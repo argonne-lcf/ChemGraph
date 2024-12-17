@@ -30,14 +30,4 @@ class HPCJobHandle:
             """
                     return script
     def submit_job(self) -> str:
-
-        pass
-job_params = JobParameters(
-job_name="RASPA",
-walltime="01:00:00",
-nodes=1,
-ppn=32,
-)
-hpc_formatter = HPCJobScheduler(job_params)
-job_script = hpc_formatter.generate_script()
-print(job_script)
+        return True
