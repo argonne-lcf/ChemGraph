@@ -1,21 +1,7 @@
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Annotated
-"""
-class AtomsData(BaseModel):
-    numbers: Annotated[List[int], Field(description="List of atomic numbers")] 
-    positions : Annotated[List[List[float]], Field(description="List of atomic coordinates")]
-    cell: Annotated[List[List[float]], Field(default=[[0,0,0], [0,0,0], [0,0,0]], description="Unit cell vectors or None")]
-    pbc: Annotated[List[bool], Field(default=[False, False, False], description="Periodic boundary conditions")]
+from comp_chem_agent.models.atomsdata import AtomsData
 
-"""
-
-class AtomsData(BaseModel):
-    numbers: List[int]
-    positions: List[List[float]]
-    cell: Optional[List[List[float]]] 
-    pbc: List[bool] = [False, False, False]
- 
 @tool
 def smiles_to_xyz(smiles: str):
     """
@@ -95,7 +81,7 @@ def smiles_to_atomsdata(smiles: str) -> AtomsData:
         cell=None,  # No unit cell for an isolated molecule
         pbc=[False, False, False],  # No periodic boundary conditions
     )
-    print(type(atoms_data))
+    #print(type(atoms_data))
     return atoms_data
 
 @tool
@@ -152,6 +138,6 @@ def geometry_optimization_ase(atomsdata: AtomsData) -> AtomsData:
     print(dyn.run(fmax=0.05))
 
     new_atomsdata = AtomsData(numbers=ASEAtoms.numbers, positions=ASEAtoms.positions, cell=ASEAtoms.cell, pbc=ASEAtoms.pbc)
-    print(new_atomsdata)
+    #print(new_atomsdata)
     return new_atomsdata
 

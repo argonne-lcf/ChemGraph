@@ -66,6 +66,23 @@ cca = CompChemAgent()
 mess = cca.return_input("Create a simulation input file to calculate H2 adsorption in a MOF named IRMOF1.cif at 77K and 100 bar using a 2 3 4 unit cell")
 print(mess)
 ```
+
+New update includes the LangGraph workflow for the geometry optimization. Example usage:
+
+```python
+from comp_chem_agent.agent.llm_graph import *
+graph = llm_graph().geo_opt_graph()
+
+user_input = "Run geometry optimization for the molecule with the smiles c1ccccc1 using your available tools."
+config = {"configurable": {"thread_id": "1"}}
+
+# The config is the **second positional argument** to stream() or invoke()!
+events = graph.stream(
+    {"messages": [("user", user_input)]}, config, stream_mode="values"
+)
+for event in events:
+    event["messages"][-1].pretty_print()
+```
 ---
 
 ## Project Structure
@@ -75,10 +92,10 @@ comp_chem_agent/
 │
 ├── src/                       # Source code
 │   ├── comp_chem_agent/       # Top-level package
-│   │   ├── tools/             # Tools for molecular handling
+│   │   ├── tools/             # Tools for molecular simulations
 │   │   ├── agent/             # Agent-based task management
-│   │   ├── models/            # Data models for simulations
-│   │   └── graph/             # Workflow graph utilities
+│   │   ├── models/            # Different Pydantic models
+│   │   └── graphs/            # Workflow graph utilities
 │
 ├── pyproject.toml             # Project configuration
 └── README.md                  # Project documentation

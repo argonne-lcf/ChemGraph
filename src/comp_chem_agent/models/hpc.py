@@ -6,12 +6,12 @@ class JobParameters(BaseModel):
     job_name: str = Field(default="debug", description="Name of the job")
     walltime: str = Field(default="01:00:00", description="Walltime for the job")
     nodes: int = Field(default=1, description="Number of nodes")
-    ppn: int = Field(default=1, description="Processors per node")
+    ncpus: int = Field(default=1, description="Processors per node")
     mem: float = Field(default=8, description="Total memory in GB")
     script_body: str = Field(default="export RASPA_DIR=/eagle/projects/HPCBot/thang/soft/RASPA2\nexport DYLD_LIBRARY_PATH=${RASPA_DIR}/lib\nexport LD_LIBRARY_PATH=${RASPA_DIR}/lib\n$RASPA_DIR/bin/simulate", description="Main body of the script to execute")
     account: str = Field(default="IQC", description="Allocation/Account name")
     queue: str = Field(default="debug", description="Queue type")
-    directory: str = Field(..., description="PBS directory to run job")
+
 class HPCJobHandle:
     def __init__(self, job_parameters: JobParameters):
         self.job_parameters = job_parameters
@@ -31,3 +31,4 @@ class HPCJobHandle:
                     return script
     def submit_job(self) -> str:
         return True
+
