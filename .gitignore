@@ -29,6 +29,3 @@ eggs/
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
-
-# Test files
-test*.py

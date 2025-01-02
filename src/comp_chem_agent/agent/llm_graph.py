@@ -7,8 +7,10 @@ from langchain_core.tools import tool
 
 from comp_chem_agent.tools.ASE_tools import *
 import json
-
+from comp_chem_agent.tools.alcf_loader import load_alcf_model
+from comp_chem_agent.tools.local_model_loader import load_ollama_model
 from comp_chem_agent.graphs.geoopt_workflow import *
+
 class llm_graph:
     def __init__(
         self,
@@ -40,6 +42,17 @@ class llm_graph:
         llm_with_tools = llm.bind_tools(tools)
         self.llm_with_tools = llm_with_tools
 
-    def geo_opt_graph(self):        # Return the LLMs with tools graph
-        tools = [smiles_to_atomsdata, geometry_optimization_ase]
+    def geo_opt_graph(self):
+        tools = [molecule_name_to_smiles, smiles_to_atomsdata, geometry_optimization_ase]
         return construct_geoopt_graph(tools, self.llm_with_tools)
+    
+    def run(self, query):
+        self.new_graph = self.geo_opt_graph()
+        inputs = {"messages": [("user", query)]}
+        for s in self.new_graph.stream(inputs, stream_mode="values"):
+            message = s["messages"][-1]
+            if isinstance(message, tuple):
+                print(message)
+            else:
+                message.pretty_print()
+

@@ -71,17 +71,9 @@ New update includes the LangGraph workflow for the geometry optimization. Exampl
 
 ```python
 from comp_chem_agent.agent.llm_graph import *
-graph = llm_graph().geo_opt_graph()
 
-user_input = "Run geometry optimization for the molecule with the smiles c1ccccc1 using your available tools."
-config = {"configurable": {"thread_id": "1"}}
-
-# The config is the **second positional argument** to stream() or invoke()!
-events = graph.stream(
-    {"messages": [("user", user_input)]}, config, stream_mode="values"
-)
-for event in events:
-    event["messages"][-1].pretty_print()
+cca = llm_graph()
+cca.run("Run geometry optimization using ASE for acetic acid using your available tools.")
 ```
 ---
 
