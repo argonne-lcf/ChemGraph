@@ -55,8 +55,8 @@ class CompChemAgent:
         print(messages)
         return messages
 
-    def return_input(self, query):
-        structured_llm = self.llm.with_structured_output(SimulationInput)
+    def return_input(self, query, simulation_class):
+        structured_llm = self.llm.with_structured_output(simulation_class)
         messages = structured_llm.invoke(query)
         return messages
     

@@ -53,7 +53,6 @@ def smiles_to_atomsdata(smiles: str) -> AtomsData:
     atoms_data = AtomsData(
         numbers=numbers,
         positions=positions,
-        cell=None,  # No unit cell for an isolated molecule
         pbc=[False, False, False],  # No periodic boundary conditions
     )
     #print(type(atoms_data))

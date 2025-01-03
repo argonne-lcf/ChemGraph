@@ -9,7 +9,9 @@ from comp_chem_agent.tools.ASE_tools import *
 import json
 from comp_chem_agent.tools.alcf_loader import load_alcf_model
 from comp_chem_agent.tools.local_model_loader import load_ollama_model
-from comp_chem_agent.graphs.geoopt_workflow import *
+from comp_chem_agent.graphs.geoopt_workflow import construct_geoopt_graph
+from comp_chem_agent.tools.xtb_tools import *
+from comp_chem_agent.graphs.xtb_workflow import construct_xtb_graph
 
 class llm_graph:
     def __init__(
@@ -37,22 +39,68 @@ class llm_graph:
             print(e)
             print(f"Error with loading {model_name}")
         if prompt == None:
-            system_message = "You are a helpful assistant."
-        tools = [smiles_to_atomsdata, geometry_optimization_ase]
-        llm_with_tools = llm.bind_tools(tools)
-        self.llm_with_tools = llm_with_tools
+            system_message = "You are a helpful assistant."       
+        self.llm = llm
 
-    def geo_opt_graph(self):
-        tools = [molecule_name_to_smiles, smiles_to_atomsdata, geometry_optimization_ase]
-        return construct_geoopt_graph(tools, self.llm_with_tools)
-    
-    def run(self, query):
-        self.new_graph = self.geo_opt_graph()
+    def _bind_tools(self, tools):
+        if not tools:
+            return self.llm
+        try:
+            self.llm_with_tools = self.llm.bind_tools(tools)    
+            return self.llm_with_tools
+        except AttributeError:
+            raise AttributeError("The LLM model doesn't support tool binding")
+        
+    def _construct_workflow(self, workflow_type: str, tools=None):
+        """
+        Constructs a workflow graph based on the specified type
+        
+        Args:
+            workflow_type (str): Type of workflow to construct ('geoopt', 'xtb', etc.)
+            tools (list, optional): Custom tools to use. If None, uses default tools for the workflow
+        
+        Returns:
+            Graph: Constructed workflow graph
+        """
+        workflow_map = {
+            'geoopt': {
+                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, geometry_optimization_ase],
+                'constructor': construct_geoopt_graph
+            },
+            'xtb': {
+                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, run_xtb_calculation],
+                'constructor': construct_xtb_graph
+            }
+            # Add more workflows here as needed
+        }
+        if workflow_type not in workflow_map:
+            raise ValueError(f"Unsupported workflow type: {workflow_type}. Available types: {list(workflow_map.keys())}")
+
+        workflow = workflow_map[workflow_type]
+        tools_to_use = tools if tools is not None else workflow['default_tools']
+        self.llm_with_tools = self._bind_tools(tools=tools_to_use)
+
+        return workflow['constructor'](tools_to_use, self.llm_with_tools)
+
+    def run(self, query, workflow_type='geoopt', tools=None):
+        """
+        Runs the specified workflow with the given query
+        
+        Args:
+            query (str): The user's input query
+            workflow_type (str): Type of workflow to run ('geoopt' or 'xtb')
+            tools (list, optional): Custom tools to use. If None, uses default tools for the workflow
+        """
+        # Construct the workflow graph
+        workflow = self._construct_workflow(workflow_type, tools=tools)
+        
+        # Prepare the input format expected by the graph
         inputs = {"messages": [("user", query)]}
-        for s in self.new_graph.stream(inputs, stream_mode="values"):
+        
+        # Execute the workflow and stream results
+        for s in workflow.stream(inputs, stream_mode="values"):
             message = s["messages"][-1]
             if isinstance(message, tuple):
                 print(message)
             else:
                 message.pretty_print()
-

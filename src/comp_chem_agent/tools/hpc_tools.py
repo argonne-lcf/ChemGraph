@@ -1,18 +1,18 @@
 from models.hpc import HPCJobHandle
-from langchain_core import tools
+from langchain_core.tools import tool
 import subprocess
 
 from comp_chem_agent.models import HPCJobHandle, JobParameters
 
- @tool
- def submit_job(params: JobParameters, mode="local"):
+@tool
+def submit_job(params: JobParameters, mode="local"):
     hjh = HPCJobHandle(params)
 
     if mode == "local":
         pbs_command = [
             "qsub",
             "-l", f"walltime={params.walltime},select=1:ncpus={params.npcus}:mem={params.mem}gb",
-            "-l" filesystems=home:eagle,
+            "-l" "filesystems=home:eagle",
             "-q", params.queue,
             "-A", params.account,
             "-N", params.job_name,

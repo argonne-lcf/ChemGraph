@@ -20,18 +20,40 @@ class BasicToolNode:
             message = messages[-1]
         else:
             raise ValueError("No message found in input")
+        
         outputs = []
         for tool_call in message.tool_calls:
-            tool_result = self.tools_by_name[tool_call["name"]].invoke(
-                tool_call["args"]
-            )
-            outputs.append(
-                ToolMessage(
-                    content=json.dumps(tool_result.dict()),
-                    name=tool_call["name"],
-                    tool_call_id=tool_call["id"],
+            try:
+                tool_name = tool_call.get("name")
+                if not tool_name or tool_name not in self.tools_by_name:
+                    raise ValueError(f"Invalid tool name: {tool_name}")
+                
+                tool_result = self.tools_by_name[tool_name].invoke(
+                    tool_call.get("args", {})
                 )
-            )
+                
+                # Handle different types of tool results
+                result_content = (
+                    tool_result.dict() if hasattr(tool_result, "dict")
+                    else tool_result if isinstance(tool_result, dict)
+                    else str(tool_result)
+                )
+                
+                outputs.append(
+                    ToolMessage(
+                        content=json.dumps(result_content),
+                        name=tool_name,
+                        tool_call_id=tool_call.get("id", ""),
+                    )
+                )
+            except Exception as e:
+                outputs.append(
+                    ToolMessage(
+                        content=json.dumps({"error": str(e)}),
+                        name=tool_name if tool_name else "unknown_tool",
+                        tool_call_id=tool_call.get("id", ""),
+                    )
+                )
         return {"messages": outputs}
         
 def route_tools(
