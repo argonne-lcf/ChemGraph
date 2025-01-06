@@ -45,6 +45,8 @@ The following libraries are required and will be installed automatically:
 - `langchain-ollama>=0.2.1`
 - `pydantic>=2.10.3`
 - `pandas>=2.2`
+- `mace-torch>=0.3.9`,
+- `torch-dftd >= 0.5.1`
 
 ---
 
@@ -55,7 +57,7 @@ After installation, you can import and use the package in your scripts:
 ```python
 from comp_chem_agent.agent.llm_agent import *
 cca = CompChemAgent()
-cca.run("Run geometry optimization using ASE for the molecule with the smiles c1ccccc1 using your available tools.")
+cca.run("Run geometry optimization for acetic acid using mace_mp potential and FIRE optimizer.")
 ```
 
 Another current usage is to create simulation input file for packages such as RASPA2.
@@ -77,7 +79,7 @@ query = "Run geometry optimization using ASE for acetic acid."
 cca.run(query, workflow_type="geoopt")
 ```
 
-TODO: XTB workflow.
+TODO: Complete XTB workflow. Generate simulation input for ASE from prompt.
 ---
 
 ## Project Structure

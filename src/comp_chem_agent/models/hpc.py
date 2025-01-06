@@ -28,7 +28,7 @@ class HPCJobHandle:
 
             {self.job_parameters.script_body.strip()}
             """
-                    return script
+        return script
     def submit_job(self) -> str:
         return True
 

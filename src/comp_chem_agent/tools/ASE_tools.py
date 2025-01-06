@@ -2,6 +2,7 @@ from langchain_core.tools import tool
 from typing import List, Dict, Any, Optional, Annotated
 from comp_chem_agent.models.atomsdata import AtomsData
 import pubchempy
+from comp_chem_agent.models.ASEinput import ASESimulationInput
 
 @tool
 def molecule_name_to_smiles(name: str) -> str:
@@ -59,26 +60,59 @@ def smiles_to_atomsdata(smiles: str) -> AtomsData:
     return atoms_data
 
 @tool
-def geometry_optimization_ase(atomsdata: AtomsData) -> AtomsData:
+def geometry_optimization(atomsdata: AtomsData, aseinput: ASESimulationInput) -> tuple[bool, AtomsData]:
     """
-    Run geometry optimization using ASE by reading AtomsData.
+    Run geometry optimization using ASE with specified calculator and optimizer.
     
     Args:
-        AtomsData: AtomsData object.
+        atomsdata: AtomsData object containing initial geometry
+        aseinput: ASE simulation parameters
 
     Returns:
-        optimized_structure (AtomsData): optimized structure in AtomsData format
+        tuple containing:
+            - bool: True if optimization converged successfully, False otherwise
+            - AtomsData: Final optimized structure
     """
     from ase import Atoms
-    from ase import Atoms
-    from ase.optimize import BFGS
-    from ase.calculators.emt import EMT
+    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
+    
+    OPTIMIZERS = {
+        "bfgs": BFGS,
+        "lbfgs": LBFGS,
+        "gpmin": GPMin,
+        "fire": FIRE,
+        "mdmin": MDMin
+    }
+    
+    fmax = aseinput.fmax
+    steps = aseinput.steps
+    calculator = aseinput.calculator
+    optimizer = aseinput.optimizer
 
-    ASEAtoms = Atoms(numbers=atomsdata.numbers, positions=atomsdata.positions, cell=atomsdata.cell, pbc=atomsdata.pbc, calculator=EMT())
-    dyn = BFGS(ASEAtoms)
-    print(dyn.run(fmax=0.05))
+    if calculator == "mace_mp":
+        from mace.calculators import mace_mp
+        calculator = mace_mp(model="medium", dispersion=True, default_dtype="float32")
+    elif calculator == "emt":
+        from ase.calculators.emt import EMT
+        calculator = EMT()
 
-    new_atomsdata = AtomsData(numbers=ASEAtoms.numbers, positions=ASEAtoms.positions, cell=ASEAtoms.cell, pbc=ASEAtoms.pbc)
-    #print(new_atomsdata)
-    return new_atomsdata
+    atoms = Atoms(numbers=atomsdata.numbers, positions=atomsdata.positions, cell=atomsdata.cell, pbc=atomsdata.pbc)    
+    atoms.calc = calculator
 
+    try:
+        optimizer_class = OPTIMIZERS.get(optimizer.lower())
+        if optimizer_class is None:
+            raise ValueError(f"Unsupported optimizer: {optimizer}")
+        
+        dyn = optimizer_class(atoms)
+        dyn.run(fmax=fmax, steps=steps)
+        final_structure = AtomsData(
+            numbers=atoms.numbers,
+            positions=atoms.positions,
+            cell=atoms.cell,
+            pbc=atoms.pbc
+        )
+        return True, final_structure
+    except Exception as e:
+        print(f"Optimization failed: {str(e)}")
+        return False, atomsdata 
