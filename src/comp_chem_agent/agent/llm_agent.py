@@ -10,7 +10,7 @@ from comp_chem_agent.tools.openai_loader import load_openai_model
 class CompChemAgent:
     def __init__(
             self,
-            model_name="gpt-3.5-turbo",
+            model_name="gpt-4o-mini",
             tools = None,
             prompt = None,
             base_url = None,
@@ -18,8 +18,8 @@ class CompChemAgent:
             temperature= 0            
     ):
         try:
-            if model_name in ["gpt-3.5-turbo"]:
-                llm = load_openai_model(model_name=model_name, temperature=temperature)
+            if model_name in ["gpt-3.5-turbo", "gpt-4o-mini"]:
+                llm = load_openai_model(model_name=model_name, api_key=api_key, temperature=temperature)
                 print(f"Loaded {model_name}")
             elif model_name in ['llama3.2', "llama3.1"]:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
@@ -38,8 +38,9 @@ class CompChemAgent:
         tools = [smiles_to_atomsdata, geometry_optimization, molecule_name_to_smiles, file_to_atomsdata]
         #self.langgraph_agent_executor = create_react_agent(llm, tools, state_modifier=system_message)
         #tools = [get_files_in_directories, search_file_by_keyword, extract_coreid_and_refcode]
-        self.graph = create_react_agent(llm, tools, state_modifier=system_message)
         self.llm = llm
+
+        self.graph = create_react_agent(llm, tools, state_modifier=system_message)
 
     def run(self, query):
         inputs = {"messages": [("user", query)]}

@@ -1,6 +1,6 @@
 from comp_chem_agent.agent.llm_agent import *
 from comp_chem_agent.models.raspa import SimulationInput
-cca = CompChemAgent()
+cca = CompChemAgent(model_name="gpt-3.5-turbo")
 #mess = cca.return_input("Create a simulation input file to calculate H2 adsorption in a MOF named IRMOF1.cif at 77K and 100 bar using a 2 3 4 unit cell")
 #query = "Create a simulation input file to calculate H2 adsorption in a MOF named IRMOF1.cif at 77K and 100 bar using a 2 3 4 unit cell"
 #query = "Run geometry optimization for acetic acide using FIRE method and EMT calculator."

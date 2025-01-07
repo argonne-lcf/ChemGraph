@@ -20,7 +20,8 @@ dependencies = [
     "pydantic>=2.10.3",
     "pandas>=2.2",
     "mace-torch>=0.3.9",
-    "torch-dftd>= 0.5.1"
+    "torch-dftd>= 0.5.1",
+    "pubchempy>=1.0.4"
     ]
 
 [project.urls]
