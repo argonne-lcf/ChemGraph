@@ -3,7 +3,8 @@ from comp_chem_agent.models.raspa import SimulationInput
 cca = CompChemAgent()
 #mess = cca.return_input("Create a simulation input file to calculate H2 adsorption in a MOF named IRMOF1.cif at 77K and 100 bar using a 2 3 4 unit cell")
 #query = "Create a simulation input file to calculate H2 adsorption in a MOF named IRMOF1.cif at 77K and 100 bar using a 2 3 4 unit cell"
-query = "Run geometry optimization for acetic acide using FIRE method and EMT calculator."
+#query = "Run geometry optimization for acetic acide using FIRE method and EMT calculator."
+query = "Run geometry optimization for the file sample.xyz using FIRE method and mace_mp calculator."
 mess = cca.run(query)
 #cca.run("Run geometry optimization using ASE for the molecule with the smiles c1ccccc1 using your available tools.")
 #new_agent.run("Run geometry optimization using ASE for the molecule with the smiles c1ccccc1 using your available tools. Firt convert the SMILES string to AtomsData, then run geometry optimization using AtomsData input.")

@@ -35,7 +35,7 @@ class CompChemAgent:
             system_message = "You are a helpful assistant."
             #system_message =  "You are a helpful assistant at extracting data of material databases."
         #tools = [smiles_to_xyz, geometry_optimization]
-        tools = [smiles_to_atomsdata, geometry_optimization]
+        tools = [smiles_to_atomsdata, geometry_optimization, molecule_name_to_smiles, file_to_atomsdata]
         #self.langgraph_agent_executor = create_react_agent(llm, tools, state_modifier=system_message)
         #tools = [get_files_in_directories, search_file_by_keyword, extract_coreid_and_refcode]
         self.graph = create_react_agent(llm, tools, state_modifier=system_message)

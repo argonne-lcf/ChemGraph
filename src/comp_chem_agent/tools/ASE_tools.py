@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional, Annotated
 from comp_chem_agent.models.atomsdata import AtomsData
 import pubchempy
 from comp_chem_agent.models.ASEinput import ASESimulationInput
+import os
 
 @tool
 def molecule_name_to_smiles(name: str) -> str:
@@ -116,3 +117,35 @@ def geometry_optimization(atomsdata: AtomsData, aseinput: ASESimulationInput) ->
     except Exception as e:
         print(f"Optimization failed: {str(e)}")
         return False, atomsdata 
+
+@tool
+def file_to_atomsdata(fname: str) -> AtomsData:
+    """
+    Convert a structure file to AtomsData format using ASE.
+    
+    Args:
+        fname: Path to the input structure file (supports various formats like xyz, pdb, cif, etc.)
+
+    Returns:
+        AtomsData: Object containing the atomic structure information
+
+    Raises:
+        FileNotFoundError: If the input file doesn't exist
+        ValueError: If the file format is not supported or file is corrupted
+    """
+    from ase.io import read
+    try:
+        atoms = read(fname)
+        # Create AtomsData object from ASE Atoms object
+        atoms_data = AtomsData(
+            numbers=atoms.numbers.tolist(),
+            positions=atoms.positions.tolist(),
+            cell=atoms.cell.tolist(),
+            pbc=atoms.pbc.tolist()
+        )
+        return atoms_data
+    except FileNotFoundError:
+        raise FileNotFoundError(f"File not found: {fname}")
+    except Exception as e:
+        raise ValueError(f"Failed to read structure file: {str(e)}")
+            
