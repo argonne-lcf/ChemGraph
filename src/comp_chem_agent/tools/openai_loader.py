@@ -3,7 +3,7 @@ import os
 from langchain_openai import ChatOpenAI
 
 
-def load_openai_model(model_name: str, temperature: float, api_key: str = None) -> ChatOpenAI:
+def load_openai_model(model_name: str, temperature: float, api_key: str = None, prompt: str = None) -> ChatOpenAI:
     """
     Load an OpenAI chat model into LangChain.
 

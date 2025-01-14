@@ -6,6 +6,7 @@ from langgraph.graph.message import add_messages
 from langchain_core.messages import ToolMessage
 import json
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import MemorySaver
 
 class State(TypedDict):
     messages: Annotated[list, add_messages]
@@ -78,6 +79,8 @@ def chatbot(llm_with_tools: ChatOpenAI, state: State):
     return {"messages": [llm_with_tools.invoke(state["messages"])]}
 
 def construct_geoopt_graph(tools: list, llm_with_tools: ChatOpenAI):
+    checkpointer = MemorySaver()
+
     tool_node = BasicToolNode(tools=tools)
     graph_builder = StateGraph(State)
     graph_builder.add_node("chatbot", lambda state: chatbot(llm_with_tools, state))
@@ -90,6 +93,6 @@ def construct_geoopt_graph(tools: list, llm_with_tools: ChatOpenAI):
     # Any time a tool is called, we return  to the chatbot to decide the next step
     graph_builder.add_edge("tools", "chatbot")
     graph_builder.add_edge(START, "chatbot")
-    graph = graph_builder.compile()
+    graph = graph_builder.compile(checkpointer=checkpointer)
 
     return graph

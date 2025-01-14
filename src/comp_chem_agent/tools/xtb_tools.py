@@ -4,10 +4,6 @@ import subprocess
 import shlex
 
 @tool
-def setup_xtb_input() -> XTBSimulationInput:
-    return True
-
-@tool
 def run_xtb_calculation(input: XTBSimulationInput, mode: str = "local") -> bool:
     """
     Run geometry optimization using XTB.

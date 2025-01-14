@@ -1,9 +1,15 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional, Annotated
+from typing import List, Dict, Any, Optional, Annotated, Union
 
 class AtomsData(BaseModel):
     numbers: List[int] = Field(..., description="Atomic numbers")
     positions: List[List[float]] = Field(..., description="Atomic positions")
-    cell: Optional[List[List[float]]] = Field(default=[[0,0,0], [0,0,0], [0,0,0]], description="Cell vectors")
-    pbc: List[bool] = Field(default=[False, False, False], description="Periodic boundary conditions")
+    cell: Optional[Union[List[List[float]], None]] = Field(
+        default=None, 
+        description="Cell vectors"
+    )
+    pbc: Optional[Union[List[bool], None]] = Field(
+        default=None, 
+        description="Periodic boundary conditions"
+    )
 

@@ -12,20 +12,19 @@ from comp_chem_agent.tools.local_model_loader import load_ollama_model
 from comp_chem_agent.graphs.geoopt_workflow import construct_geoopt_graph
 from comp_chem_agent.tools.xtb_tools import *
 from comp_chem_agent.graphs.xtb_workflow import construct_xtb_graph
-
+from comp_chem_agent.prompt.prompt import ase_prompt
 class llm_graph:
     def __init__(
         self,
-        model_name="gpt-3.5-turbo",
+        model_name="gpt-4o-mini",
         tools = None,
         prompt = None,
         base_url = None,
         api_key = None,
         temperature= 0            
     ):
-
         try:
-            if model_name in ["gpt-3.5-turbo"]:
+            if model_name in ["gpt-4o-mini"]:
                 llm = load_openai_model(model_name=model_name, temperature=temperature)
                 print(f"Loaded {model_name}")
             elif model_name in ['llama3.2', "llama3.1"]:
@@ -38,8 +37,19 @@ class llm_graph:
         except Exception as e:
             print(e)
             print(f"Error with loading {model_name}")
-        if prompt == None:
-            system_message = "You are a helpful assistant."       
+
+        self.workflow_map = {
+            'geoopt': {
+                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, geometry_optimization, save_atomsdata_to_file, file_to_atomsdata],
+                'constructor': construct_geoopt_graph,
+                'prompt': ase_prompt
+            },
+            'xtb': {
+                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, run_xtb_calculation],
+                'constructor': construct_xtb_graph
+            }
+        }
+
         self.llm = llm
 
     def _bind_tools(self, tools):
@@ -62,27 +72,16 @@ class llm_graph:
         Returns:
             Graph: Constructed workflow graph
         """
-        workflow_map = {
-            'geoopt': {
-                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, geometry_optimization_ase],
-                'constructor': construct_geoopt_graph
-            },
-            'xtb': {
-                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, run_xtb_calculation],
-                'constructor': construct_xtb_graph
-            }
-            # Add more workflows here as needed
-        }
-        if workflow_type not in workflow_map:
-            raise ValueError(f"Unsupported workflow type: {workflow_type}. Available types: {list(workflow_map.keys())}")
+        if workflow_type not in self.workflow_map:
+            raise ValueError(f"Unsupported workflow type: {workflow_type}. Available types: {list(self.workflow_map.keys())}")
 
-        workflow = workflow_map[workflow_type]
+        workflow = self.workflow_map[workflow_type]
         tools_to_use = tools if tools is not None else workflow['default_tools']
         self.llm_with_tools = self._bind_tools(tools=tools_to_use)
 
         return workflow['constructor'](tools_to_use, self.llm_with_tools)
 
-    def run(self, query, workflow_type='geoopt', tools=None):
+    def run(self, query, workflow_type='geoopt', tools=None, config = {"configurable": {"thread_id": "1"}}):
         """
         Runs the specified workflow with the given query
         
@@ -93,14 +92,15 @@ class llm_graph:
         """
         # Construct the workflow graph
         workflow = self._construct_workflow(workflow_type, tools=tools)
-        
+        system_message = self.workflow_map[workflow_type]['prompt']
+
         # Prepare the input format expected by the graph
-        inputs = {"messages": [("user", query)]}
-        
+        inputs = {"messages": [("user", query), ("system", system_message)]}
         # Execute the workflow and stream results
-        for s in workflow.stream(inputs, stream_mode="values"):
+        for s in workflow.stream(inputs, stream_mode="values", config=config):
             message = s["messages"][-1]
             if isinstance(message, tuple):
                 print(message)
             else:
                 message.pretty_print()
+
