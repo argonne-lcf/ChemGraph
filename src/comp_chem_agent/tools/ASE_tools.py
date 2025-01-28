@@ -96,6 +96,7 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
         "mdmin": MDMin
     }
     
+    #calculator = calculator.lower()
     if calculator == "mace_mp":
         from mace.calculators import mace_mp
         calc = mace_mp(model="medium", dispersion=True, default_dtype="float32")

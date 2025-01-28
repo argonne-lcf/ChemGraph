@@ -12,7 +12,8 @@ from comp_chem_agent.tools.local_model_loader import load_ollama_model
 from comp_chem_agent.graphs.geoopt_workflow import construct_geoopt_graph
 from comp_chem_agent.tools.xtb_tools import *
 from comp_chem_agent.graphs.xtb_workflow import construct_xtb_graph
-from comp_chem_agent.prompt.prompt import ase_prompt
+from comp_chem_agent.prompt.prompt import ase_prompt, geometry_input_prompt
+from comp_chem_agent.graphs.ASE_geoopt import construct_ase_graph
 class llm_graph:
     def __init__(
         self,
@@ -47,6 +48,11 @@ class llm_graph:
             'xtb': {
                 'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, run_xtb_calculation],
                 'constructor': construct_xtb_graph
+            },
+            'ase': {
+                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, file_to_atomsdata],
+                'constructor': construct_ase_graph,
+                prompt: geometry_input_prompt
             }
         }
 
@@ -78,9 +84,10 @@ class llm_graph:
         workflow = self.workflow_map[workflow_type]
         tools_to_use = tools if tools is not None else workflow['default_tools']
         self.llm_with_tools = self._bind_tools(tools=tools_to_use)
-
-        return workflow['constructor'](tools_to_use, self.llm_with_tools)
-
+        if workflow_type != 'ase':
+            return workflow['constructor'](tools_to_use, self.llm_with_tools)
+        else:
+            return workflow['constructor'](self.llm)
     def run(self, query, workflow_type='geoopt', tools=None, config = {"configurable": {"thread_id": "1"}}):
         """
         Runs the specified workflow with the given query
@@ -91,16 +98,47 @@ class llm_graph:
             tools (list, optional): Custom tools to use. If None, uses default tools for the workflow
         """
         # Construct the workflow graph
-        workflow = self._construct_workflow(workflow_type, tools=tools)
-        system_message = self.workflow_map[workflow_type]['prompt']
+        if workflow_type == 'ase':
+            workflow = self._construct_workflow(workflow_type)
+        else:
+            workflow = self._construct_workflow(workflow_type, tools=tools)
+        if workflow_type=="geoopt":
+            system_message = self.workflow_map[workflow_type]['prompt']
 
-        # Prepare the input format expected by the graph
-        inputs = {"messages": [("user", query), ("system", system_message)]}
-        # Execute the workflow and stream results
-        for s in workflow.stream(inputs, stream_mode="values", config=config):
-            message = s["messages"][-1]
-            if isinstance(message, tuple):
-                print(message)
-            else:
-                message.pretty_print()
+            # Prepare the input format expected by the graph
+            inputs = {"messages": [("user", query), ("system", system_message)]}
+                    # Execute the workflow and stream results
+            for s in workflow.stream(inputs, stream_mode="values", config=config):
+                message = s["messages"][-1]
+                if isinstance(message, tuple):
+                    print(message)
+                else:
+                    message.pretty_print()
+        else:
+            inputs = {"question": query, "geometry_response": query, "parameter_response": query, "opt_response": query}
+            previous_lengths = {
+                "geometry_response": 0,
+                "parameter_response": 0,
+                "opt_response": 0,
+                "feedback_response": 0,
+                "router_response": 0,
+                "end_response": 0
+            }
 
+            for s in workflow.stream(inputs, stream_mode="values", config=config):
+                # Check if the lengths of the message lists have changed
+                for key in previous_lengths.keys():
+                    current_length = len(s.get(key, []))
+                    
+                    if current_length > previous_lengths[key]:
+                        # If the length has increased, process the newest message
+                        new_message = s[key][-1]  # Get the newest message
+                        print(f"New message in {key}:")
+                        
+                        if isinstance(new_message, tuple):
+                            print(new_message)
+                        else:
+                            new_message.pretty_print()
+                        
+                        # Update the previous length
+                        previous_lengths[key] = current_length
