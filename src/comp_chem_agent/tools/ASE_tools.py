@@ -96,7 +96,8 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
         "mdmin": MDMin
     }
     
-    #calculator = calculator.lower()
+    calculator = calculator.lower()
+    print(calculator)
     if calculator == "mace_mp":
         from mace.calculators import mace_mp
         calc = mace_mp(model="medium", dispersion=True, default_dtype="float32")
@@ -117,6 +118,9 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
         dyn = optimizer_class(atoms)
         dyn.attach(lambda: capture_max_force(dyn), interval=10)  # Call every 10th step (interval=10)
         converged = dyn.run(fmax=fmax, steps=steps)
+        if (steps % 10) != 0 or len(max_force_at_steps) == 0:
+            capture_max_force(dyn)  # Ensure last step is recorded
+
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=atoms.positions,

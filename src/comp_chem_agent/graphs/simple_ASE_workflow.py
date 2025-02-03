@@ -7,6 +7,8 @@ from langchain_core.messages import ToolMessage
 import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
+from comp_chem_agent.tools.ASE_tools import *
+from comp_chem_agent.prompt.prompt import single_agent_prompt
 
 class State(TypedDict):
     messages: Annotated[list, add_messages]
@@ -74,25 +76,29 @@ def route_tools(
         return "tools"
     return END
 
-def chatbot(llm_with_tools: ChatOpenAI, state: State):
+def ASEAgent(state: State, llm: ChatOpenAI):
     """LLM node that processes messages and decides next actions."""
-    return {"messages": [llm_with_tools.invoke(state["messages"])]}
+    tools = [file_to_atomsdata, smiles_to_atomsdata, geometry_optimization, molecule_name_to_smiles, save_atomsdata_to_file]
+    messages = [
+            {"role": "system", "content": single_agent_prompt},
+            {"role": "user", "content": f"{state['messages']}"}]
+    llm_with_tools = llm.bind_tools(tools=tools)
+    return {"messages": [llm_with_tools.invoke(messages)]}
 
-def construct_geoopt_graph(tools: list, llm_with_tools: ChatOpenAI):
+def construct_geoopt_graph(llm: ChatOpenAI):
     checkpointer = MemorySaver()
-
+    tools = [file_to_atomsdata, smiles_to_atomsdata, geometry_optimization, molecule_name_to_smiles, save_atomsdata_to_file]
     tool_node = BasicToolNode(tools=tools)
     graph_builder = StateGraph(State)
-    graph_builder.add_node("chatbot", lambda state: chatbot(llm_with_tools, state))
+    graph_builder.add_node("ASEAgent", lambda state: ASEAgent(state, llm))
     graph_builder.add_node("tools", tool_node)
     graph_builder.add_conditional_edges(
-        "chatbot",
+        "ASEAgent",
         route_tools,
         {"tools": "tools", END: END},
     )
-    # Any time a tool is called, we return  to the chatbot to decide the next step
-    graph_builder.add_edge("tools", "chatbot")
-    graph_builder.add_edge(START, "chatbot")
+    graph_builder.add_edge("tools", "ASEAgent")
+    graph_builder.add_edge(START, "ASEAgent")
     graph = graph_builder.compile(checkpointer=checkpointer)
 
     return graph

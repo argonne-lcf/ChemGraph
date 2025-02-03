@@ -50,36 +50,18 @@ The following libraries are required and will be installed automatically:
 
 ---
 
-## Usage
+Usage
+Explore example workflows in the notebooks/ directory:
 
-After installation, you can import and use the package in your scripts:
+Single-Agent System: Demo-SingleAgent.ipynb
+- Demonstrates a basic agent with multiple tools.
 
-```python
-from comp_chem_agent.agent.llm_agent import *
-cca = CompChemAgent()
-cca.run("Run geometry optimization for acetic acid using mace_mp potential and FIRE optimizer.")
-```
+Multi-Agent System: Demo-MultiAgent.ipynb
+- Demonstrates multiple agents handling different tasks.
 
-Another current usage is to create simulation input file for packages such as RASPA2.
+Legacy Implementation: Legacy-ComChemAgent.ipynb
+- Uses deprecated create_react_agent method in LangGraph.
 
-```python
-from comp_chem_agent.agent.llm_agent import *
-cca = CompChemAgent()
-mess = cca.return_input("Create a simulation input file to calculate H2 adsorption in a MOF named IRMOF1.cif at 77K and 100 bar using a 2 3 4 unit cell")
-print(mess)
-```
-
-New update includes the LangGraph workflow for the geometry optimization. Example usage:
-
-```python
-from comp_chem_agent.agent.llm_graph import *
-
-cca = llm_graph()
-query = "Run geometry optimization using ASE for acetic acid."
-cca.run(query, workflow_type="geoopt")
-```
-
-TODO: Complete XTB workflow. Generate simulation input for ASE from prompt.
 ---
 
 ## Project Structure
@@ -89,10 +71,12 @@ comp_chem_agent/
 │
 ├── src/                       # Source code
 │   ├── comp_chem_agent/       # Top-level package
-│   │   ├── tools/             # Tools for molecular simulations
 │   │   ├── agent/             # Agent-based task management
+│   │   ├── graphs/            # Workflow graph utilities
 │   │   ├── models/            # Different Pydantic models
-│   │   └── graphs/            # Workflow graph utilities
+│   │   ├── prompt/            # Agent prompt
+│   │   ├── state/             # Agent state
+│   │   ├── tools/             # Tools for molecular simulations
 │
 ├── pyproject.toml             # Project configuration
 └── README.md                  # Project documentation

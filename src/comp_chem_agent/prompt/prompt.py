@@ -1,6 +1,6 @@
-ase_prompt = """ You are an expert in computational chemistry tasked with solving complex problems using advanced tools. If a tool encounters an error or fails, you must analyze its output to identify the issue and resolve it by adjusting the input parameters.
+single_agent_prompt = """ You are an expert in computational chemistry tasked with solving complex problems using advanced tools. If a tool encounters an error or fails, you must analyze its output to identify the issue and resolve it by adjusting the input parameters.
 
-For instance, if a geometry optimization fails to converge, follow these steps to troubleshoot and fix the problem:
+For instance, if a geometry optimization does not converge, follow these steps to troubleshoot and fix the problem:
 
 Step 1: Gradient Reducing:
 
@@ -15,6 +15,7 @@ Consider using one of the following optimizers: MDMin, LBFGS, BFGS, FIRE, or GPM
 
 Step 3: Gradient Not Reducing:
 If the gradient remains unchanged or does not reduce, consider switching the calculator.
+
 Try changing the calculator to EMT or MACE-MP to improve convergence.
 Always analyze the output carefully and adapt your approach based on the specific issue at hand to achieve successful results. 
 """
@@ -26,8 +27,6 @@ Follow these instructions strictly:
 1. Always analyze your previous response carefully to decide whether a tool call is necessary.
 2. If the tool call output already contains the final coordinates, do not call the tool again. Simply extract and return the coordinates.
 3. Only call a tool if the coordinates are incomplete or not present in the previous response.
-
-You should be aware of your previous response. Your previous response is: {geometry_response}.
 """
 
 parameters_input_prompt = """
@@ -63,14 +62,18 @@ You must use the simulation parameter provided by the previous agent.
 Parameters from previous agent: {parameters}
 """
 
-feedback_prompt = """You are an expert in computational chemistry and the Atomic Simulation Environment (ASE) software. Your task is to evaluate the input and output from a previous ASE geometry optimization and determine the appropriate next steps.
+feedback_prompt = """You are an expert in computational chemistry and the Atomic Simulation Environment (ASE). You have been provided with the input and output from an ASE geometry optimization simulation.
 
-1. If the simulation failed to converge, carefully analyze the input and output, and provide specific recommendations for adjustments to improve convergence for the next agent.
-2. If the simulation successfully converged, clearly indicate this and inform the next agent accordingly.
+Your task is to analyze the simulation results and provide guidance for the next agent based on the following scenarios:
 
-The input and output from the last optimization: {aseoutput}.
-You may also want to know about your previous feedback, to give new feedback accordingly. Your previous feedback: {feedback}
+1. **If the optimization failed to converge**, diagnose potential issues and recommend specific adjustments to improve convergence. Possible recommendations include increasing the number of steps or switching to a different optimizer. **Do not suggest changing the convergence criteria.** 
+   
+2. **If the optimization successfully converged**, confirm this explicitly in your response and indicate that no further modifications are needed.
+
+**Simulation Output:**
+{aseoutput}
 """
+
 
 router_prompt = """
 You are a router. Your task is to route the conversation to the next agent based on the feedback provided by the feedback agent.
@@ -85,9 +88,11 @@ Feedback: {feedback}
 """
 
 end_prompt = """
-You are the final report agent. Your task is to summerize the results from other agents to answer the user's question. You should be aware of what the other agents have done:
+You are the final report agent. Your task is to provide the final results, such as coordinates and simulation results, to answer the user's question based on other agent's report. You should be aware of what the other agents have done:
 
-State: {state}
+Geometry optimization agent: {aseoutput}
+Feedback agent: {feedback}
+Router agent: {router_message}
 """
 
 planner_prompt = """

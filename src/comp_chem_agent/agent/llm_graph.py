@@ -9,11 +9,11 @@ from comp_chem_agent.tools.ASE_tools import *
 import json
 from comp_chem_agent.tools.alcf_loader import load_alcf_model
 from comp_chem_agent.tools.local_model_loader import load_ollama_model
-from comp_chem_agent.graphs.geoopt_workflow import construct_geoopt_graph
+from comp_chem_agent.graphs.simple_ASE_workflow import construct_geoopt_graph
 from comp_chem_agent.tools.xtb_tools import *
 from comp_chem_agent.graphs.xtb_workflow import construct_xtb_graph
-from comp_chem_agent.prompt.prompt import ase_prompt, geometry_input_prompt
 from comp_chem_agent.graphs.ASE_geoopt import construct_ase_graph
+from comp_chem_agent.prompt.prompt import single_agent_prompt
 class llm_graph:
     def __init__(
         self,
@@ -40,32 +40,15 @@ class llm_graph:
             print(f"Error with loading {model_name}")
 
         self.workflow_map = {
-            'geoopt': {
-                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, geometry_optimization, save_atomsdata_to_file, file_to_atomsdata],
+            'single_agent_ase': {
                 'constructor': construct_geoopt_graph,
-                'prompt': ase_prompt
             },
-            'xtb': {
-                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, run_xtb_calculation],
-                'constructor': construct_xtb_graph
-            },
-            'ase': {
-                'default_tools': [molecule_name_to_smiles, smiles_to_atomsdata, file_to_atomsdata],
+            'multi_agent_ase': {
                 'constructor': construct_ase_graph,
-                prompt: geometry_input_prompt
             }
         }
 
         self.llm = llm
-
-    def _bind_tools(self, tools):
-        if not tools:
-            return self.llm
-        try:
-            self.llm_with_tools = self.llm.bind_tools(tools)    
-            return self.llm_with_tools
-        except AttributeError:
-            raise AttributeError("The LLM model doesn't support tool binding")
         
     def _construct_workflow(self, workflow_type: str, tools=None):
         """
@@ -82,18 +65,10 @@ class llm_graph:
             raise ValueError(f"Unsupported workflow type: {workflow_type}. Available types: {list(self.workflow_map.keys())}")
 
         workflow = self.workflow_map[workflow_type]
-        tools_to_use = tools if tools is not None else workflow['default_tools']
-        self.llm_with_tools = self._bind_tools(tools=tools_to_use)
-        if workflow_type != 'ase':
-            return workflow['constructor'](tools_to_use, self.llm_with_tools)
-        else:
-            return workflow['constructor'](self.llm)
+        return workflow['constructor'](self.llm)
         
     def visualize(self, workflow_type):
-        if workflow_type == 'ase':
-            workflow = self._construct_workflow(workflow_type)
-        else:
-            raise ValueError("Workflow {workflow} visualization is not supported yet.")
+        workflow = self._construct_workflow(workflow_type)
         
         import nest_asyncio
         from IPython.display import Image, display
@@ -110,7 +85,7 @@ class llm_graph:
                     output_file_path=None,
                     draw_method=MermaidDrawMethod.PYPPETEER,
                     background_color="white",
-                    padding=10,
+                    padding=6,
                 )
             )
         )
@@ -125,24 +100,20 @@ class llm_graph:
             tools (list, optional): Custom tools to use. If None, uses default tools for the workflow
         """
         # Construct the workflow graph
-        if workflow_type == 'ase':
-            workflow = self._construct_workflow(workflow_type)
+        workflow = self._construct_workflow(workflow_type)
 
-        else:
-            workflow = self._construct_workflow(workflow_type, tools=tools)
-        if workflow_type=="geoopt":
-            system_message = self.workflow_map[workflow_type]['prompt']
+        if workflow_type=="single_agent_ase":
+            #inputs = {"messages": [("user", query), ("system", single_agent_prompt)]}
 
-            # Prepare the input format expected by the graph
-            inputs = {"messages": [("user", query), ("system", system_message)]}
-                    # Execute the workflow and stream results
+            inputs = {"messages": query}
             for s in workflow.stream(inputs, stream_mode="values", config=config):
                 message = s["messages"][-1]
                 if isinstance(message, tuple):
                     print(message)
+                    continue
                 else:
                     message.pretty_print()
-        else:
+        elif workflow_type == "multi_agent_ase":
             inputs = {"question": query, "geometry_response": query, "parameter_response": query, "opt_response": query}
             previous_lengths = {
                 "planner_response": 0,
@@ -172,3 +143,5 @@ class llm_graph:
                         
                         # Update the previous length
                         previous_lengths[key] = current_length
+        else:
+            print(f"Workflow {workflow_type} is not supported. Please select either multi_agent_ase or single_agent_ase")

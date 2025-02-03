@@ -94,7 +94,6 @@ class GeometryOptimizationTool:
             raise ValueError("No message found in input")
         
         outputs = []
-        print("TOOL CALLS", message.tool_calls)
         for tool_call in message.tool_calls:
             try:
                 tool_name = tool_call.get("name")
@@ -128,8 +127,9 @@ class GeometryOptimizationTool:
             }
 
 def GeometryInputAgent(state: MultiAgentState, llm):
+    prompt = geometry_input_prompt
     messages = [
-            {"role": "system", "content": geometry_input_prompt},
+            {"role": "system", "content": prompt},
             {"role": "user", "content": f"{state['geometry_response']}"}]
     tools = [file_to_atomsdata, molecule_name_to_smiles, smiles_to_atomsdata]
     llm_with_tools = llm.bind_tools(tools=tools)
@@ -143,7 +143,6 @@ def ParameterInputAgent(state: MultiAgentState, llm: ChatOpenAI ):
     else:
         feedback = state['feedback_response'][-1]
     parameter_prompt = parameters_input_prompt.format(geometry_response=state['geometry_response'], feedback=feedback)
-    print("PARAMETER PROMPT: ", parameter_prompt)
     messages = [
             {"role": "system", "content": parameter_prompt},
             {"role": "user", "content": f"{state['parameter_response']}"}
@@ -211,10 +210,11 @@ def GeometryOptimizationAgent(state: MultiAgentState, llm):
     return {"opt_response": [response]}
 
 def FeedbackAgent(state: MultiAgentState, llm):
-    prompt = feedback_prompt.format(aseoutput=state['opt_response'][-1])
+    prompt = feedback_prompt.format(aseoutput=state['opt_response'][-1].content)
     messages = [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": f"{state['question']}"}]
+            #{"role": "user", "content": f"{state['question']}"}
+            ]
     response = llm.invoke(messages)
     return {"feedback_response": [response]}
 
@@ -260,7 +260,7 @@ def router_planner(state: MultiAgentState) -> str:
     return next_agent
 
 def EndAgent(state: MultiAgentState, llm):
-    prompt = end_prompt.format(state=state)
+    prompt = end_prompt.format(aseoutput=state['opt_response'][-1].content, feedback=state['feedback_response'][-1].content, router_message=state['router_response'][-1].content)
     messages = [
         {"role": "system", "content": prompt},
         {"role": "user", "content": f"{state['question']}"}]
