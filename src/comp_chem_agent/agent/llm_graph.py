@@ -88,6 +88,33 @@ class llm_graph:
             return workflow['constructor'](tools_to_use, self.llm_with_tools)
         else:
             return workflow['constructor'](self.llm)
+        
+    def visualize(self, workflow_type):
+        if workflow_type == 'ase':
+            workflow = self._construct_workflow(workflow_type)
+        else:
+            raise ValueError("Workflow {workflow} visualization is not supported yet.")
+        
+        import nest_asyncio
+        from IPython.display import Image, display
+        from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
+
+        nest_asyncio.apply()  # Required for Jupyter Notebook to run async functions
+
+        display(
+            Image(
+                workflow.get_graph().draw_mermaid_png(
+                    curve_style=CurveStyle.LINEAR,
+                    node_colors=NodeStyles(first="#ffdfba", last="#baffc9", default="#fad7de"),
+                    wrap_label_n_words=9,
+                    output_file_path=None,
+                    draw_method=MermaidDrawMethod.PYPPETEER,
+                    background_color="white",
+                    padding=10,
+                )
+            )
+        )
+
     def run(self, query, workflow_type='geoopt', tools=None, config = {"configurable": {"thread_id": "1"}}):
         """
         Runs the specified workflow with the given query
@@ -100,6 +127,7 @@ class llm_graph:
         # Construct the workflow graph
         if workflow_type == 'ase':
             workflow = self._construct_workflow(workflow_type)
+
         else:
             workflow = self._construct_workflow(workflow_type, tools=tools)
         if workflow_type=="geoopt":
@@ -117,12 +145,14 @@ class llm_graph:
         else:
             inputs = {"question": query, "geometry_response": query, "parameter_response": query, "opt_response": query}
             previous_lengths = {
+                "planner_response": 0,
                 "geometry_response": 0,
                 "parameter_response": 0,
                 "opt_response": 0,
                 "feedback_response": 0,
                 "router_response": 0,
-                "end_response": 0
+                "end_response": 0,
+                "regular_response": 0
             }
 
             for s in workflow.stream(inputs, stream_mode="values", config=config):

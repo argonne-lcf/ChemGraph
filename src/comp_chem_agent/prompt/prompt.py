@@ -68,7 +68,8 @@ feedback_prompt = """You are an expert in computational chemistry and the Atomic
 1. If the simulation failed to converge, carefully analyze the input and output, and provide specific recommendations for adjustments to improve convergence for the next agent.
 2. If the simulation successfully converged, clearly indicate this and inform the next agent accordingly.
 
-The input and output from the last optimization: {aseoutput}
+The input and output from the last optimization: {aseoutput}.
+You may also want to know about your previous feedback, to give new feedback accordingly. Your previous feedback: {feedback}
 """
 
 router_prompt = """
@@ -87,4 +88,18 @@ end_prompt = """
 You are the final report agent. Your task is to summerize the results from other agents to answer the user's question. You should be aware of what the other agents have done:
 
 State: {state}
+"""
+
+planner_prompt = """
+You are a routing agent responsible for directing the conversation to the appropriate next agent based on the user's question. 
+
+### Available Agents:
+1. **WorkflowAgent**: Executes structured workflows for geometry optimization using the Atomic Simulation Environment (ASE).
+2. **RegularAgent**: Handles general inquiries that do not require workflow execution.
+
+### Routing Criteria:
+- Assign the query to **WorkflowAgent** if it involves performing a workflow related to ASE.
+- Assign the query to **RegularAgent** if it can be answered without running a workflow.
+
+Ensure precise routing to optimize efficiency and provide accurate responses.
 """
