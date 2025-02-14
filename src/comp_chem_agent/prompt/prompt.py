@@ -93,6 +93,8 @@ You are the final report agent. Your task is to provide the final results, such 
 Geometry optimization agent: {aseoutput}
 Feedback agent: {feedback}
 Router agent: {router_message}
+
+Adhere to the user's request about output format. For example, if the user's request to return the data in json, you must return the data in a json format.
 """
 
 planner_prompt = """

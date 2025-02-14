@@ -137,7 +137,6 @@ def GeometryInputAgent(state: MultiAgentState, llm):
     return {"geometry_response": [response]}
 
 def ParameterInputAgent(state: MultiAgentState, llm: ChatOpenAI ):
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
     if len(state['feedback_response']) == 0:
         feedback = []
     else:

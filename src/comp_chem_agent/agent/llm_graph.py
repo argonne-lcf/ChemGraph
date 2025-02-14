@@ -14,6 +14,8 @@ from comp_chem_agent.tools.xtb_tools import *
 from comp_chem_agent.graphs.xtb_workflow import construct_xtb_graph
 from comp_chem_agent.graphs.ASE_geoopt import construct_ase_graph
 from comp_chem_agent.prompt.prompt import single_agent_prompt
+from comp_chem_agent.graphs.complex_geoopt_workflow import construct_qcengine_graph
+from comp_chem_agent.graphs.opt_vib_workflow import construct_opt_vib_graph
 class llm_graph:
     def __init__(
         self,
@@ -25,7 +27,7 @@ class llm_graph:
         temperature= 0            
     ):
         try:
-            if model_name in ["gpt-4o-mini"]:
+            if model_name in ["gpt-4o-mini", "gpt-4o"]:
                 llm = load_openai_model(model_name=model_name, temperature=temperature)
                 print(f"Loaded {model_name}")
             elif model_name in ['llama3.2', "llama3.1"]:
@@ -45,7 +47,17 @@ class llm_graph:
             },
             'multi_agent_ase': {
                 'constructor': construct_ase_graph,
+            },
+            'simple_qcengine': {
+                'constructor':construct_qcengine_graph
+            },
+            'complex_qcengine': {
+                'constructor':construct_qcengine_graph
+            },
+            'opt_vib': {
+                'constructor': construct_opt_vib_graph
             }
+
         }
 
         self.llm = llm
@@ -102,9 +114,7 @@ class llm_graph:
         # Construct the workflow graph
         workflow = self._construct_workflow(workflow_type)
 
-        if workflow_type=="single_agent_ase":
-            #inputs = {"messages": [("user", query), ("system", single_agent_prompt)]}
-
+        if workflow_type=="single_agent_ase" or workflow_type == "simple_qcengine":
             inputs = {"messages": query}
             for s in workflow.stream(inputs, stream_mode="values", config=config):
                 message = s["messages"][-1]
@@ -113,7 +123,31 @@ class llm_graph:
                     continue
                 else:
                     message.pretty_print()
-        elif workflow_type == "multi_agent_ase":
+                    
+        elif workflow_type == "gcmc":
+            inputs = {"question": query}
+            previous_lengths = {
+                "planner_response": 0,
+            }
+            for s in workflow.stream(inputs, stream_mode="values", config=config):
+                # Check if the lengths of the message lists have changed
+                for key in previous_lengths.keys():
+                    current_length = len(s.get(key, []))
+                    
+                    if current_length > previous_lengths[key]:
+                        # If the length has increased, process the newest message
+                        new_message = s[key][-1]  # Get the newest message
+                        print(f"New message in {key}:")
+                        
+                        if isinstance(new_message, tuple):
+                            print(new_message)
+                        else:
+                            new_message.pretty_print()
+                        
+                        # Update the previous length
+                        previous_lengths[key] = current_length
+
+        elif workflow_type == "multi_agent_ase" or workflow_type == "opt_vib":
             inputs = {"question": query, "geometry_response": query, "parameter_response": query, "opt_response": query}
             previous_lengths = {
                 "planner_response": 0,
@@ -143,5 +177,36 @@ class llm_graph:
                         
                         # Update the previous length
                         previous_lengths[key] = current_length
+        elif workflow_type == "complex_qcengine":
+            inputs = {"question": query, "geometry_response": query, "parameter_response": query, "opt_response": query}
+            previous_lengths = {
+                "planner_response": 0,
+                "geometry_response": 0,
+                "parameter_response": 0,
+                "opt_response": 0,
+                "feedback_response": 0,
+                "router_response": 0,
+                "end_response": 0,
+                "regular_response": 0
+            }
+
+            for s in workflow.stream(inputs, stream_mode="values", config=config):
+                # Check if the lengths of the message lists have changed
+                for key in previous_lengths.keys():
+                    current_length = len(s.get(key, []))
+                    
+                    if current_length > previous_lengths[key]:
+                        # If the length has increased, process the newest message
+                        new_message = s[key][-1]  # Get the newest message
+                        print(f"New message in {key}:")
+                        
+                        if isinstance(new_message, tuple):
+                            print(new_message)
+                        else:
+                            new_message.pretty_print()
+                        
+                        # Update the previous length
+                        previous_lengths[key] = current_length
+
         else:
             print(f"Workflow {workflow_type} is not supported. Please select either multi_agent_ase or single_agent_ase")

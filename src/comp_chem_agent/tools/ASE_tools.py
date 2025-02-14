@@ -2,9 +2,12 @@ from langchain_core.tools import tool
 from typing import List, Dict, Any, Optional, Annotated
 from comp_chem_agent.models.atomsdata import AtomsData
 import pubchempy
-from comp_chem_agent.models.ASEinput import ASESimulationInput, ASESimulationOutput
-import os
+from comp_chem_agent.models.ASEinput import ASESimulationInput, ASESimulationOutput, ASEAtomicInput
+import os, json, io
 import numpy as np
+from langchain_core.messages import HumanMessage
+
+from comp_chem_agent.state.opt_vib_state import MultiAgentState
 @tool
 def molecule_name_to_smiles(name: str) -> str:
     """
@@ -58,7 +61,6 @@ def smiles_to_atomsdata(smiles: str) -> AtomsData:
         cell=[[0,0,0], [0,0,0], [0,0,0]],
         pbc=[False, False, False],  # No periodic boundary conditions
     )
-    #print(type(atoms_data))
     return atoms_data
 
 @tool
@@ -97,7 +99,6 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
     }
     
     calculator = calculator.lower()
-    print(calculator)
     if calculator == "mace_mp":
         from mace.calculators import mace_mp
         calc = mace_mp(model="medium", dispersion=True, default_dtype="float32")
@@ -192,3 +193,83 @@ def save_atomsdata_to_file(atomsdata: AtomsData, fname: str="output.xyz") -> Non
         return f"Successfully saved atomsdata to {fname}"
     except Exception as e:
         raise ValueError(f"Failed to save atomsdata to file: {str(e)}")
+    
+def run_ase(state: MultiAgentState):
+    from ase import Atoms
+    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
+
+    params = state['parameter_response'][-1]
+
+
+    input = json.loads(params.content)
+    calculator = input['calculator']
+    atomsdata = input['atomsdata']
+    optimizer = input['optimizer']
+    fmax = input['fmax']
+    steps = input['steps']
+    driver = input['driver']
+
+    OPTIMIZERS = {
+        "bfgs": BFGS,
+        "lbfgs": LBFGS,
+        "gpmin": GPMin,
+        "fire": FIRE,
+        "mdmin": MDMin
+    }
+    
+    calculator = calculator.lower()
+    if calculator == "mace_mp":
+        from mace.calculators import mace_mp
+        calc = mace_mp(model="medium", dispersion=True, default_dtype="float32")
+    elif calculator == "emt":
+        from ase.calculators.emt import EMT
+        calc = EMT()
+    else:
+        raise ValueError(f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt.")
+    
+    atoms = Atoms(numbers=atomsdata['numbers'], positions=atomsdata['positions'], cell=atomsdata['cell'], pbc=atomsdata['pbc'])    
+    atoms.calc = calc
+
+    try:
+        optimizer_class = OPTIMIZERS.get(input['optimizer'].lower())
+        if optimizer_class is None:
+            raise ValueError(f"Unsupported optimizer: {input['optimizer']}")
+        
+        dyn = optimizer_class(atoms)
+        converged = dyn.run(fmax=fmax, steps=steps)
+        
+        final_structure = AtomsData(
+            numbers=atoms.numbers,
+            positions=atoms.positions,
+            cell=atoms.cell,
+            pbc=atoms.pbc
+        )
+        if driver == 'vib':
+            from ase.vibrations import Vibrations
+            vib = Vibrations(atoms)
+            vib.run()
+            output_buffer = io.StringIO()
+            vib.summary(log=output_buffer)  
+            vib_result = output_buffer.getvalue()
+        else:
+            vib_result = ''
+
+        simulation_output = ASESimulationOutput(
+            converged=converged,
+            final_structure=final_structure,
+            simulation_input=ASESimulationInput(
+                atomsdata=atomsdata,
+                calculator=calculator,
+                optimizer=optimizer,
+                fmax=fmax,
+                steps=steps
+            ),
+            frequencies=vib_result
+        )
+        output = []
+        output.append(HumanMessage(role="system", content=simulation_output.model_dump_json()))
+        return {"opt_response": output}    
+    
+    except Exception as e:
+        print(f"Optimization failed: {str(e)}")
+        return {"opt_response": str(e)}
