@@ -1,6 +1,7 @@
 """Load OpenAI models using LangChain."""
 
 import os
+from getpass import getpass
 from langchain_openai import ChatOpenAI
 from comp_chem_agent.models.supported_models import supported_openai_models
 
@@ -42,19 +43,29 @@ def load_openai_model(
     if api_key is None:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError(
-                "API key not provided and could not be retrieved from the environment."
-            )
+            print("OpenAI API key not found in environment variables.")
+            api_key = getpass("Please enter your OpenAI API key: ")
+            os.environ["OPENAI_API_KEY"] = api_key
 
     if model_name not in supported_openai_models:
         raise ValueError(
             f"Unsupported model '{model_name}'. Supported models are: {supported_openai_models}."
         )
 
-    llm = ChatOpenAI(
-        model=model_name,
-        temperature=temperature,
-        api_key=api_key,
-    )
-    print(f"Successfully loaded model: {model_name}")
-    return llm
+    try:
+        llm = ChatOpenAI(
+            model=model_name,
+            temperature=temperature,
+            api_key=api_key,
+        )
+        print(f"Successfully loaded model: {model_name}")
+        return llm
+    except Exception as e:
+        if "AuthenticationError" in str(e) or "invalid_api_key" in str(e):
+            print("Invalid OpenAI API key.")
+            api_key = getpass("Please enter a valid OpenAI API key: ")
+            os.environ["OPENAI_API_KEY"] = api_key
+            # Retry with new API key
+            return load_openai_model(model_name, temperature, api_key, prompt)
+        else:
+            raise e
