@@ -1,5 +1,6 @@
 import os
 from langchain_openai import ChatOpenAI
+from comp_chem_agent.models.supported_models import supported_alcf_models
 
 
 def load_alcf_model(model_name: str, base_url: str, api_key: str = None) -> ChatOpenAI:
@@ -9,11 +10,11 @@ def load_alcf_model(model_name: str, base_url: str, api_key: str = None) -> Chat
     Parameters
     ----------
     model_name : str
-        The name of the OpenAI chat model to load.
+        The name of the model to load. See supported_alcf_models for list of supported models.
     base_url : str
         The base URL of the API endpoint.
     api_key : str, optional
-        The OpenAI API key. If not provided, the function will attempt to retrieve it 
+        The OpenAI API key. If not provided, the function will attempt to retrieve it
         from the environment variable `OPENAI_API_KEY`.
 
     Returns
@@ -29,13 +30,11 @@ def load_alcf_model(model_name: str, base_url: str, api_key: str = None) -> Chat
 
     if api_key is None:
         raise ValueError("API key (access token) is not found")
-    supported_models = [
-        "meta-llama/Meta-Llama-3.1-70B-Instruct",
-        "meta-llama/Llama-3.3-70B-Instruct"
-    ]
-    
-    if model_name not in supported_models:
-        raise ValueError(f"Model {model_name} is not supported on ALCF yet.")
+
+    if model_name not in supported_alcf_models:
+        raise ValueError(
+            f"Model {model_name} is not supported on ALCF yet. Supported models are: {supported_alcf_models}"
+        )
     try:
         llm = ChatOpenAI(
             model=model_name,
