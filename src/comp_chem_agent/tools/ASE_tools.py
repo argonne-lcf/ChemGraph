@@ -79,8 +79,6 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
             - simulation_input: ASESimulationInput object containing the input used for the simulation
             - gradients: List of tuples containing the maximum force at each 10th step of the optimization
     """
-    from ase import Atoms
-    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
     
     max_force_at_steps = []
     def capture_max_force(optimizer):
@@ -89,14 +87,6 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
         forces = atoms.get_forces()  # Get the forces on atoms
         max_force = np.max(np.linalg.norm(forces, axis=1))  # Compute the maximum force (norm of the forces)
         max_force_at_steps.append(max_force)
-
-    OPTIMIZERS = {
-        "bfgs": BFGS,
-        "lbfgs": LBFGS,
-        "gpmin": GPMin,
-        "fire": FIRE,
-        "mdmin": MDMin
-    }
     
     calculator = calculator.lower()
     if calculator == "mace_mp":
@@ -107,9 +97,18 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
         calc = EMT()
     else:
         raise ValueError(f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt.")
+    from ase import Atoms
+    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
     atoms = Atoms(numbers=atomsdata.numbers, positions=atomsdata.positions, cell=atomsdata.cell, pbc=atomsdata.pbc)    
     atoms.calc = calc
+    OPTIMIZERS = {
+        "bfgs": BFGS,
+        "lbfgs": LBFGS,
+        "gpmin": GPMin,
+        "fire": FIRE,
+        "mdmin": MDMin
+    }
 
     try:
         optimizer_class = OPTIMIZERS.get(optimizer.lower())
@@ -195,12 +194,7 @@ def save_atomsdata_to_file(atomsdata: AtomsData, fname: str="output.xyz") -> Non
         raise ValueError(f"Failed to save atomsdata to file: {str(e)}")
     
 def run_ase(state: MultiAgentState):
-    from ase import Atoms
-    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
-
     params = state['parameter_response'][-1]
-
-
     input = json.loads(params.content)
     calculator = input['calculator']
     atomsdata = input['atomsdata']
@@ -208,7 +202,22 @@ def run_ase(state: MultiAgentState):
     fmax = input['fmax']
     steps = input['steps']
     driver = input['driver']
+    
+    calculator = calculator.lower()
+    if calculator == "mace_mp":
+        from mace.calculators import mace_mp
+        calc = mace_mp(model="medium", dispersion=True, default_dtype="float64")
+    elif calculator == "emt":
+        from ase.calculators.emt import EMT
+        calc = EMT()
+    else:
+        raise ValueError(f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt.")
+    
+    from ase import Atoms
+    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
+    atoms = Atoms(numbers=atomsdata['numbers'], positions=atomsdata['positions'], cell=atomsdata['cell'], pbc=atomsdata['pbc'])    
+    atoms.calc = calc
     OPTIMIZERS = {
         "bfgs": BFGS,
         "lbfgs": LBFGS,
@@ -216,22 +225,8 @@ def run_ase(state: MultiAgentState):
         "fire": FIRE,
         "mdmin": MDMin
     }
-    
-    calculator = calculator.lower()
-    if calculator == "mace_mp":
-        from mace.calculators import mace_mp
-        calc = mace_mp(model="medium", dispersion=True, default_dtype="float32")
-    elif calculator == "emt":
-        from ase.calculators.emt import EMT
-        calc = EMT()
-    else:
-        raise ValueError(f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt.")
-    
-    atoms = Atoms(numbers=atomsdata['numbers'], positions=atomsdata['positions'], cell=atomsdata['cell'], pbc=atomsdata['pbc'])    
-    atoms.calc = calc
-
     try:
-        optimizer_class = OPTIMIZERS.get(input['optimizer'].lower())
+        optimizer_class = OPTIMIZERS.get(optimizer.lower())
         if optimizer_class is None:
             raise ValueError(f"Unsupported optimizer: {input['optimizer']}")
         

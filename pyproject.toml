@@ -11,16 +11,19 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "ase>=3.22.0",
-    "rdkit>=2024.03.5",
-    "langgraph>=0.2.59",
-    "langchain-openai>=0.2.12",
-    "langchain-ollama>=0.2.1",
-    "pydantic>=2.10.3",
+    "ase==3.22.1",
+    "rdkit==2024.03.5",
+    "langgraph==0.2.59",
+    "langchain-openai==0.2.12",
+    "langchain-ollama==0.2.1",
+    "pydantic==2.10.3",
     "pandas>=2.2",
-    "mace-torch>=0.3.9",
-    "torch-dftd>= 0.5.1",
-    "pubchempy>=1.0.4"
+    "mace-torch==0.3.9",
+    "torch<2.6",
+    "torch-dftd== 0.5.1",
+    "pubchempy==1.0.4",
+    "pyppeteer==2.0.0",
+    "numpy<2"
     ]
 
 [project.urls]

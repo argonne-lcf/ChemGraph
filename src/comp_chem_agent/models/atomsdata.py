@@ -6,10 +6,10 @@ class AtomsData(BaseModel):
     positions: List[List[float]] = Field(..., description="Atomic positions")
     cell: Optional[Union[List[List[float]], None]] = Field(
         default=None, 
-        description="Cell vectors"
+        description="Cell vectors or None"
     )
     pbc: Optional[Union[List[bool], None]] = Field(
         default=None, 
-        description="Periodic boundary conditions"
+        description="Periodic boundary conditions or None"
     )
 

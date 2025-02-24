@@ -199,6 +199,8 @@ def qcengine_parameter_agent(state: MultiAgentState, llm: ChatOpenAI):
     ]
     structured_llm  = llm.with_structured_output(AtomicInputWrapper)
     response = structured_llm.invoke(messages).model_dump_json()
+
+    print("RESPONSE", response)
     return {"parameter_response": response}
 
 def ase_feedback_agent(state: MultiAgentState, llm):
