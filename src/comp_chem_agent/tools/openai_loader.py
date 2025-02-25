@@ -58,9 +58,11 @@ def load_openai_model(
             temperature=temperature,
             api_key=api_key,
         )
-        print(f"Successfully loaded model: {model_name}")
+        # No guarantee that api_key is valid, authentication happens only during invocation
+        print(f"Requested model: {model_name}")
         return llm
     except Exception as e:
+        # Can remove this since authentication happens only during invocation
         if "AuthenticationError" in str(e) or "invalid_api_key" in str(e):
             print("Invalid OpenAI API key.")
             api_key = getpass("Please enter a valid OpenAI API key: ")
