@@ -16,6 +16,7 @@ from comp_chem_agent.graphs.ASE_geoopt import construct_ase_graph
 from comp_chem_agent.prompt.prompt import single_agent_prompt
 from comp_chem_agent.graphs.complex_geoopt_workflow import construct_qcengine_graph
 from comp_chem_agent.graphs.opt_vib_workflow import construct_opt_vib_graph
+from comp_chem_agent.graphs.multi_framework_agent import construct_multi_framework_graph
 class llm_graph:
     def __init__(
         self,
@@ -56,6 +57,9 @@ class llm_graph:
             },
             'opt_vib': {
                 'constructor': construct_opt_vib_graph
+            },
+            'multi_framework': {
+                'constructor': construct_multi_framework_graph
             }
 
         }
@@ -147,7 +151,7 @@ class llm_graph:
                         # Update the previous length
                         previous_lengths[key] = current_length
 
-        elif workflow_type == "multi_agent_ase" or workflow_type == "opt_vib":
+        elif workflow_type == "multi_agent_ase" or workflow_type == "opt_vib" or workflow_type == "multi_framework":
             inputs = {"question": query, "geometry_response": query, "parameter_response": query, "opt_response": query}
             previous_lengths = {
                 "planner_response": 0,

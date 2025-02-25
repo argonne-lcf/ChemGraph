@@ -268,3 +268,88 @@ def run_ase(state: MultiAgentState):
     except Exception as e:
         print(f"Optimization failed: {str(e)}")
         return {"opt_response": str(e)}
+    
+
+def run_ase_multi_soft(state: MultiAgentState):
+    # Get parameters to run ASE from state
+    params = state['parameter_response'][-1]
+    input = json.loads(params.content)
+
+    calculator = input['calculator']
+    if "mace" in calculator['calculator_type'].lower():
+        from comp_chem_agent.models.calculators.mace_calc import MaceCalc
+        calc = MaceCalc(**calculator).get_calculator()
+    elif "emt" == calculator['calculator_type'].lower():
+        from comp_chem_agent.models.calculators.emt_calc import EMTCalc
+        calc = EMTCalc(**calculator).get_calculator()
+    elif "tblite" in calculator['calculator_type'].lower():
+        from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
+        calc = TBLiteCalc(**calculator).get_calculator()
+    elif "orca" == calculator['calculator_type'].lower():
+        from comp_chem_agent.models.calculators.orca_calc import OrcaCalc
+        calc = OrcaCalc(**calculator).get_calculator()
+    else:
+        raise ValueError(f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca")
+
+    atomsdata = input['atomsdata']
+    optimizer = input['optimizer']
+    fmax = input['fmax']
+    steps = input['steps']
+    driver = input['driver']
+    
+    # Import ASE after calculators to avoid issues
+    from ase import Atoms
+    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
+
+    atoms = Atoms(numbers=atomsdata['numbers'], positions=atomsdata['positions'], cell=atomsdata['cell'], pbc=atomsdata['pbc'])    
+    atoms.calc = calc
+    OPTIMIZERS = {
+        "bfgs": BFGS,
+        "lbfgs": LBFGS,
+        "gpmin": GPMin,
+        "fire": FIRE,
+        "mdmin": MDMin
+    }
+    try:
+        optimizer_class = OPTIMIZERS.get(optimizer.lower())
+        if optimizer_class is None:
+            raise ValueError(f"Unsupported optimizer: {input['optimizer']}")
+        
+        dyn = optimizer_class(atoms)
+        converged = dyn.run(fmax=fmax, steps=steps)
+        
+        final_structure = AtomsData(
+            numbers=atoms.numbers,
+            positions=atoms.positions,
+            cell=atoms.cell,
+            pbc=atoms.pbc
+        )
+        if driver == 'vib':
+            from ase.vibrations import Vibrations
+            vib = Vibrations(atoms)
+            vib.run()
+            output_buffer = io.StringIO()
+            vib.summary(log=output_buffer)  
+            vib_result = output_buffer.getvalue()
+        else:
+            vib_result = ''
+
+        simulation_output = ASESimulationOutput(
+            converged=converged,
+            final_structure=final_structure,
+            simulation_input=ASESimulationInput(
+                atomsdata=atomsdata,
+                calculator=calculator,
+                optimizer=optimizer,
+                fmax=fmax,
+                steps=steps
+            ),
+            frequencies=vib_result
+        )
+        output = []
+        output.append(HumanMessage(role="system", content=simulation_output.model_dump_json()))
+        return {"opt_response": output}    
+    
+    except Exception as e:
+        print(f"Optimization failed: {str(e)}")
+        return {"opt_response": str(e)}

@@ -1,11 +1,11 @@
+# Keywords and parameters obtained from https://github.com/ACEsuit/mace/blob/main/mace/calculators/foundations_models.py
+# MACE foundation models parameters for CompChemAgent
+
 from typing import Optional, Union
 from pydantic import BaseModel, Field
 from pathlib import Path
-from mace.calculators import mace_mp, mace_off
-from ase import Atoms
-from ase.optimize import BFGS
-import torch
 from ase import units
+import torch
 
 class MaceCalc(BaseModel):
     calculator_type: str = Field(
@@ -46,8 +46,10 @@ class MaceCalc(BaseModel):
     )
 
     def get_calculator(self):
+
         """Returns the appropriate MACECalculator based on the selected calculator type."""
         if self.calculator_type == "mace_mp":
+            from mace.calculators import mace_mp
             return mace_mp(
                 model=self.model,
                 device=self.device,
@@ -59,25 +61,19 @@ class MaceCalc(BaseModel):
                 return_raw_model=self.return_raw_model
             )
         elif self.calculator_type == "mace_off":
+            from mace.calculators import mace_off
             return mace_off(
                 model=self.model,
                 device=self.device,
                 default_dtype=self.default_dtype,
                 return_raw_model=self.return_raw_model
             )
+        elif self.calculator_type == "mace_anicc":
+            from mace.calculators import mace_anicc
+            return mace_anicc(
+                device=self.device,
+                model_path=self.model,
+                return_raw_model=self.return_raw_model
+            )
         else:
-            raise ValueError("Invalid calculator_type. Choose 'mace_mp' or 'mace_off'.")
-
-# Example Usage:
-mace_mp_calc = MaceCalc(calculator_type="mace_mp", dispersion=True, device='cpu', model='large').get_calculator()
-mace_off_calc = MaceCalc(calculator_type="mace_off", default_dtype="float64").get_calculator()
-
-atoms = Atoms('N2', positions=[(0, 0, 0), (0, 0, 1.1)])
-#calc = mace_mp(model="medium")
-
-#calc = mace_mp_calc
-calc = mace_off_calc
-atoms.calc = calc
-dyn = BFGS(atoms)
-result = dyn.run(fmax=0.01)
-
+            raise ValueError("Invalid calculator_type. Choose 'mace_mp' or 'mace_off' or 'mace_anicc'.")
