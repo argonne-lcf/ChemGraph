@@ -24,6 +24,11 @@ from comp_chem_agent.models.supported_models import (
 
 
 from comp_chem_agent.graphs.multi_framework_agent import construct_multi_framework_graph
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class llm_graph:
     def __init__(
         self,
@@ -58,19 +63,10 @@ class llm_graph:
             "multi_agent_ase": {
                 "constructor": construct_ase_graph,
             },
-            'simple_qcengine': {
-                'constructor':construct_qcengine_graph
-            },
-            'complex_qcengine': {
-                'constructor':construct_qcengine_graph
-            },
-            'opt_vib': {
-                'constructor': construct_opt_vib_graph
-            },
-            'multi_framework': {
-                'constructor': construct_multi_framework_graph
-            }
-
+            "simple_qcengine": {"constructor": construct_qcengine_graph},
+            "complex_qcengine": {"constructor": construct_qcengine_graph},
+            "opt_vib": {"constructor": construct_opt_vib_graph},
+            "multi_framework": {"constructor": construct_multi_framework_graph},
         }
 
         self.llm = llm
@@ -138,109 +134,127 @@ class llm_graph:
             workflow_type (str): Type of workflow to run ('geoopt' or 'xtb')
             tools (list, optional): Custom tools to use. If None, uses default tools for the workflow
         """
-        # Construct the workflow graph
-        workflow = self._construct_workflow(workflow_type)
+        try:
+            # Construct the workflow graph
+            workflow = self._construct_workflow(workflow_type)
 
-        if workflow_type == "single_agent_ase" or workflow_type == "simple_qcengine":
-            inputs = {"messages": query}
-            for s in workflow.stream(inputs, stream_mode="values", config=config):
-                message = s["messages"][-1]
-                if isinstance(message, tuple):
-                    print(message)
-                    continue
-                else:
-                    message.pretty_print()
+            if (
+                workflow_type == "single_agent_ase"
+                or workflow_type == "simple_qcengine"
+            ):
+                inputs = {"messages": query}
+                for s in workflow.stream(inputs, stream_mode="values", config=config):
+                    message = s["messages"][-1]
+                    if isinstance(message, tuple):
+                        logger.info(message)
+                        continue
+                    else:
+                        message.pretty_print()
 
-        elif workflow_type == "gcmc":
-            inputs = {"question": query}
-            previous_lengths = {
-                "planner_response": 0,
-            }
-            for s in workflow.stream(inputs, stream_mode="values", config=config):
-                # Check if the lengths of the message lists have changed
-                for key in previous_lengths.keys():
-                    current_length = len(s.get(key, []))
+            elif workflow_type == "gcmc":
+                inputs = {"question": query}
+                previous_lengths = {
+                    "planner_response": 0,
+                }
+                for s in workflow.stream(inputs, stream_mode="values", config=config):
+                    # Check if the lengths of the message lists have changed
+                    for key in previous_lengths.keys():
+                        current_length = len(s.get(key, []))
 
-                    if current_length > previous_lengths[key]:
-                        # If the length has increased, process the newest message
-                        new_message = s[key][-1]  # Get the newest message
-                        print(f"New message in {key}:")
+                        if current_length > previous_lengths[key]:
+                            # If the length has increased, process the newest message
+                            new_message = s[key][-1]  # Get the newest message
+                            logger.info(f"New message in {key}:")
 
-                        if isinstance(new_message, tuple):
-                            print(new_message)
-                        else:
-                            new_message.pretty_print()
+                            if isinstance(new_message, tuple):
+                                logger.info(new_message)
+                            else:
+                                new_message.pretty_print()
 
-                        # Update the previous length
-                        previous_lengths[key] = current_length
+                            # Update the previous length
+                            previous_lengths[key] = current_length
 
-        elif workflow_type == "multi_agent_ase" or workflow_type == "opt_vib" or workflow_type == "multi_framework":
-            inputs = {"question": query, "geometry_response": query, "parameter_response": query, "opt_response": query}
-            previous_lengths = {
-                "planner_response": 0,
-                "geometry_response": 0,
-                "parameter_response": 0,
-                "opt_response": 0,
-                "feedback_response": 0,
-                "router_response": 0,
-                "end_response": 0,
-                "regular_response": 0,
-            }
+            elif (
+                workflow_type == "multi_agent_ase"
+                or workflow_type == "opt_vib"
+                or workflow_type == "multi_framework"
+            ):
+                inputs = {
+                    "question": query,
+                    "geometry_response": query,
+                    "parameter_response": query,
+                    "opt_response": query,
+                }
+                previous_lengths = {
+                    "planner_response": 0,
+                    "geometry_response": 0,
+                    "parameter_response": 0,
+                    "opt_response": 0,
+                    "feedback_response": 0,
+                    "router_response": 0,
+                    "end_response": 0,
+                    "regular_response": 0,
+                }
 
-            for s in workflow.stream(inputs, stream_mode="values", config=config):
-                # Check if the lengths of the message lists have changed
-                for key in previous_lengths.keys():
-                    current_length = len(s.get(key, []))
+                for s in workflow.stream(inputs, stream_mode="values", config=config):
+                    # Check if the lengths of the message lists have changed
+                    for key in previous_lengths.keys():
+                        current_length = len(s.get(key, []))
 
-                    if current_length > previous_lengths[key]:
-                        # If the length has increased, process the newest message
-                        new_message = s[key][-1]  # Get the newest message
-                        print(f"New message in {key}:")
+                        if current_length > previous_lengths[key]:
+                            # If the length has increased, process the newest message
+                            new_message = s[key][-1]  # Get the newest message
+                            logger.info(f"New message in {key}:")
 
-                        if isinstance(new_message, tuple):
-                            print(new_message)
-                        else:
-                            new_message.pretty_print()
+                            if isinstance(new_message, tuple):
+                                logger.info(new_message)
+                            else:
+                                new_message.pretty_print()
 
-                        # Update the previous length
-                        previous_lengths[key] = current_length
-        elif workflow_type == "complex_qcengine":
-            inputs = {
-                "question": query,
-                "geometry_response": query,
-                "parameter_response": query,
-                "opt_response": query,
-            }
-            previous_lengths = {
-                "planner_response": 0,
-                "geometry_response": 0,
-                "parameter_response": 0,
-                "opt_response": 0,
-                "feedback_response": 0,
-                "router_response": 0,
-                "end_response": 0,
-                "regular_response": 0,
-            }
+                            # Update the previous length
+                            previous_lengths[key] = current_length
+            elif workflow_type == "complex_qcengine":
+                inputs = {
+                    "question": query,
+                    "geometry_response": query,
+                    "parameter_response": query,
+                    "opt_response": query,
+                }
+                previous_lengths = {
+                    "planner_response": 0,
+                    "geometry_response": 0,
+                    "parameter_response": 0,
+                    "opt_response": 0,
+                    "feedback_response": 0,
+                    "router_response": 0,
+                    "end_response": 0,
+                    "regular_response": 0,
+                }
 
-            for s in workflow.stream(inputs, stream_mode="values", config=config):
-                # Check if the lengths of the message lists have changed
-                for key in previous_lengths.keys():
-                    current_length = len(s.get(key, []))
+                for s in workflow.stream(inputs, stream_mode="values", config=config):
+                    # Check if the lengths of the message lists have changed
+                    for key in previous_lengths.keys():
+                        current_length = len(s.get(key, []))
 
-                    if current_length > previous_lengths[key]:
-                        # If the length has increased, process the newest message
-                        new_message = s[key][-1]  # Get the newest message
-                        print(f"New message in {key}:")
+                        if current_length > previous_lengths[key]:
+                            # If the length has increased, process the newest message
+                            new_message = s[key][-1]  # Get the newest message
+                            logger.info(f"New message in {key}:")
 
-                        if isinstance(new_message, tuple):
-                            print(new_message)
-                        else:
-                            new_message.pretty_print()
+                            if isinstance(new_message, tuple):
+                                logger.info(new_message)
+                            else:
+                                new_message.pretty_print()
 
-                        # Update the previous length
-                        previous_lengths[key] = current_length
+                            # Update the previous length
+                            previous_lengths[key] = current_length
 
-        else:
-            print(
-                f"Workflow {workflow_type} is not supported. Please select either multi_agent_ase or single_agent_ase"
-            )
+            else:
+                logger.error(
+                    f"Workflow {workflow_type} is not supported. Please select either multi_agent_ase or single_agent_ase"
+                )
+                raise ValueError(f"Workflow {workflow_type} is not supported")
+
+        except Exception as e:
+            logger.error(f"Error running workflow {workflow_type}: {str(e)}")
+            raise
