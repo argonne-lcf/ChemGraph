@@ -23,6 +23,7 @@ from comp_chem_agent.models.supported_models import (
 )
 
 
+from comp_chem_agent.graphs.multi_framework_agent import construct_multi_framework_graph
 class llm_graph:
     def __init__(
         self,
@@ -57,9 +58,19 @@ class llm_graph:
             "multi_agent_ase": {
                 "constructor": construct_ase_graph,
             },
-            "simple_qcengine": {"constructor": construct_qcengine_graph},
-            "complex_qcengine": {"constructor": construct_qcengine_graph},
-            "opt_vib": {"constructor": construct_opt_vib_graph},
+            'simple_qcengine': {
+                'constructor':construct_qcengine_graph
+            },
+            'complex_qcengine': {
+                'constructor':construct_qcengine_graph
+            },
+            'opt_vib': {
+                'constructor': construct_opt_vib_graph
+            },
+            'multi_framework': {
+                'constructor': construct_multi_framework_graph
+            }
+
         }
 
         self.llm = llm
@@ -163,13 +174,8 @@ class llm_graph:
                         # Update the previous length
                         previous_lengths[key] = current_length
 
-        elif workflow_type == "multi_agent_ase" or workflow_type == "opt_vib":
-            inputs = {
-                "question": query,
-                "geometry_response": query,
-                "parameter_response": query,
-                "opt_response": query,
-            }
+        elif workflow_type == "multi_agent_ase" or workflow_type == "opt_vib" or workflow_type == "multi_framework":
+            inputs = {"question": query, "geometry_response": query, "parameter_response": query, "opt_response": query}
             previous_lengths = {
                 "planner_response": 0,
                 "geometry_response": 0,

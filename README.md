@@ -37,17 +37,24 @@ Ensure Python 3.10 or above is installed on your system.
 
 The following libraries are required and will be installed automatically:
 
-- `pydantic>=1.8.2`
-- `ase>=3.22.0`
-- `rdkit>=2024.03.5`
-- `langgraph>=0.2.59`
-- `langchain-openai>=0.2.12`
-- `langchain-ollama>=0.2.1`
-- `pydantic>=2.10.3`
+- `ase==3.22.1`
+- `rdkit==2024.03.5`
+- `langgraph==0.2.59`
+- `langchain-openai==0.2.12`
+- `langchain-ollama==0.2.1`
+- `pydantic==2.10.3`
 - `pandas>=2.2`
-- `mace-torch>=0.3.9`,
-- `torch-dftd >= 0.5.1`
+- `mace-torch==0.3.9`
+- `torch<2.6`
+- `torch-dftd==0.5.1`
+- `pubchempy==1.0.4`
+- `pyppeteer==2.0.0`
+- `numpy<2`
+- `qcelemental==0.29.0`
+- `qcengine==0.31.0`
+- `tblite==0.4.0`
 
+For TBLite (for XTB), to use the Python extension, you must install it separately. Instructions to install Python API for TBLite can be found here: https://tblite.readthedocs.io/en/latest/installation.html
 ---
 
 Usage
@@ -56,7 +63,7 @@ Explore example workflows in the notebooks/ directory:
 Single-Agent System: Demo-SingleAgent.ipynb
 - Demonstrates a basic agent with multiple tools.
 
-Multi-Agent System: Demo-MultiAgent.ipynb
+Multi-Agent System: Demo_MultiAgent.ipynb
 - Demonstrates multiple agents handling different tasks.
 
 Legacy Implementation: Legacy-ComChemAgent.ipynb
