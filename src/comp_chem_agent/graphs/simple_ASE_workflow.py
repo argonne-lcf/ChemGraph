@@ -15,6 +15,9 @@ from comp_chem_agent.tools.ASE_tools import (
     file_to_atomsdata,
 )
 from comp_chem_agent.prompt.prompt import single_agent_prompt
+from comp_chem_agent.utils.logging_config import setup_logger
+
+logger = setup_logger(__name__)
 
 
 class State(TypedDict):
@@ -109,25 +112,30 @@ def ASEAgent(state: State, llm: ChatOpenAI):
 
 
 def construct_geoopt_graph(llm: ChatOpenAI):
-    checkpointer = MemorySaver()
-    tools = [
-        file_to_atomsdata,
-        smiles_to_atomsdata,
-        geometry_optimization,
-        molecule_name_to_smiles,
-        save_atomsdata_to_file,
-    ]
-    tool_node = BasicToolNode(tools=tools)
-    graph_builder = StateGraph(State)
-    graph_builder.add_node("ASEAgent", lambda state: ASEAgent(state, llm))
-    graph_builder.add_node("tools", tool_node)
-    graph_builder.add_conditional_edges(
-        "ASEAgent",
-        route_tools,
-        {"tools": "tools", END: END},
-    )
-    graph_builder.add_edge("tools", "ASEAgent")
-    graph_builder.add_edge(START, "ASEAgent")
-    graph = graph_builder.compile(checkpointer=checkpointer)
-
-    return graph
+    try:
+        logger.info("Constructing geometry optimization graph")
+        checkpointer = MemorySaver()
+        tools = [
+            file_to_atomsdata,
+            smiles_to_atomsdata,
+            geometry_optimization,
+            molecule_name_to_smiles,
+            save_atomsdata_to_file,
+        ]
+        tool_node = BasicToolNode(tools=tools)
+        graph_builder = StateGraph(State)
+        graph_builder.add_node("ASEAgent", lambda state: ASEAgent(state, llm))
+        graph_builder.add_node("tools", tool_node)
+        graph_builder.add_conditional_edges(
+            "ASEAgent",
+            route_tools,
+            {"tools": "tools", END: END},
+        )
+        graph_builder.add_edge("tools", "ASEAgent")
+        graph_builder.add_edge(START, "ASEAgent")
+        graph = graph_builder.compile(checkpointer=checkpointer)
+        logger.info("Graph construction completed")
+        return graph
+    except Exception as e:
+        logger.error(f"Error constructing graph: {str(e)}")
+        raise

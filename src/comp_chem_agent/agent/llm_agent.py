@@ -8,14 +8,9 @@ from comp_chem_agent.tools.ASE_tools import (
 )
 from comp_chem_agent.tools.alcf_loader import load_alcf_model
 from comp_chem_agent.tools.openai_loader import load_openai_model
-import logging
+from comp_chem_agent.utils.logging_config import setup_logger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
+logger = setup_logger(__name__)
 
 class CompChemAgent:
     def __init__(
@@ -43,37 +38,43 @@ class CompChemAgent:
                 logger.info(f"Loaded {model_name}")
 
         except Exception as e:
-            logger.error(f"Error with loading {model_name}: {str(e)}")
+            logger.error(f"Error loading {model_name}: {str(e)}")
             raise
+
         if prompt is None:
             system_message = "You are a helpful assistant."
-            # system_message =  "You are a helpful assistant at extracting data of material databases."
-        # tools = [smiles_to_xyz, geometry_optimization]
+        
         tools = [
             smiles_to_atomsdata,
             geometry_optimization,
             molecule_name_to_smiles,
             file_to_atomsdata,
         ]
-        # self.langgraph_agent_executor = create_react_agent(llm, tools, state_modifier=system_message)
-        # tools = [get_files_in_directories, search_file_by_keyword, extract_coreid_and_refcode]
+        
         self.llm = llm
-
         self.graph = create_react_agent(llm, tools, state_modifier=system_message)
 
     def run(self, query):
-        inputs = {"messages": [("user", query)]}
-        for s in self.graph.stream(inputs, stream_mode="values"):
-            message = s["messages"][-1]
-            if isinstance(message, tuple):
-                logger.info(message)
-            else:
-                message.pretty_print()
+        try:
+            inputs = {"messages": [("user", query)]}
+            for s in self.graph.stream(inputs, stream_mode="values"):
+                message = s["messages"][-1]
+                if isinstance(message, tuple):
+                    logger.info(message)
+                else:
+                    logger.info(message.content)
+        except Exception as e:
+            logger.error(f"Error running query: {str(e)}")
+            raise
 
     def runq(self, query):
-        messages = self.llm.invoke(query)
-        logger.info(messages)
-        return messages
+        try:
+            messages = self.llm.invoke(query)
+            logger.info(messages)
+            return messages
+        except Exception as e:
+            logger.error(f"Error in runq: {str(e)}")
+            raise
 
     def return_input(self, query, simulation_class):
         structured_llm = self.llm.with_structured_output(simulation_class)

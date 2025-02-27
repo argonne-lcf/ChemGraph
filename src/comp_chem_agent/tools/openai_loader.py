@@ -1,9 +1,13 @@
 """Load OpenAI models using LangChain."""
 
+import logging
 import os
 from getpass import getpass
 from langchain_openai import ChatOpenAI
 from comp_chem_agent.models.supported_models import supported_openai_models
+from comp_chem_agent.utils.logging_config import setup_logger
+
+logger = setup_logger(__name__)
 
 
 def load_openai_model(
@@ -43,7 +47,7 @@ def load_openai_model(
     if api_key is None:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            print("OpenAI API key not found in environment variables.")
+            logger.info("OpenAI API key not found in environment variables.")
             api_key = getpass("Please enter your OpenAI API key: ")
             os.environ["OPENAI_API_KEY"] = api_key
 
@@ -53,21 +57,24 @@ def load_openai_model(
         )
 
     try:
+        logger.info(f"Loading OpenAI model: {model_name}")
         llm = ChatOpenAI(
             model=model_name,
             temperature=temperature,
             api_key=api_key,
         )
         # No guarantee that api_key is valid, authentication happens only during invocation
-        print(f"Requested model: {model_name}")
+        logger.info(f"Requested model: {model_name}")
+        logger.info("OpenAI model loaded successfully")
         return llm
     except Exception as e:
         # Can remove this since authentication happens only during invocation
         if "AuthenticationError" in str(e) or "invalid_api_key" in str(e):
-            print("Invalid OpenAI API key.")
+            logger.warning("Invalid OpenAI API key.")
             api_key = getpass("Please enter a valid OpenAI API key: ")
             os.environ["OPENAI_API_KEY"] = api_key
             # Retry with new API key
             return load_openai_model(model_name, temperature, api_key, prompt)
         else:
-            raise e
+            logger.error(f"Error loading OpenAI model: {str(e)}")
+            raise

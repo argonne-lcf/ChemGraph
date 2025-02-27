@@ -2,8 +2,14 @@
 from comp_chem_agent.state.opt_vib_state import MultiAgentState
 from langchain_core.messages import HumanMessage
 import json
+from langchain.tools import tool
+import qcengine as qcng
+from comp_chem_agent.utils.logging_config import setup_logger
+
+logger = setup_logger(__name__)
 
 
+@tool
 def run_qcengine(state: MultiAgentState, program="psi4"):
     import qcengine
     import numpy as np
@@ -57,10 +63,16 @@ def run_qcengine(state: MultiAgentState, program="psi4"):
     input["molecule"] = parse_atomsdata_to_mol(input)
     del input["atomsdata"]
     del input["program"]
-    result = qcengine.compute(input, program).dict()
-    del result["stdout"]
-    output = []
-    output.append(
-        HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder))
-    )
-    return {"opt_response": output}
+    try:
+        logger.info("Starting QCEngine calculation")
+        result = qcengine.compute(input, program).dict()
+        del result["stdout"]
+        output = []
+        output.append(
+            HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder))
+        )
+        logger.info("QCEngine calculation completed successfully")
+        return {"opt_response": output}
+    except Exception as e:
+        logger.error(f"Error in QCEngine calculation: {str(e)}")
+        raise

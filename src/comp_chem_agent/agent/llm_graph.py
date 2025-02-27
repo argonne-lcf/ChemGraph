@@ -30,19 +30,16 @@ class llm_graph:
         try:
             if model_name in supported_openai_models:
                 llm = load_openai_model(model_name=model_name, temperature=temperature)
-                print(f"Loaded {model_name}")
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
-                print(f"Loaded {model_name}")
             else:
                 llm = load_alcf_model(
                     model_name=model_name, base_url=base_url, api_key=api_key
                 )
-                print(f"Loaded {model_name}")
 
         except Exception as e:
-            print(e)
-            print(f"Error with loading {model_name}")
+            logger.error(f"Exception thrown when loading {model_name}.")
+            raise e
 
         self.workflow_map = {
             "single_agent_ase": {
