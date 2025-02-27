@@ -1,0 +1,81 @@
+import pytest
+import numpy as np
+from comp_chem_agent.models.calculators.emt_calc import EMTCalc
+from comp_chem_agent.models.calculators.mace_calc import MaceCalc
+from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
+from comp_chem_agent.models.calculators.orca_calc import OrcaCalc
+from comp_chem_agent.models.atomsdata import AtomsData
+from ase import Atoms
+
+
+def test_emt_calculator():
+    # Test EMT calculator initialization
+    calc = EMTCalc()
+    ase_calc = calc.get_calculator()
+
+    # Create a simple molecule
+    atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]])
+    atoms.calc = ase_calc
+
+    # Test energy calculation
+    energy = atoms.get_potential_energy()
+    assert isinstance(energy, float)
+
+    # Test forces calculation
+    forces = atoms.get_forces()
+    assert isinstance(forces, np.ndarray)
+    assert forces.shape == (2, 3)
+
+
+@pytest.mark.skipif(not pytest.importorskip("mace"), reason="MACE not installed")
+def test_mace_calculator():
+    # Test MACE calculator initialization
+    calc = MaceCalc(model_type="medium")
+    ase_calc = calc.get_calculator()
+
+    # Create a simple molecule
+    atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]])
+    atoms.calc = ase_calc
+
+    # Test energy calculation
+    energy = atoms.get_potential_energy()
+    assert isinstance(energy, float)
+
+    # Test forces calculation
+    forces = atoms.get_forces()
+    assert isinstance(forces, np.ndarray)
+    assert forces.shape == (2, 3)
+
+
+@pytest.mark.skipif(not pytest.importorskip("tblite"), reason="TBLite not installed")
+def test_tblite_calculator():
+    # Test TBLite calculator initialization
+    calc = TBLiteCalc()
+    ase_calc = calc.get_calculator()
+
+    # Create a simple molecule
+    atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]])
+    atoms.calc = ase_calc
+
+    # Test energy calculation
+    energy = atoms.get_potential_energy()
+    assert isinstance(energy, float)
+
+    # Test forces calculation
+    forces = atoms.get_forces()
+    assert isinstance(forces, np.ndarray)
+    assert forces.shape == (2, 3)
+
+
+@pytest.mark.skipif(not pytest.importorskip("ase.io.orca"), reason="ORCA not installed")
+def test_orca_calculator():
+    # Test ORCA calculator initialization
+    calc = OrcaCalc()
+    ase_calc = calc.get_calculator()
+
+    # Create a simple molecule
+    atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]])
+    atoms.calc = ase_calc
+
+    # Test basic calculator properties
+    assert hasattr(ase_calc, "calculate")
