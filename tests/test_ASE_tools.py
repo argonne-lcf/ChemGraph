@@ -1,5 +1,4 @@
 import pytest
-import numpy as np
 from comp_chem_agent.tools.ASE_tools import (
     molecule_name_to_smiles,
     smiles_to_atomsdata,

@@ -4,7 +4,6 @@ from comp_chem_agent.models.calculators.emt_calc import EMTCalc
 from comp_chem_agent.models.calculators.mace_calc import MaceCalc
 from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
 from comp_chem_agent.models.calculators.orca_calc import OrcaCalc
-from comp_chem_agent.models.atomsdata import AtomsData
 from ase import Atoms
 
 

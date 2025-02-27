@@ -12,7 +12,6 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from comp_chem_agent.prompt.gcmc_prompt import (
     planner_prompt,
-    data_query_prompt,
 )
 from comp_chem_agent.state.opt_vib_state import MultiAgentState
 from langgraph.graph.message import add_messages

@@ -1,6 +1,5 @@
 import pytest
 import warnings
-import numpy as np
 from ase import Atoms
 
 # Configure pytest-asyncio
