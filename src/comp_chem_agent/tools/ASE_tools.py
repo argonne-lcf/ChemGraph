@@ -95,9 +95,6 @@ def geometry_optimization(
 
     def capture_max_force(optimizer):
         """Callback function to capture the maximum force at each step."""
-        current_step = (
-            optimizer.nsteps
-        )  # Access the iteration count from the optimizer instance
         forces = atoms.get_forces()  # Get the forces on atoms
         max_force = np.max(
             np.linalg.norm(forces, axis=1)

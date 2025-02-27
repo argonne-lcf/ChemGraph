@@ -1,7 +1,11 @@
 from langgraph.prebuilt import create_react_agent
 from comp_chem_agent.tools.local_model_loader import load_ollama_model
-from comp_chem_agent.tools.coremof_utils import *
-from comp_chem_agent.tools.ASE_tools import *
+from comp_chem_agent.tools.ASE_tools import (
+    geometry_optimization,
+    molecule_name_to_smiles,
+    file_to_atomsdata,
+    smiles_to_atomsdata,
+)
 from comp_chem_agent.tools.alcf_loader import load_alcf_model
 from comp_chem_agent.tools.openai_loader import load_openai_model
 import logging
@@ -41,7 +45,7 @@ class CompChemAgent:
         except Exception as e:
             logger.error(f"Error with loading {model_name}: {str(e)}")
             raise
-        if prompt == None:
+        if prompt is None:
             system_message = "You are a helpful assistant."
             # system_message =  "You are a helpful assistant at extracting data of material databases."
         # tools = [smiles_to_xyz, geometry_optimization]
