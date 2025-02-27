@@ -2,17 +2,23 @@ from langchain_core.tools import tool
 from typing import List, Dict, Any, Optional, Annotated
 from comp_chem_agent.models.atomsdata import AtomsData
 import pubchempy
-from comp_chem_agent.models.ASEinput import ASESimulationInput, ASESimulationOutput, ASEAtomicInput
+from comp_chem_agent.models.ASEinput import (
+    ASESimulationInput,
+    ASESimulationOutput,
+    ASEAtomicInput,
+)
 import os, json, io
 import numpy as np
 from langchain_core.messages import HumanMessage
 
 from comp_chem_agent.state.opt_vib_state import MultiAgentState
+
+
 @tool
 def molecule_name_to_smiles(name: str) -> str:
     """
     Convert a molecule name SMILES format.
-    
+
     Args:
         name: Molecule name.
 
@@ -21,11 +27,12 @@ def molecule_name_to_smiles(name: str) -> str:
     """
     return pubchempy.get_compounds(str(name), "name")[0].canonical_smiles
 
+
 @tool
 def smiles_to_atomsdata(smiles: str) -> AtomsData:
     """
     Convert a SMILES string to AtomsData format.
-    
+
     Args:
         smiles: Input SMILES string.
 
@@ -39,84 +46,105 @@ def smiles_to_atomsdata(smiles: str) -> AtomsData:
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError("Invalid SMILES string.")
-    
+
     # Add hydrogens and optimize 3D structure
     mol = Chem.AddHs(mol)
     if AllChem.EmbedMolecule(mol) != 0:
         raise ValueError("Failed to generate 3D coordinates.")
     if AllChem.UFFOptimizeMolecule(mol) != 0:
         raise ValueError("Failed to optimize 3D geometry.")
-    
+
     # Extract atomic information
     conf = mol.GetConformer()
     numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
-    positions = [
-        list(conf.GetAtomPosition(i)) for i in range(mol.GetNumAtoms())
-    ]
-    
+    positions = [list(conf.GetAtomPosition(i)) for i in range(mol.GetNumAtoms())]
+
     # Create AtomsData object
     atoms_data = AtomsData(
         numbers=numbers,
         positions=positions,
-        cell=[[0,0,0], [0,0,0], [0,0,0]],
+        cell=[[0, 0, 0], [0, 0, 0], [0, 0, 0]],
         pbc=[False, False, False],  # No periodic boundary conditions
     )
     return atoms_data
 
+
 @tool
-def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optimizer: str="BFGS", fmax: float=0.01, steps: int=10) -> ASESimulationOutput:
+def geometry_optimization(
+    atomsdata: AtomsData,
+    calculator: str = "mace_mp",
+    optimizer: str = "BFGS",
+    fmax: float = 0.01,
+    steps: int = 10,
+) -> ASESimulationOutput:
     """
     Run geometry optimization using ASE with specified calculator and optimizer.
-    
+
     Args:
         atomsdata: AtomsData object containing initial geometry
         aseinput: ASE simulation parameters
 
-    Returns:    
+    Returns:
         ASESimulationOutput object containing:
             - converged: True if optimization converged successfully, False otherwise
             - final_structure: Final structure from the simulation
             - simulation_input: ASESimulationInput object containing the input used for the simulation
             - gradients: List of tuples containing the maximum force at each 10th step of the optimization
     """
-    
+
     max_force_at_steps = []
+
     def capture_max_force(optimizer):
         """Callback function to capture the maximum force at each step."""
-        current_step = optimizer.nsteps  # Access the iteration count from the optimizer instance
+        current_step = (
+            optimizer.nsteps
+        )  # Access the iteration count from the optimizer instance
         forces = atoms.get_forces()  # Get the forces on atoms
-        max_force = np.max(np.linalg.norm(forces, axis=1))  # Compute the maximum force (norm of the forces)
+        max_force = np.max(
+            np.linalg.norm(forces, axis=1)
+        )  # Compute the maximum force (norm of the forces)
         max_force_at_steps.append(max_force)
-    
+
     calculator = calculator.lower()
     if calculator == "mace_mp":
         from mace.calculators import mace_mp
+
         calc = mace_mp(model="medium", dispersion=True, default_dtype="float32")
     elif calculator == "emt":
         from ase.calculators.emt import EMT
+
         calc = EMT()
     else:
-        raise ValueError(f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt.")
+        raise ValueError(
+            f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt."
+        )
     from ase import Atoms
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
-    atoms = Atoms(numbers=atomsdata.numbers, positions=atomsdata.positions, cell=atomsdata.cell, pbc=atomsdata.pbc)    
+    atoms = Atoms(
+        numbers=atomsdata.numbers,
+        positions=atomsdata.positions,
+        cell=atomsdata.cell,
+        pbc=atomsdata.pbc,
+    )
     atoms.calc = calc
     OPTIMIZERS = {
         "bfgs": BFGS,
         "lbfgs": LBFGS,
         "gpmin": GPMin,
         "fire": FIRE,
-        "mdmin": MDMin
+        "mdmin": MDMin,
     }
 
     try:
         optimizer_class = OPTIMIZERS.get(optimizer.lower())
         if optimizer_class is None:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
-        
+
         dyn = optimizer_class(atoms)
-        dyn.attach(lambda: capture_max_force(dyn), interval=10)  # Call every 10th step (interval=10)
+        dyn.attach(
+            lambda: capture_max_force(dyn), interval=10
+        )  # Call every 10th step (interval=10)
         converged = dyn.run(fmax=fmax, steps=steps)
         if (steps % 10) != 0 or len(max_force_at_steps) == 0:
             capture_max_force(dyn)  # Ensure last step is recorded
@@ -125,7 +153,7 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
             numbers=atoms.numbers,
             positions=atoms.positions,
             cell=atoms.cell,
-            pbc=atoms.pbc
+            pbc=atoms.pbc,
         )
         simulation_output = ASESimulationOutput(
             converged=converged,
@@ -135,20 +163,21 @@ def geometry_optimization(atomsdata: AtomsData, calculator: str="mace_mp", optim
                 calculator=calculator,
                 optimizer=optimizer,
                 fmax=fmax,
-                steps=steps
+                steps=steps,
             ),
-            gradients=max_force_at_steps
+            gradients=max_force_at_steps,
         )
         return simulation_output
     except Exception as e:
         print(f"Optimization failed: {str(e)}")
-        return "Error" 
+        return "Error"
+
 
 @tool
 def file_to_atomsdata(fname: str) -> AtomsData:
     """
     Convert a structure file to AtomsData format using ASE.
-    
+
     Args:
         fname: Path to the input structure file (supports various formats like xyz, pdb, cif, etc.)
 
@@ -160,6 +189,7 @@ def file_to_atomsdata(fname: str) -> AtomsData:
         ValueError: If the file format is not supported or file is corrupted
     """
     from ase.io import read
+
     try:
         atoms = read(fname)
         # Create AtomsData object from ASE Atoms object
@@ -167,7 +197,7 @@ def file_to_atomsdata(fname: str) -> AtomsData:
             numbers=atoms.numbers.tolist(),
             positions=atoms.positions.tolist(),
             cell=atoms.cell.tolist(),
-            pbc=atoms.pbc.tolist()
+            pbc=atoms.pbc.tolist(),
         )
         return atoms_data
     except FileNotFoundError:
@@ -175,79 +205,97 @@ def file_to_atomsdata(fname: str) -> AtomsData:
     except Exception as e:
         raise ValueError(f"Failed to read structure file: {str(e)}")
 
-@tool            
-def save_atomsdata_to_file(atomsdata: AtomsData, fname: str="output.xyz") -> None:
+
+@tool
+def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> None:
     """
     Save an AtomsData object to a file using ASE.
-    
+
     Args:
         atomsdata: AtomsData object to save
         fname: Path to the output file
     """
     from ase.io import write
     from ase import Atoms
+
     try:
-        atoms = Atoms(numbers=atomsdata.numbers, positions=atomsdata.positions, cell=atomsdata.cell, pbc=atomsdata.pbc)
+        atoms = Atoms(
+            numbers=atomsdata.numbers,
+            positions=atomsdata.positions,
+            cell=atomsdata.cell,
+            pbc=atomsdata.pbc,
+        )
         write(fname, atoms)
         return f"Successfully saved atomsdata to {fname}"
     except Exception as e:
         raise ValueError(f"Failed to save atomsdata to file: {str(e)}")
-    
+
+
 def run_ase(state: MultiAgentState):
-    params = state['parameter_response'][-1]
+    params = state["parameter_response"][-1]
     input = json.loads(params.content)
-    calculator = input['calculator']
-    atomsdata = input['atomsdata']
-    optimizer = input['optimizer']
-    fmax = input['fmax']
-    steps = input['steps']
-    driver = input['driver']
-    
+    calculator = input["calculator"]
+    atomsdata = input["atomsdata"]
+    optimizer = input["optimizer"]
+    fmax = input["fmax"]
+    steps = input["steps"]
+    driver = input["driver"]
+
     calculator = calculator.lower()
     if calculator == "mace_mp":
         from mace.calculators import mace_mp
+
         calc = mace_mp(model="medium", dispersion=True, default_dtype="float64")
     elif calculator == "emt":
         from ase.calculators.emt import EMT
+
         calc = EMT()
     else:
-        raise ValueError(f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt.")
-    
+        raise ValueError(
+            f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt."
+        )
+
     from ase import Atoms
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
-    atoms = Atoms(numbers=atomsdata['numbers'], positions=atomsdata['positions'], cell=atomsdata['cell'], pbc=atomsdata['pbc'])    
+    atoms = Atoms(
+        numbers=atomsdata["numbers"],
+        positions=atomsdata["positions"],
+        cell=atomsdata["cell"],
+        pbc=atomsdata["pbc"],
+    )
     atoms.calc = calc
     OPTIMIZERS = {
         "bfgs": BFGS,
         "lbfgs": LBFGS,
         "gpmin": GPMin,
         "fire": FIRE,
-        "mdmin": MDMin
+        "mdmin": MDMin,
     }
     try:
         optimizer_class = OPTIMIZERS.get(optimizer.lower())
         if optimizer_class is None:
             raise ValueError(f"Unsupported optimizer: {input['optimizer']}")
-        
+
         dyn = optimizer_class(atoms)
         converged = dyn.run(fmax=fmax, steps=steps)
-        
+
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=atoms.positions,
             cell=atoms.cell,
-            pbc=atoms.pbc
+            pbc=atoms.pbc,
         )
-        if driver == 'vib':
+        if driver == "vib":
             from ase.vibrations import Vibrations
+
             vib = Vibrations(atoms)
             vib.run()
             output_buffer = io.StringIO()
-            vib.summary(log=output_buffer)  
+            vib.summary(log=output_buffer)
             vib_result = output_buffer.getvalue()
         else:
-            vib_result = ''
+            vib_result = ""
 
         simulation_output = ASESimulationOutput(
             converged=converged,
@@ -257,82 +305,96 @@ def run_ase(state: MultiAgentState):
                 calculator=calculator,
                 optimizer=optimizer,
                 fmax=fmax,
-                steps=steps
+                steps=steps,
             ),
-            frequencies=vib_result
+            frequencies=vib_result,
         )
         output = []
-        output.append(HumanMessage(role="system", content=simulation_output.model_dump_json()))
-        return {"opt_response": output}    
-    
+        output.append(
+            HumanMessage(role="system", content=simulation_output.model_dump_json())
+        )
+        return {"opt_response": output}
+
     except Exception as e:
         print(f"Optimization failed: {str(e)}")
         return {"opt_response": str(e)}
-    
+
 
 def run_ase_multi_soft(state: MultiAgentState):
     # Get parameters to run ASE from state
-    params = state['parameter_response'][-1]
+    params = state["parameter_response"][-1]
     input = json.loads(params.content)
 
-    calculator = input['calculator']
-    if "mace" in calculator['calculator_type'].lower():
+    calculator = input["calculator"]
+    if "mace" in calculator["calculator_type"].lower():
         from comp_chem_agent.models.calculators.mace_calc import MaceCalc
+
         calc = MaceCalc(**calculator).get_calculator()
-    elif "emt" == calculator['calculator_type'].lower():
+    elif "emt" == calculator["calculator_type"].lower():
         from comp_chem_agent.models.calculators.emt_calc import EMTCalc
+
         calc = EMTCalc(**calculator).get_calculator()
-    elif "tblite" in calculator['calculator_type'].lower():
+    elif "tblite" in calculator["calculator_type"].lower():
         from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
+
         calc = TBLiteCalc(**calculator).get_calculator()
-    elif "orca" == calculator['calculator_type'].lower():
+    elif "orca" == calculator["calculator_type"].lower():
         from comp_chem_agent.models.calculators.orca_calc import OrcaCalc
+
         calc = OrcaCalc(**calculator).get_calculator()
     else:
-        raise ValueError(f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca")
+        raise ValueError(
+            f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
+        )
 
-    atomsdata = input['atomsdata']
-    optimizer = input['optimizer']
-    fmax = input['fmax']
-    steps = input['steps']
-    driver = input['driver']
-    
+    atomsdata = input["atomsdata"]
+    optimizer = input["optimizer"]
+    fmax = input["fmax"]
+    steps = input["steps"]
+    driver = input["driver"]
+
     # Import ASE after calculators to avoid issues
     from ase import Atoms
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
-    atoms = Atoms(numbers=atomsdata['numbers'], positions=atomsdata['positions'], cell=atomsdata['cell'], pbc=atomsdata['pbc'])    
+    atoms = Atoms(
+        numbers=atomsdata["numbers"],
+        positions=atomsdata["positions"],
+        cell=atomsdata["cell"],
+        pbc=atomsdata["pbc"],
+    )
     atoms.calc = calc
     OPTIMIZERS = {
         "bfgs": BFGS,
         "lbfgs": LBFGS,
         "gpmin": GPMin,
         "fire": FIRE,
-        "mdmin": MDMin
+        "mdmin": MDMin,
     }
     try:
         optimizer_class = OPTIMIZERS.get(optimizer.lower())
         if optimizer_class is None:
             raise ValueError(f"Unsupported optimizer: {input['optimizer']}")
-        
+
         dyn = optimizer_class(atoms)
         converged = dyn.run(fmax=fmax, steps=steps)
-        
+
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=atoms.positions,
             cell=atoms.cell,
-            pbc=atoms.pbc
+            pbc=atoms.pbc,
         )
-        if driver == 'vib':
+        if driver == "vib":
             from ase.vibrations import Vibrations
+
             vib = Vibrations(atoms)
             vib.run()
             output_buffer = io.StringIO()
-            vib.summary(log=output_buffer)  
+            vib.summary(log=output_buffer)
             vib_result = output_buffer.getvalue()
         else:
-            vib_result = ''
+            vib_result = ""
 
         simulation_output = ASESimulationOutput(
             converged=converged,
@@ -342,14 +404,16 @@ def run_ase_multi_soft(state: MultiAgentState):
                 calculator=calculator,
                 optimizer=optimizer,
                 fmax=fmax,
-                steps=steps
+                steps=steps,
             ),
-            frequencies=vib_result
+            frequencies=vib_result,
         )
         output = []
-        output.append(HumanMessage(role="system", content=simulation_output.model_dump_json()))
-        return {"opt_response": output}    
-    
+        output.append(
+            HumanMessage(role="system", content=simulation_output.model_dump_json())
+        )
+        return {"opt_response": output}
+
     except Exception as e:
         print(f"Optimization failed: {str(e)}")
         return {"opt_response": str(e)}

@@ -12,16 +12,19 @@ from comp_chem_agent.prompt.prompt import single_agent_prompt
 from qcelemental.models import AtomicResult, AtomicInput
 from comp_chem_agent.models.qcengineinput import AtomicInputWrapper
 
+
 class State(TypedDict):
     messages: Annotated[list, add_messages]
- 
+
+
 def chatbot(state: State, llm: ChatOpenAI):
     """LLM node that processes messages and decides next actions."""
-    messages = state['messages']
+    messages = state["messages"]
     structure_llm = llm.with_structured_output(AtomicInputWrapper)
-    #structure_llm = llm.with_structured_output(AtomicInput)
+    # structure_llm = llm.with_structured_output(AtomicInput)
     response = structure_llm.invoke(messages).model_dump_json()
     return {"messages": [response]}
+
 
 def construct_qcengine_graph(llm: ChatOpenAI):
     checkpointer = MemorySaver()

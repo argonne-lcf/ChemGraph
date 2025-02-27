@@ -10,11 +10,14 @@ from langgraph.checkpoint.memory import MemorySaver
 from comp_chem_agent.tools.ASE_tools import *
 from comp_chem_agent.prompt.prompt import single_agent_prompt
 
+
 class State(TypedDict):
     messages: Annotated[list, add_messages]
 
+
 class BasicToolNode:
     """A node that runs the tools requested in the last AIMessage."""
+
     def __init__(self, tools: list) -> None:
         self.tools_by_name = {tool.name: tool for tool in tools}
 
@@ -23,25 +26,27 @@ class BasicToolNode:
             message = messages[-1]
         else:
             raise ValueError("No message found in input")
-        
+
         outputs = []
         for tool_call in message.tool_calls:
             try:
                 tool_name = tool_call.get("name")
                 if not tool_name or tool_name not in self.tools_by_name:
                     raise ValueError(f"Invalid tool name: {tool_name}")
-                
+
                 tool_result = self.tools_by_name[tool_name].invoke(
                     tool_call.get("args", {})
                 )
-                
+
                 # Handle different types of tool results
                 result_content = (
-                    tool_result.dict() if hasattr(tool_result, "dict")
-                    else tool_result if isinstance(tool_result, dict)
+                    tool_result.dict()
+                    if hasattr(tool_result, "dict")
+                    else tool_result
+                    if isinstance(tool_result, dict)
                     else str(tool_result)
                 )
-                
+
                 outputs.append(
                     ToolMessage(
                         content=json.dumps(result_content),
@@ -58,7 +63,8 @@ class BasicToolNode:
                     )
                 )
         return {"messages": outputs}
-        
+
+
 def route_tools(
     state: State,
 ):
@@ -76,18 +82,33 @@ def route_tools(
         return "tools"
     return END
 
+
 def ASEAgent(state: State, llm: ChatOpenAI):
     """LLM node that processes messages and decides next actions."""
-    tools = [file_to_atomsdata, smiles_to_atomsdata, geometry_optimization, molecule_name_to_smiles, save_atomsdata_to_file]
+    tools = [
+        file_to_atomsdata,
+        smiles_to_atomsdata,
+        geometry_optimization,
+        molecule_name_to_smiles,
+        save_atomsdata_to_file,
+    ]
     messages = [
-            {"role": "system", "content": single_agent_prompt},
-            {"role": "user", "content": f"{state['messages']}"}]
+        {"role": "system", "content": single_agent_prompt},
+        {"role": "user", "content": f"{state['messages']}"},
+    ]
     llm_with_tools = llm.bind_tools(tools=tools)
     return {"messages": [llm_with_tools.invoke(messages)]}
 
+
 def construct_geoopt_graph(llm: ChatOpenAI):
     checkpointer = MemorySaver()
-    tools = [file_to_atomsdata, smiles_to_atomsdata, geometry_optimization, molecule_name_to_smiles, save_atomsdata_to_file]
+    tools = [
+        file_to_atomsdata,
+        smiles_to_atomsdata,
+        geometry_optimization,
+        molecule_name_to_smiles,
+        save_atomsdata_to_file,
+    ]
     tool_node = BasicToolNode(tools=tools)
     graph_builder = StateGraph(State)
     graph_builder.add_node("ASEAgent", lambda state: ASEAgent(state, llm))
