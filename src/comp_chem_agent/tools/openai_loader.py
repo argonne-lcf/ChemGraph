@@ -1,6 +1,5 @@
 """Load OpenAI models using LangChain."""
 
-import logging
 import os
 from getpass import getpass
 from langchain_openai import ChatOpenAI

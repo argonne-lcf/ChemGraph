@@ -3,7 +3,8 @@ from comp_chem_agent.state.opt_vib_state import MultiAgentState
 from langchain_core.messages import HumanMessage
 import json
 from langchain.tools import tool
-import qcengine as qcng
+import qcengine
+import numpy as np
 from comp_chem_agent.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
@@ -11,9 +12,6 @@ logger = setup_logger(__name__)
 
 @tool
 def run_qcengine(state: MultiAgentState, program="psi4"):
-    import qcengine
-    import numpy as np
-
     atomic_numbers = {
         1: "H",
         2: "He",

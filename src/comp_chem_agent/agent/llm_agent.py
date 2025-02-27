@@ -12,6 +12,7 @@ from comp_chem_agent.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
+
 class CompChemAgent:
     def __init__(
         self,
@@ -43,14 +44,14 @@ class CompChemAgent:
 
         if prompt is None:
             system_message = "You are a helpful assistant."
-        
+
         tools = [
             smiles_to_atomsdata,
             geometry_optimization,
             molecule_name_to_smiles,
             file_to_atomsdata,
         ]
-        
+
         self.llm = llm
         self.graph = create_react_agent(llm, tools, state_modifier=system_message)
 
