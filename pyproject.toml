@@ -36,3 +36,14 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src/"]
+
+[tool.ruff]
+line-length = 88  # Match Black's default (adjust as needed)
+target-version = "py311"  # Adjust based on your Python version
+exclude = ["notebooks/"]  # Add files/folders to ignore
+
+[tool.ruff.format]
+quote-style = "preserve"  # Keep existing quote style
+indent-style = "space"  # Use spaces for indentation
+skip-magic-trailing-comma = false  # Ensure Black-style formatting
+

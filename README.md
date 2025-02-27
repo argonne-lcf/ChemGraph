@@ -57,7 +57,8 @@ The following libraries are required and will be installed automatically:
 For TBLite (for XTB), to use the Python extension, you must install it separately. Instructions to install Python API for TBLite can be found here: https://tblite.readthedocs.io/en/latest/installation.html
 ---
 
-Usage
+## Usage
+
 Explore example workflows in the notebooks/ directory:
 
 Single-Agent System: Demo-SingleAgent.ipynb
@@ -90,6 +91,20 @@ comp_chem_agent/
 ```
 
 ---
+
+## Code Formatting & Linting
+
+This project uses [Ruff](https://github.com/astral-sh/ruff) for **both formatting and linting**.
+
+### **Setup**
+To ensure all code follows our style guidelines, install the pre-commit hook:
+
+```sh
+pip install pre-commit
+pre-commit install
+```
+
+
 
 ## License
 
