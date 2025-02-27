@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional, Annotated, Union
+from typing import List, Optional, Union
 
 
 class AtomsData(BaseModel):

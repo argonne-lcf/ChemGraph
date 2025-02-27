@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Tuple
-import json
+from typing import List
 
 
 class Component(BaseModel):

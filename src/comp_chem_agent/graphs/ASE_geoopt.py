@@ -1,13 +1,11 @@
-from comp_chem_agent.models.atomsdata import AtomsData
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import END, START, add_messages, StateGraph
 from langchain_core.messages import ToolMessage
 import json
-from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from comp_chem_agent.models.ASEinput import ASESimulationInput, ASESimulationOutput
+from comp_chem_agent.models.ASEinput import ASESimulationInput
 from comp_chem_agent.prompt.prompt import (
     geometry_input_prompt,
     parameters_input_prompt,

@@ -1,13 +1,12 @@
 from langchain_core.tools import tool
-from typing import List, Dict, Any, Optional, Annotated
 from comp_chem_agent.models.atomsdata import AtomsData
 import pubchempy
 from comp_chem_agent.models.ASEinput import (
     ASESimulationInput,
     ASESimulationOutput,
-    ASEAtomicInput,
 )
-import os, json, io
+import json
+import io
 import numpy as np
 from langchain_core.messages import HumanMessage
 

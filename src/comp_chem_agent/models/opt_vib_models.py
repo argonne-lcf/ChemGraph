@@ -1,6 +1,4 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Tuple
-import json
 
 
 class RouterResponse(BaseModel):

@@ -5,7 +5,6 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-import json
 
 from comp_chem_agent.prompt.gcmc_prompt import *
 from comp_chem_agent.models.gcmc_models import PlannerResponse

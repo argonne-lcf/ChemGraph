@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Tuple, Union
-import json
+from typing import List, Optional, Union
 from comp_chem_agent.models.atomsdata import AtomsData
 from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
 from comp_chem_agent.models.calculators.emt_calc import EMTCalc

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from comp_chem_agent.models.atomsdata import AtomsData
 
 

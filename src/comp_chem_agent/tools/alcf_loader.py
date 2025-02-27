@@ -1,4 +1,3 @@
-import os
 from langchain_openai import ChatOpenAI
 from comp_chem_agent.models.supported_models import supported_alcf_models
 

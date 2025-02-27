@@ -1,7 +1,7 @@
 # Keywords obtained from https://github.com/tblite/tblite/blob/main/python/tblite/ase.py
 # TBLite calculator parameters for CompChemAgent
 from pydantic import BaseModel, Field
-from typing import List, Optional, Tuple
+from typing import List, Optional
 import logging
 
 try:
