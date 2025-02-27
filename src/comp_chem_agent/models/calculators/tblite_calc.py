@@ -2,61 +2,55 @@
 # TBLite calculator parameters for CompChemAgent
 from pydantic import BaseModel, Field
 from typing import List, Optional, Tuple
-from tblite.ase import TBLite
+import logging
+
+try:
+    from tblite.ase import TBLite
+except ImportError:
+    logging.warning(
+        "tblite is not installed. If you want to use tblite, please install it using 'pip install tblite'."
+    )
+
 
 class TBLiteCalc(BaseModel):
     calculator_type: str = Field(
         default="TBLite",
-        description="Calculator type for XTB methods. Only supports TBLite"
+        description="Calculator type for XTB methods. Only supports TBLite",
     )
     method: str = Field(
-        default="GFN2-xTB",
-        description="Underlying method for energy and forces"
+        default="GFN2-xTB", description="Underlying method for energy and forces"
     )
     charge: Optional[float] = Field(
-        default=None,
-        description="Total charge of the system"
+        default=None, description="Total charge of the system"
     )
     multiplicity: Optional[int] = Field(
-        default=None,
-        description="Total multiplicity of the system"
+        default=None, description="Total multiplicity of the system"
     )
     accuracy: float = Field(
-        default=1.0,
-        description="Numerical accuracy of the calculation"
+        default=1.0, description="Numerical accuracy of the calculation"
     )
     electronic_temperature: float = Field(
-        default=300.0,
-        description="Electronic temperature in Kelvin"
+        default=300.0, description="Electronic temperature in Kelvin"
     )
     max_iterations: int = Field(
-        default=250,
-        description="Iterations for self-consistent evaluation"
+        default=250, description="Iterations for self-consistent evaluation"
     )
     initial_guess: str = Field(
-        default="sad",
-        description="Initial guess for wavefunction (sad or eeq)"
+        default="sad", description="Initial guess for wavefunction (sad or eeq)"
     )
     mixer_damping: float = Field(
-        default=0.4,
-        description="Damping parameter for self-consistent mixer"
+        default=0.4, description="Damping parameter for self-consistent mixer"
     )
     electric_field: Optional[Optional[List[float]]] = Field(
-        default=None,
-        description="Uniform electric field vector (in V/A)"
+        default=None, description="Uniform electric field vector (in V/A)"
     )
     spin_polarization: Optional[float] = Field(
-        default=None,
-        description="Spin polarization (scaling factor)"
+        default=None, description="Spin polarization (scaling factor)"
     )
     cache_api: bool = Field(
-        default=True,
-        description="Reuse generated API objects (recommended)"
+        default=True, description="Reuse generated API objects (recommended)"
     )
-    verbosity: int = Field(
-        default=1,
-        description="Set verbosity of printout"
-    )
+    verbosity: int = Field(default=1, description="Set verbosity of printout")
 
     def get_calculator(self):
         """Returns an ASE-compatible TBLite calculator instance."""
