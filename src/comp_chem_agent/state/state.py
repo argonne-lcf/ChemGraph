@@ -1,6 +1,7 @@
 from typing import TypedDict, Annotated
 from langgraph.graph import add_messages
 
+
 class MultiAgentState(TypedDict):
     question: str
     router_response: Annotated[list, add_messages]
