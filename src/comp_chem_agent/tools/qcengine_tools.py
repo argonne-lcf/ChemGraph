@@ -1,16 +1,16 @@
-# from comp_chem_agent.state.state import MultiAgentState
-from comp_chem_agent.state.opt_vib_state import MultiAgentState
+from comp_chem_agent.state.state import MultiAgentState
 from langchain_core.messages import HumanMessage
 import json
-from langchain.tools import tool
 import qcengine
+import qcelemental as qcel
 import numpy as np
 from comp_chem_agent.utils.logging_config import setup_logger
+from comp_chem_agent.models.atomsdata import AtomsData
+from ase.data import atomic_numbers
 
 logger = setup_logger(__name__)
 
 
-@tool
 def run_qcengine(state: MultiAgentState, program="psi4"):
     """Run a QCEngine calculation.
 
@@ -18,28 +18,6 @@ def run_qcengine(state: MultiAgentState, program="psi4"):
         state: The state of the multi-agent system.
         program: The program to use for the calculation.
     """
-    atomic_numbers = {
-        1: "H",
-        2: "He",
-        3: "Li",
-        4: "Be",
-        5: "B",
-        6: "C",
-        7: "N",
-        8: "O",
-        9: "F",
-        10: "Ne",
-        11: "Na",
-        12: "Mg",
-        13: "Al",
-        14: "Si",
-        15: "P",
-        16: "S",
-        17: "Cl",
-        18: "Ar",
-        19: "K",
-        20: "Ca",
-    }
 
     params = state["parameter_response"][-1]
     input = json.loads(params.content)
@@ -72,9 +50,7 @@ def run_qcengine(state: MultiAgentState, program="psi4"):
         result = qcengine.compute(input, program).dict()
         del result["stdout"]
         output = []
-        output.append(
-            HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder))
-        )
+        output.append(HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder)))
         logger.info("QCEngine calculation completed successfully")
         return {"opt_response": output}
     except Exception as e:
@@ -279,3 +255,186 @@ def compute_vibrational_frequencies(hessian, masses, coords=None, linear=None):
     vib_frequencies = frequencies_cm[np.abs(frequencies_cm) > threshold]
     vib_frequencies = np.sort(vib_frequencies)
     return vib_frequencies
+
+
+def convert_atomsdata_to_qcmolecule(atomsdata: AtomsData) -> qcel.models.Molecule:
+    """Convert an atomsdata to a qcelemental molecule.
+
+    Args:
+        atomsdata (AtomsData): AtomsData object
+
+    Returns:
+        qcel.models.Molecule: qcelemental molecule
+    """
+    import numpy as np
+
+    atomic_numbers_dict = {value: key for key, value in atomic_numbers.items()}
+    numbers = atomsdata.numbers
+    symbols = [atomic_numbers_dict[num] for num in numbers]
+
+    # atomsdata positions are in Angstrom. Convert to atomic unit for qcelemental.
+    positions = np.array(atomsdata.positions)
+
+    geometry = np.array([
+        position * qcel.constants.conversion_factor("angstrom", "bohr") for position in positions
+    ])
+    molecule = qcel.models.Molecule(symbols=symbols, geometry=geometry.flatten())
+    return molecule
+
+
+def convert_qcmolecule_to_atomsdata(molecule: qcel.models.Molecule) -> AtomsData:
+    """Convert a qcelemental molecule to an atomdata
+
+    Args:
+        molecule (qcel.models.Molecule): QCElemental Molecule object
+
+    Returns:
+        AtomsData: AtomsData object
+    """
+    symbols = molecule.symbols
+    geometry = molecule.geometry * qcel.constants.conversion_factor("bohr", "angstrom")
+    positions = geometry.reshape(-1, 3)
+    numbers = [atomic_numbers[sym] for sym in symbols]
+
+    atomsdata = AtomsData(numbers=numbers, positions=positions)
+
+    return atomsdata
+
+
+def run_qcengine_multi_framework(state: MultiAgentState):
+    """Runs a QCEngine calculation within a multi-agent framework.
+
+    Args:
+        state (MultiAgentState): The current state of the multi-agent system,
+            which includes the necessary inputs for the QCEngine calculation.
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
+    """
+    parameters = state["parameter_response"][-1]
+    params = json.loads(parameters.content)
+
+    # Extract and contruct input for QCEngine
+    qc_params = {}
+    model = {}
+    keywords = {}
+
+    calculator = params["calculator"]
+
+    calc_type = calculator["calculator_type"].lower()
+
+    if calc_type == "psi4":
+        from comp_chem_agent.models.calculators.psi4_calc import Psi4Calc
+
+        calc = Psi4Calc(**params['calculator'])
+    elif calc_type == "mopac":
+        from comp_chem_agent.models.calculators.mopac_calc import MopacCalc
+
+        calc = MopacCalc(**params['calculator'])
+    else:
+        raise ValueError(
+            f"Unsupported calculator: {calculator}. Available calculators are Psi4 and MOPAC."
+        )
+
+    # Sort values to follow QCEngine's AtomicInput format
+    calc_params = calc.model_dump()
+    for item in list(calc_params):
+        if item in ['method', 'basis']:
+            model[item] = calc_params[item]
+        elif item == 'calculator_type':
+            continue
+        else:
+            keywords[item] = calc_params[item]
+
+    atomsdata = AtomsData(**params['atomsdata'])
+    qc_params["molecule"] = convert_atomsdata_to_qcmolecule(atomsdata)
+    qc_params["model"] = model
+    qc_params["keywords"] = keywords
+    qc_params["driver"] = params["driver"]
+
+    if params["driver"] in ['energy', 'gradient', 'hessian']:  # Single-point calculations
+        inp = qcel.models.AtomicInput(**qc_params)
+        try:
+            logger.info("Starting QCEngine calculation")
+            result = qcengine.compute(inp, params["program"])
+            # Handling vibrational frequency calculations
+            if qc_params['driver'] == 'hessian':
+                from ase.data import atomic_masses
+
+                masses = [atomic_masses[num] for num in params["atomsdata"]["numbers"]]
+                print(result.dict())
+                coords = result.molecule.geometry
+                hessian = result.return_result
+                print("INPUT VALUES FOR VIBRATIONAL FREQUENCIES: ", masses, coords, hessian)
+                frequencies = compute_vibrational_frequencies(hessian, masses, coords)
+                print("FREQUENCIES: ", frequencies)
+
+            result = result.dict()
+            if 'stdout' in result:
+                result.pop('stdout')
+            output = []
+
+            # Numpy encoder. Ensure the final results can be stored in LLM messages.
+            class NumpyEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, np.ndarray):
+                        return obj.tolist()  # Convert NumPy array to list
+                    if isinstance(obj, np.generic):
+                        return obj.item()  # Convert NumPy scalar to Python scalar
+                    return super().default(obj)
+
+            output.append(HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder)))
+            logger.info("QCEngine calculation completed successfully")
+            return {"opt_response": output}
+        except Exception as e:
+            logger.error(f"Error in QCEngine calculation: {str(e)}")
+            return {"opt_response": output}
+
+    elif params["driver"] in ["opt", "vib"]:
+        from qcelemental.models import OptimizationInput
+        from qcelemental.models.procedures import QCInputSpecification
+
+        input_spec = QCInputSpecification(driver="gradient", model=model)
+        """
+        opt_input = OptimizationInput(
+            initial_molecule=convert_atomsdata_to_qcmolecule(atomsdata),
+            input_specification=input_spec,
+            protocols={"trajectory": "all"},
+            keywords={"program": params["program"], "maxsteps": 100},
+        )
+        """
+        opt_input = {
+            "initial_molecule": convert_atomsdata_to_qcmolecule(atomsdata),
+            "input_specification": input_spec,
+            "protocols": {"trajectory": "all"},
+            "keywords": {"program": params["program"], "maxsteps": 100},
+        }
+        opt_output = qcengine.compute_procedure(opt_input, "geometric", raise_error=True)
+
+        if params["driver"] == 'vib':
+            hess_inp = qcel.models.AtomicInput(
+                molecule=opt_output.final_molecule,
+                driver="hessian",
+                model=model,
+            )
+
+            hess_output = qcengine.compute(hess_inp, params["program"])
+            frequencies_in_cm = compute_vibrational_frequencies(
+                hess_output.return_result,
+                hess_output.molecule.masses,
+                hess_output.molecule.geometry,
+            )
+            output_params = {
+                "converged": hess_output.success,
+                "final_structure": convert_qcmolecule_to_atomsdata(opt_output.final_molecule),
+                "simulation_input": opt_input,
+                "frequencies": list(frequencies_in_cm),
+            }
+            from comp_chem_agent.models.qcengine_input import QCEngineOutput
+
+            output = QCEngineOutput(**output_params)
+
+            return output

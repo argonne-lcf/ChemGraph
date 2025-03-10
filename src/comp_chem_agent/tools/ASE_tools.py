@@ -1,16 +1,16 @@
 from langchain_core.tools import tool
 from comp_chem_agent.models.atomsdata import AtomsData
 import pubchempy
-from comp_chem_agent.models.ASEinput import (
-    ASESimulationInput,
-    ASESimulationOutput,
+from comp_chem_agent.models.ase_input import (
+    ASEInputSchema,
+    ASEOutputSchema,
 )
 import json
 import io
 import numpy as np
 from langchain_core.messages import HumanMessage
 
-from comp_chem_agent.state.opt_vib_state import MultiAgentState
+from comp_chem_agent.state.state import MultiAgentState
 
 
 @tool
@@ -66,107 +66,6 @@ def smiles_to_atomsdata(smiles: str) -> AtomsData:
         pbc=[False, False, False],  # No periodic boundary conditions
     )
     return atoms_data
-
-
-@tool
-def geometry_optimization(
-    atomsdata: AtomsData,
-    calculator: str = "mace_mp",
-    optimizer: str = "BFGS",
-    fmax: float = 0.01,
-    steps: int = 10,
-) -> ASESimulationOutput:
-    """
-    Run geometry optimization using ASE with specified calculator and optimizer.
-
-    Args:
-        atomsdata: AtomsData object containing initial geometry
-        aseinput: ASE simulation parameters
-
-    Returns:
-        ASESimulationOutput object containing:
-            - converged: True if optimization converged successfully, False otherwise
-            - final_structure: Final structure from the simulation
-            - simulation_input: ASESimulationInput object containing the input used for the simulation
-            - gradients: List of tuples containing the maximum force at each 10th step of the optimization
-    """
-
-    max_force_at_steps = []
-
-    def capture_max_force(optimizer):
-        """Callback function to capture the maximum force at each step."""
-        forces = atoms.get_forces()  # Get the forces on atoms
-        max_force = np.max(
-            np.linalg.norm(forces, axis=1)
-        )  # Compute the maximum force (norm of the forces)
-        max_force_at_steps.append(max_force)
-
-    calculator = calculator.lower()
-    if calculator == "mace_mp":
-        from mace.calculators import mace_mp
-
-        calc = mace_mp(model="medium", dispersion=True, default_dtype="float32")
-    elif calculator == "emt":
-        from ase.calculators.emt import EMT
-
-        calc = EMT()
-    else:
-        raise ValueError(
-            f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt."
-        )
-    from ase import Atoms
-    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
-
-    atoms = Atoms(
-        numbers=atomsdata.numbers,
-        positions=atomsdata.positions,
-        cell=atomsdata.cell,
-        pbc=atomsdata.pbc,
-    )
-    atoms.calc = calc
-    OPTIMIZERS = {
-        "bfgs": BFGS,
-        "lbfgs": LBFGS,
-        "gpmin": GPMin,
-        "fire": FIRE,
-        "mdmin": MDMin,
-    }
-
-    try:
-        optimizer_class = OPTIMIZERS.get(optimizer.lower())
-        if optimizer_class is None:
-            raise ValueError(f"Unsupported optimizer: {optimizer}")
-
-        dyn = optimizer_class(atoms)
-        dyn.attach(
-            lambda: capture_max_force(dyn), interval=10
-        )  # Call every 10th step (interval=10)
-        converged = dyn.run(fmax=fmax, steps=steps)
-        if (steps % 10) != 0 or len(max_force_at_steps) == 0:
-            capture_max_force(dyn)  # Ensure last step is recorded
-
-        final_structure = AtomsData(
-            numbers=atoms.numbers,
-            positions=atoms.positions,
-            cell=atoms.cell,
-            pbc=atoms.pbc,
-        )
-        simulation_output = ASESimulationOutput(
-            converged=converged,
-            final_structure=final_structure,
-            simulation_input=ASESimulationInput(
-                atomsdata=atomsdata,
-                calculator=calculator,
-                optimizer=optimizer,
-                fmax=fmax,
-                steps=steps,
-            ),
-            gradients=max_force_at_steps,
-        )
-        return simulation_output
-    except Exception as e:
-        print(f"Optimization failed: {str(e)}")
-        return "Error"
 
 
 @tool
@@ -227,129 +126,237 @@ def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> N
         raise ValueError(f"Failed to save atomsdata to file: {str(e)}")
 
 
-def run_ase(state: MultiAgentState):
-    params = state["parameter_response"][-1]
-    input = json.loads(params.content)
-    calculator = input["calculator"]
-    atomsdata = input["atomsdata"]
-    optimizer = input["optimizer"]
-    fmax = input["fmax"]
-    steps = input["steps"]
-    driver = input["driver"]
+@tool
+def get_symmetry_number(atomsdata: AtomsData) -> int:
+    """Get the rotational symmetry number of a molecule using Pymatgen.
 
-    calculator = calculator.lower()
-    if calculator == "mace_mp":
-        from mace.calculators import mace_mp
+    Args:
+        atomsdata (AtomsData): an AtomsData object.
 
-        calc = mace_mp(model="medium", dispersion=True, default_dtype="float64")
-    elif calculator == "emt":
-        from ase.calculators.emt import EMT
-
-        calc = EMT()
-    else:
-        raise ValueError(
-            f"Unsupported calculator: {calculator}. Available calculators are mace_mp and emt."
-        )
-
+    Returns:
+        int: rotational symmetry number.
+    """
+    from pymatgen.symmetry.analyzer import PointGroupAnalyzer
     from ase import Atoms
-    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
+    from pymatgen.io.ase import AseAtomsAdaptor
 
     atoms = Atoms(
-        numbers=atomsdata["numbers"],
-        positions=atomsdata["positions"],
-        cell=atomsdata["cell"],
-        pbc=atomsdata["pbc"],
+        numbers=atomsdata.numbers,
+        positions=atomsdata.positions,
+        cell=atomsdata.cell,
+        pbc=atomsdata.pbc,
     )
-    atoms.calc = calc
-    OPTIMIZERS = {
-        "bfgs": BFGS,
-        "lbfgs": LBFGS,
-        "gpmin": GPMin,
-        "fire": FIRE,
-        "mdmin": MDMin,
-    }
-    try:
-        optimizer_class = OPTIMIZERS.get(optimizer.lower())
-        if optimizer_class is None:
-            raise ValueError(f"Unsupported optimizer: {input['optimizer']}")
 
-        dyn = optimizer_class(atoms)
-        converged = dyn.run(fmax=fmax, steps=steps)
+    aaa = AseAtomsAdaptor()
+    molecule = aaa.get_molecule(atoms)
+    pga = PointGroupAnalyzer(molecule)
+    symmetrynumber = pga.get_rotational_symmetry_number()
 
-        final_structure = AtomsData(
-            numbers=atoms.numbers,
-            positions=atoms.positions,
-            cell=atoms.cell,
-            pbc=atoms.pbc,
-        )
-        if driver == "vib":
-            from ase.vibrations import Vibrations
-
-            vib = Vibrations(atoms)
-            vib.run()
-            output_buffer = io.StringIO()
-            vib.summary(log=output_buffer)
-            vib_result = output_buffer.getvalue()
-        else:
-            vib_result = ""
-
-        simulation_output = ASESimulationOutput(
-            converged=converged,
-            final_structure=final_structure,
-            simulation_input=ASESimulationInput(
-                atomsdata=atomsdata,
-                calculator=calculator,
-                optimizer=optimizer,
-                fmax=fmax,
-                steps=steps,
-            ),
-            frequencies=vib_result,
-        )
-        output = []
-        output.append(
-            HumanMessage(role="system", content=simulation_output.model_dump_json())
-        )
-        return {"opt_response": output}
-
-    except Exception as e:
-        print(f"Optimization failed: {str(e)}")
-        return {"opt_response": str(e)}
+    return symmetrynumber
 
 
-def run_ase_multi_soft(state: MultiAgentState):
-    # Get parameters to run ASE from state
-    params = state["parameter_response"][-1]
-    input = json.loads(params.content)
+@tool
+def is_linear_molecule(atomsdata: AtomsData, tol=1e-3) -> bool:
+    """Determine if a molecule is linear or not.
 
-    calculator = input["calculator"]
-    if "mace" in calculator["calculator_type"].lower():
+    Args:
+        atomsdata (AtomsData): AtomsData object
+        tol (float, optional): Tolerance to check for linear molecule. Defaults to 1e-3.
+
+    Returns:
+        bool: True if the molecule is linear, False otherwise.
+    """
+    coords = np.array(atomsdata.positions)
+    # Center the coordinates.
+    centered = coords - np.mean(coords, axis=0)
+    # Singular value decomposition.
+    U, s, Vt = np.linalg.svd(centered)
+    # For a linear molecule, only one singular value is significantly nonzero.
+    if s[0] == 0:
+        return False  # degenerate case (all atoms at one point)
+    return (s[1] / s[0]) < tol
+
+
+@tool
+def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
+    """Run ASE calculations using specified input parameters.
+
+    Args:
+        params (ASEInputSchema): ASEInputSchema object.
+
+    Returns:
+        ASEOutputSchema: ASEOutputSchema object.
+    """
+    calculator = params.calculator.model_dump()
+    atomsdata = params.atomsdata
+    optimizer = params.optimizer
+    fmax = params.fmax
+    steps = params.steps
+    driver = params.driver
+    temperature = params.temperature
+    pressure = params.pressure
+    calc_type = calculator["calculator_type"].lower()
+
+    if "mace" in calc_type:
         from comp_chem_agent.models.calculators.mace_calc import MaceCalc
 
         calc = MaceCalc(**calculator).get_calculator()
-    elif "emt" == calculator["calculator_type"].lower():
+    elif "emt" == calc_type:
         from comp_chem_agent.models.calculators.emt_calc import EMTCalc
 
         calc = EMTCalc(**calculator).get_calculator()
-    elif "tblite" in calculator["calculator_type"].lower():
+    elif "tblite" in calc_type:
         from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
 
         calc = TBLiteCalc(**calculator).get_calculator()
-    elif "orca" == calculator["calculator_type"].lower():
+    elif "orca" == calc_type:
         from comp_chem_agent.models.calculators.orca_calc import OrcaCalc
 
         calc = OrcaCalc(**calculator).get_calculator()
+
+    elif "nwchem" == calc_type:
+        from comp_chem_agent.models.calculators.nwchem_calc import NWChemCalc
+
+        calc = NWChemCalc(**calculator).get_calculator()
     else:
         raise ValueError(
             f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
         )
 
-    atomsdata = input["atomsdata"]
-    optimizer = input["optimizer"]
-    fmax = input["fmax"]
-    steps = input["steps"]
-    driver = input["driver"]
+    from ase import Atoms
+    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
-    # Import ASE after calculators to avoid issues
+    atoms = Atoms(
+        numbers=atomsdata.numbers,
+        positions=atomsdata.positions,
+        cell=atomsdata.cell,
+        pbc=atomsdata.pbc,
+    )
+    atoms.calc = calc
+    OPTIMIZERS = {
+        "bfgs": BFGS,
+        "lbfgs": LBFGS,
+        "gpmin": GPMin,
+        "fire": FIRE,
+        "mdmin": MDMin,
+    }
+    try:
+        optimizer_class = OPTIMIZERS.get(optimizer.lower())
+        if optimizer_class is None:
+            raise ValueError(f"Unsupported optimizer: {params['optimizer']}")
+
+        dyn = optimizer_class(atoms)
+        converged = dyn.run(fmax=fmax, steps=steps)
+
+        final_structure = AtomsData(
+            numbers=atoms.numbers,
+            positions=atoms.positions,
+            cell=atoms.cell,
+            pbc=atoms.pbc,
+        )
+        thermo_data = ""
+        vib_result = ""
+
+        if driver == "vib" or driver == "thermo":
+            from ase.vibrations import Vibrations
+
+            vib = Vibrations(atoms)
+            vib.clean()
+            vib.run()
+            output_buffer = io.StringIO()
+            vib.summary(log=output_buffer)
+            vib_result = output_buffer.getvalue()
+
+            if driver == "thermo":
+                from ase.thermochemistry import IdealGasThermo
+
+                potentialenergy = atoms.get_potential_energy()
+                vib_energies = vib.get_energies()
+
+                linear = is_linear_molecule.invoke({'atomsdata': final_structure})
+                symmetrynumber = get_symmetry_number.invoke({'atomsdata': final_structure})
+
+                if linear:
+                    geometry = "linear"
+                else:
+                    geometry = "nonlinear"
+                thermo = IdealGasThermo(
+                    vib_energies=vib_energies,
+                    potentialenergy=potentialenergy,
+                    atoms=atoms,
+                    geometry=geometry,
+                    symmetrynumber=symmetrynumber,
+                    spin=0,  # Only support spin=0
+                )
+
+                thermo_data = {}
+                thermo_data['enthalpy'] = thermo.get_enthalpy(temperature=temperature)
+                thermo_data['entropy'] = thermo.get_entropy(
+                    temperature=temperature, pressure=pressure
+                )
+                thermo_data['gibbs_free_energy'] = thermo.get_gibbs_energy(
+                    temperature=temperature, pressure=pressure
+                )
+                thermo_data['unit'] = 'eV'
+
+        simulation_output = ASEOutputSchema(
+            converged=converged,
+            final_structure=final_structure,
+            simulation_input=params,
+            frequencies=vib_result,
+            thermochemistry=thermo_data,
+        )
+        return simulation_output
+
+    except Exception as e:
+        simulation_output = ASEOutputSchema(
+            converged=False, final_structure=atomsdata, simulation_input=params, error=str(e)
+        )
+        return simulation_output
+
+
+def run_ase_with_state(state: MultiAgentState):
+    # Get parameters to run ASE from state
+    parameters = state["parameter_response"][-1]
+    params = json.loads(parameters.content)
+
+    calculator = params["calculator"]
+
+    calc_type = calculator["calculator_type"].lower()
+    if "mace" in calc_type:
+        from comp_chem_agent.models.calculators.mace_calc import MaceCalc
+
+        calc = MaceCalc(**calculator).get_calculator()
+    elif "emt" == calc_type:
+        from comp_chem_agent.models.calculators.emt_calc import EMTCalc
+
+        calc = EMTCalc(**calculator).get_calculator()
+    elif "tblite" in calc_type:
+        from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
+
+        calc = TBLiteCalc(**calculator).get_calculator()
+    elif "orca" == calc_type:
+        from comp_chem_agent.models.calculators.orca_calc import OrcaCalc
+
+        calc = OrcaCalc(**calculator).get_calculator()
+
+    elif "nwchem" == calc_type:
+        from comp_chem_agent.models.calculators.nwchem_calc import NWChemCalc
+
+        calc = NWChemCalc(**calculator).get_calculator()
+    else:
+        raise ValueError(
+            f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
+        )
+
+    atomsdata = params["atomsdata"]
+    optimizer = params["optimizer"]
+    fmax = params["fmax"]
+    steps = params["steps"]
+    driver = params["driver"]
+    temperature = params["temperature"]
+    pressure = params["pressure"]
+
     from ase import Atoms
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
@@ -370,7 +377,7 @@ def run_ase_multi_soft(state: MultiAgentState):
     try:
         optimizer_class = OPTIMIZERS.get(optimizer.lower())
         if optimizer_class is None:
-            raise ValueError(f"Unsupported optimizer: {input['optimizer']}")
+            raise ValueError(f"Unsupported optimizer: {params['optimizer']}")
 
         dyn = optimizer_class(atoms)
         converged = dyn.run(fmax=fmax, steps=steps)
@@ -381,33 +388,62 @@ def run_ase_multi_soft(state: MultiAgentState):
             cell=atoms.cell,
             pbc=atoms.pbc,
         )
-        if driver == "vib":
+        thermo_data = ""
+        vib_result = ""
+
+        if driver == "vib" or driver == "thermo":
             from ase.vibrations import Vibrations
 
+            print("Running VIBRATIONAL FREQUENCY")
             vib = Vibrations(atoms)
+            vib.clean()
             vib.run()
             output_buffer = io.StringIO()
             vib.summary(log=output_buffer)
             vib_result = output_buffer.getvalue()
-        else:
-            vib_result = ""
 
-        simulation_output = ASESimulationOutput(
+            if driver == "thermo":
+                from ase.thermochemistry import IdealGasThermo
+
+                print("Running THERMOCHEMISTRY")
+                potentialenergy = atoms.get_potential_energy()
+                vib_energies = vib.get_energies()
+
+                linear = is_linear_molecule.invoke({'atomsdata': final_structure})
+                symmetrynumber = get_symmetry_number.invoke({'atomsdata': final_structure})
+
+                if linear:
+                    geometry = "linear"
+                else:
+                    geometry = "nonlinear"
+                thermo = IdealGasThermo(
+                    vib_energies=vib_energies,
+                    potentialenergy=potentialenergy,
+                    atoms=atoms,
+                    geometry=geometry,
+                    symmetrynumber=symmetrynumber,
+                    spin=0,  # Only support spin=0
+                )
+
+                thermo_data = {}
+                thermo_data['enthalpy'] = thermo.get_enthalpy(temperature=temperature)
+                thermo_data['entropy'] = thermo.get_entropy(
+                    temperature=temperature, pressure=pressure
+                )
+                thermo_data['gibbs_free_energy'] = thermo.get_gibbs_energy(
+                    temperature=temperature, pressure=pressure
+                )
+                thermo_data['unit'] = 'eV'
+
+        simulation_output = ASEOutputSchema(
             converged=converged,
             final_structure=final_structure,
-            simulation_input=ASESimulationInput(
-                atomsdata=atomsdata,
-                calculator=calculator,
-                optimizer=optimizer,
-                fmax=fmax,
-                steps=steps,
-            ),
+            simulation_input=ASEInputSchema(**params),
             frequencies=vib_result,
+            thermochemistry=thermo_data,
         )
         output = []
-        output.append(
-            HumanMessage(role="system", content=simulation_output.model_dump_json())
-        )
+        output.append(HumanMessage(role="system", content=simulation_output.model_dump_json()))
         return {"opt_response": output}
 
     except Exception as e:

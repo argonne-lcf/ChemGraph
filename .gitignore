@@ -30,3 +30,4 @@ eggs/
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 test/
+notebooks/vib/

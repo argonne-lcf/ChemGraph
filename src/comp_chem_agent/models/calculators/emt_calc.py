@@ -15,8 +15,6 @@ class EMTCalc(BaseModel):
         if self.calculator_type != "emt":
             raise ValueError("Invalid calculator_type. The only valid option is 'emt'.")
 
-        from ase.calculators.emt import (
-            EMT,
-        )  # Importing here to avoid unnecessary dependencies
+        from ase.calculators.emt import EMT
 
         return EMT(asap_cutoff=self.asap_cutoff)

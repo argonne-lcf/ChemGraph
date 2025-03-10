@@ -4,7 +4,6 @@
 from typing import Optional, Union
 from pydantic import BaseModel, Field
 from pathlib import Path
-from ase import units
 import torch
 
 
@@ -38,12 +37,8 @@ class MaceCalc(BaseModel):
         description="Exchange-correlation functional for D3 dispersion corrections (only for 'mace_mp').",
     )
     dispersion_cutoff: float = Field(
-        default=40.0 * units.Bohr,
+        default=21.167088422553647,  # Equivalent to 40.0 * units.Bohr,
         description="Cutoff radius in Bohr for D3 dispersion corrections (only for 'mace_mp').",
-    )
-    return_raw_model: bool = Field(
-        default=False,
-        description="Whether to return the raw PyTorch model instead of an ASE calculator.",
     )
 
     def get_calculator(self):
@@ -59,7 +54,6 @@ class MaceCalc(BaseModel):
                 damping=self.damping,
                 dispersion_xc=self.dispersion_xc,
                 dispersion_cutoff=self.dispersion_cutoff,
-                return_raw_model=self.return_raw_model,
             )
         elif self.calculator_type == "mace_off":
             from mace.calculators import mace_off
@@ -68,7 +62,6 @@ class MaceCalc(BaseModel):
                 model=self.model,
                 device=self.device,
                 default_dtype=self.default_dtype,
-                return_raw_model=self.return_raw_model,
             )
         elif self.calculator_type == "mace_anicc":
             from mace.calculators import mace_anicc
@@ -76,7 +69,6 @@ class MaceCalc(BaseModel):
             return mace_anicc(
                 device=self.device,
                 model_path=self.model,
-                return_raw_model=self.return_raw_model,
             )
         else:
             raise ValueError(

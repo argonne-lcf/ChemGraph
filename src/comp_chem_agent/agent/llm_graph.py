@@ -1,17 +1,13 @@
 from comp_chem_agent.tools.openai_loader import load_openai_model
 from comp_chem_agent.tools.alcf_loader import load_alcf_model
 from comp_chem_agent.tools.local_model_loader import load_ollama_model
-from comp_chem_agent.graphs.simple_ASE_workflow import construct_geoopt_graph
-from comp_chem_agent.graphs.ASE_geoopt import construct_ase_graph
-from comp_chem_agent.graphs.complex_geoopt_workflow import construct_qcengine_graph
-from comp_chem_agent.graphs.opt_vib_workflow import construct_opt_vib_graph
+from comp_chem_agent.graphs.single_agent import construct_geoopt_graph
 from comp_chem_agent.models.supported_models import (
     supported_openai_models,
     supported_ollama_models,
 )
 
-
-from comp_chem_agent.graphs.multi_framework_agent import construct_multi_framework_graph
+from comp_chem_agent.graphs.multi_agent import construct_multi_framework_graph
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,9 +29,7 @@ class llm_graph:
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
             else:
-                llm = load_alcf_model(
-                    model_name=model_name, base_url=base_url, api_key=api_key
-                )
+                llm = load_alcf_model(model_name=model_name, base_url=base_url, api_key=api_key)
 
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}.")
@@ -45,12 +39,6 @@ class llm_graph:
             "single_agent_ase": {
                 "constructor": construct_geoopt_graph,
             },
-            "multi_agent_ase": {
-                "constructor": construct_ase_graph,
-            },
-            "simple_qcengine": {"constructor": construct_qcengine_graph},
-            "complex_qcengine": {"constructor": construct_qcengine_graph},
-            "opt_vib": {"constructor": construct_opt_vib_graph},
             "multi_framework": {"constructor": construct_multi_framework_graph},
         }
 
@@ -92,9 +80,7 @@ class llm_graph:
             Image(
                 workflow.get_graph().draw_mermaid_png(
                     curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(
-                        first="#ffdfba", last="#baffc9", default="#fad7de"
-                    ),
+                    node_colors=NodeStyles(first="#ffdfba", last="#baffc9", default="#fad7de"),
                     wrap_label_n_words=9,
                     output_file_path=None,
                     draw_method=MermaidDrawMethod.PYPPETEER,
@@ -123,10 +109,7 @@ class llm_graph:
             # Construct the workflow graph
             workflow = self._construct_workflow(workflow_type)
 
-            if (
-                workflow_type == "single_agent_ase"
-                or workflow_type == "simple_qcengine"
-            ):
+            if workflow_type == "single_agent_ase":
                 inputs = {"messages": query}
                 for s in workflow.stream(inputs, stream_mode="values", config=config):
                     message = s["messages"][-1]
@@ -136,69 +119,7 @@ class llm_graph:
                     else:
                         message.pretty_print()
 
-            elif workflow_type == "gcmc":
-                inputs = {"question": query}
-                previous_lengths = {
-                    "planner_response": 0,
-                }
-                for s in workflow.stream(inputs, stream_mode="values", config=config):
-                    # Check if the lengths of the message lists have changed
-                    for key in previous_lengths.keys():
-                        current_length = len(s.get(key, []))
-
-                        if current_length > previous_lengths[key]:
-                            # If the length has increased, process the newest message
-                            new_message = s[key][-1]  # Get the newest message
-                            logger.info(f"New message in {key}:")
-
-                            if isinstance(new_message, tuple):
-                                logger.info(new_message)
-                            else:
-                                new_message.pretty_print()
-
-                            # Update the previous length
-                            previous_lengths[key] = current_length
-
-            elif (
-                workflow_type == "multi_agent_ase"
-                or workflow_type == "opt_vib"
-                or workflow_type == "multi_framework"
-            ):
-                inputs = {
-                    "question": query,
-                    "geometry_response": query,
-                    "parameter_response": query,
-                    "opt_response": query,
-                }
-                previous_lengths = {
-                    "planner_response": 0,
-                    "geometry_response": 0,
-                    "parameter_response": 0,
-                    "opt_response": 0,
-                    "feedback_response": 0,
-                    "router_response": 0,
-                    "end_response": 0,
-                    "regular_response": 0,
-                }
-
-                for s in workflow.stream(inputs, stream_mode="values", config=config):
-                    # Check if the lengths of the message lists have changed
-                    for key in previous_lengths.keys():
-                        current_length = len(s.get(key, []))
-
-                        if current_length > previous_lengths[key]:
-                            # If the length has increased, process the newest message
-                            new_message = s[key][-1]  # Get the newest message
-                            logger.info(f"New message in {key}:")
-
-                            if isinstance(new_message, tuple):
-                                logger.info(new_message)
-                            else:
-                                new_message.pretty_print()
-
-                            # Update the previous length
-                            previous_lengths[key] = current_length
-            elif workflow_type == "complex_qcengine":
+            elif workflow_type == "multi_framework":
                 inputs = {
                     "question": query,
                     "geometry_response": query,

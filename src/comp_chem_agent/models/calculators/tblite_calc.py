@@ -17,18 +17,12 @@ class TBLiteCalc(BaseModel):
         default="TBLite",
         description="Calculator type for XTB methods. Only supports TBLite",
     )
-    method: str = Field(
-        default="GFN2-xTB", description="Underlying method for energy and forces"
-    )
-    charge: Optional[float] = Field(
-        default=None, description="Total charge of the system"
-    )
+    method: str = Field(default="GFN2-xTB", description="Underlying method for energy and forces")
+    charge: Optional[float] = Field(default=None, description="Total charge of the system")
     multiplicity: Optional[int] = Field(
         default=None, description="Total multiplicity of the system"
     )
-    accuracy: float = Field(
-        default=1.0, description="Numerical accuracy of the calculation"
-    )
+    accuracy: float = Field(default=1.0, description="Numerical accuracy of the calculation")
     electronic_temperature: float = Field(
         default=300.0, description="Electronic temperature in Kelvin"
     )
@@ -47,10 +41,8 @@ class TBLiteCalc(BaseModel):
     spin_polarization: Optional[float] = Field(
         default=None, description="Spin polarization (scaling factor)"
     )
-    cache_api: bool = Field(
-        default=True, description="Reuse generated API objects (recommended)"
-    )
-    verbosity: int = Field(default=1, description="Set verbosity of printout")
+    cache_api: bool = Field(default=True, description="Reuse generated API objects (recommended)")
+    verbosity: int = Field(default=0, description="Set verbosity of printout")
 
     def get_calculator(self):
         """Returns an ASE-compatible TBLite calculator instance."""

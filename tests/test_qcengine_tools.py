@@ -5,7 +5,10 @@ from comp_chem_agent.tools.qcengine_tools import (
     compute_mass_weighted_hessian,
     build_projection_operator,
     compute_vibrational_frequencies,
+    convert_qcmolecule_to_atomsdata,
+    convert_atomsdata_to_qcmolecule,
 )
+from comp_chem_agent.models.atomsdata import AtomsData
 
 
 @pytest.fixture
@@ -93,9 +96,7 @@ def test_compute_vibrational_frequencies(sample_hessian):
     assert len(freqs) == 3  # 3 vibrational modes
 
     # Test with projection (linear molecule)
-    freqs = compute_vibrational_frequencies(
-        sample_hessian, masses, coords=coords, linear=True
-    )
+    freqs = compute_vibrational_frequencies(sample_hessian, masses, coords=coords, linear=True)
     assert len(freqs) == 1  # only vibrational mode (others projected out)
 
     # Test automatic linearity detection
@@ -114,9 +115,7 @@ def test_edge_cases():
     zero_hessian = np.zeros((6, 6))
     masses = [1.0, 1.0]
     freqs = compute_vibrational_frequencies(zero_hessian, masses)
-    assert (
-        len(freqs) == 0
-    )  # should return empty array (all frequencies below threshold)
+    assert len(freqs) == 0  # should return empty array (all frequencies below threshold)
 
     # Test with single atom
     single_atom_hessian = np.zeros((3, 3))
@@ -124,3 +123,22 @@ def test_edge_cases():
     coords = np.array([[0.0, 0.0, 0.0]])
     freqs = compute_vibrational_frequencies(single_atom_hessian, masses, coords=coords)
     assert len(freqs) == 0  # no vibrational modes for single atom
+
+
+@pytest.fixture
+def water_atomsdata():
+    """Fixture for water atomsdata"""
+    numbers = [8, 1, 1]
+    positions = [[0.0, 0.0, 0.0], [0.76, 0.58, 0.0], [-0.76, 0.58, 0.0]]  # Positions in Angstrom
+    atomsdata_input = {"numbers": numbers, "positions": positions}
+    return AtomsData(**atomsdata_input)
+
+
+def test_convert_between_atomsdata_and_qcmolecule(water_atomsdata):
+    import qcelemental as qcel
+
+    assert isinstance(convert_atomsdata_to_qcmolecule(water_atomsdata), qcel.models.Molecule)
+    assert isinstance(
+        convert_qcmolecule_to_atomsdata(convert_atomsdata_to_qcmolecule(water_atomsdata)),
+        AtomsData,
+    )
