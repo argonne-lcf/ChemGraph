@@ -13,6 +13,8 @@ from comp_chem_agent.tools.ASE_tools import (
     run_ase,
     save_atomsdata_to_file,
     file_to_atomsdata,
+    calculate_thermochemistry,
+    run_single_point,
 )
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
 from comp_chem_agent.utils.logging_config import setup_logger
@@ -59,6 +61,8 @@ class BasicToolNode:
                         tool_call_id=tool_call.get("id", ""),
                     )
                 )
+
+                print("Output from TOOL CALLING: ", outputs)
             except Exception as e:
                 outputs.append(
                     ToolMessage(
@@ -96,6 +100,8 @@ def ASEAgent(state: State, llm: ChatOpenAI):
         run_ase,
         molecule_name_to_smiles,
         save_atomsdata_to_file,
+        calculate_thermochemistry,
+        run_single_point,
     ]
     messages = [
         {"role": "system", "content": single_agent_prompt},
@@ -115,6 +121,8 @@ def construct_geoopt_graph(llm: ChatOpenAI):
             run_ase,
             molecule_name_to_smiles,
             save_atomsdata_to_file,
+            calculate_thermochemistry,
+            run_single_point,
         ]
         tool_node = BasicToolNode(tools=tools)
         graph_builder = StateGraph(State)
