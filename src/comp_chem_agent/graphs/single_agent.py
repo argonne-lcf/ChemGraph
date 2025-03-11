@@ -92,7 +92,7 @@ def route_tools(
     return END
 
 
-def ASEAgent(state: State, llm: ChatOpenAI):
+def ASEAgent(state: State, llm: ChatOpenAI, system_prompt=""):
     """LLM node that processes messages and decides next actions."""
     tools = [
         file_to_atomsdata,
@@ -104,14 +104,14 @@ def ASEAgent(state: State, llm: ChatOpenAI):
         run_single_point,
     ]
     messages = [
-        {"role": "system", "content": single_agent_prompt},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
     llm_with_tools = llm.bind_tools(tools=tools)
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
-def construct_geoopt_graph(llm: ChatOpenAI):
+def construct_geoopt_graph(llm: ChatOpenAI, system_prompt=""):
     try:
         logger.info("Constructing geometry optimization graph")
         checkpointer = MemorySaver()
@@ -126,7 +126,9 @@ def construct_geoopt_graph(llm: ChatOpenAI):
         ]
         tool_node = BasicToolNode(tools=tools)
         graph_builder = StateGraph(State)
-        graph_builder.add_node("ASEAgent", lambda state: ASEAgent(state, llm))
+        graph_builder.add_node(
+            "ASEAgent", lambda state: ASEAgent(state, llm, system_prompt=system_prompt)
+        )
         graph_builder.add_node("tools", tool_node)
         graph_builder.add_conditional_edges(
             "ASEAgent",

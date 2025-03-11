@@ -21,6 +21,7 @@ class llm_graph:
         base_url=None,
         api_key=None,
         temperature=0,
+        system_prompt="",
     ):
         try:
             if model_name in supported_openai_models:
@@ -47,7 +48,7 @@ class llm_graph:
                 f"Unsupported workflow type: {workflow_type}. Available types: {list(self.workflow_map.keys())}"
             )
 
-        self.workflow = self.workflow_map[workflow_type]["constructor"](llm)
+        self.workflow = self.workflow_map[workflow_type]["constructor"](llm, system_prompt)
 
     def visualize(self):
         workflow = self.workflow
