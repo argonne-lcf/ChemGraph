@@ -17,8 +17,7 @@ class llm_graph:
     def __init__(
         self,
         model_name="gpt-4o-mini",
-        tools=None,
-        prompt=None,
+        workflow_type="single_agent_ase",
         base_url=None,
         api_key=None,
         temperature=0,
@@ -35,6 +34,7 @@ class llm_graph:
             logger.error(f"Exception thrown when loading {model_name}.")
             raise e
 
+        self.workflow_type = workflow_type
         self.workflow_map = {
             "single_agent_ase": {
                 "constructor": construct_geoopt_graph,
@@ -42,29 +42,15 @@ class llm_graph:
             "multi_framework": {"constructor": construct_multi_framework_graph},
         }
 
-        self.llm = llm
-
-    def _construct_workflow(self, workflow_type: str, tools=None):
-        """
-        Constructs a workflow graph based on the specified type
-
-        Args:
-            workflow_type (str): Type of workflow to construct ('geoopt', 'xtb', etc.)
-            tools (list, optional): Custom tools to use. If None, uses default tools for the workflow
-
-        Returns:
-            Graph: Constructed workflow graph
-        """
         if workflow_type not in self.workflow_map:
             raise ValueError(
                 f"Unsupported workflow type: {workflow_type}. Available types: {list(self.workflow_map.keys())}"
             )
 
-        workflow = self.workflow_map[workflow_type]
-        return workflow["constructor"](self.llm)
+        self.workflow = self.workflow_map[workflow_type]["constructor"](llm)
 
-    def visualize(self, workflow_type):
-        workflow = self._construct_workflow(workflow_type)
+    def visualize(self):
+        workflow = self.workflow
 
         import nest_asyncio
         from IPython.display import Image, display
@@ -90,11 +76,12 @@ class llm_graph:
             )
         )
 
+    def get_state(self, config={"configurable": {"thread_id": "1"}}):
+        return self.workflow.get_state(config).values["messages"]
+
     def run(
         self,
         query,
-        workflow_type="geoopt",
-        tools=None,
         config={"configurable": {"thread_id": "1"}},
     ):
         """
@@ -103,13 +90,12 @@ class llm_graph:
         Args:
             query (str): The user's input query
             workflow_type (str): Type of workflow to run ('geoopt' or 'xtb')
-            tools (list, optional): Custom tools to use. If None, uses default tools for the workflow
         """
         try:
             # Construct the workflow graph
-            workflow = self._construct_workflow(workflow_type)
+            workflow = self.workflow
 
-            if workflow_type == "single_agent_ase":
+            if self.workflow_type == "single_agent_ase":
                 inputs = {"messages": query}
                 for s in workflow.stream(inputs, stream_mode="values", config=config):
                     message = s["messages"][-1]
@@ -119,7 +105,7 @@ class llm_graph:
                     else:
                         message.pretty_print()
 
-            elif workflow_type == "multi_framework":
+            elif self.workflow_type == "multi_framework":
                 inputs = {
                     "question": query,
                     "geometry_response": query,
@@ -157,10 +143,10 @@ class llm_graph:
 
             else:
                 logger.error(
-                    f"Workflow {workflow_type} is not supported. Please select either multi_agent_ase or single_agent_ase"
+                    f"Workflow {self.workflow_type} is not supported. Please select either multi_agent_ase or single_agent_ase"
                 )
-                raise ValueError(f"Workflow {workflow_type} is not supported")
+                raise ValueError(f"Workflow {self.workflow_type} is not supported")
 
         except Exception as e:
-            logger.error(f"Error running workflow {workflow_type}: {str(e)}")
+            logger.error(f"Error running workflow {self.workflow_type}: {str(e)}")
             raise
