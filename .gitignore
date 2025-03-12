@@ -32,3 +32,6 @@ eggs/
 test/
 notebooks/vib/
 tests/vib/
+
+# Log files
+evaluations/run_logs
