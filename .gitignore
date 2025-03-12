@@ -31,3 +31,4 @@ eggs/
 .ipynb_checkpoints/
 test/
 notebooks/vib/
+tests/vib/

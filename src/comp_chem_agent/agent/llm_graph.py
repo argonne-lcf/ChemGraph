@@ -51,6 +51,7 @@ class llm_graph:
         self.workflow = self.workflow_map[workflow_type]["constructor"](llm, system_prompt)
 
     def visualize(self):
+        """Visualize the LangGraph graph structure."""
         workflow = self.workflow
 
         import nest_asyncio

@@ -14,7 +14,6 @@ from comp_chem_agent.tools.ASE_tools import (
     save_atomsdata_to_file,
     file_to_atomsdata,
     calculate_thermochemistry,
-    run_single_point,
 )
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
 from comp_chem_agent.utils.logging_config import setup_logger
@@ -62,7 +61,6 @@ class BasicToolNode:
                     )
                 )
 
-                print("Output from TOOL CALLING: ", outputs)
             except Exception as e:
                 outputs.append(
                     ToolMessage(
@@ -92,17 +90,17 @@ def route_tools(
     return END
 
 
-def ASEAgent(state: State, llm: ChatOpenAI, system_prompt=""):
+def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prompt, tools=None):
     """LLM node that processes messages and decides next actions."""
-    tools = [
-        file_to_atomsdata,
-        smiles_to_atomsdata,
-        run_ase,
-        molecule_name_to_smiles,
-        save_atomsdata_to_file,
-        calculate_thermochemistry,
-        run_single_point,
-    ]
+    if tools is None:
+        tools = [
+            file_to_atomsdata,
+            smiles_to_atomsdata,
+            run_ase,
+            molecule_name_to_smiles,
+            save_atomsdata_to_file,
+            calculate_thermochemistry,
+        ]
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{state['messages']}"},
@@ -111,7 +109,7 @@ def ASEAgent(state: State, llm: ChatOpenAI, system_prompt=""):
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
-def construct_geoopt_graph(llm: ChatOpenAI, system_prompt=""):
+def construct_geoopt_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
     try:
         logger.info("Constructing geometry optimization graph")
         checkpointer = MemorySaver()
@@ -122,21 +120,21 @@ def construct_geoopt_graph(llm: ChatOpenAI, system_prompt=""):
             molecule_name_to_smiles,
             save_atomsdata_to_file,
             calculate_thermochemistry,
-            run_single_point,
         ]
         tool_node = BasicToolNode(tools=tools)
         graph_builder = StateGraph(State)
         graph_builder.add_node(
-            "ASEAgent", lambda state: ASEAgent(state, llm, system_prompt=system_prompt)
+            "CompChemAgent",
+            lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
         )
         graph_builder.add_node("tools", tool_node)
         graph_builder.add_conditional_edges(
-            "ASEAgent",
+            "CompChemAgent",
             route_tools,
             {"tools": "tools", END: END},
         )
-        graph_builder.add_edge("tools", "ASEAgent")
-        graph_builder.add_edge(START, "ASEAgent")
+        graph_builder.add_edge("tools", "CompChemAgent")
+        graph_builder.add_edge(START, "CompChemAgent")
         graph = graph_builder.compile(checkpointer=checkpointer)
         logger.info("Graph construction completed")
         return graph

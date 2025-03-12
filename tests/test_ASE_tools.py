@@ -5,9 +5,12 @@ from comp_chem_agent.tools.ASE_tools import (
     run_ase,
     get_symmetry_number,
     is_linear_molecule,
+    run_vibrational_frequency,
+    run_geometry_optimization,
+    calculate_thermochemistry,
 )
 from comp_chem_agent.models.atomsdata import AtomsData
-from comp_chem_agent.models.ase_input import ASEOutputSchema
+from comp_chem_agent.models.ase_input import ASEOutputSchema, ASEInputSchema
 
 
 def test_molecule_name_to_smiles():
@@ -68,12 +71,10 @@ def test_is_linear_molecule(water_atomsdata, co2_atomsdata):
     assert islinear_co2 == True
 
 
-def test_run_ase():
-    """Test run_ase function."""
-
-    from comp_chem_agent.models.ase_input import ASEInputSchema
-
-    params = {
+@pytest.fixture
+def sample_ase_schema():
+    """Fixture for a sample ASE Schema"""
+    input_dict = {
         "atomsdata": {
             "numbers": [8, 1, 1],
             "positions": [
@@ -87,16 +88,31 @@ def test_run_ase():
         "driver": "thermo",
         "optimizer": "bfgs",
         "calculator": {
-            "calculator_type": "TBLite",
+            "calculator_type": "emt",
         },
-        "fmax": 0.01,
-        "steps": 1000,
-        "temperature": 298.15,
-        "pressure": 101325.0,
     }
+    return ASEInputSchema(**input_dict)
 
-    params = ASEInputSchema(**params)
-    print(params.model_dump())
 
-    result = run_ase.invoke({'params': params})
+def test_run_ase(sample_ase_schema):
+    """Test run_ase function."""
+    result = run_ase.invoke({'params': sample_ase_schema})
+    assert isinstance(result, ASEOutputSchema)
+
+
+def test_run_geometry_optimization(sample_ase_schema):
+    """Test run_geometry_optimization function."""
+    result = run_geometry_optimization.invoke({'params': sample_ase_schema})
+    assert isinstance(result, ASEOutputSchema)
+
+
+def test_run_vibrational_frequency(sample_ase_schema):
+    """Test run_vibrational_frequency"""
+    result = run_vibrational_frequency.invoke({'params': sample_ase_schema})
+    assert isinstance(result, ASEOutputSchema)
+
+
+def test_calculate_thermochemistry(sample_ase_schema):
+    """Test calculate_thermochemistry"""
+    result = calculate_thermochemistry.invoke({'params': sample_ase_schema})
     assert isinstance(result, ASEOutputSchema)

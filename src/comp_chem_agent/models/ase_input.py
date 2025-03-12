@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Union
+from typing import Union
 from comp_chem_agent.models.atomsdata import AtomsData
 from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
 from comp_chem_agent.models.calculators.emt_calc import EMTCalc
@@ -29,16 +29,30 @@ class ASEInputSchema(BaseModel):
         default=1000,
         description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
     )
-    temperature: float = Field(default=298.15, description="Temperature in Kelvin (K).")
-    pressure: float = Field(default=101325.0, description="Pressure in Pascal (Pa).")
+    temperature: float = Field(
+        default=298.15, description="Temperature for thermochemistry calculations in Kelvin (K)."
+    )
+    pressure: float = Field(
+        default=101325.0, description="Pressure for thermochemistry calculations in Pascal (Pa)."
+    )
 
 
 class ASEOutputSchema(BaseModel):
-    converged: bool = Field(description="Whether the optimization converged.")
-    final_structure: AtomsData = Field(description="The final structure after optimization.")
-    simulation_input: ASEInputSchema = Field(description="The input used for the simulation.")
-    frequencies: Optional[str] = Field(
-        default="", description="Summary of vibrational frequency calculations."
+    converged: bool = Field(
+        default=False, description="Indicates if the optimization successfully converged."
     )
-    thermochemistry: Union[str, dict] = Field(default="", description="Thermochemistry data in eV.")
+    final_structure: AtomsData = Field(description="Final structure.")
+    simulation_input: ASEInputSchema = Field(
+        description="Simulation input for Atomic Simulation Environment."
+    )
+    single_point_energy: float = Field(
+        default=None, description="Single-point energy/Potential energy"
+    )
+    vibrational_frequencies: dict = Field(
+        default={}, description="Vibrational frequencies (in cm-1) and energies (in eV)."
+    )
+    thermochemistry: dict = Field(default={}, description="Thermochemistry data in eV.")
+    success: bool = Field(
+        default=False, description="Indicates if the simulation finished correctly."
+    )
     error: str = Field(default="", description="Error captured during the simulation")
