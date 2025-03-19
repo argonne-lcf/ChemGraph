@@ -8,6 +8,7 @@ from comp_chem_agent.models.supported_models import (
 )
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
 from comp_chem_agent.graphs.multi_agent import construct_multi_framework_graph
+from comp_chem_agent.graphs.python_relp_agent import construct_relp_graph
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class llm_graph:
                 "constructor": construct_geoopt_graph,
             },
             "multi_framework": {"constructor": construct_multi_framework_graph},
+            "python_relp": {"constructor": construct_relp_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -158,7 +160,7 @@ class llm_graph:
             # Construct the workflow graph
             workflow = self.workflow
 
-            if self.workflow_type == "single_agent_ase":
+            if self.workflow_type == "single_agent_ase" or self.workflow_type == "python_relp":
                 inputs = {"messages": query}
                 for s in workflow.stream(inputs, stream_mode="values", config=config):
                     message = s["messages"][-1]

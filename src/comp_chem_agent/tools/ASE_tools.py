@@ -432,10 +432,12 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         optimizer_class = OPTIMIZERS.get(optimizer.lower())
         if optimizer_class is None:
             raise ValueError(f"Unsupported optimizer: {params['optimizer']}")
-
-        dyn = optimizer_class(atoms)
-        converged = dyn.run(fmax=fmax, steps=steps)
-
+        # Do optimization only if number of atoms > 1 to avoid error.
+        if len(atoms) > 1:
+            dyn = optimizer_class(atoms)
+            converged = dyn.run(fmax=fmax, steps=steps)
+        else:
+            converged = True
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=atoms.positions,
@@ -471,35 +473,42 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 vib_data['frequencies'].append(str(e / units.invcm) + c)
 
             if driver == "thermo":
-                from ase.thermochemistry import IdealGasThermo
-
-                potentialenergy = atoms.get_potential_energy()
-                vib_energies = vib.get_energies()
-
-                linear = is_linear_molecule.invoke({'atomsdata': final_structure})
-                symmetrynumber = get_symmetry_number.invoke({'atomsdata': final_structure})
-
-                if linear:
-                    geometry = "linear"
+                # Approximation for system with a single atom.
+                if len(atoms) == 1:
+                    thermo_data['enthalpy'] = atoms.get_potential_energy()
+                    thermo_data['entropy'] = 0
+                    thermo_data['gibbs_free_energy'] = atoms.get_potential_energy()
+                    thermo_data['unit'] = 'eV'
                 else:
-                    geometry = "nonlinear"
-                thermo = IdealGasThermo(
-                    vib_energies=vib_energies,
-                    potentialenergy=potentialenergy,
-                    atoms=atoms,
-                    geometry=geometry,
-                    symmetrynumber=symmetrynumber,
-                    spin=0,  # Only support spin=0
-                )
+                    from ase.thermochemistry import IdealGasThermo
 
-                thermo_data['enthalpy'] = thermo.get_enthalpy(temperature=temperature)
-                thermo_data['entropy'] = thermo.get_entropy(
-                    temperature=temperature, pressure=pressure
-                )
-                thermo_data['gibbs_free_energy'] = thermo.get_gibbs_energy(
-                    temperature=temperature, pressure=pressure
-                )
-                thermo_data['unit'] = 'eV'
+                    potentialenergy = atoms.get_potential_energy()
+                    vib_energies = vib.get_energies()
+
+                    linear = is_linear_molecule.invoke({'atomsdata': final_structure})
+                    symmetrynumber = get_symmetry_number.invoke({'atomsdata': final_structure})
+
+                    if linear:
+                        geometry = "linear"
+                    else:
+                        geometry = "nonlinear"
+                    thermo = IdealGasThermo(
+                        vib_energies=vib_energies,
+                        potentialenergy=potentialenergy,
+                        atoms=atoms,
+                        geometry=geometry,
+                        symmetrynumber=symmetrynumber,
+                        spin=0,  # Only support spin=0
+                    )
+
+                    thermo_data['enthalpy'] = thermo.get_enthalpy(temperature=temperature)
+                    thermo_data['entropy'] = thermo.get_entropy(
+                        temperature=temperature, pressure=pressure
+                    )
+                    thermo_data['gibbs_free_energy'] = thermo.get_gibbs_energy(
+                        temperature=temperature, pressure=pressure
+                    )
+                    thermo_data['unit'] = 'eV'
 
         simulation_output = ASEOutputSchema(
             converged=converged,

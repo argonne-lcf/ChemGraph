@@ -7,14 +7,7 @@ from langchain_core.messages import ToolMessage
 import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from comp_chem_agent.tools.ASE_tools import (
-    molecule_name_to_smiles,
-    smiles_to_atomsdata,
-    run_ase,
-    save_atomsdata_to_file,
-    file_to_atomsdata,
-    calculate_thermochemistry,
-)
+from comp_chem_agent.tools.generic import repl_tool
 from comp_chem_agent.tools.generic import calculator
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
 from comp_chem_agent.utils.logging_config import setup_logger
@@ -94,15 +87,7 @@ def route_tools(
 def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prompt, tools=None):
     """LLM node that processes messages and decides next actions."""
     if tools is None:
-        tools = [
-            file_to_atomsdata,
-            smiles_to_atomsdata,
-            run_ase,
-            molecule_name_to_smiles,
-            save_atomsdata_to_file,
-            calculate_thermochemistry,
-            calculator,
-        ]
+        tools = []
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{state['messages']}"},
@@ -111,17 +96,12 @@ def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prom
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
-def construct_geoopt_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
+def construct_relp_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
     try:
         logger.info("Constructing geometry optimization graph")
         checkpointer = MemorySaver()
         tools = [
-            file_to_atomsdata,
-            smiles_to_atomsdata,
-            run_ase,
-            molecule_name_to_smiles,
-            save_atomsdata_to_file,
-            calculate_thermochemistry,
+            repl_tool,
             calculator,
         ]
         tool_node = BasicToolNode(tools=tools)
