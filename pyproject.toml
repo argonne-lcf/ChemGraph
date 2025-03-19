@@ -24,10 +24,11 @@ dependencies = [
     "pubchempy==1.0.4",
     "pyppeteer==2.0.0",
     "numpy<2",
-    #"scipy<1.14",
     "qcelemental==0.29.0",
     "qcengine==0.31.0",
     "tblite==0.4.0",
+    "langchain-experimental==0.3.4",
+    "numexpr==2.10.2"
     ]
 
 [project.urls]
