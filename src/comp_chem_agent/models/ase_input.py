@@ -11,7 +11,7 @@ class ASEInputSchema(BaseModel):
     atomsdata: AtomsData = Field(description="The atomsdata object to be used for the simulation.")
     driver: str = Field(
         default=None,
-        description="Type of simulation to run. Support: 'energy' for single point energy calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency calculations and 'thermo' for thermochemistry calculations.",
+        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
     )
     optimizer: str = Field(
         default="bfgs",
@@ -48,6 +48,7 @@ class ASEOutputSchema(BaseModel):
     single_point_energy: float = Field(
         default=None, description="Single-point energy/Potential energy"
     )
+    energy_unit: str = Field(default="eV", description="The unit of the energy reported.")
     vibrational_frequencies: dict = Field(
         default={}, description="Vibrational frequencies (in cm-1) and energies (in eV)."
     )

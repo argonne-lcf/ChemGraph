@@ -26,8 +26,6 @@ class NWChemCalc(BaseModel):
         default=None, description="K-point mesh for periodic calculations."
     )
     directory: str = Field(default=".", description="Working directory for NWChem calculations.")
-    mult: int = Field(default=1, description="Multiplicity")
-    odft: str = Field(default=None, description="Set the calculation to be open-shell.")
     command: Optional[str] = Field(
         default=None,
         description="Command to execute NWChem (e.g., 'nwchem PREFIX.nwi > PREFIX.nwo').",

@@ -100,7 +100,6 @@ def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prom
             run_ase,
             molecule_name_to_smiles,
             save_atomsdata_to_file,
-            calculate_thermochemistry,
             calculator,
         ]
     messages = [
@@ -121,7 +120,6 @@ def construct_geoopt_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
             run_ase,
             molecule_name_to_smiles,
             save_atomsdata_to_file,
-            calculate_thermochemistry,
             calculator,
         ]
         tool_node = BasicToolNode(tools=tools)

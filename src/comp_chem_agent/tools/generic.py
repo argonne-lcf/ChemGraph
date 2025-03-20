@@ -8,12 +8,15 @@ from langchain_experimental.utilities import PythonREPL
 @tool
 def calculator(expression: str) -> str:
     """Evaluate mathematical expressions safely.
-
     Args:
         expression: Mathematical expression (e.g., "2 * pi + 5")
 
     Returns:
         String result or error message
+
+    Notes:
+        - Use this function whenever mathematical calculations are required.
+        - Ensure the input is a valid mathematical expression.
     """
     local_dict = {
         "pi": math.pi,
