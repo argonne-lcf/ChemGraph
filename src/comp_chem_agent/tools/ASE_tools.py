@@ -462,6 +462,8 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             vib.run()
 
             energies = vib.get_energies()
+            linear = is_linear_molecule.invoke({'atomsdata': final_structure})
+
             for idx, e in enumerate(energies):
                 if abs(e.imag) > 1e-8:
                     c = 'i'
@@ -469,6 +471,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 else:
                     c = ''
                     e = e.real
+
                 vib_data['energies'].append(str(1e3 * e) + c)
                 vib_data['frequencies'].append(str(e / units.invcm) + c)
 

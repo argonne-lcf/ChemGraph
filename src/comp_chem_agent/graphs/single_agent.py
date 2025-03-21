@@ -13,9 +13,9 @@ from comp_chem_agent.tools.ASE_tools import (
     run_ase,
     save_atomsdata_to_file,
     file_to_atomsdata,
-    calculate_thermochemistry,
 )
 from comp_chem_agent.tools.generic import calculator
+from comp_chem_agent.models.agent_response import ResponseFormatter
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
 from comp_chem_agent.utils.logging_config import setup_logger
 
@@ -88,7 +88,7 @@ def route_tools(
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
     if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
         return "tools"
-    return END
+    return "done"
 
 
 def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prompt, tools=None):
@@ -110,7 +110,26 @@ def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prom
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
-def construct_geoopt_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
+def ResponseAgent(state: State, llm: ChatOpenAI):
+    """An LLM agent responsible for formatting final message"""
+
+    system_prompt = """You are an agent responsible to format the output based on user's request. Follow this instruction to get the correct format that the user wants:
+    1. If the user asks for SMILES string, or yes/no question, use string.
+    2. If the user asks for structure, use AtomsData format
+    3. If the user asks for vibrational frequency, use a dictionary.
+    4. If the user asks to calculate properties (enthalpy, entropy or Gibbs free energy), use float."""
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"{state['messages']}"},
+    ]
+    llm_structured_output = llm.with_structured_output(ResponseFormatter)
+    response = llm_structured_output.invoke(messages).model_dump_json()
+    return {"messages": [response]}
+
+
+def construct_geoopt_graph(
+    llm: ChatOpenAI, system_prompt=single_agent_prompt, structured_output=False
+):
     try:
         logger.info("Constructing geometry optimization graph")
         checkpointer = MemorySaver()
@@ -124,21 +143,43 @@ def construct_geoopt_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
         ]
         tool_node = BasicToolNode(tools=tools)
         graph_builder = StateGraph(State)
-        graph_builder.add_node(
-            "CompChemAgent",
-            lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
-        )
-        graph_builder.add_node("tools", tool_node)
-        graph_builder.add_conditional_edges(
-            "CompChemAgent",
-            route_tools,
-            {"tools": "tools", END: END},
-        )
-        graph_builder.add_edge("tools", "CompChemAgent")
-        graph_builder.add_edge(START, "CompChemAgent")
-        graph = graph_builder.compile(checkpointer=checkpointer)
-        logger.info("Graph construction completed")
-        return graph
+
+        if not structured_output:
+            graph_builder.add_node(
+                "CompChemAgent",
+                lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
+            )
+            graph_builder.add_node("tools", tool_node)
+            graph_builder.add_conditional_edges(
+                "CompChemAgent",
+                route_tools,
+                {"tools": "tools", "done": END},
+            )
+            graph_builder.add_edge("tools", "CompChemAgent")
+            graph_builder.add_edge(START, "CompChemAgent")
+            graph = graph_builder.compile(checkpointer=checkpointer)
+            logger.info("Graph construction completed")
+            return graph
+        else:
+            graph_builder.add_node(
+                "CompChemAgent",
+                lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
+            )
+            graph_builder.add_node("tools", tool_node)
+            graph_builder.add_node("ResponseAgent", lambda state: ResponseAgent(state, llm))
+            graph_builder.add_conditional_edges(
+                "CompChemAgent",
+                route_tools,
+                {"tools": "tools", "done": "ResponseAgent"},
+            )
+            graph_builder.add_edge("tools", "CompChemAgent")
+            graph_builder.add_edge(START, "CompChemAgent")
+            graph_builder.add_edge("ResponseAgent", END)
+
+            graph = graph_builder.compile(checkpointer=checkpointer)
+            logger.info("Graph construction completed")
+            return graph
+
     except Exception as e:
         logger.error(f"Error constructing graph: {str(e)}")
         raise

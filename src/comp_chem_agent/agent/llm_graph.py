@@ -35,6 +35,8 @@ class llm_graph:
         api_key=None,
         temperature=0,
         system_prompt=single_agent_prompt,
+        structured_output=False,
+        return_option="last_message",  # Option: "state"
     ):
         try:
             if model_name in supported_openai_models:
@@ -51,6 +53,8 @@ class llm_graph:
         self.workflow_type = workflow_type
         self.model_name = model_name
         self.system_prompt = system_prompt
+        self.structured_output = structured_output
+        self.return_option = return_option
         self.workflow_map = {
             "single_agent_ase": {
                 "constructor": construct_geoopt_graph,
@@ -64,7 +68,9 @@ class llm_graph:
                 f"Unsupported workflow type: {workflow_type}. Available types: {list(self.workflow_map.keys())}"
             )
 
-        self.workflow = self.workflow_map[workflow_type]["constructor"](llm, system_prompt)
+        self.workflow = self.workflow_map[workflow_type]["constructor"](
+            llm, self.system_prompt, self.structured_output
+        )
 
     def visualize(self):
         """Visualize the LangGraph graph structure."""
@@ -169,7 +175,14 @@ class llm_graph:
                         continue
                     else:
                         message.pretty_print()
-
+                if self.return_option == "last_message":
+                    return s["messages"][-1]
+                elif self.return_option == "state":
+                    return s["messages"]
+                else:
+                    raise ValueError(
+                        f"Return option {self.return_option} is not supported. Only supports 'last_message' or 'state'."
+                    )
             elif self.workflow_type == "multi_framework":
                 inputs = {
                     "question": query,
