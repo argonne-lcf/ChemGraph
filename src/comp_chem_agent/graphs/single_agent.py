@@ -16,7 +16,7 @@ from comp_chem_agent.tools.ASE_tools import (
 )
 from comp_chem_agent.tools.generic import calculator
 from comp_chem_agent.models.agent_response import ResponseFormatter
-from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
+from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
 from comp_chem_agent.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
@@ -113,13 +113,8 @@ def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prom
 def ResponseAgent(state: State, llm: ChatOpenAI):
     """An LLM agent responsible for formatting final message"""
 
-    system_prompt = """You are an agent responsible to format the output based on user's request. Follow this instruction to get the correct format that the user wants:
-    1. If the user asks for SMILES string, or yes/no question, use string.
-    2. If the user asks for structure, use AtomsData format
-    3. If the user asks for vibrational frequency, use a dictionary.
-    4. If the user asks to calculate properties (enthalpy, entropy or Gibbs free energy), use float."""
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": formatter_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
     llm_structured_output = llm.with_structured_output(ResponseFormatter)

@@ -9,3 +9,9 @@ Instructions:
 6. Do not provide estimated or hypothetical values when actual calculations are needed. Always prioritize accuracy.  
 7. If no tool call is required, provide a response based on your domain knowledge while ensuring factual correctness.  
 """
+
+formatter_prompt = """You are an agent that formats responses based on user intent. Use the correct type:
+1. Use `str` for SMILES strings, yes/no questions, or general explanations.
+2. Use `AtomsData` for molecular structures or atomic geometries.
+3. Use `VibrationalFrequency` for vibrational frequencies.
+4. Use `ScalarResult` (float) for properties like enthalpy, entropy, or Gibbs free energy."""
