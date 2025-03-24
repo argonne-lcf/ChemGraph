@@ -6,7 +6,7 @@ from comp_chem_agent.models.atomsdata import AtomsData
 class VibrationalFrequency(BaseModel):
     frequency_cm1: list[str] = Field(
         ...,
-        description="List of vibrational frequencies in cm⁻¹. May include imaginary frequencies as complex numbers.",
+        description="List of vibrational frequencies in cm-1.",
     )
 
 
@@ -25,8 +25,8 @@ class ResponseFormatter(BaseModel):
         description=(
             "Structured answer to the user's query. Use:\n"
             "- `str` for general or explanatory responses or SMILES string.\n"
-            "- `ScalarResult` for single numerical properties (e.g. enthalpy)\n"
             "- `VibrationalFrequency` for vibrational frequecies\n"
+            "- `ScalarResult` for single numerical properties (e.g. enthalpy)\n"
             "- `AtomsData` for atomic geometries and molecular structures"
         )
     )

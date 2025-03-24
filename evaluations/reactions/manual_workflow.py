@@ -10,13 +10,8 @@ def get_manual_workflow_result(
     calculator: dict = {},
 ):
     workflow = {
-        "reaction": reaction,
-        "tool_calls": {
-            "molecule_name_to_smiles": {"name": []},
-            "smiles_to_atomsdata": {"smiles": []},
-            "run_ase": {"params": []},
-        },
-        prop: 0,
+        "tool_calls": [],
+        "result": {"value": 0, "property": prop, "unit": "eV"},
     }
     try:
         for r in reaction["reactants"]:
@@ -34,15 +29,18 @@ def get_manual_workflow_result(
             aseoutput = run_ase.invoke({"params": params})
 
             # Populate worklfow to return
-            workflow["tool_calls"]["molecule_name_to_smiles"]["name"].append(name)
-            workflow["tool_calls"]["smiles_to_atomsdata"]["smiles"].append(smiles)
-            workflow["tool_calls"]["run_ase"]["params"].append(params)
-            workflow[prop] = workflow[prop] - aseoutput.thermochemistry[prop] * r["coefficient"]
+            workflow["tool_calls"].append({"molecule_name_to_smiles": {"name": name}})
+            workflow["tool_calls"].append({"smiles_to_atomsdata": {"smiles": smiles}})
+            workflow["tool_calls"].append({"run_ase": {"params": params.model_dump()}})
+
+            workflow["result"]["value"] = (
+                workflow["result"]["value"] - aseoutput.thermochemistry[prop] * r["coefficient"]
+            )
 
         for p in reaction["products"]:
             input_dict = {
                 "atomsdata": None,
-                "driver": "thermo",  # Right now just thermochemistry in this subset.
+                "driver": "thermo",
                 "calculator": calculator,
             }
             name = p["name"]
@@ -53,10 +51,12 @@ def get_manual_workflow_result(
             aseoutput = run_ase.invoke({"params": params})
 
             # Populate worklfow to return
-            workflow["tool_calls"]["molecule_name_to_smiles"]["name"].append(name)
-            workflow["tool_calls"]["smiles_to_atomsdata"]["smiles"].append(smiles)
-            workflow["tool_calls"]["run_ase"]["params"].append(params)
-            workflow[prop] = workflow[prop] + aseoutput.thermochemistry[prop] * r["coefficient"]
+            workflow["tool_calls"].append({"molecule_name_to_smiles": {"name": name}})
+            workflow["tool_calls"].append({"smiles_to_atomsdata": {"smiles": smiles}})
+            workflow["tool_calls"].append({"run_ase": {"params": params.model_dump()}})
+            workflow["result"]["value"] = (
+                workflow["result"]["value"] + aseoutput.thermochemistry[prop] * r["coefficient"]
+            )
 
         return workflow
     except Exception as e:
