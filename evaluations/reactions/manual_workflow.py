@@ -31,7 +31,8 @@ def get_manual_workflow_result(
             # Populate worklfow to return
             workflow["tool_calls"].append({"molecule_name_to_smiles": {"name": name}})
             workflow["tool_calls"].append({"smiles_to_atomsdata": {"smiles": smiles}})
-            workflow["tool_calls"].append({"run_ase": {"params": params.model_dump()}})
+            input_dict["atomsdata"] = input_dict["atomsdata"].model_dump()
+            workflow["tool_calls"].append({"run_ase": {"params": input_dict}})
 
             workflow["result"]["value"] = (
                 workflow["result"]["value"] - aseoutput.thermochemistry[prop] * r["coefficient"]
@@ -53,7 +54,8 @@ def get_manual_workflow_result(
             # Populate worklfow to return
             workflow["tool_calls"].append({"molecule_name_to_smiles": {"name": name}})
             workflow["tool_calls"].append({"smiles_to_atomsdata": {"smiles": smiles}})
-            workflow["tool_calls"].append({"run_ase": {"params": params.model_dump()}})
+            input_dict["atomsdata"] = input_dict["atomsdata"].model_dump()
+            workflow["tool_calls"].append({"run_ase": {"params": input_dict}})
             workflow["result"]["value"] = (
                 workflow["result"]["value"] + aseoutput.thermochemistry[prop] * r["coefficient"]
             )

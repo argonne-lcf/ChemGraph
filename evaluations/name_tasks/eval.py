@@ -1,32 +1,5 @@
 import json
 from deepdiff import DeepDiff
-from collections import Counter
-
-
-def canonicalize_tool_call(tool_call):
-    """Convert a tool call dictionary to a canonical, hashable form (sorted JSON)."""
-    return json.dumps(tool_call, sort_keys=True)
-
-
-def compare_tool_calls(dict1, dict2):
-    calls1 = dict1.get("tool_calls", [])
-    calls2 = dict2.get("tool_calls", [])
-
-    # Canonicalize each call to make order-insensitive comparisons
-    canonical1 = Counter([canonicalize_tool_call(call) for call in calls1])
-    canonical2 = Counter([canonicalize_tool_call(call) for call in calls2])
-
-    # Compare
-    only_in_1 = canonical1 - canonical2
-    only_in_2 = canonical2 - canonical1
-
-    result = {
-        "equal": not (only_in_1 or only_in_2),
-        "only_in_dict1": [json.loads(item) for item in only_in_1.elements()],
-        "only_in_dict2": [json.loads(item) for item in only_in_2.elements()],
-    }
-
-    return result
 
 
 def compare_llm_and_manual_workflow(manual_filepath, llm_filepath):
@@ -34,7 +7,6 @@ def compare_llm_and_manual_workflow(manual_filepath, llm_filepath):
         manual_data = json.load(f1)
     with open(llm_filepath, 'r') as f2:
         llm_data = json.load(f2)
-
     print("1. Comparing tool_call function names...")
     funcs1 = [list(call.keys())[0] for call in manual_data["tool_calls"]]
     funcs2 = [list(call.keys())[0] for call in llm_data["tool_calls"]]
@@ -48,6 +20,7 @@ def compare_llm_and_manual_workflow(manual_filepath, llm_filepath):
     for i, (a1, a2) in enumerate(zip(args1, args2)):
         print(f" - Step {i + 1} diff:")
         diff = DeepDiff(a1, a2, ignore_order=True, significant_digits=3)
+        # print(json.dumps(diff.to_dict(), indent=2))
         print(diff)
     print()
 
@@ -61,18 +34,6 @@ def compare_llm_and_manual_workflow(manual_filepath, llm_filepath):
         manual_data['result'], llm_data['result'], ignore_order=True, significant_digits=3
     )
     print(json.dumps(diff_final, indent=2))
-    print()
-
-    print("5. Full tool_call list comparison (ignoring order)...")
-    tool_call_comparison = compare_tool_calls(manual_data, llm_data)
-    if tool_call_comparison["equal"]:
-        print(" - Tool calls are equal (ignoring order)")
-    else:
-        print(" - Tool calls differ (ignoring order)")
-        print(" - Only in manual:")
-        print(json.dumps(tool_call_comparison["only_in_dict1"], indent=2))
-        print(" - Only in LLM:")
-        print(json.dumps(tool_call_comparison["only_in_dict2"], indent=2))
 
 
 manual_filepath = "manual_result.json"

@@ -16,7 +16,7 @@ def get_query(
 
     reaction_equation = f"{reactants_str} -> {products_str}"
     query_dict = {
-        "enthalpy": f"What is the reaction enthalpy of {reaction_equation}?",
+        "enthalpy": f"What is the reaction enthalpy of {reaction_equation}",
         "enthalpy_method": f"Calculate the reaction enthalpy of {reaction_equation} using {method}?",
         "gibbs_free_energy": f"What is the Gibbs free energy of reaction for {reaction_equation}?",
         "gibbs_free_energy_method": f"What is the Gibbs free energy of reaction for {reaction_equation} using {method}?",

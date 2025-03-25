@@ -1,18 +1,26 @@
 import json
 from comp_chem_agent.agent.llm_graph import llm_graph
-from manual_workflow import get_manual_workflow_result
-from reactions_dataset import reaction_list
+from manual_workflow import (
+    get_atomsdata_from_molecule_name,
+    get_geometry_optimization_from_molecule_name,
+    get_vibrational_frequencies_from_molecule_name,
+)
 from query import get_query
 from comp_chem_agent.utils.get_workflow_from_llm import get_workflow_from_state
 
-# Parameters
-reaction = reaction_list[0]  # Pick a reaction from reaction_list
-
-# Results from running workflow
-# calculator = {"calculator_type": "nwchem", "xc": "b3lyp", "basis": "3-21g"}
+# Load a smiles string from smiles_data.json
+with open("smiles_data.json", "r") as f:
+    smiles_data = json.load(f)
+name = smiles_data[5]["name"]
 
 calculator = {"calculator_type": "mace_mp"}
-result = get_manual_workflow_result(reaction, calculator=calculator)
+
+# result = get_atomsdata_from_smiles(smiles)  # For evaluating conversion between smiles to atomsdata
+# result = get_geometry_optimization_from_smiles(smiles, calculator)  # For evaluating running geometry optimization using SMILES
+result = get_vibrational_frequencies_from_molecule_name(
+    name,
+    calculator,
+)  # For evaluating running vibrational frequencies using SMILES
 
 if isinstance(result, dict):
     # Save manual workflow in a json file
@@ -21,18 +29,15 @@ if isinstance(result, dict):
 else:
     print("ERROR WITH RUNNING MANUAL WORKFLOW.")
     print(f"Error message:  {result}")
-
-# Results from running CompChemAgent
-
+"""
 cca = llm_graph(
     model_name='gpt-4o',
     workflow_type="single_agent_ase",
-    return_option="state",
     structured_output=True,
+    return_option="state",
 )
 # Have to adjust query name and method manually
-query = get_query(reaction, query_name="enthalpy_method", method="mace_mp")
-
+query = get_query(name, query_name="vib_method", method="mace_mp")
 result = cca.run(query, config={"configurable": {"thread_id": "1"}})
 
 workflow_dict = get_workflow_from_state(result)
@@ -43,3 +48,4 @@ with open('llm_result.json', 'w') as f:
 
 # Store the state
 cca.write_state(config={"configurable": {"thread_id": "1"}})
+"""

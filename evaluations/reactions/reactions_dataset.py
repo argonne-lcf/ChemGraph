@@ -8,7 +8,7 @@ reaction_list = [
         ],
         "products": [
             {"name": "Carbon dioxide", "coefficient": 1},
-            {"name": "Hydrogen", "coefficient": 1},
+            {"name": "Hydrogen gas", "coefficient": 1},
         ],
     },
     {

@@ -14,28 +14,27 @@ from comp_chem_agent.state.state import MultiAgentState
 
 @tool
 def molecule_name_to_smiles(name: str) -> str:
-    """
-    Convert a molecule name SMILES format.
+    """Convert a molecule name SMILES format.
 
     Args:
-        name: Molecule name.
+        name (str): molecule name.
 
     Returns:
-        SMILES string.
+        str: SMILES string.
     """
     return pubchempy.get_compounds(str(name), "name")[0].canonical_smiles
 
 
 @tool
-def smiles_to_atomsdata(smiles: str) -> AtomsData:
-    """
-    Convert a SMILES string to AtomsData format.
+def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025) -> AtomsData:
+    """Convert a SMILES string to AtomsData format.
 
     Args:
-        smiles: Input SMILES string.
+        smiles (str): SMILES string.
+        randomSeed (int, optional): random seed for RDKit. Defaults to 2025.
 
     Returns:
-        coords: coordinates of the atoms.
+        AtomsData: AtomsData object.
     """
     from rdkit import Chem
     from rdkit.Chem import AllChem
@@ -47,11 +46,10 @@ def smiles_to_atomsdata(smiles: str) -> AtomsData:
 
     # Add hydrogens and optimize 3D structure
     mol = Chem.AddHs(mol)
-    if AllChem.EmbedMolecule(mol) != 0:
+    if AllChem.EmbedMolecule(mol, randomSeed=randomSeed) != 0:
         raise ValueError("Failed to generate 3D coordinates.")
     if AllChem.UFFOptimizeMolecule(mol) != 0:
         raise ValueError("Failed to optimize 3D geometry.")
-
     # Extract atomic information
     conf = mol.GetConformer()
     numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
