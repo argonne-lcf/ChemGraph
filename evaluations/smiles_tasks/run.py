@@ -29,7 +29,6 @@ if isinstance(result, dict):
 else:
     print("ERROR WITH RUNNING MANUAL WORKFLOW.")
     print(f"Error message:  {result}")
-
 cca = llm_graph(
     model_name='gpt-4o',
     workflow_type="single_agent_ase",

@@ -28,7 +28,8 @@ dependencies = [
     "qcengine==0.31.0",
     "tblite==0.4.0",
     "langchain-experimental==0.3.4",
-    "numexpr==2.10.2"
+    "numexpr==2.10.2",
+    "deepdiff==8.4.2"
     ]
 
 [project.urls]
