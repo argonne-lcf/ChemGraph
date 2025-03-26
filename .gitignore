@@ -34,4 +34,5 @@ notebooks/vib/
 tests/vib/
 
 # Log files
-evaluations/run_logs
+*run_logs/
+*vib/
