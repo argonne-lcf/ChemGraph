@@ -29,14 +29,15 @@ def serialize_state(state):
 class llm_graph:
     def __init__(
         self,
-        model_name="gpt-4o-mini",
-        workflow_type="single_agent_ase",
-        base_url=None,
-        api_key=None,
-        temperature=0,
-        system_prompt=single_agent_prompt,
-        structured_output=False,
-        return_option="last_message",  # Option: "state"
+        model_name: str = "gpt-4o-mini",
+        workflow_type: str = "single_agent_ase",
+        base_url: str = None,
+        api_key: str = None,
+        temperature: float = 0,
+        system_prompt: str = single_agent_prompt,
+        structured_output: bool = False,
+        return_option: str = "last_message",
+        recursion_limit: int = 25,
     ):
         try:
             if model_name in supported_openai_models:
@@ -55,6 +56,7 @@ class llm_graph:
         self.system_prompt = system_prompt
         self.structured_output = structured_output
         self.return_option = return_option
+        self.recursion_limit = recursion_limit
         self.workflow_map = {
             "single_agent_ase": {
                 "constructor": construct_geoopt_graph,
@@ -150,19 +152,22 @@ class llm_graph:
             print("Error with write_state: ", str(e))
             return 1
 
-    def run(
-        self,
-        query,
-        config={"configurable": {"thread_id": "1"}},
-    ):
+    def run(self, query: str, config=None):
         """
-        Runs the specified workflow with the given query
+        Runs the specified workflow with the given query.
 
         Args:
             query (str): The user's input query
-            workflow_type (str): Type of workflow to run ('geoopt' or 'xtb')
+            config (dict, optional): Configuration dictionary.
         """
         try:
+            if config is None:
+                config = {}
+            if not isinstance(config, dict):
+                raise TypeError(f"`config` must be a dictionary, got {type(config).__name__}")
+            config.setdefault("configurable", {}).setdefault("thread_id", "1")
+            config["recursion_limit"] = self.recursion_limit
+
             # Construct the workflow graph
             workflow = self.workflow
 

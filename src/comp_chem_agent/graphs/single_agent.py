@@ -18,12 +18,9 @@ from comp_chem_agent.tools.generic import calculator
 from comp_chem_agent.models.agent_response import ResponseFormatter
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
 from comp_chem_agent.utils.logging_config import setup_logger
+from comp_chem_agent.state.state import State
 
 logger = setup_logger(__name__)
-
-
-class State(TypedDict):
-    messages: Annotated[list, add_messages]
 
 
 class BasicToolNode:
@@ -73,13 +70,12 @@ class BasicToolNode:
         return {"messages": outputs}
 
 
-def route_tools(
-    state: State,
-):
+def route_tools(state: State):
     """
-    Use in the conditional_edge to route to the ToolNode if the last message
-    has tool calls. Otherwise, route to the end.
+    Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
     """
+    if state.get("remaining_steps") <= 2:
+        return "done"
     if isinstance(state, list):
         ai_message = state[-1]
     elif messages := state.get("messages", []):
@@ -123,7 +119,9 @@ def ResponseAgent(state: State, llm: ChatOpenAI):
 
 
 def construct_geoopt_graph(
-    llm: ChatOpenAI, system_prompt=single_agent_prompt, structured_output=False
+    llm: ChatOpenAI,
+    system_prompt: str = single_agent_prompt,
+    structured_output: bool = False,
 ):
     try:
         logger.info("Constructing geometry optimization graph")
