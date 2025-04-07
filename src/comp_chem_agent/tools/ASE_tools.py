@@ -700,7 +700,10 @@ def calculate_thermochemistry(params: ASEInputSchema) -> ASEOutputSchema:
 
     except Exception as e:
         simulation_output = ASEOutputSchema(
-            converged=False, final_structure=atomsdata, simulation_input=params, error=str(e)
+            converged=False,
+            final_structure=atomsdata,
+            simulation_input=params,
+            error=str(e),
         )
         return simulation_output
 

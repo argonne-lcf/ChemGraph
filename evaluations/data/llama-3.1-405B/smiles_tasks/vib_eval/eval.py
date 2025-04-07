@@ -1,0 +1,151 @@
+import json
+from deepdiff import DeepDiff
+
+# Right now for the results, it compares direct matching of dictionary - so this can be an issue. Need to develop better metrics.
+
+
+def compare_llm_and_manual_workflow(
+    manual_workflow_fp: str, llm_workflow_fp: str, print_diff=False
+):
+    """Compare a manual workflow and an LLM workflow. Criteria:
+    (1) workflow's result, (2) tool names and (3) tool counts.
+
+    Args:
+        manual_workflow_fp (str): Path to log file for manual workflow.
+        llm_workflow_fp (str): Path to log file for LLM workflow.
+    """
+    combined_eval_score = []
+
+    with open(manual_workflow_fp, "r") as f1:
+        mdata = json.load(f1)
+    with open(llm_workflow_fp, "r") as f2:
+        ldata = json.load(f2)
+
+    if len(mdata) != len(ldata):
+        return f"Error. Different number of logs in {manual_workflow_fp} and {llm_workflow_fp}"
+    for manual_data, llm_data in zip(mdata, ldata):
+        man_mol_smiles = manual_data["smiles"]
+        llm_mol_smiles = llm_data["smiles"]
+
+        if man_mol_smiles != llm_mol_smiles:
+            print("Error. Different smiles found for the comparison")
+            print(f"Manual SMILES: {man_mol_smiles}")
+            print(f"LLM SMILES: {llm_mol_smiles}")
+            continue
+        eval_score = {
+            "workflow_success": True,
+            "matched_result": False,
+            "matched_tool_name": False,
+            "matched_tool_count": False,
+        }
+        try:
+            if isinstance(manual_data["manual_workflow"]["result"], str):
+                if manual_data["manual_workflow"]["result"].startswith("ERROR"):
+                    eval_score["workflow_success"] = False
+                if isinstance(llm_data["llm_workflow"]["result"], str):
+                    llm_result_lower = llm_data["llm_workflow"][
+                        "result"
+                    ].lower()
+                    if (
+                        "error" in llm_result_lower
+                        or "fail" in llm_result_lower
+                    ):
+                        eval_score["result"] = 1
+            else:
+                diff_final = DeepDiff(
+                    manual_data["manual_workflow"]['result'],
+                    llm_data["llm_workflow"]['result'],
+                    ignore_order=True,
+                    significant_digits=3,
+                    exclude_paths={"root['cell']", "root['pbc']"},
+                )
+                if diff_final == {}:
+                    eval_score["matched_result"] = True
+                else:
+                    if print_diff:
+                        print(
+                            f"Difference between manual and LLM workflow for {man_mol_smiles}"
+                        )
+                        print(diff_final)
+        except Exception as e:
+            print(man_mol_smiles, str(e))
+            continue
+        manual_set = set(
+            list(call)[0]
+            for call in list(manual_data["manual_workflow"]["tool_calls"])
+        )
+        llm_set = set(
+            list(call)[0]
+            for call in list(llm_data["llm_workflow"]["tool_calls"])
+        )
+
+        if manual_set == llm_set:
+            eval_score["matched_tool_name"] = True
+        else:
+            print(manual_set, llm_set)
+        if len(manual_data["manual_workflow"]['tool_calls']) == len(
+            llm_data["llm_workflow"]['tool_calls']
+        ):
+            eval_score["matched_tool_count"] = True
+        added_data = {}
+        added_data["smiles"] = manual_data["smiles"]
+        added_data["name"] = manual_data["name"]
+        added_data["eval_score"] = eval_score
+        combined_eval_score.append(added_data)
+    return combined_eval_score
+
+
+def get_statistics(combined_eval_score: list):
+    """Give some statistics based on evaluation dictionary"""
+
+    number_of_sims = len(combined_eval_score)
+    correct_results = 0
+    correct_tool_names = 0
+    correct_tool_counts = 0
+    failed_smiles = []
+    failed_names = []
+    for sim in combined_eval_score:
+        if sim['eval_score']["matched_result"]:
+            correct_results += 1
+        else:
+            failed_smiles.append(sim["smiles"])
+            failed_names.append(sim["name"])
+        if sim['eval_score']["matched_tool_name"]:
+            correct_tool_names += 1
+        if sim['eval_score']["matched_tool_count"]:
+            correct_tool_counts += 1
+    success_rate = {}
+    success_rate["correct_result"] = correct_results / number_of_sims
+    success_rate["correct_tool_names"] = correct_tool_names / number_of_sims
+    success_rate["correct_tool_counts"] = correct_tool_counts / number_of_sims
+
+    print(
+        f"Number of correct results: {correct_results}/{number_of_sims} ({success_rate['correct_result'] * 100}%)"
+    )
+    print(
+        f"Number of correct tool names: {correct_tool_names}/{number_of_sims} ({success_rate['correct_tool_names'] * 100}%)"
+    )
+    print(
+        f"Number of correct tool counts: {correct_tool_counts}/{number_of_sims} ({success_rate['correct_tool_counts'] * 100}%)"
+    )
+
+    if len(failed_smiles) > 0:
+        print(
+            "The final results are different for the following molecule and SMILES: "
+        )
+        for s, n in zip(failed_smiles, failed_names):
+            print(f"- Name: {n}, SMILES: {s}")
+    return success_rate
+
+
+def main():
+    result = compare_llm_and_manual_workflow(
+        manual_workflow_fp="manual_workflow.json",
+        llm_workflow_fp="llm_workflow.json",
+        print_diff=True,
+    )
+    get_statistics(result)
+
+
+if __name__ == "__main__":
+    main()

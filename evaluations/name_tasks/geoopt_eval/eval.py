@@ -4,7 +4,9 @@ from deepdiff import DeepDiff
 # Right now for the results, it compares direct matching of dictionary - so this can be an issue. Need to develop better metrics.
 
 
-def compare_llm_and_manual_workflow(manual_workflow_fp: str, llm_workflow_fp: str):
+def compare_llm_and_manual_workflow(
+    manual_workflow_fp: str, llm_workflow_fp: str
+):
     """Compare a manual workflow and an LLM workflow. Criteria:
     (1) workflow's result, (2) tool names and (3) tool counts.
 
@@ -40,8 +42,13 @@ def compare_llm_and_manual_workflow(manual_workflow_fp: str, llm_workflow_fp: st
             if manual_data["manual_workflow"]["result"].startswith("ERROR"):
                 eval_score["workflow_success"] = False
                 if isinstance(llm_data["llm_workflow"]["result"], str):
-                    llm_result_lower = llm_data["llm_workflow"]["result"].lower()
-                    if "error" in llm_result_lower or "fail" in llm_result_lower:
+                    llm_result_lower = llm_data["llm_workflow"][
+                        "result"
+                    ].lower()
+                    if (
+                        "error" in llm_result_lower
+                        or "fail" in llm_result_lower
+                    ):
                         eval_score["result"] = 1
         else:
             diff_final = DeepDiff(
@@ -54,9 +61,13 @@ def compare_llm_and_manual_workflow(manual_workflow_fp: str, llm_workflow_fp: st
             if diff_final == {}:
                 eval_score["matched_result"] = True
         manual_set = set(
-            list(call)[0] for call in list(manual_data["manual_workflow"]["tool_calls"])
+            list(call)[0]
+            for call in list(manual_data["manual_workflow"]["tool_calls"])
         )
-        llm_set = set(list(call)[0] for call in list(llm_data["llm_workflow"]["tool_calls"]))
+        llm_set = set(
+            list(call)[0]
+            for call in list(llm_data["llm_workflow"]["tool_calls"])
+        )
 
         if manual_set == llm_set:
             eval_score["matched_tool_name"] = True
@@ -83,6 +94,7 @@ def get_statistics(combined_eval_score: list):
     correct_tool_counts = 0
     failed_smiles = []
     failed_names = []
+    print(combined_eval_score)
     for sim in combined_eval_score:
         if sim['eval_score']["matched_result"]:
             correct_results += 1
@@ -109,7 +121,9 @@ def get_statistics(combined_eval_score: list):
     )
 
     if len(failed_smiles) > 0:
-        print("The final results are different for the following molecule and SMILES: ")
+        print(
+            "The final results are different for the following molecule and SMILES: "
+        )
         for s, n in zip(failed_smiles, failed_names):
             print(f"- Name: {n}, SMILES: {s}")
     return success_rate
@@ -117,7 +131,8 @@ def get_statistics(combined_eval_score: list):
 
 def main():
     result = compare_llm_and_manual_workflow(
-        manual_workflow_fp="manual_workflow.json", llm_workflow_fp="llm_workflow.json"
+        manual_workflow_fp="manual_workflow.json",
+        llm_workflow_fp="llm_workflow.json",
     )
     get_statistics(result)
 

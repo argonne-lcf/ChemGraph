@@ -1,0 +1,362 @@
+[
+    {
+        "index": 0,
+        "name": "pyridine-4-carbonitrile",
+        "number_of_atoms": 12,
+        "smiles": "C1=CN=CC=C1C#N"
+    },
+    {
+        "index": 1,
+        "name": "N-(benzylcarbamoyl)-2-cyanoacetamide",
+        "number_of_atoms": 27,
+        "smiles": "C1=CC=C(C=C1)CNC(=O)NC(=O)CC#N"
+    },
+    {
+        "index": 2,
+        "name": "3-methyl-4-methylsulfonylphenol",
+        "number_of_atoms": 22,
+        "smiles": "CC1=C(C=CC(=C1)O)S(=O)(=O)C"
+    },
+    {
+        "index": 3,
+        "name": "1H-indole-2,7-dicarboxylic acid",
+        "number_of_atoms": 22,
+        "smiles": "C1=CC2=C(C(=C1)C(=O)O)NC(=C2)C(=O)O"
+    },
+    {
+        "index": 4,
+        "name": "4-bromo-N-(1,3,4-thiadiazol-2-yl)benzamide",
+        "number_of_atoms": 21,
+        "smiles": "C1=CC(=CC=C1C(=O)NC2=NN=CS2)Br"
+    },
+    {
+        "index": 5,
+        "name": "N-[3-(2,2-dicyanoethenylamino)phenyl]acetamide",
+        "number_of_atoms": 27,
+        "smiles": "CC(=O)NC1=CC=CC(=C1)NC=C(C#N)C#N"
+    },
+    {
+        "index": 6,
+        "name": "1-isocyanatooctane",
+        "number_of_atoms": 28,
+        "smiles": "CCCCCCCCN=C=O"
+    },
+    {
+        "index": 7,
+        "name": "2-cyano-3-(5-methylfuran-2-yl)prop-2-enamide",
+        "number_of_atoms": 21,
+        "smiles": "CC1=CC=C(O1)C=C(C#N)C(=O)N"
+    },
+    {
+        "index": 8,
+        "name": "3-chloro-2,4-bis(chloromethyl)furan",
+        "number_of_atoms": 15,
+        "smiles": "C1=C(C(=C(O1)CCl)Cl)CCl"
+    },
+    {
+        "index": 9,
+        "name": "ethyl 2-[4-bromo-5-methyl-3-(trifluoromethyl)pyrazol-1-yl]acetate",
+        "number_of_atoms": 27,
+        "smiles": "CCOC(=O)CN1C(=C(C(=N1)C(F)(F)F)Br)C"
+    },
+    {
+        "index": 10,
+        "name": "1,2,4,5-tetrazinane-3,6-dione",
+        "number_of_atoms": 12,
+        "smiles": "C1(=O)NNC(=O)NN1"
+    },
+    {
+        "index": 11,
+        "name": "3-(2-methoxyphenyl)benzaldehyde",
+        "number_of_atoms": 28,
+        "smiles": "COC1=CC=CC=C1C2=CC=CC(=C2)C=O"
+    },
+    {
+        "index": 12,
+        "name": "hydrogen arsorate;lead(2+)",
+        "number_of_atoms": 7,
+        "smiles": "O[As](=O)([O-])[O-].[Pb+2]"
+    },
+    {
+        "index": 13,
+        "name": "calcium;2-sulfanylacetate",
+        "number_of_atoms": 17,
+        "smiles": "C(C(=O)[O-])S.C(C(=O)[O-])S.[Ca+2]"
+    },
+    {
+        "index": 14,
+        "name": "7-fluoro-3-methoxysulfanyl-1-methylquinolin-4-one",
+        "number_of_atoms": 26,
+        "smiles": "CN1C=C(C(=O)C2=C1C=C(C=C2)F)SOC"
+    },
+    {
+        "index": 15,
+        "name": "ethyl 2-(2,1,3-benzothiadiazol-4-yloxy)acetate",
+        "number_of_atoms": 26,
+        "smiles": "CCOC(=O)COC1=CC=CC2=NSN=C21"
+    },
+    {
+        "index": 16,
+        "name": "3-chloro-2-methyl-7-thiophen-2-ylpyrazolo[1,5-a]pyrimidine",
+        "number_of_atoms": 24,
+        "smiles": "CC1=NN2C(=CC=NC2=C1Cl)C3=CC=CS3"
+    },
+    {
+        "index": 17,
+        "name": "1-(2-chloro-5-nitrophenyl)pyrrole-2,5-dione",
+        "number_of_atoms": 22,
+        "smiles": "C1=CC(=C(C=C1[N+](=O)[O-])N2C(=O)C=CC2=O)Cl"
+    },
+    {
+        "index": 18,
+        "name": "2-chloro-1-(difluoromethyl)-4-fluorobenzene",
+        "number_of_atoms": 15,
+        "smiles": "C1=CC(=C(C=C1F)Cl)C(F)F"
+    },
+    {
+        "index": 19,
+        "name": "5-nitro-1H-pyrimidine-2,4-dione",
+        "number_of_atoms": 14,
+        "smiles": "C1=C(C(=O)NC(=O)N1)[N+](=O)[O-]"
+    },
+    {
+        "index": 20,
+        "name": "5-(benzenesulfonyl)-2-methylsulfanyl-1H-pyrimidin-6-one",
+        "number_of_atoms": 28,
+        "smiles": "CSC1=NC=C(C(=O)N1)S(=O)(=O)C2=CC=CC=C2"
+    },
+    {
+        "index": 21,
+        "name": "(2-methylphenyl) 3-fluorobenzoate",
+        "number_of_atoms": 28,
+        "smiles": "CC1=CC=CC=C1OC(=O)C2=CC(=CC=C2)F"
+    },
+    {
+        "index": 22,
+        "name": "1-chloro-4-(2-methylprop-2-enyl)benzene",
+        "number_of_atoms": 22,
+        "smiles": "CC(=C)CC1=CC=C(C=C1)Cl"
+    },
+    {
+        "index": 23,
+        "name": "3-benzoyl-1,3-benzothiazol-2-one",
+        "number_of_atoms": 27,
+        "smiles": "C1=CC=C(C=C1)C(=O)N2C3=CC=CC=C3SC2=O"
+    },
+    {
+        "index": 24,
+        "name": "3-(1-ethoxyethylidene)-1H-indol-2-one",
+        "number_of_atoms": 28,
+        "smiles": "CCOC(=C1C2=CC=CC=C2NC1=O)C"
+    },
+    {
+        "index": 25,
+        "name": "(1S,6R)-3,7,7-trimethylbicyclo[4.1.0]hept-3-ene",
+        "number_of_atoms": 26,
+        "smiles": "CC1=CCC2C(C1)C2(C)C"
+    },
+    {
+        "index": 26,
+        "name": "1-(2,4-dimethoxy-6-methylphenyl)ethanone",
+        "number_of_atoms": 28,
+        "smiles": "CC1=CC(=CC(=C1C(=O)C)OC)OC"
+    },
+    {
+        "index": 27,
+        "name": "[(E)-(7,7-dioxo-5,6-dihydrothieno[2,3-b]thiopyran-4-ylidene)amino] propanoate",
+        "number_of_atoms": 28,
+        "smiles": "CCC(=O)ON=C1CCS(=O)(=O)C2=C1C=CS2"
+    },
+    {
+        "index": 28,
+        "name": "2-(4-bromo-3-nitropyrazol-1-yl)acetate",
+        "number_of_atoms": 16,
+        "smiles": "C1=C(C(=NN1CC(=O)[O-])[N+](=O)[O-])Br"
+    },
+    {
+        "index": 29,
+        "name": "2-tert-butyl-4-chloro-5-hydrazinylpyridazin-3-one",
+        "number_of_atoms": 27,
+        "smiles": "CC(C)(C)N1C(=O)C(=C(C=N1)NN)Cl"
+    },
+    {
+        "index": 30,
+        "name": "2-methyl-N-(1,3,4-thiadiazol-2-yl)but-2-enamide",
+        "number_of_atoms": 21,
+        "smiles": "CC=C(C)C(=O)NC1=NN=CS1"
+    },
+    {
+        "index": 31,
+        "name": "ethyl (3S)-3-amino-3-(3-bromophenyl)propanoate",
+        "number_of_atoms": 29,
+        "smiles": "CCOC(=O)CC(C1=CC(=CC=C1)Br)N"
+    },
+    {
+        "index": 32,
+        "name": "1-nitroso-1-(2-oxopropyl)urea",
+        "number_of_atoms": 17,
+        "smiles": "CC(=O)CN(C(=O)N)N=O"
+    },
+    {
+        "index": 33,
+        "name": "2,2-dihydroxy-1-(4-methylphenyl)ethanone",
+        "number_of_atoms": 22,
+        "smiles": "CC1=CC=C(C=C1)C(=O)C(O)O"
+    },
+    {
+        "index": 34,
+        "name": "benzonitrile;bromozinc(1+)",
+        "number_of_atoms": 14,
+        "smiles": "C1=CC=C([C-]=C1)C#N.[Zn+]Br"
+    },
+    {
+        "index": 35,
+        "name": "4-methyl-2-phenyl-5,6-dihydro-1,3-thiazin-4-ol",
+        "number_of_atoms": 27,
+        "smiles": "CC1(CCSC(=N1)C2=CC=CC=C2)O"
+    },
+    {
+        "index": 36,
+        "name": "1-(3-bromo-4-methoxyphenyl)-N-(2-fluorophenyl)methanimine",
+        "number_of_atoms": 29,
+        "smiles": "COC1=C(C=C(C=C1)C=NC2=CC=CC=C2F)Br"
+    },
+    {
+        "index": 37,
+        "name": "2-(4-bromophenyl)benzaldehyde",
+        "number_of_atoms": 24,
+        "smiles": "C1=CC=C(C(=C1)C=O)C2=CC=C(C=C2)Br"
+    },
+    {
+        "index": 38,
+        "name": "3-thiophen-3-ylthiophene-2-carboxylate",
+        "number_of_atoms": 18,
+        "smiles": "C1=CSC=C1C2=C(SC=C2)C(=O)[O-]"
+    },
+    {
+        "index": 39,
+        "name": "6-chloro-2-(4-chlorophenyl)imidazo[1,2-a]pyridine-3-carbaldehyde",
+        "number_of_atoms": 27,
+        "smiles": "C1=CC(=CC=C1C2=C(N3C=C(C=CC3=N2)Cl)C=O)Cl"
+    },
+    {
+        "index": 40,
+        "name": "1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea",
+        "number_of_atoms": 17,
+        "smiles": "C1(=NON=C1NC(=O)NN)N"
+    },
+    {
+        "index": 41,
+        "name": "[4-(3,4-dichlorophenyl)-1,3-thiazol-2-yl]hydrazine",
+        "number_of_atoms": 22,
+        "smiles": "C1=CC(=C(C=C1C2=CSC(=N2)NN)Cl)Cl"
+    },
+    {
+        "index": 42,
+        "name": "2-nitrosobenzaldehyde",
+        "number_of_atoms": 15,
+        "smiles": "C1=CC=C(C(=C1)C=O)N=O"
+    },
+    {
+        "index": 43,
+        "name": "N-(4-propanoylphenyl)acetamide",
+        "number_of_atoms": 27,
+        "smiles": "CCC(=O)C1=CC=C(C=C1)NC(=O)C"
+    },
+    {
+        "index": 44,
+        "name": "diethylcarbamoyl-oxido-oxophosphanium",
+        "number_of_atoms": 20,
+        "smiles": "CCN(CC)C(=O)[P+](=O)[O-]"
+    },
+    {
+        "index": 45,
+        "name": "N-(5-chloropyridin-2-yl)-5-nitrofuran-2-carboxamide",
+        "number_of_atoms": 24,
+        "smiles": "C1=CC(=NC=C1Cl)NC(=O)C2=CC=C(O2)[N+](=O)[O-]"
+    },
+    {
+        "index": 46,
+        "name": "(E)-N-morpholin-4-yl-1-thiophen-2-ylmethanimine",
+        "number_of_atoms": 25,
+        "smiles": "C1COCCN1N=CC2=CC=CS2"
+    },
+    {
+        "index": 47,
+        "name": "1-(benzimidazol-1-yl)-3-ethylthiourea",
+        "number_of_atoms": 27,
+        "smiles": "CCNC(=S)NN1C=NC2=CC=CC=C21"
+    },
+    {
+        "index": 48,
+        "name": "1-ethyl-2,6-dimethylpyridin-1-ium-4-carbonitrile",
+        "number_of_atoms": 25,
+        "smiles": "CC[N+]1=C(C=C(C=C1C)C#N)C"
+    },
+    {
+        "index": 49,
+        "name": "5-chloro-8-methoxy-2-methyl-1H-quinolin-4-one",
+        "number_of_atoms": 25,
+        "smiles": "CC1=CC(=O)C2=C(C=CC(=C2N1)OC)Cl"
+    },
+    {
+        "index": 50,
+        "name": "1-bromo-6-fluorohexane",
+        "number_of_atoms": 20,
+        "smiles": "C(CCCBr)CCF"
+    },
+    {
+        "index": 51,
+        "name": "2-propylquinoline",
+        "number_of_atoms": 26,
+        "smiles": "CCCC1=NC2=CC=CC=C2C=C1"
+    },
+    {
+        "index": 52,
+        "name": "(3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one",
+        "number_of_atoms": 18,
+        "smiles": "C(C1C(C(C(=O)O1)O)O)O"
+    },
+    {
+        "index": 53,
+        "name": "(6-chloropyridin-3-yl)methyl acetate",
+        "number_of_atoms": 20,
+        "smiles": "CC(=O)OCC1=CN=C(C=C1)Cl"
+    },
+    {
+        "index": 54,
+        "name": "8,9-dihydro-7H-[1,2,4]triazolo[1,5-a]quinazolin-6-one",
+        "number_of_atoms": 22,
+        "smiles": "C1CC2=C(C=NC3=NC=NN23)C(=O)C1"
+    },
+    {
+        "index": 55,
+        "name": "4-hydroxy-4-pyridin-2-ylbutan-2-one",
+        "number_of_atoms": 23,
+        "smiles": "CC(=O)CC(C1=CC=CC=N1)O"
+    },
+    {
+        "index": 56,
+        "name": "N-methoxy-4-methylsulfanylbenzenesulfonamide",
+        "number_of_atoms": 25,
+        "smiles": "CONS(=O)(=O)C1=CC=C(C=C1)SC"
+    },
+    {
+        "index": 57,
+        "name": "2-bromooxirane",
+        "number_of_atoms": 7,
+        "smiles": "C1C(O1)Br"
+    },
+    {
+        "index": 58,
+        "name": "6-(4-chlorophenyl)sulfanyl-7H-purine",
+        "number_of_atoms": 24,
+        "smiles": "C1=CC(=CC=C1SC2=NC=NC3=C2NC=N3)Cl"
+    },
+    {
+        "index": 59,
+        "name": "2,2-dimethyl-3H-1,3-benzoxazin-4-one",
+        "number_of_atoms": 24,
+        "smiles": "CC1(NC(=O)C2=CC=CC=C2O1)C"
+    }
+]

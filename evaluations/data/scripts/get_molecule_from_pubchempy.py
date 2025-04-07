@@ -2,10 +2,15 @@ import pubchempy as pcp
 import random
 import time
 import json
-from comp_chem_agent.tools.ASE_tools import smiles_to_atomsdata, molecule_name_to_smiles
+from comp_chem_agent.tools.ASE_tools import (
+    smiles_to_atomsdata,
+    molecule_name_to_smiles,
+)
 
 
-def get_random_molecule_names(n=2, cid_range=(0, 10000000), seed=42, natoms=30):
+def get_random_molecule_names(
+    n=2, cid_range=(0, 10000000), seed=42, max_natoms=30, min_natoms=5
+):
     """Get a list of random molecule names and smiles from PubChemPy.
 
     Args:
@@ -30,14 +35,19 @@ def get_random_molecule_names(n=2, cid_range=(0, 10000000), seed=42, natoms=30):
 
         try:
             compound = pcp.Compound.from_cid(cid)
-            name = compound.iupac_name or (compound.synonyms[0] if compound.synonyms else None)
+            name = compound.iupac_name or (
+                compound.synonyms[0] if compound.synonyms else None
+            )
             if not name:
                 continue
 
             smiles = molecule_name_to_smiles.invoke({"name": name})
             atomsdata = smiles_to_atomsdata.invoke({"smiles": smiles})
 
-            if len(atomsdata.numbers) < natoms:
+            if (
+                len(atomsdata.numbers) < max_natoms
+                and len(atomsdata.numbers) > min_natoms
+            ):
                 molecule_info = {
                     "index": count,
                     "name": name,
@@ -59,7 +69,7 @@ def get_random_molecule_names(n=2, cid_range=(0, 10000000), seed=42, natoms=30):
 
 
 def main():
-    output = get_random_molecule_names(n=50)
+    output = get_random_molecule_names(n=60, seed=2025)
     with open('pubchempy_molecule_max.json', 'w') as f:
         json.dump(output, f, indent=4)
 
