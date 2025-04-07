@@ -167,7 +167,7 @@ def run_graspa(graspa_input: GRASPAInputSchema):
 
         return atoms
 
-    output_path = graspa_input.output_path
+    output_path = Path(graspa_input.output_path)
     name = graspa_input.name
     ddec6_path = graspa_input.ddec6_path
     adsorbate = graspa_input.adsorbate
@@ -185,7 +185,7 @@ def run_graspa(graspa_input: GRASPAInputSchema):
 
     # Copy other input files (simulation.input, force fields and definition files) from template folder.
     subprocess.run(f"cp {_file_dir}/* {out_dir}/", shell=True)
-
+    print(_file_dir)
     [uc_x, uc_y, uc_z] = _calculate_cell_size(atoms=atoms)
 
     # Modify input from template simulation.input
