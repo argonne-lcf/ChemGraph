@@ -26,13 +26,13 @@ def molecule_name_to_smiles(name: str) -> str:
 
 
 @tool
-def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025) -> AtomsData:
+def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025, round_to: int = None) -> AtomsData:
     """Convert a SMILES string to AtomsData format.
 
     Args:
         smiles (str): SMILES string.
         randomSeed (int, optional): random seed for RDKit. Defaults to 2025.
-
+        round_to (int, optional): Number of decimal places to round floating-point values. Default is None, no rounding is applied.
     Returns:
         AtomsData: AtomsData object.
     """
@@ -54,6 +54,9 @@ def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025) -> AtomsData:
     conf = mol.GetConformer()
     numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
     positions = [list(conf.GetAtomPosition(i)) for i in range(mol.GetNumAtoms())]
+
+    if round_to is not None:
+        positions = [[round(coord, round_to) for coord in pos] for pos in positions]
 
     # Create AtomsData object
     atoms_data = AtomsData(
@@ -105,7 +108,7 @@ def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> N
 
     Args:
         atomsdata: AtomsData object to save
-        fname: Path to the output file
+        fname: Path to the output file. Default to output.xyz
     """
     from ase.io import write
     from ase import Atoms
@@ -207,175 +210,22 @@ def load_calculator(calculator: dict):
 
 
 @tool
-def run_geometry_optimization(params: ASEInputSchema) -> ASEOutputSchema:
-    """Run geometry optimization using Atomic Simulation Environment (ASE).
-
-    Args:
-        params (ASEInputSchema): ASEInputSchema object.
-
-    Returns:
-        ASEOutputSchema: ASEOutputSchema object.
-    """
-    calculator = params.calculator.model_dump()
-    atomsdata = params.atomsdata
-    optimizer = params.optimizer
-    fmax = params.fmax
-    steps = params.steps
-
-    calc = load_calculator(calculator)
-    if calc is None:
-        e = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
-        raise ValueError(
-            f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
-        )
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
-            success=False,
-        )
-        return simulation_output
-
-    from ase import Atoms
-    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
-
-    atoms = Atoms(
-        numbers=atomsdata.numbers,
-        positions=atomsdata.positions,
-        cell=atomsdata.cell,
-        pbc=atomsdata.pbc,
-    )
-    atoms.calc = calc
-    OPTIMIZERS = {
-        "bfgs": BFGS,
-        "lbfgs": LBFGS,
-        "gpmin": GPMin,
-        "fire": FIRE,
-        "mdmin": MDMin,
-    }
-    try:
-        optimizer_class = OPTIMIZERS.get(optimizer.lower())
-        if optimizer_class is None:
-            raise ValueError(f"Unsupported optimizer: {params['optimizer']}")
-
-        dyn = optimizer_class(atoms)
-        converged = dyn.run(fmax=fmax, steps=steps)
-
-        final_structure = AtomsData(
-            numbers=atoms.numbers,
-            positions=atoms.positions,
-            cell=atoms.cell,
-            pbc=atoms.pbc,
-        )
-        simulation_output = ASEOutputSchema(
-            converged=converged,
-            final_structure=final_structure,
-            simulation_input=params,
-            success=True,
-        )
-        return simulation_output
-
-    except Exception as e:
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
-            success=False,
-        )
-        return simulation_output
-
-
-@tool
-def run_vibrational_frequency(params: ASEInputSchema) -> ASEOutputSchema:
-    """Run vibrational frequency calculation using Atomic Simulation Environment (ASE).
-
-    Args:
-        params (ASEInputSchema): ASEInputSchema object.
-
-    Returns:
-        ASEOutputSchema: ASEOutputSchema object.
-    """
-
-    from ase import Atoms
-    from ase.vibrations import Vibrations
-    import ase.units as units
-
-    calculator = params.calculator.model_dump()
-    atomsdata = params.atomsdata
-    calc = load_calculator(calculator)
-    if calc is None:
-        e = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
-        raise ValueError(e)
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
-            success=False,
-        )
-        return simulation_output
-    try:
-        atoms = Atoms(
-            numbers=atomsdata.numbers,
-            positions=atomsdata.positions,
-            cell=atomsdata.cell,
-            pbc=atomsdata.pbc,
-        )
-        atoms.calc = calc
-
-        vib_data = {}
-        vib_data['energies'] = []
-        vib_data['energy_unit'] = 'meV'
-
-        vib_data['frequencies'] = []
-        vib_data['frequency_unit'] = 'cm-1'
-
-        vib = Vibrations(atoms)
-        vib.clean()
-        vib.run()
-
-        energies = vib.get_energies()
-        for idx, e in enumerate(energies):
-            if abs(e.imag) > 1e-8:
-                c = 'i'
-                e = e.imag
-            else:
-                c = ''
-                e = e.real
-            vib_data['energies'].append(str(1e3 * e) + c)
-            vib_data['frequencies'].append(str(e / units.invcm) + c)
-        simulation_output = ASEOutputSchema(
-            converged=True,
-            final_structure=atomsdata,
-            simulation_input=params,
-            vibrational_frequencies=vib_data,
-            success=True,
-        )
-        return simulation_output
-    except Exception as e:
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
-            success=True,
-        )
-        return simulation_output
-
-
-@tool
-def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
+def run_ase(params: ASEInputSchema, round_to: int = None) -> ASEOutputSchema:
     """Run ASE calculations using specified input parameters.
 
     Args:
         params (ASEInputSchema): ASEInputSchema object.
-
+        round_to (int, optional): Number of decimal places to round all floating-point outputs. If set to None, no rounding will be applied. Default is None.
     Returns:
         ASEOutputSchema: ASEOutputSchema object.
     """
-    calculator = params.calculator.model_dump()
+
+    print(params)
+    try:
+        calculator = params.calculator.model_dump()
+    except Exception as e:
+        return f"Incorrect ASEInputSchema for input parameter. Revise your input schema. Error message: {e}"
+
     atomsdata = params.atomsdata
     optimizer = params.optimizer
     fmax = params.fmax
@@ -436,9 +286,14 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             converged = dyn.run(fmax=fmax, steps=steps)
         else:
             converged = True
+
+        final_coords = atoms.positions
+        if round_to is not None:
+            final_coords = [[round(coord, round_to) for coord in pos] for pos in final_coords]
+
         final_structure = AtomsData(
             numbers=atoms.numbers,
-            positions=atoms.positions,
+            positions=final_coords,
             cell=atoms.cell,
             pbc=atoms.pbc,
         )
@@ -465,13 +320,20 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             for idx, e in enumerate(energies):
                 if abs(e.imag) > 1e-8:
                     c = 'i'
-                    e = e.imag
+                    e_val = e.imag
                 else:
                     c = ''
-                    e = e.real
+                    e_val = e.real
 
-                vib_data['energies'].append(str(1e3 * e) + c)
-                vib_data['frequencies'].append(str(e / units.invcm) + c)
+                if round_to is None:
+                    energy_meV = 1e3 * e_val
+                    freq_cm1 = e_val / units.invcm
+                else:
+                    energy_meV = round(1e3 * e_val, round_to)
+                    freq_cm1 = round(e_val / units.invcm, round_to)
+
+                vib_data['energies'].append(f"{energy_meV}{c}")
+                vib_data['frequencies'].append(f"{freq_cm1}{c}")
 
             if driver == "thermo":
                 # Approximation for system with a single atom.
@@ -528,182 +390,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             simulation_input=params,
             error=str(e),
             success=False,
-        )
-        return simulation_output
-
-
-@tool
-def run_single_point(params: ASEInputSchema) -> float:
-    """Run single point calculation and return the energy.
-
-    Args:
-        params (ASEInputSchema): _description_
-
-    Returns:
-        : _description_
-    """
-    from ase import Atoms
-
-    calculator = params.calculator.model_dump()
-    atomsdata = params.atomsdata
-    calc = load_calculator(calculator)
-    if calc is None:
-        e = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
-        raise ValueError(e)
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
-            success=False,
-        )
-        return simulation_output
-
-    atoms = Atoms(
-        numbers=atomsdata.numbers,
-        positions=atomsdata.positions,
-        cell=atomsdata.cell,
-        pbc=atomsdata.pbc,
-    )
-    atoms.calc = calc
-    energy = atoms.get_potential_energy()
-
-    return energy
-
-
-@tool
-def calculate_thermochemistry(params: ASEInputSchema) -> ASEOutputSchema:
-    """Calculate thermochemistry after performing vibrational frequency calculation
-
-    Args:
-        params (ASEInputSchema): ASEInputSchema object.
-
-    Returns:
-        ASEOutputSchema: ASEOutputSchema object.
-    """
-    calculator = params.calculator.model_dump()
-    atomsdata = params.atomsdata
-    optimizer = params.optimizer
-    fmax = params.fmax
-    steps = params.steps
-    temperature = params.temperature
-    pressure = params.pressure
-
-    calc = load_calculator(calculator)
-    if calc is None:
-        e = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
-        raise ValueError(e)
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
-            success=False,
-        )
-        return simulation_output
-
-    from ase import Atoms
-    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
-
-    atoms = Atoms(
-        numbers=atomsdata.numbers,
-        positions=atomsdata.positions,
-        cell=atomsdata.cell,
-        pbc=atomsdata.pbc,
-    )
-    atoms.calc = calc
-    OPTIMIZERS = {
-        "bfgs": BFGS,
-        "lbfgs": LBFGS,
-        "gpmin": GPMin,
-        "fire": FIRE,
-        "mdmin": MDMin,
-    }
-    try:
-        optimizer_class = OPTIMIZERS.get(optimizer.lower())
-        if optimizer_class is None:
-            raise ValueError(f"Unsupported optimizer: {params['optimizer']}")
-
-        dyn = optimizer_class(atoms)
-        converged = dyn.run(fmax=fmax, steps=steps)
-
-        final_structure = AtomsData(
-            numbers=atoms.numbers,
-            positions=atoms.positions,
-            cell=atoms.cell,
-            pbc=atoms.pbc,
-        )
-
-        from ase.vibrations import Vibrations
-        from ase import units
-
-        vib_data = {}
-        vib_data['energies'] = []
-        vib_data['energy_unit'] = 'meV'
-
-        vib_data['frequencies'] = []
-        vib_data['frequency_unit'] = 'cm-1'
-
-        vib = Vibrations(atoms)
-        vib.clean()
-        vib.run()
-
-        energies = vib.get_energies()
-        for idx, e in enumerate(energies):
-            if abs(e.imag) > 1e-8:
-                c = 'i'
-                e = e.imag
-            else:
-                c = ''
-                e = e.real
-            vib_data['energies'].append(str(1e3 * e) + c)
-            vib_data['frequencies'].append(str(e / units.invcm) + c)
-
-        from ase.thermochemistry import IdealGasThermo
-
-        thermo_data = {}
-        potentialenergy = atoms.get_potential_energy()
-        vib_energies = vib.get_energies()
-
-        linear = is_linear_molecule.invoke({'atomsdata': final_structure})
-        symmetrynumber = get_symmetry_number.invoke({'atomsdata': final_structure})
-
-        if linear:
-            geometry = "linear"
-        else:
-            geometry = "nonlinear"
-        thermo = IdealGasThermo(
-            vib_energies=vib_energies,
-            potentialenergy=potentialenergy,
-            atoms=atoms,
-            geometry=geometry,
-            symmetrynumber=symmetrynumber,
-            spin=0,  # Only support spin=0
-        )
-
-        thermo_data = {}
-        thermo_data['enthalpy'] = thermo.get_enthalpy(temperature=temperature)
-        thermo_data['entropy'] = thermo.get_entropy(temperature=temperature, pressure=pressure)
-        thermo_data['gibbs_free_energy'] = thermo.get_gibbs_energy(
-            temperature=temperature, pressure=pressure
-        )
-        thermo_data['unit'] = 'eV'
-
-        simulation_output = ASEOutputSchema(
-            converged=converged,
-            final_structure=final_structure,
-            simulation_input=params,
-            vibrational_frequencies=vib_data,
-            thermochemistry=thermo_data,
-        )
-        return simulation_output
-
-    except Exception as e:
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
         )
         return simulation_output
 

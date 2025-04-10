@@ -9,7 +9,7 @@ from comp_chem_agent.tools.ASE_tools import (
 
 
 def get_random_molecule_names(
-    n=2, cid_range=(0, 10000000), seed=42, max_natoms=30, min_natoms=5
+    n=2, cid_range=(0, 10000000), seed=2025, max_natoms=20, min_natoms=6
 ):
     """Get a list of random molecule names and smiles from PubChemPy.
 

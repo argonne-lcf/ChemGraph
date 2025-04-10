@@ -11,9 +11,7 @@ class VibrationalFrequency(BaseModel):
 
 
 class ScalarResult(BaseModel):
-    value: float = Field(
-        ..., description="Scalar numerical result like enthalpy"
-    )
+    value: float = Field(..., description="Scalar numerical result like enthalpy")
     property: str = Field(
         ...,
         description="Name of the property, e.g. 'enthalpy', 'Gibbs free energy'",
@@ -24,7 +22,15 @@ class ScalarResult(BaseModel):
 class ResponseFormatter(BaseModel):
     """Defined structured response to the user."""
 
-    answer: Union[str, ScalarResult, VibrationalFrequency, AtomsData] = Field(
+    answer: Union[
+        str,
+        ScalarResult,
+        VibrationalFrequency,
+        AtomsData,
+        list[AtomsData],
+        list[VibrationalFrequency],
+        list[ScalarResult],
+    ] = Field(
         description=(
             "Structured answer to the user's query. Use:\n"
             "- `str` for general or explanatory responses or SMILES string.\n"
