@@ -1,8 +1,9 @@
 import json
 import argparse
-from comp_chem_agent.agent.llm_graph import llm_graph
 from comp_chem_agent.tools.ASE_tools import smiles_to_atomsdata, run_ase
 from comp_chem_agent.models.ase_input import ASEInputSchema
+import datetime
+import subprocess
 
 
 def get_atomsdata_from_smiles(smiles: str) -> dict:
@@ -125,31 +126,35 @@ def main(fname: str, n_structures: int):
     with open(fname, "r") as f:
         smiles_data = json.load(f)
 
-    combined_data = []
+    combined_data = {}
 
     # Iterate through the first n_structures molecules
     for idx, molecule in enumerate(smiles_data[:n_structures]):
         smiles = molecule["smiles"]
-        index = molecule["index"]
-        name = molecule["name"]
 
-        calculator = {"calculator_type": "mace_mp"}
         try:
             # Run the geometry optimization workflow
-            manual_workflow = get_geometry_optimization_from_smiles(smiles, calculator=calculator)
+            manual_workflow = get_geometry_optimization_from_smiles(
+                smiles, calculator={"calculator_type": "mace_mp"}
+            )
         except Exception as e:
             print(f"ERROR running workflow for {smiles}. Error message: {e}")
             continue
 
         # Store results in a structured dictionary
-        molecule_data = {
-            "name": name,
-            "smiles": smiles,
-            "index": index,
-            "manual_workflow": manual_workflow,
-        }
-        combined_data.append(molecule_data)
+        combined_data[smiles] = {"manual_workflow": manual_workflow}
 
+        # Get metadata
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        try:
+            git_commit = (
+                subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+            )
+        except subprocess.CalledProcessError:
+            git_commit = "unknown"
+
+        metadata = {"timestamp": timestamp, "git_commit": git_commit}
+        combined_data[smiles]["metadata"] = metadata
     # Save the results to a JSON file
     with open("manual_workflow.json", "w") as f:
         json.dump(combined_data, f, indent=4)
@@ -161,11 +166,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--fname",
         type=str,
-        default="pubchempy_molecules_max40.json",
+        default="data_from_pubchempy.json",
         help="Path to the input SMILES JSON file (e.g., smiles_data.json)",
     )
     parser.add_argument(
-        "--n_structures", type=int, default=10, help="Number of molecules to process (default: 20)"
+        "--n_structures", type=int, default=30, help="Number of molecules to process (default: 30)"
     )
     args = parser.parse_args()
 

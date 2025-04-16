@@ -1,7 +1,12 @@
 {
-    "C1=CN=CC=C1C#N": {
+    "pyridine-4-carbonitrile": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "pyridine-4-carbonitrile"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CN=CC=C1C#N"
@@ -110,13 +115,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-18",
+            "timestamp": "2025-04-16_14-00-16",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=C(C(=C(O1)CCl)Cl)CCl": {
+    "3-chloro-2,4-bis(chloromethyl)furan": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3-chloro-2,4-bis(chloromethyl)furan"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=C(C(=C(O1)CCl)Cl)CCl"
@@ -243,13 +253,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-18",
+            "timestamp": "2025-04-16_14-00-16",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1(=O)NNC(=O)NN1": {
+    "1,2,4,5-tetrazinane-3,6-dione": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1,2,4,5-tetrazinane-3,6-dione"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1(=O)NNC(=O)NN1"
@@ -358,13 +373,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-18",
+            "timestamp": "2025-04-16_14-00-16",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=CC(=C(C=C1F)Cl)C(F)F": {
+    "2-chloro-1-(difluoromethyl)-4-fluorobenzene": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-chloro-1-(difluoromethyl)-4-fluorobenzene"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CC(=C(C=C1F)Cl)C(F)F"
@@ -491,13 +511,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-18",
+            "timestamp": "2025-04-16_14-00-17",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=C(C(=O)NC(=O)N1)[N+](=O)[O-]": {
+    "5-nitro-1H-pyrimidine-2,4-dione": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5-nitro-1H-pyrimidine-2,4-dione"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=C(C(=O)NC(=O)N1)[N+](=O)[O-]"
@@ -618,13 +643,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-18",
+            "timestamp": "2025-04-16_14-00-17",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=C(C(=NN1CC(=O)[O-])[N+](=O)[O-])Br": {
+    "2-(4-bromo-3-nitropyrazol-1-yl)acetate": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-(4-bromo-3-nitropyrazol-1-yl)acetate"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=C(C(=NN1CC(=O)[O-])[N+](=O)[O-])Br"
@@ -757,13 +787,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-18",
+            "timestamp": "2025-04-16_14-00-17",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "CC(=O)CN(C(=O)N)N=O": {
+    "1-nitroso-1-(2-oxopropyl)urea": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-nitroso-1-(2-oxopropyl)urea"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "CC(=O)CN(C(=O)N)N=O"
@@ -902,13 +937,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-18",
+            "timestamp": "2025-04-16_14-00-17",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=CSC=C1C2=C(SC=C2)C(=O)[O-]": {
+    "3-thiophen-3-ylthiophene-2-carboxylate": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3-thiophen-3-ylthiophene-2-carboxylate"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CSC=C1C2=C(SC=C2)C(=O)[O-]"
@@ -1053,13 +1093,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-17",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1(=NON=C1NC(=O)NN)N": {
+    "1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1(=NON=C1NC(=O)NN)N"
@@ -1198,13 +1243,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-17",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=CC=C(C(=C1)C=O)N=O": {
+    "2-nitrosobenzaldehyde": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-nitrosobenzaldehyde"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CC=C(C(=C1)C=O)N=O"
@@ -1331,13 +1381,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-17",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C(C1C(C(C(=O)O1)O)O)O": {
+    "(3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "(3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C(C1C(C(C(=O)O1)O)O)O"
@@ -1482,13 +1537,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-18",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1C(O1)Br": {
+    "2-bromooxirane": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-bromooxirane"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1C(O1)Br"
@@ -1567,13 +1627,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-18",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1COC2=C1C=C(C=C2C(=O)[O-])Br": {
+    "5-bromo-2,3-dihydro-1-benzofuran-7-carboxylate": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5-bromo-2,3-dihydro-1-benzofuran-7-carboxylate"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1COC2=C1C=C(C=C2C(=O)[O-])Br"
@@ -1724,13 +1789,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-18",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=NC2C(=N1)N=CN=C2S(=O)(=O)F": {
+    "5H-purine-6-sulfonyl fluoride": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5H-purine-6-sulfonyl fluoride"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=NC2C(=N1)N=CN=C2S(=O)(=O)F"
@@ -1863,13 +1933,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-18",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=CC(=C(C=C1Br)C(F)(F)F)C(F)(F)F": {
+    "4-bromo-1,2-bis(trifluoromethyl)benzene": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "4-bromo-1,2-bis(trifluoromethyl)benzene"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CC(=C(C=C1Br)C(F)(F)F)C(F)(F)F"
@@ -2014,13 +2089,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-18",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "CCC(=C)C(=O)C": {
+    "3-methylidenepentan-2-one": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3-methylidenepentan-2-one"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "CCC(=C)C(=O)C"
@@ -2159,13 +2239,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-18",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "CC1CCC(=O)N1C": {
+    "1,5-dimethylpyrrolidin-2-one": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1,5-dimethylpyrrolidin-2-one"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "CC1CCC(=O)N1C"
@@ -2316,13 +2401,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-19",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=C(C(=C(C(=C1Cl)Cl)Br)O)Cl": {
+    "2-bromo-3,4,6-trichlorophenol": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-bromo-3,4,6-trichlorophenol"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=C(C(=C(C(=C1Cl)Cl)Br)O)Cl"
@@ -2437,13 +2527,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-19",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=CC(=CC=C1N=C=S)N=C=S": {
+    "1,4-diisothiocyanatobenzene": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1,4-diisothiocyanatobenzene"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CC(=CC=C1N=C=S)N=C=S"
@@ -2576,13 +2671,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-19",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "B(C1=CC=C(C=C1)N)(O)O": {
+    "(4-aminophenyl)boronic acid": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "(4-aminophenyl)boronic acid"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "B(C1=CC=C(C=C1)N)(O)O"
@@ -2727,13 +2827,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-19",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=CC=C2C(=C1)C=C(S2)C(=O)Cl": {
+    "1-benzothiophene-2-carbonyl chloride": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-benzothiophene-2-carbonyl chloride"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CC=C2C(=C1)C=C(S2)C(=O)Cl"
@@ -2872,13 +2977,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-20",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "CN(C)C(=C)O": {
+    "1-(dimethylamino)ethenol": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-(dimethylamino)ethenol"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "CN(C)C(=C)O"
@@ -3005,13 +3115,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-20",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=CC(=CC=C1N=O)Cl": {
+    "1-chloro-4-nitrosobenzene": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-chloro-4-nitrosobenzene"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CC(=CC=C1N=O)Cl"
@@ -3126,13 +3241,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-20",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C(CS(=O)(=O)O)[P+](=O)[O-]": {
+    "oxido-oxo-(2-sulfoethyl)phosphanium": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "oxido-oxo-(2-sulfoethyl)phosphanium"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C(CS(=O)(=O)O)[P+](=O)[O-]"
@@ -3253,13 +3373,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-20",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "CN1C=CC(=N1)NC(=O)CCl": {
+    "2-chloro-N-(1-methylpyrazol-3-yl)acetamide": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-chloro-N-(1-methylpyrazol-3-yl)acetamide"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "CN1C=CC(=N1)NC(=O)CCl"
@@ -3410,13 +3535,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-20",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=CC=NC(=C1)C2=NN=C(S2)N": {
+    "5-pyridin-2-yl-1,3,4-thiadiazol-2-amine": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5-pyridin-2-yl-1,3,4-thiadiazol-2-amine"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=CC=NC(=C1)C2=NN=C(S2)N"
@@ -3561,13 +3691,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-20",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1=NN2C(=S)NN=C2S1": {
+    "2H-[1,2,4]triazolo[3,4-b][1,3,4]thiadiazole-3-thione": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2H-[1,2,4]triazolo[3,4-b][1,3,4]thiadiazole-3-thione"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1=NN2C(=S)NN=C2S1"
@@ -3670,13 +3805,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-21",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1COCCN1CC#N": {
+    "2-morpholin-4-ylacetonitrile": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-morpholin-4-ylacetonitrile"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1COCCN1CC#N"
@@ -3827,13 +3967,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-21",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "CSC1=NC(=NC(=N1)Cl)Cl": {
+    "2,4-dichloro-6-methylsulfanyl-1,3,5-triazine": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2,4-dichloro-6-methylsulfanyl-1,3,5-triazine"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "CSC1=NC(=NC(=N1)Cl)Cl"
@@ -3948,13 +4093,18 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-21",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     },
-    "C1(=C(NC(=O)N=C1N)N)N=O": {
+    "4,6-diamino-5-nitroso-1H-pyrimidin-2-one": {
         "manual_workflow": {
             "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "4,6-diamino-5-nitroso-1H-pyrimidin-2-one"
+                    }
+                },
                 {
                     "smiles_to_atomsdata": {
                         "smiles": "C1(=C(NC(=O)N=C1N)N)N=O"
@@ -4087,7 +4237,7 @@
             }
         },
         "metadata": {
-            "timestamp": "2025-04-16_14-58-19",
+            "timestamp": "2025-04-16_14-00-21",
             "git_commit": "b831d94aad1142ed489aae3e362ab198a45b40fd"
         }
     }

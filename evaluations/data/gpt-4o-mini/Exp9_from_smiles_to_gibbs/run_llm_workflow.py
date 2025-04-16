@@ -64,7 +64,7 @@ def main(fname: str, n_structures: int):
 
         smiles = molecule["smiles"]
 
-        query = get_query(smiles, query_name="smiles_to_opt", method="mace_mp")
+        query = get_query(smiles, query_name="smiles_to_gibbs", method="mace_mp")
         state = cca.run(query, config={"configurable": {"thread_id": f"{str(idx)}"}})
 
         llm_workflow = get_workflow_from_state(state)
@@ -86,7 +86,7 @@ def main(fname: str, n_structures: int):
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Run geometry optimization on SMILES molecules.")
+    parser = argparse.ArgumentParser(description="Run vibrational frequency on SMILES molecules.")
     parser.add_argument(
         "--fname",
         type=str,
@@ -94,7 +94,7 @@ if __name__ == "__main__":
         help="Path to the input SMILES JSON file (e.g., smiles_data.json)",
     )
     parser.add_argument(
-        "--n_structures", type=int, default=30, help="Number of molecules to process (default: 30)"
+        "--n_structures", type=int, default=15, help="Number of molecules to process (default: 15)"
     )
     args = parser.parse_args()
 

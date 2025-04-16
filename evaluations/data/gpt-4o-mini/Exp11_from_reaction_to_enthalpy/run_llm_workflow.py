@@ -17,12 +17,12 @@ def get_query(
     Returns:
         _type_: _description_
     """
-    reactants_str = " + ".join([f"{r['coefficient']} {r['name']}" for r in reaction["reactants"]])
-    products_str = " + ".join([f"{p['coefficient']} {p['name']}" for p in reaction["products"]])
+    reactants_str = " + ".join([f"{r['coefficient']} ({r['name']})" for r in reaction["reactants"]])
+    products_str = " + ".join([f"{p['coefficient']} ({p['name']})" for p in reaction["products"]])
 
     reaction_equation = f"{reactants_str} -> {products_str}"
     query_dict = {
-        "enthalpy": f"What is the reaction enthalpy of {reaction_equation}",
+        "enthalpy": f"Calculate the reaction enthalpy for this reaction: {reaction_equation}",
         "enthalpy_method": f"Calculate the reaction enthalpy for this chemical reaction, {reaction_equation} using {method} potential",
         "gibbs_free_energy": f"What is the Gibbs free energy of reaction for {reaction_equation}?",
         "gibbs_free_energy_method": f"What is the Gibbs free energy of reaction for {reaction_equation} using {method}?",
@@ -57,7 +57,7 @@ def main(n_reactions: int):
         reactants = reaction["reactants"]
         products = reaction["products"]
 
-        query = get_query(reaction, query_name="enthalpy_method", method="mace_mp")
+        query = get_query(reaction, query_name="enthalpy_method", method="GFN2-xTB")
         state = cca.run(query, config={"configurable": {"thread_id": f"{str(idx)}"}})
 
         llm_workflow = get_workflow_from_state(state)

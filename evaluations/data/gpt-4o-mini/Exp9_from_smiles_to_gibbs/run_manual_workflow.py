@@ -113,6 +113,49 @@ def get_vibrational_frequencies_from_smiles(smiles: str, calculator: dict) -> di
         return f"Error message: {e}"
 
 
+def get_gibbs_energy_from_smiles(smiles: str, calculator: dict, temperature: float) -> dict:
+    """Run and return a workflow of calculating gibbs free energy using a molecule name, a calculator and temperature as input.
+
+    Args:
+        smiles (str): SMILES string.
+        calculator (dict): details of input calculator/method.
+
+    Returns:
+        dict: Workflow details including input parameters and results.
+    """
+
+    workflow = {
+        "tool_calls": [],
+        "result": {},
+    }
+    atomsdata = smiles_to_atomsdata.invoke({"smiles": smiles})
+    input_dict = {
+        "atomsdata": atomsdata,
+        "driver": "thermo",
+        "calculator": calculator,
+        "temperature": temperature,
+    }
+    try:
+        params = ASEInputSchema(**input_dict)
+        aseoutput = run_ase.invoke({"params": params})
+
+        result = aseoutput.thermochemistry['gibbs_free_energy']
+        # Populate workflow with relevant data.
+        workflow["tool_calls"].append({"smiles_to_atomsdata": {"smiles": smiles}})
+        input_dict["atomsdata"] = input_dict["atomsdata"].model_dump()
+        workflow["tool_calls"].append({"run_ase": {"params": input_dict}})
+        workflow["result"]["value"] = result
+        workflow["result"]["property"] = "Gibbs free energy"
+        workflow["result"]["unit"] = "eV"
+        return workflow
+    except Exception as e:
+        workflow["tool_calls"].append({"smiles_to_atomsdata": {"smiles": smiles}})
+        input_dict["atomsdata"] = input_dict["atomsdata"].model_dump()
+        workflow["tool_calls"].append({"run_ase": {"params": input_dict}})
+        workflow["result"] = f"ERROR - {str(e)}"
+        return workflow
+
+
 def main(fname: str, n_structures: int):
     """
     Run a manual geometry optimization workflow on a subset of molecules
@@ -134,7 +177,9 @@ def main(fname: str, n_structures: int):
 
         try:
             # Run the geometry optimization workflow
-            manual_workflow = get_atomsdata_from_smiles(smiles)
+            manual_workflow = get_gibbs_energy_from_smiles(
+                smiles, calculator={"calculator_type": "mace_mp"}, temperature=400
+            )
         except Exception as e:
             print(f"ERROR running workflow for {smiles}. Error message: {e}")
             continue
@@ -160,7 +205,7 @@ def main(fname: str, n_structures: int):
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Run geometry optimization on SMILES molecules.")
+    parser = argparse.ArgumentParser(description="Calculate Gibbs free energy on SMILES molecules.")
     parser.add_argument(
         "--fname",
         type=str,
@@ -168,7 +213,7 @@ if __name__ == "__main__":
         help="Path to the input SMILES JSON file (e.g., smiles_data.json)",
     )
     parser.add_argument(
-        "--n_structures", type=int, default=30, help="Number of molecules to process (default: 30)"
+        "--n_structures", type=int, default=15, help="Number of molecules to process (default: 15)"
     )
     args = parser.parse_args()
 

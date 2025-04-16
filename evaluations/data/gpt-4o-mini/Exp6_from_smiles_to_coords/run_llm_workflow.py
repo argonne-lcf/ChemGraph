@@ -2,11 +2,12 @@ import json
 from comp_chem_agent.agent.llm_graph import llm_graph
 from comp_chem_agent.utils.get_workflow_from_llm import get_workflow_from_state
 import argparse
+import datetime
 
 
 def get_query(
     smiles: str,
-    query_name: str = "atomsdata",  # options: atomsdata, opt, vib
+    query_name: str = "smiles_to_coord",  # options: atomsdata, opt, vib
     method: str = "mace_mp",
 ) -> str:
     """Get query for a SMILES-related task for CompChemAgent
@@ -20,9 +21,12 @@ def get_query(
         str: formatted query.
     """
     query_dict = {
-        "atomsdata": f"Provide the XYZ coordinates corresponding to this SMILES string: {smiles}",
-        "opt_method": f"Perform geometry optimization for this SMILES string {smiles} using {method}",
-        "vib_method": f"Run vibrational frequency calculation for {smiles} using {method}",
+        "smiles_to_coord": f"Provide the XYZ coordinates corresponding to this SMILES string: {smiles}",
+        "smiles_to_opt": f"Perform geometry optimization for this SMILES string {smiles} using {method}",
+        "smiles_to_vib": f"Run vibrational frequency calculation for this SMILES string {smiles} using {method}",
+        "smiles_to_enthalpy": f"Calculate the enthalpy of this SMILES string {smiles} using {method}",
+        "smiles_to_gibbs": f"Calculate the Gibbs free energy of this SMILES string {smiles} using {method} at T=400K",
+        "smiles_to_opt_file": f"Perform geometry optimization for this SMILES string {smiles} using {method}. Save the optimized coordinate in an XYZ file.",
     }
 
     return query_dict.get(query_name, "Query not found")  # Returns the query or a default message
@@ -41,7 +45,7 @@ def main(fname: str, n_structures: int):
     with open(fname, "r") as f:
         smiles_data = json.load(f)
 
-    combined_data = []
+    combined_data = {}
 
     cca = llm_graph(
         model_name='gpt-4o-mini',
@@ -59,26 +63,24 @@ def main(fname: str, n_structures: int):
         print("********************************************")
 
         smiles = molecule["smiles"]
-        index = molecule["index"]
-        name = molecule["name"]
 
-        query = get_query(smiles, query_name="atomsdata", method="mace_mp")
+        query = get_query(smiles, query_name="smiles_to_coord", method="mace_mp")
         state = cca.run(query, config={"configurable": {"thread_id": f"{str(idx)}"}})
 
         llm_workflow = get_workflow_from_state(state)
 
         # Store results in a structured dictionary
-        molecule_data = {
-            "name": name,
-            "smiles": smiles,
-            "index": index,
-            "llm_workflow": llm_workflow,
-        }
-        combined_data.append(molecule_data)
-        cca.write_state(config={"configurable": {"thread_id": f"{str(idx)}"}})
+        state_data = cca.write_state(config={"configurable": {"thread_id": f"{str(idx)}"}})
+
+        combined_data[smiles] = {"llm_workflow": llm_workflow}
+        combined_data[smiles]["metadata"] = state_data
 
     # Save the results to a JSON file
-    with open("llm_workflow.json", "w") as f:
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"llm_workflow_{timestamp}.json"
+
+    # Save the results to a JSON file
+    with open(filename, "w") as f:
         json.dump(combined_data, f, indent=4)
 
 
@@ -88,11 +90,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--fname",
         type=str,
-        default="pubchempy_molecules_max40.json",
+        default="data_from_pubchempy.json",
         help="Path to the input SMILES JSON file (e.g., smiles_data.json)",
     )
     parser.add_argument(
-        "--n_structures", type=int, default=10, help="Number of molecules to process (default: 10)"
+        "--n_structures", type=int, default=30, help="Number of molecules to process (default: 30)"
     )
     args = parser.parse_args()
 

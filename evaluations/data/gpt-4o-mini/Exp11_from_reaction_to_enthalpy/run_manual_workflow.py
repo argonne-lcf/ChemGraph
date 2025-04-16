@@ -97,7 +97,9 @@ def main():
         index = reaction["reaction_index"]
         reactants = reaction["reactants"]
         products = reaction["products"]
-        manual_workflow = get_manual_workflow_result(reaction)
+        #calculator = {"calculator_type": "TBLite", "method": "GFN2-xTB"}
+        calculator = {"calculator_type": "mace_mp"}
+        manual_workflow = get_manual_workflow_result(reaction, calculator=calculator)
         reaction_data = {
             "name": name,
             "index": index,

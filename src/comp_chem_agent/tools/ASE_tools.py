@@ -26,13 +26,12 @@ def molecule_name_to_smiles(name: str) -> str:
 
 
 @tool
-def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025, round_to: int = None) -> AtomsData:
+def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025) -> AtomsData:
     """Convert a SMILES string to AtomsData format.
 
     Args:
         smiles (str): SMILES string.
         randomSeed (int, optional): random seed for RDKit. Defaults to 2025.
-        round_to (int, optional): Number of decimal places to round floating-point values. Default is None, no rounding is applied.
     Returns:
         AtomsData: AtomsData object.
     """
@@ -54,9 +53,6 @@ def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025, round_to: int = Non
     conf = mol.GetConformer()
     numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
     positions = [list(conf.GetAtomPosition(i)) for i in range(mol.GetNumAtoms())]
-
-    if round_to is not None:
-        positions = [[round(coord, round_to) for coord in pos] for pos in positions]
 
     # Create AtomsData object
     atoms_data = AtomsData(
@@ -210,21 +206,19 @@ def load_calculator(calculator: dict):
 
 
 @tool
-def run_ase(params: ASEInputSchema, round_to: int = None) -> ASEOutputSchema:
+def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     """Run ASE calculations using specified input parameters.
 
     Args:
         params (ASEInputSchema): ASEInputSchema object.
-        round_to (int, optional): Number of decimal places to round all floating-point outputs. If set to None, no rounding will be applied. Default is None.
     Returns:
         ASEOutputSchema: ASEOutputSchema object.
     """
 
-    print(params)
     try:
         calculator = params.calculator.model_dump()
     except Exception as e:
-        return f"Incorrect ASEInputSchema for input parameter. Revise your input schema. Error message: {e}"
+        return "Missing calculator parameter for the simulation."
 
     atomsdata = params.atomsdata
     optimizer = params.optimizer
@@ -288,8 +282,6 @@ def run_ase(params: ASEInputSchema, round_to: int = None) -> ASEOutputSchema:
             converged = True
 
         final_coords = atoms.positions
-        if round_to is not None:
-            final_coords = [[round(coord, round_to) for coord in pos] for pos in final_coords]
 
         final_structure = AtomsData(
             numbers=atoms.numbers,
@@ -325,12 +317,8 @@ def run_ase(params: ASEInputSchema, round_to: int = None) -> ASEOutputSchema:
                     c = ''
                     e_val = e.real
 
-                if round_to is None:
-                    energy_meV = 1e3 * e_val
-                    freq_cm1 = e_val / units.invcm
-                else:
-                    energy_meV = round(1e3 * e_val, round_to)
-                    freq_cm1 = round(e_val / units.invcm, round_to)
+                energy_meV = 1e3 * e_val
+                freq_cm1 = e_val / units.invcm
 
                 vib_data['energies'].append(f"{energy_meV}{c}")
                 vib_data['frequencies'].append(f"{freq_cm1}{c}")

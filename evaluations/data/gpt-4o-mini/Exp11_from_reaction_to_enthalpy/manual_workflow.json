@@ -78,7 +78,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -142,7 +144,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -206,7 +210,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -264,7 +270,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -281,11 +289,11 @@
         "index": 2,
         "reactants": [
             {
-                "name": "Nitrogen",
+                "name": "Nitrogen gas",
                 "coefficient": 1
             },
             {
-                "name": "Hydrogen",
+                "name": "Hydrogen gas",
                 "coefficient": 3
             }
         ],
@@ -299,7 +307,7 @@
             "tool_calls": [
                 {
                     "molecule_name_to_smiles": {
-                        "name": "Nitrogen"
+                        "name": "Nitrogen gas"
                     }
                 },
                 {
@@ -351,13 +359,15 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
                 {
                     "molecule_name_to_smiles": {
-                        "name": "Hydrogen"
+                        "name": "Hydrogen gas"
                     }
                 },
                 {
@@ -409,7 +419,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -479,7 +491,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -572,7 +586,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -630,7 +646,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -700,7 +718,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -799,7 +819,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -863,7 +885,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -951,7 +975,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -1060,7 +1086,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -1118,7 +1146,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -1182,7 +1212,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -1246,7 +1278,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -1339,7 +1373,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -1397,7 +1433,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -1455,7 +1493,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -1468,239 +1508,8 @@
         }
     },
     {
-        "name": "Lime Slaking Reaction",
-        "index": 7,
-        "reactants": [
-            {
-                "name": "Calcium oxide",
-                "coefficient": 1
-            },
-            {
-                "name": "Water",
-                "coefficient": 1
-            }
-        ],
-        "products": [
-            {
-                "name": "Calcium hydroxide",
-                "coefficient": 1
-            }
-        ],
-        "manual_workflow": {
-            "tool_calls": [],
-            "result": {
-                "value": "ERROR - list index out of range",
-                "property": "enthalpy",
-                "unit": "eV"
-            }
-        }
-    },
-    {
-        "name": "Boudouard Reaction",
-        "index": 8,
-        "reactants": [
-            {
-                "name": "Carbon monoxide",
-                "coefficient": 2
-            }
-        ],
-        "products": [
-            {
-                "name": "Carbon",
-                "coefficient": 1
-            },
-            {
-                "name": "Carbon dioxide",
-                "coefficient": 1
-            }
-        ],
-        "manual_workflow": {
-            "tool_calls": [
-                {
-                    "molecule_name_to_smiles": {
-                        "name": "Carbon monoxide"
-                    }
-                },
-                {
-                    "smiles_to_atomsdata": {
-                        "smiles": "[C-]#[O+]"
-                    }
-                },
-                {
-                    "run_ase": {
-                        "params": {
-                            "atomsdata": {
-                                "numbers": [
-                                    6,
-                                    8
-                                ],
-                                "positions": [
-                                    [
-                                        0.5640605106731242,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        -0.5640605106731242,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "cell": [
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "pbc": [
-                                    false,
-                                    false,
-                                    false
-                                ]
-                            },
-                            "driver": "thermo",
-                            "calculator": {}
-                        }
-                    }
-                },
-                {
-                    "molecule_name_to_smiles": {
-                        "name": "Carbon"
-                    }
-                },
-                {
-                    "smiles_to_atomsdata": {
-                        "smiles": "[C]"
-                    }
-                },
-                {
-                    "run_ase": {
-                        "params": {
-                            "atomsdata": {
-                                "numbers": [
-                                    6
-                                ],
-                                "positions": [
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "cell": [
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "pbc": [
-                                    false,
-                                    false,
-                                    false
-                                ]
-                            },
-                            "driver": "thermo",
-                            "calculator": {}
-                        }
-                    }
-                },
-                {
-                    "molecule_name_to_smiles": {
-                        "name": "Carbon dioxide"
-                    }
-                },
-                {
-                    "smiles_to_atomsdata": {
-                        "smiles": "C(=O)=O"
-                    }
-                },
-                {
-                    "run_ase": {
-                        "params": {
-                            "atomsdata": {
-                                "numbers": [
-                                    6,
-                                    8,
-                                    8
-                                ],
-                                "positions": [
-                                    [
-                                        4.5556649759108717e-08,
-                                        0.5033862641973668,
-                                        0.0
-                                    ],
-                                    [
-                                        -1.237393800775972,
-                                        0.5176981640440148,
-                                        0.0
-                                    ],
-                                    [
-                                        1.2373937552193337,
-                                        0.4890745459797487,
-                                        0.0
-                                    ]
-                                ],
-                                "cell": [
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "pbc": [
-                                    false,
-                                    false,
-                                    false
-                                ]
-                            },
-                            "driver": "thermo",
-                            "calculator": {}
-                        }
-                    }
-                }
-            ],
-            "result": {
-                "value": 4.184421544378342,
-                "property": "enthalpy",
-                "unit": "eV"
-            }
-        }
-    },
-    {
         "name": "Ethanol Fermentation",
-        "index": 11,
+        "index": 7,
         "reactants": [
             {
                 "name": "Glucose",
@@ -1905,7 +1714,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -2005,7 +1816,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -2069,7 +1882,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -2083,7 +1898,7 @@
     },
     {
         "name": "Decomposition of Hydrogen Peroxide",
-        "index": 13,
+        "index": 8,
         "reactants": [
             {
                 "name": "Hydrogen peroxide",
@@ -2168,7 +1983,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -2232,7 +2049,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -2290,7 +2109,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -2303,268 +2124,8 @@
         }
     },
     {
-        "name": "Acid-Base Neutralization",
-        "index": 15,
-        "reactants": [
-            {
-                "name": "Hydrochloric acid",
-                "coefficient": 1
-            },
-            {
-                "name": "Sodium hydroxide",
-                "coefficient": 1
-            }
-        ],
-        "products": [
-            {
-                "name": "Sodium chloride",
-                "coefficient": 1
-            },
-            {
-                "name": "Water",
-                "coefficient": 1
-            }
-        ],
-        "manual_workflow": {
-            "tool_calls": [
-                {
-                    "molecule_name_to_smiles": {
-                        "name": "Hydrochloric acid"
-                    }
-                },
-                {
-                    "smiles_to_atomsdata": {
-                        "smiles": "Cl"
-                    }
-                },
-                {
-                    "run_ase": {
-                        "params": {
-                            "atomsdata": {
-                                "numbers": [
-                                    17,
-                                    1
-                                ],
-                                "positions": [
-                                    [
-                                        0.6878248644303301,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        -0.6878248644303301,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "cell": [
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "pbc": [
-                                    false,
-                                    false,
-                                    false
-                                ]
-                            },
-                            "driver": "thermo",
-                            "calculator": {}
-                        }
-                    }
-                },
-                {
-                    "molecule_name_to_smiles": {
-                        "name": "Sodium hydroxide"
-                    }
-                },
-                {
-                    "smiles_to_atomsdata": {
-                        "smiles": "[OH-].[Na+]"
-                    }
-                },
-                {
-                    "run_ase": {
-                        "params": {
-                            "atomsdata": {
-                                "numbers": [
-                                    8,
-                                    11,
-                                    1
-                                ],
-                                "positions": [
-                                    [
-                                        0.4951271020006809,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        -0.4951271020006809,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "cell": [
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "pbc": [
-                                    false,
-                                    false,
-                                    false
-                                ]
-                            },
-                            "driver": "thermo",
-                            "calculator": {}
-                        }
-                    }
-                }
-            ],
-            "result": {
-                "value": "ERROR - 'enthalpy'",
-                "property": "enthalpy",
-                "unit": "eV"
-            }
-        }
-    },
-    {
-        "name": "Limestone Calcination",
-        "index": 16,
-        "reactants": [
-            {
-                "name": "Calcium carbonate",
-                "coefficient": 1
-            }
-        ],
-        "products": [
-            {
-                "name": "Calcium oxide",
-                "coefficient": 1
-            },
-            {
-                "name": "Carbon dioxide",
-                "coefficient": 1
-            }
-        ],
-        "manual_workflow": {
-            "tool_calls": [
-                {
-                    "molecule_name_to_smiles": {
-                        "name": "Calcium carbonate"
-                    }
-                },
-                {
-                    "smiles_to_atomsdata": {
-                        "smiles": "C(=O)([O-])[O-].[Ca+2]"
-                    }
-                },
-                {
-                    "run_ase": {
-                        "params": {
-                            "atomsdata": {
-                                "numbers": [
-                                    6,
-                                    8,
-                                    8,
-                                    8,
-                                    20
-                                ],
-                                "positions": [
-                                    [
-                                        -0.011865578016251183,
-                                        0.03027724536691596,
-                                        -0.00044097052000248476
-                                    ],
-                                    [
-                                        -0.47082286241532856,
-                                        1.2013887983648486,
-                                        -0.017482389993077063
-                                    ],
-                                    [
-                                        1.358787278781589,
-                                        -0.17701755410817874,
-                                        0.07018440543143195
-                                    ],
-                                    [
-                                        -0.8760988383500139,
-                                        -1.0546484896235864,
-                                        -0.05226104491834664
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "cell": [
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "pbc": [
-                                    false,
-                                    false,
-                                    false
-                                ]
-                            },
-                            "driver": "thermo",
-                            "calculator": {}
-                        }
-                    }
-                }
-            ],
-            "result": {
-                "value": "ERROR - list index out of range",
-                "property": "enthalpy",
-                "unit": "eV"
-            }
-        }
-    },
-    {
         "name": "Ostwald Process",
-        "index": 17,
+        "index": 9,
         "reactants": [
             {
                 "name": "Ammonia",
@@ -2653,7 +2214,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -2711,7 +2274,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -2769,122 +2334,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
-                        }
-                    }
-                }
-            ],
-            "result": {
-                "value": "ERROR - 'enthalpy'",
-                "property": "enthalpy",
-                "unit": "eV"
-            }
-        }
-    },
-    {
-        "name": "Thermal Decomposition of Sodium Bicarbonate",
-        "index": 18,
-        "reactants": [
-            {
-                "name": "Sodium bicarbonate",
-                "coefficient": 2
-            }
-        ],
-        "products": [
-            {
-                "name": "Sodium carbonate",
-                "coefficient": 1
-            },
-            {
-                "name": "Carbon dioxide",
-                "coefficient": 1
-            },
-            {
-                "name": "Water",
-                "coefficient": 1
-            }
-        ],
-        "manual_workflow": {
-            "tool_calls": [
-                {
-                    "molecule_name_to_smiles": {
-                        "name": "Sodium bicarbonate"
-                    }
-                },
-                {
-                    "smiles_to_atomsdata": {
-                        "smiles": "C(=O)(O)[O-].[Na+]"
-                    }
-                },
-                {
-                    "run_ase": {
-                        "params": {
-                            "atomsdata": {
-                                "numbers": [
-                                    6,
-                                    8,
-                                    8,
-                                    8,
-                                    11,
-                                    1
-                                ],
-                                "positions": [
-                                    [
-                                        -0.4213539448145692,
-                                        0.03269889665238773,
-                                        0.00028746127058876334
-                                    ],
-                                    [
-                                        -0.5299646864022458,
-                                        1.2869072832124346,
-                                        -0.0028977797667789637
-                                    ],
-                                    [
-                                        0.8353115279577326,
-                                        -0.561909279871752,
-                                        0.0007307608410018141
-                                    ],
-                                    [
-                                        -1.5607737064993152,
-                                        -0.7599433322560702,
-                                        0.003369768879821756
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        1.676780809758397,
-                                        0.0022464322630025135,
-                                        -0.001490211224637025
-                                    ]
-                                ],
-                                "cell": [
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ],
-                                    [
-                                        0.0,
-                                        0.0,
-                                        0.0
-                                    ]
-                                ],
-                                "pbc": [
-                                    false,
-                                    false,
-                                    false
-                                ]
-                            },
-                            "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }
@@ -2898,7 +2350,7 @@
     },
     {
         "name": "Esterification",
-        "index": 19,
+        "index": 10,
         "reactants": [
             {
                 "name": "Acetic acid",
@@ -3011,7 +2463,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -3111,7 +2565,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -3241,7 +2697,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 },
@@ -3305,7 +2763,9 @@
                                 ]
                             },
                             "driver": "thermo",
-                            "calculator": {}
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
                         }
                     }
                 }

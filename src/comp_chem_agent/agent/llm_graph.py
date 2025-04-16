@@ -125,6 +125,7 @@ class llm_graph:
         import datetime
         import os
         import json
+        import subprocess
 
         try:
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -136,6 +137,12 @@ class llm_graph:
             state = self.get_state(config=config)
 
             serialized_state = serialize_state(state)
+            try:
+                git_commit = (
+                    subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+                )
+            except subprocess.CalledProcessError:
+                git_commit = "unknown"
 
             output_data = {
                 "timestamp": datetime.datetime.now().isoformat(),
@@ -143,14 +150,15 @@ class llm_graph:
                 "system_prompt": self.system_prompt,
                 "state": serialized_state,
                 "thread_id": thread_id,
+                "git_commit": git_commit,
             }
             with open(file_path, "w", encoding="utf-8") as json_file:
                 json.dump(output_data, json_file, indent=4)
-            return 0
+            return output_data
 
         except Exception as e:
             print("Error with write_state: ", str(e))
-            return 1
+            return "Error"
 
     def run(self, query: str, config=None):
         """

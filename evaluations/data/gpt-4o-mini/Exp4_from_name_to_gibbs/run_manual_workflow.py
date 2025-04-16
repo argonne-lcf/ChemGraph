@@ -202,7 +202,9 @@ def main(fname: str, n_structures: int):
 
         try:
             # Run the geometry optimization workflow
-            manual_workflow = get_atomsdata_from_molecule_name(name)
+            manual_workflow = get_gibbs_energy_from_molecule_name(
+                name, calculator={"calculator_type": "mace_mp"}, temperature=400
+            )
         except Exception as e:
             print(f"ERROR running workflow for {name}. Error message: {e}")
             continue
@@ -228,7 +230,9 @@ def main(fname: str, n_structures: int):
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Run geometry optimization using a molecule name.")
+    parser = argparse.ArgumentParser(
+        description="Run vibrational frequencies using a molecule name."
+    )
     parser.add_argument(
         "--fname",
         type=str,
@@ -236,7 +240,7 @@ if __name__ == "__main__":
         help="Path to the input SMILES JSON file (e.g., smiles_data.json)",
     )
     parser.add_argument(
-        "--n_structures", type=int, default=30, help="Number of molecules to process (default: 10)"
+        "--n_structures", type=int, default=15, help="Number of molecules to process (default: 15)"
     )
     args = parser.parse_args()
 
