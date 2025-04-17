@@ -41,6 +41,7 @@ def get_manual_workflow_result(
                 "atomsdata": atomsdata,
                 "driver": "thermo",
                 "calculator": calculator,
+                "temperature": temperature,
             }
 
             params = ASEInputSchema(**input_dict)
@@ -91,16 +92,17 @@ def main():
         help="Path to save the output workflow results.",
     )
     args = parser.parse_args()
-
-    combined_data = {}
     with open("reaction_dataset.json", "r") as rf:
         reactions = json.load(rf)
 
+    combined_data = {}
     for idx, reaction in enumerate(reactions[: args.n_reactions]):
         name = reaction["reaction_name"]
-        calculator = {"calculator_type": "TBLite", "method": "GFN2-xTB"}
+        calculator = {"calculator_type": "mace_mp"}
         # calculator = {"calculator_type": "mace_mp"}
-        manual_workflow = get_manual_workflow_result(reaction, calculator=calculator)
+        manual_workflow = get_manual_workflow_result(
+            reaction, calculator=calculator, prop="gibbs_free_energy", temperature=500
+        )
         combined_data[name] = {"manual_workflow": manual_workflow}
 
         # Get metadata

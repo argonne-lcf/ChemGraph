@@ -75,9 +75,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -136,9 +136,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -203,9 +203,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -270,21 +270,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": -12.521167696645875,
-                "property": "enthalpy",
+                "value": -7.773439644479296,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-37",
+            "timestamp": "2025-04-17_11-08-17",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -346,9 +346,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -407,9 +407,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -480,21 +480,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": -2.999811319590634,
-                "property": "enthalpy",
+                "value": -1.4651587856748023,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-38",
+            "timestamp": "2025-04-17_11-08-19",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -556,9 +556,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -623,9 +623,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -690,9 +690,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -751,21 +751,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": -2.8199835714194705,
-                "property": "enthalpy",
+                "value": -0.6780434523533287,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-39",
+            "timestamp": "2025-04-17_11-08-21",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -851,9 +851,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -912,9 +912,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1009,21 +1009,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": -7.574096019633657,
-                "property": "enthalpy",
+                "value": -1.5126522246936744,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-42",
+            "timestamp": "2025-04-17_11-08-26",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -1127,9 +1127,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1188,9 +1188,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1255,9 +1255,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1322,21 +1322,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": -19.471932165404382,
-                "property": "enthalpy",
+                "value": -12.37911653520537,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-44",
+            "timestamp": "2025-04-17_11-08-32",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -1416,9 +1416,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1489,9 +1489,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1592,21 +1592,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": "ERROR - 'enthalpy'",
-                "property": "enthalpy",
+                "value": 2.7404064805457153,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-47",
+            "timestamp": "2025-04-17_11-08-43",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -1680,9 +1680,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1747,9 +1747,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1808,21 +1808,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": 1.5732203622220027,
-                "property": "enthalpy",
+                "value": -2.2890564803619213,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-48",
+            "timestamp": "2025-04-17_11-08-47",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -1890,9 +1890,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -1957,9 +1957,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -2042,21 +2042,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": 0.029715426464463235,
-                "property": "enthalpy",
+                "value": 0.7020844699196331,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-50",
+            "timestamp": "2025-04-17_11-08-50",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -2172,9 +2172,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -2233,9 +2233,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -2300,9 +2300,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -2367,21 +2367,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": -31.945704908336438,
-                "property": "enthalpy",
+                "value": -19.852101282221497,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-52",
+            "timestamp": "2025-04-17_11-08-56",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     },
@@ -2461,9 +2461,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -2528,9 +2528,9 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 },
@@ -2589,21 +2589,21 @@
                             },
                             "driver": "thermo",
                             "calculator": {
-                                "calculator_type": "TBLite",
-                                "method": "GFN2-xTB"
-                            }
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500
                         }
                     }
                 }
             ],
             "result": {
-                "value": -0.45858126167684077,
-                "property": "enthalpy",
+                "value": -0.41399985883517587,
+                "property": "gibbs_free_energy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-53",
+            "timestamp": "2025-04-17_11-08-59",
             "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
         }
     }

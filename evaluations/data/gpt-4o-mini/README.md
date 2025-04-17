@@ -30,3 +30,9 @@ Add the `--save_task` flag:
 ```bash
 python eval.py --llm_workflow name_of_llm_workflow.json --save_task
 ```
+#### For Reaction Tasks:
+Add the `--reaction_task` flag:
+
+```bash
+python eval.py --llm_workflow name_of_llm_workflow.json --reaction_task
+```

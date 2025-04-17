@@ -26,7 +26,7 @@ def get_query(
         "enthalpy_method": f"You are given a chemical reaction: {reaction_equation}. Calculate the enthalpy for this reaction using {method}.",
         "gibbs_free_energy": f"What is the Gibbs free energy of reaction for {reaction_equation}?",
         "gibbs_free_energy_method": f"What is the Gibbs free energy of reaction for {reaction_equation} using {method}?",
-        "gibbs_free_energy_method_temperature": f"What is the Gibbs free energy of reaction for {reaction_equation} using {method} at {temperature}K?",
+        "gibbs_free_energy_method_temperature": f"You are given a chemical reaction: {reaction_equation}. Calculate the Gibbs free energy change (ΔG) for this reaction using {method} at {temperature}K.",
     }
 
     return query_dict.get(query_name, "Query not found")  # Returns the query or a default message
@@ -43,9 +43,9 @@ def main(n_reactions: int):
         structured_output=True,
         return_option="state",
     )
+
     with open("reaction_dataset.json", "r") as rf:
         reactions = json.load(rf)
-
     # Iterate through the first n_structures molecules
     for idx, reaction in enumerate(reactions[:n_reactions]):
         print("********************************************")
@@ -56,12 +56,13 @@ def main(n_reactions: int):
 
         name = reaction["reaction_name"]
 
-        query = get_query(reaction, query_name="enthalpy_method", method="GFN2-xTB")
-
-        try:
-            state = cca.run(query, config={"configurable": {"thread_id": f"{str(idx)}"}})
-        except Exception as e:
-            print(e)
+        query = get_query(
+            reaction,
+            query_name="gibbs_free_energy_method_temperature",
+            method="mace_mp",
+            temperature=500,
+        )
+        state = cca.run(query, config={"configurable": {"thread_id": f"{str(idx)}"}})
 
         llm_workflow = get_workflow_from_state(state)
 
