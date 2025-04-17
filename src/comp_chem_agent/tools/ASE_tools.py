@@ -98,7 +98,7 @@ def file_to_atomsdata(fname: str) -> AtomsData:
 
 
 @tool
-def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> None:
+def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> str:
     """
     Save an AtomsData object to a file using ASE.
 
@@ -120,6 +120,7 @@ def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> N
         return f"Successfully saved atomsdata to {fname}"
     except Exception as e:
         raise ValueError(f"Failed to save atomsdata to file: {str(e)}")
+        return f"ERROR - {str(e)}"
 
 
 @tool

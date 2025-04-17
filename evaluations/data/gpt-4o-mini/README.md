@@ -24,3 +24,9 @@ Add the `--vib_task` flag:
 ```bash
 python eval.py --llm_workflow name_of_llm_workflow.json --vib_task
 ```
+#### For Save File Tasks:
+Add the `--save_task` flag:
+
+```bash
+python eval.py --llm_workflow name_of_llm_workflow.json --save_task
+```
