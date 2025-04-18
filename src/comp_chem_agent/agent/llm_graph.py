@@ -1,10 +1,13 @@
 from comp_chem_agent.tools.openai_loader import load_openai_model
 from comp_chem_agent.tools.alcf_loader import load_alcf_model
 from comp_chem_agent.tools.local_model_loader import load_ollama_model
+from comp_chem_agent.tools.anthropic_loader import load_anthropic_model
 from comp_chem_agent.graphs.single_agent import construct_geoopt_graph
 from comp_chem_agent.models.supported_models import (
     supported_openai_models,
     supported_ollama_models,
+    supported_anthropic_models,
+    supported_alcf_models,
 )
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
 from comp_chem_agent.graphs.multi_agent import construct_multi_framework_graph
@@ -44,8 +47,12 @@ class llm_graph:
                 llm = load_openai_model(model_name=model_name, temperature=temperature)
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
-            else:
+            elif model_name in supported_alcf_models:
                 llm = load_alcf_model(model_name=model_name, base_url=base_url, api_key=api_key)
+            elif model_name in supported_anthropic_models:
+                llm = load_anthropic_model(
+                    model_name=model_name, api_key=api_key, temperature=temperature
+                )
 
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}.")

@@ -19,3 +19,8 @@ supported_alcf_models = [
     "meta-llama/Meta-Llama-3.1-405B-Instruct",
     "meta-llama/Llama-3.3-70B-Instruct",
 ]
+
+# Anthropic models
+supported_anthropic_models = [
+    "claude-3-5-haiku-20241022",
+]
