@@ -48,7 +48,9 @@ class llm_graph:
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
             elif model_name in supported_alcf_models:
-                llm = load_alcf_model(model_name=model_name, base_url=base_url, api_key=api_key)
+                llm = load_alcf_model(
+                    model_name=model_name, base_url=base_url, api_key=api_key
+                )
             elif model_name in supported_anthropic_models:
                 llm = load_anthropic_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
@@ -69,6 +71,7 @@ class llm_graph:
                 "constructor": construct_geoopt_graph,
             },
             "multi_framework": {"constructor": construct_multi_framework_graph},
+            "multi_agent_ase": {"constructor": construct_multi_framework_graph},
             "python_relp": {"constructor": construct_relp_graph},
         }
 
@@ -99,7 +102,9 @@ class llm_graph:
             Image(
                 workflow.get_graph().draw_mermaid_png(
                     curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(first="#ffdfba", last="#baffc9", default="#fad7de"),
+                    node_colors=NodeStyles(
+                        first="#ffdfba", last="#baffc9", default="#fad7de"
+                    ),
                     wrap_label_n_words=9,
                     output_file_path=None,
                     draw_method=MermaidDrawMethod.PYPPETEER,
@@ -118,7 +123,9 @@ class llm_graph:
 
         return self.workflow.get_state(config).values["messages"]
 
-    def write_state(self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"):
+    def write_state(
+        self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"
+    ):
         """Write log of CCA run to a file.
 
         Args:
@@ -146,7 +153,9 @@ class llm_graph:
             serialized_state = serialize_state(state)
             try:
                 git_commit = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+                    subprocess.check_output(["git", "rev-parse", "HEAD"])
+                    .decode("utf-8")
+                    .strip()
                 )
             except subprocess.CalledProcessError:
                 git_commit = "unknown"
@@ -179,22 +188,23 @@ class llm_graph:
             if config is None:
                 config = {}
             if not isinstance(config, dict):
-                raise TypeError(f"`config` must be a dictionary, got {type(config).__name__}")
+                raise TypeError(
+                    f"`config` must be a dictionary, got {type(config).__name__}"
+                )
             config.setdefault("configurable", {}).setdefault("thread_id", "1")
             config["recursion_limit"] = self.recursion_limit
 
             # Construct the workflow graph
             workflow = self.workflow
 
-            if self.workflow_type == "single_agent_ase" or self.workflow_type == "python_relp":
+            if (
+                self.workflow_type == "single_agent_ase"
+                or self.workflow_type == "python_relp"
+            ):
                 inputs = {"messages": query}
                 for s in workflow.stream(inputs, stream_mode="values", config=config):
                     message = s["messages"][-1]
-                    if isinstance(message, tuple):
-                        logger.info(message)
-                        continue
-                    else:
-                        message.pretty_print()
+                    logger.info(message)
                 if self.return_option == "last_message":
                     return s["messages"][-1]
                 elif self.return_option == "state":
@@ -203,7 +213,10 @@ class llm_graph:
                     raise ValueError(
                         f"Return option {self.return_option} is not supported. Only supports 'last_message' or 'state'."
                     )
-            elif self.workflow_type == "multi_framework":
+            elif (
+                self.workflow_type == "multi_framework"
+                or self.workflow_type == "multi_agent_ase"
+            ):
                 inputs = {
                     "question": query,
                     "geometry_response": query,
@@ -230,14 +243,21 @@ class llm_graph:
                             # If the length has increased, process the newest message
                             new_message = s[key][-1]  # Get the newest message
                             logger.info(f"New message in {key}:")
-
-                            if isinstance(new_message, tuple):
-                                logger.info(new_message)
-                            else:
-                                new_message.pretty_print()
+                            logger.info(new_message)
 
                             # Update the previous length
                             previous_lengths[key] = current_length
+                # Return based on option for multi-agent as well
+                if self.return_option == "last_message":
+                    # Need to determine what the 'last' meaningful message is for multi-agent
+                    # Returning the full state for now as a placeholder
+                    return s
+                elif self.return_option == "state":
+                    return s
+                else:
+                    raise ValueError(
+                        f"Return option {self.return_option} is not supported. Only supports 'last_message' or 'state'."
+                    )
 
             else:
                 logger.error(
