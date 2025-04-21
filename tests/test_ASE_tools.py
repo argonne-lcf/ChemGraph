@@ -40,7 +40,11 @@ def test_smiles_to_atomsdata():
 def water_atomsdata():
     """Fixture for water atomsdata"""
     numbers = [8, 1, 1]
-    positions = [[0.0, 0.0, 0.0], [0.76, 0.58, 0.0], [-0.76, 0.58, 0.0]]  # Positions in Angstrom
+    positions = [
+        [0.0, 0.0, 0.0],
+        [0.76, 0.58, 0.0],
+        [-0.76, 0.58, 0.0],
+    ]  # Positions in Angstrom
     atomsdata_input = {"numbers": numbers, "positions": positions}
     return AtomsData(**atomsdata_input)
 
@@ -56,22 +60,22 @@ def co2_atomsdata():
 
 def test_get_symmetry_number(water_atomsdata):
     """Test get_symmetry_number function."""
-    symmetrynumber = get_symmetry_number.invoke({'atomsdata': water_atomsdata})
+    symmetrynumber = get_symmetry_number.invoke({"atomsdata": water_atomsdata})
     assert isinstance(symmetrynumber, int)
 
 
 def test_is_linear_molecule(water_atomsdata, co2_atomsdata):
     """Test is_linear_molecule function."""
-    islinear_water = is_linear_molecule.invoke({'atomsdata': water_atomsdata})
-    islinear_co2 = is_linear_molecule.invoke({'atomsdata': co2_atomsdata})
-    assert islinear_water == False
-    assert islinear_co2 == True
+    islinear_water = is_linear_molecule.invoke({"atomsdata": water_atomsdata})
+    islinear_co2 = is_linear_molecule.invoke({"atomsdata": co2_atomsdata})
+    assert not islinear_water
+    assert islinear_co2
 
 
 @pytest.fixture
-def sample_ase_schema():
-    """Fixture for a sample ASE Schema"""
-    input_dict = {
+def base_ase_input():
+    """Base fixture for ASE input with common parameters"""
+    return {
         "atomsdata": {
             "numbers": [8, 1, 1],
             "positions": [
@@ -82,35 +86,92 @@ def sample_ase_schema():
             "cell": None,
             "pbc": None,
         },
-        "driver": "thermo",
         "optimizer": "bfgs",
         "calculator": {
             "calculator_type": "emt",
         },
     }
+
+
+@pytest.fixture
+def energy_ase_schema(base_ase_input):
+    """Fixture for energy calculation ASE Schema"""
+    input_dict = base_ase_input.copy()
+    input_dict["driver"] = "energy"
     return ASEInputSchema(**input_dict)
 
 
-def test_run_ase(sample_ase_schema):
-    """Test run_ase function."""
-    result = run_ase.invoke({'params': sample_ase_schema})
+@pytest.fixture
+def opt_ase_schema(base_ase_input):
+    """Fixture for geometry optimization ASE Schema"""
+    input_dict = base_ase_input.copy()
+    input_dict["driver"] = "opt"
+    return ASEInputSchema(**input_dict)
+
+
+@pytest.fixture
+def vib_ase_schema(base_ase_input):
+    """Fixture for vibrational analysis ASE Schema"""
+    input_dict = base_ase_input.copy()
+    input_dict["driver"] = "vib"
+    return ASEInputSchema(**input_dict)
+
+
+@pytest.fixture
+def thermo_ase_schema(base_ase_input):
+    """Fixture for thermochemistry ASE Schema"""
+    input_dict = base_ase_input.copy()
+    input_dict["driver"] = "thermo"
+    return ASEInputSchema(**input_dict)
+
+
+def test_run_ase_energy(energy_ase_schema):
+    """Test ASE energy calculation."""
+    result = run_ase.invoke({"params": energy_ase_schema})
     assert isinstance(result, ASEOutputSchema)
+    assert result.success
+    assert result.single_point_energy is not None
+    assert result.energy_unit == "eV"
 
 
-def test_run_geometry_optimization(sample_ase_schema):
-    """Test run_geometry_optimization function."""
-    # Temporarily skip test for geometry optimization, assuming run_ase covers it
-    # result = run_geometry_optimization.invoke({'params': sample_ase_schema})
-    # assert isinstance(result, ASEOutputSchema)
-    pytest.skip("Skipping test_run_geometry_optimization, assuming run_ase covers this.")
+def test_run_ase_opt(opt_ase_schema):
+    """Test ASE geometry optimization."""
+    result = run_ase.invoke({"params": opt_ase_schema})
+    assert isinstance(result, ASEOutputSchema)
+    assert result.success
+    assert result.converged
+    assert result.final_structure is not None
+    # Check that optimization changed the structure
+    assert result.final_structure.positions != opt_ase_schema.atomsdata.positions
 
 
-def test_run_vibrational_frequency(sample_ase_schema):
-    """Test run_vibrational_frequency"""
-    # Temporarily skip test for vibrational frequency
-    pytest.skip("Skipping test_run_vibrational_frequency as the function is missing.")
+def test_run_ase_vib(vib_ase_schema):
+    """Test ASE vibrational analysis."""
+    result = run_ase.invoke({"params": vib_ase_schema})
+    assert isinstance(result, ASEOutputSchema)
+    assert result.success
+    assert result.vibrational_frequencies
+    assert len(result.vibrational_frequencies) > 0
 
 
-def test_calculate_thermochemistry(sample_ase_schema):
-    """Test calculate_thermochemistry"""
-    pytest.skip("Skipping test_calculate_thermochemistry as the function is missing.")
+def test_run_ase_thermo(thermo_ase_schema):
+    """Test ASE thermochemistry calculation."""
+    result = run_ase.invoke({"params": thermo_ase_schema})
+    assert isinstance(result, ASEOutputSchema)
+    assert result.success
+    assert result.thermochemistry
+    # Check for required thermochemistry keys
+    assert "enthalpy" in result.thermochemistry
+    assert "entropy" in result.thermochemistry
+    assert "gibbs_free_energy" in result.thermochemistry
+    assert "unit" in result.thermochemistry
+    # Check that values are reasonable
+    assert result.thermochemistry["unit"] == "eV"
+    assert isinstance(result.thermochemistry["enthalpy"], float)
+    assert isinstance(result.thermochemistry["entropy"], float)
+    assert isinstance(result.thermochemistry["gibbs_free_energy"], float)
+    # Check that vibrational frequencies are present
+    assert result.vibrational_frequencies
+    assert "frequencies" in result.vibrational_frequencies
+    assert "frequency_unit" in result.vibrational_frequencies
+    assert result.vibrational_frequencies["frequency_unit"] == "cm-1"
