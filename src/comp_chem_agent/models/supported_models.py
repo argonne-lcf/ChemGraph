@@ -18,6 +18,11 @@ supported_alcf_models = [
     "AuroraGPT-IT-v4-0125_2",
     "meta-llama/Meta-Llama-3.1-405B-Instruct",
     "meta-llama/Llama-3.3-70B-Instruct",
+    "meta-llama/Meta-Llama-3.1-70B-Instruct",
+    "Qwen/Qwen2.5-14B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "Qwen/QwQ-32B-Preview",
+    "Qwen/QwQ-32B",
 ]
 
 # Anthropic models

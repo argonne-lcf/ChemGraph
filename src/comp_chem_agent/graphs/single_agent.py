@@ -83,7 +83,7 @@ def route_tools(state: State):
     return "done"
 
 
-def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prompt, tools=None):
+def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
     """LLM node that processes messages and decides next actions."""
     if tools is None:
         tools = [
@@ -102,7 +102,7 @@ def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prom
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
-def ResponseAgent(state: State, llm: ChatOpenAI):
+def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     """An LLM agent responsible for formatting final message"""
 
     messages = [
@@ -118,6 +118,7 @@ def construct_geoopt_graph(
     llm: ChatOpenAI,
     system_prompt: str = single_agent_prompt,
     structured_output: bool = False,
+    formatter_prompt: str = formatter_prompt,
 ):
     try:
         logger.info("Constructing geometry optimization graph")
@@ -155,7 +156,10 @@ def construct_geoopt_graph(
                 lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
             )
             graph_builder.add_node("tools", tool_node)
-            graph_builder.add_node("ResponseAgent", lambda state: ResponseAgent(state, llm))
+            graph_builder.add_node(
+                "ResponseAgent",
+                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
+            )
             graph_builder.add_conditional_edges(
                 "CompChemAgent",
                 route_tools,
