@@ -9,9 +9,10 @@ from comp_chem_agent.models.supported_models import (
     supported_anthropic_models,
     supported_alcf_models,
 )
-from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
+from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
 from comp_chem_agent.graphs.multi_agent import construct_multi_framework_graph
 from comp_chem_agent.graphs.python_relp_agent import construct_relp_graph
+from comp_chem_agent.graphs.chemgraph_manager_worker import contruct_manager_worker_graph
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class llm_graph:
         api_key: str = None,
         temperature: float = 0,
         system_prompt: str = single_agent_prompt,
+        formatter_prompt: str = formatter_prompt,
         structured_output: bool = False,
         return_option: str = "last_message",
         recursion_limit: int = 25,
@@ -63,6 +65,7 @@ class llm_graph:
         self.workflow_type = workflow_type
         self.model_name = model_name
         self.system_prompt = system_prompt
+        self.formatter_prompt = formatter_prompt
         self.structured_output = structured_output
         self.return_option = return_option
         self.recursion_limit = recursion_limit
@@ -73,6 +76,7 @@ class llm_graph:
             "multi_framework": {"constructor": construct_multi_framework_graph},
             "multi_agent_ase": {"constructor": construct_multi_framework_graph},
             "python_relp": {"constructor": construct_relp_graph},
+            "manager_worker": {"constructor": contruct_manager_worker_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -80,9 +84,12 @@ class llm_graph:
                 f"Unsupported workflow type: {workflow_type}. Available types: {list(self.workflow_map.keys())}"
             )
 
-        self.workflow = self.workflow_map[workflow_type]["constructor"](
-            llm, self.system_prompt, self.structured_output
-        )
+        if self.workflow_type != "manager_worker":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm, self.system_prompt, self.structured_output, self.formatter_prompt
+            )
+        else:
+            self.workflow = self.workflow_map[workflow_type]["constructor"](llm)
 
     def visualize(self):
         """Visualize the LangGraph graph structure."""
@@ -200,6 +207,7 @@ class llm_graph:
             if (
                 self.workflow_type == "single_agent_ase"
                 or self.workflow_type == "python_relp"
+                or self.workflow_type == "manager_worker"
             ):
                 inputs = {"messages": query}
                 for s in workflow.stream(inputs, stream_mode="values", config=config):

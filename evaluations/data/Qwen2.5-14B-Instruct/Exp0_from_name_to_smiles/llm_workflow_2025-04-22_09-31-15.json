@@ -1,0 +1,3992 @@
+{
+    "pyridine-4-carbonitrile": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "pyridine-4-carbonitrile"
+                    }
+                }
+            ],
+            "result": "C1=CN=CC=C1C#N"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:28:32.407887",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: pyridine-4-carbonitrile",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "ab5cf5e9-f6fe-41e5-a603-d946fa8ccab3",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-5e06e13a5cf04e438940f6d2f5ccad65",
+                                "function": {
+                                    "arguments": "{\"name\": \"pyridine-4-carbonitrile\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "32",
+                            "prompt_tokens": "3482",
+                            "total_tokens": "3514",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-06829043-de44-43ff-b114-8f28a0672aa5-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "pyridine-4-carbonitrile"
+                            },
+                            "id": "chatcmpl-tool-5e06e13a5cf04e438940f6d2f5ccad65",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3482",
+                        "output_tokens": "32",
+                        "total_tokens": "3514",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CN=CC=C1C#N\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "3d460f3f-5872-4481-ab55-270655d6caa7",
+                    "tool_call_id": "chatcmpl-tool-5e06e13a5cf04e438940f6d2f5ccad65",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule pyridine-4-carbonitrile is \"C1=CN=CC=C1C#N\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "32",
+                            "prompt_tokens": "3924",
+                            "total_tokens": "3956",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-669dfa68-2b1b-4671-98d4-c8b9acf00ddd-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3924",
+                        "output_tokens": "32",
+                        "total_tokens": "3956",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CN=CC=C1C#N\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "2b8b08c0-8a72-4d74-b73e-72760119a02c",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "0",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "3-chloro-2,4-bis(chloromethyl)furan": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3-chloro-2,4-bis(chloromethyl)furan"
+                    }
+                }
+            ],
+            "result": "C1=C(C(=C(O1)CCl)Cl)CCl"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:28:37.883103",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 3-chloro-2,4-bis(chloromethyl)furan",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "47526244-4607-4448-a5d3-b58e0e39de30",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-5b574151633d4cb599853088a851f1b6",
+                                "function": {
+                                    "arguments": "{\"name\": \"3-chloro-2,4-bis(chloromethyl)furan\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "39",
+                            "prompt_tokens": "3496",
+                            "total_tokens": "3535",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-e42d3d8b-06ae-4a04-b7da-50aad7bb425f-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "3-chloro-2,4-bis(chloromethyl)furan"
+                            },
+                            "id": "chatcmpl-tool-5b574151633d4cb599853088a851f1b6",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3496",
+                        "output_tokens": "39",
+                        "total_tokens": "3535",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=C(C(=C(O1)CCl)Cl)CCl\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "a2269605-73b7-4660-b0b2-0a0e7c2dacaa",
+                    "tool_call_id": "chatcmpl-tool-5b574151633d4cb599853088a851f1b6",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"3-chloro-2,4-bis(chloromethyl)furan\" is \"C1=C(C(=C(O1)CCl)Cl)CCl\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "47",
+                            "prompt_tokens": "3962",
+                            "total_tokens": "4009",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-0ce341f9-3b74-4834-8066-8ab27219adcd-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3962",
+                        "output_tokens": "47",
+                        "total_tokens": "4009",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=C(C(=C(O1)CCl)Cl)CCl\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "a46fb7ae-a8c3-42c6-97f3-3e17312be84e",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "1",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "1,2,4,5-tetrazinane-3,6-dione": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1,2,4,5-tetrazinane-3,6-dione"
+                    }
+                }
+            ],
+            "result": "C1(=O)NNC(=O)NN1"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:28:42.423788",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 1,2,4,5-tetrazinane-3,6-dione",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "41dc6722-5d41-4ce8-9e87-3b670c85eab0",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-486ed3f5864547e98389cb8dfc6e1c2f",
+                                "function": {
+                                    "arguments": "{\"name\": \"1,2,4,5-tetrazinane-3,6-dione\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "41",
+                            "prompt_tokens": "3498",
+                            "total_tokens": "3539",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-9df9137a-5b27-4ec4-a1cc-7abfe5f1892a-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "1,2,4,5-tetrazinane-3,6-dione"
+                            },
+                            "id": "chatcmpl-tool-486ed3f5864547e98389cb8dfc6e1c2f",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3498",
+                        "output_tokens": "41",
+                        "total_tokens": "3539",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1(=O)NNC(=O)NN1\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "58e08234-dcc7-4214-9a25-6ea3d7b6502e",
+                    "tool_call_id": "chatcmpl-tool-486ed3f5864547e98389cb8dfc6e1c2f",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 1,2,4,5-tetrazinane-3,6-dione is \"C1(=O)NNC(=O)NN1\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "45",
+                            "prompt_tokens": "3961",
+                            "total_tokens": "4006",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-c8039982-43cf-4e67-bab9-90d543c85bc3-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3961",
+                        "output_tokens": "45",
+                        "total_tokens": "4006",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1(=O)NNC(=O)NN1\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "988d161c-314e-4458-a122-6a6338a2ede4",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "2",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2-chloro-1-(difluoromethyl)-4-fluorobenzene": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-chloro-1-(difluoromethyl)-4-fluorobenzene"
+                    }
+                }
+            ],
+            "result": "C1=CC(=C(C=C1F)Cl)C(F)F"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:28:50.938680",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2-chloro-1-(difluoromethyl)-4-fluorobenzene",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "08bab961-2504-443f-a993-625342fd0291",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-be3dccd4f45b43829bb2b6994f822880",
+                                "function": {
+                                    "arguments": "{\"name\": \"2-chloro-1-(difluoromethyl)-4-fluorobenzene\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "43",
+                            "prompt_tokens": "3499",
+                            "total_tokens": "3542",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-bb518729-ced4-4d5b-aad3-4151ca412291-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2-chloro-1-(difluoromethyl)-4-fluorobenzene"
+                            },
+                            "id": "chatcmpl-tool-be3dccd4f45b43829bb2b6994f822880",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3499",
+                        "output_tokens": "43",
+                        "total_tokens": "3542",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CC(=C(C=C1F)Cl)C(F)F\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "41e652d1-0ef8-4b91-80db-b4d26b4d5210",
+                    "tool_call_id": "chatcmpl-tool-be3dccd4f45b43829bb2b6994f822880",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 2-chloro-1-(difluoromethyl)-4-fluorobenzene is \"C1=CC(=C(C=C1F)Cl)C(F)F\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "51",
+                            "prompt_tokens": "3964",
+                            "total_tokens": "4015",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-51f98bdf-7294-4fbc-89df-c009ade3b5ed-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3964",
+                        "output_tokens": "51",
+                        "total_tokens": "4015",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CC(=C(C=C1F)Cl)C(F)F\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "f5971569-0320-4c9a-86f8-831e4cc0f3e4",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "3",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "5-nitro-1H-pyrimidine-2,4-dione": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5-nitro-1H-pyrimidine-2,4-dione"
+                    }
+                }
+            ],
+            "result": "C1=C(C(=O)NC(=O)N1)[N+](=O)[O-]"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:28:56.785088",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 5-nitro-1H-pyrimidine-2,4-dione",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "428b69cb-1ffe-4fb6-9c70-d706ca7ae287",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-0aeecc8307f6444b99caf2b2d7469ea6",
+                                "function": {
+                                    "arguments": "{\"name\": \"5-nitro-1H-pyrimidine-2,4-dione\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "40",
+                            "prompt_tokens": "3493",
+                            "total_tokens": "3533",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-fd4ec8f3-0ad1-4f7e-88d9-e01806cad04b-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "5-nitro-1H-pyrimidine-2,4-dione"
+                            },
+                            "id": "chatcmpl-tool-0aeecc8307f6444b99caf2b2d7469ea6",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3493",
+                        "output_tokens": "40",
+                        "total_tokens": "3533",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=C(C(=O)NC(=O)N1)[N+](=O)[O-]\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "8aacb6ff-ee34-4df8-9f18-d4a07042374a",
+                    "tool_call_id": "chatcmpl-tool-0aeecc8307f6444b99caf2b2d7469ea6",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 5-nitro-1H-pyrimidine-2,4-dione is \"C1=C(C(=O)NC(=O)N1)[N+](=O)[O-]\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "55",
+                            "prompt_tokens": "3956",
+                            "total_tokens": "4011",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-d02eaae7-7d39-4a54-a454-ba8a8e8ddc29-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3956",
+                        "output_tokens": "55",
+                        "total_tokens": "4011",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=C(C(=O)NC(=O)N1)[N+](=O)[O-]\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "84fc7e9f-09c4-4200-8305-65bab15dcfb4",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "4",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2-(4-bromo-3-nitropyrazol-1-yl)acetate": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-(4-bromo-3-nitropyrazol-1-yl)acetate"
+                    }
+                }
+            ],
+            "result": "C1=C(C(=NN1CC(=O)[O-])[N+](=O)[O-])Br"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:01.790221",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2-(4-bromo-3-nitropyrazol-1-yl)acetate",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "83de6b0f-b72f-4196-a952-c82729a6b378",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-8193e4bea0fc4ba4b042eaea62d885ce",
+                                "function": {
+                                    "arguments": "{\"name\": \"2-(4-bromo-3-nitropyrazol-1-yl)acetate\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "42",
+                            "prompt_tokens": "3498",
+                            "total_tokens": "3540",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-d7fe4233-82c2-4fbc-ad24-9fb5d7b6eedd-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2-(4-bromo-3-nitropyrazol-1-yl)acetate"
+                            },
+                            "id": "chatcmpl-tool-8193e4bea0fc4ba4b042eaea62d885ce",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3498",
+                        "output_tokens": "42",
+                        "total_tokens": "3540",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=C(C(=NN1CC(=O)[O-])[N+](=O)[O-])Br\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "994561a9-7e80-4d18-8422-88054bd23588",
+                    "tool_call_id": "chatcmpl-tool-8193e4bea0fc4ba4b042eaea62d885ce",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"2-(4-bromo-3-nitropyrazol-1-yl)acetate\" is \"C1=C(C(=NN1CC(=O)[O-])[N+](=O)[O-])Br\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "59",
+                            "prompt_tokens": "3966",
+                            "total_tokens": "4025",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-a3f58e8f-3274-4c52-a62c-719f17e5f0fe-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3966",
+                        "output_tokens": "59",
+                        "total_tokens": "4025",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=C(C(=NN1CC(=O)[O-])[N+](=O)[O-])Br\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "6bc733a3-d439-4e32-b056-a277b6274c32",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "5",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "1-nitroso-1-(2-oxopropyl)urea": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-nitroso-1-(2-oxopropyl)urea"
+                    }
+                }
+            ],
+            "result": "CC(=O)CN(C(=O)N)N=O"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:06.416647",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 1-nitroso-1-(2-oxopropyl)urea",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "f72ca2fb-4d22-4365-8139-ce6e9c09d6fb",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-da2e0a4167de430db442008b6515d012",
+                                "function": {
+                                    "arguments": "{\"name\": \"1-nitroso-1-(2-oxopropyl)urea\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "40",
+                            "prompt_tokens": "3495",
+                            "total_tokens": "3535",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-fe74f9ab-8ea4-4686-834e-82ad6b4d9eec-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "1-nitroso-1-(2-oxopropyl)urea"
+                            },
+                            "id": "chatcmpl-tool-da2e0a4167de430db442008b6515d012",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3495",
+                        "output_tokens": "40",
+                        "total_tokens": "3535",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"CC(=O)CN(C(=O)N)N=O\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "933dc911-1826-4733-af1e-f165070c33a0",
+                    "tool_call_id": "chatcmpl-tool-da2e0a4167de430db442008b6515d012",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"1-nitroso-1-(2-oxopropyl)urea\" is \"CC(=O)CN(C(=O)N)N=O\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "47",
+                            "prompt_tokens": "3954",
+                            "total_tokens": "4001",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-c950a6cf-e374-43fc-8d7c-c173616a3d44-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3954",
+                        "output_tokens": "47",
+                        "total_tokens": "4001",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"CC(=O)CN(C(=O)N)N=O\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "95981703-f406-4210-be2a-a3f440eb102b",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "6",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "3-thiophen-3-ylthiophene-2-carboxylate": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3-thiophen-3-ylthiophene-2-carboxylate"
+                    }
+                }
+            ],
+            "result": "C1=CSC=C1C2=C(SC=C2)C(=O)[O-]"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:13.830257",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 3-thiophen-3-ylthiophene-2-carboxylate",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "94ab0ce0-31dd-490d-8d61-54bf83a9da8e",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-273be389c0f84b549fae1738ed0ea0ab",
+                                "function": {
+                                    "arguments": "{\"name\": \"3-thiophen-3-ylthiophene-2-carboxylate\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "42",
+                            "prompt_tokens": "3497",
+                            "total_tokens": "3539",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-67ac5573-c75e-4db3-8ddc-b21d5605ac53-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "3-thiophen-3-ylthiophene-2-carboxylate"
+                            },
+                            "id": "chatcmpl-tool-273be389c0f84b549fae1738ed0ea0ab",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3497",
+                        "output_tokens": "42",
+                        "total_tokens": "3539",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CSC=C1C2=C(SC=C2)C(=O)[O-]\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "bc5697f0-0ae2-4f16-8d2b-b2d18b3870c0",
+                    "tool_call_id": "chatcmpl-tool-273be389c0f84b549fae1738ed0ea0ab",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 3-thiophen-3-ylthiophene-2-carboxylate is \"C1=CSC=C1C2=C(SC=C2)C(=O)[O-]\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "53",
+                            "prompt_tokens": "3963",
+                            "total_tokens": "4016",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-efcc8fa0-1428-48af-83dc-b597c2fba1bb-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3963",
+                        "output_tokens": "53",
+                        "total_tokens": "4016",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CSC=C1C2=C(SC=C2)C(=O)[O-]\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "05fca696-7b2a-4fcd-8942-3afc3c91d881",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "7",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea"
+                    }
+                }
+            ],
+            "result": "C1(=NON=C1NC(=O)NN)N"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:18.825743",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "4c440242-65d5-4bde-9aae-7a769ff21004",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-014c859cd8424cba8a177064888a9c82",
+                                "function": {
+                                    "arguments": "{\"name\": \"1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "50",
+                            "prompt_tokens": "3507",
+                            "total_tokens": "3557",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-90c00e83-0c18-4ad5-9fc1-f0e6fe2eec11-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea"
+                            },
+                            "id": "chatcmpl-tool-014c859cd8424cba8a177064888a9c82",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3507",
+                        "output_tokens": "50",
+                        "total_tokens": "3557",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1(=NON=C1NC(=O)NN)N\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "75e6d426-a645-4b52-859b-d75f3ae60a9c",
+                    "tool_call_id": "chatcmpl-tool-014c859cd8424cba8a177064888a9c82",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"1-amino-3-(4-amino-1,2,5-oxadiazol-3-yl)urea\" is \"C1(=NON=C1NC(=O)NN)N\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "56",
+                            "prompt_tokens": "3989",
+                            "total_tokens": "4045",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-012a3d84-7817-4923-bcb5-1776965575d3-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3989",
+                        "output_tokens": "56",
+                        "total_tokens": "4045",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1(=NON=C1NC(=O)NN)N\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "39275a8b-e534-49c5-baa1-ac25f7d3da7d",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "8",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2-nitrosobenzaldehyde": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-nitrosobenzaldehyde"
+                    }
+                }
+            ],
+            "result": "C1=CC=C(C(=C1)C=O)N=O"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:22.829544",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2-nitrosobenzaldehyde",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "ee036ee5-5859-4187-9acd-32bdffa1c7f8",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-45e6f2d569f74351aeb133e445b7899c",
+                                "function": {
+                                    "arguments": "{\"name\": \"2-nitrosobenzaldehyde\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "31",
+                            "prompt_tokens": "3484",
+                            "total_tokens": "3515",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-41b91921-714d-4678-8258-5dddf9a7b058-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2-nitrosobenzaldehyde"
+                            },
+                            "id": "chatcmpl-tool-45e6f2d569f74351aeb133e445b7899c",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3484",
+                        "output_tokens": "31",
+                        "total_tokens": "3515",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CC=C(C(=C1)C=O)N=O\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "c64767ac-2410-4871-bbdd-8e9389c92a24",
+                    "tool_call_id": "chatcmpl-tool-45e6f2d569f74351aeb133e445b7899c",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 2-nitrosobenzaldehyde is \"C1=CC=C(C(=C1)C=O)N=O\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "39",
+                            "prompt_tokens": "3940",
+                            "total_tokens": "3979",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-4f8db9bb-2e77-413e-8a1a-614ee32175e7-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3940",
+                        "output_tokens": "39",
+                        "total_tokens": "3979",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CC=C(C(=C1)C=O)N=O\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "5a6f48c1-8124-4733-8271-159c31e2cb8b",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "9",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "(3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "(3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one"
+                    }
+                }
+            ],
+            "result": "C(C1C(C(C(=O)O1)O)O)O"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:27.848334",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: (3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "2036dff1-62ee-436c-8078-91d9723c487e",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-4b21ecf76375487fb39d1092c054cfd2",
+                                "function": {
+                                    "arguments": "{\"name\": \"(3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "52",
+                            "prompt_tokens": "3509",
+                            "total_tokens": "3561",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-ca1368d8-28e3-46b8-942d-7d6753fe95fe-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "(3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one"
+                            },
+                            "id": "chatcmpl-tool-4b21ecf76375487fb39d1092c054cfd2",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3509",
+                        "output_tokens": "52",
+                        "total_tokens": "3561",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C(C1C(C(C(=O)O1)O)O)O\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "5d0c891a-a831-44cd-b1a9-4a5cdca476f1",
+                    "tool_call_id": "chatcmpl-tool-4b21ecf76375487fb39d1092c054cfd2",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule (3R,4R,5R)-3,4-dihydroxy-5-(hydroxymethyl)oxolan-2-one is \"C(C1C(C(C(=O)O1)O)O)O\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "60",
+                            "prompt_tokens": "3998",
+                            "total_tokens": "4058",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-ddf63b52-ca48-4d8c-bfb2-b0027ed31368-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3998",
+                        "output_tokens": "60",
+                        "total_tokens": "4058",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C(C1C(C(C(=O)O1)O)O)O\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "7bf9975f-c230-4fa0-a5ea-fc103b77d621",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "10",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2-bromooxirane": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-bromooxirane"
+                    }
+                }
+            ],
+            "result": "C1C(O1)Br"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:31.865602",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2-bromooxirane",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "a668bc88-dfb6-490d-979d-dce1e5599616",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-de8a097fa6b44436b5bc162b9a02bbf6",
+                                "function": {
+                                    "arguments": "{\"name\": \"2-bromooxirane\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "30",
+                            "prompt_tokens": "3485",
+                            "total_tokens": "3515",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-15a8292a-36e9-42ad-9cd5-ac1c4bd5696f-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2-bromooxirane"
+                            },
+                            "id": "chatcmpl-tool-de8a097fa6b44436b5bc162b9a02bbf6",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3485",
+                        "output_tokens": "30",
+                        "total_tokens": "3515",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1C(O1)Br\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "55272560-d271-4f16-aaba-105d7bfc6197",
+                    "tool_call_id": "chatcmpl-tool-de8a097fa6b44436b5bc162b9a02bbf6",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 2-bromooxirane is \"C1C(O1)Br\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "27",
+                            "prompt_tokens": "3912",
+                            "total_tokens": "3939",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-5bc72587-df35-4b2f-a439-7ebd607b7028-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3912",
+                        "output_tokens": "27",
+                        "total_tokens": "3939",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1C(O1)Br\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "bb659724-b22b-4e14-ae1f-c61c8bab4120",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "11",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "5-bromo-2,3-dihydro-1-benzofuran-7-carboxylate": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5-bromo-2,3-dihydro-1-benzofuran-7-carboxylate"
+                    }
+                }
+            ],
+            "result": "C1COC2=C1C=C(C=C2C(=O)[O-])Br"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:37.858955",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 5-bromo-2,3-dihydro-1-benzofuran-7-carboxylate",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "bf9a0875-0a09-479b-be65-d3bc039544c3",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-d8da0d35ef12440d9e237d02815e19e9",
+                                "function": {
+                                    "arguments": "{\"name\": \"5-bromo-2,3-dihydro-1-benzofuran-7-carboxylate\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "45",
+                            "prompt_tokens": "3500",
+                            "total_tokens": "3545",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-4038063c-3a0e-4bd1-a23a-399a6ae51268-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "5-bromo-2,3-dihydro-1-benzofuran-7-carboxylate"
+                            },
+                            "id": "chatcmpl-tool-d8da0d35ef12440d9e237d02815e19e9",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3500",
+                        "output_tokens": "45",
+                        "total_tokens": "3545",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1COC2=C1C=C(C=C2C(=O)[O-])Br\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "e44a919b-6f12-4ace-9c8c-32372ce098f2",
+                    "tool_call_id": "chatcmpl-tool-d8da0d35ef12440d9e237d02815e19e9",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"5-bromo-2,3-dihydro-1-benzofuran-7-carboxylate\" is \"C1COC2=C1C=C(C=C2C(=O)[O-])Br\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "57",
+                            "prompt_tokens": "3981",
+                            "total_tokens": "4038",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-39bb92f0-b217-4dc2-90d2-dfa57b89e5c8-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3981",
+                        "output_tokens": "57",
+                        "total_tokens": "4038",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1COC2=C1C=C(C=C2C(=O)[O-])Br\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "b155f870-7418-4f9e-8e6a-90968eece329",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "12",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "5H-purine-6-sulfonyl fluoride": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5H-purine-6-sulfonyl fluoride"
+                    }
+                }
+            ],
+            "result": "C1=NC2C(=N1)N=CN=C2S(=O)(=O)F"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:43.358827",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 5H-purine-6-sulfonyl fluoride",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "5e8f7e76-b5a5-47c7-a1e4-f5f4a77a4e93",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-4bb6b0de65974839ad89400b9021e11b",
+                                "function": {
+                                    "arguments": "{\"name\": \"5H-purine-6-sulfonyl fluoride\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "35",
+                            "prompt_tokens": "3492",
+                            "total_tokens": "3527",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-7713aa59-20d7-4882-8d15-10e5eda37d80-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "5H-purine-6-sulfonyl fluoride"
+                            },
+                            "id": "chatcmpl-tool-4bb6b0de65974839ad89400b9021e11b",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3492",
+                        "output_tokens": "35",
+                        "total_tokens": "3527",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=NC2C(=N1)N=CN=C2S(=O)(=O)F\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "de5d3b4e-828a-4196-8041-25ee1bf014e9",
+                    "tool_call_id": "chatcmpl-tool-4bb6b0de65974839ad89400b9021e11b",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"5H-purine-6-sulfonyl fluoride\" is \"C1=NC2C(=N1)N=CN=C2S(=O)(=O)F\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "51",
+                            "prompt_tokens": "3957",
+                            "total_tokens": "4008",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-1789efc8-7f15-47a5-b91c-121366a0d080-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3957",
+                        "output_tokens": "51",
+                        "total_tokens": "4008",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=NC2C(=N1)N=CN=C2S(=O)(=O)F\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "3c85b7b6-f054-4ce7-842e-62fc87e14931",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "13",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "4-bromo-1,2-bis(trifluoromethyl)benzene": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "4-bromo-1,2-bis(trifluoromethyl)benzene"
+                    }
+                }
+            ],
+            "result": "C1=CC(=C(C=C1Br)C(F)(F)F)C(F)(F)F"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:47.894065",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 4-bromo-1,2-bis(trifluoromethyl)benzene",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "7ce767bb-095e-4f2a-9e02-93d84682ce71",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-598975c538fa4eaea941bd967613ce19",
+                                "function": {
+                                    "arguments": "{\"name\": \"4-bromo-1,2-bis(trifluoromethyl)benzene\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "42",
+                            "prompt_tokens": "3499",
+                            "total_tokens": "3541",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-a2a1641a-683e-4f8c-bed9-d002cd5a1a5b-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "4-bromo-1,2-bis(trifluoromethyl)benzene"
+                            },
+                            "id": "chatcmpl-tool-598975c538fa4eaea941bd967613ce19",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3499",
+                        "output_tokens": "42",
+                        "total_tokens": "3541",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CC(=C(C=C1Br)C(F)(F)F)C(F)(F)F\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "8ad0d838-78b0-4fe4-be6e-000d20bfd9d1",
+                    "tool_call_id": "chatcmpl-tool-598975c538fa4eaea941bd967613ce19",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 4-bromo-1,2-bis(trifluoromethyl)benzene is \"C1=CC(=C(C=C1Br)C(F)(F)F)C(F)(F)F\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "57",
+                            "prompt_tokens": "3966",
+                            "total_tokens": "4023",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-a3976278-7ed7-46a5-9c44-d2e03bf7a3a3-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3966",
+                        "output_tokens": "57",
+                        "total_tokens": "4023",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CC(=C(C=C1Br)C(F)(F)F)C(F)(F)F\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "3b2b0efd-bc8d-44fc-9889-8b40c4c335cb",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "14",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "3-methylidenepentan-2-one": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3-methylidenepentan-2-one"
+                    }
+                }
+            ],
+            "result": "CCC(=C)C(=O)C"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:51.996143",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 3-methylidenepentan-2-one",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "42a15235-8a8b-4c57-8921-89d610f51990",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-8a155e5ba79848328438d647d514eec7",
+                                "function": {
+                                    "arguments": "{\"name\": \"3-methylidenepentan-2-one\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "33",
+                            "prompt_tokens": "3493",
+                            "total_tokens": "3526",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-aaa68067-925a-4ad3-9e75-b80cdfe4230c-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "3-methylidenepentan-2-one"
+                            },
+                            "id": "chatcmpl-tool-8a155e5ba79848328438d647d514eec7",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3493",
+                        "output_tokens": "33",
+                        "total_tokens": "3526",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"CCC(=C)C(=O)C\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "59814b0a-7bd4-4541-9fb6-6bc8fc10a298",
+                    "tool_call_id": "chatcmpl-tool-8a155e5ba79848328438d647d514eec7",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 3-methylidenepentan-2-one is \"CCC(=C)C(=O)C\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "34",
+                            "prompt_tokens": "3936",
+                            "total_tokens": "3970",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-b13ea014-0ac4-45b2-9906-b5222014b609-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3936",
+                        "output_tokens": "34",
+                        "total_tokens": "3970",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"CCC(=C)C(=O)C\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "dbb2541f-1055-487f-9b31-b467de244eab",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "15",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "1,5-dimethylpyrrolidin-2-one": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1,5-dimethylpyrrolidin-2-one"
+                    }
+                }
+            ],
+            "result": "CC1CCC(=O)N1C"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:29:57.381302",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 1,5-dimethylpyrrolidin-2-one",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "e08337fa-3f37-41b4-baeb-9010c00a7029",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-d0aae223a3db47369b0182cfd6edb4a1",
+                                "function": {
+                                    "arguments": "{\"name\": \"1,5-dimethylpyrrolidin-2-one\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "37",
+                            "prompt_tokens": "3494",
+                            "total_tokens": "3531",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-0aba4df7-9930-4dd7-88c4-d4309b98e31f-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "1,5-dimethylpyrrolidin-2-one"
+                            },
+                            "id": "chatcmpl-tool-d0aae223a3db47369b0182cfd6edb4a1",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3494",
+                        "output_tokens": "37",
+                        "total_tokens": "3531",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"CC1CCC(=O)N1C\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "cb87969f-0fc9-4c1f-a7c8-fc8831f0f1ab",
+                    "tool_call_id": "chatcmpl-tool-d0aae223a3db47369b0182cfd6edb4a1",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 1,5-dimethylpyrrolidin-2-one is \"CC1CCC(=O)N1C\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "37",
+                            "prompt_tokens": "3935",
+                            "total_tokens": "3972",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-fd850d9c-b519-402f-b3e0-4da344277293-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3935",
+                        "output_tokens": "37",
+                        "total_tokens": "3972",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"CC1CCC(=O)N1C\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "65d7b602-901c-436e-9845-be384a98dbbc",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "16",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2-bromo-3,4,6-trichlorophenol": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-bromo-3,4,6-trichlorophenol"
+                    }
+                }
+            ],
+            "result": "C1=C(C(=C(C(=C1Cl)Cl)Br)O)Cl"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:06.016738",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2-bromo-3,4,6-trichlorophenol",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "11e5c5ab-7881-4655-bf4a-6fb204dd91a8",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-e3eba52016944a2fadc386e650828016",
+                                "function": {
+                                    "arguments": "{\"name\": \"2-bromo-3,4,6-trichlorophenol\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "38",
+                            "prompt_tokens": "3494",
+                            "total_tokens": "3532",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-5993a0fe-94cb-494d-9b8c-28cf5a1821b9-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2-bromo-3,4,6-trichlorophenol"
+                            },
+                            "id": "chatcmpl-tool-e3eba52016944a2fadc386e650828016",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3494",
+                        "output_tokens": "38",
+                        "total_tokens": "3532",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=C(C(=C(C(=C1Cl)Cl)Br)O)Cl\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "8d35d3ff-2b9d-4a85-8efc-8b3d5583b5d8",
+                    "tool_call_id": "chatcmpl-tool-e3eba52016944a2fadc386e650828016",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 2-bromo-3,4,6-trichlorophenol is \"C1=C(C(=C(C(=C1Cl)Cl)Br)O)Cl\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "49",
+                            "prompt_tokens": "3956",
+                            "total_tokens": "4005",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-2291ed25-cfd2-4613-b353-a85ec49d817b-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3956",
+                        "output_tokens": "49",
+                        "total_tokens": "4005",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=C(C(=C(C(=C1Cl)Cl)Br)O)Cl\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "84276c5d-57a6-4814-83cd-ee09dd7fef1d",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "17",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "1,4-diisothiocyanatobenzene": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1,4-diisothiocyanatobenzene"
+                    }
+                }
+            ],
+            "result": "C1=CC(=CC=C1N=C=S)N=C=S"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:14.106107",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 1,4-diisothiocyanatobenzene",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "ed1e6363-7b9f-4548-b952-7e659d30cd7b",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-ce636028d65045c2829f1ae08bb053d0",
+                                "function": {
+                                    "arguments": "{\"name\": \"1,4-diisothiocyanatobenzene\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "35",
+                            "prompt_tokens": "3492",
+                            "total_tokens": "3527",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-8c85e990-50ea-42f8-8bc4-aa0065f1159a-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "1,4-diisothiocyanatobenzene"
+                            },
+                            "id": "chatcmpl-tool-ce636028d65045c2829f1ae08bb053d0",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3492",
+                        "output_tokens": "35",
+                        "total_tokens": "3527",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CC(=CC=C1N=C=S)N=C=S\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "a5d64146-b54e-4ec5-b192-97246654774b",
+                    "tool_call_id": "chatcmpl-tool-ce636028d65045c2829f1ae08bb053d0",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 1,4-diisothiocyanatobenzene is \"C1=CC(=CC=C1N=C=S)N=C=S\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "41",
+                            "prompt_tokens": "3945",
+                            "total_tokens": "3986",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-a021d7a6-5599-4f84-8e2d-3bcafc850569-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3945",
+                        "output_tokens": "41",
+                        "total_tokens": "3986",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CC(=CC=C1N=C=S)N=C=S\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "eae5a049-e3dc-4639-8c2e-b98c33cb9b67",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "18",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "(4-aminophenyl)boronic acid": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "4-aminophenyl boronic acid"
+                    }
+                }
+            ],
+            "result": "B(C1=CC=C(C=C1)N)(O)O"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:20.040697",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: (4-aminophenyl)boronic acid",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "92a6ac08-5e21-4a71-a8f4-11c39f28ddef",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-0ccd2f7053e04e54bacf50b2687e18d2",
+                                "function": {
+                                    "arguments": "{\"name\": \"4-aminophenyl boronic acid\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "32",
+                            "prompt_tokens": "3489",
+                            "total_tokens": "3521",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-38131cec-6fc2-4ab4-b4e2-19ad3777d474-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "4-aminophenyl boronic acid"
+                            },
+                            "id": "chatcmpl-tool-0ccd2f7053e04e54bacf50b2687e18d2",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3489",
+                        "output_tokens": "32",
+                        "total_tokens": "3521",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"B(C1=CC=C(C=C1)N)(O)O\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "ffb55ae5-9574-432a-a99e-dec2d0c5b74b",
+                    "tool_call_id": "chatcmpl-tool-0ccd2f7053e04e54bacf50b2687e18d2",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule (4-aminophenyl)boronic acid is \"B(C1=CC=C(C=C1)N)(O)O\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "38",
+                            "prompt_tokens": "3929",
+                            "total_tokens": "3967",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-db612202-ec4a-46dd-9134-a6e998c9f84d-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3929",
+                        "output_tokens": "38",
+                        "total_tokens": "3967",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"B(C1=CC=C(C=C1)N)(O)O\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "0a14b39e-b2ea-44c8-a451-24cdbb816c34",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "19",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "1-benzothiophene-2-carbonyl chloride": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-benzothiophene-2-carbonyl chloride"
+                    }
+                }
+            ],
+            "result": "C1=CC=C2C(=C1)C=C(S2)C(=O)Cl"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:24.939475",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 1-benzothiophene-2-carbonyl chloride",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "564c91a3-abab-4d2b-89fb-e83d319edfdc",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-a879dc0ba5c84653ac862f9d3e211de1",
+                                "function": {
+                                    "arguments": "{\"name\": \"1-benzothiophene-2-carbonyl chloride\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "37",
+                            "prompt_tokens": "3489",
+                            "total_tokens": "3526",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-1126e0b5-d928-478f-b25f-c2ad040f1ed7-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "1-benzothiophene-2-carbonyl chloride"
+                            },
+                            "id": "chatcmpl-tool-a879dc0ba5c84653ac862f9d3e211de1",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3489",
+                        "output_tokens": "37",
+                        "total_tokens": "3526",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CC=C2C(=C1)C=C(S2)C(=O)Cl\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "653f2a5b-5cb2-4509-a1ee-1431373aab21",
+                    "tool_call_id": "chatcmpl-tool-a879dc0ba5c84653ac862f9d3e211de1",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 1-benzothiophene-2-carbonyl chloride is \"C1=CC=C2C(=C1)C=C(S2)C(=O)Cl\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "50",
+                            "prompt_tokens": "3946",
+                            "total_tokens": "3996",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-93e3c729-2e72-42ca-9975-16aa24f385df-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3946",
+                        "output_tokens": "50",
+                        "total_tokens": "3996",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CC=C2C(=C1)C=C(S2)C(=O)Cl\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "0980367c-1449-4822-b76a-a0174488ffae",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "20",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "1-(dimethylamino)ethenol": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-(dimethylamino)ethenol"
+                    }
+                }
+            ],
+            "result": "CN(C)C(=C)O"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:30.055030",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 1-(dimethylamino)ethenol",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "2558e9bc-f7de-4ec1-9bca-60a30cfb7ef7",
+                    "example": "False"
+                },
+                {
+                    "content": "\u0e04\u0e13\u0e30\u0e01\u0e23\u0e23\u0e21\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19\u0e02\u0e2d\u0e07\u0e04\u0e38\u0e13\u0e44\u0e21\u0e48\u0e21\u0e35\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e40\u0e1e\u0e35\u0e22\u0e07\u0e1e\u0e2d\u0e43\u0e19\u0e01\u0e32\u0e23\u0e41\u0e1b\u0e25\u0e07\u0e0a\u0e37\u0e48\u0e2d\u0e2a\u0e32\u0e23\u0e40\u0e04\u0e21\u0e35\u0e40\u0e1b\u0e47\u0e19\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a SMILES \u0e42\u0e14\u0e22\u0e15\u0e23\u0e07 \u0e14\u0e31\u0e07\u0e19\u0e31\u0e49\u0e19 \u0e40\u0e23\u0e32\u0e08\u0e33\u0e40\u0e1b\u0e47\u0e19\u0e15\u0e49\u0e2d\u0e07\u0e43\u0e0a\u0e49\u0e1f\u0e31\u0e07\u0e01\u0e4c\u0e0a\u0e31\u0e19\u0e2a\u0e33\u0e2b\u0e23\u0e31\u0e1a\u0e01\u0e32\u0e23\u0e41\u0e1b\u0e25\u0e07\u0e0a\u0e37\u0e48\u0e2d\u0e2a\u0e32\u0e23\u0e40\u0e04\u0e21\u0e35\u0e40\u0e1b\u0e47\u0e19\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a SMILES\n\n",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-f1316b03d3d74a5d89fead77a9e7caab",
+                                "function": {
+                                    "arguments": "{\"name\": \"1-(dimethylamino)ethenol\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "111",
+                            "prompt_tokens": "3486",
+                            "total_tokens": "3597",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-7baeb646-faee-4935-a560-02102ad3f1c8-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "1-(dimethylamino)ethenol"
+                            },
+                            "id": "chatcmpl-tool-f1316b03d3d74a5d89fead77a9e7caab",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3486",
+                        "output_tokens": "111",
+                        "total_tokens": "3597",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"CN(C)C(=C)O\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "0c280954-7332-46c9-bcb5-5a87f8d695e2",
+                    "tool_call_id": "chatcmpl-tool-f1316b03d3d74a5d89fead77a9e7caab",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"1-(dimethylamino)ethenol\" is \"CN(C)C(=C)O\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "33",
+                            "prompt_tokens": "4005",
+                            "total_tokens": "4038",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-f3a96d57-44a0-451a-941b-bcf3a624a06b-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "4005",
+                        "output_tokens": "33",
+                        "total_tokens": "4038",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"CN(C)C(=C)O\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "ae79a8c0-ada0-4f6f-b60e-ba28b6bc0c02",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "21",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "1-chloro-4-nitrosobenzene": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-chloro-4-nitrosobenzene"
+                    }
+                }
+            ],
+            "result": "C1=CC(=CC=C1N=O)Cl"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:34.182299",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 1-chloro-4-nitrosobenzene",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "a7337914-b701-473e-8cb9-178dc32a1395",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-d0d3fa703c724be2ba28b8d4af121307",
+                                "function": {
+                                    "arguments": "{\"name\": \"1-chloro-4-nitrosobenzene\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "35",
+                            "prompt_tokens": "3492",
+                            "total_tokens": "3527",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-896d9e2e-3f1c-4ef0-b29e-14d64dd14d1a-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "1-chloro-4-nitrosobenzene"
+                            },
+                            "id": "chatcmpl-tool-d0d3fa703c724be2ba28b8d4af121307",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3492",
+                        "output_tokens": "35",
+                        "total_tokens": "3527",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CC(=CC=C1N=O)Cl\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "c213ce1e-6121-4959-9fe2-50b4fbf4ef4f",
+                    "tool_call_id": "chatcmpl-tool-d0d3fa703c724be2ba28b8d4af121307",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 1-chloro-4-nitrosobenzene is \"C1=CC(=CC=C1N=O)Cl\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "39",
+                            "prompt_tokens": "3939",
+                            "total_tokens": "3978",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-04a38569-fe56-4a50-be0f-8b5e938f1714-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3939",
+                        "output_tokens": "39",
+                        "total_tokens": "3978",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CC(=CC=C1N=O)Cl\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "99063d26-ea31-4a94-934f-bc13b47ffce7",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "22",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "oxido-oxo-(2-sulfoethyl)phosphanium": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "oxido-oxo-(2-sulfoethyl)phosphanium"
+                    }
+                }
+            ],
+            "result": "C(CS(=O)(=O)O)[P+](=O)[O-]"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:38.582309",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: oxido-oxo-(2-sulfoethyl)phosphanium",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "86c7fb30-366a-4a10-8c0a-64f53d570ec6",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-916d4585c50d44ef8d9f6e7f47a82173",
+                                "function": {
+                                    "arguments": "{\"name\": \"oxido-oxo-(2-sulfoethyl)phosphanium\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "39",
+                            "prompt_tokens": "3496",
+                            "total_tokens": "3535",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-54172726-c5b2-4a13-8060-10e6afccf578-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "oxido-oxo-(2-sulfoethyl)phosphanium"
+                            },
+                            "id": "chatcmpl-tool-916d4585c50d44ef8d9f6e7f47a82173",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3496",
+                        "output_tokens": "39",
+                        "total_tokens": "3535",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C(CS(=O)(=O)O)[P+](=O)[O-]\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "f7c16634-66e4-4947-b8f9-5eeaaef50b3c",
+                    "tool_call_id": "chatcmpl-tool-916d4585c50d44ef8d9f6e7f47a82173",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"oxido-oxo-(2-sulfoethyl)phosphanium\" is \"C(CS(=O)(=O)O)[P+](=O)[O-]\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "51",
+                            "prompt_tokens": "3970",
+                            "total_tokens": "4021",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-00862438-6048-4efa-9536-6ae632b14e1f-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3970",
+                        "output_tokens": "51",
+                        "total_tokens": "4021",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C(CS(=O)(=O)O)[P+](=O)[O-]\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "3be6e990-2657-43de-b74d-a84b3dc98cb9",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "23",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2-chloro-N-(1-methylpyrazol-3-yl)acetamide": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-chloro-N-(1-methylpyrazol-3-yl)acetamide"
+                    }
+                }
+            ],
+            "result": "CN1C=CC(=N1)NC(=O)CCl"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:43.085036",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2-chloro-N-(1-methylpyrazol-3-yl)acetamide",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "5275f63f-f2a6-45fa-8b2c-bbeabd6483c1",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-5087eb5ed6d24d8cadc18b1edb04bc4e",
+                                "function": {
+                                    "arguments": "{\"name\": \"2-chloro-N-(1-methylpyrazol-3-yl)acetamide\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "42",
+                            "prompt_tokens": "3496",
+                            "total_tokens": "3538",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-af62fc6c-6357-44e1-a53c-e5082fc6d58a-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2-chloro-N-(1-methylpyrazol-3-yl)acetamide"
+                            },
+                            "id": "chatcmpl-tool-5087eb5ed6d24d8cadc18b1edb04bc4e",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3496",
+                        "output_tokens": "42",
+                        "total_tokens": "3538",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"CN1C=CC(=N1)NC(=O)CCl\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "990f7a85-2d1f-4cfe-9b05-6d207a18031e",
+                    "tool_call_id": "chatcmpl-tool-5087eb5ed6d24d8cadc18b1edb04bc4e",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule \"2-chloro-N-(1-methylpyrazol-3-yl)acetamide\" is \"CN1C=CC(=N1)NC(=O)CCl\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "50",
+                            "prompt_tokens": "3955",
+                            "total_tokens": "4005",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-616cd3e8-2f51-4add-a3e4-e3d63ec56a7e-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3955",
+                        "output_tokens": "50",
+                        "total_tokens": "4005",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"CN1C=CC(=N1)NC(=O)CCl\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "7b887503-7edf-4462-acae-789652d082b8",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "24",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "5-pyridin-2-yl-1,3,4-thiadiazol-2-amine": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5-pyridin-2-yl-1,3,4-thiadiazol-2-amine"
+                    }
+                }
+            ],
+            "result": "C1=CC=NC(=C1)C2=NN=C(S2)N"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:48.098009",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 5-pyridin-2-yl-1,3,4-thiadiazol-2-amine",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "c5d6e823-f05c-4d28-bb34-b062cb5d44c4",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-cb3fb92e25984b928e8e97d115310166",
+                                "function": {
+                                    "arguments": "{\"name\": \"5-pyridin-2-yl-1,3,4-thiadiazol-2-amine\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "46",
+                            "prompt_tokens": "3502",
+                            "total_tokens": "3548",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-26c6da3b-26e1-4f32-8075-bd52146e5dec-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "5-pyridin-2-yl-1,3,4-thiadiazol-2-amine"
+                            },
+                            "id": "chatcmpl-tool-cb3fb92e25984b928e8e97d115310166",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3502",
+                        "output_tokens": "46",
+                        "total_tokens": "3548",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=CC=NC(=C1)C2=NN=C(S2)N\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "2b6078cc-85fe-4542-a0fd-979977d2cbef",
+                    "tool_call_id": "chatcmpl-tool-cb3fb92e25984b928e8e97d115310166",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 5-pyridin-2-yl-1,3,4-thiadiazol-2-amine is \"C1=CC=NC(=C1)C2=NN=C(S2)N\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "56",
+                            "prompt_tokens": "3983",
+                            "total_tokens": "4039",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-8da697f2-9d86-45b7-9b77-a9b3eb15e0a3-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3983",
+                        "output_tokens": "56",
+                        "total_tokens": "4039",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=CC=NC(=C1)C2=NN=C(S2)N\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "40322a2e-ead6-4d47-b30f-c3ff77d65a73",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "25",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2H-[1,2,4]triazolo[3,4-b][1,3,4]thiadiazole-3-thione": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2H-[1,2,4]triazolo[3,4-b][1,3,4]thiadiazole-3-thione"
+                    }
+                }
+            ],
+            "result": "C1=NN2C(=S)NN=C2S1"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:30:53.086975",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2H-[1,2,4]triazolo[3,4-b][1,3,4]thiadiazole-3-thione",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "73ce38d9-a424-438d-a72a-e79b8dee7db7",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-a05beee1a2e347198177b1af3dee6169",
+                                "function": {
+                                    "arguments": "{\"name\": \"2H-[1,2,4]triazolo[3,4-b][1,3,4]thiadiazole-3-thione\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "55",
+                            "prompt_tokens": "3508",
+                            "total_tokens": "3563",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-a9fd95d8-7c8e-4ef0-8488-8d9c77157513-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2H-[1,2,4]triazolo[3,4-b][1,3,4]thiadiazole-3-thione"
+                            },
+                            "id": "chatcmpl-tool-a05beee1a2e347198177b1af3dee6169",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3508",
+                        "output_tokens": "55",
+                        "total_tokens": "3563",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1=NN2C(=S)NN=C2S1\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "8a1ef821-17e1-4623-8b26-728e852341d0",
+                    "tool_call_id": "chatcmpl-tool-a05beee1a2e347198177b1af3dee6169",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 2H-[1,2,4]triazolo[3,4-b][1,3,4]thiadiazole-3-thione is \"C1=NN2C(=S)NN=C2S1\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "60",
+                            "prompt_tokens": "3996",
+                            "total_tokens": "4056",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-ad45264a-d7e8-43e9-94c0-6b951d723061-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3996",
+                        "output_tokens": "60",
+                        "total_tokens": "4056",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1=NN2C(=S)NN=C2S1\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "540ab021-3c74-4b6f-b861-042d78d7bc82",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "26",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2-morpholin-4-ylacetonitrile": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-morpholin-4-ylacetonitrile"
+                    }
+                }
+            ],
+            "result": "C1COCCN1CC#N"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:31:02.103695",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2-morpholin-4-ylacetonitrile",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "8691a746-915c-496c-a4a8-ef2487f42a28",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-5277bc0255b748738ebfe1687b37ba57",
+                                "function": {
+                                    "arguments": "{\"name\": \"2-morpholin-4-ylacetonitrile\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "35",
+                            "prompt_tokens": "3493",
+                            "total_tokens": "3528",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-c03ffb5c-6a61-45af-beab-3d4f7195e46a-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2-morpholin-4-ylacetonitrile"
+                            },
+                            "id": "chatcmpl-tool-5277bc0255b748738ebfe1687b37ba57",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3493",
+                        "output_tokens": "35",
+                        "total_tokens": "3528",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1COCCN1CC#N\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "6dff2e29-da36-47dd-8fec-d37436919427",
+                    "tool_call_id": "chatcmpl-tool-5277bc0255b748738ebfe1687b37ba57",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 2-morpholin-4-ylacetonitrile is \"C1COCCN1CC#N\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "34",
+                            "prompt_tokens": "3930",
+                            "total_tokens": "3964",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-8c45d945-7893-4ba6-95db-cba12a92d4ae-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3930",
+                        "output_tokens": "34",
+                        "total_tokens": "3964",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1COCCN1CC#N\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "30542171-5c0d-446c-8dbd-bd1d2e6ccfb0",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "27",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "2,4-dichloro-6-methylsulfanyl-1,3,5-triazine": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2,4-dichloro-6-methylsulfanyl-1,3,5-triazine"
+                    }
+                }
+            ],
+            "result": "CSC1=NC(=NC(=N1)Cl)Cl"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:31:10.652635",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 2,4-dichloro-6-methylsulfanyl-1,3,5-triazine",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "e1a6e82b-67d1-4785-bb9e-42524a4391e5",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-6cd3180a4ce2426b8d56cbe7e54805de",
+                                "function": {
+                                    "arguments": "{\"name\": \"2,4-dichloro-6-methylsulfanyl-1,3,5-triazine\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "46",
+                            "prompt_tokens": "3505",
+                            "total_tokens": "3551",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-1f5aaa13-fc20-47b5-ab3b-39a36c06db93-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "2,4-dichloro-6-methylsulfanyl-1,3,5-triazine"
+                            },
+                            "id": "chatcmpl-tool-6cd3180a4ce2426b8d56cbe7e54805de",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3505",
+                        "output_tokens": "46",
+                        "total_tokens": "3551",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"CSC1=NC(=NC(=N1)Cl)Cl\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "384f2250-2a3a-46c0-a4be-5e2850e1af7c",
+                    "tool_call_id": "chatcmpl-tool-6cd3180a4ce2426b8d56cbe7e54805de",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 2,4-dichloro-6-methylsulfanyl-1,3,5-triazine is \"CSC1=NC(=NC(=N1)Cl)Cl\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "52",
+                            "prompt_tokens": "3977",
+                            "total_tokens": "4029",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-0f7f7f85-0bcc-451c-abf9-62db5bfd3324-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3977",
+                        "output_tokens": "52",
+                        "total_tokens": "4029",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"CSC1=NC(=NC(=N1)Cl)Cl\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "dbeca1f2-13cc-48cf-b8c3-40696a7c8658",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "28",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    },
+    "4,6-diamino-5-nitroso-1H-pyrimidin-2-one": {
+        "llm_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "4,6-diamino-5-nitroso-1H-pyrimidin-2-one"
+                    }
+                }
+            ],
+            "result": "C1(=C(NC(=O)N=C1N)N)N=O"
+        },
+        "metadata": {
+            "timestamp": "2025-04-22T09:31:15.650860",
+            "model_name": "Qwen/Qwen2.5-14B-Instruct",
+            "system_prompt": "You are a computational chemistry expert using specialized tools to solve scientific problems.\n\nInstructions:\n\n1. Extract key inputs (e.g. SMILES, molecule names, methods, software, properties, conditions).\n2. Call tools only when needed, using the correct schema. Call one tool at a time, no nested calls.\n3. Base responses only on actual tool outputs\u2014never fabricate results or data.\n4. If a tool fails, retry with improved inputs if possible.\n5. Use available data when present; if not, clearly state that a tool call is needed.\n6. If no tool is required, respond with factual domain knowledge only.\n\n",
+            "state": [
+                {
+                    "content": "Provide the SMILES string corresponding to this molecule: 4,6-diamino-5-nitroso-1H-pyrimidin-2-one",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "7216097b-1d82-448d-8876-0e0f0d3b8ab5",
+                    "example": "False"
+                },
+                {
+                    "content": "",
+                    "additional_kwargs": {
+                        "tool_calls": [
+                            {
+                                "id": "chatcmpl-tool-ce83ca3d28d74f00ade00d3125ea39ba",
+                                "function": {
+                                    "arguments": "{\"name\": \"4,6-diamino-5-nitroso-1H-pyrimidin-2-one\"}",
+                                    "name": "molecule_name_to_smiles"
+                                },
+                                "type": "function"
+                            }
+                        ],
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "46",
+                            "prompt_tokens": "3505",
+                            "total_tokens": "3551",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "tool_calls",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-7dcba626-1817-4fee-8802-8dd5ae913ccc-0",
+                    "example": "False",
+                    "tool_calls": [
+                        {
+                            "name": "molecule_name_to_smiles",
+                            "args": {
+                                "name": "4,6-diamino-5-nitroso-1H-pyrimidin-2-one"
+                            },
+                            "id": "chatcmpl-tool-ce83ca3d28d74f00ade00d3125ea39ba",
+                            "type": "tool_call"
+                        }
+                    ],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3505",
+                        "output_tokens": "46",
+                        "total_tokens": "3551",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "\"C1(=C(NC(=O)N=C1N)N)N=O\"",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "tool",
+                    "name": "molecule_name_to_smiles",
+                    "id": "f219cbc6-1b84-4b05-b6f5-ca16aa087bdd",
+                    "tool_call_id": "chatcmpl-tool-ce83ca3d28d74f00ade00d3125ea39ba",
+                    "artifact": "None",
+                    "status": "success"
+                },
+                {
+                    "content": "The SMILES string corresponding to the molecule 4,6-diamino-5-nitroso-1H-pyrimidin-2-one is \"C1(=C(NC(=O)N=C1N)N)N=O\".",
+                    "additional_kwargs": {
+                        "refusal": "None"
+                    },
+                    "response_metadata": {
+                        "token_usage": {
+                            "completion_tokens": "57",
+                            "prompt_tokens": "3966",
+                            "total_tokens": "4023",
+                            "completion_tokens_details": "None",
+                            "prompt_tokens_details": "None"
+                        },
+                        "model_name": "Qwen/Qwen2.5-14B-Instruct",
+                        "system_fingerprint": "None",
+                        "finish_reason": "stop",
+                        "logprobs": "None"
+                    },
+                    "type": "ai",
+                    "name": "None",
+                    "id": "run-4fa1563c-3cd9-47c5-9ab1-6c4c332ad7d5-0",
+                    "example": "False",
+                    "tool_calls": [],
+                    "invalid_tool_calls": [],
+                    "usage_metadata": {
+                        "input_tokens": "3966",
+                        "output_tokens": "57",
+                        "total_tokens": "4023",
+                        "input_token_details": {},
+                        "output_token_details": {}
+                    }
+                },
+                {
+                    "content": "{\"answer\":\"C1(=C(NC(=O)N=C1N)N)N=O\"}",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "type": "human",
+                    "name": "None",
+                    "id": "5acca0c5-41b4-432a-9ee0-0e52c58a7c35",
+                    "example": "False"
+                }
+            ],
+            "thread_id": "29",
+            "git_commit": "3f4360c2082e3a10a97d5e179703af64c25f95e8"
+        }
+    }
+}
