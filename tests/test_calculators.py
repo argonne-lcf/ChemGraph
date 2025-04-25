@@ -69,8 +69,13 @@ def test_tblite_calculator():
 @pytest.mark.skipif(not pytest.importorskip("ase.io.orca"), reason="ORCA not installed")
 def test_orca_calculator():
     # Test ORCA calculator initialization
-    calc = OrcaCalc()
-    ase_calc = calc.get_calculator()
+    from ase.calculators.calculator import BadConfiguration
+    from ase import Atoms
+    try:
+        calc = OrcaCalc()
+        ase_calc = calc.get_calculator()
+    except BadConfiguration:
+        pytest.skip("ORCA calculator not configured in ASE.")
 
     # Create a simple molecule
     atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]])

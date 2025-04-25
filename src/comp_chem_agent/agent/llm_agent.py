@@ -1,7 +1,7 @@
 from langgraph.prebuilt import create_react_agent
 from comp_chem_agent.tools.local_model_loader import load_ollama_model
 from comp_chem_agent.tools.ASE_tools import (
-    geometry_optimization,
+    run_ase,
     molecule_name_to_smiles,
     file_to_atomsdata,
     smiles_to_atomsdata,
@@ -47,7 +47,7 @@ class CompChemAgent:
 
         tools = [
             smiles_to_atomsdata,
-            geometry_optimization,
+            run_ase,
             molecule_name_to_smiles,
             file_to_atomsdata,
         ]

@@ -5,6 +5,14 @@ from typing import Optional, Union
 from pydantic import BaseModel, Field
 from pathlib import Path
 import torch
+from mace.modules.models import ScaleShiftMACE
+import os
+
+# Allow loading slice and ScaleShiftMACE objects for compatibility with older model files
+torch.serialization.add_safe_globals([slice, ScaleShiftMACE])
+
+# Force torch to disable weights_only loading (allows full pickle loads) for MACE models
+os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
 
 
 class MaceCalc(BaseModel):
