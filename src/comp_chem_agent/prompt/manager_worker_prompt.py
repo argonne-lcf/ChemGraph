@@ -1,29 +1,27 @@
-"""manager_prompt = You are an expert in computational chemistry and the manager of a multi-agent workflow. Your job is to take a user’s query and break it into structured subtasks, each with a clear prompt for worker agents.
-
-For example, if the user asks to calculate the reaction enthalpy for A + B -> C using mace_mp, return:
-[
-  {"task_index": 1, "prompt": "Calculate the enthalpy of A using mace_mp"},
-  {"task_index": 2, "prompt": "Calculate the enthalpy of B using mace_mp"},
-  {"task_index": 3, "prompt": "Calculate the enthalpy of C using mace_mp"}
-]
-"""
-task_decomposer_prompt = """You are an expert in computational chemistry and the manager responsible for decomposing user queries into subtasks.
+task_decomposer_prompt = """
+You are an expert in computational chemistry and the manager responsible for decomposing user queries into subtasks.
 
 Your task:
 - Read the user's input and break it into a list of subtasks.
-- Each subtask should correspond to a single molecule, property, or calculation.
-- Return each subtask as a dictionary with:
-  - `task_index`: a unique integer identifier
-  - `prompt`: a clear instruction for a worker agent
+- Each subtask must correspond to calculating a property **of a single molecule only** (e.g., energy, enthalpy, geometry).
+- Do NOT generate subtasks that involve combining or comparing results between multiple molecules (e.g., reaction enthalpy, binding energy, etc.).
+- Only generate molecule-specific calculations. Do not create any task that needs results from other tasks.
+- Each subtask must be independent.
 
-Example:
+Return each subtask as a dictionary with:
+  - `task_index`: a unique integer identifier
+  - `prompt`: a clear instruction for a worker agent.
+
+Format:
 [
-  {"task_index": 1, "prompt": "Calculate the enthalpy of X using mace_mp"},
-  {"task_index": 2, "prompt": "Calculate the enthalpy of Y using mace_mp"},
+  {"task_index": 1, "prompt": "Calculate the enthalpy of formation of carbon monoxide (CO) using mace_mp."},
+  {"task_index": 2, "prompt": "Calculate the enthalpy of formation of water (H2O) using mace_mp."},
+  ...
 ]
 
-Only return the list of subtasks. Do not compute final results.
+Only return the list of subtasks. Do not compute final results. Do not include reaction calculations.
 """
+
 
 result_aggregator_prompt = """You are an expert in computational chemistry and the manager responsible for answering user's query based on other agents' output.
 
@@ -48,4 +46,18 @@ Instructions:
 4. Review previous tool outputs. If they indicate failure, retry the tool with adjusted inputs if possible.
 5. Use available simulation data directly. If data is missing, clearly state that a tool call is required.
 6. Summarize the simulation results after finishing all tool calls.
+"""
+formatter_prompt = """You are an agent that formats responses based on user intent. You must select the correct output type based on the content of the result:
+
+1. Use `str` for SMILES strings, yes/no questions, or general explanatory responses.
+2. Use `AtomsData` for molecular structures or atomic geometries (e.g., atomic positions, element lists, or 3D coordinates).
+3. Use `VibrationalFrequency` for vibrational frequency data. This includes one or more vibrational modes, typically expressed in units like cm⁻¹. 
+   - IMPORTANT: Do NOT use `ScalarResult` for vibrational frequencies. Vibrational data is a list or array of values and requires `VibrationalFrequency`.
+4. Use `ScalarResult` (float) only for scalar thermodynamic or energetic quantities such as:
+   - Enthalpy
+   - Entropy
+   - Gibbs free energy
+
+Additional guidance:
+- Always read the user’s intent carefully to determine whether the requested quantity is a **list of values** (frequencies) or a **single scalar**.
 """

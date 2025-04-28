@@ -42,7 +42,7 @@ class llm_graph:
         formatter_prompt: str = formatter_prompt,
         structured_output: bool = False,
         return_option: str = "last_message",
-        recursion_limit: int = 25,
+        recursion_limit: int = 50,
     ):
         try:
             if model_name in supported_openai_models:
@@ -50,9 +50,7 @@ class llm_graph:
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
             elif model_name in supported_alcf_models:
-                llm = load_alcf_model(
-                    model_name=model_name, base_url=base_url, api_key=api_key
-                )
+                llm = load_alcf_model(model_name=model_name, base_url=base_url, api_key=api_key)
             elif model_name in supported_anthropic_models:
                 llm = load_anthropic_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
@@ -89,7 +87,9 @@ class llm_graph:
                 llm, self.system_prompt, self.structured_output, self.formatter_prompt
             )
         else:
-            self.workflow = self.workflow_map[workflow_type]["constructor"](llm)
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm, structured_output=self.structured_output
+            )
 
     def visualize(self):
         """Visualize the LangGraph graph structure."""
@@ -109,9 +109,7 @@ class llm_graph:
             Image(
                 workflow.get_graph().draw_mermaid_png(
                     curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(
-                        first="#ffdfba", last="#baffc9", default="#fad7de"
-                    ),
+                    node_colors=NodeStyles(first="#ffdfba", last="#baffc9", default="#fad7de"),
                     wrap_label_n_words=9,
                     output_file_path=None,
                     draw_method=MermaidDrawMethod.PYPPETEER,
@@ -130,9 +128,7 @@ class llm_graph:
 
         return self.workflow.get_state(config).values["messages"]
 
-    def write_state(
-        self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"
-    ):
+    def write_state(self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"):
         """Write log of CCA run to a file.
 
         Args:
@@ -160,9 +156,7 @@ class llm_graph:
             serialized_state = serialize_state(state)
             try:
                 git_commit = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"])
-                    .decode("utf-8")
-                    .strip()
+                    subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
                 )
             except subprocess.CalledProcessError:
                 git_commit = "unknown"
@@ -195,9 +189,7 @@ class llm_graph:
             if config is None:
                 config = {}
             if not isinstance(config, dict):
-                raise TypeError(
-                    f"`config` must be a dictionary, got {type(config).__name__}"
-                )
+                raise TypeError(f"`config` must be a dictionary, got {type(config).__name__}")
             config.setdefault("configurable", {}).setdefault("thread_id", "1")
             config["recursion_limit"] = self.recursion_limit
 
@@ -221,10 +213,7 @@ class llm_graph:
                     raise ValueError(
                         f"Return option {self.return_option} is not supported. Only supports 'last_message' or 'state'."
                     )
-            elif (
-                self.workflow_type == "multi_framework"
-                or self.workflow_type == "multi_agent_ase"
-            ):
+            elif self.workflow_type == "multi_framework" or self.workflow_type == "multi_agent_ase":
                 inputs = {
                     "question": query,
                     "geometry_response": query,
