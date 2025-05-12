@@ -10,6 +10,31 @@ import shutil
 
 
 class OrcaCalc(BaseModel):
+    """ORCA quantum chemistry calculator configuration.
+
+    This class defines the configuration parameters for ORCA quantum chemistry
+    calculations. It supports various quantum chemical methods and basis sets
+    through the ORCA program.
+
+    Parameters
+    ----------
+    calculator_type : str, optional
+        Calculator type. Currently supports only 'orca', by default 'orca'
+    charge : int, optional
+        Total charge of the system, by default 0
+    multiplicity : int, optional
+        Total multiplicity of the system, by default 1
+    orcasimpleinput : str, optional
+        ORCA input keywords specifying method and basis set,
+        by default 'B3LYP def2-TZVP'
+    orcablocks : str, optional
+        Additional ORCA block settings, by default '%pal nprocs 1 end'
+    directory : str, optional
+        Working directory for ORCA calculations, by default '.'
+    profile : OrcaProfile, optional
+        Optional ORCA profile configuration, by default None
+    """
+
     model_config = {"arbitrary_types_allowed": True}
 
     calculator_type: str = Field(
@@ -34,7 +59,22 @@ class OrcaCalc(BaseModel):
     )
 
     def get_calculator(self):
-        """Returns an ASE-compatible ORCA calculator instance."""
+        """Get an ASE-compatible ORCA calculator instance.
+
+        This method creates and returns an ORCA calculator instance with the
+        specified configuration. It automatically searches for the ORCA executable
+        if no profile is provided.
+
+        Returns
+        -------
+        ORCA
+            An ASE-compatible ORCA calculator instance
+
+        Raises
+        ------
+        ValueError
+            If an invalid calculator_type is specified
+        """
         if self.calculator_type != "orca":
             raise ValueError(
                 "Invalid calculator_type. The only valid option is 'orca'."
