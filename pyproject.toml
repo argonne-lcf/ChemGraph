@@ -16,6 +16,7 @@ dependencies = [
     "langgraph==0.2.59",
     "langchain-openai==0.2.12",
     "langchain-ollama==0.2.1",
+    "langchain-anthropic==0.3.13",
     "pydantic==2.10.3",
     "pandas>=2.2",
     "mace-torch==0.3.9",
