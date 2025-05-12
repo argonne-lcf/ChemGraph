@@ -9,17 +9,33 @@ from comp_chem_agent.models.supported_models import (
     supported_anthropic_models,
     supported_alcf_models,
 )
-from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
+from comp_chem_agent.prompt.single_agent_prompt import (
+    single_agent_prompt,
+    formatter_prompt,
+)
 from comp_chem_agent.graphs.multi_agent import construct_multi_framework_graph
 from comp_chem_agent.graphs.python_relp_agent import construct_relp_graph
-from comp_chem_agent.graphs.chemgraph_manager_worker import contruct_manager_worker_graph
+from comp_chem_agent.graphs.chemgraph_manager_worker import (
+    contruct_manager_worker_graph,
+)
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 def serialize_state(state):
-    """Convert non-serializable objects in state to a JSON-friendly format."""
+    """Convert non-serializable objects in state to a JSON-friendly format.
+
+    Parameters
+    ----------
+    state : Any
+        The state object to be serialized. Can be a list, dict, or object with __dict__
+
+    Returns
+    -------
+    Any
+        A JSON-serializable version of the input state
+    """
     if isinstance(state, list):
         return [serialize_state(item) for item in state]
     elif isinstance(state, dict):
@@ -31,6 +47,51 @@ def serialize_state(state):
 
 
 class llm_graph:
+    """A graph-based workflow for LLM-powered computational chemistry tasks.
+
+    This class manages different types of workflows for computational chemistry tasks,
+    supporting various LLM models and workflow types.
+
+    Parameters
+    ----------
+    model_name : str, optional
+        Name of the language model to use, by default "gpt-4o-mini"
+    workflow_type : str, optional
+        Type of workflow to use. Options:
+        - "single_agent_ase"
+        - "multi_framework"
+        - "multi_agent_ase"
+        - "python_relp"
+        - "manager_worker"
+        by default "single_agent_ase"
+    base_url : str, optional
+        Base URL for API calls, by default None
+    api_key : str, optional
+        API key for authentication, by default None
+    temperature : float, optional
+        Temperature parameter for model generation, by default 0
+    system_prompt : str, optional
+        System prompt for the language model, by default single_agent_prompt
+    formatter_prompt : str, optional
+        Prompt for formatting output, by default formatter_prompt
+    structured_output : bool, optional
+        Whether to use structured output, by default False
+    return_option : str, optional
+        What to return from the workflow. Options:
+        - "last_message"
+        - "state"
+        by default "last_message"
+    recursion_limit : int, optional
+        Maximum number of recursive steps in the workflow, by default 50
+
+    Raises
+    ------
+    ValueError
+        If the workflow_type is not supported
+    Exception
+        If there is an error loading the specified model
+    """
+
     def __init__(
         self,
         model_name: str = "gpt-4o-mini",
@@ -50,7 +111,9 @@ class llm_graph:
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
             elif model_name in supported_alcf_models:
-                llm = load_alcf_model(model_name=model_name, base_url=base_url, api_key=api_key)
+                llm = load_alcf_model(
+                    model_name=model_name, base_url=base_url, api_key=api_key
+                )
             elif model_name in supported_anthropic_models:
                 llm = load_anthropic_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
@@ -92,7 +155,16 @@ class llm_graph:
             )
 
     def visualize(self):
-        """Visualize the LangGraph graph structure."""
+        """Visualize the LangGraph graph structure.
+
+        This method creates and displays a visual representation of the workflow graph
+        using Mermaid diagrams. The visualization is shown in Jupyter notebooks.
+
+        Notes
+        -----
+        Requires IPython and nest_asyncio to be installed.
+        The visualization uses Mermaid diagrams with custom styling.
+        """
         workflow = self.workflow
 
         import nest_asyncio
@@ -109,7 +181,9 @@ class llm_graph:
             Image(
                 workflow.get_graph().draw_mermaid_png(
                     curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(first="#ffdfba", last="#baffc9", default="#fad7de"),
+                    node_colors=NodeStyles(
+                        first="#ffdfba", last="#baffc9", default="#fad7de"
+                    ),
                     wrap_label_n_words=9,
                     output_file_path=None,
                     draw_method=MermaidDrawMethod.PYPPETEER,
@@ -120,24 +194,50 @@ class llm_graph:
         )
 
     def get_state(self, config={"configurable": {"thread_id": "1"}}):
-        """Get the current state.
+        """Get the current state of the workflow.
 
-        Args:
-            config (dict, optional): Config of the conversation. Defaults to {"configurable": {"thread_id": "1"}}.
+        Parameters
+        ----------
+        config : dict, optional
+            Configuration dictionary containing thread information,
+            by default {"configurable": {"thread_id": "1"}}
+
+        Returns
+        -------
+        list
+            List of messages in the current state
         """
-
         return self.workflow.get_state(config).values["messages"]
 
-    def write_state(self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"):
+    def write_state(
+        self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"
+    ):
         """Write log of CCA run to a file.
 
-        Args:
-            config (dict, optional): Config of the conversation to save. Defaults to "{"configurable": {"thread_id": "1"}}"
-            output_dir (str, optional): Output directory to save log. Defaults to "run_logs".
+        Parameters
+        ----------
+        config : dict, optional
+            Configuration dictionary containing thread information,
+            by default {"configurable": {"thread_id": "1"}}
+        output_dir : str, optional
+            Output directory to save log, by default "run_logs"
 
-        Returns:
-            0: Save file successfully
-            1: Encounter error
+        Returns
+        -------
+        dict or str
+            If successful, returns a dictionary containing:
+            - timestamp: ISO format timestamp
+            - model_name: Name of the model used
+            - system_prompt: The system prompt used
+            - state: Serialized state
+            - thread_id: Thread identifier
+            - git_commit: Current git commit hash
+            If error occurs, returns "Error"
+
+        Notes
+        -----
+        The output file is saved as a JSON file with format:
+        state_{thread_id}_{timestamp}.json
         """
         import datetime
         import os
@@ -156,7 +256,9 @@ class llm_graph:
             serialized_state = serialize_state(state)
             try:
                 git_commit = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+                    subprocess.check_output(["git", "rev-parse", "HEAD"])
+                    .decode("utf-8")
+                    .strip()
                 )
             except subprocess.CalledProcessError:
                 git_commit = "unknown"
@@ -178,18 +280,38 @@ class llm_graph:
             return "Error"
 
     def run(self, query: str, config=None):
-        """
-        Runs the specified workflow with the given query.
+        """Run the specified workflow with the given query.
 
-        Args:
-            query (str): The user's input query
-            config (dict, optional): Configuration dictionary.
+        Parameters
+        ----------
+        query : str
+            The user's input query
+        config : dict, optional
+            Configuration dictionary for the workflow run, by default None
+
+        Returns
+        -------
+        Any
+            The result depends on return_option:
+            - If "last_message": returns the last message from the workflow
+            - If "state": returns the complete message state
+
+        Raises
+        ------
+        TypeError
+            If config is not a dictionary
+        ValueError
+            If return_option is not supported
+        Exception
+            If there is an error running the workflow
         """
         try:
             if config is None:
                 config = {}
             if not isinstance(config, dict):
-                raise TypeError(f"`config` must be a dictionary, got {type(config).__name__}")
+                raise TypeError(
+                    f"`config` must be a dictionary, got {type(config).__name__}"
+                )
             config.setdefault("configurable", {}).setdefault("thread_id", "1")
             config["recursion_limit"] = self.recursion_limit
 
@@ -213,7 +335,10 @@ class llm_graph:
                     raise ValueError(
                         f"Return option {self.return_option} is not supported. Only supports 'last_message' or 'state'."
                     )
-            elif self.workflow_type == "multi_framework" or self.workflow_type == "multi_agent_ase":
+            elif (
+                self.workflow_type == "multi_framework"
+                or self.workflow_type == "multi_agent_ase"
+            ):
                 inputs = {
                     "question": query,
                     "geometry_response": query,

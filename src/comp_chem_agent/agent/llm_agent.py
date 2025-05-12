@@ -14,6 +14,37 @@ logger = setup_logger(__name__)
 
 
 class CompChemAgent:
+    """A computational chemistry agent that uses LLMs to perform chemical calculations.
+
+    This agent integrates various language models with computational chemistry tools
+    to perform tasks like molecular structure optimization and analysis.
+
+    Parameters
+    ----------
+    model_name : str, optional
+        Name of the language model to use. Can be one of:
+        - "gpt-3.5-turbo"
+        - "gpt-4o-mini"
+        - "llama3.2"
+        - "llama3.1"
+        or any ALCF model name, by default "gpt-4o-mini"
+    tools : list, optional
+        List of tools to be used by the agent, by default None
+    prompt : str, optional
+        System prompt for the language model, by default None
+    base_url : str, optional
+        Base URL for API calls, by default None
+    api_key : str, optional
+        API key for authentication, by default None
+    temperature : float, optional
+        Temperature parameter for model generation, by default 0
+
+    Raises
+    ------
+    Exception
+        If there is an error loading the specified model
+    """
+
     def __init__(
         self,
         model_name="gpt-4o-mini",
@@ -56,6 +87,18 @@ class CompChemAgent:
         self.graph = create_react_agent(llm, tools, state_modifier=system_message)
 
     def run(self, query):
+        """Run a query through the agent's workflow.
+
+        Parameters
+        ----------
+        query : str
+            The query to be processed by the agent
+
+        Raises
+        ------
+        Exception
+            If there is an error processing the query
+        """
         try:
             inputs = {"messages": [("user", query)]}
             for s in self.graph.stream(inputs, stream_mode="values"):
@@ -69,6 +112,23 @@ class CompChemAgent:
             raise
 
     def runq(self, query):
+        """Run a direct query to the language model without using the agent workflow.
+
+        Parameters
+        ----------
+        query : str
+            The query to be sent directly to the language model
+
+        Returns
+        -------
+        Any
+            The response from the language model
+
+        Raises
+        ------
+        Exception
+            If there is an error processing the query
+        """
         try:
             messages = self.llm.invoke(query)
             logger.info(messages)
@@ -78,6 +138,25 @@ class CompChemAgent:
             raise
 
     def return_input(self, query, simulation_class):
+        """Return structured output from the language model based on a simulation class.
+
+        Parameters
+        ----------
+        query : str
+            The query to be processed
+        simulation_class : class
+            The class to structure the output
+
+        Returns
+        -------
+        Any
+            Structured output matching the simulation class format
+
+        Raises
+        ------
+        Exception
+            If there is an error processing the query or structuring the output
+        """
         structured_llm = self.llm.with_structured_output(simulation_class)
         messages = structured_llm.invoke(query)
         return messages
