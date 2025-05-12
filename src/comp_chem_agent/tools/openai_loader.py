@@ -12,8 +12,11 @@ logger = setup_logger(__name__)
 def load_openai_model(
     model_name: str, temperature: float, api_key: str = None, prompt: str = None
 ) -> ChatOpenAI:
-    """
-    Load an OpenAI chat model into LangChain.
+    """Load an OpenAI chat model into LangChain.
+
+    This function loads an OpenAI model and configures it for use with LangChain.
+    It handles API key management, including prompting for the key if not provided
+    or if the provided key is invalid.
 
     Parameters
     ----------
@@ -21,11 +24,14 @@ def load_openai_model(
         The name of the OpenAI chat model to load. See supported_openai_models for list
         of supported models.
     temperature : float
-        Controls the randomness of the generated text. A higher temperature results
-        in more random outputs, while a lower temperature results in more deterministic outputs.
+        Controls the randomness of the generated text. Higher values (e.g., 0.8)
+        make the output more random, while lower values (e.g., 0.2) make it more
+        deterministic.
     api_key : str, optional
         The OpenAI API key. If not provided, the function will attempt to retrieve it
         from the environment variable `OPENAI_API_KEY`.
+    prompt : str, optional
+        Custom prompt to use when requesting the API key from the user.
 
     Returns
     -------
@@ -35,12 +41,18 @@ def load_openai_model(
     Raises
     ------
     ValueError
-        If the API key is not provided and cannot be retrieved from the environment.
+        If the model name is not in the list of supported models.
+    Exception
+        If there is an error loading the model or if the API key is invalid.
 
     Notes
     -----
-    Ensure the model_name provided is one of the supported models. Unsupported models
-    will result in an exception.
+    The function will:
+    1. Check for the API key in the environment variables
+    2. Prompt for the key if not found
+    3. Validate the model name against supported models
+    4. Attempt to load the model
+    5. Handle any authentication errors by prompting for a new key
     """
 
     if api_key is None:

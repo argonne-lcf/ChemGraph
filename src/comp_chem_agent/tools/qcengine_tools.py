@@ -14,11 +14,27 @@ logger = setup_logger(__name__)
 def run_qcengine(state: MultiAgentState, program="psi4"):
     """Run a QCEngine calculation.
 
-    Args:
-        state: The state of the multi-agent system.
-        program: The program to use for the calculation.
-    """
+    This function executes a quantum chemistry calculation using QCEngine
+    with the specified program and parameters from the state.
 
+    Parameters
+    ----------
+    state : MultiAgentState
+        The state of the multi-agent system containing calculation parameters
+    program : str, optional
+        The quantum chemistry program to use, by default "psi4"
+
+    Returns
+    -------
+    dict
+        Dictionary containing the calculation results in a format suitable for
+        the multi-agent system
+
+    Raises
+    ------
+    Exception
+        If the calculation fails or encounters an error
+    """
     params = state["parameter_response"][-1]
     input = json.loads(params.content)
     program = input["program"]
@@ -50,7 +66,9 @@ def run_qcengine(state: MultiAgentState, program="psi4"):
         result = qcengine.compute(input, program).dict()
         del result["stdout"]
         output = []
-        output.append(HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder)))
+        output.append(
+            HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder))
+        )
         logger.info("QCEngine calculation completed successfully")
         return {"opt_response": output}
     except Exception as e:
@@ -59,21 +77,29 @@ def run_qcengine(state: MultiAgentState, program="psi4"):
 
 
 def is_linear_molecule(coords, tol=1e-3):
-    """
-    Determine if a molecule is linear.
+    """Determine if a molecule is linear.
+
+    This function uses singular value decomposition to determine if a molecule
+    is linear based on its atomic coordinates.
 
     Parameters
     ----------
     coords : np.ndarray
         (N x 3) array of Cartesian coordinates.
-    tol : float
+    tol : float, optional
         Tolerance for linearity; if the ratio of the second largest to largest
-        singular value is below tol, the molecule is considered linear.
+        singular value is below tol, the molecule is considered linear,
+        by default 1e-3
 
     Returns
     -------
     bool
-        True if the molecule is linear, False otherwise.
+        True if the molecule is linear, False otherwise
+
+    Notes
+    -----
+    A molecule is considered linear if the ratio of the second largest to largest
+    singular value of its centered coordinates is below the tolerance.
     """
     # Center the coordinates.
     centered = coords - np.mean(coords, axis=0)
@@ -86,8 +112,10 @@ def is_linear_molecule(coords, tol=1e-3):
 
 
 def compute_mass_weighted_hessian(hessian, masses):
-    """
-    Mass-weights the Hessian matrix.
+    """Mass-weights the Hessian matrix.
+
+    This function converts a Hessian matrix to its mass-weighted form,
+    which is required for vibrational frequency calculations.
 
     Parameters
     ----------
@@ -102,6 +130,12 @@ def compute_mass_weighted_hessian(hessian, masses):
         The mass-weighted Hessian.
     mass_vector : np.ndarray
         The mass vector (each mass repeated three times).
+
+    Notes
+    -----
+    The mass-weighting is performed by multiplying the Hessian by the inverse
+    square root of the mass matrix. This is a standard step in normal mode
+    analysis.
     """
     # Convert masses from amu to atomic units (electron masses)
     amu_to_au = 1822.888486
@@ -116,9 +150,10 @@ def compute_mass_weighted_hessian(hessian, masses):
 
 
 def build_projection_operator(masses, coords, is_linear=False):
-    """
-    Build a projection operator that projects out the translational and rotational
-    degrees of freedom.
+    """Build a projection operator for translational and rotational modes.
+
+    This function constructs a projection operator that removes translational
+    and rotational degrees of freedom from the Hessian matrix.
 
     Parameters
     ----------
@@ -126,14 +161,20 @@ def build_projection_operator(masses, coords, is_linear=False):
         List of atomic masses (in amu) for N atoms.
     coords : np.ndarray
         (N x 3) array of Cartesian coordinates.
-    is_linear : bool
+    is_linear : bool, optional
         If True, the molecule is assumed linear (removes 3 translations and 2 rotations);
-        otherwise, it removes 3 translations and 3 rotations.
+        otherwise, it removes 3 translations and 3 rotations, by default False
 
     Returns
     -------
     P : np.ndarray
         A (3N x 3N) projection matrix.
+
+    Notes
+    -----
+    The projection operator is used to remove the translational and rotational
+    modes from the Hessian matrix before computing vibrational frequencies.
+    For linear molecules, only 2 rotational modes are removed instead of 3.
     """
     N = len(masses)
     dim = 3 * N
@@ -199,12 +240,11 @@ def build_projection_operator(masses, coords, is_linear=False):
 
 
 def compute_vibrational_frequencies(hessian, masses, coords=None, linear=None):
-    """
-    Calculate vibrational frequencies (in cm⁻¹) from a Hessian matrix and atomic masses.
-    Optionally projects out translational and rotational modes if coordinates are provided.
+    """Calculate vibrational frequencies from a Hessian matrix.
 
-    For non-linear molecules, 3 translational and 3 rotational modes are removed.
-    For linear molecules (including diatomics), 3 translational and 2 rotational modes are removed.
+    This function computes the vibrational frequencies of a molecule from its
+    Hessian matrix and atomic masses. It can optionally project out translational
+    and rotational modes if coordinates are provided.
 
     Parameters
     ----------
@@ -212,16 +252,25 @@ def compute_vibrational_frequencies(hessian, masses, coords=None, linear=None):
         A (3N x 3N) Hessian matrix in atomic units.
     masses : array-like
         List/array of atomic masses in amu.
-    coords : np.ndarray or None
-        (N x 3) Cartesian coordinates. If provided, used to project out rotation and translation.
-    linear : bool or None
+    coords : np.ndarray or None, optional
+        (N x 3) Cartesian coordinates. If provided, used to project out rotation
+        and translation, by default None
+    linear : bool or None, optional
         If set, explicitly specifies whether the molecule is linear.
-        If None and coords is provided, linearity is determined automatically.
+        If None and coords is provided, linearity is determined automatically,
+        by default None
 
     Returns
     -------
     frequencies_cm : np.ndarray
-        Array of vibrational frequencies in cm⁻¹ (negative values indicate imaginary modes).
+        Array of vibrational frequencies in cm⁻¹ (negative values indicate
+        imaginary modes).
+
+    Notes
+    -----
+    For non-linear molecules, 3 translational and 3 rotational modes are removed.
+    For linear molecules (including diatomics), 3 translational and 2 rotational
+    modes are removed.
     """
     F, _ = compute_mass_weighted_hessian(hessian, masses)
 
@@ -258,13 +307,22 @@ def compute_vibrational_frequencies(hessian, masses, coords=None, linear=None):
 
 
 def convert_atomsdata_to_qcmolecule(atomsdata: AtomsData) -> qcel.models.Molecule:
-    """Convert an atomsdata to a qcelemental molecule.
+    """Convert an AtomsData object to a QCElemental Molecule.
 
-    Args:
-        atomsdata (AtomsData): AtomsData object
+    Parameters
+    ----------
+    atomsdata : AtomsData
+        AtomsData object containing the molecular structure
 
-    Returns:
-        qcel.models.Molecule: qcelemental molecule
+    Returns
+    -------
+    qcel.models.Molecule
+        QCElemental Molecule object
+
+    Notes
+    -----
+    This function converts atomic numbers to element symbols and
+    converts coordinates from Angstroms to Bohr units.
     """
     import numpy as np
 
@@ -275,21 +333,33 @@ def convert_atomsdata_to_qcmolecule(atomsdata: AtomsData) -> qcel.models.Molecul
     # atomsdata positions are in Angstrom. Convert to atomic unit for qcelemental.
     positions = np.array(atomsdata.positions)
 
-    geometry = np.array([
-        position * qcel.constants.conversion_factor("angstrom", "bohr") for position in positions
-    ])
+    geometry = np.array(
+        [
+            position * qcel.constants.conversion_factor("angstrom", "bohr")
+            for position in positions
+        ]
+    )
     molecule = qcel.models.Molecule(symbols=symbols, geometry=geometry.flatten())
     return molecule
 
 
 def convert_qcmolecule_to_atomsdata(molecule: qcel.models.Molecule) -> AtomsData:
-    """Convert a qcelemental molecule to an atomdata
+    """Convert a QCElemental Molecule to an AtomsData object.
 
-    Args:
-        molecule (qcel.models.Molecule): QCElemental Molecule object
+    Parameters
+    ----------
+    molecule : qcel.models.Molecule
+        QCElemental Molecule object
 
-    Returns:
-        AtomsData: AtomsData object
+    Returns
+    -------
+    AtomsData
+        AtomsData object
+
+    Notes
+    -----
+    This function converts element symbols to atomic numbers and
+    converts coordinates from Bohr to Angstrom units.
     """
     symbols = molecule.symbols
     geometry = molecule.geometry * qcel.constants.conversion_factor("bohr", "angstrom")
@@ -302,17 +372,38 @@ def convert_qcmolecule_to_atomsdata(molecule: qcel.models.Molecule) -> AtomsData
 
 
 def run_qcengine_multi_framework(state: MultiAgentState):
-    """Runs a QCEngine calculation within a multi-agent framework.
+    """Run a QCEngine calculation within a multi-agent framework.
 
-    Args:
-        state (MultiAgentState): The current state of the multi-agent system,
-            which includes the necessary inputs for the QCEngine calculation.
+    This function executes a quantum chemistry calculation using QCEngine
+    with parameters from the multi-agent state. It supports various quantum
+    chemistry programs and calculation types.
 
-    Raises:
-        ValueError: _description_
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state of the multi-agent system containing calculation
+        parameters
 
-    Returns:
-        _type_: _description_
+    Returns
+    -------
+    dict
+        Dictionary containing the calculation results in a format suitable for
+        the multi-agent system
+
+    Raises
+    ------
+    ValueError
+        If the calculator type is not supported
+    Exception
+        If the calculation fails or encounters an error
+
+    Notes
+    -----
+    This function supports:
+    - Single-point calculations (energy, gradient, hessian)
+    - Geometry optimization
+    - Vibrational frequency calculations
+    - Thermochemistry calculations
     """
     parameters = state["parameter_response"][-1]
     params = json.loads(parameters.content)
@@ -329,11 +420,11 @@ def run_qcengine_multi_framework(state: MultiAgentState):
     if calc_type == "psi4":
         from comp_chem_agent.models.calculators.psi4_calc import Psi4Calc
 
-        calc = Psi4Calc(**params['calculator'])
+        calc = Psi4Calc(**params["calculator"])
     elif calc_type == "mopac":
         from comp_chem_agent.models.calculators.mopac_calc import MopacCalc
 
-        calc = MopacCalc(**params['calculator'])
+        calc = MopacCalc(**params["calculator"])
     else:
         raise ValueError(
             f"Unsupported calculator: {calculator}. Available calculators are Psi4 and MOPAC."
@@ -342,39 +433,48 @@ def run_qcengine_multi_framework(state: MultiAgentState):
     # Sort values to follow QCEngine's AtomicInput format
     calc_params = calc.model_dump()
     for item in list(calc_params):
-        if item in ['method', 'basis']:
+        if item in ["method", "basis"]:
             model[item] = calc_params[item]
-        elif item == 'calculator_type':
+        elif item == "calculator_type":
             continue
         else:
             keywords[item] = calc_params[item]
 
-    atomsdata = AtomsData(**params['atomsdata'])
+    atomsdata = AtomsData(**params["atomsdata"])
     qc_params["molecule"] = convert_atomsdata_to_qcmolecule(atomsdata)
     qc_params["model"] = model
     qc_params["keywords"] = keywords
     qc_params["driver"] = params["driver"]
 
-    if params["driver"] in ['energy', 'gradient', 'hessian']:  # Single-point calculations
+    if params["driver"] in [
+        "energy",
+        "gradient",
+        "hessian",
+    ]:  # Single-point calculations
         inp = qcel.models.AtomicInput(**qc_params)
         try:
             logger.info("Starting QCEngine calculation")
             result = qcengine.compute(inp, params["program"])
             # Handling vibrational frequency calculations
-            if qc_params['driver'] == 'hessian':
+            if qc_params["driver"] == "hessian":
                 from ase.data import atomic_masses
 
                 masses = [atomic_masses[num] for num in params["atomsdata"]["numbers"]]
                 print(result.dict())
                 coords = result.molecule.geometry
                 hessian = result.return_result
-                print("INPUT VALUES FOR VIBRATIONAL FREQUENCIES: ", masses, coords, hessian)
+                print(
+                    "INPUT VALUES FOR VIBRATIONAL FREQUENCIES: ",
+                    masses,
+                    coords,
+                    hessian,
+                )
                 frequencies = compute_vibrational_frequencies(hessian, masses, coords)
                 print("FREQUENCIES: ", frequencies)
 
             result = result.dict()
-            if 'stdout' in result:
-                result.pop('stdout')
+            if "stdout" in result:
+                result.pop("stdout")
             output = []
 
             # Numpy encoder. Ensure the final results can be stored in LLM messages.
@@ -386,7 +486,11 @@ def run_qcengine_multi_framework(state: MultiAgentState):
                         return obj.item()  # Convert NumPy scalar to Python scalar
                     return super().default(obj)
 
-            output.append(HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder)))
+            output.append(
+                HumanMessage(
+                    role="system", content=json.dumps(result, cls=NumpyEncoder)
+                )
+            )
             logger.info("QCEngine calculation completed successfully")
             return {"opt_response": output}
         except Exception as e:
@@ -398,23 +502,24 @@ def run_qcengine_multi_framework(state: MultiAgentState):
         from qcelemental.models.procedures import QCInputSpecification
 
         input_spec = QCInputSpecification(driver="gradient", model=model)
-        """
         opt_input = OptimizationInput(
             initial_molecule=convert_atomsdata_to_qcmolecule(atomsdata),
             input_specification=input_spec,
             protocols={"trajectory": "all"},
             keywords={"program": params["program"], "maxsteps": 100},
         )
-        """
+
         opt_input = {
             "initial_molecule": convert_atomsdata_to_qcmolecule(atomsdata),
             "input_specification": input_spec,
             "protocols": {"trajectory": "all"},
             "keywords": {"program": params["program"], "maxsteps": 100},
         }
-        opt_output = qcengine.compute_procedure(opt_input, "geometric", raise_error=True)
+        opt_output = qcengine.compute_procedure(
+            opt_input, "geometric", raise_error=True
+        )
 
-        if params["driver"] == 'vib':
+        if params["driver"] == "vib":
             hess_inp = qcel.models.AtomicInput(
                 molecule=opt_output.final_molecule,
                 driver="hessian",
@@ -429,7 +534,9 @@ def run_qcengine_multi_framework(state: MultiAgentState):
             )
             output_params = {
                 "converged": hess_output.success,
-                "final_structure": convert_qcmolecule_to_atomsdata(opt_output.final_molecule),
+                "final_structure": convert_qcmolecule_to_atomsdata(
+                    opt_output.final_molecule
+                ),
                 "simulation_input": opt_input,
                 "frequencies": list(frequencies_in_cm),
             }
