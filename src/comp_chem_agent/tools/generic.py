@@ -7,12 +7,29 @@ from langchain_experimental.utilities import PythonREPL
 
 @tool
 def calculator(expression: str) -> str:
-    """Evaluate mathematical expressions safely. Use this function whenever mathematical calculations are required.
-    Args:
-        expression: Mathematical expression (e.g., "2 * pi + 5")
+    """Evaluate mathematical expressions safely.
 
-    Returns:
+    This function provides a safe way to evaluate mathematical expressions
+    using numexpr. It supports basic mathematical operations and common
+    mathematical functions.
+
+    Parameters
+    ----------
+    expression : str
+        Mathematical expression to evaluate (e.g., "2 * pi + 5")
+
+    Returns
+    -------
+    str
         String result or error message
+
+    Notes
+    -----
+    Supported mathematical functions:
+    - Basic operations: +, -, *, /, **
+    - Trigonometric: sin, cos, tan
+    - Other: sqrt, abs
+    - Constants: pi, e
     """
     local_dict = {
         "pi": math.pi,

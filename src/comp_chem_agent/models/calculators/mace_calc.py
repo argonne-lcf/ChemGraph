@@ -16,6 +16,35 @@ os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
 
 
 class MaceCalc(BaseModel):
+    """MACE (Message-passing Atomic and Continuous Environment) calculator configuration.
+
+    This class defines the configuration parameters for MACE machine learning models
+    used in molecular simulations. It supports different calculator types including
+    MACE-MP, MACE-OFF, and MACE-ANI-CC.
+
+    Parameters
+    ----------
+    calculator_type : str, optional
+        Type of calculator to use. Options: 'mace_mp' (default), 'mace_off', or 'mace_anicc'
+    model : str or Path, optional
+        Path to the model file. If None, uses default model for selected calculator type
+    device : str, optional
+        Device to use for calculations ('cpu' or 'cuda'), by default 'cuda' if available
+    default_dtype : str, optional
+        Default data type for the model ('float32' or 'float64'), by default 'float64'
+    dispersion : bool, optional
+        Whether to use D3 dispersion corrections (only for 'mace_mp'), by default False
+    damping : str, optional
+        Damping function for dispersion correction (only for 'mace_mp'),
+        options: ['zero', 'bj', 'zerom', 'bjm'], by default 'bj'
+    dispersion_xc : str, optional
+        Exchange-correlation functional for D3 dispersion corrections (only for 'mace_mp'),
+        by default 'pbe'
+    dispersion_cutoff : float, optional
+        Cutoff radius in Bohr for D3 dispersion corrections (only for 'mace_mp'),
+        by default 21.167088422553647 (40.0 * units.Bohr)
+    """
+
     calculator_type: str = Field(
         default="mace_mp",
         description="Type of calculator. Options: 'mace_mp' (default) or 'mace_off'.",
@@ -50,7 +79,18 @@ class MaceCalc(BaseModel):
     )
 
     def get_calculator(self):
-        """Returns the appropriate MACECalculator based on the selected calculator type."""
+        """Get the appropriate MACECalculator instance based on the selected calculator type.
+
+        Returns
+        -------
+        MACECalculator
+            An instance of the appropriate MACE calculator
+
+        Raises
+        ------
+        ValueError
+            If an invalid calculator_type is specified
+        """
         if self.calculator_type == "mace_mp":
             from mace.calculators import mace_mp
 

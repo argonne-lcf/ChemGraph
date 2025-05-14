@@ -14,13 +14,22 @@ from comp_chem_agent.state.state import MultiAgentState
 
 @tool
 def molecule_name_to_smiles(name: str) -> str:
-    """Convert a molecule name SMILES format.
+    """Convert a molecule name to SMILES format.
 
-    Args:
-        name (str): molecule name.
+    Parameters
+    ----------
+    name : str
+        The name of the molecule to convert.
 
-    Returns:
-        str: SMILES string.
+    Returns
+    -------
+    str
+        The SMILES string representation of the molecule.
+
+    Raises
+    ------
+    IndexError
+        If the molecule name is not found in PubChem.
     """
     return pubchempy.get_compounds(str(name), "name")[0].canonical_smiles
 
@@ -29,11 +38,22 @@ def molecule_name_to_smiles(name: str) -> str:
 def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025) -> AtomsData:
     """Convert a SMILES string to AtomsData format.
 
-    Args:
-        smiles (str): SMILES string.
-        randomSeed (int, optional): random seed for RDKit. Defaults to 2025.
-    Returns:
-        AtomsData: AtomsData object.
+    Parameters
+    ----------
+    smiles : str
+        SMILES string representation of the molecule.
+    randomSeed : int, optional
+        Random seed for RDKit 3D structure generation, by default 2025.
+
+    Returns
+    -------
+    AtomsData
+        AtomsData object containing the molecular structure.
+
+    Raises
+    ------
+    ValueError
+        If the SMILES string is invalid or if 3D structure generation fails.
     """
     from rdkit import Chem
     from rdkit.Chem import AllChem
@@ -66,18 +86,24 @@ def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025) -> AtomsData:
 
 @tool
 def file_to_atomsdata(fname: str) -> AtomsData:
-    """
-    Convert a structure file to AtomsData format using ASE.
+    """Convert a structure file to AtomsData format using ASE.
 
-    Args:
-        fname: Path to the input structure file (supports various formats like xyz, pdb, cif, etc.)
+    Parameters
+    ----------
+    fname : str
+        Path to the input structure file (supports various formats like xyz, pdb, cif, etc.)
 
-    Returns:
-        AtomsData: Object containing the atomic structure information
+    Returns
+    -------
+    AtomsData
+        Object containing the atomic structure information
 
-    Raises:
-        FileNotFoundError: If the input file doesn't exist
-        ValueError: If the file format is not supported or file is corrupted
+    Raises
+    ------
+    FileNotFoundError
+        If the input file doesn't exist
+    ValueError
+        If the file format is not supported or file is corrupted
     """
     from ase.io import read
 
@@ -99,12 +125,24 @@ def file_to_atomsdata(fname: str) -> AtomsData:
 
 @tool
 def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> str:
-    """
-    Save an AtomsData object to a file using ASE.
+    """Save an AtomsData object to a file using ASE.
 
-    Args:
-        atomsdata: AtomsData object to save
-        fname: Path to the output file. Default to output.xyz
+    Parameters
+    ----------
+    atomsdata : AtomsData
+        AtomsData object to save
+    fname : str, optional
+        Path to the output file, by default "output.xyz"
+
+    Returns
+    -------
+    str
+        Success message or error message
+
+    Raises
+    ------
+    ValueError
+        If saving the file fails
     """
     from ase.io import write
     from ase import Atoms
@@ -120,18 +158,21 @@ def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> s
         return f"Successfully saved atomsdata to {fname}"
     except Exception as e:
         raise ValueError(f"Failed to save atomsdata to file: {str(e)}")
-        return f"ERROR - {str(e)}"
 
 
 @tool
 def get_symmetry_number(atomsdata: AtomsData) -> int:
     """Get the rotational symmetry number of a molecule using Pymatgen.
 
-    Args:
-        atomsdata (AtomsData): an AtomsData object.
+    Parameters
+    ----------
+    atomsdata : AtomsData
+        AtomsData object containing the molecular structure
 
-    Returns:
-        int: rotational symmetry number.
+    Returns
+    -------
+    int
+        Rotational symmetry number of the molecule
     """
     from pymatgen.symmetry.analyzer import PointGroupAnalyzer
     from ase import Atoms
@@ -156,12 +197,17 @@ def get_symmetry_number(atomsdata: AtomsData) -> int:
 def is_linear_molecule(atomsdata: AtomsData, tol=1e-3) -> bool:
     """Determine if a molecule is linear or not.
 
-    Args:
-        atomsdata (AtomsData): AtomsData object
-        tol (float, optional): Tolerance to check for linear molecule. Defaults to 1e-3.
+    Parameters
+    ----------
+    atomsdata : AtomsData
+        AtomsData object containing the molecular structure
+    tol : float, optional
+        Tolerance to check for linear molecule, by default 1e-3
 
-    Returns:
-        bool: True if the molecule is linear, False otherwise.
+    Returns
+    -------
+    bool
+        True if the molecule is linear, False otherwise
     """
     coords = np.array(atomsdata.positions)
     # Center the coordinates.
@@ -175,6 +221,23 @@ def is_linear_molecule(atomsdata: AtomsData, tol=1e-3) -> bool:
 
 
 def load_calculator(calculator: dict):
+    """Load an ASE calculator based on the provided configuration.
+
+    Parameters
+    ----------
+    calculator : dict
+        Dictionary containing calculator configuration parameters
+
+    Returns
+    -------
+    object
+        ASE calculator instance
+
+    Raises
+    ------
+    ValueError
+        If the calculator type is not supported
+    """
     calc_type = calculator["calculator_type"].lower()
 
     if "mace" in calc_type:
@@ -210,16 +273,25 @@ def load_calculator(calculator: dict):
 def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     """Run ASE calculations using specified input parameters.
 
-    Args:
-        params (ASEInputSchema): ASEInputSchema object.
-    Returns:
-        ASEOutputSchema: ASEOutputSchema object.
-    """
+    Parameters
+    ----------
+    params : ASEInputSchema
+        Input parameters for the ASE calculation
 
+    Returns
+    -------
+    ASEOutputSchema
+        Output containing calculation results and status
+
+    Raises
+    ------
+    ValueError
+        If the calculator is not supported or if the calculation fails
+    """
     try:
         calculator = params.calculator.model_dump()
     except Exception as e:
-        return "Missing calculator parameter for the simulation."
+        return f"Missing calculator parameter for the simulation. Raised exception: {str(e)}"
 
     atomsdata = params.atomsdata
     optimizer = params.optimizer
@@ -253,7 +325,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     )
     atoms.calc = calc
 
-    if driver == 'energy':
+    if driver == "energy":
         energy = atoms.get_potential_energy()
         simulation_output = ASEOutputSchema(
             converged=True,
@@ -297,48 +369,50 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             from ase.vibrations import Vibrations
             from ase import units
 
-            vib_data['energies'] = []
-            vib_data['energy_unit'] = 'meV'
+            vib_data["energies"] = []
+            vib_data["energy_unit"] = "meV"
 
-            vib_data['frequencies'] = []
-            vib_data['frequency_unit'] = 'cm-1'
+            vib_data["frequencies"] = []
+            vib_data["frequency_unit"] = "cm-1"
 
             vib = Vibrations(atoms)
             vib.clean()
             vib.run()
 
             energies = vib.get_energies()
-            linear = is_linear_molecule.invoke({'atomsdata': final_structure})
+            linear = is_linear_molecule.invoke({"atomsdata": final_structure})
 
             for idx, e in enumerate(energies):
                 if abs(e.imag) > 1e-8:
-                    c = 'i'
+                    c = "i"
                     e_val = e.imag
                 else:
-                    c = ''
+                    c = ""
                     e_val = e.real
 
                 energy_meV = 1e3 * e_val
                 freq_cm1 = e_val / units.invcm
 
-                vib_data['energies'].append(f"{energy_meV}{c}")
-                vib_data['frequencies'].append(f"{freq_cm1}{c}")
+                vib_data["energies"].append(f"{energy_meV}{c}")
+                vib_data["frequencies"].append(f"{freq_cm1}{c}")
 
             if driver == "thermo":
                 # Approximation for system with a single atom.
                 if len(atoms) == 1:
-                    thermo_data['enthalpy'] = atoms.get_potential_energy()
-                    thermo_data['entropy'] = 0
-                    thermo_data['gibbs_free_energy'] = atoms.get_potential_energy()
-                    thermo_data['unit'] = 'eV'
+                    thermo_data["enthalpy"] = atoms.get_potential_energy()
+                    thermo_data["entropy"] = 0
+                    thermo_data["gibbs_free_energy"] = atoms.get_potential_energy()
+                    thermo_data["unit"] = "eV"
                 else:
                     from ase.thermochemistry import IdealGasThermo
 
                     potentialenergy = atoms.get_potential_energy()
                     vib_energies = vib.get_energies()
 
-                    linear = is_linear_molecule.invoke({'atomsdata': final_structure})
-                    symmetrynumber = get_symmetry_number.invoke({'atomsdata': final_structure})
+                    linear = is_linear_molecule.invoke({"atomsdata": final_structure})
+                    symmetrynumber = get_symmetry_number.invoke(
+                        {"atomsdata": final_structure}
+                    )
 
                     if linear:
                         geometry = "linear"
@@ -353,14 +427,16 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                         spin=0,  # Only support spin=0
                     )
 
-                    thermo_data['enthalpy'] = thermo.get_enthalpy(temperature=temperature)
-                    thermo_data['entropy'] = thermo.get_entropy(
+                    thermo_data["enthalpy"] = thermo.get_enthalpy(
+                        temperature=temperature
+                    )
+                    thermo_data["entropy"] = thermo.get_entropy(
                         temperature=temperature, pressure=pressure
                     )
-                    thermo_data['gibbs_free_energy'] = thermo.get_gibbs_energy(
+                    thermo_data["gibbs_free_energy"] = thermo.get_gibbs_energy(
                         temperature=temperature, pressure=pressure
                     )
-                    thermo_data['unit'] = 'eV'
+                    thermo_data["unit"] = "eV"
 
         simulation_output = ASEOutputSchema(
             converged=converged,
@@ -384,6 +460,23 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
 
 def run_ase_with_state(state: MultiAgentState):
+    """Run ASE calculations using parameters from the multi-agent state.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state of the multi-agent system containing calculation parameters
+
+    Returns
+    -------
+    dict
+        Dictionary containing the calculation results or error message
+
+    Raises
+    ------
+    ValueError
+        If the calculator is not supported or if the calculation fails
+    """
     # Get parameters to run ASE from state
     parameters = state["parameter_response"][-1]
     params = json.loads(parameters.content)
@@ -463,11 +556,11 @@ def run_ase_with_state(state: MultiAgentState):
             from ase import units
 
             vib_data = {}
-            vib_data['energies'] = []
-            vib_data['energy_unit'] = 'meV'
+            vib_data["energies"] = []
+            vib_data["energy_unit"] = "meV"
 
-            vib_data['frequencies'] = []
-            vib_data['frequency_unit'] = 'cm-1'
+            vib_data["frequencies"] = []
+            vib_data["frequency_unit"] = "cm-1"
 
             vib = Vibrations(atoms)
             vib.clean()
@@ -476,13 +569,13 @@ def run_ase_with_state(state: MultiAgentState):
             energies = vib.get_energies()
             for idx, e in enumerate(energies):
                 if abs(e.imag) > 1e-8:
-                    c = 'i'
+                    c = "i"
                     e = e.imag
                 else:
-                    c = ''
+                    c = ""
                     e = e.real
-                vib_data['energies'].append(str(1e3 * e) + c)
-                vib_data['frequencies'].append(str(e / units.invcm) + c)
+                vib_data["energies"].append(str(1e3 * e) + c)
+                vib_data["frequencies"].append(str(e / units.invcm) + c)
 
             if driver == "thermo":
                 from ase.thermochemistry import IdealGasThermo
@@ -490,8 +583,10 @@ def run_ase_with_state(state: MultiAgentState):
                 potentialenergy = atoms.get_potential_energy()
                 vib_energies = vib.get_energies()
 
-                linear = is_linear_molecule.invoke({'atomsdata': final_structure})
-                symmetrynumber = get_symmetry_number.invoke({'atomsdata': final_structure})
+                linear = is_linear_molecule.invoke({"atomsdata": final_structure})
+                symmetrynumber = get_symmetry_number.invoke(
+                    {"atomsdata": final_structure}
+                )
 
                 if linear:
                     geometry = "linear"
@@ -506,14 +601,14 @@ def run_ase_with_state(state: MultiAgentState):
                     spin=0,  # Only support spin=0
                 )
 
-                thermo_data['enthalpy'] = thermo.get_enthalpy(temperature=temperature)
-                thermo_data['entropy'] = thermo.get_entropy(
+                thermo_data["enthalpy"] = thermo.get_enthalpy(temperature=temperature)
+                thermo_data["entropy"] = thermo.get_entropy(
                     temperature=temperature, pressure=pressure
                 )
-                thermo_data['gibbs_free_energy'] = thermo.get_gibbs_energy(
+                thermo_data["gibbs_free_energy"] = thermo.get_gibbs_energy(
                     temperature=temperature, pressure=pressure
                 )
-                thermo_data['unit'] = 'eV'
+                thermo_data["unit"] = "eV"
 
         simulation_output = ASEOutputSchema(
             converged=converged,
@@ -523,7 +618,9 @@ def run_ase_with_state(state: MultiAgentState):
             thermochemistry=thermo_data,
         )
         output = []
-        output.append(HumanMessage(role="system", content=simulation_output.model_dump_json()))
+        output.append(
+            HumanMessage(role="system", content=simulation_output.model_dump_json())
+        )
         return {"opt_response": output}
 
     except Exception as e:

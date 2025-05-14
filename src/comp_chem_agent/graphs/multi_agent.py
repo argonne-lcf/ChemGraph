@@ -34,7 +34,20 @@ logger = logging.getLogger(__name__)
 
 
 def first_router_agent(state: MultiAgentState, llm):
-    """An LLM router node that decides the workflow based on user's query."""
+    """An LLM router node that decides the workflow based on user's query.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing the user's question
+    llm : ChatOpenAI
+        The language model to use for routing
+
+    Returns
+    -------
+    dict
+        Updated state containing the router's response
+    """
     prompt = first_router_prompt
     messages = [
         {"role": "system", "content": prompt},
@@ -46,7 +59,24 @@ def first_router_agent(state: MultiAgentState, llm):
 
 
 def route_first_router(state: MultiAgentState) -> str:
-    """Extract next_agent from first_router_response."""
+    """Extract next_agent from first_router_response.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing the router's response
+
+    Returns
+    -------
+    str
+        The name of the next agent to route to
+
+    Raises
+    ------
+    ValueError
+        If no messages are found in the input state
+        If there is an error decoding the JSON content
+    """
     if isinstance(state, list):
         ai_message = state[-1]
     elif messages := state.get("first_router_response", []):
@@ -63,7 +93,20 @@ def route_first_router(state: MultiAgentState) -> str:
 
 
 def regular_agent(state: MultiAgentState, llm):
-    """A LLM agent that handles general queries."""
+    """A LLM agent that handles general queries.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing the user's question
+    llm : ChatOpenAI
+        The language model to use for processing
+
+    Returns
+    -------
+    dict
+        Updated state containing the agent's response
+    """
     prompt = regular_prompt
     messages = [
         {"role": "system", "content": prompt},
@@ -74,7 +117,20 @@ def regular_agent(state: MultiAgentState, llm):
 
 
 def geometry_agent(state: MultiAgentState, llm):
-    """An LLM node that generates initial molecular structure"""
+    """An LLM node that generates initial molecular structure.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing geometry-related information
+    llm : ChatOpenAI
+        The language model to use for structure generation
+
+    Returns
+    -------
+    dict
+        Updated state containing the generated geometry response
+    """
     prompt = geometry_input_prompt
     messages = [
         {"role": "system", "content": prompt},
@@ -87,16 +143,32 @@ def geometry_agent(state: MultiAgentState, llm):
 
 
 def route_tools_geometry(state: MultiAgentState) -> str:
-    """Route tools for geometry agents"""
-    # Get the last AI message from either list or dict state
+    """Route tools for geometry agents.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing geometry-related information
+
+    Returns
+    -------
+    str
+        Either 'tools' or the next agent based on the state
+
+    Raises
+    ------
+    ValueError
+        If no messages are found in the input state
+    """
     if isinstance(state, list):
         ai_message = state[-1]
     elif messages := state.get("geometry_response", []):
         ai_message = messages[-1]
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
-    # Check if there are tool calls to process
-    has_tool_calls = hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0
+    has_tool_calls = (
+        hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0
+    )
     if has_tool_calls:
         return "tools"
     else:
@@ -104,12 +176,40 @@ def route_tools_geometry(state: MultiAgentState) -> str:
 
 
 class GeometryTool:
-    """A node that runs the tools requested in the last AIMessage."""
+    """A node that executes tools requested in the last AIMessage for geometry operations.
+
+    Parameters
+    ----------
+    tools : list
+        List of tool objects that can be called by the node
+
+    Attributes
+    ----------
+    tools_by_name : dict
+        Dictionary mapping tool names to their corresponding tool objects
+    """
 
     def __init__(self, tools: list) -> None:
         self.tools_by_name = {tool.name: tool for tool in tools}
 
     def __call__(self, inputs: MultiAgentState) -> MultiAgentState:
+        """Execute tools requested in the last message.
+
+        Parameters
+        ----------
+        inputs : MultiAgentState
+            The current state containing messages
+
+        Returns
+        -------
+        MultiAgentState
+            Updated state containing tool execution results
+
+        Raises
+        ------
+        ValueError
+            If no message is found in the input state
+        """
         if messages := inputs.get("geometry_response", []):
             message = messages[-1]
         else:
@@ -126,7 +226,11 @@ class GeometryTool:
                 result_content = (
                     tool_result.model_dump()
                     if hasattr(tool_result, "dict")
-                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
+                    else (
+                        tool_result
+                        if isinstance(tool_result, dict)
+                        else str(tool_result)
+                    )
                 )
                 outputs.append(
                     ToolMessage(
@@ -147,6 +251,20 @@ class GeometryTool:
 
 
 def ase_parameter_agent(state: MultiAgentState, llm: ChatOpenAI):
+    """An LLM agent that generates ASE parameters based on geometry and feedback.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing geometry and feedback information
+    llm : ChatOpenAI
+        The language model to use for parameter generation
+
+    Returns
+    -------
+    dict
+        Updated state containing the generated parameters
+    """
     if len(state["feedback_response"]) == 0:
         feedback = []
     else:
@@ -167,6 +285,20 @@ def ase_parameter_agent(state: MultiAgentState, llm: ChatOpenAI):
 
 
 def qcengine_parameter_agent(state: MultiAgentState, llm: ChatOpenAI):
+    """An LLM agent that generates QCEngine parameters based on geometry and feedback.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing geometry and feedback information
+    llm : ChatOpenAI
+        The language model to use for parameter generation
+
+    Returns
+    -------
+    dict
+        Updated state containing the generated parameters
+    """
     if len(state["feedback_response"]) == 0:
         feedback = []
     else:
@@ -188,6 +320,20 @@ def qcengine_parameter_agent(state: MultiAgentState, llm: ChatOpenAI):
 
 
 def ase_feedback_agent(state: MultiAgentState, llm):
+    """An LLM agent that generates feedback based on ASE optimization results.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing ASE optimization results
+    llm : ChatOpenAI
+        The language model to use for feedback generation
+
+    Returns
+    -------
+    dict
+        Updated state containing the feedback response
+    """
     prompt = ase_feedback_prompt.format(aseoutput=state["opt_response"][-1].content)
     messages = [
         {"role": "system", "content": prompt},
@@ -198,7 +344,23 @@ def ase_feedback_agent(state: MultiAgentState, llm):
 
 
 def qcengine_feedback_agent(state: MultiAgentState, llm):
-    prompt = qcengine_feedback_prompt.format(qcengine_output=state["opt_response"][-1].content)
+    """An LLM agent that generates feedback based on QCEngine results.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing QCEngine results
+    llm : ChatOpenAI
+        The language model to use for feedback generation
+
+    Returns
+    -------
+    dict
+        Updated state containing the feedback response
+    """
+    prompt = qcengine_feedback_prompt.format(
+        qcengine_output=state["opt_response"][-1].content
+    )
     messages = [
         {"role": "system", "content": prompt},
     ]
@@ -208,7 +370,24 @@ def qcengine_feedback_agent(state: MultiAgentState, llm):
 
 
 def route_feedback(state: MultiAgentState) -> str:
-    """Extract next_agent from first_router_response."""
+    """Extract next_agent from feedback response.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing feedback information
+
+    Returns
+    -------
+    str
+        The name of the next agent to route to
+
+    Raises
+    ------
+    ValueError
+        If no messages are found in the input state
+        If there is an error decoding the JSON content
+    """
     if isinstance(state, list):
         ai_message = state[-1]
     elif messages := state.get("feedback_response", []):
@@ -225,6 +404,20 @@ def route_feedback(state: MultiAgentState) -> str:
 
 
 def end_agent(state: MultiAgentState, llm):
+    """An LLM agent that generates the final response.
+
+    Parameters
+    ----------
+    state : MultiAgentState
+        The current state containing optimization results and feedback
+    llm : ChatOpenAI
+        The language model to use for final response generation
+
+    Returns
+    -------
+    dict
+        Updated state containing the final response
+    """
     prompt = end_prompt.format(
         output=state["opt_response"][-1].content,
         feedback=state["feedback_response"][-1].content,
@@ -238,6 +431,21 @@ def end_agent(state: MultiAgentState, llm):
 
 
 def construct_multi_framework_graph(llm: ChatOpenAI):
+    """Construct a graph for multi-framework computational chemistry workflow.
+
+    This function creates a state graph that implements a workflow for computational
+    chemistry tasks using multiple frameworks (ASE and QCEngine).
+
+    Parameters
+    ----------
+    llm : ChatOpenAI
+        The language model to use in the workflow
+
+    Returns
+    -------
+    StateGraph
+        A compiled state graph implementing the multi-framework workflow
+    """
     checkpointer = MemorySaver()
     # Nodes
     graph_builder = StateGraph(MultiAgentState)
@@ -247,18 +455,26 @@ def construct_multi_framework_graph(llm: ChatOpenAI):
     graph_builder.add_node("GeometryAgent", lambda state: geometry_agent(state, llm))
     graph_builder.add_node(
         "GeometryTool",
-        GeometryTool(tools=[molecule_name_to_smiles, smiles_to_atomsdata, file_to_atomsdata]),
+        GeometryTool(
+            tools=[molecule_name_to_smiles, smiles_to_atomsdata, file_to_atomsdata]
+        ),
     )
 
-    graph_builder.add_node("ASEParameterAgent", lambda state: ase_parameter_agent(state, llm))
+    graph_builder.add_node(
+        "ASEParameterAgent", lambda state: ase_parameter_agent(state, llm)
+    )
     graph_builder.add_node(
         "QCEngineParameterAgent", lambda state: qcengine_parameter_agent(state, llm)
     )
 
-    graph_builder.add_node("RunQCEngine", lambda state: run_qcengine_multi_framework(state))
+    graph_builder.add_node(
+        "RunQCEngine", lambda state: run_qcengine_multi_framework(state)
+    )
     graph_builder.add_node("RunASE", lambda state: run_ase_with_state(state))
 
-    graph_builder.add_node("ASEFeedbackAgent", lambda state: ase_feedback_agent(state, llm))
+    graph_builder.add_node(
+        "ASEFeedbackAgent", lambda state: ase_feedback_agent(state, llm)
+    )
     graph_builder.add_node(
         "QCEngineFeedbackAgent", lambda state: qcengine_feedback_agent(state, llm)
     )

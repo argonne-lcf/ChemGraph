@@ -13,6 +13,42 @@ except ImportError:
 
 
 class TBLiteCalc(BaseModel):
+    """TBLite tight-binding calculator configuration.
+
+    This class defines the configuration parameters for TBLite tight-binding
+    calculations. It supports various tight-binding methods and parameters for
+    electronic structure calculations.
+
+    Parameters
+    ----------
+    calculator_type : str, optional
+        Calculator type for XTB methods. Only supports TBLite, by default 'TBLite'
+    method : str, optional
+        Underlying method for energy and forces, by default 'GFN2-xTB'
+    charge : float, optional
+        Total charge of the system, by default None
+    multiplicity : int, optional
+        Total multiplicity of the system, by default None
+    accuracy : float, optional
+        Numerical accuracy of the calculation, by default 1.0
+    electronic_temperature : float, optional
+        Electronic temperature in Kelvin, by default 300.0
+    max_iterations : int, optional
+        Iterations for self-consistent evaluation, by default 250
+    initial_guess : str, optional
+        Initial guess for wavefunction ('sad' or 'eeq'), by default 'sad'
+    mixer_damping : float, optional
+        Damping parameter for self-consistent mixer, by default 0.4
+    electric_field : list of float, optional
+        Uniform electric field vector (in V/A), by default None
+    spin_polarization : float, optional
+        Spin polarization (scaling factor), by default None
+    cache_api : bool, optional
+        Reuse generated API objects (recommended), by default True
+    verbosity : int, optional
+        Set verbosity of printout, by default 0
+    """
+
     calculator_type: str = Field(
         default="TBLite",
         description="Calculator type for XTB methods. Only supports TBLite",
@@ -25,7 +61,9 @@ class TBLiteCalc(BaseModel):
     multiplicity: Optional[int] = Field(
         default=None, description="Total multiplicity of the system"
     )
-    accuracy: float = Field(default=1.0, description="Numerical accuracy of the calculation")
+    accuracy: float = Field(
+        default=1.0, description="Numerical accuracy of the calculation"
+    )
     electronic_temperature: float = Field(
         default=300.0, description="Electronic temperature in Kelvin"
     )
@@ -44,11 +82,20 @@ class TBLiteCalc(BaseModel):
     spin_polarization: Optional[float] = Field(
         default=None, description="Spin polarization (scaling factor)"
     )
-    cache_api: bool = Field(default=True, description="Reuse generated API objects (recommended)")
+    cache_api: bool = Field(
+        default=True, description="Reuse generated API objects (recommended)"
+    )
     verbosity: int = Field(default=0, description="Set verbosity of printout")
 
     def get_calculator(self):
-        """Returns an ASE-compatible TBLite calculator instance."""
+        """Get an ASE-compatible TBLite calculator instance.
+
+        Returns
+        -------
+        TBLite
+            An ASE-compatible TBLite calculator instance with the specified
+            configuration parameters
+        """
         return TBLite(
             method=self.method,
             charge=self.charge,

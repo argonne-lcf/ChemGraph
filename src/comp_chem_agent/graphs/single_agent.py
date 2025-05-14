@@ -12,7 +12,10 @@ from comp_chem_agent.tools.ASE_tools import (
 )
 from comp_chem_agent.tools.generic import calculator
 from comp_chem_agent.models.agent_response import ResponseFormatter
-from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
+from comp_chem_agent.prompt.single_agent_prompt import (
+    single_agent_prompt,
+    formatter_prompt,
+)
 from comp_chem_agent.utils.logging_config import setup_logger
 from comp_chem_agent.state.state import State
 
@@ -20,7 +23,21 @@ logger = setup_logger(__name__)
 
 
 class BasicToolNode:
-    """A node that runs the tools requested in the last AIMessage."""
+    """A node that executes tools requested in the last AIMessage.
+
+    This class processes tool calls from AI messages and executes the corresponding
+    tools, handling their results and any potential errors.
+
+    Parameters
+    ----------
+    tools : list
+        List of tool objects that can be called by the node
+
+    Attributes
+    ----------
+    tools_by_name : dict
+        Dictionary mapping tool names to their corresponding tool objects
+    """
 
     def __init__(self, tools: list) -> None:
         self.tools_by_name = {tool.name: tool for tool in tools}
@@ -38,13 +55,19 @@ class BasicToolNode:
                 if not tool_name or tool_name not in self.tools_by_name:
                     raise ValueError(f"Invalid tool name: {tool_name}")
 
-                tool_result = self.tools_by_name[tool_name].invoke(tool_call.get("args", {}))
+                tool_result = self.tools_by_name[tool_name].invoke(
+                    tool_call.get("args", {})
+                )
 
                 # Handle different types of tool results
                 result_content = (
                     tool_result.dict()
                     if hasattr(tool_result, "dict")
-                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
+                    else (
+                        tool_result
+                        if isinstance(tool_result, dict)
+                        else str(tool_result)
+                    )
                 )
 
                 outputs.append(
@@ -67,11 +90,18 @@ class BasicToolNode:
 
 
 def route_tools(state: State):
+    """Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
+
+    Parameters
+    ----------
+    state : State
+        The current state containing messages and remaining steps
+
+    Returns
+    -------
+    str
+        Either 'tools' or 'done' based on the state conditions
     """
-    Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
-    """
-    if state.get("remaining_steps") <= 2:
-        return "done"
     if isinstance(state, list):
         ai_message = state[-1]
     elif messages := state.get("messages", []):
@@ -84,7 +114,24 @@ def route_tools(state: State):
 
 
 def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
-    """LLM node that processes messages and decides next actions."""
+    """LLM node that processes messages and decides next actions.
+
+    Parameters
+    ----------
+    state : State
+        The current state containing messages and remaining steps
+    llm : ChatOpenAI
+        The language model to use for processing
+    system_prompt : str
+        The system prompt to guide the LLM's behavior
+    tools : list, optional
+        List of tools available to the agent, by default None
+
+    Returns
+    -------
+    dict
+        Updated state containing the LLM's response
+    """
     if tools is None:
         tools = [
             file_to_atomsdata,
@@ -103,7 +150,22 @@ def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None)
 
 
 def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
-    """An LLM agent responsible for formatting final message"""
+    """An LLM agent responsible for formatting final messag
+
+    Parameters
+    ----------
+    state : State
+        The current state containing messages and remaining steps
+    llm : ChatOpenAI
+        The language model to use for formatting
+    formatter_prompt : str
+        The prompt to guide the LLM's formatting behavior
+
+    Returns
+    -------
+    dict
+        Updated state containing the formatted response
+    """
 
     messages = [
         {"role": "system", "content": formatter_prompt},
@@ -121,6 +183,24 @@ def construct_geoopt_graph(
     structured_output: bool = False,
     formatter_prompt: str = formatter_prompt,
 ):
+    """Construct a geometry optimization graph.
+
+    Parameters
+    ----------
+    llm : ChatOpenAI
+        The language model to use for the graph
+    system_prompt : str, optional
+        The system prompt to guide the LLM's behavior, by default single_agent_prompt
+    structured_output : bool, optional
+        Whether to use structured output, by default False
+    formatter_prompt : str, optional
+        The prompt to guide the LLM's formatting behavior, by default formatter_prompt
+
+    Returns
+    -------
+    StateGraph
+        The constructed geometry optimization graph
+    """
     try:
         logger.info("Constructing geometry optimization graph")
         checkpointer = MemorySaver()
@@ -138,7 +218,9 @@ def construct_geoopt_graph(
         if not structured_output:
             graph_builder.add_node(
                 "CompChemAgent",
-                lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                lambda state: CompChemAgent(
+                    state, llm, system_prompt=system_prompt, tools=tools
+                ),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_conditional_edges(
@@ -154,12 +236,16 @@ def construct_geoopt_graph(
         else:
             graph_builder.add_node(
                 "CompChemAgent",
-                lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                lambda state: CompChemAgent(
+                    state, llm, system_prompt=system_prompt, tools=tools
+                ),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_node(
                 "ResponseAgent",
-                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
+                lambda state: ResponseAgent(
+                    state, llm, formatter_prompt=formatter_prompt
+                ),
             )
             graph_builder.add_conditional_edges(
                 "CompChemAgent",
