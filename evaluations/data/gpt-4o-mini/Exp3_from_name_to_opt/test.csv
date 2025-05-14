@@ -1,0 +1,31 @@
+molecule,final_result_match,positions_diff_norm,tool_names_match,tool_args_match,num_calls_match,llm_tool_calls,manual_tool_calls
+Hydrogen,True,0.0,True,False,True,3,3
+Nitrogen,True,0.0,True,False,True,3,3
+Oxygen,True,0.0,True,False,True,3,3
+Fluorine,True,0.0,True,False,True,3,3
+Chlorine,True,0.0,True,False,True,3,3
+Hydrogen chloride,True,0.0,True,False,True,3,3
+Hydrogen fluoride,True,0.0,True,False,True,3,3
+Hydrogen bromide,True,0.0,True,False,True,3,3
+Hydrogen iodide,True,0.0,True,False,True,3,3
+Carbon monoxide,True,1.8782,False,False,False,2,3
+Carbon dioxide,True,0.0,True,False,True,3,3
+Methane,True,0.0,True,False,True,3,3
+Ethane,True,0.0,True,False,True,3,3
+Ethylene,True,0.0,True,False,True,3,3
+Acetylene,True,0.0,True,False,True,3,3
+Propane,True,0.0,True,False,True,3,3
+Butane,True,0.0,True,False,True,3,3
+Isobutane,True,0.0,True,False,True,3,3
+Ammonia,True,0.0,True,False,True,3,3
+Sulfur dioxide,True,0.0,True,False,True,3,3
+Phosgene,True,0.0,True,False,True,3,3
+Dichlorine monoxide,True,0.0,True,False,True,3,3
+Nitrous oxide,True,2.5195,False,False,False,2,3
+Formaldehyde,True,0.0,True,False,True,3,3
+Acetaldehyde,True,0.0,True,False,True,3,3
+Acetone,True,0.0,True,False,True,3,3
+Methanol,True,0.0,True,False,True,3,3
+Ethanol,True,0.0,True,False,True,3,3
+Dimethyl ether,True,0.0,True,False,True,3,3
+Methylamine,True,0.0,True,False,True,3,3

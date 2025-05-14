@@ -1,0 +1,207 @@
+[
+    {
+        "index": 0,
+        "name": "Hydrogen",
+        "number_of_atoms": 2,
+        "smiles": "[H][H]"
+    },
+    {
+        "index": 1,
+        "name": "Nitrogen",
+        "number_of_atoms": 2,
+        "smiles": "N#N"
+    },
+    {
+        "index": 2,
+        "name": "Oxygen",
+        "number_of_atoms": 2,
+        "smiles": "O=O"
+    },
+    {
+        "index": 3,
+        "name": "Fluorine",
+        "number_of_atoms": 2,
+        "smiles": "F-F"
+    },
+    {
+        "index": 4,
+        "name": "Chlorine",
+        "number_of_atoms": 2,
+        "smiles": "Cl-Cl"
+    },
+    {
+        "index": 5,
+        "name": "Hydrogen chloride",
+        "number_of_atoms": 2,
+        "smiles": "Cl"
+    },
+    {
+        "index": 6,
+        "name": "Hydrogen fluoride",
+        "number_of_atoms": 2,
+        "smiles": "F"
+    },
+    {
+        "index": 7,
+        "name": "Hydrogen bromide",
+        "number_of_atoms": 2,
+        "smiles": "Br"
+    },
+    {
+        "index": 8,
+        "name": "Hydrogen iodide",
+        "number_of_atoms": 2,
+        "smiles": "I"
+    },
+    {
+        "index": 9,
+        "name": "Carbon monoxide",
+        "number_of_atoms": 2,
+        "smiles": "C#O"
+    },
+    {
+        "index": 10,
+        "name": "Carbon dioxide",
+        "number_of_atoms": 3,
+        "smiles": "O=C=O"
+    },
+    {
+        "index": 11,
+        "name": "Methane",
+        "number_of_atoms": 5,
+        "smiles": "C"
+    },
+    {
+        "index": 12,
+        "name": "Ethane",
+        "number_of_atoms": 8,
+        "smiles": "CC"
+    },
+    {
+        "index": 13,
+        "name": "Ethylene",
+        "number_of_atoms": 6,
+        "smiles": "C=C"
+    },
+    {
+        "index": 14,
+        "name": "Acetylene",
+        "number_of_atoms": 4,
+        "smiles": "C#C"
+    },
+    {
+        "index": 15,
+        "name": "Propane",
+        "number_of_atoms": 11,
+        "smiles": "CCC"
+    },
+    {
+        "index": 16,
+        "name": "Butane",
+        "number_of_atoms": 14,
+        "smiles": "CCCC"
+    },
+    {
+        "index": 17,
+        "name": "Isobutane",
+        "number_of_atoms": 14,
+        "smiles": "CC(C)C"
+    },
+    {
+        "index": 18,
+        "name": "Ammonia",
+        "number_of_atoms": 4,
+        "smiles": "N"
+    },
+    {
+        "index": 22,
+        "name": "Sulfur dioxide",
+        "number_of_atoms": 3,
+        "smiles": "O=S=O"
+    },
+    {
+        "index": 24,
+        "name": "Phosgene",
+        "number_of_atoms": 4,
+        "smiles": "ClC(=O)Cl"
+    },
+    {
+        "index": 26,
+        "name": "Dichlorine monoxide",
+        "number_of_atoms": 3,
+        "smiles": "ClOCl"
+    },
+    {
+        "index": 27,
+        "name": "Nitrous oxide",
+        "number_of_atoms": 3,
+        "smiles": "N=N=O"
+    },
+    {
+        "index": 29,
+        "name": "Formaldehyde",
+        "number_of_atoms": 4,
+        "smiles": "C=O"
+    },
+    {
+        "index": 30,
+        "name": "Acetaldehyde",
+        "number_of_atoms": 6,
+        "smiles": "CC=O"
+    },
+    {
+        "index": 31,
+        "name": "Acetone",
+        "number_of_atoms": 9,
+        "smiles": "CC(=O)C"
+    },
+    {
+        "index": 32,
+        "name": "Methanol",
+        "number_of_atoms": 6,
+        "smiles": "CO"
+    },
+    {
+        "index": 33,
+        "name": "Ethanol",
+        "number_of_atoms": 9,
+        "smiles": "CCO"
+    },
+    {
+        "index": 34,
+        "name": "Dimethyl ether",
+        "number_of_atoms": 10,
+        "smiles": "COC"
+    },
+    {
+        "index": 35,
+        "name": "Methylamine",
+        "number_of_atoms": 5,
+        "smiles": "CN"
+    },
+    {
+        "index": 36,
+        "name": "Ethylamine",
+        "number_of_atoms": 8,
+        "smiles": "CCN"
+    },
+    {
+        "index": 37,
+        "name": "Hydrazine",
+        "number_of_atoms": 4,
+        "smiles": "NN"
+    },
+    {
+        "index": 38,
+        "name": "Hydrogen peroxide",
+        "number_of_atoms": 4,
+        "smiles": "OO"
+    },
+    {
+        "index": 39,
+        "name": "Methyl isocyanate",
+        "number_of_atoms": 5,
+        "smiles": "CN=C=O"
+    }
+]
+

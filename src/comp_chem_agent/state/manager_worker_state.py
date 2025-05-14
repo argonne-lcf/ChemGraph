@@ -5,7 +5,6 @@ from langgraph.managed.is_last_step import RemainingSteps
 
 class ManagerWorkerState(TypedDict):
     messages: Annotated[list, add_messages]
-    worker_state: Annotated[list, add_messages]
     worker_result: Annotated[list, add_messages]
     current_task_index: int
     task_list: list

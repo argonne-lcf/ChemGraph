@@ -20,7 +20,7 @@ class ScalarResult(BaseModel):
 
 
 class ResponseFormatter(BaseModel):
-    """Defined structured response to the user."""
+    """Defined structured output to the user."""
 
     answer: Union[
         str,
@@ -36,6 +36,6 @@ class ResponseFormatter(BaseModel):
             "- `str` for general or explanatory responses or SMILES string.\n"
             "- `VibrationalFrequency` for vibrational frequecies.\n"
             "- `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
-            "- `AtomsData` for atomic geometries and molecular structures."
+            "- `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
         )
     )

@@ -1,0 +1,31 @@
+title "nwchem"
+
+permanent_dir /Users/tpham2/work/projects/CompChemAgent/evaluations/data/evaluations/gpt-4o-mini/Exp3_from_name_to_opt/nwchem
+
+scratch_dir /Users/tpham2/work/projects/CompChemAgent/evaluations/data/evaluations/gpt-4o-mini/Exp3_from_name_to_opt/nwchem
+
+start nwchem
+
+
+
+geometry units angstrom nocenter noautosym noautoz
+  C  -5.8154345327555457e-01 -9.9494611418637219e-03 7.7497308389452161e-03
+  N  8.6967322498923516e-01 3.6904323358956541e-02 -4.6335875618812966e-01
+  H  -7.1941664901095614e-01 -6.6138389485486421e-02 1.1136685664588581e+00
+  H  -1.0700101906587622e+00 -8.9598292784808586e-01 -4.4639712263688752e-01
+  H  -1.0995620806870348e+00 8.9953452411338353e-01 -3.5885409105539845e-01
+  H  1.3139649588163365e+00 -8.0457239017392301e-01 3.3498436179648539e-02
+  H  1.2868949968902976e+00 8.4020162798919928e-01 1.1368821988101907e-01
+end
+
+basis noprint
+   * library sto-3g
+end
+
+dft
+  xc xpbe96 cpbe96
+  mult 1
+end
+
+task dft gradient
+

@@ -4,11 +4,28 @@ from comp_chem_agent.models.atomsdata import AtomsData
 
 
 class WorkerTask(BaseModel):
+    """
+    Represents a task assigned to a worker agent for performing tool-based computations.
+
+    Attributes:
+        task_index (int): The index or ID of the task, typically used to track execution order.
+        prompt (str): A natural language prompt that describes the task or request for which
+                      the worker is expected to generate tool calls.
+    """
+
     task_index: int = Field(..., description="Task index")
     prompt: str = Field(..., description="Prompt to send to worker for tool calls")
 
 
 class TaskDecomposerResponse(BaseModel):
+    """
+    Response model from the Task Decomposer agent containing a list of tasks.
+
+    Attributes:
+        worker_tasks (list[WorkerTask]): A list of tasks that are to be assigned
+        to Worker agents for tool execution or computation.
+    """
+
     worker_tasks: list[WorkerTask] = Field(..., description="List of task to assign for Worker")
 
 

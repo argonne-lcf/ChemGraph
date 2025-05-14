@@ -173,6 +173,7 @@ def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     ]
     llm_structured_output = llm.with_structured_output(ResponseFormatter)
     response = llm_structured_output.invoke(messages).model_dump_json()
+
     return {"messages": [response]}
 
 

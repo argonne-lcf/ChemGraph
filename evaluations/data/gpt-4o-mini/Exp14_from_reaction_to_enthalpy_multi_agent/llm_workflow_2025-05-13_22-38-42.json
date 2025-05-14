@@ -1,0 +1,1574 @@
+{
+    "Methane Combustion": {
+        "llm_workflow": {
+            "tool_calls": [],
+            "result": {
+                "value": -12.5090237958382,
+                "property": "enthalpy change",
+                "unit": "eV"
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-13T22:38:42.315002",
+            "model_name": "gpt-4o-mini",
+            "system_prompt": "You are an expert in computational chemistry, using advanced tools to solve complex problems.\n\nInstructions:\n1. Extract all relevant inputs from the user's query, such as SMILES strings, molecule names, methods, software, properties, and conditions.\n2. If a tool is needed, call it using the correct schema.\n3. Base all responses strictly on actual tool outputs\u2014never fabricate results, coordinates or SMILES string.\n4. Review previous tool outputs. If they indicate failure, retry the tool with adjusted inputs if possible.\n5. Use available simulation data directly. If data is missing, clearly state that a tool call is required.\n6. If no tool call is needed, respond using factual domain knowledge.\n",
+            "state": {
+                "messages": [
+                    {
+                        "content": "You are given a chemical reaction: 1 (Methane) + 2 (Oxygen) -> 1 (Carbon dioxide) + 2 (Water). Calculate the enthalpy for this reaction using GFN2-xTB at 400K.",
+                        "additional_kwargs": {},
+                        "response_metadata": {},
+                        "type": "human",
+                        "name": "None",
+                        "id": "cb0aa152-cd41-4445-98ba-10d345955c39",
+                        "example": "False"
+                    },
+                    {
+                        "content": "{\"worker_tasks\":[{\"task_index\":1,\"prompt\":\"Calculate the enthalpy of formation of methane (CH4) using GFN2-xTB at 400K.\"},{\"task_index\":2,\"prompt\":\"Calculate the enthalpy of formation of oxygen (O2) using GFN2-xTB at 400K.\"},{\"task_index\":3,\"prompt\":\"Calculate the enthalpy of formation of carbon dioxide (CO2) using GFN2-xTB at 400K.\"},{\"task_index\":4,\"prompt\":\"Calculate the enthalpy of formation of water (H2O) using GFN2-xTB at 400K.\"}]}",
+                        "additional_kwargs": {},
+                        "response_metadata": {},
+                        "type": "human",
+                        "name": "None",
+                        "id": "6d72e77a-4f44-48f0-80e7-04a11a693168",
+                        "example": "False"
+                    },
+                    {
+                        "content": "Worker Outputs:\nThe enthalpy of formation of methane (CH\u2084) calculated using the GFN2-xTB method at 400 K is **-112.25118192684184 eV**. \n\nAdditionally, the calculated thermochemical properties are as follows:\n- **Entropy**: 0.0020390423427076197 eV\n- **Gibbs Free Energy**: -113.06679886392489 eV\n\nIf you need further analysis or additional properties, feel free to ask!\nThe enthalpy of formation for oxygen (O2) at 400K using GFN2-xTB has been successfully calculated. Here are the results:\n\n- **Enthalpy of Formation**: -214.93146497478304 eV\n- **Entropy**: 0.0021200311782391917 eV\n- **Gibbs Free Energy**: -215.77947744607872 eV\n\nThe calculation converged successfully, and the results are based on the thermochemical properties derived from the simulation. If you need further analysis or additional calculations, feel free to ask!\nThe enthalpy of formation of carbon dioxide (CO2) calculated using the GFN2-xTB method at 400K is as follows:\n\n- **Enthalpy of Formation**: -280.04249145620344 eV\n- **Entropy**: 0.0023421563326895 eV\n- **Gibbs Free Energy**: -280.9793539892792 eV\n\nThe calculation was successful, and all required parameters were met. If you need further analysis or additional calculations, feel free to ask!\nThe calculation of the enthalpy of formation for water (H2O) using GFN2-xTB at 400K has been successfully completed. Here are the results:\n\n- **Enthalpy of Formation**: -137.29032210802134 eV\n- **Entropy**: 0.0020568239189760573 eV\n- **Gibbs Free Energy**: -138.11305167561176 eV\n\nThese values provide the thermochemical properties of water at the specified conditions. If you need further analysis or additional calculations, feel free to ask!",
+                        "additional_kwargs": {},
+                        "response_metadata": {},
+                        "type": "ai",
+                        "name": "None",
+                        "id": "b03d5d81-a030-4fd8-a292-ecfe617881d0",
+                        "example": "False",
+                        "tool_calls": [],
+                        "invalid_tool_calls": [],
+                        "usage_metadata": "None"
+                    },
+                    {
+                        "content": "To calculate the enthalpy change for the reaction:\n\n\\[ \\text{1 CH}_4 + \\text{2 O}_2 \\rightarrow \\text{1 CO}_2 + \\text{2 H}_2\\text{O} \\]\n\nwe will use the enthalpy of formation values obtained from the worker outputs. The enthalpy change for the reaction can be calculated using the following formula:\n\n\\[\n\\Delta H_{\\text{reaction}} = \\sum \\Delta H_f (\\text{products}) - \\sum \\Delta H_f (\\text{reactants})\n\\]\n\n### Step 1: Gather the enthalpy of formation values\n\nFrom the worker outputs, we have the following enthalpy of formation values:\n\n- **Methane (CH\u2084)**: \\(-112.25118192684184 \\, \\text{eV}\\)\n- **Oxygen (O\u2082)**: \\(-214.93146497478304 \\, \\text{eV}\\) (Note: O\u2082 is in its standard state, so its enthalpy of formation is typically considered to be 0, but we will use the provided value for consistency.)\n- **Carbon Dioxide (CO\u2082)**: \\(-280.04249145620344 \\, \\text{eV}\\)\n- **Water (H\u2082O)**: \\(-137.29032210802134 \\, \\text{eV}\\)\n\n### Step 2: Calculate the total enthalpy of formation for reactants and products\n\n**Reactants:**\n- For 1 CH\u2084: \\(-112.25118192684184 \\, \\text{eV}\\)\n- For 2 O\u2082: \\(2 \\times (-214.93146497478304 \\, \\text{eV}) = -429.86292994956608 \\, \\text{eV}\\)\n\nTotal for reactants:\n\\[\n\\Delta H_f (\\text{reactants}) = -112.25118192684184 + (-429.86292994956608) = -542.1141118764079 \\, \\text{eV}\n\\]\n\n**Products:**\n- For 1 CO\u2082: \\(-280.04249145620344 \\, \\text{eV}\\)\n- For 2 H\u2082O: \\(2 \\times (-137.29032210802134 \\, \\text{eV}) = -274.58064421604268 \\, \\text{eV}\\)\n\nTotal for products:\n\\[\n\\Delta H_f (\\text{products}) = -280.04249145620344 + (-274.58064421604268) = -554.6231356722461 \\, \\text{eV}\n\\]\n\n### Step 3: Calculate the enthalpy change for the reaction\n\nNow, we can calculate the enthalpy change for the reaction:\n\\[\n\\Delta H_{\\text{reaction}} = \\Delta H_f (\\text{products}) - \\Delta H_f (\\text{reactants})\n\\]\n\\[\n\\Delta H_{\\text{reaction}} = -554.6231356722461 - (-542.1141118764079) = -12.5090237958382 \\, \\text{eV}\n\\]\n\n### Final Answer\n\nThe enthalpy change for the reaction at 400 K is:\n\\[\n\\Delta H_{\\text{reaction}} = -12.509 \\, \\text{eV}\n\\]\n\nThis result is complete based on the provided outputs.",
+                        "additional_kwargs": {
+                            "refusal": "None"
+                        },
+                        "response_metadata": {
+                            "token_usage": {
+                                "completion_tokens": "737",
+                                "prompt_tokens": "930",
+                                "total_tokens": "1667",
+                                "completion_tokens_details": {
+                                    "accepted_prediction_tokens": "0",
+                                    "audio_tokens": "0",
+                                    "reasoning_tokens": "0",
+                                    "rejected_prediction_tokens": "0"
+                                },
+                                "prompt_tokens_details": {
+                                    "audio_tokens": "0",
+                                    "cached_tokens": "0"
+                                }
+                            },
+                            "model_name": "gpt-4o-mini-2024-07-18",
+                            "system_fingerprint": "fp_0392822090",
+                            "finish_reason": "stop",
+                            "logprobs": "None"
+                        },
+                        "type": "ai",
+                        "name": "None",
+                        "id": "run-88cd2759-94e1-49bf-9691-f3b7ca089734-0",
+                        "example": "False",
+                        "tool_calls": [],
+                        "invalid_tool_calls": [],
+                        "usage_metadata": {
+                            "input_tokens": "930",
+                            "output_tokens": "737",
+                            "total_tokens": "1667",
+                            "input_token_details": {
+                                "audio": "0",
+                                "cache_read": "0"
+                            },
+                            "output_token_details": {
+                                "audio": "0",
+                                "reasoning": "0"
+                            }
+                        }
+                    },
+                    {
+                        "content": "{\"answer\":{\"value\":-12.5090237958382,\"property\":\"enthalpy change\",\"unit\":\"eV\"}}",
+                        "additional_kwargs": {},
+                        "response_metadata": {},
+                        "type": "human",
+                        "name": "None",
+                        "id": "c5505dcf-b802-4efe-aff8-4eec33fde2be",
+                        "example": "False"
+                    }
+                ],
+                "worker_state": [],
+                "worker_result": [
+                    {
+                        "content": "The enthalpy of formation of methane (CH\u2084) calculated using the GFN2-xTB method at 400 K is **-112.25118192684184 eV**. \n\nAdditionally, the calculated thermochemical properties are as follows:\n- **Entropy**: 0.0020390423427076197 eV\n- **Gibbs Free Energy**: -113.06679886392489 eV\n\nIf you need further analysis or additional properties, feel free to ask!",
+                        "additional_kwargs": {
+                            "refusal": "None"
+                        },
+                        "response_metadata": {
+                            "token_usage": {
+                                "completion_tokens": "106",
+                                "prompt_tokens": "3573",
+                                "total_tokens": "3679",
+                                "completion_tokens_details": {
+                                    "accepted_prediction_tokens": "0",
+                                    "audio_tokens": "0",
+                                    "reasoning_tokens": "0",
+                                    "rejected_prediction_tokens": "0"
+                                },
+                                "prompt_tokens_details": {
+                                    "audio_tokens": "0",
+                                    "cached_tokens": "2560"
+                                }
+                            },
+                            "model_name": "gpt-4o-mini-2024-07-18",
+                            "system_fingerprint": "fp_0392822090",
+                            "finish_reason": "stop",
+                            "logprobs": "None"
+                        },
+                        "type": "ai",
+                        "name": "None",
+                        "id": "run-db81ad4d-d29e-45ef-845b-940235164307-0",
+                        "example": "False",
+                        "tool_calls": [],
+                        "invalid_tool_calls": [],
+                        "usage_metadata": {
+                            "input_tokens": "3573",
+                            "output_tokens": "106",
+                            "total_tokens": "3679",
+                            "input_token_details": {
+                                "audio": "0",
+                                "cache_read": "2560"
+                            },
+                            "output_token_details": {
+                                "audio": "0",
+                                "reasoning": "0"
+                            }
+                        }
+                    },
+                    {
+                        "content": "The enthalpy of formation for oxygen (O2) at 400K using GFN2-xTB has been successfully calculated. Here are the results:\n\n- **Enthalpy of Formation**: -214.93146497478304 eV\n- **Entropy**: 0.0021200311782391917 eV\n- **Gibbs Free Energy**: -215.77947744607872 eV\n\nThe calculation converged successfully, and the results are based on the thermochemical properties derived from the simulation. If you need further analysis or additional calculations, feel free to ask!",
+                        "additional_kwargs": {
+                            "refusal": "None"
+                        },
+                        "response_metadata": {
+                            "token_usage": {
+                                "completion_tokens": "127",
+                                "prompt_tokens": "3278",
+                                "total_tokens": "3405",
+                                "completion_tokens_details": {
+                                    "accepted_prediction_tokens": "0",
+                                    "audio_tokens": "0",
+                                    "reasoning_tokens": "0",
+                                    "rejected_prediction_tokens": "0"
+                                },
+                                "prompt_tokens_details": {
+                                    "audio_tokens": "0",
+                                    "cached_tokens": "2432"
+                                }
+                            },
+                            "model_name": "gpt-4o-mini-2024-07-18",
+                            "system_fingerprint": "fp_0392822090",
+                            "finish_reason": "stop",
+                            "logprobs": "None"
+                        },
+                        "type": "ai",
+                        "name": "None",
+                        "id": "run-3fef526c-2e1a-477d-9346-0e6d741c5b7c-0",
+                        "example": "False",
+                        "tool_calls": [],
+                        "invalid_tool_calls": [],
+                        "usage_metadata": {
+                            "input_tokens": "3278",
+                            "output_tokens": "127",
+                            "total_tokens": "3405",
+                            "input_token_details": {
+                                "audio": "0",
+                                "cache_read": "2432"
+                            },
+                            "output_token_details": {
+                                "audio": "0",
+                                "reasoning": "0"
+                            }
+                        }
+                    },
+                    {
+                        "content": "The enthalpy of formation of carbon dioxide (CO2) calculated using the GFN2-xTB method at 400K is as follows:\n\n- **Enthalpy of Formation**: -280.04249145620344 eV\n- **Entropy**: 0.0023421563326895 eV\n- **Gibbs Free Energy**: -280.9793539892792 eV\n\nThe calculation was successful, and all required parameters were met. If you need further analysis or additional calculations, feel free to ask!",
+                        "additional_kwargs": {
+                            "refusal": "None"
+                        },
+                        "response_metadata": {
+                            "token_usage": {
+                                "completion_tokens": "115",
+                                "prompt_tokens": "3531",
+                                "total_tokens": "3646",
+                                "completion_tokens_details": {
+                                    "accepted_prediction_tokens": "0",
+                                    "audio_tokens": "0",
+                                    "reasoning_tokens": "0",
+                                    "rejected_prediction_tokens": "0"
+                                },
+                                "prompt_tokens_details": {
+                                    "audio_tokens": "0",
+                                    "cached_tokens": "2688"
+                                }
+                            },
+                            "model_name": "gpt-4o-mini-2024-07-18",
+                            "system_fingerprint": "fp_0392822090",
+                            "finish_reason": "stop",
+                            "logprobs": "None"
+                        },
+                        "type": "ai",
+                        "name": "None",
+                        "id": "run-f47b0fd5-5ec8-436f-b62c-bedf13de9499-0",
+                        "example": "False",
+                        "tool_calls": [],
+                        "invalid_tool_calls": [],
+                        "usage_metadata": {
+                            "input_tokens": "3531",
+                            "output_tokens": "115",
+                            "total_tokens": "3646",
+                            "input_token_details": {
+                                "audio": "0",
+                                "cache_read": "2688"
+                            },
+                            "output_token_details": {
+                                "audio": "0",
+                                "reasoning": "0"
+                            }
+                        }
+                    },
+                    {
+                        "content": "The calculation of the enthalpy of formation for water (H2O) using GFN2-xTB at 400K has been successfully completed. Here are the results:\n\n- **Enthalpy of Formation**: -137.29032210802134 eV\n- **Entropy**: 0.0020568239189760573 eV\n- **Gibbs Free Energy**: -138.11305167561176 eV\n\nThese values provide the thermochemical properties of water at the specified conditions. If you need further analysis or additional calculations, feel free to ask!",
+                        "additional_kwargs": {
+                            "refusal": "None"
+                        },
+                        "response_metadata": {
+                            "token_usage": {
+                                "completion_tokens": "124",
+                                "prompt_tokens": "3511",
+                                "total_tokens": "3635",
+                                "completion_tokens_details": {
+                                    "accepted_prediction_tokens": "0",
+                                    "audio_tokens": "0",
+                                    "reasoning_tokens": "0",
+                                    "rejected_prediction_tokens": "0"
+                                },
+                                "prompt_tokens_details": {
+                                    "audio_tokens": "0",
+                                    "cached_tokens": "2560"
+                                }
+                            },
+                            "model_name": "gpt-4o-mini-2024-07-18",
+                            "system_fingerprint": "fp_0392822090",
+                            "finish_reason": "stop",
+                            "logprobs": "None"
+                        },
+                        "type": "ai",
+                        "name": "None",
+                        "id": "run-3cf3984b-3564-437e-94c4-0d6fabd7159a-0",
+                        "example": "False",
+                        "tool_calls": [],
+                        "invalid_tool_calls": [],
+                        "usage_metadata": {
+                            "input_tokens": "3511",
+                            "output_tokens": "124",
+                            "total_tokens": "3635",
+                            "input_token_details": {
+                                "audio": "0",
+                                "cache_read": "2560"
+                            },
+                            "output_token_details": {
+                                "audio": "0",
+                                "reasoning": "0"
+                            }
+                        }
+                    }
+                ],
+                "current_task_index": "4",
+                "task_list": "{\"worker_tasks\":[{\"task_index\":1,\"prompt\":\"Calculate the enthalpy of formation of methane (CH4) using GFN2-xTB at 400K.\"},{\"task_index\":2,\"prompt\":\"Calculate the enthalpy of formation of oxygen (O2) using GFN2-xTB at 400K.\"},{\"task_index\":3,\"prompt\":\"Calculate the enthalpy of formation of carbon dioxide (CO2) using GFN2-xTB at 400K.\"},{\"task_index\":4,\"prompt\":\"Calculate the enthalpy of formation of water (H2O) using GFN2-xTB at 400K.\"}]}",
+                "worker_channel": {
+                    "worker_0": [
+                        {
+                            "role": "user",
+                            "content": "Calculate the enthalpy of formation of methane (CH4) using GFN2-xTB at 400K."
+                        },
+                        {
+                            "content": "",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_DnqzcCs8pUCjLllHLkTlMjBK",
+                                        "function": {
+                                            "arguments": "{\"name\":\"methane\"}",
+                                            "name": "molecule_name_to_smiles"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "20",
+                                    "prompt_tokens": "2048",
+                                    "total_tokens": "2068",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "0"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-96359ae6-245a-4043-aa29-e11f31f31957-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "molecule_name_to_smiles",
+                                    "args": {
+                                        "name": "methane"
+                                    },
+                                    "id": "call_DnqzcCs8pUCjLllHLkTlMjBK",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2048",
+                                "output_tokens": "20",
+                                "total_tokens": "2068",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "0"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "\"C\"",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "molecule_name_to_smiles",
+                            "id": "None",
+                            "tool_call_id": "call_DnqzcCs8pUCjLllHLkTlMjBK",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_jII5Rs92XsPsl7Rn8smp69XT",
+                                        "function": {
+                                            "arguments": "{\"smiles\":\"C\"}",
+                                            "name": "smiles_to_atomsdata"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "19",
+                                    "prompt_tokens": "2081",
+                                    "total_tokens": "2100",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2048"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-2ed19a10-02f3-4746-b0c4-66497f5d58c3-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "smiles_to_atomsdata",
+                                    "args": {
+                                        "smiles": "C"
+                                    },
+                                    "id": "call_jII5Rs92XsPsl7Rn8smp69XT",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2081",
+                                "output_tokens": "19",
+                                "total_tokens": "2100",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2048"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "{\"numbers\": [6, 1, 1, 1, 1], \"positions\": [[-5.515752553510999e-08, 9.195817918950514e-09, -1.7151920351483622e-08], [-0.38545298681366186, -0.8083199790622183, -0.6548396702426592], [-0.7452127558562118, 0.22181498591294727, 0.7913445847364606], [0.1793872841779948, 0.9123041408765922, -0.6052202767903315], [0.9512785136494, -0.3257991569231384, 0.46871537944845043]], \"cell\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"pbc\": [false, false, false]}",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "smiles_to_atomsdata",
+                            "id": "None",
+                            "tool_call_id": "call_jII5Rs92XsPsl7Rn8smp69XT",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_MJ95riQy5M2sWk0jOEg9WQNl",
+                                        "function": {
+                                            "arguments": "{\"params\":{\"atomsdata\":{\"numbers\":[6,1,1,1,1],\"positions\":[[-5.515752553510999e-08,9.195817918950514e-09,-1.7151920351483622e-08],[-0.38545298681366186,-0.8083199790622183,-0.6548396702426592],[-0.7452127558562118,0.22181498591294727,0.7913445847364606],[0.1793872841779948,0.9123041408765922,-0.6052202767903315],[0.9512785136494,-0.3257991569231384,0.46871537944845043]],\"cell\":null,\"pbc\":[false,false,false]},\"driver\":\"thermo\",\"calculator\":{\"calculator_type\":\"TBLite\",\"method\":\"GFN2-xTB\"},\"temperature\":400}}",
+                                            "name": "run_ase"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "215",
+                                    "prompt_tokens": "2347",
+                                    "total_tokens": "2562",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2048"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-0e0f31a1-3056-4314-8d8f-71ba5b7d2bcc-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "run_ase",
+                                    "args": {
+                                        "params": {
+                                            "atomsdata": {
+                                                "numbers": [
+                                                    "6",
+                                                    "1",
+                                                    "1",
+                                                    "1",
+                                                    "1"
+                                                ],
+                                                "positions": [
+                                                    [
+                                                        "-5.515752553510999e-08",
+                                                        "9.195817918950514e-09",
+                                                        "-1.7151920351483622e-08"
+                                                    ],
+                                                    [
+                                                        "-0.38545298681366186",
+                                                        "-0.8083199790622183",
+                                                        "-0.6548396702426592"
+                                                    ],
+                                                    [
+                                                        "-0.7452127558562118",
+                                                        "0.22181498591294727",
+                                                        "0.7913445847364606"
+                                                    ],
+                                                    [
+                                                        "0.1793872841779948",
+                                                        "0.9123041408765922",
+                                                        "-0.6052202767903315"
+                                                    ],
+                                                    [
+                                                        "0.9512785136494",
+                                                        "-0.3257991569231384",
+                                                        "0.46871537944845043"
+                                                    ]
+                                                ],
+                                                "cell": "None",
+                                                "pbc": [
+                                                    "False",
+                                                    "False",
+                                                    "False"
+                                                ]
+                                            },
+                                            "driver": "thermo",
+                                            "calculator": {
+                                                "calculator_type": "TBLite",
+                                                "method": "GFN2-xTB"
+                                            },
+                                            "temperature": "400"
+                                        }
+                                    },
+                                    "id": "call_MJ95riQy5M2sWk0jOEg9WQNl",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2347",
+                                "output_tokens": "215",
+                                "total_tokens": "2562",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2048"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "{\"converged\": true, \"final_structure\": {\"numbers\": [6, 1, 1, 1, 1], \"positions\": [[-1.8848342399828265e-08, 7.590679795696838e-09, -9.355713895556488e-09], [-0.37601327797846346, -0.7885242085974127, -0.6388026545534377], [-0.726962522350725, 0.21638273612585412, 0.7719645389683355], [0.17499407075431436, 0.8899618041007247, -0.5903984350274283], [0.9279817484232121, -0.31782033921984537, 0.45723655996824425]], \"cell\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"pbc\": [false, false, false]}, \"simulation_input\": {\"atomsdata\": {\"numbers\": [6, 1, 1, 1, 1], \"positions\": [[-5.515752553510999e-08, 9.195817918950514e-09, -1.7151920351483622e-08], [-0.38545298681366186, -0.8083199790622183, -0.6548396702426592], [-0.7452127558562118, 0.22181498591294727, 0.7913445847364606], [0.1793872841779948, 0.9123041408765922, -0.6052202767903315], [0.9512785136494, -0.3257991569231384, 0.46871537944845043]], \"cell\": null, \"pbc\": [false, false, false]}, \"driver\": \"thermo\", \"optimizer\": \"bfgs\", \"calculator\": {\"calculator_type\": \"TBLite\", \"method\": \"GFN2-xTB\", \"charge\": null, \"multiplicity\": null, \"accuracy\": 1.0, \"electronic_temperature\": 300.0, \"max_iterations\": 250, \"initial_guess\": \"sad\", \"mixer_damping\": 0.4, \"electric_field\": null, \"spin_polarization\": null, \"cache_api\": true, \"verbosity\": 0}, \"fmax\": 0.01, \"steps\": 1000, \"temperature\": 400.0, \"pressure\": 101325.0}, \"single_point_energy\": null, \"energy_unit\": \"eV\", \"vibrational_frequencies\": {\"energies\": [\"1.9939473115553412i\", \"1.813171188660011i\", \"0.02050254375652245i\", \"0.0844581310126035\", \"0.09117808791967852\", \"2.5857545345210924\", \"171.7518396705325\", \"171.790681590409\", \"171.79263619468526\", \"193.0363120473365\", \"193.07533501782535\", \"383.0831650707919\", \"384.7546271223239\", \"384.76694161946637\", \"384.77848223510193\"], \"energy_unit\": \"meV\", \"frequencies\": [\"16.08226978459371i\", \"14.624212010365065i\", \"0.16536416887848138i\", \"0.6812007722449549\", \"0.7354008803892994\", \"20.85551698377992\", \"1385.2720207672974\", \"1385.5853019812923\", \"1385.6010669280945\", \"1556.942869341269\", \"1557.2576108269445\", \"3089.7741253748914\", \"3103.255376103869\", \"3103.3546992224683\", \"3103.4477805657193\"], \"frequency_unit\": \"cm-1\"}, \"thermochemistry\": {\"enthalpy\": -112.25118192684184, \"entropy\": 0.0020390423427076197, \"gibbs_free_energy\": -113.06679886392489, \"unit\": \"eV\"}, \"success\": true, \"error\": \"\"}",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "run_ase",
+                            "id": "None",
+                            "tool_call_id": "call_MJ95riQy5M2sWk0jOEg9WQNl",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The enthalpy of formation of methane (CH\u2084) calculated using the GFN2-xTB method at 400 K is **-112.25118192684184 eV**. \n\nAdditionally, the calculated thermochemical properties are as follows:\n- **Entropy**: 0.0020390423427076197 eV\n- **Gibbs Free Energy**: -113.06679886392489 eV\n\nIf you need further analysis or additional properties, feel free to ask!",
+                            "additional_kwargs": {
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "106",
+                                    "prompt_tokens": "3573",
+                                    "total_tokens": "3679",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2560"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "stop",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-db81ad4d-d29e-45ef-845b-940235164307-0",
+                            "example": "False",
+                            "tool_calls": [],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "3573",
+                                "output_tokens": "106",
+                                "total_tokens": "3679",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2560"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        }
+                    ],
+                    "worker_1": [
+                        {
+                            "role": "user",
+                            "content": "Calculate the enthalpy of formation of oxygen (O2) using GFN2-xTB at 400K."
+                        },
+                        {
+                            "content": "To calculate the enthalpy of formation of oxygen (O2) using GFN2-xTB at 400K, I need to convert the molecule name \"O2\" into its SMILES representation. Then, I will prepare the necessary parameters for the calculation.\n\nLet's start by converting the molecule name \"O2\" to its SMILES format. I'll proceed with that now.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_IyBhstmCbY2v4xMZaqamPFaW",
+                                        "function": {
+                                            "arguments": "{\"name\":\"O2\"}",
+                                            "name": "molecule_name_to_smiles"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "99",
+                                    "prompt_tokens": "2048",
+                                    "total_tokens": "2147",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "1920"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-b6915c64-1735-497e-b546-e7994b80aba4-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "molecule_name_to_smiles",
+                                    "args": {
+                                        "name": "O2"
+                                    },
+                                    "id": "call_IyBhstmCbY2v4xMZaqamPFaW",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2048",
+                                "output_tokens": "99",
+                                "total_tokens": "2147",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "1920"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "\"O=O\"",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "molecule_name_to_smiles",
+                            "id": "None",
+                            "tool_call_id": "call_IyBhstmCbY2v4xMZaqamPFaW",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The SMILES representation for oxygen (O2) is \"O=O\". \n\nNext, I will convert this SMILES string into the AtomsData format, which is required for the GFN2-xTB calculation. I'll proceed with that now.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_VIfyrrCV1ik9M3QOUw4ynHKh",
+                                        "function": {
+                                            "arguments": "{\"smiles\":\"O=O\"}",
+                                            "name": "smiles_to_atomsdata"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "74",
+                                    "prompt_tokens": "2164",
+                                    "total_tokens": "2238",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2048"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-dbf7f26f-ccc1-4d81-aa45-0414374a0b1d-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "smiles_to_atomsdata",
+                                    "args": {
+                                        "smiles": "O=O"
+                                    },
+                                    "id": "call_VIfyrrCV1ik9M3QOUw4ynHKh",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2164",
+                                "output_tokens": "74",
+                                "total_tokens": "2238",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2048"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "{\"numbers\": [8, 8], \"positions\": [[0.5754645523783292, 0.0, 0.0], [-0.5754645523783292, 0.0, 0.0]], \"cell\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"pbc\": [false, false, false]}",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "smiles_to_atomsdata",
+                            "id": "None",
+                            "tool_call_id": "call_VIfyrrCV1ik9M3QOUw4ynHKh",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The AtomsData for oxygen (O2) has been successfully generated. Here are the details:\n\n- Atomic numbers: [8, 8] (for O)\n- Atomic positions: [[0.5754645523783292, 0.0, 0.0], [-0.5754645523783292, 0.0, 0.0]]\n- Cell vectors: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]\n- Periodic boundary conditions: [false, false, false]\n\nNow, I will set up the parameters for the GFN2-xTB calculation to find the enthalpy of formation at 400K. The parameters will include the AtomsData, the method (GFN2-xTB), and the temperature.\n\nLet's proceed with the calculation.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_uG8JIpEEPkT9fYordAM9ZzpW",
+                                        "function": {
+                                            "arguments": "{\"params\":{\"atomsdata\":{\"numbers\":[8,8],\"positions\":[[0.5754645523783292,0,0],[-0.5754645523783292,0,0]],\"cell\":null,\"pbc\":[false,false,false]},\"driver\":\"thermo\",\"calculator\":{\"calculator_type\":\"TBLite\",\"method\":\"GFN2-xTB\"},\"temperature\":400}}",
+                                            "name": "run_ase"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "292",
+                                    "prompt_tokens": "2361",
+                                    "total_tokens": "2653",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2176"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-d168bb1e-2323-499f-9aa6-3c308dd743ba-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "run_ase",
+                                    "args": {
+                                        "params": {
+                                            "atomsdata": {
+                                                "numbers": [
+                                                    "8",
+                                                    "8"
+                                                ],
+                                                "positions": [
+                                                    [
+                                                        "0.5754645523783292",
+                                                        "0",
+                                                        "0"
+                                                    ],
+                                                    [
+                                                        "-0.5754645523783292",
+                                                        "0",
+                                                        "0"
+                                                    ]
+                                                ],
+                                                "cell": "None",
+                                                "pbc": [
+                                                    "False",
+                                                    "False",
+                                                    "False"
+                                                ]
+                                            },
+                                            "driver": "thermo",
+                                            "calculator": {
+                                                "calculator_type": "TBLite",
+                                                "method": "GFN2-xTB"
+                                            },
+                                            "temperature": "400"
+                                        }
+                                    },
+                                    "id": "call_uG8JIpEEPkT9fYordAM9ZzpW",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2361",
+                                "output_tokens": "292",
+                                "total_tokens": "2653",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2176"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "{\"converged\": true, \"final_structure\": {\"numbers\": [8, 8], \"positions\": [[0.6049118968385692, 7.435574559759166e-17, -4.5534531530944764e-17], [-0.6049118968385692, -7.680475127355566e-17, 4.064762551817786e-17]], \"cell\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"pbc\": [false, false, false]}, \"simulation_input\": {\"atomsdata\": {\"numbers\": [8, 8], \"positions\": [[0.5754645523783292, 0.0, 0.0], [-0.5754645523783292, 0.0, 0.0]], \"cell\": null, \"pbc\": [false, false, false]}, \"driver\": \"thermo\", \"optimizer\": \"bfgs\", \"calculator\": {\"calculator_type\": \"TBLite\", \"method\": \"GFN2-xTB\", \"charge\": null, \"multiplicity\": null, \"accuracy\": 1.0, \"electronic_temperature\": 300.0, \"max_iterations\": 250, \"initial_guess\": \"sad\", \"mixer_damping\": 0.4, \"electric_field\": null, \"spin_polarization\": null, \"cache_api\": true, \"verbosity\": 0}, \"fmax\": 0.01, \"steps\": 1000, \"temperature\": 400.0, \"pressure\": 101325.0}, \"single_point_energy\": null, \"energy_unit\": \"eV\", \"vibrational_frequencies\": {\"energies\": [\"0.08778853541929289i\", \"0.010453758603062913i\", \"5.95942586893449e-05i\", \"1.3829729415650103\", \"2.0635650777327474\", \"202.014315191322\"], \"energy_unit\": \"meV\", \"frequencies\": [\"0.7080622955408737i\", \"0.08431525002851567i\", \"0.00048066011589209046i\", \"11.154429117634358\", \"16.64377494121316\", \"1629.3553487742781\"], \"frequency_unit\": \"cm-1\"}, \"thermochemistry\": {\"enthalpy\": -214.93146497478304, \"entropy\": 0.0021200311782391917, \"gibbs_free_energy\": -215.77947744607872, \"unit\": \"eV\"}, \"success\": true, \"error\": \"\"}",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "run_ase",
+                            "id": "None",
+                            "tool_call_id": "call_uG8JIpEEPkT9fYordAM9ZzpW",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The enthalpy of formation for oxygen (O2) at 400K using GFN2-xTB has been successfully calculated. Here are the results:\n\n- **Enthalpy of Formation**: -214.93146497478304 eV\n- **Entropy**: 0.0021200311782391917 eV\n- **Gibbs Free Energy**: -215.77947744607872 eV\n\nThe calculation converged successfully, and the results are based on the thermochemical properties derived from the simulation. If you need further analysis or additional calculations, feel free to ask!",
+                            "additional_kwargs": {
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "127",
+                                    "prompt_tokens": "3278",
+                                    "total_tokens": "3405",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2432"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "stop",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-3fef526c-2e1a-477d-9346-0e6d741c5b7c-0",
+                            "example": "False",
+                            "tool_calls": [],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "3278",
+                                "output_tokens": "127",
+                                "total_tokens": "3405",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2432"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        }
+                    ],
+                    "worker_2": [
+                        {
+                            "role": "user",
+                            "content": "Calculate the enthalpy of formation of carbon dioxide (CO2) using GFN2-xTB at 400K."
+                        },
+                        {
+                            "content": "To calculate the enthalpy of formation of carbon dioxide (CO2) using GFN2-xTB at 400K, I need to follow these steps:\n\n1. Convert the SMILES string of CO2 to AtomsData format.\n2. Run the ASE calculations with the specified parameters (using GFN2-xTB method, at 400K).\n\nFirst, I will convert the molecule name \"carbon dioxide\" to its SMILES representation. Let's proceed with that.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_WxUwshdvOGrJHRbvnbsaQORR",
+                                        "function": {
+                                            "arguments": "{\"name\":\"carbon dioxide\"}",
+                                            "name": "molecule_name_to_smiles"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "118",
+                                    "prompt_tokens": "2049",
+                                    "total_tokens": "2167",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "1920"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-04adffe1-f73f-48ea-8a67-d18d0de635cb-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "molecule_name_to_smiles",
+                                    "args": {
+                                        "name": "carbon dioxide"
+                                    },
+                                    "id": "call_WxUwshdvOGrJHRbvnbsaQORR",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2049",
+                                "output_tokens": "118",
+                                "total_tokens": "2167",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "1920"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "\"C(=O)=O\"",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "molecule_name_to_smiles",
+                            "id": "None",
+                            "tool_call_id": "call_WxUwshdvOGrJHRbvnbsaQORR",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The SMILES representation of carbon dioxide (CO2) is \"C(=O)=O\". Now, I will convert this SMILES string to AtomsData format. Let's proceed with that.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_skSB9fsy8PZmh1vfACw8YfAF",
+                                        "function": {
+                                            "arguments": "{\"smiles\":\"C(=O)=O\"}",
+                                            "name": "smiles_to_atomsdata"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "66",
+                                    "prompt_tokens": "2187",
+                                    "total_tokens": "2253",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2048"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-f14b15c7-4666-4f81-9c2d-c967d124e142-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "smiles_to_atomsdata",
+                                    "args": {
+                                        "smiles": "C(=O)=O"
+                                    },
+                                    "id": "call_skSB9fsy8PZmh1vfACw8YfAF",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2187",
+                                "output_tokens": "66",
+                                "total_tokens": "2253",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2048"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "{\"numbers\": [6, 8, 8], \"positions\": [[4.5556649759108717e-08, 0.5033862641973668, 0.0], [-1.237393800775972, 0.5176981640440148, 0.0], [1.2373937552193337, 0.4890745459797487, 0.0]], \"cell\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"pbc\": [false, false, false]}",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "smiles_to_atomsdata",
+                            "id": "None",
+                            "tool_call_id": "call_skSB9fsy8PZmh1vfACw8YfAF",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The AtomsData for carbon dioxide (CO2) has been successfully obtained:\n\n- Atomic numbers: [6, 8, 8] (C, O, O)\n- Atomic positions: \n  - C: [4.5556649759108717e-08, 0.5033862641973668, 0.0]\n  - O: [-1.237393800775972, 0.5176981640440148, 0.0]\n  - O: [1.2373937552193337, 0.4890745459797487, 0.0]\n- Cell: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]\n- Periodic boundary conditions: [false, false, false]\n\nNext, I will run the ASE calculations using the GFN2-xTB method at a temperature of 400K to calculate the enthalpy of formation. Let's proceed with that.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_El3c0hwnBIYx7eKeULiRpn6D",
+                                        "function": {
+                                            "arguments": "{\"params\":{\"atomsdata\":{\"numbers\":[6,8,8],\"positions\":[[4.5556649759108717e-08,0.5033862641973668,0.0],[-1.237393800775972,0.5176981640440148,0.0],[1.2373937552193337,0.4890745459797487,0.0]],\"cell\":null,\"pbc\":[false,false,false]},\"driver\":\"thermo\",\"calculator\":{\"calculator_type\":\"TBLite\",\"method\":\"GFN2-xTB\"},\"temperature\":400}}",
+                                            "name": "run_ase"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "367",
+                                    "prompt_tokens": "2416",
+                                    "total_tokens": "2783",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "1920"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-f50bf9fd-40c7-4131-8a39-d4f7c4c497d8-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "run_ase",
+                                    "args": {
+                                        "params": {
+                                            "atomsdata": {
+                                                "numbers": [
+                                                    "6",
+                                                    "8",
+                                                    "8"
+                                                ],
+                                                "positions": [
+                                                    [
+                                                        "4.5556649759108717e-08",
+                                                        "0.5033862641973668",
+                                                        "0.0"
+                                                    ],
+                                                    [
+                                                        "-1.237393800775972",
+                                                        "0.5176981640440148",
+                                                        "0.0"
+                                                    ],
+                                                    [
+                                                        "1.2373937552193337",
+                                                        "0.4890745459797487",
+                                                        "0.0"
+                                                    ]
+                                                ],
+                                                "cell": "None",
+                                                "pbc": [
+                                                    "False",
+                                                    "False",
+                                                    "False"
+                                                ]
+                                            },
+                                            "driver": "thermo",
+                                            "calculator": {
+                                                "calculator_type": "TBLite",
+                                                "method": "GFN2-xTB"
+                                            },
+                                            "temperature": "400"
+                                        }
+                                    },
+                                    "id": "call_El3c0hwnBIYx7eKeULiRpn6D",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2416",
+                                "output_tokens": "367",
+                                "total_tokens": "2783",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "1920"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "{\"converged\": true, \"final_structure\": {\"numbers\": [6, 8, 8], \"positions\": [[2.631014413535227e-07, 0.5033863045972068, 2.7334588235650122e-17], [-1.1435566981142968, 0.5166128141179973, -7.186470670775434e-17], [1.143556435012867, 0.4901598555059262, 4.000084975290069e-17]], \"cell\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"pbc\": [false, false, false]}, \"simulation_input\": {\"atomsdata\": {\"numbers\": [6, 8, 8], \"positions\": [[4.5556649759108717e-08, 0.5033862641973668, 0.0], [-1.237393800775972, 0.5176981640440148, 0.0], [1.2373937552193337, 0.4890745459797487, 0.0]], \"cell\": null, \"pbc\": [false, false, false]}, \"driver\": \"thermo\", \"optimizer\": \"bfgs\", \"calculator\": {\"calculator_type\": \"TBLite\", \"method\": \"GFN2-xTB\", \"charge\": null, \"multiplicity\": null, \"accuracy\": 1.0, \"electronic_temperature\": 300.0, \"max_iterations\": 250, \"initial_guess\": \"sad\", \"mixer_damping\": 0.4, \"electric_field\": null, \"spin_polarization\": null, \"cache_api\": true, \"verbosity\": 0}, \"fmax\": 0.01, \"steps\": 1000, \"temperature\": 400.0, \"pressure\": 101325.0}, \"single_point_energy\": null, \"energy_unit\": \"eV\", \"vibrational_frequencies\": {\"energies\": [\"0.014882409868765654i\", \"0.011542314192667906i\", \"0.004163352574504588i\", \"0.7544591805215406\", \"0.8569128570282877\", \"74.46859132696461\", \"74.46973289649782\", \"176.7242268567261\", \"321.6404808140162\"], \"energy_unit\": \"meV\", \"frequencies\": [\"0.12003473169393535i\", \"0.09309504303814108i\", \"0.03357970339714627i\", \"6.085123720318597\", \"6.91146835663687\", \"600.6297003227813\", \"600.6389077020859\", \"1425.3770284264242\", \"2594.205451729098\"], \"frequency_unit\": \"cm-1\"}, \"thermochemistry\": {\"enthalpy\": -280.04249145620344, \"entropy\": 0.0023421563326895, \"gibbs_free_energy\": -280.9793539892792, \"unit\": \"eV\"}, \"success\": true, \"error\": \"\"}",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "run_ase",
+                            "id": "None",
+                            "tool_call_id": "call_El3c0hwnBIYx7eKeULiRpn6D",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The enthalpy of formation of carbon dioxide (CO2) calculated using the GFN2-xTB method at 400K is as follows:\n\n- **Enthalpy of Formation**: -280.04249145620344 eV\n- **Entropy**: 0.0023421563326895 eV\n- **Gibbs Free Energy**: -280.9793539892792 eV\n\nThe calculation was successful, and all required parameters were met. If you need further analysis or additional calculations, feel free to ask!",
+                            "additional_kwargs": {
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "115",
+                                    "prompt_tokens": "3531",
+                                    "total_tokens": "3646",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2688"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "stop",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-f47b0fd5-5ec8-436f-b62c-bedf13de9499-0",
+                            "example": "False",
+                            "tool_calls": [],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "3531",
+                                "output_tokens": "115",
+                                "total_tokens": "3646",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2688"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        }
+                    ],
+                    "worker_3": [
+                        {
+                            "role": "user",
+                            "content": "Calculate the enthalpy of formation of water (H2O) using GFN2-xTB at 400K."
+                        },
+                        {
+                            "content": "To calculate the enthalpy of formation of water (H2O) using GFN2-xTB at 400K, I need to follow these steps:\n\n1. Convert the SMILES representation of water (H2O) to AtomsData format.\n2. Run the ASE calculations using the GFN2-xTB method with the specified temperature of 400K.\n\nFirst, I will convert the molecule name \"water\" to its SMILES representation. Let's proceed with that.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_mKLa5Gpw39PYGvzbbGBodFEG",
+                                        "function": {
+                                            "arguments": "{\"name\":\"water\"}",
+                                            "name": "molecule_name_to_smiles"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "119",
+                                    "prompt_tokens": "2049",
+                                    "total_tokens": "2168",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "1920"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-ff82a1b1-f981-4490-94a2-acaaf6fb213f-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "molecule_name_to_smiles",
+                                    "args": {
+                                        "name": "water"
+                                    },
+                                    "id": "call_mKLa5Gpw39PYGvzbbGBodFEG",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2049",
+                                "output_tokens": "119",
+                                "total_tokens": "2168",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "1920"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "\"O\"",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "molecule_name_to_smiles",
+                            "id": "None",
+                            "tool_call_id": "call_mKLa5Gpw39PYGvzbbGBodFEG",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The SMILES representation of water (H2O) is \"O\". Now, I will convert this SMILES string to AtomsData format. Let's proceed with that.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_LomF3uhZtXY7eYKDZT7dGkBi",
+                                        "function": {
+                                            "arguments": "{\"smiles\":\"O\"}",
+                                            "name": "smiles_to_atomsdata"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "56",
+                                    "prompt_tokens": "2183",
+                                    "total_tokens": "2239",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2048"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-5da9f121-3a71-494a-ab86-d3046fae9ccf-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "smiles_to_atomsdata",
+                                    "args": {
+                                        "smiles": "O"
+                                    },
+                                    "id": "call_LomF3uhZtXY7eYKDZT7dGkBi",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2183",
+                                "output_tokens": "56",
+                                "total_tokens": "2239",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2048"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "{\"numbers\": [8, 1, 1], \"positions\": [[0.006278547432814329, 0.40407281100004966, 0.0], [-0.7860813452298498, -0.18987091442763143, 0.0], [0.7798027977970334, -0.21420189657241812, 0.0]], \"cell\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"pbc\": [false, false, false]}",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "smiles_to_atomsdata",
+                            "id": "None",
+                            "tool_call_id": "call_LomF3uhZtXY7eYKDZT7dGkBi",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The AtomsData for water (H2O) has been successfully obtained. Here are the details:\n\n- Atomic numbers: [8, 1, 1] (O, H, H)\n- Atomic positions: \n  - O: [0.006278547432814329, 0.40407281100004966, 0.0]\n  - H: [-0.7860813452298498, -0.18987091442763143, 0.0]\n  - H: [0.7798027977970334, -0.21420189657241812, 0.0]\n- Cell: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]\n- Periodic boundary conditions: [false, false, false]\n\nNext, I will run the ASE calculations using the GFN2-xTB method to calculate the enthalpy of formation at 400K. Let's proceed with that.",
+                            "additional_kwargs": {
+                                "tool_calls": [
+                                    {
+                                        "id": "call_NRf9VPHY6nVa6y7lEDcP6MaF",
+                                        "function": {
+                                            "arguments": "{\"params\":{\"atomsdata\":{\"numbers\":[8,1,1],\"positions\":[[0.006278547432814329,0.40407281100004966,0.0],[-0.7860813452298498,-0.18987091442763143,0.0],[0.7798027977970334,-0.21420189657241812,0.0]],\"cell\":null,\"pbc\":[false,false,false]},\"driver\":\"thermo\",\"calculator\":{\"calculator_type\":\"TBLite\",\"method\":\"GFN2-xTB\"},\"temperature\":400}}",
+                                            "name": "run_ase"
+                                        },
+                                        "type": "function"
+                                    }
+                                ],
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "363",
+                                    "prompt_tokens": "2400",
+                                    "total_tokens": "2763",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2176"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "tool_calls",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-94a0536e-af35-4a9f-8a46-261bc0d0af18-0",
+                            "example": "False",
+                            "tool_calls": [
+                                {
+                                    "name": "run_ase",
+                                    "args": {
+                                        "params": {
+                                            "atomsdata": {
+                                                "numbers": [
+                                                    "8",
+                                                    "1",
+                                                    "1"
+                                                ],
+                                                "positions": [
+                                                    [
+                                                        "0.006278547432814329",
+                                                        "0.40407281100004966",
+                                                        "0.0"
+                                                    ],
+                                                    [
+                                                        "-0.7860813452298498",
+                                                        "-0.18987091442763143",
+                                                        "0.0"
+                                                    ],
+                                                    [
+                                                        "0.7798027977970334",
+                                                        "-0.21420189657241812",
+                                                        "0.0"
+                                                    ]
+                                                ],
+                                                "cell": "None",
+                                                "pbc": [
+                                                    "False",
+                                                    "False",
+                                                    "False"
+                                                ]
+                                            },
+                                            "driver": "thermo",
+                                            "calculator": {
+                                                "calculator_type": "TBLite",
+                                                "method": "GFN2-xTB"
+                                            },
+                                            "temperature": "400"
+                                        }
+                                    },
+                                    "id": "call_NRf9VPHY6nVa6y7lEDcP6MaF",
+                                    "type": "tool_call"
+                                }
+                            ],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "2400",
+                                "output_tokens": "363",
+                                "total_tokens": "2763",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2176"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        },
+                        {
+                            "content": "{\"converged\": true, \"final_structure\": {\"numbers\": [8, 1, 1], \"positions\": [[0.005894419629747587, 0.37935093657377167, 3.0240084829857463e-16], [-0.7750463401046981, -0.1776784585514773, -2.0104622027193226e-16], [0.7691519204749484, -0.20167247802229438, -1.0122441997896464e-16]], \"cell\": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], \"pbc\": [false, false, false]}, \"simulation_input\": {\"atomsdata\": {\"numbers\": [8, 1, 1], \"positions\": [[0.006278547432814329, 0.40407281100004966, 0.0], [-0.7860813452298498, -0.18987091442763143, 0.0], [0.7798027977970334, -0.21420189657241812, 0.0]], \"cell\": null, \"pbc\": [false, false, false]}, \"driver\": \"thermo\", \"optimizer\": \"bfgs\", \"calculator\": {\"calculator_type\": \"TBLite\", \"method\": \"GFN2-xTB\", \"charge\": null, \"multiplicity\": null, \"accuracy\": 1.0, \"electronic_temperature\": 300.0, \"max_iterations\": 250, \"initial_guess\": \"sad\", \"mixer_damping\": 0.4, \"electric_field\": null, \"spin_polarization\": null, \"cache_api\": true, \"verbosity\": 0}, \"fmax\": 0.01, \"steps\": 1000, \"temperature\": 400.0, \"pressure\": 101325.0}, \"single_point_energy\": null, \"energy_unit\": \"eV\", \"vibrational_frequencies\": {\"energies\": [\"5.595900656224663i\", \"0.09575884439311781i\", \"0.0038075312885917714i\", \"0.079204156630585\", \"3.969091181595252\", \"4.507249846806767\", \"190.7874764308751\", \"451.6782624319062\", \"452.7047800092268\"], \"energy_unit\": \"meV\", \"frequencies\": [\"45.13398298924522i\", \"0.7723471733010767i\", \"0.03070981115777345i\", \"0.6388246106667154\", \"32.01287958420311\", \"36.353421980028706\", \"1538.8047867171476\", \"3643.030901654205\", \"3651.310324345781\"], \"frequency_unit\": \"cm-1\"}, \"thermochemistry\": {\"enthalpy\": -137.29032210802134, \"entropy\": 0.0020568239189760573, \"gibbs_free_energy\": -138.11305167561176, \"unit\": \"eV\"}, \"success\": true, \"error\": \"\"}",
+                            "additional_kwargs": {},
+                            "response_metadata": {},
+                            "type": "tool",
+                            "name": "run_ase",
+                            "id": "None",
+                            "tool_call_id": "call_NRf9VPHY6nVa6y7lEDcP6MaF",
+                            "artifact": "None",
+                            "status": "success"
+                        },
+                        {
+                            "content": "The calculation of the enthalpy of formation for water (H2O) using GFN2-xTB at 400K has been successfully completed. Here are the results:\n\n- **Enthalpy of Formation**: -137.29032210802134 eV\n- **Entropy**: 0.0020568239189760573 eV\n- **Gibbs Free Energy**: -138.11305167561176 eV\n\nThese values provide the thermochemical properties of water at the specified conditions. If you need further analysis or additional calculations, feel free to ask!",
+                            "additional_kwargs": {
+                                "refusal": "None"
+                            },
+                            "response_metadata": {
+                                "token_usage": {
+                                    "completion_tokens": "124",
+                                    "prompt_tokens": "3511",
+                                    "total_tokens": "3635",
+                                    "completion_tokens_details": {
+                                        "accepted_prediction_tokens": "0",
+                                        "audio_tokens": "0",
+                                        "reasoning_tokens": "0",
+                                        "rejected_prediction_tokens": "0"
+                                    },
+                                    "prompt_tokens_details": {
+                                        "audio_tokens": "0",
+                                        "cached_tokens": "2560"
+                                    }
+                                },
+                                "model_name": "gpt-4o-mini-2024-07-18",
+                                "system_fingerprint": "fp_0392822090",
+                                "finish_reason": "stop",
+                                "logprobs": "None"
+                            },
+                            "type": "ai",
+                            "name": "None",
+                            "id": "run-3cf3984b-3564-437e-94c4-0d6fabd7159a-0",
+                            "example": "False",
+                            "tool_calls": [],
+                            "invalid_tool_calls": [],
+                            "usage_metadata": {
+                                "input_tokens": "3511",
+                                "output_tokens": "124",
+                                "total_tokens": "3635",
+                                "input_token_details": {
+                                    "audio": "0",
+                                    "cache_read": "2560"
+                                },
+                                "output_token_details": {
+                                    "audio": "0",
+                                    "reasoning": "0"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "current_worker": "worker_3"
+            },
+            "thread_id": "0",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    }
+}
