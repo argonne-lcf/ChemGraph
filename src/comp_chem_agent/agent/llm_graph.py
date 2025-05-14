@@ -10,6 +10,12 @@ from comp_chem_agent.models.supported_models import (
     supported_alcf_models,
 )
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
+from comp_chem_agent.prompt.manager_worker_prompt import (
+    worker_prompt,
+    formatter_prompt,
+    result_aggregator_prompt,
+    task_decomposer_prompt,
+)
 from comp_chem_agent.graphs.multi_agent import construct_multi_framework_graph
 from comp_chem_agent.graphs.python_relp_agent import construct_relp_graph
 from comp_chem_agent.graphs.chemgraph_manager_worker import contruct_manager_worker_graph
@@ -43,6 +49,9 @@ class llm_graph:
         structured_output: bool = False,
         return_option: str = "last_message",
         recursion_limit: int = 50,
+        planner_prompt: str = task_decomposer_prompt,
+        executor_prompt: str = worker_prompt,
+        combiner_prompt: str = result_aggregator_prompt,
     ):
         try:
             if model_name in supported_openai_models:
@@ -67,6 +76,10 @@ class llm_graph:
         self.structured_output = structured_output
         self.return_option = return_option
         self.recursion_limit = recursion_limit
+        self.planner_prompt = planner_prompt
+        self.executor_prompt = executor_prompt
+        self.combiner_prompt = combiner_prompt
+
         self.workflow_map = {
             "single_agent_ase": {
                 "constructor": construct_geoopt_graph,
@@ -88,7 +101,11 @@ class llm_graph:
             )
         else:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm, structured_output=self.structured_output
+                llm,
+                structured_output=self.structured_output,
+                task_decomposer_prompt=self.planner_prompt,
+                result_aggregator_prompt=self.combiner_prompt,
+                worker_prompt=self.executor_prompt,
             )
 
     def visualize(self):
@@ -126,7 +143,8 @@ class llm_graph:
             config (dict, optional): Config of the conversation. Defaults to {"configurable": {"thread_id": "1"}}.
         """
 
-        return self.workflow.get_state(config).values["messages"]
+        # return self.workflow.get_state(config).values["messages"]
+        return self.workflow.get_state(config).values
 
     def write_state(self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"):
         """Write log of CCA run to a file.
@@ -204,6 +222,7 @@ class llm_graph:
                 inputs = {"messages": query}
                 for s in workflow.stream(inputs, stream_mode="values", config=config):
                     message = s["messages"][-1]
+                    message.pretty_print()
                     logger.info(message)
                 if self.return_option == "last_message":
                     return s["messages"][-1]

@@ -1,0 +1,16 @@
+molecule,final_result_match,positions_diff_norm,tool_names_match,tool_args_match,num_calls_match,llm_tool_calls,manual_tool_calls
+CN1C2=C(C(=O)NC1=O)N(C(=S)N2)CCOC,False,,True,False,True,3,3
+CC1=C(C=C(C=C1Cl)[N+](=O)[O-])Cl,False,,True,False,True,3,3
+C1CC(C1)(C2=CC=CC3=CC=CC=C32)O,False,,True,False,True,3,3
+COC1=C(C=C(C=C1)C(=O)Cl)OC,False,,True,False,True,3,3
+CC(COC)O,False,,True,False,True,3,3
+C(C(C(=O)O)O)S,False,,True,False,True,3,3
+C1=CC=C(C=C1)OC2=C(C(=O)C(C2(Cl)Cl)(Cl)Cl)Cl,False,,True,False,True,3,3
+C1=CC2=CN(N=C2C=C1)C3=CC(=CC=C3)F,False,,True,False,True,3,3
+COC(=O)NS(=O)(=O)OC,False,,True,False,True,3,3
+C1=CC=C(C=C1)N2N=C(N=N2)C3=CN=CC=C3,False,,True,False,True,3,3
+CCCCC1=C(C=C(S1)C)C,False,,True,False,True,3,3
+CCOC(C(F)(F)F)(C(F)(F)F)O,False,,True,False,True,3,3
+CN1C2=C(C=C(C=C2)F)SC1=NC(=O)C3=C(SC(=C3)Cl)Cl,False,,True,False,True,3,3
+C1=CC=C(C(=C1)C2=NC3=C(C=CC(=C3)F)NC2=O)N,False,,True,False,True,3,3
+C1=CC(=C(N=C1)Cl)C(=O)NC2=NC=C(C=C2)Cl,False,,True,False,True,3,3

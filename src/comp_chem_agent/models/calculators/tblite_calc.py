@@ -17,7 +17,10 @@ class TBLiteCalc(BaseModel):
         default="TBLite",
         description="Calculator type for XTB methods. Only supports TBLite",
     )
-    method: str = Field(default="GFN2-xTB", description="Underlying method for energy and forces")
+    method: str = Field(
+        default="GFN2-xTB",
+        description="Underlying method for energy and forces. Options are GFN2-xTB and GFN1-xTB.",
+    )
     charge: Optional[float] = Field(default=None, description="Total charge of the system")
     multiplicity: Optional[int] = Field(
         default=None, description="Total multiplicity of the system"

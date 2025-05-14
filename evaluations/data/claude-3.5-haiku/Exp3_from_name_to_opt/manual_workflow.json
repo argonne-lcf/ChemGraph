@@ -1,0 +1,4490 @@
+{
+    "Hydrogen": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Hydrogen"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "[HH]"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        0.3539999999999999,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.3539999999999999,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        0.36721724509118786,
+                        -1.4411733370563343e-18,
+                        9.693822250740611e-20
+                    ],
+                    [
+                        -0.36721724509118786,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-12-06",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Nitrogen": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Nitrogen"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "N#N"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    7,
+                                    7
+                                ],
+                                "positions": [
+                                    [
+                                        0.5600041371060116,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.5600041371060116,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    7,
+                    7
+                ],
+                "positions": [
+                    [
+                        0.597662929894531,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        -0.5976629298945308,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-12-16",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Oxygen": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Oxygen"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "O=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    8,
+                                    8
+                                ],
+                                "positions": [
+                                    [
+                                        0.5754645523783292,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.5754645523783292,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    8,
+                    8
+                ],
+                "positions": [
+                    [
+                        0.6477456517445969,
+                        -1.5468786248790024e-17,
+                        1.6125530381016385e-18
+                    ],
+                    [
+                        -0.6477456517445968,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-12-27",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Fluorine": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Fluorine"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "FF"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    9,
+                                    9
+                                ],
+                                "positions": [
+                                    [
+                                        0.6679999999999999,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.668,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    9,
+                    9
+                ],
+                "positions": [
+                    [
+                        0.6937398421305571,
+                        -9.853954575310572e-20,
+                        -5.977537276780614e-20
+                    ],
+                    [
+                        -0.6937398421305572,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-12-33",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Chlorine": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Chlorine"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "ClCl"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    17,
+                                    17
+                                ],
+                                "positions": [
+                                    [
+                                        1.044,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -1.044,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    17,
+                    17
+                ],
+                "positions": [
+                    [
+                        1.0623906819070934,
+                        -6.449389550272256e-19,
+                        4.2483078169505977e-19
+                    ],
+                    [
+                        -1.0623906819070934,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-12-39",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Hydrogen chloride": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Hydrogen chloride"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "Cl"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    17,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        0.6878248644303301,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.6878248644303301,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    17,
+                    1
+                ],
+                "positions": [
+                    [
+                        0.6744242740224055,
+                        -4.399505016514613e-19,
+                        -6.015387599219092e-20
+                    ],
+                    [
+                        -0.6744242740224055,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-12-43",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Hydrogen fluoride": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Hydrogen fluoride"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "F"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    9,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        0.4927564807944481,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.4927564807944481,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    9,
+                    1
+                ],
+                "positions": [
+                    [
+                        0.5028298989406232,
+                        7.42612855184529e-20,
+                        -1.9971682747795083e-21
+                    ],
+                    [
+                        -0.5028298989406232,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-12-49",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Hydrogen bromide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Hydrogen bromide"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "Br"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    35,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        0.7644788559644482,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.7644788559644482,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    35,
+                    1
+                ],
+                "positions": [
+                    [
+                        0.7213912885318617,
+                        2.614959300138732e-19,
+                        -7.010268826270039e-20
+                    ],
+                    [
+                        -0.7213912885318617,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-12-55",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Hydrogen iodide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Hydrogen iodide"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "I"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    53,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        0.8628055987658423,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.8628055987658423,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    53,
+                    1
+                ],
+                "positions": [
+                    [
+                        0.8171664852891257,
+                        9.573651756343962e-20,
+                        -4.052518390439724e-20
+                    ],
+                    [
+                        -0.8171664852891257,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-13-04",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Carbon monoxide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Carbon monoxide"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "[C-]#[O+]"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    8
+                                ],
+                                "positions": [
+                                    [
+                                        0.5640605106731242,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.5640605106731242,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    8
+                ],
+                "positions": [
+                    [
+                        0.6011985222539111,
+                        -1.0804105141709565e-17,
+                        0.0
+                    ],
+                    [
+                        -0.6011985222539111,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-13-13",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Carbon dioxide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Carbon dioxide"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "C(=O)=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    8,
+                                    8
+                                ],
+                                "positions": [
+                                    [
+                                        4.5556649759108717e-08,
+                                        0.5033862641973668,
+                                        0.0
+                                    ],
+                                    [
+                                        -1.237393800775972,
+                                        0.5176981640440148,
+                                        0.0
+                                    ],
+                                    [
+                                        1.2373937552193337,
+                                        0.4890745459797487,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    8,
+                    8
+                ],
+                "positions": [
+                    [
+                        4.5556649759108717e-08,
+                        0.5033862641973668,
+                        0.0
+                    ],
+                    [
+                        -1.239060275297956,
+                        0.5177179802148311,
+                        -7.1847952932569e-20
+                    ],
+                    [
+                        1.23906080310385,
+                        0.4890547298089325,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-13-17",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Methane": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Methane"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "C"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -5.515752553510999e-08,
+                                        9.195817918950514e-09,
+                                        -1.7151920351483622e-08
+                                    ],
+                                    [
+                                        -0.38545298681366186,
+                                        -0.8083199790622183,
+                                        -0.6548396702426592
+                                    ],
+                                    [
+                                        -0.7452127558562118,
+                                        0.22181498591294727,
+                                        0.7913445847364606
+                                    ],
+                                    [
+                                        0.1793872841779948,
+                                        0.9123041408765922,
+                                        -0.6052202767903315
+                                    ],
+                                    [
+                                        0.9512785136494,
+                                        -0.3257991569231384,
+                                        0.46871537944845043
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -8.858561565800607e-07,
+                        9.195817918476708e-09,
+                        -6.556557581309492e-07
+                    ],
+                    [
+                        -0.38274595042943543,
+                        -0.8026440296104054,
+                        -0.6502401930061377
+                    ],
+                    [
+                        -0.7399806868677805,
+                        0.2202583217400787,
+                        0.7857860005924604
+                    ],
+                    [
+                        0.17812944668651942,
+                        0.9058968535101684,
+                        -0.6009707877709417
+                    ],
+                    [
+                        0.9445980764668486,
+                        -0.3235111548356589,
+                        0.4654235281340704
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-13-21",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Ethane": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Ethane"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CC"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        0.7581763364707977,
+                                        -0.004142070475937767,
+                                        0.04613654107870974
+                                    ],
+                                    [
+                                        -0.7581761536536844,
+                                        0.004141922173907274,
+                                        -0.04613682142515862
+                                    ],
+                                    [
+                                        1.0872875906498454,
+                                        -0.7840658652815939,
+                                        0.7647197455599961
+                                    ],
+                                    [
+                                        1.1947983984165083,
+                                        -0.22109988636744873,
+                                        -0.9514843924086348
+                                    ],
+                                    [
+                                        1.1195350872188397,
+                                        0.9865820037968568,
+                                        0.3937617987756219
+                                    ],
+                                    [
+                                        -1.1195354011826093,
+                                        -0.9865818855003334,
+                                        -0.39376044047289727
+                                    ],
+                                    [
+                                        -1.194798304415668,
+                                        0.2211008501098616,
+                                        0.9514838581914491
+                                    ],
+                                    [
+                                        -1.0872875535040118,
+                                        0.7840649315446924,
+                                        -0.7647202892990886
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        0.7736596277328684,
+                        -0.004229711096805413,
+                        0.0470775513492298
+                    ],
+                    [
+                        -0.7736599394997824,
+                        0.004228937343912971,
+                        -0.04707814653076773
+                    ],
+                    [
+                        1.1195537950415586,
+                        -0.7761726725942986,
+                        0.759445138804893
+                    ],
+                    [
+                        1.2259622951328362,
+                        -0.21904141725795265,
+                        -0.9389727724748436
+                    ],
+                    [
+                        1.1514557265261036,
+                        0.9761187905913677,
+                        0.3923378841373091
+                    ],
+                    [
+                        -1.1514560404898733,
+                        -0.9761214237280649,
+                        -0.39233652583458445
+                    ],
+                    [
+                        -1.2259630004157822,
+                        0.21904238100036552,
+                        0.9389720644247337
+                    ],
+                    [
+                        -1.119553584062801,
+                        0.7761695335637704,
+                        -0.7594472811115576
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-13-31",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Ethylene": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Ethylene"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "C=C"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -0.5233513566833614,
+                                        -0.05891862458387315,
+                                        -0.40497995069681497
+                                    ],
+                                    [
+                                        0.5233513283553852,
+                                        0.05891851770878867,
+                                        0.4049800750995627
+                                    ],
+                                    [
+                                        -1.5216794712879844,
+                                        0.14350897319210268,
+                                        -0.033335453091963486
+                                    ],
+                                    [
+                                        -1.5216811090958657,
+                                        0.14350810372805597,
+                                        -0.03333921014899479
+                                    ],
+                                    [
+                                        1.5216810868240571,
+                                        -0.14350804138472467,
+                                        0.03333916713649148
+                                    ],
+                                    [
+                                        1.5216795218878587,
+                                        -0.14350892866036727,
+                                        0.03333537170176064
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -0.5233513566833614,
+                        -0.05891862458387315,
+                        -0.40497995069681497
+                    ],
+                    [
+                        0.5233513283553852,
+                        0.05891851770878867,
+                        0.4049800750995627
+                    ],
+                    [
+                        -1.5216794712879844,
+                        0.14350897319210268,
+                        -0.033335453091963486
+                    ],
+                    [
+                        -1.5216811090958657,
+                        0.14350810372805597,
+                        -0.03333921014899479
+                    ],
+                    [
+                        1.5216810868240571,
+                        -0.14350804138472467,
+                        0.03333916713649148
+                    ],
+                    [
+                        1.5216795218878587,
+                        -0.14350892866036727,
+                        0.03333537170176064
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-13-32",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Acetylene": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Acetylene"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "C#C"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        0.5886393526980478,
+                                        0.009848404049858971,
+                                        -0.26643888455586406
+                                    ],
+                                    [
+                                        -0.5886393486423457,
+                                        -0.009848416800355633,
+                                        -0.5242905280799697
+                                    ],
+                                    [
+                                        1.6223754793092124,
+                                        0.02714363343920637,
+                                        -0.0400264020902249
+                                    ],
+                                    [
+                                        -1.6223754833649089,
+                                        -0.027143620688711668,
+                                        -0.7507029862877835
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        0.5915806207425305,
+                        0.009898081798975295,
+                        -0.2657947183406742
+                    ],
+                    [
+                        -0.5915822760559923,
+                        -0.009898094549471968,
+                        -0.5249346942951596
+                    ],
+                    [
+                        1.653349437567797,
+                        0.027661739792074026,
+                        -0.03324305058045321
+                    ],
+                    [
+                        -1.6533477822543294,
+                        -0.02766172704157932,
+                        -0.7574856893839803
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-13-39",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Propane": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Propane"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CCC"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    6,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        1.181393464114975,
+                                        -0.4502325656895342,
+                                        -0.21233658039956
+                                    ],
+                                    [
+                                        0.013776550556395064,
+                                        0.5239646877512757,
+                                        -0.33552568068099137
+                                    ],
+                                    [
+                                        -1.1919499587287934,
+                                        0.04874535719600727,
+                                        0.46943165354269645
+                                    ],
+                                    [
+                                        1.4972859438967214,
+                                        -0.5416791278311391,
+                                        0.8487928468292598
+                                    ],
+                                    [
+                                        2.0409815863427596,
+                                        -0.07695782694536431,
+                                        -0.8079088337125673
+                                    ],
+                                    [
+                                        0.8908539304929607,
+                                        -1.4512834243068886,
+                                        -0.5965632503859901
+                                    ],
+                                    [
+                                        -0.27348972696035667,
+                                        0.618770037173381,
+                                        -1.404932538327882
+                                    ],
+                                    [
+                                        0.329821554600544,
+                                        1.5236914835345807,
+                                        0.032987645360127306
+                                    ],
+                                    [
+                                        -2.0225664142081543,
+                                        0.7773745528497807,
+                                        0.35939035039648626
+                                    ],
+                                    [
+                                        -0.9298374467677748,
+                                        -0.031394546342199084,
+                                        1.5460095856418659
+                                    ],
+                                    [
+                                        -1.536269483339269,
+                                        -0.9409986273899197,
+                                        0.10065480173652527
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    6,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        1.2126260828697755,
+                        -0.45524214625362086,
+                        -0.22228784913993704
+                    ],
+                    [
+                        0.013901984593999194,
+                        0.5286242518766623,
+                        -0.33850589308736334
+                    ],
+                    [
+                        -1.2230995333427455,
+                        0.05685409012511579,
+                        0.47739768128734394
+                    ],
+                    [
+                        1.5319851565732079,
+                        -0.5585010870952878,
+                        0.8315378471075257
+                    ],
+                    [
+                        2.0755544126470427,
+                        -0.09331228454639247,
+                        -0.8121191470962172
+                    ],
+                    [
+                        0.9326398368202339,
+                        -1.4574678248133681,
+                        -0.5969247746646512
+                    ],
+                    [
+                        -0.2703185220362311,
+                        0.6350772982454855,
+                        -1.4058379149459768
+                    ],
+                    [
+                        0.32729128220012427,
+                        1.531442002369997,
+                        0.018493398051234653
+                    ],
+                    [
+                        -2.0576124406154372,
+                        0.7756582942503331,
+                        0.37517009182773176
+                    ],
+                    [
+                        -0.9718104244710196,
+                        -0.03208820287230012,
+                        1.550778707352614
+                    ],
+                    [
+                        -1.5711423025021531,
+                        -0.9310631412006021,
+                        0.12231684055176867
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-14-25",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Butane": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Butane"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CCCC"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    6,
+                                    6,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        1.934113793457718,
+                                        -0.08783232731723933,
+                                        -0.3089558342488894
+                                    ],
+                                    [
+                                        0.5188196271125053,
+                                        0.40268520569580424,
+                                        -0.5997266196146361
+                                    ],
+                                    [
+                                        -0.5188198979947845,
+                                        -0.4026861591883862,
+                                        0.1899154783456168
+                                    ],
+                                    [
+                                        -1.9341136355301798,
+                                        0.08783328016577761,
+                                        -0.10085355682241251
+                                    ],
+                                    [
+                                        2.662958843119945,
+                                        0.5123978724234335,
+                                        -0.8933317111717978
+                                    ],
+                                    [
+                                        2.0397478631080372,
+                                        -1.155107989417682,
+                                        -0.5985601226677038
+                                    ],
+                                    [
+                                        2.167006845370416,
+                                        0.02420588018220897,
+                                        0.771467314277949
+                                    ],
+                                    [
+                                        0.44731002382538043,
+                                        1.4778041748681099,
+                                        -0.3250798900220147
+                                    ],
+                                    [
+                                        0.32058593174525885,
+                                        0.3034497019737829,
+                                        -1.689350777905667
+                                    ],
+                                    [
+                                        -0.44731200212150585,
+                                        -1.4778049080343778,
+                                        -0.0847320318017489
+                                    ],
+                                    [
+                                        -0.3205851244706053,
+                                        -0.3034521603061633,
+                                        1.2795395225315884
+                                    ],
+                                    [
+                                        -2.039745779451153,
+                                        1.155108145406303,
+                                        0.18875291328814195
+                                    ],
+                                    [
+                                        -2.6629591779432205,
+                                        -0.5123969674462022,
+                                        0.4835218475137029
+                                    ],
+                                    [
+                                        -2.167007310227803,
+                                        -0.02420374900537844,
+                                        -1.1812767809376394
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    6,
+                    6,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        1.9832009130176391,
+                        -0.0865841987451406,
+                        -0.3145945548610136
+                    ],
+                    [
+                        0.5360425398062122,
+                        0.4041831828181187,
+                        -0.6026171463681548
+                    ],
+                    [
+                        -0.5360426874609421,
+                        -0.4041858479348796,
+                        0.19280644652155016
+                    ],
+                    [
+                        -1.983200033847135,
+                        0.08658421824827714,
+                        -0.09521399711130467
+                    ],
+                    [
+                        2.719298277299622,
+                        0.5041919268105802,
+                        -0.8915075299837285
+                    ],
+                    [
+                        2.0977352728035186,
+                        -1.150702655398453,
+                        -0.5935495539663768
+                    ],
+                    [
+                        2.2234884698028647,
+                        0.014646672757222175,
+                        0.7602544036956812
+                    ],
+                    [
+                        0.4516867464372309,
+                        1.4787238340873268,
+                        -0.33862029636007485
+                    ],
+                    [
+                        0.32627145034853827,
+                        0.31650561072679917,
+                        -1.6887848772837937
+                    ],
+                    [
+                        -0.4516887247333563,
+                        -1.4787254852912486,
+                        -0.07119267269653136
+                    ],
+                    [
+                        -0.32627027944794107,
+                        -0.31651079858861325,
+                        1.2789738285041177
+                    ],
+                    [
+                        -2.0977304596172006,
+                        1.1507016805886547,
+                        0.18374268497122354
+                    ],
+                    [
+                        -2.719299495630499,
+                        -0.5041911858624405,
+                        0.481699244887275
+                    ],
+                    [
+                        -2.2234894453753546,
+                        -0.014643463899901149,
+                        -1.1700624748785833
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-15-30",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Isobutane": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Isobutane"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CC(C)C"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    6,
+                                    6,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        1.1866830195934857,
+                                        -0.7758957360018576,
+                                        0.3343946778503152
+                                    ],
+                                    [
+                                        -0.06356571239413467,
+                                        -0.20736428590877556,
+                                        -0.3454396302909638
+                                    ],
+                                    [
+                                        0.14018483716557315,
+                                        1.2693680657153528,
+                                        -0.7007877619760128
+                                    ],
+                                    [
+                                        -1.2924206145096,
+                                        -0.38109875739737836,
+                                        0.5535918596201365
+                                    ],
+                                    [
+                                        2.066081474956607,
+                                        -0.6765569499367787,
+                                        -0.33718803177292844
+                                    ],
+                                    [
+                                        1.3970957732192744,
+                                        -0.23721381729254815,
+                                        1.2834853110222422
+                                    ],
+                                    [
+                                        1.0435169433692137,
+                                        -1.8546288830154654,
+                                        0.5581606402250677
+                                    ],
+                                    [
+                                        -0.23692596838287244,
+                                        -0.7729001745717082,
+                                        -1.2875429721264173
+                                    ],
+                                    [
+                                        -0.7571712500850476,
+                                        1.664615074803862,
+                                        -1.2230567234649552
+                                    ],
+                                    [
+                                        0.3173295121208302,
+                                        1.873069202568511,
+                                        0.2153942352168989
+                                    ],
+                                    [
+                                        1.0123630443695837,
+                                        1.3828174845822117,
+                                        -1.379512313340444
+                                    ],
+                                    [
+                                        -1.452692219191699,
+                                        -1.4571075108816065,
+                                        0.7788722872719964
+                                    ],
+                                    [
+                                        -2.1996623371870023,
+                                        0.0027601485412798573,
+                                        0.03997893525969983
+                                    ],
+                                    [
+                                        -1.1608165030442763,
+                                        0.17013613879496722,
+                                        1.509649486505368
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    6,
+                    6,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        1.2095432248924585,
+                        -0.7936151634973593,
+                        0.3371898144692217
+                    ],
+                    [
+                        -0.06430670127983203,
+                        -0.20986319435308126,
+                        -0.3495936405054557
+                    ],
+                    [
+                        0.14218749234923497,
+                        1.2921837110050032,
+                        -0.718760762975207
+                    ],
+                    [
+                        -1.3188451492620104,
+                        -0.39105063935474155,
+                        0.5606523628527803
+                    ],
+                    [
+                        2.0905261975950507,
+                        -0.6911776942437765,
+                        -0.3238484218377324
+                    ],
+                    [
+                        1.420449633700531,
+                        -0.25857324909572227,
+                        1.2820820834704074
+                    ],
+                    [
+                        1.0705855278952832,
+                        -1.8662167044248716,
+                        0.5691455894175289
+                    ],
+                    [
+                        -0.23760731800673673,
+                        -0.7755963826028253,
+                        -1.2918245680576055
+                    ],
+                    [
+                        -0.7510817309716886,
+                        1.6937227726018158,
+                        -1.232966345212336
+                    ],
+                    [
+                        0.3185501645027544,
+                        1.8947725152092005,
+                        0.19190937422936946
+                    ],
+                    [
+                        1.0139968212652852,
+                        1.4125897284957774,
+                        -1.3888665314699138
+                    ],
+                    [
+                        -1.479693637291539,
+                        -1.4601434261058948,
+                        0.7945860053212422
+                    ],
+                    [
+                        -2.2246908930040794,
+                        -0.0040289081565489365,
+                        0.05750360902209768
+                    ],
+                    [
+                        -1.189605904261923,
+                        0.1570076386812099,
+                        1.5127848621271425
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-16-38",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Ammonia": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Ammonia"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "N"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    7,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        0.003910347714827463,
+                                        0.0015382820118762983,
+                                        0.29489567107012227
+                                    ],
+                                    [
+                                        -0.5372003225516879,
+                                        -0.8060345973233893,
+                                        -0.08699057663391635
+                                    ],
+                                    [
+                                        -0.43093763776555016,
+                                        0.8664312123883084,
+                                        -0.09712382759069459
+                                    ],
+                                    [
+                                        0.9642276126024116,
+                                        -0.06193489707679586,
+                                        -0.11078126684551158
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    7,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        0.005086053143437209,
+                        0.0020030573482524585,
+                        0.3837227737956418
+                    ],
+                    [
+                        -0.5247544995108475,
+                        -0.7868905425309983,
+                        -0.1168714078885989
+                    ],
+                    [
+                        -0.4210339362319908,
+                        0.8455034630822309,
+                        -0.1267619725534206
+                    ],
+                    [
+                        0.9407023825994023,
+                        -0.06061987212978098,
+                        -0.14009031550206438
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-16-46",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Sulfur dioxide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Sulfur dioxide"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "O=S=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    8,
+                                    16,
+                                    8
+                                ],
+                                "positions": [
+                                    [
+                                        -1.1668576840421077,
+                                        -0.21635783135401052,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0030448839032206363,
+                                        0.44853793676640424,
+                                        0.0
+                                    ],
+                                    [
+                                        1.1638128001388863,
+                                        -0.23218010541239262,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    8,
+                    16,
+                    8
+                ],
+                "positions": [
+                    [
+                        -1.323821796639488,
+                        -0.3124473029196783,
+                        -1.1071434744765491e-18
+                    ],
+                    [
+                        0.004305928471250883,
+                        0.6428856719844047,
+                        2.14787469285758e-19
+                    ],
+                    [
+                        1.319520419828724,
+                        -0.33043647476032934,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-16-56",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Phosgene": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Phosgene"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "C(=O)(Cl)Cl"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    8,
+                                    17,
+                                    17
+                                ],
+                                "positions": [
+                                    [
+                                        -0.004676708993981803,
+                                        0.1334329449157616,
+                                        -3.561876437247169e-05
+                                    ],
+                                    [
+                                        -0.04739139066138002,
+                                        1.3521392848799338,
+                                        -0.0003609282142142674
+                                    ],
+                                    [
+                                        1.5436896793859423,
+                                        -0.6895932788395189,
+                                        0.0012187584202261893
+                                    ],
+                                    [
+                                        -1.4916215797305803,
+                                        -0.7959789509561789,
+                                        -0.0008222114416415928
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    8,
+                    17,
+                    17
+                ],
+                "positions": [
+                    [
+                        -0.007737180833526713,
+                        0.22075087594603462,
+                        -5.741910091914197e-05
+                    ],
+                    [
+                        -0.0510665000559661,
+                        1.4570074202719283,
+                        -0.00038617966418524625
+                    ],
+                    [
+                        1.5420298111091342,
+                        -0.785860793124802,
+                        0.0012406049454323782
+                    ],
+                    [
+                        -1.4832250044720068,
+                        -0.8918950272434018,
+                        -0.0007922647907029859
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-17-19",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Dichlorine monoxide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Dichlorine monoxide"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "O(Cl)Cl"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    8,
+                                    17,
+                                    17
+                                ],
+                                "positions": [
+                                    [
+                                        -0.0008113293040392334,
+                                        0.6945664813314211,
+                                        0.0
+                                    ],
+                                    [
+                                        -1.3454045438819886,
+                                        -0.3488551842924143,
+                                        0.0
+                                    ],
+                                    [
+                                        1.34621587318602,
+                                        -0.34571129703900455,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    8,
+                    17,
+                    17
+                ],
+                "positions": [
+                    [
+                        -0.0008148479034614576,
+                        0.6991191933926315,
+                        3.1961305322337603e-18
+                    ],
+                    [
+                        -1.4939351731851154,
+                        -0.3513022572243103,
+                        -1.833653483038022e-18
+                    ],
+                    [
+                        1.494752783099425,
+                        -0.3478120466399176,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-17-33",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Nitrous oxide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Nitrous oxide"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "[N-]=[N+]=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    7,
+                                    7,
+                                    8
+                                ],
+                                "positions": [
+                                    [
+                                        1.217563201427397,
+                                        0.11088629893326596,
+                                        0.0
+                                    ],
+                                    [
+                                        -0.007264444460547281,
+                                        -0.0006615485371653896,
+                                        0.0
+                                    ],
+                                    [
+                                        -1.2102987569668457,
+                                        -0.11022475039610137,
+                                        0.0
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    7,
+                    7,
+                    8
+                ],
+                "positions": [
+                    [
+                        1.2473859436790173,
+                        0.11360294637798693,
+                        -3.138521732965488e-17
+                    ],
+                    [
+                        0.014182352306183572,
+                        0.001290919835451228,
+                        9.175843019976354e-19
+                    ],
+                    [
+                        -1.2615667314578833,
+                        -0.11489444529155649,
+                        0.0
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-17-44",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Formaldehyde": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Formaldehyde"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "C=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    8,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -0.03314015189367863,
+                                        0.006363183761140722,
+                                        0.000976674877194814
+                                    ],
+                                    [
+                                        1.1639374480091877,
+                                        -0.22348557914090486,
+                                        -0.03430245204999328
+                                    ],
+                                    [
+                                        -0.7421281833052128,
+                                        -0.813713463343768,
+                                        0.028701395972543713
+                                    ],
+                                    [
+                                        -0.3886691128103024,
+                                        1.0308358587235351,
+                                        0.0046243812002591715
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    8,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -0.0012748868149745267,
+                        0.00024410377805086843,
+                        3.594311239198771e-05
+                    ],
+                    [
+                        1.2343267403134368,
+                        -0.23700243429756512,
+                        -0.03637687273280614
+                    ],
+                    [
+                        -0.7945283725867659,
+                        -0.8105322833281587,
+                        0.030294520187986097
+                    ],
+                    [
+                        -0.4385240995539553,
+                        1.0472888718598239,
+                        0.0060435350576904644
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-17-55",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Acetaldehyde": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Acetaldehyde"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CC=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    8,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -0.643399594701266,
+                                        -0.04005592919009544,
+                                        0.007052821636345816
+                                    ],
+                                    [
+                                        0.8485815009541652,
+                                        0.015737587961774182,
+                                        -0.013736261398021908
+                                    ],
+                                    [
+                                        1.424024359182543,
+                                        1.0853842160448974,
+                                        0.10354469423676517
+                                    ],
+                                    [
+                                        -1.0201262362662653,
+                                        0.3547286436705633,
+                                        0.9738256098792042
+                                    ],
+                                    [
+                                        -0.9820141783333072,
+                                        -1.0904581992836877,
+                                        -0.11228583695515397
+                                    ],
+                                    [
+                                        -1.0532351773429396,
+                                        0.5697870354401847,
+                                        -0.8251453246093314
+                                    ],
+                                    [
+                                        1.4261693265070634,
+                                        -0.8951233546436448,
+                                        -0.1332557027898099
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    8,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -0.6709560427157739,
+                        -0.051028369137046004,
+                        0.006248294046123121
+                    ],
+                    [
+                        0.8921991012745154,
+                        0.060896833833069035,
+                        -0.009140319851819413
+                    ],
+                    [
+                        1.5319939331581334,
+                        1.1393369628368883,
+                        0.10800665505059204
+                    ],
+                    [
+                        -1.0724714590009257,
+                        0.3417195598255002,
+                        0.9611774949236106
+                    ],
+                    [
+                        -0.9878286983810368,
+                        -1.1022165460473103,
+                        -0.11358267263818383
+                    ],
+                    [
+                        -1.1051385612095856,
+                        0.5539342453451355,
+                        -0.8140298091186496
+                    ],
+                    [
+                        1.412198853294197,
+                        -0.9426397610741188,
+                        -0.13867908982799707
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-18-30",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Acetone": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Acetone"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CC(=O)C"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    8,
+                                    6,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -1.2962869741454222,
+                                        -0.17949993552621965,
+                                        -0.16414068341603907
+                                    ],
+                                    [
+                                        -0.033430603107538315,
+                                        0.5014059464334235,
+                                        0.2739148738755695
+                                    ],
+                                    [
+                                        -0.10476156205950923,
+                                        1.571257740427257,
+                                        0.8583669327261915
+                                    ],
+                                    [
+                                        1.3149901360461174,
+                                        -0.10101745159684637,
+                                        0.010896058527384716
+                                    ],
+                                    [
+                                        -1.0826840373904494,
+                                        -1.1385840659806201,
+                                        -0.6805200282485107
+                                    ],
+                                    [
+                                        -1.8518646452193208,
+                                        0.4822991807784468,
+                                        -0.8611315988707854
+                                    ],
+                                    [
+                                        -1.9318277319467034,
+                                        -0.38784434360972453,
+                                        0.7219299871608181
+                                    ],
+                                    [
+                                        1.8380138202407565,
+                                        -0.2745418293618216,
+                                        0.9746262407912082
+                                    ],
+                                    [
+                                        1.9179742435460452,
+                                        0.5956035186179258,
+                                        -0.6084341319284048
+                                    ],
+                                    [
+                                        1.2298773540360317,
+                                        -1.0690787601818168,
+                                        -0.5255076506174343
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    8,
+                    6,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -1.3222773476359175,
+                        -0.19693231291064744,
+                        -0.17503648656934873
+                    ],
+                    [
+                        -0.038354557307724045,
+                        0.5752605565709528,
+                        0.3142605096646997
+                    ],
+                    [
+                        -0.11203688780275252,
+                        1.6803923497902786,
+                        0.9179888104952258
+                    ],
+                    [
+                        1.3431937253479707,
+                        -0.11682429075149797,
+                        0.0036320832700029084
+                    ],
+                    [
+                        -1.0610846080988308,
+                        -1.14234618769553,
+                        -0.6814982605877616
+                    ],
+                    [
+                        -1.8972247772673463,
+                        0.4408517995825325,
+                        -0.8748258255603397
+                    ],
+                    [
+                        -1.9763061051550763,
+                        -0.41970538418204123,
+                        0.690792242654807
+                    ],
+                    [
+                        1.8880693554025978,
+                        -0.3035637029511526,
+                        0.949824362341764
+                    ],
+                    [
+                        1.9671520720291316,
+                        0.5569897899777874,
+                        -0.61579508273887
+                    ],
+                    [
+                        1.2088605625905253,
+                        -1.0741250152460127,
+                        -0.5293416012568462
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-19-31",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Methanol": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Methanol"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CO"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    8,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -0.3567770457202704,
+                                        -0.034317961719168906,
+                                        -0.0009634332660173875
+                                    ],
+                                    [
+                                        0.9456805151155422,
+                                        -0.39463135932990084,
+                                        -0.36076916349097965
+                                    ],
+                                    [
+                                        -0.4794569106081398,
+                                        -0.09089519338689692,
+                                        1.1024766266117112
+                                    ],
+                                    [
+                                        -0.580159601046553,
+                                        0.9968016234046755,
+                                        -0.3512829677382848
+                                    ],
+                                    [
+                                        -1.0729019796020371,
+                                        -0.7358215856145991,
+                                        -0.4762180486141381
+                                    ],
+                                    [
+                                        1.5436150218614653,
+                                        0.25886447664589646,
+                                        0.08675698649769925
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    8,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -0.35525998634334743,
+                        -0.0256272580918171,
+                        0.005435025965651445
+                    ],
+                    [
+                        0.9954740662567376,
+                        -0.44485260272937865,
+                        -0.40179251234998176
+                    ],
+                    [
+                        -0.5223465655324507,
+                        -0.07146801518443646,
+                        1.1125853007567654
+                    ],
+                    [
+                        -0.622393233910346,
+                        1.0091514817422618,
+                        -0.3317183045480329
+                    ],
+                    [
+                        -1.0654840798883198,
+                        -0.7337971234046389,
+                        -0.4752182367443504
+                    ],
+                    [
+                        1.570007570604199,
+                        0.26658520652068685,
+                        0.09070603739823387
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-19-50",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Ethanol": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Ethanol"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CCO"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    6,
+                                    8,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -0.9158795991865881,
+                                        -0.09837996478571792,
+                                        0.11992559905452588
+                                    ],
+                                    [
+                                        0.5022543600132879,
+                                        0.4357427615469777,
+                                        -0.039677373211928935
+                                    ],
+                                    [
+                                        1.2817755639152792,
+                                        -0.46383259941538574,
+                                        -0.7794737807524096
+                                    ],
+                                    [
+                                        -1.3742987843214274,
+                                        -0.2637920012585992,
+                                        -0.8780898369324562
+                                    ],
+                                    [
+                                        -1.5311149258058063,
+                                        0.6355240156469791,
+                                        0.681917248002867
+                                    ],
+                                    [
+                                        -0.9016407124955177,
+                                        -1.0578820842912116,
+                                        0.6790400489361305
+                                    ],
+                                    [
+                                        0.4662379443959916,
+                                        1.4052766156340446,
+                                        -0.579857479981799
+                                    ],
+                                    [
+                                        0.9560078604795391,
+                                        0.6150724763352917,
+                                        0.9614214629610197
+                                    ],
+                                    [
+                                        1.5166582930052028,
+                                        -1.2077292194123448,
+                                        -0.16520588807593803
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    6,
+                    8,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -0.9283865763545196,
+                        -0.10790771813303346,
+                        0.13277144055120996
+                    ],
+                    [
+                        0.5280356772541105,
+                        0.4510922457096238,
+                        -0.03184734668128689
+                    ],
+                    [
+                        1.4235379933399317,
+                        -0.42469772961224495,
+                        -0.8063100934297461
+                    ],
+                    [
+                        -1.3897054403244515,
+                        -0.28945180014989347,
+                        -0.8556803794299987
+                    ],
+                    [
+                        -1.5548336988333744,
+                        0.6164675927894077,
+                        0.6872972211087196
+                    ],
+                    [
+                        -0.9190883438185017,
+                        -1.0612673967567698,
+                        0.6955756336067999
+                    ],
+                    [
+                        0.48972815303510037,
+                        1.410964230673846,
+                        -0.598121889503375
+                    ],
+                    [
+                        0.9367053578789252,
+                        0.6821857997518305,
+                        0.9887896803478552
+                    ],
+                    [
+                        1.4140265122951194,
+                        -1.2773407082067112,
+                        -0.2124986105721009
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-20-53",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Dimethyl ether": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Dimethyl ether"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "COC"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    8,
+                                    6,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -1.1455362895983578,
+                                        0.0007534989280141038,
+                                        0.09825530580518894
+                                    ],
+                                    [
+                                        -0.02675380808206996,
+                                        -0.856779435435367,
+                                        0.09589921826986308
+                                    ],
+                                    [
+                                        1.142700821943979,
+                                        -0.0915568837158883,
+                                        -0.08809190330094781
+                                    ],
+                                    [
+                                        -2.0594969787876485,
+                                        -0.6110005699696849,
+                                        0.2435467325893715
+                                    ],
+                                    [
+                                        -1.0928696865538328,
+                                        0.7303856146526404,
+                                        0.9370198200720327
+                                    ],
+                                    [
+                                        -1.2483353879204266,
+                                        0.5325330260268835,
+                                        -0.8740128934677643
+                                    ],
+                                    [
+                                        1.2847746646252776,
+                                        0.6344722072879713,
+                                        0.7433881188988515
+                                    ],
+                                    [
+                                        1.1293117578198266,
+                                        0.4366114607712634,
+                                        -1.0676434578800096
+                                    ],
+                                    [
+                                        2.016204906553251,
+                                        -0.77541891854584,
+                                        -0.08836094098659565
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    8,
+                    6,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -1.1766873077762576,
+                        0.0008185685776963093,
+                        0.1009229919720444
+                    ],
+                    [
+                        -0.028924671988412646,
+                        -0.9262544176780143,
+                        0.10367103982248754
+                    ],
+                    [
+                        1.1737753761224183,
+                        -0.09400274505179208,
+                        -0.09049455287865983
+                    ],
+                    [
+                        -2.085414766922886,
+                        -0.6230690575169999,
+                        0.2470922140397059
+                    ],
+                    [
+                        -1.1233406679723978,
+                        0.7550343286505277,
+                        0.9267516624867208
+                    ],
+                    [
+                        -1.2770952502397133,
+                        0.5593709052586459,
+                        -0.8642810555171775
+                    ],
+                    [
+                        1.315064033390895,
+                        0.656669375588237,
+                        0.7281697280857655
+                    ],
+                    [
+                        1.1613186411532765,
+                        0.4609969379324698,
+                        -1.0628622967908765
+                    ],
+                    [
+                        2.0413040633636363,
+                        -0.7895484404661086,
+                        -0.08897623297249915
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-21-25",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    },
+    "Methylamine": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Methylamine"
+                    }
+                },
+                {
+                    "smiles_to_atomsdata": {
+                        "smiles": "CN"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "atomsdata": {
+                                "numbers": [
+                                    6,
+                                    7,
+                                    1,
+                                    1,
+                                    1,
+                                    1,
+                                    1
+                                ],
+                                "positions": [
+                                    [
+                                        -0.5734306394072454,
+                                        -0.009352519896693025,
+                                        -0.001755407716992465
+                                    ],
+                                    [
+                                        0.8318725665229283,
+                                        0.032260199302979714,
+                                        -0.38085923149271705
+                                    ],
+                                    [
+                                        -0.6733761884647814,
+                                        -0.06492290899706682,
+                                        1.1042663037643778
+                                    ],
+                                    [
+                                        -1.0569059451228164,
+                                        -0.8989399880825873,
+                                        -0.4578616988788944
+                                    ],
+                                    [
+                                        -1.0865801276554108,
+                                        0.9040221236926523,
+                                        -0.36995605267430304
+                                    ],
+                                    [
+                                        1.2930106776008168,
+                                        -0.8200102250330443,
+                                        0.012203985085354922
+                                    ],
+                                    [
+                                        1.2654096565265056,
+                                        0.8569433190137589,
+                                        0.09396210191317161
+                                    ]
+                                ],
+                                "cell": [
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ],
+                                    [
+                                        0.0,
+                                        0.0,
+                                        0.0
+                                    ]
+                                ],
+                                "pbc": [
+                                    false,
+                                    false,
+                                    false
+                                ]
+                            },
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "nwchem",
+                                "xc": "pbe",
+                                "basis": "sto-3g"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "numbers": [
+                    6,
+                    7,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1
+                ],
+                "positions": [
+                    [
+                        -0.5815434532755546,
+                        -0.009949461141863722,
+                        0.007749730838945216
+                    ],
+                    [
+                        0.8696732249892352,
+                        0.03690432335895654,
+                        -0.46335875618812966
+                    ],
+                    [
+                        -0.7194166490109561,
+                        -0.06613838948548642,
+                        1.1136685664588581
+                    ],
+                    [
+                        -1.0700101906587622,
+                        -0.8959829278480859,
+                        -0.4463971226368875
+                    ],
+                    [
+                        -1.0995620806870348,
+                        0.8995345241133835,
+                        -0.35885409105539845
+                    ],
+                    [
+                        1.3139649588163365,
+                        -0.804572390173923,
+                        0.03349843617964854
+                    ],
+                    [
+                        1.2868949968902976,
+                        0.8402016279891993,
+                        0.11368821988101907
+                    ]
+                ],
+                "cell": [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ],
+                "pbc": [
+                    false,
+                    false,
+                    false
+                ]
+            }
+        },
+        "metadata": {
+            "timestamp": "2025-05-09_17-21-44",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
+        }
+    }
+}

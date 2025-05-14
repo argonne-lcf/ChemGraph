@@ -138,25 +138,20 @@ def ResultAggregatorAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_pro
     """Result Aggregator Agent"""
     print("*****ResultAggregatorAgent*****")
 
-    worker_outputs_text = ""
-
     if "worker_result" in state:
-        outputs = [message.content for message in state["worker_result"]]
-        worker_outputs_text = "\n".join(outputs)
-
-    system_prompt_filled = system_prompt.format(worker_outputs=worker_outputs_text)
+        outputs = [m.content for m in state["worker_result"]]
+        worker_summary_msg = {
+            "role": "assistant",
+            "content": "Worker Outputs:\n" + "\n".join(outputs),
+        }
+        state["messages"].append(worker_summary_msg)
 
     messages = [
-        {"role": "system", "content": system_prompt_filled},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
-
-    print(f'messages: {messages}')
-
+    print(messages)
     response = llm.invoke(messages)
-
-    print(f'response: {response}')
-
     return {"messages": [response]}
 
 
