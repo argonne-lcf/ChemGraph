@@ -21,7 +21,7 @@ dependencies = [
     "pandas>=2.2",
     "mace-torch==0.3.9",
     "torch<2.6",
-    "torch-dftd== 0.5.1",
+    "torch-dftd==0.5.1",
     "pubchempy==1.0.4",
     "pyppeteer==2.0.0",
     "numpy<2",
@@ -30,8 +30,12 @@ dependencies = [
     "tblite==0.4.0",
     "langchain-experimental==0.3.4",
     "numexpr==2.10.2",
-    "deepdiff==8.4.2"
-    ]
+    "deepdiff==8.4.2",
+    "langchain-core>=0.1.0",
+    "pymatgen>=2024.2.8",
+    "typing-extensions>=4.9.0",
+    "getpass-asterisk>=0.1.0"
+]
 
 [project.urls]
 "Homepage" = "https://example.com/your-project"
