@@ -298,7 +298,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     fmax = params.fmax
     steps = params.steps
     driver = params.driver
-    temperature = params.temperature
     pressure = params.pressure
 
     calc = load_calculator(calculator)
@@ -366,6 +365,8 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         thermo_data = {}
 
         if driver == "vib" or driver == "thermo":
+            temperature = params.temperature
+
             from ase.vibrations import Vibrations
             from ase import units
 
@@ -410,9 +411,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                     vib_energies = vib.get_energies()
 
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-                    symmetrynumber = get_symmetry_number.invoke(
-                        {"atomsdata": final_structure}
-                    )
+                    symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
 
                     if linear:
                         geometry = "linear"
@@ -427,9 +426,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                         spin=0,  # Only support spin=0
                     )
 
-                    thermo_data["enthalpy"] = thermo.get_enthalpy(
-                        temperature=temperature
-                    )
+                    thermo_data["enthalpy"] = thermo.get_enthalpy(temperature=temperature)
                     thermo_data["entropy"] = thermo.get_entropy(
                         temperature=temperature, pressure=pressure
                     )
@@ -584,9 +581,7 @@ def run_ase_with_state(state: MultiAgentState):
                 vib_energies = vib.get_energies()
 
                 linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-                symmetrynumber = get_symmetry_number.invoke(
-                    {"atomsdata": final_structure}
-                )
+                symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
 
                 if linear:
                     geometry = "linear"
@@ -618,9 +613,7 @@ def run_ase_with_state(state: MultiAgentState):
             thermochemistry=thermo_data,
         )
         output = []
-        output.append(
-            HumanMessage(role="system", content=simulation_output.model_dump_json())
-        )
+        output.append(HumanMessage(role="system", content=simulation_output.model_dump_json()))
         return {"opt_response": output}
 
     except Exception as e:

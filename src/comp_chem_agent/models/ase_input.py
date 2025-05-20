@@ -5,6 +5,7 @@ from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
 from comp_chem_agent.models.calculators.emt_calc import EMTCalc
 from comp_chem_agent.models.calculators.mace_calc import MaceCalc
 from comp_chem_agent.models.calculators.nwchem_calc import NWChemCalc
+from typing import Optional
 
 
 class ASEInputSchema(BaseModel):
@@ -29,8 +30,8 @@ class ASEInputSchema(BaseModel):
         default=1000,
         description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
     )
-    temperature: float = Field(
-        default=298.15, description="Temperature for thermochemistry calculations in Kelvin (K)."
+    temperature: Optional[float] = Field(
+        default=None, description="Temperature for thermochemistry calculations in Kelvin (K)."
     )
     pressure: float = Field(
         default=101325.0, description="Pressure for thermochemistry calculations in Pascal (Pa)."

@@ -65,7 +65,7 @@ class TBLiteCalc(BaseModel):
         default=1.0, description="Numerical accuracy of the calculation"
     )
     electronic_temperature: float = Field(
-        default=300.0, description="Electronic temperature in Kelvin"
+        default=300.0, description="Electronic temperature in Kelvin for xTB calculations"
     )
     max_iterations: int = Field(
         default=250, description="Iterations for self-consistent evaluation"

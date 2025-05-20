@@ -82,19 +82,13 @@ class BasicToolNode:
                 if not tool_name or tool_name not in self.tools_by_name:
                     raise ValueError(f"Invalid tool name: {tool_name}")
 
-                tool_result = self.tools_by_name[tool_name].invoke(
-                    tool_call.get("args", {})
-                )
+                tool_result = self.tools_by_name[tool_name].invoke(tool_call.get("args", {}))
 
                 # Handle tool output: make it a dict or string
                 result_content = (
                     tool_result.dict()
                     if hasattr(tool_result, "dict")
-                    else (
-                        tool_result
-                        if isinstance(tool_result, dict)
-                        else str(tool_result)
-                    )
+                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
                 )
 
                 outputs.append(
@@ -174,14 +168,12 @@ def TaskDecomposerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_promp
     response = structured_llm.invoke(messages).model_dump_json()
 
     print("*****TASK DECOMPOSER*****")
-    print(f"messages: {messages}")
+    # print(f"messages: {messages}")
     print(f"response: {response}")
     return {"messages": [response]}
 
 
-def WorkerAgent(
-    state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, tools=None
-):
+def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, tools=None):
     """An LLM agent that executes assigned tasks using available tools.
 
     Parameters
@@ -215,7 +207,7 @@ def WorkerAgent(
     messages = [{"role": "system", "content": system_prompt}] + history
     llm_with_tools = llm.bind_tools(tools=tools)
     response = llm_with_tools.invoke(messages)
-
+    print(response)
     # Append new LLM response directly back into the worker's channel
     state["worker_channel"][worker_id].append(response)
 
@@ -226,9 +218,7 @@ def WorkerAgent(
     return state
 
 
-def ResultAggregatorAgent(
-    state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str
-):
+def ResultAggregatorAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str):
     """An LLM agent that aggregates results from all workers.
 
     Parameters
@@ -335,9 +325,7 @@ def loop_control(state: ManagerWorkerState):
         return state
 
     task_prompt = task_list["worker_tasks"][task_idx]["prompt"]
-    worker_id = task_list["worker_tasks"][task_idx].get(
-        "worker_id", f"worker_{task_idx}"
-    )
+    worker_id = task_list["worker_tasks"][task_idx].get("worker_id", f"worker_{task_idx}")
 
     state["current_worker"] = worker_id
 
@@ -439,9 +427,7 @@ def contruct_manager_worker_graph(
 
         graph_builder.add_node(
             "TaskDecomposerAgent",
-            lambda state: TaskDecomposerAgent(
-                state, llm, system_prompt=task_decomposer_prompt
-            ),
+            lambda state: TaskDecomposerAgent(state, llm, system_prompt=task_decomposer_prompt),
         )
         graph_builder.add_node("extract_tasks", extract_tasks)
         graph_builder.add_node("loop_control", loop_control)
@@ -452,22 +438,18 @@ def contruct_manager_worker_graph(
         )
         graph_builder.add_node(
             "tools",
-            BasicToolNode(
-                [
-                    molecule_name_to_smiles,
-                    smiles_to_atomsdata,
-                    run_ase,
-                    save_atomsdata_to_file,
-                    file_to_atomsdata,
-                ]
-            ),
+            BasicToolNode([
+                molecule_name_to_smiles,
+                smiles_to_atomsdata,
+                run_ase,
+                save_atomsdata_to_file,
+                file_to_atomsdata,
+            ]),
         )
         graph_builder.add_node("increment", increment_index)
         graph_builder.add_node(
             "ResultAggregatorAgent",
-            lambda state: ResultAggregatorAgent(
-                state, llm, system_prompt=result_aggregator_prompt
-            ),
+            lambda state: ResultAggregatorAgent(state, llm, system_prompt=result_aggregator_prompt),
         )
         graph_builder.add_conditional_edges(
             "loop_control",
@@ -491,9 +473,7 @@ def contruct_manager_worker_graph(
         else:
             graph_builder.add_node(
                 "ResponseAgent",
-                lambda state: ResponseAgent(
-                    state, llm, formatter_prompt=formatter_prompt
-                ),
+                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
             )
             graph_builder.add_edge("ResultAggregatorAgent", "ResponseAgent")
             graph_builder.add_edge("ResponseAgent", END)

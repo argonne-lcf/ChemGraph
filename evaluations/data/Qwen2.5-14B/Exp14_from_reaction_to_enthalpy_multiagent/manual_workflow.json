@@ -77,7 +77,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -138,7 +139,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -205,7 +207,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -272,20 +275,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": -12.521167696645875,
+                "value": -12.509023972597447,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-37",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-09",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
     "Ammonia Synthesis": {
@@ -348,7 +352,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -409,7 +414,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -482,20 +488,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": -2.999811319590634,
+                "value": -3.046869152730835,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-38",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-10",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
     "Water Gas Shift Reaction": {
@@ -558,7 +565,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -625,7 +633,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -692,7 +701,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -753,20 +763,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": -2.8199835714194705,
+                "value": -2.813482621051037,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-39",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-11",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
     "Ethene Hydrogenation": {
@@ -853,7 +864,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -914,7 +926,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -1011,20 +1024,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": -7.574096019633657,
+                "value": -7.6246198870692865,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-42",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-14",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
     "Ethanol Combustion": {
@@ -1129,7 +1143,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -1190,7 +1205,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -1257,7 +1273,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -1324,33 +1341,34 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": -19.471932165404382,
+                "value": -19.450619045601456,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-44",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-17",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
-    "Formic Acid Neutralization with Ammonia": {
+    "Hydration of Alkene": {
         "manual_workflow": {
             "tool_calls": [
                 {
                     "molecule_name_to_smiles": {
-                        "name": "Formic acid"
+                        "name": "Ethene"
                     }
                 },
                 {
                     "smiles_to_atomsdata": {
-                        "smiles": "C(=O)O"
+                        "smiles": "C=C"
                     }
                 },
                 {
@@ -1359,36 +1377,42 @@
                             "atomsdata": {
                                 "numbers": [
                                     6,
-                                    8,
-                                    8,
+                                    6,
+                                    1,
+                                    1,
                                     1,
                                     1
                                 ],
                                 "positions": [
                                     [
-                                        -0.46860165770779405,
-                                        -0.040783843015428006,
-                                        0.10844018529135815
+                                        -0.5233513566833614,
+                                        -0.05891862458387315,
+                                        -0.40497995069681497
                                     ],
                                     [
-                                        -0.6576607066846873,
-                                        1.1679290082459417,
-                                        -0.188383198679763
+                                        0.5233513283553852,
+                                        0.05891851770878867,
+                                        0.4049800750995627
                                     ],
                                     [
-                                        0.8185414778578852,
-                                        -0.5151602163004702,
-                                        0.3341833023372096
+                                        -1.5216794712879844,
+                                        0.14350897319210268,
+                                        -0.033335453091963486
                                     ],
                                     [
-                                        -1.3113739484840947,
-                                        -0.7136358142299067,
-                                        0.18828382054922604
+                                        -1.5216811090958657,
+                                        0.14350810372805597,
+                                        -0.03333921014899479
                                     ],
                                     [
-                                        1.619094835018677,
-                                        0.10165086529986515,
-                                        0.26350930166396996
+                                        1.5216810868240571,
+                                        -0.14350804138472467,
+                                        0.03333916713649148
+                                    ],
+                                    [
+                                        1.5216795218878587,
+                                        -0.14350892866036727,
+                                        0.03333537170176064
                                     ]
                                 ],
                                 "cell": [
@@ -1418,18 +1442,19 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
                 {
                     "molecule_name_to_smiles": {
-                        "name": "Ammonia"
+                        "name": "Water"
                     }
                 },
                 {
                     "smiles_to_atomsdata": {
-                        "smiles": "N"
+                        "smiles": "O"
                     }
                 },
                 {
@@ -1437,31 +1462,25 @@
                         "params": {
                             "atomsdata": {
                                 "numbers": [
-                                    7,
-                                    1,
+                                    8,
                                     1,
                                     1
                                 ],
                                 "positions": [
                                     [
-                                        0.003910347714827463,
-                                        0.0015382820118762983,
-                                        0.29489567107012227
+                                        0.006278547432814329,
+                                        0.40407281100004966,
+                                        0.0
                                     ],
                                     [
-                                        -0.5372003225516879,
-                                        -0.8060345973233893,
-                                        -0.08699057663391635
+                                        -0.7860813452298498,
+                                        -0.18987091442763143,
+                                        0.0
                                     ],
                                     [
-                                        -0.43093763776555016,
-                                        0.8664312123883084,
-                                        -0.09712382759069459
-                                    ],
-                                    [
-                                        0.9642276126024116,
-                                        -0.06193489707679586,
-                                        -0.11078126684551158
+                                        0.7798027977970334,
+                                        -0.21420189657241812,
+                                        0.0
                                     ]
                                 ],
                                 "cell": [
@@ -1491,18 +1510,19 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
                 {
                     "molecule_name_to_smiles": {
-                        "name": "Ammonium formate"
+                        "name": "Ethanol"
                     }
                 },
                 {
                     "smiles_to_atomsdata": {
-                        "smiles": "C(=O)[O-].[NH4+]"
+                        "smiles": "CCO"
                     }
                 },
                 {
@@ -1511,9 +1531,9 @@
                             "atomsdata": {
                                 "numbers": [
                                     6,
+                                    6,
                                     8,
-                                    8,
-                                    7,
+                                    1,
                                     1,
                                     1,
                                     1,
@@ -1522,49 +1542,49 @@
                                 ],
                                 "positions": [
                                     [
-                                        -0.038502426857259485,
-                                        0.0543590934457132,
-                                        0.0018218493008727388
+                                        -0.9158795991865881,
+                                        -0.09837996478571792,
+                                        0.11992559905452588
                                     ],
                                     [
-                                        -0.9978623624600867,
-                                        -0.7592916696264815,
-                                        -0.00409644451002018
+                                        0.5022543600132879,
+                                        0.4357427615469777,
+                                        -0.039677373211928935
                                     ],
                                     [
-                                        1.2681358331937862,
-                                        -0.4130687469726491,
-                                        -0.02743289961900559
+                                        1.2817755639152792,
+                                        -0.46383259941538574,
+                                        -0.7794737807524096
                                     ],
                                     [
-                                        -7.367323950785385e-07,
-                                        3.673412368797034e-08,
-                                        -1.2571401389280956e-06
+                                        -1.3742987843214274,
+                                        -0.2637920012585992,
+                                        -0.8780898369324562
                                     ],
                                     [
-                                        -0.2317710438764395,
-                                        1.1180013231534178,
-                                        0.02970749482815279
+                                        -1.5311149258058063,
+                                        0.6355240156469791,
+                                        0.681917248002867
                                     ],
                                     [
-                                        -0.35909342309951153,
-                                        -0.7617603940824431,
-                                        -0.6177280862385421
+                                        -0.9016407124955177,
+                                        -1.0578820842912116,
+                                        0.6790400489361305
                                     ],
                                     [
-                                        -0.7036314695444378,
-                                        0.20577960055476807,
-                                        0.7438873519031116
+                                        0.4662379443959916,
+                                        1.4052766156340446,
+                                        -0.579857479981799
                                     ],
                                     [
-                                        0.16689582758772878,
-                                        0.8599005700776334,
-                                        -0.5687973553572251
+                                        0.9560078604795391,
+                                        0.6150724763352917,
+                                        0.9614214629610197
                                     ],
                                     [
-                                        0.8958298017886173,
-                                        -0.30391981328408063,
-                                        0.44263934683279654
+                                        1.5166582930052028,
+                                        -1.2077292194123448,
+                                        -0.16520588807593803
                                     ]
                                 ],
                                 "cell": [
@@ -1594,20 +1614,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": "ERROR - 'enthalpy'",
+                "value": -6.998843567898177,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-47",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-20",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
     "Hydrogen Peroxide Decomposition": {
@@ -1682,7 +1703,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -1749,7 +1771,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -1810,20 +1833,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": 1.5732203622220027,
+                "value": 1.580256371683788,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-48",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-21",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
     "Carbonic Acid Formation": {
@@ -1892,7 +1916,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -1959,7 +1984,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -2044,20 +2070,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": 0.029715426464463235,
+                "value": 0.022476019694295246,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-50",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-23",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
     "Propane Combustion": {
@@ -2174,7 +2201,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -2235,7 +2263,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -2302,7 +2331,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -2369,20 +2399,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": -31.945704908336438,
+                "value": -31.91557818698061,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-52",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-25",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     },
     "Formic Acid Decomposition": {
@@ -2463,7 +2494,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -2530,7 +2562,8 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 },
@@ -2591,20 +2624,21 @@
                             "calculator": {
                                 "calculator_type": "TBLite",
                                 "method": "GFN2-xTB"
-                            }
+                            },
+                            "temperature": 400
                         }
                     }
                 }
             ],
             "result": {
-                "value": -0.45858126167684077,
+                "value": -0.43802624931294076,
                 "property": "enthalpy",
                 "unit": "eV"
             }
         },
         "metadata": {
-            "timestamp": "2025-04-17_11-29-53",
-            "git_commit": "5d7af932b8fc6a550a5fca2d3aba07fdd7274d46"
+            "timestamp": "2025-05-09_17-29-26",
+            "git_commit": "457e9539b2ceb08de0bda1b8ef27c46e0104e808"
         }
     }
 }

@@ -1,11 +1,11 @@
 molecule,final_result_match,positions_diff_norm,tool_names_match,tool_args_match,num_calls_match,llm_tool_calls,manual_tool_calls
-Methane Combustion,True,0.001,False,False,False,14,12
+Methane Combustion,False,0.5479,False,False,False,13,12
 Ammonia Synthesis,True,0.0031,False,False,False,10,9
 Water Gas Shift Reaction,True,0.0035,False,False,False,13,12
-Ethene Hydrogenation,True,0.0046,False,False,False,10,9
-Ethanol Combustion,False,654.3206,False,False,False,13,12
-Hydration of Alkene,True,0.0012,False,False,False,10,9
-Hydrogen Peroxide Decomposition,True,0.0003,False,False,False,10,9
-Carbonic Acid Formation,True,0.0,False,False,False,10,9
-Propane Combustion,False,629.2656,False,False,False,13,12
-Formic Acid Decomposition,True,0.0,False,False,False,10,9
+Ethene Hydrogenation,True,0.0046,False,False,True,9,9
+Ethanol Combustion,True,0.0006,False,False,True,12,12
+Hydration of Alkene,True,0.0012,False,False,True,9,9
+Hydrogen Peroxide Decomposition,True,0.0007,False,False,True,9,9
+Carbonic Acid Formation,True,0.0005,False,False,True,9,9
+Propane Combustion,True,0.0056,False,False,True,12,12
+Formic Acid Decomposition,True,0.0,False,False,True,9,9

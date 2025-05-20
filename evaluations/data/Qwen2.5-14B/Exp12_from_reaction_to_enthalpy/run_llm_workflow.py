@@ -54,7 +54,6 @@ def main(n_reactions: int):
     with open("reaction_dataset.json", "r") as rf:
         reactions = json.load(rf)
 
-    # Iterate through the first n_structures molecules
     for idx, reaction in enumerate(reactions[:n_reactions]):
         print("********************************************")
         print(
