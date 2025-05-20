@@ -40,6 +40,7 @@ def load_alcf_model(model_name: str, base_url: str, api_key: str = None) -> Chat
             base_url=base_url,
             api_key=api_key,
         )
+        print(llm.max_tokens)
         print(f"Successfully loaded model: {model_name} from {base_url}")
 
     except Exception as e:

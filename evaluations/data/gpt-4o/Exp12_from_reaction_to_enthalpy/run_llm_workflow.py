@@ -3,7 +3,7 @@ from comp_chem_agent.agent.llm_graph import llm_graph
 from comp_chem_agent.utils.get_workflow_from_llm import get_workflow_from_state
 import argparse
 import datetime
-
+import time
 
 def get_query(
     reaction: dict,
@@ -47,7 +47,7 @@ def main(n_reactions: int):
         reactions = json.load(rf)
 
     # Iterate through the first n_structures molecules
-    for idx, reaction in enumerate(reactions[:n_reactions]):
+    for idx, reaction in enumerate(reactions[:5]):
         print("********************************************")
         print(
             f"REACTION INDEX {reaction['reaction_index']}: REACTION NAME: {reaction['reaction_name']}"
@@ -70,7 +70,7 @@ def main(n_reactions: int):
 
         combined_data[name] = {"llm_workflow": llm_workflow}
         combined_data[name]["metadata"] = state_data
-
+        time.sleep(60)
     # Save the results to a JSON file
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"llm_workflow_{timestamp}.json"

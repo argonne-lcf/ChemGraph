@@ -50,7 +50,7 @@ def main(n_reactions: int):
         reactions = json.load(rf)
 
     # Iterate through the first n_structures molecules
-    for idx, reaction in enumerate(reactions[:n_reactions]):
+    for idx, reaction in enumerate(reactions[5:]):
         print("********************************************")
         print(
             f"REACTION INDEX {reaction['reaction_index']}: REACTION NAME: {reaction['reaction_name']}"

@@ -84,27 +84,38 @@ def get_workflow_from_state(state) -> dict:
       - Any other content type
     """
     workflow_dict = {"tool_calls": []}
-    for msg in state:
-        if isinstance(msg, AIMessage):
-            for tool_call in msg.tool_calls:
-                name = tool_call.get("name")
-                args = tool_call.get("args")
-                dat = {}
-                dat[name] = args
-                workflow_dict["tool_calls"].append(dat)
 
-    last_message = state[-1]
-    content = getattr(last_message, "content", None)
+    def recurse(obj):
+        if isinstance(obj, dict):
+            # Extract tool_calls if it's an AI message
+            if obj.get("type") == "ai":
+                tool_calls = obj.get("tool_calls", [])
+                for call in tool_calls:
+                    name = call.get("name")
+                    args = call.get("args", {})
+                    workflow_dict["tool_calls"].append({name: args})
+            # Recurse into all values
+            for v in obj.values():
+                recurse(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                recurse(item)
+
+    recurse(state)
+
+    last_message = state["messages"][-1]
+
+    content = last_message.get("content", {})
 
     if isinstance(content, str):
         try:
-            parsed = json.loads(content)
-            if "answer" in parsed:
-                workflow_dict["result"] = parsed["answer"]
-            else:
-                workflow_dict["result"] = parsed
+            content = json.loads(content)
         except json.JSONDecodeError:
-            workflow_dict["result"] = content
+            pass  # keep content as-is if it's not valid JSON
+
+    # Extract result (just the value of the "answer" key if it exists)
+    if isinstance(content, dict) and "answer" in content:
+        workflow_dict["result"] = content["answer"]
     else:
         workflow_dict["result"] = content
 

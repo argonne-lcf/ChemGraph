@@ -26,7 +26,7 @@ def get_query(
         "enthalpy_method": f"You are given a chemical reaction: {reaction_equation}. Calculate the enthalpy for this reaction using {method}.",
         "gibbs_free_energy": f"What is the Gibbs free energy of reaction for {reaction_equation}?",
         "gibbs_free_energy_method": f"What is the Gibbs free energy of reaction for {reaction_equation} using {method}?",
-        "gibbs_free_energy_method_temperature": f"You are given a chemical reaction: {reaction_equation}. Calculate the Gibbs free energy change (ΔG) for this reaction using {method} at {temperature}K.",
+        "gibbs_free_energy_method_temperature": f"You are given a chemical reaction: {reaction_equation}. Calculate the Gibbs free energy of reaction for this reaction using {method} at {temperature}K.",
     }
 
     return query_dict.get(query_name, "Query not found")  # Returns the query or a default message

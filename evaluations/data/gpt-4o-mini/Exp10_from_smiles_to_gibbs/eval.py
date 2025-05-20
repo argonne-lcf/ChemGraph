@@ -92,6 +92,9 @@ def compare_results(llm_result_raw, manual_result_raw):
             llm_s = {k: v for k, v in llm_result.items() if k not in ["cell", "pbc"]}
             manual_s = {k: v for k, v in manual_result.items() if k not in ["cell", "pbc"]}
             numbers_match = llm_s.get("numbers", []) == manual_s.get("numbers", [])
+            if not numbers_match:
+                #print(len(llm_s.get("numbers", [])),  len(manual_s.get("numbers", [])))
+                print(llm_s.get("numbers", []), manual_s.get("numbers", []))
             try:
                 pos_diff = np.linalg.norm(
                     np.array(llm_s.get("positions", [])) - np.array(manual_s.get("positions", []))
