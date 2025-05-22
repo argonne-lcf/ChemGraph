@@ -19,13 +19,23 @@ services:
     build:
       context: ./vllm
       dockerfile: docker/Dockerfile.arm
-    command: ["--host", "0.0.0.0", "--port", "8000", "--model", "meta-llama/Llama-3.1-8B-Instruct", "--max-model-len", "8192", "--enable-auto-tool-choice","--tool-call-parser","llama3_json"]
+    command: ["--host", "0.0.0.0", "--port", "8000", "--model", "meta-llama/Llama-3.2-3B-Instruct", "--enable-auto-tool-choice","--tool-call-parser","llama3_json","--max-model-len", "10240","--tensor-parallel-size", "1","--gpu-memory-utilization", "0.90","--max-num-seqs", "16"]
     ports:
       - "8001:8000"
+    privileged: true
+    shm_size: '8g'
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+        reservations:
+          memory: 10G
     environment:
-      - VLLM_CPU_ONLY=1
       - VLLM_LOG_LEVEL=debug
-      - HF_TOKEN=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
+      - HF_TOKEN=${HF_TOKEN}
+      - VLLM_CPU_KVCACHE_SPACE=6
+      - VLLM_CPU_OMP_THREADS_BIND="0-7"
+      - OMP_NUM_THREADS=8              # Added explicit thread count
     networks:
       default:
         aliases:

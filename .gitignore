@@ -46,3 +46,4 @@ combine*
 vllm/
 logs/
 error_log.txt
+.env
