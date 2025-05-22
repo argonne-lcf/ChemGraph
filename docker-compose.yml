@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  jupyter_lab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/app
+    environment:
+      - VLLM_BASE_URL=http://vllm_server:8000/v1
+      - OPENAI_API_KEY=dummy-key
+    depends_on:
+      - vllm_server
+
+  vllm_server:
+    build:
+      context: ./vllm
+      dockerfile: docker/Dockerfile.arm
+    command: ["--host", "0.0.0.0", "--port", "8000", "--model", "meta-llama/Llama-3.1-8B-Instruct", "--max-model-len", "8192", "--enable-auto-tool-choice","--tool-call-parser","llama3_json"]
+    ports:
+      - "8001:8000"
+    environment:
+      - VLLM_CPU_ONLY=1
+      - VLLM_LOG_LEVEL=debug
+      - HF_TOKEN=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
+    networks:
+      default:
+        aliases:
+          - vllm_server_alias
+
+# Networks allow services to communicate with each other using their service names as hostnames.
+# A default network is created if not specified, but explicit definition can be useful.
+networks:
+  default:
+    driver: bridge 
