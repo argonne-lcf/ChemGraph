@@ -9,6 +9,7 @@ from comp_chem_agent.tools.ASE_tools import (
 from comp_chem_agent.tools.alcf_loader import load_alcf_model
 from comp_chem_agent.tools.openai_loader import load_openai_model
 from comp_chem_agent.utils.logging_config import setup_logger
+from comp_chem_agent.models.supported_models import supported_alcf_models, supported_anthropic_models
 
 logger = setup_logger(__name__)
 
@@ -63,11 +64,30 @@ class CompChemAgent:
             elif model_name in ["llama3.2", "llama3.1"]:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
                 logger.info(f"Loaded {model_name}")
-            else:
+            elif model_name in supported_alcf_models:
                 llm = load_alcf_model(
                     model_name=model_name, base_url=base_url, api_key=api_key
                 )
-                logger.info(f"Loaded {model_name}")
+                logger.info(f"Loaded {model_name} from ALCF")
+            else:
+                import os
+                from langchain_openai import ChatOpenAI
+                vllm_base_url = os.getenv("VLLM_BASE_URL", base_url)
+                vllm_api_key = os.getenv("OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key")
+
+                if vllm_base_url:
+                    logger.info(f"Attempting to load model '{model_name}' from custom endpoint: {vllm_base_url}")
+                    llm = ChatOpenAI(
+                        model=model_name,
+                        temperature=temperature,
+                        base_url=vllm_base_url,
+                        api_key=vllm_api_key,
+                        max_tokens=4096
+                    )
+                    logger.info(f"Successfully initialized ChatOpenAI for model '{model_name}' at {vllm_base_url}")
+                else:
+                    logger.error(f"Model '{model_name}' is not in any supported list and no VLLM_BASE_URL/base_url provided.")
+                    raise ValueError(f"Unsupported model or missing base URL for: {model_name}")
 
         except Exception as e:
             logger.error(f"Error loading {model_name}: {str(e)}")
