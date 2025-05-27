@@ -286,7 +286,6 @@ The provided `Dockerfile.arm` and the default `docker-compose.yml` setup are con
 2.  **Modify `docker-compose.yml`**:
     *   Change the `build.context` for the `vllm_server` service to point to your local clone of the vLLM repository (e.g., `./vllm`).
     *   Change the `build.dockerfile` to the path of the CUDA-enabled Dockerfile within that context (e.g., `docker/Dockerfile`).
-    *   Remove or comment out `ENV VLLM_CPU_ONLY=1`.
     *   Uncomment and configure the `deploy.resources.reservations.devices` section for the `vllm_server` service to grant it GPU access.
 
     ```yaml
@@ -318,9 +317,54 @@ The provided `Dockerfile.arm` and the default `docker-compose.yml` setup are con
     ```
     Consult the specific vLLM Dockerfile you choose for available build arguments.
 
+### Running Only JupyterLab (for External LLM Services)
+
+If you prefer to use external LLM services like OpenAI, Claude, or other hosted providers instead of running a local vLLM server, you can run only the JupyterLab service:
+
+```bash
+docker-compose up jupyter_lab
+```
+
+This will start only the JupyterLab container without the vLLM server. In this setup:
+
+1. **JupyterLab Access**: JupyterLab will be available at `http://localhost:8888`
+2. **LLM Configuration**: In your notebooks, configure the agent to use external services by providing appropriate model names and API keys:
+
+**Example for OpenAI:**
+```python
+import os
+from comp_chem_agent.agent import llm_graph
+
+# Set your OpenAI API key as an environment variable or pass it directly
+os.environ["OPENAI_API_KEY"] = "your-openai-api-key-here"
+
+agent = llm_graph.llm_graph(
+    model_name="gpt-4",  # or "gpt-3.5-turbo", "gpt-4o", etc.
+    workflow_type="single_agent_ase"
+)
+```
+
+**Example for Anthropic Claude:**
+```python
+import os
+from comp_chem_agent.agent import llm_graph
+
+# Set your Anthropic API key
+os.environ["ANTHROPIC_API_KEY"] = "your-anthropic-api-key-here"
+
+agent = llm_graph.llm_graph(
+    model_name="claude-3-sonnet-20240229",  # or other Claude models
+    workflow_type="single_agent_ase"
+)
+```
+
+**Available Environment Variables for External Services:**
+- `OPENAI_API_KEY`: For OpenAI models
+- `ANTHROPIC_API_KEY`: For Anthropic Claude models
+
 ### Working with Example Notebooks
 
-Once JupyterLab is running (via `docker-compose up`), you can navigate to the `notebooks/` directory within the JupyterLab interface to open and run the example notebooks. Modify them as shown above to use the locally served vLLM model.
+Once JupyterLab is running (via `docker-compose up` or `docker-compose up jupyter_lab`), you can navigate to the `notebooks/` directory within the JupyterLab interface to open and run the example notebooks. Modify them as shown above to use either the locally served vLLM model or external LLM services.
 
 ### Notes on TBLite Python API
 
