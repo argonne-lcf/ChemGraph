@@ -1,5 +1,5 @@
 from langchain_openai import ChatOpenAI
-from comp_chem_agent.models.supported_models import supported_alcf_models
+from chemgraph.models.supported_models import supported_alcf_models
 
 
 def load_alcf_model(model_name: str, base_url: str, api_key: str = None) -> ChatOpenAI:

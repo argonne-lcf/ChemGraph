@@ -1,11 +1,11 @@
-from comp_chem_agent.state.state import MultiAgentState
+from chemgraph.state.state import MultiAgentState
 from langchain_core.messages import HumanMessage
 import json
 import qcengine
 import qcelemental as qcel
 import numpy as np
-from comp_chem_agent.utils.logging_config import setup_logger
-from comp_chem_agent.models.atomsdata import AtomsData
+from chemgraph.utils.logging_config import setup_logger
+from chemgraph.models.atomsdata import AtomsData
 from ase.data import atomic_numbers
 
 logger = setup_logger(__name__)
@@ -66,9 +66,7 @@ def run_qcengine(state: MultiAgentState, program="psi4"):
         result = qcengine.compute(input, program).dict()
         del result["stdout"]
         output = []
-        output.append(
-            HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder))
-        )
+        output.append(HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder)))
         logger.info("QCEngine calculation completed successfully")
         return {"opt_response": output}
     except Exception as e:
@@ -333,12 +331,9 @@ def convert_atomsdata_to_qcmolecule(atomsdata: AtomsData) -> qcel.models.Molecul
     # atomsdata positions are in Angstrom. Convert to atomic unit for qcelemental.
     positions = np.array(atomsdata.positions)
 
-    geometry = np.array(
-        [
-            position * qcel.constants.conversion_factor("angstrom", "bohr")
-            for position in positions
-        ]
-    )
+    geometry = np.array([
+        position * qcel.constants.conversion_factor("angstrom", "bohr") for position in positions
+    ])
     molecule = qcel.models.Molecule(symbols=symbols, geometry=geometry.flatten())
     return molecule
 
@@ -418,11 +413,11 @@ def run_qcengine_multi_framework(state: MultiAgentState):
     calc_type = calculator["calculator_type"].lower()
 
     if calc_type == "psi4":
-        from comp_chem_agent.models.calculators.psi4_calc import Psi4Calc
+        from chemgraph.models.calculators.psi4_calc import Psi4Calc
 
         calc = Psi4Calc(**params["calculator"])
     elif calc_type == "mopac":
-        from comp_chem_agent.models.calculators.mopac_calc import MopacCalc
+        from chemgraph.models.calculators.mopac_calc import MopacCalc
 
         calc = MopacCalc(**params["calculator"])
     else:
@@ -486,11 +481,7 @@ def run_qcengine_multi_framework(state: MultiAgentState):
                         return obj.item()  # Convert NumPy scalar to Python scalar
                     return super().default(obj)
 
-            output.append(
-                HumanMessage(
-                    role="system", content=json.dumps(result, cls=NumpyEncoder)
-                )
-            )
+            output.append(HumanMessage(role="system", content=json.dumps(result, cls=NumpyEncoder)))
             logger.info("QCEngine calculation completed successfully")
             return {"opt_response": output}
         except Exception as e:
@@ -515,9 +506,7 @@ def run_qcengine_multi_framework(state: MultiAgentState):
             "protocols": {"trajectory": "all"},
             "keywords": {"program": params["program"], "maxsteps": 100},
         }
-        opt_output = qcengine.compute_procedure(
-            opt_input, "geometric", raise_error=True
-        )
+        opt_output = qcengine.compute_procedure(opt_input, "geometric", raise_error=True)
 
         if params["driver"] == "vib":
             hess_inp = qcel.models.AtomicInput(
@@ -534,13 +523,11 @@ def run_qcengine_multi_framework(state: MultiAgentState):
             )
             output_params = {
                 "converged": hess_output.success,
-                "final_structure": convert_qcmolecule_to_atomsdata(
-                    opt_output.final_molecule
-                ),
+                "final_structure": convert_qcmolecule_to_atomsdata(opt_output.final_molecule),
                 "simulation_input": opt_input,
                 "frequencies": list(frequencies_in_cm),
             }
-            from comp_chem_agent.models.qcengine_input import QCEngineOutput
+            from chemgraph.models.qcengine_input import QCEngineOutput
 
             output = QCEngineOutput(**output_params)
 

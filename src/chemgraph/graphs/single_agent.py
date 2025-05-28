@@ -3,23 +3,23 @@ from langchain_core.messages import ToolMessage
 import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from comp_chem_agent.tools.ase_tools import (
+from chemgraph.tools.ase_tools import (
     run_ase,
     save_atomsdata_to_file,
     file_to_atomsdata,
 )
-from comp_chem_agent.tools.cheminformatics_tools import (
+from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_atomsdata,
 )
-from comp_chem_agent.tools.generic_tools import calculator
-from comp_chem_agent.models.agent_response import ResponseFormatter
-from comp_chem_agent.prompt.single_agent_prompt import (
+from chemgraph.tools.generic_tools import calculator
+from chemgraph.models.agent_response import ResponseFormatter
+from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
 )
-from comp_chem_agent.utils.logging_config import setup_logger
-from comp_chem_agent.state.state import State
+from chemgraph.utils.logging_config import setup_logger
+from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
 
@@ -109,7 +109,7 @@ def route_tools(state: State):
     return "done"
 
 
-def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
+def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
     """LLM node that processes messages and decides next actions.
 
     Parameters
@@ -216,24 +216,24 @@ def construct_single_agent_graph(
 
         if not structured_output:
             graph_builder.add_node(
-                "CompChemAgent",
-                lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                "ChemGraphAgent",
+                lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_conditional_edges(
-                "CompChemAgent",
+                "ChemGraphAgent",
                 route_tools,
                 {"tools": "tools", "done": END},
             )
-            graph_builder.add_edge("tools", "CompChemAgent")
-            graph_builder.add_edge(START, "CompChemAgent")
+            graph_builder.add_edge("tools", "ChemGraphAgent")
+            graph_builder.add_edge(START, "ChemGraphAgent")
             graph = graph_builder.compile(checkpointer=checkpointer)
             logger.info("Graph construction completed")
             return graph
         else:
             graph_builder.add_node(
-                "CompChemAgent",
-                lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                "ChemGraphAgent",
+                lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_node(
@@ -241,12 +241,12 @@ def construct_single_agent_graph(
                 lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
             )
             graph_builder.add_conditional_edges(
-                "CompChemAgent",
+                "ChemGraphAgent",
                 route_tools,
                 {"tools": "tools", "done": "ResponseAgent"},
             )
-            graph_builder.add_edge("tools", "CompChemAgent")
-            graph_builder.add_edge(START, "CompChemAgent")
+            graph_builder.add_edge("tools", "ChemGraphAgent")
+            graph_builder.add_edge(START, "ChemGraphAgent")
             graph_builder.add_edge("ResponseAgent", END)
 
             graph = graph_builder.compile(checkpointer=checkpointer)

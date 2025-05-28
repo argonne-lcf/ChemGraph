@@ -1,6 +1,6 @@
 import pubchempy
 from langchain_core.tools import tool
-from comp_chem_agent.models.atomsdata import AtomsData
+from chemgraph.models.atomsdata import AtomsData
 
 
 @tool

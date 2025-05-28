@@ -1,74 +1,71 @@
-# comp_chem_agent
+# chemgraph
 
-## Description
+## Overview
 
-`comp_chem_agent` is a computational chemistry agent designed to assist with **molecular simulation tasks**. The package integrates key libraries such as `ASE`, `RDKit`, and modern agent frameworks like `LangGraph` and `LangChain`. This tool simplifies molecular modeling workflows, enabling seamless interaction with high-performance computing (HPC) environments.
+`ChemGraph` is an agentic framework for automating molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, such as structure generation, energy calculations, and geometry optimizations—through natural language interfaces.
+
+ChemGraph bridges high-level user queries with low-level simulation tools, simplifying setup, execution, and analysis across a range of quantum chemistry, tight-binding, and machine learning methods. It is designed with extensibility in mind and works efficiently in both local and high-performance computing (HPC) environments.
 
 ---
 
-## Features
+## Key Features
 
-- **Molecular Simulations**: Leverages `ASE` and `RDKit` for molecular structure handling and simulation workflows.
-- **Agent-Based Tasks**: Uses `LangGraph` and `LangChain` to coordinate tasks dynamically.
-- **HPC Integration**: Designed for computational chemistry tasks on HPC systems.
+- **Intelligent Simulation Workflows**  
+  Supports a wide range of simulation tasks, including:
+  - Molecular structure generation from molecule name or SMILES string  
+  - Geometry optimization and energy evaluation  
+  - Vibrational analysis and thermodynamic property calculations
+
+- **LLM-Driven Agent Architecture**  
+  Powered by `LangGraph`, ChemGraph uses multiple coordinated agents (e.g., planner, tool caller, result aggregator) to break down and execute complex workflows.
+
+- **Modular Tool Integration**  
+  Works with simulation backends via `ASE`, enabling support for:
+  - DFT codes (e.g., NWChem, ORCA)  
+  - Semi-empirical methods (e.g., XTB via TBLite)  
+  - Machine learning potentials (e.g., MACE, UMA)
+
+- **HPC and Parallel Execution Ready**  
+  ChemGraph can be deployed on HPC systems, with compatibility for workflow engines like Parsl or Colmena, supporting high-throughput and distributed simulations.
+
+- **Model Flexibility and Performance**  
+  Optimized for both small and large LLMs (e.g., GPT-4o-mini, Claude 3.5, Qwen2.5), and capable of decomposing tasks to improve performance even on resource-constrained models.
 
 ---
 
 ## Installation
 
-Ensure Python 3.10 or above is installed on your system.
+Ensure you have **Conda** and **Python 3.10 or higher** installed on your system.
 
 1. Clone the repository:
-
    ```bash
-   git clone https://github.com/Autonomous-Scientific-Agents/CompChemAgent.git
-   cd CompChemAgent
-   ```
-
-2. Install the package using `pip`:
-
+   git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+   cd ChemGraph
+    ```
+2. Create and activate a new Conda environment:
    ```bash
-   pip install .
-   ```
-
----
-
-## Dependencies
-
-The following libraries are required and will be installed automatically:
-
-- `ase==3.22.1`
-- `rdkit==2024.03.5`
-- `langgraph==0.2.59`
-- `langchain-openai==0.2.12`
-- `langchain-ollama==0.2.1`
-- `pydantic==2.10.3`
-- `pandas>=2.2`
-- `mace-torch==0.3.9`
-- `torch<2.6`
-- `torch-dftd==0.5.1`
-- `pubchempy==1.0.4`
-- `pyppeteer==2.0.0`
-- `numpy<2`
-- `qcelemental==0.29.0`
-- `qcengine==0.31.0`
-- `tblite==0.4.0`
-
-For TBLite (for XTB), to use the Python extension, you must install it separately. Instructions to install Python API for TBLite can be found here: https://tblite.readthedocs.io/en/latest/installation.html
+    conda create -n chemgraph python=3.10 -y
+    conda activate chemgraph
+    ```
+3. Install required Conda dependencies: 
+    ```bash
+    conda install -c conda-forge tblite
+    ```
+4. Install the package and its dependencies:
+    ``` bash
+    pip install -e .
+    ```
 ---
 
 ## Usage
 
 Explore example workflows in the notebooks/ directory:
 
-Single-Agent System: Demo-SingleAgent.ipynb
+Single-Agent System: Demo_single_agent.ipynb
 - Demonstrates a basic agent with multiple tools.
 
-Multi-Agent System: Demo_MultiAgent.ipynb
+Multi-Agent System: Demo_multi_agent.ipynb
 - Demonstrates multiple agents handling different tasks.
-
-Legacy Implementation: Legacy-ComChemAgent.ipynb
-- Uses deprecated create_react_agent method in LangGraph.
 
 ---
 
@@ -164,10 +161,10 @@ This standalone script is an alternative to running vLLM via Docker Compose and 
 ## Project Structure
 
 ```
-comp_chem_agent/
+chemgraph/
 │
 ├── src/                       # Source code
-│   ├── comp_chem_agent/       # Top-level package
+│   ├── chemgraph/       # Top-level package
 │   │   ├── agent/             # Agent-based task management
 │   │   ├── graphs/            # Workflow graph utilities
 │   │   ├── models/            # Different Pydantic models
@@ -197,7 +194,7 @@ pre-commit install
 
 ## Docker Support with Docker Compose (Recommended for vLLM)
 
-This project uses Docker Compose to manage multi-container applications, providing a consistent development and deployment environment. This setup allows you to run the `comp_chem_agent` (with JupyterLab) and a local vLLM model server as separate, inter-communicating services.
+This project uses Docker Compose to manage multi-container applications, providing a consistent development and deployment environment. This setup allows you to run the `chemgraph` (with JupyterLab) and a local vLLM model server as separate, inter-communicating services.
 
 ### Prerequisites
 
@@ -257,7 +254,7 @@ When you initialize `CompChemAgent` or `llm_graph` in your Jupyter notebooks (ru
 **Example in a notebook:**
 
 ```python
-from comp_chem_agent.agent import llm_graph # Or CompChemAgent
+from chemgraph.agent import llm_graph # Or CompChemAgent
 
 # The model name should match what vLLM is serving.
 # The base_url and api_key will be picked up from environment variables
@@ -333,7 +330,7 @@ This will start only the JupyterLab container without the vLLM server. In this s
 **Example for OpenAI:**
 ```python
 import os
-from comp_chem_agent.agent import llm_graph
+from chemgraph.agent import llm_graph
 
 # Set your OpenAI API key as an environment variable or pass it directly
 os.environ["OPENAI_API_KEY"] = "your-openai-api-key-here"
@@ -347,7 +344,7 @@ agent = llm_graph.llm_graph(
 **Example for Anthropic Claude:**
 ```python
 import os
-from comp_chem_agent.agent import llm_graph
+from chemgraph.agent import llm_graph
 
 # Set your Anthropic API key
 os.environ["ANTHROPIC_API_KEY"] = "your-anthropic-api-key-here"

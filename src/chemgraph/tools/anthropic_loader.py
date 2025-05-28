@@ -3,8 +3,8 @@
 import os
 from getpass import getpass
 from langchain_anthropic import ChatAnthropic
-from comp_chem_agent.models.supported_models import supported_anthropic_models
-from comp_chem_agent.utils.logging_config import setup_logger
+from chemgraph.models.supported_models import supported_anthropic_models
+from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 

@@ -1,7 +1,7 @@
 import json
 from langchain.schema.messages import AIMessage
 import logging
-from comp_chem_agent.utils.logging_config import setup_logger
+from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 

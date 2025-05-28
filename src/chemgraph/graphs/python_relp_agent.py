@@ -7,10 +7,10 @@ from langchain_core.messages import ToolMessage
 import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from comp_chem_agent.tools.generic_tools import repl_tool
-from comp_chem_agent.tools.generic_tools import calculator
-from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
-from comp_chem_agent.utils.logging_config import setup_logger
+from chemgraph.tools.generic_tools import repl_tool
+from chemgraph.tools.generic_tools import calculator
+from chemgraph.prompt.single_agent_prompt import single_agent_prompt
+from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 

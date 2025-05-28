@@ -1,5 +1,5 @@
 from langchain_ollama import ChatOllama
-from comp_chem_agent.models.supported_models import supported_ollama_models
+from chemgraph.models.supported_models import supported_ollama_models
 
 
 def load_ollama_model(model_name: str, temperature: float) -> ChatOllama:

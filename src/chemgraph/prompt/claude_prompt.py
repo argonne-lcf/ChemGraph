@@ -50,7 +50,7 @@ Only return the list of subtasks. Do not compute final results. Do not include r
 """
 
 
-combiner_prompt = """You are an expert in computational chemistry and serve as the manager responsible for synthesizing results from multiple agents to accurately answer the user's original query.
+aggregator_prompt = """You are an expert in computational chemistry and serve as the manager responsible for synthesizing results from multiple agents to accurately answer the user's original query.
 
 Your task:
 - Carefully read and understand the user's original query. Extract the full reaction equation, including correct **stoichiometric coefficients** for all reactants and products.

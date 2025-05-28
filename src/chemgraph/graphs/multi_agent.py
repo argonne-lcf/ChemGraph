@@ -3,27 +3,27 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from comp_chem_agent.tools.ase_tools import (
+from chemgraph.tools.ase_tools import (
     run_ase,
     save_atomsdata_to_file,
     file_to_atomsdata,
 )
-from comp_chem_agent.tools.cheminformatics_tools import (
+from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_atomsdata,
 )
-from comp_chem_agent.prompt.multi_agent_prompt import (
+from chemgraph.prompt.multi_agent_prompt import (
     planner_prompt,
     executor_prompt,
-    combiner_prompt,
+    aggregator_prompt,
     formatter_multi_prompt,
 )
-from comp_chem_agent.models.multi_agent_response import (
+from chemgraph.models.multi_agent_response import (
     PlannerResponse,
     ResponseFormatter,
 )
-from comp_chem_agent.utils.logging_config import setup_logger
-from comp_chem_agent.state.multi_agent_state import ManagerWorkerState
+from chemgraph.utils.logging_config import setup_logger
+from chemgraph.state.multi_agent_state import ManagerWorkerState
 
 logger = setup_logger(__name__)
 
@@ -216,7 +216,7 @@ def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, 
     return state
 
 
-def CombinerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str):
+def AggregatorAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str):
     """An LLM agent that aggregates results from all workers.
 
     Parameters
@@ -374,7 +374,7 @@ def contruct_multi_agent_graph(
     llm: ChatOpenAI,
     planner_prompt: str = planner_prompt,
     executor_prompt: str = executor_prompt,
-    combiner_prompt: str = combiner_prompt,
+    aggregator_prompt: str = aggregator_prompt,
     formatter_prompt: str = formatter_multi_prompt,
     structured_output: bool = False,
     tools: list = None,
@@ -395,9 +395,9 @@ def contruct_multi_agent_graph(
     executor_prompt : str, optional
         The prompt to guide worker behavior,
         by default executor_prompt
-    combiner_prompt : str, optional
+    aggregator_prompt : str, optional
         The prompt to guide result aggregation,
-        by default combiner_prompt
+        by default aggregator_prompt
     structured_output : bool, optional
         Whether to use structured output format,
         by default False
@@ -446,13 +446,13 @@ def contruct_multi_agent_graph(
         )
         graph_builder.add_node("increment", increment_index)
         graph_builder.add_node(
-            "CombinerAgent",
-            lambda state: CombinerAgent(state, llm, system_prompt=combiner_prompt),
+            "AggregatorAgent",
+            lambda state: AggregatorAgent(state, llm, system_prompt=aggregator_prompt),
         )
         graph_builder.add_conditional_edges(
             "loop_control",
             worker_iterator,
-            {"worker": "WorkerAgent", "aggregate": "CombinerAgent"},
+            {"worker": "WorkerAgent", "aggregate": "AggregatorAgent"},
         )
         graph_builder.set_entry_point("PlannerAgent")
         graph_builder.add_edge("PlannerAgent", "extract_tasks")
@@ -467,13 +467,13 @@ def contruct_multi_agent_graph(
         graph_builder.add_edge("increment", "loop_control")
 
         if not structured_output:
-            graph_builder.add_edge("CombinerAgent", END)
+            graph_builder.add_edge("AggregatorAgent", END)
         else:
             graph_builder.add_node(
                 "ResponseAgent",
                 lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
             )
-            graph_builder.add_edge("CombinerAgent", "ResponseAgent")
+            graph_builder.add_edge("AggregatorAgent", "ResponseAgent")
             graph_builder.add_edge("ResponseAgent", END)
 
         graph = graph_builder.compile(checkpointer=checkpointer)

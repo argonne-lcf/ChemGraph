@@ -36,7 +36,7 @@ Your task:
 If any subtasks failed or are missing, state that the result is incomplete and identify which ones are affected.
 """
 
-combiner_prompt = """
+aggregator_prompt = """
 You are a strict aggregation agent for computational chemistry tasks. Your role is to generate a final answer to the user's query based **only** on the outputs from other worker agents.
 
 Your instructions:

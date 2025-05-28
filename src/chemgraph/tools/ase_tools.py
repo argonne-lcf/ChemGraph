@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
-from comp_chem_agent.models.atomsdata import AtomsData
-from comp_chem_agent.models.ase_input import (
+from chemgraph.models.atomsdata import AtomsData
+from chemgraph.models.ase_input import (
     ASEInputSchema,
     ASEOutputSchema,
 )
@@ -164,24 +164,24 @@ def load_calculator(calculator: dict):
     calc_type = calculator["calculator_type"].lower()
 
     if "mace" in calc_type:
-        from comp_chem_agent.models.calculators.mace_calc import MaceCalc
+        from chemgraph.models.calculators.mace_calc import MaceCalc
 
         calc = MaceCalc(**calculator).get_calculator()
     elif "emt" == calc_type:
-        from comp_chem_agent.models.calculators.emt_calc import EMTCalc
+        from chemgraph.models.calculators.emt_calc import EMTCalc
 
         calc = EMTCalc(**calculator).get_calculator()
     elif "tblite" in calc_type:
-        from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
+        from chemgraph.models.calculators.tblite_calc import TBLiteCalc
 
         calc = TBLiteCalc(**calculator).get_calculator()
     elif "orca" == calc_type:
-        from comp_chem_agent.models.calculators.orca_calc import OrcaCalc
+        from chemgraph.models.calculators.orca_calc import OrcaCalc
 
         calc = OrcaCalc(**calculator).get_calculator()
 
     elif "nwchem" == calc_type:
-        from comp_chem_agent.models.calculators.nwchem_calc import NWChemCalc
+        from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 
         calc = NWChemCalc(**calculator).get_calculator()
     else:

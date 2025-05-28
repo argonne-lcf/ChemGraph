@@ -3,7 +3,7 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "comp_chem_agent"
+name = "chemgraph"
 version = "0.1.0"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [

@@ -1,10 +1,10 @@
 from pydantic import BaseModel, Field
 from typing import Union
-from comp_chem_agent.models.atomsdata import AtomsData
-from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
-from comp_chem_agent.models.calculators.emt_calc import EMTCalc
-from comp_chem_agent.models.calculators.mace_calc import MaceCalc
-from comp_chem_agent.models.calculators.nwchem_calc import NWChemCalc
+from chemgraph.models.atomsdata import AtomsData
+from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+from chemgraph.models.calculators.emt_calc import EMTCalc
+from chemgraph.models.calculators.mace_calc import MaceCalc
+from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 from typing import Optional
 
 

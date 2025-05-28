@@ -39,7 +39,7 @@ Always make sure the output format matches what the user originally asked for. I
 Make sure you extract the correct results from previous agents. When asked to perform geometry optimization for a molecule, always output AtomsData format.
 """
 
-task_decomposer_prompt = """
+planner_prompt = """
 You are an expert in computational chemistry and the manager responsible for decomposing user queries into subtasks.
 
 Your task:
@@ -62,7 +62,7 @@ Format:
 
 Only return the list of subtasks. Do not compute final results. Do not include reaction calculations.
 """
-result_aggregator_prompt = """You are an expert in computational chemistry and the manager responsible for answering user's query based on other agents' output.
+aggregator_prompt = """You are an expert in computational chemistry and the manager responsible for answering user's query based on other agents' output.
 
 Your task:
 1. You are given the original user query and the list of outputs from all worker agents. 
@@ -77,7 +77,7 @@ Your task:
 If any subtasks failed or are missing, state that the result is incomplete and identify which ones are affected.
 """
 
-worker_prompt = """You are a computational chemistry expert working with advanced tools to answer user questions.
+executor_prompt = """You are a computational chemistry expert working with advanced tools to answer user questions.
 
 Follow these strict rules:
 

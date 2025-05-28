@@ -1,23 +1,23 @@
-from comp_chem_agent.tools.openai_loader import load_openai_model
-from comp_chem_agent.tools.alcf_loader import load_alcf_model
-from comp_chem_agent.tools.local_model_loader import load_ollama_model
-from comp_chem_agent.tools.anthropic_loader import load_anthropic_model
-from comp_chem_agent.models.supported_models import (
+from chemgraph.tools.openai_loader import load_openai_model
+from chemgraph.tools.alcf_loader import load_alcf_model
+from chemgraph.tools.local_model_loader import load_ollama_model
+from chemgraph.tools.anthropic_loader import load_anthropic_model
+from chemgraph.models.supported_models import (
     supported_openai_models,
     supported_ollama_models,
     supported_anthropic_models,
     supported_alcf_models,
 )
-from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
-from comp_chem_agent.prompt.multi_agent_prompt import (
+from chemgraph.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
+from chemgraph.prompt.multi_agent_prompt import (
     executor_prompt,
     formatter_multi_prompt,
-    combiner_prompt,
+    aggregator_prompt,
     planner_prompt,
 )
-from comp_chem_agent.graphs.single_agent import construct_single_agent_graph
-from comp_chem_agent.graphs.python_relp_agent import construct_relp_graph
-from comp_chem_agent.graphs.multi_agent import contruct_multi_agent_graph
+from chemgraph.graphs.single_agent import construct_single_agent_graph
+from chemgraph.graphs.python_relp_agent import construct_relp_graph
+from chemgraph.graphs.multi_agent import contruct_multi_agent_graph
 
 import logging
 
@@ -105,7 +105,7 @@ class ChemGraph:
         recursion_limit: int = 50,
         planner_prompt: str = planner_prompt,
         executor_prompt: str = executor_prompt,
-        combiner_prompt: str = combiner_prompt,
+        aggregator_prompt: str = aggregator_prompt,
         formatter_multi_prompt: str = formatter_multi_prompt,
     ):
         try:
@@ -163,7 +163,7 @@ class ChemGraph:
         self.recursion_limit = recursion_limit
         self.planner_prompt = planner_prompt
         self.executor_prompt = executor_prompt
-        self.combiner_prompt = combiner_prompt
+        self.aggregator_prompt = aggregator_prompt
         self.formatter_multi_prompt = formatter_multi_prompt
         self.workflow_map = {
             "single_agent": {"constructor": construct_single_agent_graph},
@@ -187,7 +187,7 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 planner_prompt=self.planner_prompt,
-                combiner_prompt=self.combiner_prompt,
+                aggregator_prompt=self.aggregator_prompt,
                 executor_prompt=self.executor_prompt,
                 formatter_prompt=self.formatter_multi_prompt,
                 structured_output=self.structured_output,
