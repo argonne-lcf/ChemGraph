@@ -41,3 +41,5 @@ plots/
 scripts/
 initial_evaluations/
 test/
+
+.venv
