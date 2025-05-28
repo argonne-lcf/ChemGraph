@@ -122,9 +122,31 @@ class llm_graph:
                 llm = load_anthropic_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
                 )
+            else: # Assume it might be a vLLM or other custom OpenAI-compatible endpoint
+                import os
+                # Use environment variables for vLLM base_url and a dummy api_key if not provided
+                # These would be set by docker-compose for the jupyter_lab service
+                vllm_base_url = os.getenv("VLLM_BASE_URL", base_url)
+                # ChatOpenAI requires an api_key, even if the endpoint doesn't use it.
+                vllm_api_key = os.getenv("OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key")
+                
+                if vllm_base_url:
+                    logger.info(f"Attempting to load model '{model_name}' from custom endpoint: {vllm_base_url}")
+                    from langchain_openai import ChatOpenAI
+                    llm = ChatOpenAI(
+                        model=model_name, 
+                        temperature=temperature, 
+                        base_url=vllm_base_url,
+                        api_key=vllm_api_key,
+                        max_tokens=4096 # Default, can be adjusted
+                    )
+                    logger.info(f"Successfully initialized ChatOpenAI for model '{model_name}' at {vllm_base_url}")
+                else:
+                    logger.error(f"Model '{model_name}' is not in any supported list and no VLLM_BASE_URL/base_url provided.")
+                    raise ValueError(f"Unsupported model or missing base URL for: {model_name}")
 
         except Exception as e:
-            logger.error(f"Exception thrown when loading {model_name}.")
+            logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
             raise e
 
         self.workflow_type = workflow_type

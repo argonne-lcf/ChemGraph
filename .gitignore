@@ -38,8 +38,11 @@ tests/vib/
 *vib/
 graspa*
 plots/
-scripts/
 initial_evaluations/
 test/
 combine*
+vllm/
+logs/
+error_log.txt
+.env
 test.csv
