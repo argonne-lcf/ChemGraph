@@ -11,26 +11,22 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "ase==3.24.0",
-    "rdkit==2024.03.5",
-    "langgraph==0.2.59",
-    "langchain-openai==0.2.12",
-    "langchain-ollama==0.2.1",
-    "langchain-anthropic==0.3.13",
-    "pydantic==2.10.3",
-    "pandas>=2.2",
-    "mace-torch==0.3.9",
-    "torch<2.6",
-    "torch-dftd== 0.5.1",
-    "pubchempy==1.0.4",
-    "pyppeteer==2.0.0",
-    "numpy<2",
-    "qcelemental==0.29.0",
-    "qcengine==0.31.0",
-    "tblite==0.4.0",
-    "langchain-experimental==0.3.4",
-    "numexpr==2.10.2",
-    "deepdiff==8.4.2"
+    "ase",
+    "rdkit",
+    "langgraph>=0.3",
+    "langchain-openai>=0.2.12",
+    "langchain-ollama>=0.2.1",
+    "langchain-anthropic>=0.3.13",
+    "pydantic",
+    "pandas",
+    "mace-torch",
+    "torch-dftd>=0.5.1",
+    "pubchempy",
+    "pyppeteer",
+    "numpy>=2",
+    "langchain-experimental>=0.3.4",
+    "numexpr",
+    "tblite>=0.4.0"
     ]
 
 [project.urls]
