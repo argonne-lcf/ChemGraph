@@ -385,6 +385,7 @@ def contruct_manager_worker_graph(
     task_decomposer_prompt: str = task_decomposer_prompt,
     worker_prompt: str = worker_prompt,
     result_aggregator_prompt: str = result_aggregator_prompt,
+    formatter_prompt: str = formatter_prompt,
     structured_output: bool = False,
 ):
     """Construct a graph for manager-worker workflow.

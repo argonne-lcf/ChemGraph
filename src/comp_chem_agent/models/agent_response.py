@@ -4,6 +4,16 @@ from comp_chem_agent.models.atomsdata import AtomsData
 
 
 class VibrationalFrequency(BaseModel):
+    """
+    Schema for storing vibrational frequency results from a simulation.
+
+    Attributes
+    ----------
+    frequency_cm1 : list[str]
+        List of vibrational frequencies in inverse centimeters (cm⁻¹).
+        Each entry is a string representation of the frequency value.
+    """
+
     frequency_cm1: list[str] = Field(
         ...,
         description="List of vibrational frequencies in cm-1.",
@@ -11,6 +21,19 @@ class VibrationalFrequency(BaseModel):
 
 
 class ScalarResult(BaseModel):
+    """
+    Schema for storing a scalar numerical result from a simulation or calculation.
+
+    Attributes
+    ----------
+    value : float
+        The numerical value of the scalar result (e.g., 1.23).
+    property : str
+        The name of the physical or chemical property represented (e.g., 'enthalpy', 'Gibbs free energy').
+    unit : str
+        The unit associated with the result (e.g., 'eV', 'kJ/mol').
+    """
+
     value: float = Field(..., description="Scalar numerical result like enthalpy")
     property: str = Field(
         ...,
