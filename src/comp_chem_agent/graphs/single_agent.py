@@ -160,14 +160,12 @@ def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     dict
         Updated state containing the formatted response
     """
-
     messages = [
         {"role": "system", "content": formatter_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
     llm_structured_output = llm.with_structured_output(ResponseFormatter)
     response = llm_structured_output.invoke(messages).model_dump_json()
-
     return {"messages": [response]}
 
 

@@ -9,6 +9,35 @@ from typing import Optional
 
 
 class ASEInputSchema(BaseModel):
+    """
+    Schema for defining input parameters used in ASE-based molecular simulations.
+
+    Attributes
+    ----------
+    atomsdata : AtomsData
+        The atomic structure and associated metadata for the simulation.
+    driver : str
+        Specifies the type of simulation to perform. Options:
+        - 'energy': Single-point electronic energy calculation.
+        - 'opt': Geometry optimization.
+        - 'vib': Vibrational frequency analysis.
+        - 'thermo': Thermochemical property calculation (enthalpy, entropy, Gibbs free energy).
+    optimizer : str
+        Optimization algorithm for geometry optimization. Options:
+        - 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'.
+    calculator : Union[MaceCalc, EMTCalc, NWChemCalc, TBLiteCalc]
+        ASE-compatible calculator used for the simulation. Supported types include:
+        - MACE, EMT, NWChem, and TBLite.
+    fmax : float
+        Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
+    steps : int
+        Maximum number of steps for geometry optimization.
+    temperature : Optional[float]
+        Temperature in Kelvin, required for thermochemical calculations (e.g., when using 'thermo' as the driver).
+    pressure : float
+        Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
+    """
+
     atomsdata: AtomsData = Field(description="The atomsdata object to be used for the simulation.")
     driver: str = Field(
         default=None,
@@ -20,7 +49,7 @@ class ASEInputSchema(BaseModel):
     )
     calculator: Union[MaceCalc, EMTCalc, NWChemCalc, TBLiteCalc] = Field(
         default=None,
-        description="The ASE calculator to be used. Support XTB, Mace, EMT and NWChem. ",
+        description="The ASE calculator to be used. Support TBLite, Mace, EMT and NWChem. ",
     )
     fmax: float = Field(
         default=0.01,

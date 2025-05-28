@@ -186,6 +186,7 @@ class llm_graph:
                 task_decomposer_prompt=self.planner_prompt,
                 result_aggregator_prompt=self.combiner_prompt,
                 worker_prompt=self.executor_prompt,
+                formatter_prompt=self.formatter_prompt,
             )
 
     def visualize(self):

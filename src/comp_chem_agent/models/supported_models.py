@@ -18,6 +18,9 @@ supported_alcf_models = [
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/QwQ-32B-Preview",
     "Qwen/QwQ-32B",
+    "Qwen/Qwen3-32B",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
 ]
 
 # Anthropic models
