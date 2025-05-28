@@ -1,9 +1,9 @@
 import pytest
 import numpy as np
-from comp_chem_agent.models.calculators.emt_calc import EMTCalc
-from comp_chem_agent.models.calculators.mace_calc import MaceCalc
-from comp_chem_agent.models.calculators.tblite_calc import TBLiteCalc
-from comp_chem_agent.models.calculators.orca_calc import OrcaCalc
+from chemgraph.models.calculators.emt_calc import EMTCalc
+from chemgraph.models.calculators.mace_calc import MaceCalc
+from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+from chemgraph.models.calculators.orca_calc import OrcaCalc
 from ase import Atoms
 
 
@@ -71,6 +71,7 @@ def test_orca_calculator():
     # Test ORCA calculator initialization
     from ase.calculators.calculator import BadConfiguration
     from ase import Atoms
+
     try:
         calc = OrcaCalc()
         ase_calc = calc.get_calculator()
