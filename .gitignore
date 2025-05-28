@@ -46,3 +46,4 @@ logs/
 error_log.txt
 .env
 test.csv
+nwchem*
