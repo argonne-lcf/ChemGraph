@@ -1,13 +1,15 @@
 import pytest
-from comp_chem_agent.tools.ASE_tools import (
-    molecule_name_to_smiles,
-    smiles_to_atomsdata,
+from chemgraph.tools.ase_tools import (
     run_ase,
     get_symmetry_number,
     is_linear_molecule,
 )
-from comp_chem_agent.models.atomsdata import AtomsData
-from comp_chem_agent.models.ase_input import ASEOutputSchema, ASEInputSchema
+from chemgraph.tools.cheminformatics_tools import (
+    smiles_to_atomsdata,
+    molecule_name_to_smiles,
+)
+from chemgraph.models.atomsdata import AtomsData
+from chemgraph.models.ase_input import ASEOutputSchema, ASEInputSchema
 
 
 def test_molecule_name_to_smiles():
@@ -122,6 +124,7 @@ def thermo_ase_schema(base_ase_input):
     """Fixture for thermochemistry ASE Schema"""
     input_dict = base_ase_input.copy()
     input_dict["driver"] = "thermo"
+    input_dict["temperature"] = 298
     return ASEInputSchema(**input_dict)
 
 

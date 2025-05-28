@@ -94,7 +94,7 @@ class ChemGraph:
     def __init__(
         self,
         model_name: str = "gpt-4o-mini",
-        workflow_type: str = "single_agent_ase",
+        workflow_type: str = "single_agent",
         base_url: str = None,
         api_key: str = None,
         temperature: float = 0,

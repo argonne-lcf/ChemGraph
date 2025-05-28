@@ -3,7 +3,7 @@ import warnings
 from ase import Atoms
 
 # Configure pytest-asyncio
-pytest_plugins = ("pytest_asyncio",)
+#pytest_plugins = ("pytest_asyncio",)
 
 
 @pytest.fixture(autouse=True)
