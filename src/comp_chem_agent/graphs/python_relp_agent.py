@@ -7,8 +7,8 @@ from langchain_core.messages import ToolMessage
 import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from comp_chem_agent.tools.generic import repl_tool
-from comp_chem_agent.tools.generic import calculator
+from comp_chem_agent.tools.generic_tools import repl_tool
+from comp_chem_agent.tools.generic_tools import calculator
 from comp_chem_agent.prompt.single_agent_prompt import single_agent_prompt
 from comp_chem_agent.utils.logging_config import setup_logger
 
@@ -77,19 +77,13 @@ class BasicToolNode:
                 if not tool_name or tool_name not in self.tools_by_name:
                     raise ValueError(f"Invalid tool name: {tool_name}")
 
-                tool_result = self.tools_by_name[tool_name].invoke(
-                    tool_call.get("args", {})
-                )
+                tool_result = self.tools_by_name[tool_name].invoke(tool_call.get("args", {}))
 
                 # Handle different types of tool results
                 result_content = (
                     tool_result.dict()
                     if hasattr(tool_result, "dict")
-                    else (
-                        tool_result
-                        if isinstance(tool_result, dict)
-                        else str(tool_result)
-                    )
+                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
                 )
 
                 outputs.append(
@@ -140,9 +134,7 @@ def route_tools(state: State):
     return END
 
 
-def CompChemAgent(
-    state: State, llm: ChatOpenAI, system_prompt=single_agent_prompt, tools=None
-):
+def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prompt, tools=None):
     """LLM node that processes messages and decides next actions.
 
     Parameters
@@ -207,9 +199,7 @@ def construct_relp_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
         graph_builder = StateGraph(State)
         graph_builder.add_node(
             "CompChemAgent",
-            lambda state: CompChemAgent(
-                state, llm, system_prompt=system_prompt, tools=tools
-            ),
+            lambda state: CompChemAgent(state, llm, system_prompt=system_prompt, tools=tools),
         )
         graph_builder.add_node("tools", tool_node)
         graph_builder.add_conditional_edges(

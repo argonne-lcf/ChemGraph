@@ -3,7 +3,7 @@ Lists of supported models for different LLM providers.
 """
 
 # OpenAI models that are supported
-supported_openai_models = ["gpt-4o-mini", "gpt-4o", "gpt-4.1"]
+supported_openai_models = ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-3.5-turbo-0125"]
 
 # Ollama models that are supported
 supported_ollama_models = ["llama3.2", "llama3.1"]
@@ -25,5 +25,13 @@ supported_alcf_models = [
 
 # Anthropic models
 supported_anthropic_models = [
+    "claude-opus-4-20250514",
+    "claude-sonnet-4-20250514",
     "claude-3-5-haiku-20241022",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-sonnet-20240620",
+    "claude-3-opus-20240229",
+    "claude-3-sonnet-20240229",
+    "claude-3-haiku-20240307",
 ]

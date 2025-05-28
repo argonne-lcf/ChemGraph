@@ -1,182 +1,39 @@
-from langgraph.graph import END, START, StateGraph
+import json
+from langgraph.graph import StateGraph, END
 from langchain_core.messages import ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from comp_chem_agent.prompt.multi_agent_prompt import (
-    first_router_prompt,
-    regular_prompt,
-    geometry_input_prompt,
-    new_ase_parameters_input_prompt,
-    qcengine_parameter_prompt,
-    ase_feedback_prompt,
-    qcengine_feedback_prompt,
-    end_prompt,
+from comp_chem_agent.tools.ase_tools import (
+    run_ase,
+    save_atomsdata_to_file,
+    file_to_atomsdata,
 )
-from comp_chem_agent.tools.ASE_tools import (
+from comp_chem_agent.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_atomsdata,
-    file_to_atomsdata,
-    run_ase_with_state,
 )
-from comp_chem_agent.state.state import MultiAgentState
+from comp_chem_agent.prompt.multi_agent_prompt import (
+    planner_prompt,
+    executor_prompt,
+    combiner_prompt,
+    formatter_multi_prompt,
+)
 from comp_chem_agent.models.multi_agent_response import (
-    RouterResponse,
-    QCEngineFeedbackResponse,
-    ASEFeedbackResponse,
+    PlannerResponse,
+    ResponseFormatter,
 )
-from comp_chem_agent.models.qcengine_input import QCEngineInputSchema
-from comp_chem_agent.tools.qcengine_tools import run_qcengine_multi_framework
-from comp_chem_agent.models.ase_input import ASEInputSchema
-import json
-import logging
+from comp_chem_agent.utils.logging_config import setup_logger
+from comp_chem_agent.state.multi_agent_state import ManagerWorkerState
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
-def first_router_agent(state: MultiAgentState, llm):
-    """An LLM router node that decides the workflow based on user's query.
+class BasicToolNode:
+    """A node that executes tools requested in the last AIMessage.
 
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing the user's question
-    llm : ChatOpenAI
-        The language model to use for routing
-
-    Returns
-    -------
-    dict
-        Updated state containing the router's response
-    """
-    prompt = first_router_prompt
-    messages = [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": f"{state['question']}"},
-    ]
-    structured_llm = llm.with_structured_output(RouterResponse)
-    response = structured_llm.invoke(messages).model_dump_json()
-    return {"first_router_response": [response]}
-
-
-def route_first_router(state: MultiAgentState) -> str:
-    """Extract next_agent from first_router_response.
-
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing the router's response
-
-    Returns
-    -------
-    str
-        The name of the next agent to route to
-
-    Raises
-    ------
-    ValueError
-        If no messages are found in the input state
-        If there is an error decoding the JSON content
-    """
-    if isinstance(state, list):
-        ai_message = state[-1]
-    elif messages := state.get("first_router_response", []):
-        ai_message = messages[-1]
-    else:
-        raise ValueError(f"No messages found in input state to router_tool: {state}")
-    try:
-        content_dict = json.loads(ai_message.content)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Error decoding JSON content: {ai_message.content}") from e
-
-    next_agent = content_dict["next_agent"]
-    return next_agent
-
-
-def regular_agent(state: MultiAgentState, llm):
-    """A LLM agent that handles general queries.
-
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing the user's question
-    llm : ChatOpenAI
-        The language model to use for processing
-
-    Returns
-    -------
-    dict
-        Updated state containing the agent's response
-    """
-    prompt = regular_prompt
-    messages = [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": f"{state['question']}"},
-    ]
-    response = llm.invoke(messages)
-    return {"end_response": [response]}
-
-
-def geometry_agent(state: MultiAgentState, llm):
-    """An LLM node that generates initial molecular structure.
-
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing geometry-related information
-    llm : ChatOpenAI
-        The language model to use for structure generation
-
-    Returns
-    -------
-    dict
-        Updated state containing the generated geometry response
-    """
-    prompt = geometry_input_prompt
-    messages = [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": f"{state['geometry_response']}"},
-    ]
-    tools = [file_to_atomsdata, molecule_name_to_smiles, smiles_to_atomsdata]
-    llm_with_tools = llm.bind_tools(tools=tools)
-    response = llm_with_tools.invoke(messages)
-    return {"geometry_response": [response]}
-
-
-def route_tools_geometry(state: MultiAgentState) -> str:
-    """Route tools for geometry agents.
-
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing geometry-related information
-
-    Returns
-    -------
-    str
-        Either 'tools' or the next agent based on the state
-
-    Raises
-    ------
-    ValueError
-        If no messages are found in the input state
-    """
-    if isinstance(state, list):
-        ai_message = state[-1]
-    elif messages := state.get("geometry_response", []):
-        ai_message = messages[-1]
-    else:
-        raise ValueError(f"No messages found in input state to tool_edge: {state}")
-    has_tool_calls = (
-        hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0
-    )
-    if has_tool_calls:
-        return "tools"
-    else:
-        return route_first_router(state)
-
-
-class GeometryTool:
-    """A node that executes tools requested in the last AIMessage for geometry operations.
+    This class processes tool calls from AI messages and executes the corresponding
+    tools, handling their results and any potential errors. It maintains separate
+    message channels for different workers.
 
     Parameters
     ----------
@@ -192,46 +49,50 @@ class GeometryTool:
     def __init__(self, tools: list) -> None:
         self.tools_by_name = {tool.name: tool for tool in tools}
 
-    def __call__(self, inputs: MultiAgentState) -> MultiAgentState:
-        """Execute tools requested in the last message.
+    def __call__(self, inputs: ManagerWorkerState) -> ManagerWorkerState:
+        """Execute tools requested in the last message for the current worker.
 
         Parameters
         ----------
-        inputs : MultiAgentState
-            The current state containing messages
+        inputs : ManagerWorkerState
+            The current state containing worker channels and messages
 
         Returns
         -------
-        MultiAgentState
+        ManagerWorkerState
             Updated state containing tool execution results
 
         Raises
         ------
         ValueError
-            If no message is found in the input state
+            If no messages are found for the current worker
         """
-        if messages := inputs.get("geometry_response", []):
-            message = messages[-1]
-        else:
-            raise ValueError("No message found in input")
+        worker_id = inputs["current_worker"]
+
+        # Access that worker's messages
+        messages = inputs["worker_channel"].get(worker_id, [])
+        if not messages:
+            raise ValueError(f"No messages found for worker {worker_id}")
+
+        message = messages[-1]  # Last AI message that called tools
 
         outputs = []
+
         for tool_call in message.tool_calls:
             try:
                 tool_name = tool_call.get("name")
                 if not tool_name or tool_name not in self.tools_by_name:
                     raise ValueError(f"Invalid tool name: {tool_name}")
-                tool_args = tool_call.get("args", {})
-                tool_result = self.tools_by_name[tool_name].invoke(tool_args)
+
+                tool_result = self.tools_by_name[tool_name].invoke(tool_call.get("args", {}))
+
+                # Handle tool output: make it a dict or string
                 result_content = (
-                    tool_result.model_dump()
+                    tool_result.dict()
                     if hasattr(tool_result, "dict")
-                    else (
-                        tool_result
-                        if isinstance(tool_result, dict)
-                        else str(tool_result)
-                    )
+                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
                 )
+
                 outputs.append(
                     ToolMessage(
                         content=json.dumps(result_content),
@@ -239,6 +100,7 @@ class GeometryTool:
                         tool_call_id=tool_call.get("id", ""),
                     )
                 )
+
             except Exception as e:
                 outputs.append(
                     ToolMessage(
@@ -247,279 +109,377 @@ class GeometryTool:
                         tool_call_id=tool_call.get("id", ""),
                     )
                 )
-            return {"geometry_response": outputs}
+
+        # Now, append the tool outputs directly into the worker's channel
+        inputs["worker_channel"][worker_id].extend(outputs)
+
+        return inputs
 
 
-def ase_parameter_agent(state: MultiAgentState, llm: ChatOpenAI):
-    """An LLM agent that generates ASE parameters based on geometry and feedback.
-
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing geometry and feedback information
-    llm : ChatOpenAI
-        The language model to use for parameter generation
-
-    Returns
-    -------
-    dict
-        Updated state containing the generated parameters
-    """
-    if len(state["feedback_response"]) == 0:
-        feedback = []
-    else:
-        feedback = state["feedback_response"][-1].content
-    prompt = new_ase_parameters_input_prompt.format(
-        geometry_response=state["geometry_response"][-1].content,
-        feedback=feedback,
-        ase_schema=ASEInputSchema.model_json_schema(),
-    )
-    logger.debug(f"PROMPT: {prompt}")
-    messages = [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": f"{state['question']}"},
-    ]
-    structured_llm = llm.with_structured_output(ASEInputSchema)
-    response = structured_llm.invoke(messages).model_dump_json()
-    return {"parameter_response": response}
-
-
-def qcengine_parameter_agent(state: MultiAgentState, llm: ChatOpenAI):
-    """An LLM agent that generates QCEngine parameters based on geometry and feedback.
+def route_tools(state: ManagerWorkerState):
+    """Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
 
     Parameters
     ----------
-    state : MultiAgentState
-        The current state containing geometry and feedback information
-    llm : ChatOpenAI
-        The language model to use for parameter generation
-
-    Returns
-    -------
-    dict
-        Updated state containing the generated parameters
-    """
-    if len(state["feedback_response"]) == 0:
-        feedback = []
-    else:
-        feedback = state["feedback_response"][-1].content
-    prompt = qcengine_parameter_prompt.format(
-        geometry_response=state["geometry_response"][-1].content,
-        feedback=feedback,
-        qcengine_schema=QCEngineInputSchema.model_json_schema(),
-    )
-
-    messages = [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": f"{state['question']}"},
-    ]
-    structured_llm = llm.with_structured_output(QCEngineInputSchema)
-    response = structured_llm.invoke(messages).model_dump_json()
-    print(response)
-    return {"parameter_response": response}
-
-
-def ase_feedback_agent(state: MultiAgentState, llm):
-    """An LLM agent that generates feedback based on ASE optimization results.
-
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing ASE optimization results
-    llm : ChatOpenAI
-        The language model to use for feedback generation
-
-    Returns
-    -------
-    dict
-        Updated state containing the feedback response
-    """
-    prompt = ase_feedback_prompt.format(aseoutput=state["opt_response"][-1].content)
-    messages = [
-        {"role": "system", "content": prompt},
-    ]
-    structured_llm = llm.with_structured_output(ASEFeedbackResponse)
-    response = structured_llm.invoke(messages)
-    return {"feedback_response": [response.model_dump_json()]}
-
-
-def qcengine_feedback_agent(state: MultiAgentState, llm):
-    """An LLM agent that generates feedback based on QCEngine results.
-
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing QCEngine results
-    llm : ChatOpenAI
-        The language model to use for feedback generation
-
-    Returns
-    -------
-    dict
-        Updated state containing the feedback response
-    """
-    prompt = qcengine_feedback_prompt.format(
-        qcengine_output=state["opt_response"][-1].content
-    )
-    messages = [
-        {"role": "system", "content": prompt},
-    ]
-    structured_llm = llm.with_structured_output(QCEngineFeedbackResponse)
-    response = structured_llm.invoke(messages)
-    return {"feedback_response": [response.model_dump_json()]}
-
-
-def route_feedback(state: MultiAgentState) -> str:
-    """Extract next_agent from feedback response.
-
-    Parameters
-    ----------
-    state : MultiAgentState
-        The current state containing feedback information
+    state : ManagerWorkerState
+        The current state containing worker channels and messages
 
     Returns
     -------
     str
-        The name of the next agent to route to
+        Either 'tools' or 'done' based on the presence of tool calls
 
     Raises
     ------
     ValueError
-        If no messages are found in the input state
-        If there is an error decoding the JSON content
+        If no messages are found for the current worker
     """
-    if isinstance(state, list):
-        ai_message = state[-1]
-    elif messages := state.get("feedback_response", []):
+    worker_id = state["current_worker"]
+    if messages := state["worker_channel"].get(worker_id, []):
         ai_message = messages[-1]
     else:
-        raise ValueError(f"No messages found in input state to router_tool: {state}")
-    try:
-        content_dict = json.loads(ai_message.content)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Error decoding JSON content: {ai_message.content}") from e
+        raise ValueError(f"No messages found for worker {worker_id} in worker_channel.")
 
-    next_agent = content_dict["next_agent"]
-    return next_agent
+    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+        return "tools"
+    return "done"
 
 
-def end_agent(state: MultiAgentState, llm):
-    """An LLM agent that generates the final response.
+def PlannerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str):
+    """An LLM agent that decomposes tasks into subtasks for workers.
 
     Parameters
     ----------
-    state : MultiAgentState
-        The current state containing optimization results and feedback
+    state : ManagerWorkerState
+        The current state containing the task to be decomposed
     llm : ChatOpenAI
-        The language model to use for final response generation
+        The language model to use for task decomposition
+    system_prompt : str
+        The system prompt to guide the task decomposition
 
     Returns
     -------
     dict
-        Updated state containing the final response
+        Updated state containing the decomposed tasks
     """
-    prompt = end_prompt.format(
-        output=state["opt_response"][-1].content,
-        feedback=state["feedback_response"][-1].content,
-    )
     messages = [
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": f"{state['question']}"},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"{state['messages']}"},
+    ]
+    structured_llm = llm.with_structured_output(PlannerResponse)
+    response = structured_llm.invoke(messages).model_dump_json()
+    return {"messages": [response]}
+
+
+def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, tools=None):
+    """An LLM agent that executes assigned tasks using available tools.
+
+    Parameters
+    ----------
+    state : ManagerWorkerState
+        The current state containing worker channels and task information
+    llm : ChatOpenAI
+        The language model to use for task execution
+    system_prompt : str
+        The system prompt to guide the worker's behavior
+    tools : list, optional
+        List of tools available to the worker, by default None
+
+    Returns
+    -------
+    ManagerWorkerState
+        Updated state containing the worker's response and results
+    """
+    if tools is None:
+        tools = [
+            file_to_atomsdata,
+            smiles_to_atomsdata,
+            run_ase,
+            molecule_name_to_smiles,
+            save_atomsdata_to_file,
+        ]
+
+    worker_id = state["current_worker"]
+    history = state["worker_channel"].get(worker_id, [])
+
+    messages = [{"role": "system", "content": system_prompt}] + history
+    llm_with_tools = llm.bind_tools(tools=tools)
+    response = llm_with_tools.invoke(messages)
+
+    # Append new LLM response directly back into the worker's channel
+    state["worker_channel"][worker_id].append(response)
+
+    # (optional) if no tool call, save it as worker_result
+    if not getattr(response, "tool_calls", None):
+        state["worker_result"] = [response]
+
+    return state
+
+
+def CombinerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str):
+    """An LLM agent that aggregates results from all workers.
+
+    Parameters
+    ----------
+    state : ManagerWorkerState
+        The current state containing worker results
+    llm : ChatOpenAI
+        The language model to use for result aggregation
+    system_prompt : str
+        The system prompt to guide the aggregation process
+
+    Returns
+    -------
+    dict
+        Updated state containing the aggregated results
+    """
+    if "worker_result" in state:
+        outputs = [m.content for m in state["worker_result"]]
+        worker_summary_msg = {
+            "role": "assistant",
+            "content": "Worker Outputs:\n" + "\n".join(outputs),
+        }
+        state["messages"].append(worker_summary_msg)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"{state['messages']}"},
     ]
     response = llm.invoke(messages)
-    return {"end_response": [response]}
+    return {"messages": [response]}
 
 
-def construct_multi_framework_graph(llm: ChatOpenAI):
-    """Construct a graph for multi-framework computational chemistry workflow.
+def ResponseAgent(
+    state: ManagerWorkerState, llm: ChatOpenAI, formatter_prompt: str = formatter_multi_prompt
+):
+    """An LLM agent responsible for formatting the final response.
 
-    This function creates a state graph that implements a workflow for computational
-    chemistry tasks using multiple frameworks (ASE and QCEngine).
+    Parameters
+    ----------
+    state : ManagerWorkerState
+        The current state containing the aggregated results
+    llm : ChatOpenAI
+        The language model to use for response formatting
+    formatter_prompt : str, optional
+        The prompt to guide the formatting process,
+        by default formatter_prompt
+
+    Returns
+    -------
+    dict
+        Updated state containing the formatted response
+    """
+    messages = [
+        {"role": "system", "content": formatter_prompt},
+        {"role": "user", "content": f"{state['messages']}"},
+    ]
+    llm_structured_output = llm.with_structured_output(ResponseFormatter)
+    response = llm_structured_output.invoke(messages).model_dump_json()
+    return {"messages": [response]}
+
+
+def extract_tasks(state: ManagerWorkerState):
+    """Extract task list from the task decomposer's response.
+
+    Parameters
+    ----------
+    state : ManagerWorkerState
+        The current state containing the task decomposer's response
+
+    Returns
+    -------
+    ManagerWorkerState
+        Updated state with extracted task list and initialized task index
+    """
+    state["task_list"] = state["messages"][-1].content
+    state["current_task_index"] = 0
+    return state
+
+
+def loop_control(state: ManagerWorkerState):
+    """Prepare the next task for the current worker.
+
+    Parameters
+    ----------
+    state : ManagerWorkerState
+        The current state containing task list and worker information
+
+    Returns
+    -------
+    ManagerWorkerState
+        Updated state with prepared task for the current worker
+    """
+    task_idx = state["current_task_index"]
+    task_list = json.loads(state["task_list"])
+
+    # If finished all tasks, do nothing. worker_iterator will handle it
+    if task_idx >= len(task_list["worker_tasks"]):
+        return state
+
+    task_prompt = task_list["worker_tasks"][task_idx]["prompt"]
+    worker_id = task_list["worker_tasks"][task_idx].get("worker_id", f"worker_{task_idx}")
+
+    state["current_worker"] = worker_id
+
+    if "worker_channel" not in state:
+        state["worker_channel"] = {}
+
+    if worker_id not in state["worker_channel"]:
+        state["worker_channel"][worker_id] = []
+
+    state["worker_channel"][worker_id].append({"role": "user", "content": task_prompt})
+    print(f"[Worker {worker_id}] Now processing task: '{task_prompt}'")
+    return state
+
+
+def worker_iterator(state: ManagerWorkerState):
+    """Determine the next step in the workflow based on task completion.
+
+    Parameters
+    ----------
+    state : ManagerWorkerState
+        The current state containing task list and progress
+
+    Returns
+    -------
+    str
+        Either 'aggregate' if all tasks are done, or 'worker' to continue with tasks
+    """
+    task_idx = state["current_task_index"]
+    task_list = json.loads(state["task_list"])
+
+    if task_idx >= len(task_list["worker_tasks"]):
+        return "aggregate"
+    else:
+        return "worker"
+
+
+def increment_index(state: ManagerWorkerState):
+    """Increment the current task index.
+
+    Parameters
+    ----------
+    state : ManagerWorkerState
+        The current state containing task progress
+
+    Returns
+    -------
+    ManagerWorkerState
+        Updated state with incremented task index
+    """
+    state["current_task_index"] += 1
+    return state
+
+
+def contruct_multi_agent_graph(
+    llm: ChatOpenAI,
+    planner_prompt: str = planner_prompt,
+    executor_prompt: str = executor_prompt,
+    combiner_prompt: str = combiner_prompt,
+    formatter_prompt: str = formatter_multi_prompt,
+    structured_output: bool = False,
+    tools: list = None,
+):
+    """Construct a graph for manager-worker workflow.
+
+    This function creates a state graph that implements a manager-worker pattern
+    for computational chemistry tasks, where tasks are decomposed and executed
+    by specialized workers.
 
     Parameters
     ----------
     llm : ChatOpenAI
         The language model to use in the workflow
+    planner_prompt : str, optional
+        The prompt to guide task decomposition,
+        by default planner_prompt
+    executor_prompt : str, optional
+        The prompt to guide worker behavior,
+        by default executor_prompt
+    combiner_prompt : str, optional
+        The prompt to guide result aggregation,
+        by default combiner_prompt
+    structured_output : bool, optional
+        Whether to use structured output format,
+        by default False
+    tools: list, optional
+        The tools provided for the agent,
+        by default None
 
     Returns
     -------
     StateGraph
-        A compiled state graph implementing the multi-framework workflow
+        A compiled state graph implementing the manager-worker workflow
+
+    Raises
+    ------
+    Exception
+        If there is an error during graph construction
     """
-    checkpointer = MemorySaver()
-    # Nodes
-    graph_builder = StateGraph(MultiAgentState)
-    graph_builder.add_node("RouterAgent", lambda state: first_router_agent(state, llm))
-    graph_builder.add_node("RegularAgent", lambda state: regular_agent(state, llm))
+    try:
+        logger.info("Constructing multi-agent graph")
+        checkpointer = MemorySaver()
 
-    graph_builder.add_node("GeometryAgent", lambda state: geometry_agent(state, llm))
-    graph_builder.add_node(
-        "GeometryTool",
-        GeometryTool(
-            tools=[molecule_name_to_smiles, smiles_to_atomsdata, file_to_atomsdata]
-        ),
-    )
+        graph_builder = StateGraph(ManagerWorkerState)
+        graph_builder.add_node(
+            "PlannerAgent",
+            lambda state: PlannerAgent(state, llm, system_prompt=planner_prompt),
+        )
+        graph_builder.add_node("extract_tasks", extract_tasks)
+        graph_builder.add_node("loop_control", loop_control)
 
-    graph_builder.add_node(
-        "ASEParameterAgent", lambda state: ase_parameter_agent(state, llm)
-    )
-    graph_builder.add_node(
-        "QCEngineParameterAgent", lambda state: qcengine_parameter_agent(state, llm)
-    )
+        graph_builder.add_node(
+            "WorkerAgent",
+            lambda state: WorkerAgent(state, llm, system_prompt=executor_prompt),
+        )
+        if tools is None:
+            tools = [
+                file_to_atomsdata,
+                smiles_to_atomsdata,
+                run_ase,
+                molecule_name_to_smiles,
+                save_atomsdata_to_file,
+            ]
 
-    graph_builder.add_node(
-        "RunQCEngine", lambda state: run_qcengine_multi_framework(state)
-    )
-    graph_builder.add_node("RunASE", lambda state: run_ase_with_state(state))
+        graph_builder.add_node(
+            "tools",
+            BasicToolNode(tools=tools),
+        )
+        graph_builder.add_node("increment", increment_index)
+        graph_builder.add_node(
+            "CombinerAgent",
+            lambda state: CombinerAgent(state, llm, system_prompt=combiner_prompt),
+        )
+        graph_builder.add_conditional_edges(
+            "loop_control",
+            worker_iterator,
+            {"worker": "WorkerAgent", "aggregate": "CombinerAgent"},
+        )
+        graph_builder.set_entry_point("PlannerAgent")
+        graph_builder.add_edge("PlannerAgent", "extract_tasks")
+        graph_builder.add_edge("extract_tasks", "loop_control")
+        graph_builder.add_edge("tools", "WorkerAgent")
+        graph_builder.add_conditional_edges(
+            "WorkerAgent",
+            route_tools,
+            {"tools": "tools", "done": "increment"},
+        )
 
-    graph_builder.add_node(
-        "ASEFeedbackAgent", lambda state: ase_feedback_agent(state, llm)
-    )
-    graph_builder.add_node(
-        "QCEngineFeedbackAgent", lambda state: qcengine_feedback_agent(state, llm)
-    )
+        graph_builder.add_edge("increment", "loop_control")
 
-    graph_builder.add_node("EndAgent", lambda state: end_agent(state, llm))
+        if not structured_output:
+            graph_builder.add_edge("CombinerAgent", END)
+        else:
+            graph_builder.add_node(
+                "ResponseAgent",
+                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
+            )
+            graph_builder.add_edge("CombinerAgent", "ResponseAgent")
+            graph_builder.add_edge("ResponseAgent", END)
 
-    # Edges
-    graph_builder.add_edge(START, "RouterAgent")
-    graph_builder.add_conditional_edges(
-        "RouterAgent",
-        route_first_router,
-        {
-            "ASEWorkflow": "GeometryAgent",
-            "RegularAgent": "RegularAgent",
-            "QCEngineWorkflow": "GeometryAgent",
-        },
-    )
-    graph_builder.add_edge("RegularAgent", END)
-    graph_builder.add_conditional_edges(
-        "GeometryAgent",
-        route_tools_geometry,
-        {
-            "tools": "GeometryTool",
-            "ASEWorkflow": "ASEParameterAgent",
-            "QCEngineWorkflow": "QCEngineParameterAgent",
-        },
-    )
-    graph_builder.add_edge("GeometryTool", "GeometryAgent")
-    graph_builder.add_edge("ASEParameterAgent", "RunASE")
-    graph_builder.add_edge("QCEngineParameterAgent", "RunQCEngine")
+        graph = graph_builder.compile(checkpointer=checkpointer)
+        logger.info("Graph construction completed")
+        return graph
 
-    graph_builder.add_edge("RunASE", "ASEFeedbackAgent")
-    graph_builder.add_edge("RunQCEngine", "QCEngineFeedbackAgent")
-
-    graph_builder.add_conditional_edges(
-        "ASEFeedbackAgent",
-        route_feedback,
-        {"ASEParameterAgent": "ASEParameterAgent", "EndAgent": "EndAgent"},
-    )
-    graph_builder.add_conditional_edges(
-        "QCEngineFeedbackAgent",
-        route_feedback,
-        {"QCEngineParameterAgent": "QCEngineParameterAgent", "EndAgent": "EndAgent"},
-    )
-    graph_builder.add_edge("EndAgent", END)
-    graph = graph_builder.compile(checkpointer=checkpointer)
-
-    return graph
+    except Exception as e:
+        logger.error(f"Error constructing graph: {str(e)}")
+        raise

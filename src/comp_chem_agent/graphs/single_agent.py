@@ -3,14 +3,16 @@ from langchain_core.messages import ToolMessage
 import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from comp_chem_agent.tools.ASE_tools import (
-    molecule_name_to_smiles,
-    smiles_to_atomsdata,
+from comp_chem_agent.tools.ase_tools import (
     run_ase,
     save_atomsdata_to_file,
     file_to_atomsdata,
 )
-from comp_chem_agent.tools.generic import calculator
+from comp_chem_agent.tools.cheminformatics_tools import (
+    molecule_name_to_smiles,
+    smiles_to_atomsdata,
+)
+from comp_chem_agent.tools.generic_tools import calculator
 from comp_chem_agent.models.agent_response import ResponseFormatter
 from comp_chem_agent.prompt.single_agent_prompt import (
     single_agent_prompt,
@@ -126,6 +128,8 @@ def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None)
     dict
         Updated state containing the LLM's response
     """
+
+    # Load default tools if no tool is specified.
     if tools is None:
         tools = [
             file_to_atomsdata,
@@ -169,11 +173,12 @@ def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     return {"messages": [response]}
 
 
-def construct_geoopt_graph(
+def construct_single_agent_graph(
     llm: ChatOpenAI,
     system_prompt: str = single_agent_prompt,
     structured_output: bool = False,
     formatter_prompt: str = formatter_prompt,
+    tools: list = None,
 ):
     """Construct a geometry optimization graph.
 
@@ -187,7 +192,8 @@ def construct_geoopt_graph(
         Whether to use structured output, by default False
     formatter_prompt : str, optional
         The prompt to guide the LLM's formatting behavior, by default formatter_prompt
-
+    tool: list, optional
+        The list of tools for the agent, by default None
     Returns
     -------
     StateGraph
@@ -196,14 +202,15 @@ def construct_geoopt_graph(
     try:
         logger.info("Constructing geometry optimization graph")
         checkpointer = MemorySaver()
-        tools = [
-            file_to_atomsdata,
-            smiles_to_atomsdata,
-            run_ase,
-            molecule_name_to_smiles,
-            save_atomsdata_to_file,
-            calculator,
-        ]
+        if tools is None:
+            tools = [
+                file_to_atomsdata,
+                smiles_to_atomsdata,
+                run_ase,
+                molecule_name_to_smiles,
+                save_atomsdata_to_file,
+                calculator,
+            ]
         tool_node = BasicToolNode(tools=tools)
         graph_builder = StateGraph(State)
 
