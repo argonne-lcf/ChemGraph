@@ -34,8 +34,9 @@ ChemGraph bridges high-level user queries with low-level simulation tools, simpl
 ---
 
 ## Installation
+Ensure you have **Conda** and **Python 3.10 or higher** installed on your system. 
 
-Ensure you have **Conda** and **Python 3.10 or higher** installed on your system.
+# Standard Installation (with MACE support)
 
 1. Clone the repository:
    ```bash
@@ -49,12 +50,34 @@ Ensure you have **Conda** and **Python 3.10 or higher** installed on your system
     ```
 3. Install required Conda dependencies: 
     ```bash
-    conda install -c conda-forge tblite
+    conda install -c conda-forge nwchem
     ```
 4. Install the package and its dependencies:
     ``` bash
     pip install -e .
     ```
+# UMA Support (alternative branch)
+
+Due to a dependency conflict between `e3nn` versions used by MACE and UMA, UMA is only supported on a separate branch named `uma-support`.
+
+1. Switch to `uma-support` branch inside ChemGraph:
+   ```bash
+   git switch uma-support
+   ```
+1. Create and activate a new Conda environment:
+   ```bash
+    conda create -n chemgraph_uma python=3.10 -y
+    conda activate chemgraph_uma
+    ```
+2. Install required Conda dependencies: 
+    ```bash
+    conda install -c conda-forge nwchem
+    ```
+3. Install the package and its dependencies:
+    ``` bash
+    pip install -e ".[uma]"
+    ```
+
 ---
 
 ## Usage
