@@ -18,16 +18,18 @@ st.set_page_config(
 # Main title
 st.title("🧪 CompChemAgent - Computational Chemistry Assistant")
 
-st.markdown("""
+st.markdown(
+    """
 Welcome to the Computational Chemistry Agent interface! This tool allows you to perform various 
 computational chemistry tasks using natural language queries.
-""")
+"""
+)
 
 # Sidebar for configuration
 st.sidebar.header("Configuration")
 
 # Model selection
-model_options = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo']
+model_options = ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
 selected_model = st.sidebar.selectbox(
     "Select LLM Model",
     model_options,
@@ -36,7 +38,7 @@ selected_model = st.sidebar.selectbox(
 )
 
 # Workflow type selection
-workflow_options = ['single_agent_ase']
+workflow_options = ["single_agent_ase"]
 selected_workflow = st.sidebar.selectbox(
     "Workflow Type",
     workflow_options,
@@ -45,7 +47,7 @@ selected_workflow = st.sidebar.selectbox(
 )
 
 # Output options
-output_options = ['last_message', 'state']
+output_options = ["last_message", "state"]
 selected_output = st.sidebar.selectbox(
     "Return Option",
     output_options,
@@ -68,9 +70,9 @@ thread_id = st.sidebar.number_input(
 )
 
 # Initialize session state
-if 'agent' not in st.session_state:
+if "agent" not in st.session_state:
     st.session_state.agent = None
-if 'conversation_history' not in st.session_state:
+if "conversation_history" not in st.session_state:
     st.session_state.conversation_history = []
 
 # Agent Status in sidebar
@@ -163,10 +165,10 @@ if st.session_state.conversation_history:
                 for message in reversed(messages):
                     if (
                         type(message).__name__ == "AIMessage"
-                        and hasattr(message, 'content')
+                        and hasattr(message, "content")
                         and message.content
                         and message.content.strip()
-                        and not (hasattr(message, 'tool_calls') and message.tool_calls)
+                        and not (hasattr(message, "tool_calls") and message.tool_calls)
                     ):
                         final_answer = message.content.strip()
                         break
@@ -176,7 +178,7 @@ if st.session_state.conversation_history:
                     for message in reversed(messages):
                         if (
                             type(message).__name__ == "AIMessage"
-                            and hasattr(message, 'content')
+                            and hasattr(message, "content")
                             and message.content
                             and message.content.strip()
                         ):
@@ -193,7 +195,7 @@ if st.session_state.conversation_history:
                             <strong style="color: #388e3c;">CompChemAgent</strong>
                         </div>
                         <div style="font-size: 16px; line-height: 1.6; color: #333;">
-                            {final_answer.replace('\n', '<br>')}
+                            {final_answer.replace(chr(10), '<br>')}
                         </div>
                     </div>
                     """,
@@ -229,20 +231,20 @@ if st.session_state.conversation_history:
                     # Show all messages with their types and content preview
                     for j, msg in enumerate(messages):
                         msg_type = type(msg).__name__
-                        has_content = hasattr(msg, 'content') and bool(
-                            getattr(msg, 'content', '')
+                        has_content = hasattr(msg, "content") and bool(
+                            getattr(msg, "content", "")
                         )
                         content_preview = ""
                         if has_content:
-                            content = getattr(msg, 'content', '')
+                            content = getattr(msg, "content", "")
                             content_preview = (
                                 f" - Content: {content[:100]}..."
                                 if len(content) > 100
                                 else f" - Content: {content}"
                             )
 
-                        has_tool_calls = hasattr(msg, 'tool_calls') and bool(
-                            getattr(msg, 'tool_calls', [])
+                        has_tool_calls = hasattr(msg, "tool_calls") and bool(
+                            getattr(msg, "tool_calls", [])
                         )
                         tool_info = " - Has tool calls" if has_tool_calls else ""
 
@@ -270,39 +272,39 @@ if st.session_state.conversation_history:
                     # Show all processing steps
                     for j, message in enumerate(messages):
                         message_type = type(message).__name__
-                        message_content = getattr(message, 'content', '')
+                        message_content = getattr(message, "content", "")
 
                         if (
                             message_type == "AIMessage"
-                            and hasattr(message, 'tool_calls')
+                            and hasattr(message, "tool_calls")
                             and message.tool_calls
                         ):
                             st.info(f"🔧 **Step {j + 1}**: Agent used tools")
                             for tool_call in message.tool_calls:
-                                tool_name = tool_call.get('name', 'Unknown tool')
+                                tool_name = tool_call.get("name", "Unknown tool")
                                 st.code(f"Tool: {tool_name}")
 
                         elif message_type == "ToolMessage" and message_content:
-                            tool_name = getattr(message, 'name', 'Unknown')
+                            tool_name = getattr(message, "name", "Unknown")
                             st.success(
                                 f"✅ **Step {j + 1}**: Tool result from {tool_name}"
                             )
 
                             try:
                                 tool_result = json.loads(message_content)
-                                if 'error' in tool_result:
+                                if "error" in tool_result:
                                     st.error(f"Error: {tool_result['error']}")
                                 else:
                                     # Show key results
                                     if (
-                                        'numbers' in tool_result
-                                        and 'positions' in tool_result
+                                        "numbers" in tool_result
+                                        and "positions" in tool_result
                                     ):
                                         st.write(
                                             f"🧬 Found molecular structure with {len(tool_result['numbers'])} atoms"
                                         )
-                                    elif 'vibrational_frequencies' in tool_result:
-                                        if tool_result.get('success', False):
+                                    elif "vibrational_frequencies" in tool_result:
+                                        if tool_result.get("success", False):
                                             st.write(
                                                 "🎯 Calculation completed successfully"
                                             )
@@ -366,9 +368,9 @@ with st.expander("💡 Example Queries", expanded=False):
             st.rerun()
 
 # Initialize session state
-if 'selected_example' not in st.session_state:
+if "selected_example" not in st.session_state:
     st.session_state.selected_example = ""
-if 'auto_submit' not in st.session_state:
+if "auto_submit" not in st.session_state:
     st.session_state.auto_submit = False
 
 # Query input
@@ -439,9 +441,11 @@ if st.session_state.conversation_history:
             {
                 "query": latest["query"],
                 "result_type": type(latest["result"]).__name__,
-                "result_length": len(latest["result"])
-                if isinstance(latest["result"], list)
-                else "Not a list",
+                "result_length": (
+                    len(latest["result"])
+                    if isinstance(latest["result"], list)
+                    else "Not a list"
+                ),
                 "thread_id": latest.get("thread_id", "N/A"),
             }
         )
@@ -454,7 +458,8 @@ if st.session_state.conversation_history:
 
 # Footer
 st.markdown("---")
-st.markdown("""
+st.markdown(
+    """
 ### About CompChemAgent
 This application provides a natural language interface to computational chemistry tools. 
 You can ask questions about molecular properties, request calculations, and perform various 
@@ -468,4 +473,5 @@ computational chemistry tasks using simple English queries.
 - Integration with various quantum chemistry packages
 
 **Note:** Some calculations may require specific software packages to be installed on the system.
-""")
+"""
+)
