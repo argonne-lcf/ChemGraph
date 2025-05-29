@@ -3,7 +3,7 @@ from typing import Union
 from chemgraph.models.atomsdata import AtomsData
 from chemgraph.models.calculators.tblite_calc import TBLiteCalc
 from chemgraph.models.calculators.emt_calc import EMTCalc
-from chemgraph.models.calculators.mace_calc import MaceCalc
+from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
 from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 from chemgraph.models.calculators.orca_calc import OrcaCalc
 from typing import Optional
@@ -48,9 +48,9 @@ class ASEInputSchema(BaseModel):
         default="bfgs",
         description="The optimization algorithm used for geometry optimization. Options are 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'",
     )
-    calculator: Union[MaceCalc, EMTCalc, NWChemCalc, TBLiteCalc, OrcaCalc] = Field(
+    calculator: Union[EMTCalc, NWChemCalc, TBLiteCalc, OrcaCalc, FAIRChemCalc] = Field(
         default=None,
-        description="The ASE calculator to be used. Support TBLite, Mace, EMT, NWChem and Orca.",
+        description="The ASE calculator to be used. Support TBLite, FAIRChem, EMT, NWChem and Orca.",
     )
     fmax: float = Field(
         default=0.01,

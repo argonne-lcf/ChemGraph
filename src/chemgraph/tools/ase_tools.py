@@ -163,33 +163,38 @@ def load_calculator(calculator: dict):
     """
     calc_type = calculator["calculator_type"].lower()
 
-    if "mace" in calc_type:
-        from chemgraph.models.calculators.mace_calc import MaceCalc
-
-        calc = MaceCalc(**calculator).get_calculator()
-    elif "emt" == calc_type:
+    if "emt" == calc_type:
         from chemgraph.models.calculators.emt_calc import EMTCalc
 
-        calc = EMTCalc(**calculator).get_calculator()
+        calc = EMTCalc(**calculator)
     elif "tblite" in calc_type:
         from chemgraph.models.calculators.tblite_calc import TBLiteCalc
 
-        calc = TBLiteCalc(**calculator).get_calculator()
+        calc = TBLiteCalc(**calculator)
     elif "orca" == calc_type:
         from chemgraph.models.calculators.orca_calc import OrcaCalc
 
-        calc = OrcaCalc(**calculator).get_calculator()
+        calc = OrcaCalc(**calculator)
 
     elif "nwchem" == calc_type:
         from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 
-        calc = NWChemCalc(**calculator).get_calculator()
+        calc = NWChemCalc(**calculator)
+
+    elif "fairchem" == calc_type:
+        from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
+
+        calc = FAIRChemCalc(**calculator)
     else:
         raise ValueError(
-            f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB) and Orca"
+            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem."
         )
-        return None
-    return calc
+    # Extract additional args like spin/charge if the model defines it
+    extra_info = {}
+    if hasattr(calc, "get_atoms_properties"):
+        extra_info = calc.get_atoms_properties()
+
+    return calc.get_calculator(), extra_info
 
 
 @tool
@@ -223,7 +228,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     driver = params.driver
     pressure = params.pressure
 
-    calc = load_calculator(calculator)
+    calc, system_info = load_calculator(calculator)
     if calc is None:
         e = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
         raise ValueError(e)
@@ -245,6 +250,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         cell=atomsdata.cell,
         pbc=atomsdata.pbc,
     )
+    atoms.info.update(system_info)
     atoms.calc = calc
 
     if driver == "energy":
