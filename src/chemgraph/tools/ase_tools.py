@@ -185,9 +185,15 @@ def load_calculator(calculator: dict):
         from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
 
         calc = FAIRChemCalc(**calculator)
+
+    elif "mace_mp" == calc_type:
+        from chemgraph.models.calculators.mace_calc import MaceCalc
+
+        calc = MaceCalc(**calculator)
+
     else:
         raise ValueError(
-            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem."
+            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem or MACE."
         )
     # Extract additional args like spin/charge if the model defines it
     extra_info = {}
