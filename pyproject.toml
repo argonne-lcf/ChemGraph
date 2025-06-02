@@ -25,6 +25,8 @@ dependencies = [
     "langchain-experimental>=0.3.4",
     "numexpr",
     "tblite>=0.4.0",
+    "pytest",
+    "deepdiff",
     ]
 
 [project.optional-dependencies]
