@@ -16,7 +16,6 @@ Ensure you have **Conda** and **Python 3.10 or higher** installed on your system
 > To use both libraries, create **separate Conda environments**, one for each.
 
 ### Step to Install
-
 1. Clone the repository:
    ```bash
    git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
@@ -39,7 +38,7 @@ Ensure you have **Conda** and **Python 3.10 or higher** installed on your system
 #### Optional B: Install with MACE support
     ``` bash
     pip install ".[mace]"
-    ```
+   ```
 ---
 
 ## Usage
