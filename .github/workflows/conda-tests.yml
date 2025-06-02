@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  test-conda:
+  test-conda-mace:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -26,10 +26,10 @@ jobs:
       with:
         miniconda-version: "latest"
         python-version: ${{ matrix.python-version }}
-        activate-environment: chemgraph
+        activate-environment: chemgraph-mace
         auto-activate-base: false
     
-    - name: Install Conda dependencies
+    - name: Install Conda dependencies for MACE
       shell: bash -l {0}
       run: |
         conda install -c conda-forge nwchem -y
@@ -42,7 +42,45 @@ jobs:
         pip install -e ".[mace]"
         pip install pytest
     
-    - name: Run tests
+    - name: Run tests with MACE
+      shell: bash -l {0}
+      run: |
+        python -m pytest tests/ -v
+
+  test-conda-uma:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Set up Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniconda-version: "latest"
+        python-version: ${{ matrix.python-version }}
+        activate-environment: chemgraph-uma
+        auto-activate-base: false
+    
+    - name: Install Conda dependencies for UMA
+      shell: bash -l {0}
+      run: |
+        conda install -c conda-forge nwchem -y
+    
+    - name: Install ChemGraph with UMA support
+      shell: bash -l {0}
+      run: |
+        pip install -e ".[uma]"
+        pip install pytest
+    
+    - name: Run tests with UMA
       shell: bash -l {0}
       run: |
         python -m pytest tests/ -v 
