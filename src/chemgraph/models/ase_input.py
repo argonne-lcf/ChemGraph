@@ -3,69 +3,204 @@ from typing import Union
 from chemgraph.models.atomsdata import AtomsData
 from chemgraph.models.calculators.tblite_calc import TBLiteCalc
 from chemgraph.models.calculators.emt_calc import EMTCalc
-from chemgraph.models.calculators.mace_calc import MaceCalc
 from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 from chemgraph.models.calculators.orca_calc import OrcaCalc
 from typing import Optional
 
+# Try importing MACECalc or FAIRChemCalc based on availability
+try:
+    from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
 
-class ASEInputSchema(BaseModel):
-    """
-    Schema for defining input parameters used in ASE-based molecular simulations.
+    class ASEInputSchema(BaseModel):
+        """
+        Schema for defining input parameters used in ASE-based molecular simulations.
 
-    Attributes
-    ----------
-    atomsdata : AtomsData
-        The atomic structure and associated metadata for the simulation.
-    driver : str
-        Specifies the type of simulation to perform. Options:
-        - 'energy': Single-point electronic energy calculation.
-        - 'opt': Geometry optimization.
-        - 'vib': Vibrational frequency analysis.
-        - 'thermo': Thermochemical property calculation (enthalpy, entropy, Gibbs free energy).
-    optimizer : str
-        Optimization algorithm for geometry optimization. Options:
-        - 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'.
-    calculator : Union[MaceCalc, EMTCalc, NWChemCalc, TBLiteCalc]
-        ASE-compatible calculator used for the simulation. Supported types include:
-        - MACE, EMT, NWChem, and TBLite.
-    fmax : float
-        Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
-    steps : int
-        Maximum number of steps for geometry optimization.
-    temperature : Optional[float]
-        Temperature in Kelvin, required for thermochemical calculations (e.g., when using 'thermo' as the driver).
-    pressure : float
-        Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
-    """
+        Attributes
+        ----------
+        atomsdata : AtomsData
+            The atomic structure and associated metadata for the simulation.
+        driver : str
+            Specifies the type of simulation to perform. Options:
+            - 'energy': Single-point electronic energy calculation.
+            - 'opt': Geometry optimization.
+            - 'vib': Vibrational frequency analysis.
+            - 'thermo': Thermochemical property calculation (enthalpy, entropy, Gibbs free energy).
+        optimizer : str
+            Optimization algorithm for geometry optimization. Options:
+            - 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'.
+        calculator : Union[MaceCalc, EMTCalc, NWChemCalc, TBLiteCalc]
+            ASE-compatible calculator used for the simulation. Supported types include:
+            - FAIRChem, EMT, NWChem, Orca and TBLite.
+        fmax : float
+            Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
+        steps : int
+            Maximum number of steps for geometry optimization.
+        temperature : Optional[float]
+            Temperature in Kelvin, required for thermochemical calculations (e.g., when using 'thermo' as the driver).
+        pressure : float
+            Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
+        """
 
-    atomsdata: AtomsData = Field(description="The atomsdata object to be used for the simulation.")
-    driver: str = Field(
-        default=None,
-        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
-    )
-    optimizer: str = Field(
-        default="bfgs",
-        description="The optimization algorithm used for geometry optimization. Options are 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'",
-    )
-    calculator: Union[MaceCalc, EMTCalc, NWChemCalc, TBLiteCalc, OrcaCalc] = Field(
-        default=None,
-        description="The ASE calculator to be used. Support TBLite, Mace, EMT, NWChem and Orca.",
-    )
-    fmax: float = Field(
-        default=0.01,
-        description="The convergence criterion for forces (in eV/Å). Optimization stops when all force components are smaller than this value.",
-    )
-    steps: int = Field(
-        default=1000,
-        description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
-    )
-    temperature: Optional[float] = Field(
-        default=None, description="Temperature for thermochemistry calculations in Kelvin (K)."
-    )
-    pressure: float = Field(
-        default=101325.0, description="Pressure for thermochemistry calculations in Pascal (Pa)."
-    )
+        atomsdata: AtomsData = Field(
+            description="The atomsdata object to be used for the simulation."
+        )
+        driver: str = Field(
+            default=None,
+            description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+        )
+        optimizer: str = Field(
+            default="bfgs",
+            description="The optimization algorithm used for geometry optimization. Options are 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'",
+        )
+        calculator: Union[EMTCalc, NWChemCalc, TBLiteCalc, OrcaCalc, FAIRChemCalc] = Field(
+            default=None,
+            description="The ASE calculator to be used. Support TBLite, FAIRChem, EMT, NWChem and Orca.",
+        )
+        fmax: float = Field(
+            default=0.01,
+            description="The convergence criterion for forces (in eV/Å). Optimization stops when all force components are smaller than this value.",
+        )
+        steps: int = Field(
+            default=1000,
+            description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
+        )
+        temperature: Optional[float] = Field(
+            default=None, description="Temperature for thermochemistry calculations in Kelvin (K)."
+        )
+        pressure: float = Field(
+            default=101325.0,
+            description="Pressure for thermochemistry calculations in Pascal (Pa).",
+        )
+
+except ModuleNotFoundError:
+    try:
+        from chemgraph.models.calculators.mace_calc import MaceCalc
+
+        class ASEInputSchema(BaseModel):
+            """
+            Schema for defining input parameters used in ASE-based molecular simulations.
+
+            Attributes
+            ----------
+            atomsdata : AtomsData
+                The atomic structure and associated metadata for the simulation.
+            driver : str
+                Specifies the type of simulation to perform. Options:
+                - 'energy': Single-point electronic energy calculation.
+                - 'opt': Geometry optimization.
+                - 'vib': Vibrational frequency analysis.
+                - 'thermo': Thermochemical property calculation (enthalpy, entropy, Gibbs free energy).
+            optimizer : str
+                Optimization algorithm for geometry optimization. Options:
+                - 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'.
+            calculator : Union[MaceCalc, EMTCalc, NWChemCalc, TBLiteCalc]
+                ASE-compatible calculator used for the simulation. Supported types include:
+                - MACE, EMT, NWChem, Orca and TBLite.
+            fmax : float
+                Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
+            steps : int
+                Maximum number of steps for geometry optimization.
+            temperature : Optional[float]
+                Temperature in Kelvin, required for thermochemical calculations (e.g., when using 'thermo' as the driver).
+            pressure : float
+                Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
+            """
+
+            atomsdata: AtomsData = Field(
+                description="The atomsdata object to be used for the simulation."
+            )
+            driver: str = Field(
+                default=None,
+                description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+            )
+            optimizer: str = Field(
+                default="bfgs",
+                description="The optimization algorithm used for geometry optimization. Options are 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'",
+            )
+            calculator: Union[EMTCalc, NWChemCalc, TBLiteCalc, OrcaCalc, MaceCalc] = Field(
+                default=None,
+                description="The ASE calculator to be used. Support TBLite, MACE, EMT, NWChem and Orca.",
+            )
+            fmax: float = Field(
+                default=0.01,
+                description="The convergence criterion for forces (in eV/Å). Optimization stops when all force components are smaller than this value.",
+            )
+            steps: int = Field(
+                default=1000,
+                description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
+            )
+            temperature: Optional[float] = Field(
+                default=None,
+                description="Temperature for thermochemistry calculations in Kelvin (K).",
+            )
+            pressure: float = Field(
+                default=101325.0,
+                description="Pressure for thermochemistry calculations in Pascal (Pa).",
+            )
+
+    except ModuleNotFoundError:
+
+        class ASEInputSchema(BaseModel):
+            """
+            Schema for defining input parameters used in ASE-based molecular simulations.
+
+            Attributes
+            ----------
+            atomsdata : AtomsData
+                The atomic structure and associated metadata for the simulation.
+            driver : str
+                Specifies the type of simulation to perform. Options:
+                - 'energy': Single-point electronic energy calculation.
+                - 'opt': Geometry optimization.
+                - 'vib': Vibrational frequency analysis.
+                - 'thermo': Thermochemical property calculation (enthalpy, entropy, Gibbs free energy).
+            optimizer : str
+                Optimization algorithm for geometry optimization. Options:
+                - 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'.
+            calculator : Union[MaceCalc, EMTCalc, NWChemCalc, TBLiteCalc]
+                ASE-compatible calculator used for the simulation. Supported types include:
+                - EMT, NWChem, Orca and TBLite.
+            fmax : float
+                Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
+            steps : int
+                Maximum number of steps for geometry optimization.
+            temperature : Optional[float]
+                Temperature in Kelvin, required for thermochemical calculations (e.g., when using 'thermo' as the driver).
+            pressure : float
+                Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
+            """
+
+            atomsdata: AtomsData = Field(
+                description="The atomsdata object to be used for the simulation."
+            )
+            driver: str = Field(
+                default=None,
+                description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+            )
+            optimizer: str = Field(
+                default="bfgs",
+                description="The optimization algorithm used for geometry optimization. Options are 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'",
+            )
+            calculator: Union[EMTCalc, NWChemCalc, TBLiteCalc, OrcaCalc] = Field(
+                default=None,
+                description="The ASE calculator to be used. Support TBLite, EMT, NWChem and Orca.",
+            )
+            fmax: float = Field(
+                default=0.01,
+                description="The convergence criterion for forces (in eV/Å). Optimization stops when all force components are smaller than this value.",
+            )
+            steps: int = Field(
+                default=1000,
+                description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
+            )
+            temperature: Optional[float] = Field(
+                default=None,
+                description="Temperature for thermochemistry calculations in Kelvin (K).",
+            )
+            pressure: float = Field(
+                default=101325.0,
+                description="Pressure for thermochemistry calculations in Pascal (Pa).",
+            )
 
 
 class ASEOutputSchema(BaseModel):

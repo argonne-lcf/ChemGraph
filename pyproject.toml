@@ -19,15 +19,23 @@ dependencies = [
     "langchain-anthropic>=0.3.13",
     "pydantic",
     "pandas",
-    "mace-torch",
-    "torch-dftd>=0.5.1",
     "pubchempy",
     "pyppeteer",
     "numpy>=2",
     "langchain-experimental>=0.3.4",
     "numexpr",
-    "tblite>=0.4.0"
+    "tblite>=0.4.0",
     ]
+
+[project.optional-dependencies]
+mace = [
+    "mace-torch>=0.3.13",
+    "e3nn==0.4.4"
+]
+
+uma = [
+    "fairchem-core==2.1.0",
+]
 
 [project.urls]
 "Homepage" = "https://example.com/your-project"
