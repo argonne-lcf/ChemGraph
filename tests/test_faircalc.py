@@ -9,6 +9,15 @@ from chemgraph.models.atomsdata import AtomsData
 from chemgraph.models.ase_input import ASEOutputSchema, ASEInputSchema
 
 
+def is_fairchem_installed():
+    try:
+        import fairchem.core
+
+        return True
+    except ImportError:
+        return False
+
+
 @pytest.fixture
 def water_atomsdata():
     """Fixture for water atomsdata"""
@@ -66,6 +75,7 @@ def thermo_ase_schema(base_ase_input):
     return ASEInputSchema(**input_dict)
 
 
+@pytest.mark.skipif(not is_fairchem_installed(), reason="FairChem is not installed")
 def test_run_ase_opt(opt_ase_schema):
     """Test ASE geometry optimization."""
     result = run_ase.invoke({"params": opt_ase_schema})
@@ -77,6 +87,7 @@ def test_run_ase_opt(opt_ase_schema):
     assert result.final_structure.positions != opt_ase_schema.atomsdata.positions
 
 
+@pytest.mark.skipif(not is_fairchem_installed(), reason="FairChem is not installed")
 def test_run_ase_vib(vib_ase_schema):
     """Test ASE vibrational analysis."""
     result = run_ase.invoke({"params": vib_ase_schema})
@@ -86,6 +97,7 @@ def test_run_ase_vib(vib_ase_schema):
     assert len(result.vibrational_frequencies) > 0
 
 
+@pytest.mark.skipif(not is_fairchem_installed(), reason="FairChem is not installed")
 def test_run_ase_thermo(thermo_ase_schema):
     """Test ASE thermochemistry calculation."""
     result = run_ase.invoke({"params": thermo_ase_schema})
