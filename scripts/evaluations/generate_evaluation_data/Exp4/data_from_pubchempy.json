@@ -1,0 +1,202 @@
+[
+    {
+        "name": "3-methyl-1,2,4-trithiolane",
+        "number_of_atoms": 12,
+        "smiles": "CC1SCSS1"
+    },
+    {
+        "name": "2-nitropropane",
+        "number_of_atoms": 13,
+        "smiles": "CC(C)[N+](=O)[O-]"
+    },
+    {
+        "name": "2-ethylsulfanyl-4,5-dihydro-1H-imidazole",
+        "number_of_atoms": 18,
+        "smiles": "CCSC1=NCCN1"
+    },
+    {
+        "name": "2-thiophosphorosoacetic acid",
+        "number_of_atoms": 9,
+        "smiles": "C(C(=O)O)P=S"
+    },
+    {
+        "name": "(E)-3-(5-bromo-2-fluorophenyl)prop-2-enoic acid",
+        "number_of_atoms": 19,
+        "smiles": "C1=CC(=C(C=C1Br)C=CC(=O)O)F"
+    },
+    {
+        "name": "2-hydroxy-1H-pyridin-4-one",
+        "number_of_atoms": 13,
+        "smiles": "C1=CNC(=O)C=C1O"
+    },
+    {
+        "name": "methyl 5-amino-4-cyanopyrazole-1-carboxylate",
+        "number_of_atoms": 18,
+        "smiles": "COC(=O)N1C(=C(C=N1)C#N)N"
+    },
+    {
+        "name": "2-hydroxy-2-methylbutanedioic acid",
+        "number_of_atoms": 18,
+        "smiles": "CC(CC(=O)O)(C(=O)O)O"
+    },
+    {
+        "name": "2-bromo-1-(2,3,4-trichlorophenyl)ethanone",
+        "number_of_atoms": 17,
+        "smiles": "C1=CC(=C(C(=C1C(=O)CBr)Cl)Cl)Cl"
+    },
+    {
+        "name": "4-chlorobenzaldehyde",
+        "number_of_atoms": 14,
+        "smiles": "C1=CC(=CC=C1C=O)Cl"
+    },
+    {
+        "name": "(E)-4-(dimethylamino)-4-oxobut-2-enoic acid",
+        "number_of_atoms": 19,
+        "smiles": "CN(C)C(=O)C=CC(=O)O"
+    },
+    {
+        "name": "1,2-dichloro-2-fluoropropane",
+        "number_of_atoms": 11,
+        "smiles": "CC(CCl)(F)Cl"
+    },
+    {
+        "name": "trichloro(dichloromethyl)silane",
+        "number_of_atoms": 8,
+        "smiles": "C([Si](Cl)(Cl)Cl)(Cl)Cl"
+    },
+    {
+        "name": "methyl 5-bromothiadiazole-4-carboxylate",
+        "number_of_atoms": 13,
+        "smiles": "COC(=O)C1=C(SN=N1)Br"
+    },
+    {
+        "name": "1-imidazol-1-ylsulfonylimidazole",
+        "number_of_atoms": 19,
+        "smiles": "C1=CN(C=N1)S(=O)(=O)N2C=CN=C2"
+    },
+    {
+        "name": "6-methyl-2,3-dihydrothieno[2,3-c]furan",
+        "number_of_atoms": 17,
+        "smiles": "CC1=C2C(=CO1)CCS2"
+    },
+    {
+        "name": "2-methyl-5-nitropyridine-3-carboxylate",
+        "number_of_atoms": 18,
+        "smiles": "CC1=C(C=C(C=N1)[N+](=O)[O-])C(=O)[O-]"
+    },
+    {
+        "name": "5-bromo-2,1,3-benzothiadiazol-4-amine",
+        "number_of_atoms": 15,
+        "smiles": "C1=CC2=NSN=C2C(=C1Br)N"
+    },
+    {
+        "name": "N'-hydroxyfuran-2-carboximidamide",
+        "number_of_atoms": 15,
+        "smiles": "C1=COC(=C1)C(=NO)N"
+    },
+    {
+        "name": "3,5-dichlorobenzamide",
+        "number_of_atoms": 16,
+        "smiles": "C1=C(C=C(C=C1Cl)Cl)C(=O)N"
+    },
+    {
+        "name": "2-amino-6H-1,3,4-thiadiazine-5-carboxylic acid",
+        "number_of_atoms": 15,
+        "smiles": "C1C(=NN=C(S1)N)C(=O)O"
+    },
+    {
+        "name": "dipotassium;sulfonatooxy sulfate",
+        "number_of_atoms": 12,
+        "smiles": "[O-]S(=O)(=O)OOS(=O)(=O)[O-].[K+].[K+]"
+    },
+    {
+        "name": "2,2-dichloro-N-phenylacetamide",
+        "number_of_atoms": 19,
+        "smiles": "C1=CC=C(C=C1)NC(=O)C(Cl)Cl"
+    },
+    {
+        "name": "N-(4-chlorophenyl)-1-cyanoformamide",
+        "number_of_atoms": 17,
+        "smiles": "C1=CC(=CC=C1NC(=O)C#N)Cl"
+    },
+    {
+        "name": "2-bromo-4-fluorobenzonitrile",
+        "number_of_atoms": 13,
+        "smiles": "C1=CC(=C(C=C1F)Br)C#N"
+    },
+    {
+        "name": "dicesium;dioxido(dioxo)chromium",
+        "number_of_atoms": 7,
+        "smiles": "[O-][Cr](=O)(=O)[O-].[Cs+].[Cs+]"
+    },
+    {
+        "name": "1,5-dimethylpyrazole-4-carbonyl chloride",
+        "number_of_atoms": 17,
+        "smiles": "CC1=C(C=NN1C)C(=O)Cl"
+    },
+    {
+        "name": "4-(1,3-oxazol-5-yl)benzonitrile",
+        "number_of_atoms": 19,
+        "smiles": "C1=CC(=CC=C1C#N)C2=CN=CO2"
+    },
+    {
+        "name": "Methoxy(methyl)chlorosilane",
+        "number_of_atoms": 11,
+        "smiles": "CO[Si](C)Cl"
+    },
+    {
+        "name": "1-methylcyclobutan-1-ol",
+        "number_of_atoms": 16,
+        "smiles": "CC1(CCC1)O"
+    },
+    {
+        "name": "(4-hydroxyphenyl)urea",
+        "number_of_atoms": 19,
+        "smiles": "C1=CC(=CC=C1NC(=O)N)O"
+    },
+    {
+        "name": "N-(4,5-dihydro-1H-imidazol-2-yl)nitramide",
+        "number_of_atoms": 15,
+        "smiles": "C1CN=C(N1)N[N+](=O)[O-]"
+    },
+    {
+        "name": "6-methoxypyrazin-2-amine",
+        "number_of_atoms": 16,
+        "smiles": "COC1=NC(=CN=C1)N"
+    },
+    {
+        "name": "2,3,6-trihydroxybenzoic acid",
+        "number_of_atoms": 18,
+        "smiles": "C1=CC(=C(C(=C1O)C(=O)O)O)O"
+    },
+    {
+        "name": "2-chloro-4-methylpyridin-3-amine",
+        "number_of_atoms": 16,
+        "smiles": "CC1=C(C(=NC=C1)Cl)N"
+    },
+    {
+        "name": "methyl 4-isocyanobenzoate",
+        "number_of_atoms": 19,
+        "smiles": "COC(=O)C1=CC=C(C=C1)[N+]#[C-]"
+    },
+    {
+        "name": "3-nitropyridine-2-sulfonic acid",
+        "number_of_atoms": 17,
+        "smiles": "C1=CC(=C(N=C1)S(=O)(=O)O)[N+](=O)[O-]"
+    },
+    {
+        "name": "deuterio trifluoromethanesulfonate",
+        "number_of_atoms": 9,
+        "smiles": "C(F)(F)(F)S(=O)(=O)O"
+    },
+    {
+        "name": "S-(2-acetamidothiophen-3-yl) methanethioate",
+        "number_of_atoms": 19,
+        "smiles": "CC(=O)NC1=C(C=CS1)SC=O"
+    },
+    {
+        "name": "3-methylcyclopentan-1-ol",
+        "number_of_atoms": 19,
+        "smiles": "CC1CCC(C1)O"
+    }
+]

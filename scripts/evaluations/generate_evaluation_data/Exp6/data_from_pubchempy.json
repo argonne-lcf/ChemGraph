@@ -1,0 +1,202 @@
+[
+    {
+        "name": "2,3,3,3-tetrafluoropropanoic acid",
+        "number_of_atoms": 11,
+        "smiles": "C(C(=O)O)(C(F)(F)F)F"
+    },
+    {
+        "name": "2-(5-chloropyridin-2-yl)-1H-quinolin-4-one",
+        "number_of_atoms": 27,
+        "smiles": "C1=CC=C2C(=C1)C(=O)C=C(N2)C3=NC=C(C=C3)Cl"
+    },
+    {
+        "name": "3-(4-methylphenyl)-5-pyridin-4-yl-1,2,4-oxadiazole",
+        "number_of_atoms": 29,
+        "smiles": "CC1=CC=C(C=C1)C2=NOC(=N2)C3=CC=NC=C3"
+    },
+    {
+        "name": "4-bromo-6,8-dioxabicyclo[3.2.1]octane",
+        "number_of_atoms": 18,
+        "smiles": "C1CC(C2OCC1O2)Br"
+    },
+    {
+        "name": "2-[4-(hydroxymethyl)phenoxy]acetic acid",
+        "number_of_atoms": 23,
+        "smiles": "C1=CC(=CC=C1CO)OCC(=O)O"
+    },
+    {
+        "name": "5-(5-fluoro-2-methoxyphenyl)-1H-pyrazol-3-amine",
+        "number_of_atoms": 25,
+        "smiles": "COC1=C(C=C(C=C1)F)C2=CC(=NN2)N"
+    },
+    {
+        "name": "O-ethyl N-prop-2-enylcarbamothioate",
+        "number_of_atoms": 20,
+        "smiles": "CCOC(=S)NCC=C"
+    },
+    {
+        "name": "2-[difluoromethyl(propan-2-yloxy)phosphoryl]oxypropane",
+        "number_of_atoms": 28,
+        "smiles": "CC(C)OP(=O)(C(F)F)OC(C)C"
+    },
+    {
+        "name": "4-hydroxy-3-methyl-2-prop-2-enylcyclopent-2-en-1-one",
+        "number_of_atoms": 23,
+        "smiles": "CC1=C(C(=O)CC1O)CC=C"
+    },
+    {
+        "name": "2-ethyl-4-phenyl-1,3-thiazole",
+        "number_of_atoms": 24,
+        "smiles": "CCC1=NC(=CS1)C2=CC=CC=C2"
+    },
+    {
+        "name": "(2E,4Z)-3-chlorohexa-2,4-dienedioate",
+        "number_of_atoms": 14,
+        "smiles": "C(=CC(=O)[O-])C(=CC(=O)[O-])Cl"
+    },
+    {
+        "name": "(E)-1-(5-bromo-2-hydroxyphenyl)-3-(4-fluorophenyl)prop-2-en-1-one",
+        "number_of_atoms": 29,
+        "smiles": "C1=CC(=CC=C1C=CC(=O)C2=C(C=CC(=C2)Br)O)F"
+    },
+    {
+        "name": "12,16-dioxatetracyclo[11.2.1.02,11.03,8]hexadeca-2(11),3,5,7,9-pentaene",
+        "number_of_atoms": 28,
+        "smiles": "C1CC2OC1C3=C(O2)C=CC4=CC=CC=C43"
+    },
+    {
+        "name": "2-thiophen-2-yl-3,1-benzoxazin-4-one",
+        "number_of_atoms": 23,
+        "smiles": "C1=CC=C2C(=C1)C(=O)OC(=N2)C3=CC=CS3"
+    },
+    {
+        "name": "6-pyridin-2-ylpyridine-3-sulfonic acid",
+        "number_of_atoms": 24,
+        "smiles": "C1=CC=NC(=C1)C2=NC=C(C=C2)S(=O)(=O)O"
+    },
+    {
+        "name": "2-nitro-4-(trifluoromethyl)benzenesulfonyl chloride",
+        "number_of_atoms": 20,
+        "smiles": "C1=CC(=C(C=C1C(F)(F)F)[N+](=O)[O-])S(=O)(=O)Cl"
+    },
+    {
+        "name": "imidazol-1-yl-(4-methylphenyl)methanone",
+        "number_of_atoms": 24,
+        "smiles": "CC1=CC=C(C=C1)C(=O)N2C=CN=C2"
+    },
+    {
+        "name": "1-(benzotriazol-1-yl)propan-1-one",
+        "number_of_atoms": 22,
+        "smiles": "CCC(=O)N1C2=CC=CC=C2N=N1"
+    },
+    {
+        "name": "dimethylarsinate",
+        "number_of_atoms": 11,
+        "smiles": "C[As](=O)(C)[O-]"
+    },
+    {
+        "name": "3-(trifluoromethyl)aniline",
+        "number_of_atoms": 17,
+        "smiles": "C1=CC(=CC(=C1)N)C(F)(F)F"
+    },
+    {
+        "name": "2-(3,3-dimethyloxiran-2-yl)-1-oxidopyridin-1-ium",
+        "number_of_atoms": 23,
+        "smiles": "CC1(C(O1)C2=CC=CC=[N+]2[O-])C"
+    },
+    {
+        "name": "2-methylpyrimido[4,5-d]pyrimidin-5-amine",
+        "number_of_atoms": 19,
+        "smiles": "CC1=NC=C2C(=NC=NC2=N1)N"
+    },
+    {
+        "name": "2-ethylsulfanyl-3-nitropyridine",
+        "number_of_atoms": 20,
+        "smiles": "CCSC1=C(C=CC=N1)[N+](=O)[O-]"
+    },
+    {
+        "name": "2,2-dimethyl-3H-benzo[g][1]benzofuran-4,5-dione",
+        "number_of_atoms": 29,
+        "smiles": "CC1(CC2=C(O1)C3=CC=CC=C3C(=O)C2=O)C"
+    },
+    {
+        "name": "2-methyl-3-phenylprop-2-enehydrazide",
+        "number_of_atoms": 25,
+        "smiles": "CC(=CC1=CC=CC=C1)C(=O)NN"
+    },
+    {
+        "name": "1-(4-hydroxyphenyl)-2,5-dimethylpyrrole-3-carbaldehyde",
+        "number_of_atoms": 29,
+        "smiles": "CC1=CC(=C(N1C2=CC=C(C=C2)O)C)C=O"
+    },
+    {
+        "name": "2-amino-4-phenyl-1,3-thiazole-5-carbohydrazide",
+        "number_of_atoms": 26,
+        "smiles": "C1=CC=C(C=C1)C2=C(SC(=N2)N)C(=O)NN"
+    },
+    {
+        "name": "1-ethyl-3-(2-nitroanilino)thiourea",
+        "number_of_atoms": 28,
+        "smiles": "CCNC(=S)NNC1=CC=CC=C1[N+](=O)[O-]"
+    },
+    {
+        "name": "ethyl (2R)-2-acetamido-2-cyanoacetate",
+        "number_of_atoms": 22,
+        "smiles": "CCOC(=O)C(C#N)NC(=O)C"
+    },
+    {
+        "name": "1,3,4-trichloro-1-(1,1,2-trichloroethyl)cyclohexane",
+        "number_of_atoms": 24,
+        "smiles": "C1CC(CC(C1Cl)Cl)(C(CCl)(Cl)Cl)Cl"
+    },
+    {
+        "name": "methyl (E)-5-hydroxypent-2-enoate",
+        "number_of_atoms": 19,
+        "smiles": "COC(=O)C=CCCO"
+    },
+    {
+        "name": "N-(pyridin-3-ylmethyl)pyridine-2-carboxamide",
+        "number_of_atoms": 27,
+        "smiles": "C1=CC=NC(=C1)C(=O)NCC2=CN=CC=C2"
+    },
+    {
+        "name": "5-acetamido-2-hydroxybenzoate",
+        "number_of_atoms": 22,
+        "smiles": "CC(=O)NC1=CC(=C(C=C1)[O-])C(=O)O"
+    },
+    {
+        "name": "methyl 2-[acetyl(methyl)amino]benzoate",
+        "number_of_atoms": 28,
+        "smiles": "CC(=O)N(C)C1=CC=CC=C1C(=O)OC"
+    },
+    {
+        "name": "N'-hydroxycyclopropanecarboximidamide",
+        "number_of_atoms": 15,
+        "smiles": "C1CC1C(=NO)N"
+    },
+    {
+        "name": "5-bromo-N-tert-butylpyridine-3-carboxamide",
+        "number_of_atoms": 27,
+        "smiles": "CC(C)(C)NC(=O)C1=CC(=CN=C1)Br"
+    },
+    {
+        "name": "(5-fluoropyridin-3-yl)methyl but-3-enoate",
+        "number_of_atoms": 24,
+        "smiles": "C=CCC(=O)OCC1=CC(=CN=C1)F"
+    },
+    {
+        "name": "(E)-4-oxo-4-[(4-phenyl-1,3-thiazol-2-yl)amino]but-2-enoic acid",
+        "number_of_atoms": 29,
+        "smiles": "C1=CC=C(C=C1)C2=CSC(=N2)NC(=O)C=CC(=O)O"
+    },
+    {
+        "name": "2-(2-chloro-1,3-thiazol-5-yl)acetonitrile",
+        "number_of_atoms": 12,
+        "smiles": "C1=C(SC(=N1)Cl)CC#N"
+    },
+    {
+        "name": "4,5-dihydroxy-1-methylpiperidine-2-carboxylic acid",
+        "number_of_atoms": 25,
+        "smiles": "CN1CC(C(CC1C(=O)O)O)O"
+    }
+]
