@@ -12,7 +12,7 @@ def test_chemgraph_initialization():
     with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
         mock_load.return_value = Mock()
         agent = ChemGraph(model_name="gpt-4o-mini")
-        assert hasattr(agent, "graph")
+        assert hasattr(agent, "workflow")
 
 
 def test_agent_query(mock_llm):
