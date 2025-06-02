@@ -1,6 +1,7 @@
 import pytest
 from chemgraph.agent.llm_agent import ChemGraph
 from unittest.mock import Mock, patch
+from langchain_core.messages import HumanMessage, AIMessage
 
 
 @pytest.fixture
@@ -20,8 +21,8 @@ def test_agent_query(mock_llm):
         mock_load.return_value = mock_llm
         agent = ChemGraph(model_name="gpt-4o-mini")
 
-        # Mock response
-        mock_llm.invoke.return_value = "Test response"
+        # Mock response as a proper LangChain message
+        mock_llm.invoke.return_value = AIMessage(content="Test response")
 
         response = agent.run("What is the SMILES string for water?")
         assert response == "Test response"
