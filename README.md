@@ -2,40 +2,20 @@
 
 ## Overview
 
-`ChemGraph` is an agentic framework for automating molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, such as structure generation, energy calculations, and geometry optimizations—through natural language interfaces.
+`ChemGraph` is an agentic framework that can automate molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, from structure generation to thermochemistry calculation through natural language interfaces. 
 
-ChemGraph bridges high-level user queries with low-level simulation tools, simplifying setup, execution, and analysis across a range of quantum chemistry, tight-binding, and machine learning methods. It is designed with extensibility in mind and works efficiently in both local and high-performance computing (HPC) environments.
-
----
-
-## Key Features
-
-- **Intelligent Simulation Workflows**  
-  Supports a wide range of simulation tasks, including:
-  - Molecular structure generation from molecule name or SMILES string  
-  - Geometry optimization and energy evaluation  
-  - Vibrational analysis and thermodynamic property calculations
-
-- **LLM-Driven Agent Architecture**  
-  Powered by `LangGraph`, ChemGraph uses multiple coordinated agents (e.g., planner, tool caller, result aggregator) to break down and execute complex workflows.
-
-- **Modular Tool Integration**  
-  Works with simulation backends via `ASE`, enabling support for:
-  - DFT codes (e.g., NWChem, ORCA)  
-  - Semi-empirical methods (e.g., XTB via TBLite)  
-  - Machine learning potentials (e.g., MACE, UMA)
-
-- **HPC and Parallel Execution Ready**  
-  ChemGraph can be deployed on HPC systems, with compatibility for workflow engines like Parsl or Colmena, supporting high-throughput and distributed simulations.
-
-- **Model Flexibility and Performance**  
-  Optimized for both small and large LLMs (e.g., GPT-4o-mini, Claude 3.5, Qwen2.5), and capable of decomposing tasks to improve performance even on resource-constrained models.
-
+ChemGraph supports diverse simulation backends—including DFT (e.g., NWChem, ORCA), semi-empirical methods (e.g., XTB via TBLite), and machine learning potentials (e.g., MACE, UMA)—through modular integration with `ASE`. Its flexible multi-agent architecture allows for intelligent task decomposition and orchestration, making it compatible with both small and large LLMs (e.g., GPT-4o-mini, Claude 3.5, Qwen2.5). Designed for extensibility, ChemGraph can run on local machines and high-performance computing (HPC) systems.
 ---
 
 ## Installation
 
-Ensure you have **Conda** and **Python 3.10 or higher** installed on your system.
+Ensure you have **Conda** and **Python 3.10 or higher** installed on your system. 
+
+> ⚠️ **Note on Compatibility**  
+> ChemGraph supports both MACE and UMA (Meta’s machine learning potential). However, due to the current dependency conflicts, particularly with `e3nn`—**you cannot install both in the same environment**.  
+> To use both libraries, create **separate Conda environments**, one for each.
+
+### Step to Install
 
 1. Clone the repository:
    ```bash
@@ -49,20 +29,28 @@ Ensure you have **Conda** and **Python 3.10 or higher** installed on your system
     ```
 3. Install required Conda dependencies: 
     ```bash
-    conda install -c conda-forge tblite
+    conda install -c conda-forge nwchem
     ```
-4. Install the package and its dependencies:
+4. Install `ChemGraph` and its dependencies:
+#### Optional A: Install with UMA support
     ``` bash
-    pip install -e .
+    pip install ".[uma]"
+    ```
+#### Optional B: Install with MACE support
+    ``` bash
+    pip install ".[mace]"
     ```
 ---
 
 ## Usage
 
-Explore example workflows in the notebooks/ directory:
+Explore example usage in the notebooks/directory:
 
-Single-Agent System: Demo_single_agent.ipynb
-- Demonstrates a basic agent with multiple tools.
+Single-Agent System with MACE: Demo_single_agent.ipynb
+- Demonstrates a single agent with multiple tools (for MACE-support).
+
+Single-Agent System with UMA: Demo_single_agent_UMA.ipynb
+- Demonstrates a single agent with multiple tools (for UMA-support).
 
 Multi-Agent System: Demo_multi_agent.ipynb
 - Demonstrates multiple agents handling different tasks.
@@ -254,14 +242,14 @@ When you initialize `CompChemAgent` or `llm_graph` in your Jupyter notebooks (ru
 **Example in a notebook:**
 
 ```python
-from chemgraph.agent import llm_graph # Or CompChemAgent
+from chemgraph.agent import llm_agent
 
 # The model name should match what vLLM is serving.
 # The base_url and api_key will be picked up from environment variables
 # set in docker-compose.yml if this model_name is not a standard one.
-agent = llm_graph.llm_graph(
+agent = llm_agent.ChemGraph(
     model_name="meta-llama/Llama-3.1-8B-Instruct", # Or whatever model is configured in docker-compose.yml
-    workflow_type="single_agent_ase", 
+    workflow_type="single_agent", 
     # No need to explicitly pass base_url or api_key here if using the docker-compose setup
 )
 
@@ -335,9 +323,9 @@ from chemgraph.agent import llm_graph
 # Set your OpenAI API key as an environment variable or pass it directly
 os.environ["OPENAI_API_KEY"] = "your-openai-api-key-here"
 
-agent = llm_graph.llm_graph(
+agent = llm_agent.ChemGraph(
     model_name="gpt-4",  # or "gpt-3.5-turbo", "gpt-4o", etc.
-    workflow_type="single_agent_ase"
+    workflow_type="single_agent"
 )
 ```
 
@@ -349,7 +337,7 @@ from chemgraph.agent import llm_graph
 # Set your Anthropic API key
 os.environ["ANTHROPIC_API_KEY"] = "your-anthropic-api-key-here"
 
-agent = llm_graph.llm_graph(
+agent = llm_agent.ChemGraph(
     model_name="claude-3-sonnet-20240229",  # or other Claude models
     workflow_type="single_agent_ase"
 )

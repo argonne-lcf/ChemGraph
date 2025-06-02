@@ -46,4 +46,6 @@ logs/
 error_log.txt
 .env
 test.csv
-nwchem*
+nwchem/
+nwchem.nwi
+nwchem.nwo
