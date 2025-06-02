@@ -1,11 +1,9 @@
-# chemgraph
+# ChemGraph
 
 ## Overview
 
-`ChemGraph` is an agentic framework that can automate molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, from structure generation to thermochemistry calculation through natural language interfaces. 
-
-ChemGraph supports diverse simulation backends—including DFT (e.g., NWChem, ORCA), semi-empirical methods (e.g., XTB via TBLite), and machine learning potentials (e.g., MACE, UMA)—through modular integration with `ASE`. Its flexible multi-agent architecture allows for intelligent task decomposition and orchestration, making it compatible with both small and large LLMs (e.g., GPT-4o-mini, Claude 3.5, Qwen2.5). Designed for extensibility, ChemGraph can run on local machines and high-performance computing (HPC) systems.
----
+**ChemGraph** is an agentic framework that can automate molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, from structure generation to thermochemistry calculation through natural language interfaces. 
+ChemGraph supports diverse simulation backends, including DFT (e.g., NWChem, ORCA), semi-emperical methods (e.g., XTB via TBLite), and machine learning potentials (e.g, MACE, UMA) through modular integration with `ASE`. 
 
 ## Installation
 
@@ -32,26 +30,21 @@ Ensure you have **Conda** and **Python 3.10 or higher** installed on your system
     ```
 4. Install `ChemGraph` and its dependencies:
 #### Optional A: Install with UMA support
-    ``` bash
     pip install ".[uma]"
-    ```
 #### Optional B: Install with MACE support
-    ``` bash
     pip install ".[mace]"
-   ```
----
-
+   
 ## Usage
 
 Explore example usage in the notebooks/directory:
 
-Single-Agent System with MACE: Demo_single_agent.ipynb
+### Single-Agent System with MACE: Demo_single_agent.ipynb
 - Demonstrates a single agent with multiple tools (for MACE-support).
 
-Single-Agent System with UMA: Demo_single_agent_UMA.ipynb
+### Single-Agent System with UMA: Demo_single_agent_UMA.ipynb
 - Demonstrates a single agent with multiple tools (for UMA-support).
 
-Multi-Agent System: Demo_multi_agent.ipynb
+### Multi-Agent System: Demo_multi_agent.ipynb
 - Demonstrates multiple agents handling different tasks.
 
 ---
@@ -233,10 +226,10 @@ To stop the services, press `Ctrl+C` in the terminal where `docker-compose up` i
 
 ### Configuring Notebooks to Use the Local vLLM Server
 
-When you initialize `CompChemAgent` or `llm_graph` in your Jupyter notebooks (running within the `jupyter_lab` service), you can now point to the local vLLM server:
+When you initialize `ChemGraph` in your Jupyter notebooks (running within the `jupyter_lab` service), you can now point to the local vLLM server:
 
 1.  **Model Name**: Use the Hugging Face identifier of the model being served by vLLM (e.g., `meta-llama/Llama-3.1-8B-Instruct` as per default in `docker-compose.yml`).
-2.  **Base URL & API Key**: These are automatically passed as environment variables (`VLLM_BASE_URL` and `OPENAI_API_KEY`) to the `jupyter_lab` service by `docker-compose.yml`. The agent code in `llm_graph.py` and `llm_agent.py` has been updated to automatically use these environment variables if a model name is provided that isn't in the pre-defined supported lists (OpenAI, Ollama, ALCF, Anthropic).
+2.  **Base URL & API Key**: These are automatically passed as environment variables (`VLLM_BASE_URL` and `OPENAI_API_KEY`) to the `jupyter_lab` service by `docker-compose.yml`. The agent code in `llm_agent.py` has been updated to automatically use these environment variables if a model name is provided that isn't in the pre-defined supported lists (OpenAI, Ollama, ALCF, Anthropic).
 
 **Example in a notebook:**
 
@@ -317,7 +310,7 @@ This will start only the JupyterLab container without the vLLM server. In this s
 **Example for OpenAI:**
 ```python
 import os
-from chemgraph.agent import llm_graph
+from chemgraph.agent import ChemGraph
 
 # Set your OpenAI API key as an environment variable or pass it directly
 os.environ["OPENAI_API_KEY"] = "your-openai-api-key-here"
@@ -331,7 +324,7 @@ agent = llm_agent.ChemGraph(
 **Example for Anthropic Claude:**
 ```python
 import os
-from chemgraph.agent import llm_graph
+from chemgraph.agent import ChemGraph
 
 # Set your Anthropic API key
 os.environ["ANTHROPIC_API_KEY"] = "your-anthropic-api-key-here"
