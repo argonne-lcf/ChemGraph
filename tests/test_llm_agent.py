@@ -18,12 +18,14 @@ def test_chemgraph_initialization():
 
 def test_agent_query(mock_llm):
     with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
+        # Set up the mock chain
+        mock_chain = Mock()
+        mock_chain.invoke.return_value = AIMessage(content="Test response")
+        mock_llm.bind_tools.return_value = mock_chain
         mock_load.return_value = mock_llm
+
         agent = ChemGraph(model_name="gpt-4o-mini")
-
-        # Mock response as a proper LangChain message
-        mock_llm.invoke.return_value = AIMessage(content="Test response")
-
         response = agent.run("What is the SMILES string for water?")
         assert response == "Test response"
-        mock_llm.invoke.assert_called_once()
+        mock_llm.bind_tools.assert_called_once()
+        mock_chain.invoke.assert_called_once()
