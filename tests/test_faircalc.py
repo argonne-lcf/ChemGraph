@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
 from ase import Atoms
 from chemgraph.tools.ase_tools import (
     run_ase,
@@ -16,6 +15,11 @@ def is_fairchem_installed():
         return True
     except ImportError:
         return False
+
+
+# Only import FAIRChemCalc if fairchem is installed
+if is_fairchem_installed():
+    from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
 
 
 @pytest.fixture
