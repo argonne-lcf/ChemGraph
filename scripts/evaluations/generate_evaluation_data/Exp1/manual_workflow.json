@@ -1,0 +1,482 @@
+{
+    "9-[(2,6-dichlorophenyl)methyl]-N-(furan-2-ylmethyl)purin-6-amine": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "9-[(2,6-dichlorophenyl)methyl]-N-(furan-2-ylmethyl)purin-6-amine"
+                    }
+                }
+            ],
+            "result": "C1=CC(=C(C(=C1)Cl)CN2C=NC3=C(N=CN=C32)NCC4=CC=CO4)Cl"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-30",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "bis(2-hydroxyphenyl)phosphinic acid": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "bis(2-hydroxyphenyl)phosphinic acid"
+                    }
+                }
+            ],
+            "result": "C1=CC=C(C(=C1)O)P(=O)(C2=CC=CC=C2O)O"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-30",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "N-[3-(2-ethylsulfonyl-3-phenyl-3,4-dihydropyrazol-5-yl)phenyl]methanesulfonamide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "N-[3-(2-ethylsulfonyl-3-phenyl-3,4-dihydropyrazol-5-yl)phenyl]methanesulfonamide"
+                    }
+                }
+            ],
+            "result": "CCS(=O)(=O)N1C(CC(=N1)C2=CC(=CC=C2)NS(=O)(=O)C)C3=CC=CC=C3"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-30",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "6-methyl-2-(3,4,5-trimethoxyphenyl)quinoline-4-carboxylic acid": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "6-methyl-2-(3,4,5-trimethoxyphenyl)quinoline-4-carboxylic acid"
+                    }
+                }
+            ],
+            "result": "CC1=CC2=C(C=C1)N=C(C=C2C(=O)O)C3=CC(=C(C(=C3)OC)OC)OC"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-30",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "methyl 4-(4-benzoyl-2-nitroanilino)butanoate": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "methyl 4-(4-benzoyl-2-nitroanilino)butanoate"
+                    }
+                }
+            ],
+            "result": "COC(=O)CCCNC1=C(C=C(C=C1)C(=O)C2=CC=CC=C2)[N+](=O)[O-]"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-31",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "1-(2-methylphenyl)-3-(3-methylpyridin-2-yl)urea": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-(2-methylphenyl)-3-(3-methylpyridin-2-yl)urea"
+                    }
+                }
+            ],
+            "result": "CC1=C(N=CC=C1)NC(=O)NC2=CC=CC=C2C"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-31",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "3-[1-[2-(4-methylphenoxy)ethyl]benzimidazol-2-yl]propan-1-ol": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3-[1-[2-(4-methylphenoxy)ethyl]benzimidazol-2-yl]propan-1-ol"
+                    }
+                }
+            ],
+            "result": "CC1=CC=C(C=C1)OCCN2C3=CC=CC=C3N=C2CCCO"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-31",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "4-bromo-N-(6-methoxy-1,3-benzothiazol-2-yl)benzenesulfonamide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "4-bromo-N-(6-methoxy-1,3-benzothiazol-2-yl)benzenesulfonamide"
+                    }
+                }
+            ],
+            "result": "COC1=CC2=C(C=C1)N=C(S2)NS(=O)(=O)C3=CC=C(C=C3)Br"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-31",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "1-butyl-2-(chloromethyl)pyrrolidine": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-butyl-2-(chloromethyl)pyrrolidine"
+                    }
+                }
+            ],
+            "result": "CCCCN1CCCC1CCl"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-31",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "2-(4-propoxyphenyl)ethanimidamide;hydrochloride": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-(4-propoxyphenyl)ethanimidamide;hydrochloride"
+                    }
+                }
+            ],
+            "result": "CCCOC1=CC=C(C=C1)CC(=N)N.Cl"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-31",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "5-(4-phenylcyclohexyl)-3-propyl-1,2,4-oxadiazole": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5-(4-phenylcyclohexyl)-3-propyl-1,2,4-oxadiazole"
+                    }
+                }
+            ],
+            "result": "CCCC1=NOC(=N1)C2CCC(CC2)C3=CC=CC=C3"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-32",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "3,8-dimethyl-6-phenyl-[1,2,4]triazolo[4,3-b]pyridazine": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3,8-dimethyl-6-phenyl-[1,2,4]triazolo[4,3-b]pyridazine"
+                    }
+                }
+            ],
+            "result": "CC1=CC(=NN2C1=NN=C2C)C3=CC=CC=C3"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-32",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "cyclopropyl-(4-methoxyphenyl)-pyrimidin-5-ylmethanol": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "cyclopropyl-(4-methoxyphenyl)-pyrimidin-5-ylmethanol"
+                    }
+                }
+            ],
+            "result": "COC1=CC=C(C=C1)C(C2CC2)(C3=CN=CN=C3)O"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-32",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "3-[(3-amino-5-sulfanylidene-1H-1,2,4-triazol-4-yl)amino]indol-2-one": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "3-[(3-amino-5-sulfanylidene-1H-1,2,4-triazol-4-yl)amino]indol-2-one"
+                    }
+                }
+            ],
+            "result": "C1=CC=C2C(=C1)C(=NN3C(=NNC3=S)N)C(=O)N2"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-32",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "N'-[(Z)-2-amino-1,2-dicyanoethenyl]methanimidamide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "N'-[(Z)-2-amino-1,2-dicyanoethenyl]methanimidamide"
+                    }
+                }
+            ],
+            "result": "C(=NC(=C(C#N)N)C#N)N"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-32",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "N-(5-ethylsulfanyl-1,3,4-thiadiazol-2-yl)-2-(3-methylphenoxy)acetamide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "N-(5-ethylsulfanyl-1,3,4-thiadiazol-2-yl)-2-(3-methylphenoxy)acetamide"
+                    }
+                }
+            ],
+            "result": "CCSC1=NN=C(S1)NC(=O)COC2=CC=CC(=C2)C"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-33",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "methyl 6-acetyl-7-(4-chlorophenyl)-4,7-dihydrotetrazolo[1,5-a]pyrimidine-5-carboxylate": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "methyl 6-acetyl-7-(4-chlorophenyl)-4,7-dihydrotetrazolo[1,5-a]pyrimidine-5-carboxylate"
+                    }
+                }
+            ],
+            "result": "CC(=O)C1=C(NC2=NN=NN2C1C3=CC=C(C=C3)Cl)C(=O)OC"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-33",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "2-(2-chloroethoxy)ethyl 2-hydroxypropanoate": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-(2-chloroethoxy)ethyl 2-hydroxypropanoate"
+                    }
+                }
+            ],
+            "result": "CC(C(=O)OCCOCCCl)O"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-33",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "4-[5-[(Z)-(2,4-dioxo-3-prop-2-ynyl-1,3-thiazolidin-5-ylidene)methyl]furan-2-yl]-3-methylbenzoic acid": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "4-[5-[(Z)-(2,4-dioxo-3-prop-2-ynyl-1,3-thiazolidin-5-ylidene)methyl]furan-2-yl]-3-methylbenzoic acid"
+                    }
+                }
+            ],
+            "result": "CC1=C(C=CC(=C1)C(=O)O)C2=CC=C(O2)C=C3C(=O)N(C(=O)S3)CC#C"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-33",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "4-[2-(2-methylphenyl)ethenyl]thiadiazole": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "4-[2-(2-methylphenyl)ethenyl]thiadiazole"
+                    }
+                }
+            ],
+            "result": "CC1=CC=CC=C1C=CC2=CSN=N2"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-33",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "2-benzyl-1-(3-methylbutyl)benzimidazole": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-benzyl-1-(3-methylbutyl)benzimidazole"
+                    }
+                }
+            ],
+            "result": "CC(C)CCN1C2=CC=CC=C2N=C1CC3=CC=CC=C3"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-34",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "1-(3,4,5-trichlorothiophen-2-yl)propan-1-one": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "1-(3,4,5-trichlorothiophen-2-yl)propan-1-one"
+                    }
+                }
+            ],
+            "result": "CCC(=O)C1=C(C(=C(S1)Cl)Cl)Cl"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-34",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "N-heptylbicyclo[2.2.1]heptane-2-carboxamide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "N-heptylbicyclo[2.2.1]heptane-2-carboxamide"
+                    }
+                }
+            ],
+            "result": "CCCCCCCNC(=O)C1CC2CCC1C2"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-34",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "2-(trifluoromethyl)-6-(3,4,5-trimethoxyphenyl)imidazo[2,1-b][1,3,4]thiadiazole": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "2-(trifluoromethyl)-6-(3,4,5-trimethoxyphenyl)imidazo[2,1-b][1,3,4]thiadiazole"
+                    }
+                }
+            ],
+            "result": "COC1=CC(=CC(=C1OC)OC)C2=CN3C(=N2)SC(=N3)C(F)(F)F"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-34",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "N-methyl-N-[1-(methylamino)propan-2-yl]acetamide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "N-methyl-N-[1-(methylamino)propan-2-yl]acetamide"
+                    }
+                }
+            ],
+            "result": "CC(CNC)N(C)C(=O)C"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-34",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "dimethyl 3-(4-chlorophenyl)-2,2-dicyanocyclopropane-1,1-dicarboxylate": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "dimethyl 3-(4-chlorophenyl)-2,2-dicyanocyclopropane-1,1-dicarboxylate"
+                    }
+                }
+            ],
+            "result": "COC(=O)C1(C(C1(C#N)C#N)C2=CC=C(C=C2)Cl)C(=O)OC"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-34",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "tert-butyl 3-oxo-8-azabicyclo[3.2.1]octane-8-carboxylate": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "tert-butyl 3-oxo-8-azabicyclo[3.2.1]octane-8-carboxylate"
+                    }
+                }
+            ],
+            "result": "CC(C)(C)OC(=O)N1C2CCC1CC(=O)C2"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-35",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "5-methyl-2,5-diazatetracyclo[13.4.0.02,7.08,13]nonadeca-1(15),8,10,12,16,18-hexaen-17-ol": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "5-methyl-2,5-diazatetracyclo[13.4.0.02,7.08,13]nonadeca-1(15),8,10,12,16,18-hexaen-17-ol"
+                    }
+                }
+            ],
+            "result": "CN1CCN2C(C1)C3=CC=CC=C3CC4=C2C=CC(=C4)O"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-35",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "benzyl N-[2-(4-chlorophenyl)quinolin-4-yl]carbamate": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "benzyl N-[2-(4-chlorophenyl)quinolin-4-yl]carbamate"
+                    }
+                }
+            ],
+            "result": "C1=CC=C(C=C1)COC(=O)NC2=CC(=NC3=CC=CC=C32)C4=CC=C(C=C4)Cl"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-35",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    },
+    "N-(4-acetylphenyl)-2-phenoxyacetamide": {
+        "manual_workflow": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "N-(4-acetylphenyl)-2-phenoxyacetamide"
+                    }
+                }
+            ],
+            "result": "CC(=O)C1=CC=C(C=C1)NC(=O)COC2=CC=CC=C2"
+        },
+        "metadata": {
+            "timestamp": "2025-06-02_14-55-35",
+            "git_commit": "dffc9322157a8dbf4f358ab6420b250e9fb86461"
+        }
+    }
+}
