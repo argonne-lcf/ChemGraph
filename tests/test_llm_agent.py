@@ -26,6 +26,7 @@ def test_agent_query(mock_llm):
 
         agent = ChemGraph(model_name="gpt-4o-mini")
         response = agent.run("What is the SMILES string for water?")
-        assert response == "Test response"
+        assert isinstance(response, AIMessage)
+        assert response.content == "Test response"
         mock_llm.bind_tools.assert_called_once()
         mock_chain.invoke.assert_called_once()
