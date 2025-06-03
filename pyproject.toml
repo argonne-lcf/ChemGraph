@@ -3,11 +3,13 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "chemgraph"
+name = "ChemGraph"
 version = "0.1.0"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
-    { name = "Thang Pham", email = "tpham@anl.gov" }
+    { name = "Thang Pham", email = "tpham@anl.gov" },
+    { name = "Murat Keçeli", email = "keceli@anl.gov" },
+    { name = "Aditya Tanikanti, email = "atanikanti@anl.gov"}
 ]
 requires-python = ">=3.10"
 dependencies = [
@@ -28,21 +30,18 @@ dependencies = [
     "pytest",
     "deepdiff",
     "pymatgen",
+    "mace-torch>=0.3.13",
+    "e3nn==0.4.4"   
     ]
 
 [project.optional-dependencies]
-mace = [
-    "mace-torch>=0.3.13",
-    "e3nn==0.4.4"
-]
-
 uma = [
     "fairchem-core==2.1.0",
 ]
 
 [project.urls]
-"Homepage" = "https://example.com/your-project"
-"Repository" = "https://github.com/Autonomous-Scientific-Agents/CompChemAgent/tree/main"
+"Homepage" = "https://github.com/argonne-lcf/ChemGraph"
+"Repository" = "https://github.com/argonne-lcf/ChemGraph"
 
 [tool.setuptools.packages.find]
 where = ["src/"]
