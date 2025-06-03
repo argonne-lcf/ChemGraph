@@ -51,8 +51,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-    env:
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
     steps:
     - uses: actions/checkout@v4
@@ -77,11 +75,15 @@ jobs:
     
     - name: Install ChemGraph with UMA support
       shell: bash -l {0}
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
         pip install -e ".[uma]"
         pip install pytest
     
     - name: Run tests with UMA
       shell: bash -l {0}
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
         python -m pytest tests/ -v 
