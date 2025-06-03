@@ -9,7 +9,7 @@ description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
     { name = "Murat Keçeli", email = "keceli@anl.gov" },
-    { name = "Aditya Tanikanti, email = "atanikanti@anl.gov"}
+    { name = "Aditya Tanikanti", email = "atanikanti@anl.gov" }
 ]
 requires-python = ">=3.10"
 dependencies = [
