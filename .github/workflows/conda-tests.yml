@@ -34,12 +34,11 @@ jobs:
       run: |
         conda install -c conda-forge nwchem -y
         conda install -c conda-forge mamba -y
-        mamba install -c conda-forge e3nn==0.4.4 -y
     
     - name: Install ChemGraph with MACE support
       shell: bash -l {0}
       run: |
-        pip install -e ".[mace]"
+        pip install -e .
         pip install pytest
     
     - name: Run tests with MACE
