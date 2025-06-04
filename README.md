@@ -2,18 +2,35 @@
 
 ## Overview
 
-**ChemGraph** is an agentic framework that can automate molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, from structure generation to thermochemistry calculation through natural language interfaces. 
-ChemGraph supports diverse simulation backends, including DFT (e.g., NWChem, ORCA), semi-emperical methods (e.g., XTB via TBLite), and machine learning potentials (e.g, MACE, UMA) through modular integration with `ASE`. 
+**ChemGraph** is an agentic framework that can automate molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, from structure generation to thermochemistry calculations, with a natural language interface. 
+ChemGraph supports diverse simulation backends, including ab initio quantum chemistry methods (e.g. coupled-cluster, DFT via NWChem, ORCA), semi-empirical methods (e.g., XTB via TBLite), and machine learning potentials (e.g, MACE, UMA) through a modular integration with `ASE`. 
 
 ## Installation
 
-Ensure you have **Conda** and **Python 3.10 or higher** installed on your system. 
+Ensure you have **Python 3.10 or higher** installed on your system. 
+### Using pip (Recommended for most users)
+
+1. Create and activate a virtual environment:
+   ```bash
+   # Using venv (built into Python)
+   python -m venv chemgraph-env
+   source chemgraph-env/bin/activate  # On Unix/macOS
+   # OR
+   .\chemgraph-env\Scripts\activate  # On Windows
+   ```
+
+2. Install ChemGraph:
+   ```bash
+   pip install -e .
+   ```
+
+### Using Conda (Alternative)
 
 > ⚠️ **Note on Compatibility**  
-> ChemGraph supports both MACE and UMA (Meta’s machine learning potential). However, due to the current dependency conflicts, particularly with `e3nn`—**you cannot install both in the same environment**.  
+> ChemGraph supports both MACE and UMA (Meta's machine learning potential). However, due to the current dependency conflicts, particularly with `e3nn`—**you cannot install both in the same environment**.  
 > To use both libraries, create **separate Conda environments**, one for each.
 
-### Step to Install
+#### Steps for Conda Installation
 1. Clone the repository:
    ```bash
    git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
@@ -30,21 +47,33 @@ Ensure you have **Conda** and **Python 3.10 or higher** installed on your system
     ```
 4. Install `ChemGraph` and its dependencies:
 #### Optional A: Install with UMA support
-    pip install ".[uma]"
+
+> **Note on e3nn for UMA:** The `uma` extras require `e3nn>=0.5`, while the base `mace-torch` dependency requires `e3nn==0.4.4`. If you encounter a conflict when adding UMA support to an environment where `mace-torch` is already installed, you can prioritize the UMA requirement by first explicitly installing/upgrading `e3nn`:
+> ```bash
+> pip install "e3nn>=0.5"
+> ```
+> Then, install the UMA extras:
+```bash
+pip install -e ".[uma]"
+```
+> This ensures UMA compatibility. However, please be aware that this will change the `e3nn` version from what `mace-torch` expects, potentially affecting `mace-torch` functionality in this specific environment. For guaranteed compatibility for both, using separate environments (as highlighted in the "Note on Compatibility" above) is the recommended approach.
+
 #### Optional B: Install with MACE support
-    pip install ".[mace]"
+```bash
+pip install -e ".[mace]"
+```
    
 ## Usage
 
 Explore example usage in the notebooks/directory:
 
-### Single-Agent System with MACE: Demo_single_agent.ipynb
+### [Single-Agent System with MACE](notebooks/Demo_single_agent.ipynb)
 - Demonstrates a single agent with multiple tools (for MACE-support).
 
-### Single-Agent System with UMA: Demo_single_agent_UMA.ipynb
+### [Single-Agent System with UMA](notebooks/Demo_single_agent_UMA.ipynb)
 - Demonstrates a single agent with multiple tools (for UMA-support).
 
-### Multi-Agent System: Demo_multi_agent.ipynb
+### [Multi-Agent System](notebooks/Demo_multi_agent.ipynb)
 - Demonstrates multiple agents handling different tasks.
 
 ---
@@ -192,7 +221,7 @@ The `docker-compose.yml` file defines two main services:
 2.  **`vllm_server`**:
     *   Builds from `Dockerfile.arm` by default (located in the project root), which is suitable for running vLLM on macOS (Apple Silicon / ARM-based CPUs). This Dockerfile is a modified version intended for CPU execution.
     *   For other operating systems or hardware (e.g., Linux with NVIDIA GPUs), you will need to use a different Dockerfile. The vLLM project provides a collection of Dockerfiles for various architectures (CPU, CUDA, ROCm, etc.) available at [https://github.com/vllm-project/vllm/tree/main/docker](https://github.com/vllm-project/vllm/tree/main/docker). You would need to adjust the `docker-compose.yml` to point to the appropriate Dockerfile and context (e.g., by cloning the vLLM repository locally and referencing a Dockerfile within it).
-    *   Starts an OpenAI-compatible API server using vLLM, serving a pre-configured model (e.g., `meta-llama/Llama-3.1-8B-Instruct` as per the current `docker-compose.yml`).
+    *   Starts an OpenAI-compatible API server using vLLM, serving a pre-configured model (e.g., `meta-llama/Llama-3-8B-Instruct` as per the current `docker-compose.yml`).
     *   Listens on port 8000 within the Docker network (and is exposed to host port 8001 by default).
 
 ### Building and Running with Docker Compose
@@ -204,7 +233,7 @@ docker-compose up --build
 ```
 
 **Note on Hugging Face Token (`HF_TOKEN`):**
-Many models, including the default `meta-llama/Llama-3.1-8B-Instruct`, are gated and require Hugging Face authentication. To provide your Hugging Face token to the `vllm_server` service:
+Many models, including the default `meta-llama/Llama-3-8B-Instruct`, are gated and require Hugging Face authentication. To provide your Hugging Face token to the `vllm_server` service:
 
 1.  **Create a `.env` file** in the root directory of the project (the same directory as `docker-compose.yml`).
 2.  Add your Hugging Face token to this file:
@@ -228,19 +257,19 @@ To stop the services, press `Ctrl+C` in the terminal where `docker-compose up` i
 
 When you initialize `ChemGraph` in your Jupyter notebooks (running within the `jupyter_lab` service), you can now point to the local vLLM server:
 
-1.  **Model Name**: Use the Hugging Face identifier of the model being served by vLLM (e.g., `meta-llama/Llama-3.1-8B-Instruct` as per default in `docker-compose.yml`).
+1.  **Model Name**: Use the Hugging Face identifier of the model being served by vLLM (e.g., `meta-llama/Llama-3-8B-Instruct` as per default in `docker-compose.yml`).
 2.  **Base URL & API Key**: These are automatically passed as environment variables (`VLLM_BASE_URL` and `OPENAI_API_KEY`) to the `jupyter_lab` service by `docker-compose.yml`. The agent code in `llm_agent.py` has been updated to automatically use these environment variables if a model name is provided that isn't in the pre-defined supported lists (OpenAI, Ollama, ALCF, Anthropic).
 
 **Example in a notebook:**
 
 ```python
-from chemgraph.agent import llm_agent
+from chemgraph.agent import ChemGraph
 
 # The model name should match what vLLM is serving.
 # The base_url and api_key will be picked up from environment variables
 # set in docker-compose.yml if this model_name is not a standard one.
-agent = llm_agent.ChemGraph(
-    model_name="meta-llama/Llama-3.1-8B-Instruct", # Or whatever model is configured in docker-compose.yml
+agent = ChemGraph(
+    model_name="meta-llama/Llama-3-8B-Instruct", # Or whatever model is configured in docker-compose.yml
     workflow_type="single_agent", 
     # No need to explicitly pass base_url or api_key here if using the docker-compose setup
 )
@@ -315,7 +344,7 @@ from chemgraph.agent import ChemGraph
 # Set your OpenAI API key as an environment variable or pass it directly
 os.environ["OPENAI_API_KEY"] = "your-openai-api-key-here"
 
-agent = llm_agent.ChemGraph(
+agent = ChemGraph(
     model_name="gpt-4",  # or "gpt-3.5-turbo", "gpt-4o", etc.
     workflow_type="single_agent"
 )
@@ -329,7 +358,7 @@ from chemgraph.agent import ChemGraph
 # Set your Anthropic API key
 os.environ["ANTHROPIC_API_KEY"] = "your-anthropic-api-key-here"
 
-agent = llm_agent.ChemGraph(
+agent = ChemGraph(
     model_name="claude-3-sonnet-20240229",  # or other Claude models
     workflow_type="single_agent_ase"
 )

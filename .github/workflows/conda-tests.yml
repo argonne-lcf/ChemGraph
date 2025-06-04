@@ -78,6 +78,7 @@ jobs:
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
+        pip install "e3nn>=0.5"
         pip install -e ".[uma]"
         pip install pytest
     
