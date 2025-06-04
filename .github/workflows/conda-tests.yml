@@ -72,16 +72,25 @@ jobs:
       shell: bash -l {0}
       run: |
         conda install -c conda-forge nwchem -y
+
+    - name: Temporarily modify pyproject.toml for UMA e3nn compatibility
+      shell: bash -l {0}
+      run: |
+        echo "Backing up pyproject.toml to pyproject.toml.original..."
+        cp pyproject.toml pyproject.toml.original
+        echo "Commenting out mace-torch from pyproject.toml..."
+        # This sed command finds lines starting with optional whitespace,
+        # then "mace-torch>=0.3.13", and prepends a '#' to the matched line.
+        sed -i 's/^[[:space:]]*"mace-torch>=0.3.13",/#&/' pyproject.toml
+        echo "pyproject.toml after modification:"
+        cat pyproject.toml
     
-    - name: Install ChemGraph with UMA support (pip flag strategy)
+    - name: Install ChemGraph with UMA support
       shell: bash -l {0}
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
-        echo "Installing base ChemGraph package (with mace-torch -> e3nn==0.4.4)..."
-        pip install -e .
-        echo "Ensuring UMA extras are installed with e3nn >= 0.5..."
-        pip install -e ".[uma]" --upgrade --upgrade-strategy eager
+        pip install -e ".[uma]"
         pip install pytest
     
     - name: Run tests with UMA
@@ -90,3 +99,15 @@ jobs:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
         python -m pytest tests/ -v 
+    
+    - name: Restore pyproject.toml
+      shell: bash -l {0}
+      if: always() # Ensures this step runs even if previous steps fail
+      run: |
+        echo "Restoring pyproject.toml from pyproject.toml.original..."
+        if [ -f pyproject.toml.original ]; then
+          mv pyproject.toml.original pyproject.toml
+          echo "pyproject.toml restored."
+        else
+          echo "Backup pyproject.toml.original not found. Cannot restore."
+        fi 

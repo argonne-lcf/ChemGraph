@@ -10,7 +10,12 @@ ChemGraph supports diverse simulation backends, including ab initio quantum chem
 Ensure you have **Python 3.10 or higher** installed on your system. 
 ### Using pip (Recommended for most users)
 
-1. Create and activate a virtual environment:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+   cd ChemGraph
+    ```
+2. Create and activate a virtual environment:
    ```bash
    # Using venv (built into Python)
    python -m venv chemgraph-env
@@ -19,7 +24,7 @@ Ensure you have **Python 3.10 or higher** installed on your system.
    .\chemgraph-env\Scripts\activate  # On Windows
    ```
 
-2. Install ChemGraph:
+3. Install ChemGraph:
    ```bash
    pip install -e .
    ```
@@ -46,23 +51,29 @@ Ensure you have **Python 3.10 or higher** installed on your system.
     conda install -c conda-forge nwchem
     ```
 4. Install `ChemGraph` and its dependencies:
-#### Optional A: Install with UMA support
+   
+#### Option: Install with UMA support
 
-> **Note on e3nn for UMA:** The `uma` extras require `e3nn>=0.5`, while the base `mace-torch` dependency requires `e3nn==0.4.4`. If you encounter a conflict when adding UMA support to an environment where `mace-torch` is already installed, you can prioritize the UMA requirement by first explicitly installing/upgrading `e3nn`:
-> ```bash
-> pip install "e3nn>=0.5"
-> ```
-> Then, install the UMA extras:
+> **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 
+> If you need to install UMA support in an environment where `mace-torch` might cause this conflict, you can try the following workaround:
+> 1. **Temporarily modify `pyproject.toml`**: Open the `pyproject.toml` file in the root of the ChemGraph project.
+> 2. Find the line containing `"mace-torch>=0.3.13",` in the `dependencies` list.
+> 3. Comment out this line by adding a `#` at the beginning (e.g., `#    "mace-torch>=0.3.13",`).
+> 4. **Install UMA extras**: Run `pip install -e ".[uma]"`.
+> 5. **(Optional) Restore `pyproject.toml`**: After installation, you can uncomment the `mace-torch` line if you still need it for other purposes in the same environment. Be aware that `mace-torch` might not function correctly due to the `e3nn` version mismatch (`e3nn>=0.5` will be present for UMA).
+>
+> **The most robust solution for using both MACE and UMA with their correct dependencies is to create separate Conda environments, as highlighted in the "Note on Compatibility" above.**
+
 ```bash
 pip install -e ".[uma]"
 ```
-> This ensures UMA compatibility. However, please be aware that this will change the `e3nn` version from what `mace-torch` expects, potentially affecting `mace-torch` functionality in this specific environment. For guaranteed compatibility for both, using separate environments (as highlighted in the "Note on Compatibility" above) is the recommended approach.
 
 #### Optional B: Install with MACE support
+
 ```bash
 pip install -e ".[mace]"
 ```
-   
+
 ## Usage
 
 Explore example usage in the notebooks/directory:
