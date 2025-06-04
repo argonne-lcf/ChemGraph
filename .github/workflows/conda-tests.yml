@@ -73,13 +73,15 @@ jobs:
       run: |
         conda install -c conda-forge nwchem -y
     
-    - name: Install ChemGraph with UMA support
+    - name: Install ChemGraph with UMA support (pip flag strategy)
       shell: bash -l {0}
       env:
         HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
-        pip install "e3nn>=0.5"
-        pip install -e ".[uma]"
+        echo "Installing base ChemGraph package (with mace-torch -> e3nn==0.4.4)..."
+        pip install -e .
+        echo "Ensuring UMA extras are installed with e3nn >= 0.5..."
+        pip install -e ".[uma]" --upgrade --upgrade-strategy eager
         pip install pytest
     
     - name: Run tests with UMA
