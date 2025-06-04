@@ -73,11 +73,6 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 ```bash
 pip install -e ".[uma]"
 ```
-
-#### Optional B: Install with MACE support
-
-```bash
-pip install -e ".[mace]"
 ```
 
 ## Usage
@@ -397,4 +392,4 @@ The `tblite` package is installed via pip within the `jupyter_lab` service. For 
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the Apache 2.0 License.
