@@ -92,6 +92,17 @@ jobs:
       run: |
         pip install -e ".[uma]"
         pip install pytest
+        pip install huggingface-hub # Ensure huggingface-cli is available
+
+    - name: Authenticate with Hugging Face CLI
+      shell: bash -l {0}
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      run: |
+        echo "Attempting Hugging Face CLI login..."
+        huggingface-cli login --token $HF_TOKEN
+        echo "Login attempted. Verifying whoami..."
+        huggingface-cli whoami
     
     - name: Run tests with UMA
       shell: bash -l {0}

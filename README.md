@@ -64,6 +64,12 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 >
 > **The most robust solution for using both MACE and UMA with their correct dependencies is to create separate Conda environments, as highlighted in the "Note on Compatibility" above.**
 
+> **Important for UMA Model Access:** The `facebook/UMA` model is a gated model on Hugging Face. To use it, you must:
+> 1. Visit the [facebook/UMA model page](https://huggingface.co/facebook/UMA) on Hugging Face.
+> 2. Log in with your Hugging Face account.
+> 3. Accept the model's terms and conditions if prompted.
+> Your environment (local or CI) must also be authenticated with Hugging Face, typically by logging in via `huggingface-cli login` or ensuring `HF_TOKEN` is set and recognized.
+
 ```bash
 pip install -e ".[uma]"
 ```
