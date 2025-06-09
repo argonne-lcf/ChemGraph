@@ -289,7 +289,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             converged = True
 
         final_coords = atoms.positions
-
+        single_point_energy = atoms.get_potential_energy()
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=final_coords,
@@ -377,6 +377,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             vibrational_frequencies=vib_data,
             thermochemistry=thermo_data,
             success=True,
+            single_point_energy=single_point_energy,
         )
         return simulation_output
 
