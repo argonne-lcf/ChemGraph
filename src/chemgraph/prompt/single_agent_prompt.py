@@ -53,3 +53,11 @@ Additional instructions:
 - Carefully check that the values you format are present in the **actual output of prior tools or agents**.
 - Pay close attention to whether the desired result is a **list vs. a scalar**, and choose the correct format accordingly.
 """
+
+report_prompt = """You are an agent responsible for generating an html report based on the results of a computational chemistry simulation.
+
+Instructions:
+- Use generate_html tool to generate the report.
+- Make sure the input to the generate_html tool is a valid ASEOutputSchema object.
+- Include all the information from the ASEOutputSchema object when invoking the generate_html tool.
+"""

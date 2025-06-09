@@ -19,7 +19,7 @@ sample_ase_output = {
         'atomsdata': {'numbers': [6, 8, 6, 6, 6, 6, 6, 6, 8, 6, 6, 6, 6, 8, 8, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 'positions': [[-4.386389153880405, 0.08279395837817095, 0.17035293728963444], [-3.1272253754444743, -0.5293064652150616, -0.08652803796250216], [-1.8948390857194093, 0.019554729834529425, 0.294335450049076], [-1.7742033545538396, 1.2532251407598456, 0.9802125876017296], [-0.5018669285821701, 1.755680440673316, 1.3330537662335435], [0.663778948008566, 1.0386351545558137, 1.012033968722649], [0.5144687867255454, -0.17410036556653308, 0.34193491371306767], [-0.7168404827877023, -0.6633083772303519, -0.007817792913418472], [-0.5954553785556782, -1.806025041419148, -0.6419425737287208], [0.6921919396470129, -2.0897808883985323, -0.7239460416861158], [1.4392686899585787, -1.0926336456556074, -0.10598354427003526], [2.932367945009614, -1.0013229057877107, -0.03761338529227019], [3.447094638813016, -0.17613840419406154, -1.1719230253564632], [3.725478522448878, -0.720745665190186, -2.2736694091927494], [3.576070214541992, 1.2012692755231267, -1.024237917407537], [-5.192631614423245, -0.561698933243827, -0.23579528431768718], [-4.538915721231114, 0.1972289286135407, 1.2643716164952985], [-4.437591579097855, 1.0739105667618845, -0.32795039445661456], [-2.6504628973667756, 1.830115366842459, 1.2424797011718762], [-0.423255327155912, 2.7005824309182587, 1.8548281600138927], [1.6410436871288054, 1.419023767368517, 1.2791163438819162], [1.090387046393975, -2.9713177885918967, -1.2087345125638282], [3.3736953005678907, -2.020405878896555, -0.08229839088755009], [3.237383476570283, -0.5422986899155408, 0.9266661649231507], [3.9064477029836775, 1.777063289075177, -1.7893348892307053]], 'cell': [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]], 'pbc': [False, False, False]},
         'driver': 'thermo',
         'optimizer': 'bfgs',
-        'calculator': {'calculator_type': 'TBLite', 'method': 'GFN2-xTB', 'charge': None, 'multiplicity': None, 'accuracy': 1.0, 'electronic_temperature': 300.0, 'max_iterations': 250, 'initial_guess': 'sad', 'mixer_damping': 0.4, 'electric_field': None, 'spin_polarization': None, 'cache_api': True, 'verbosity': 0},
+        'calculator': {'calculator_type': 'TBLite', 'method': 'GFN2-xTB'},
         'fmax': 0.01,
         'steps': 1000,
         'temperature': 800.0,
@@ -118,11 +118,30 @@ def test_generate_html_with_xyz(test_output_dir, sample_ase_output_schema):
         # Verify key information is present in the HTML
         assert "XYZ Molecule Viewer" in html_content
         assert "Calculation Results" in html_content
+        assert "Simulation Details" in html_content
+        
+        # Check for collapsible functionality
+        assert "toggleSection" in html_content
+        assert "collapsible-content" in html_content
+        assert "onclick=\"toggleSection" in html_content
+        
+        # Check for simulation details
+        assert "Simulation Type" in html_content
+        assert "Calculator" in html_content
+        assert "thermo" in html_content  # From sample data
+        assert "Temperature" in html_content
+        assert "Pressure" in html_content
         
         # Check for thermochemistry values
-        assert "Enthalpy: -1215.407428" in html_content
-        assert "Entropy: 0.008508" in html_content
-        assert "Gibbs Free Energy: -1222.213543" in html_content
+        assert "Enthalpy" in html_content
+        assert "-1215.407428" in html_content  # Check for the value separately
+        assert "Entropy" in html_content
+        assert "Gibbs Free Energy" in html_content
+        assert "Thermochemistry Values" in html_content
+        assert "Energy Unit" in html_content
+        assert "eV" in html_content
+        assert "kJ/mol" in html_content
+        assert "kcal/mol" in html_content
         
         # Check for vibrational frequencies
         assert "Vibrational Frequencies" in html_content  # Check for the label
@@ -167,11 +186,30 @@ def test_generate_html_without_xyz(test_output_dir, sample_ase_output_schema):
         # Verify key information is present in the HTML
         assert "XYZ Molecule Viewer" in html_content
         assert "Calculation Results" in html_content
+        assert "Simulation Details" in html_content
+        
+        # Check for collapsible functionality
+        assert "toggleSection" in html_content
+        assert "collapsible-content" in html_content
+        assert "onclick=\"toggleSection" in html_content
+        
+        # Check for simulation details
+        assert "Simulation Type" in html_content
+        assert "Calculator" in html_content
+        assert "thermo" in html_content  # From sample data
+        assert "Temperature" in html_content
+        assert "Pressure" in html_content
         
         # Check for thermochemistry values
-        assert "Enthalpy: -1215.407428" in html_content
-        assert "Entropy: 0.008508" in html_content
-        assert "Gibbs Free Energy: -1222.213543" in html_content
+        assert "Enthalpy" in html_content
+        assert "-1215.407428" in html_content  # Check for the value separately
+        assert "Entropy" in html_content
+        assert "Gibbs Free Energy" in html_content
+        assert "Thermochemistry Values" in html_content
+        assert "Energy Unit" in html_content
+        assert "eV" in html_content
+        assert "kJ/mol" in html_content
+        assert "kcal/mol" in html_content
         
         # Check for vibrational frequencies
         assert "Vibrational Frequencies" in html_content  # Check for the label
