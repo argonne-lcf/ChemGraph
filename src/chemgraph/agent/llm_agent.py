@@ -8,7 +8,11 @@ from chemgraph.models.supported_models import (
     supported_anthropic_models,
     supported_alcf_models,
 )
-from chemgraph.prompt.single_agent_prompt import single_agent_prompt, formatter_prompt
+from chemgraph.prompt.single_agent_prompt import (
+    single_agent_prompt, 
+    formatter_prompt, 
+    report_prompt,
+)
 from chemgraph.prompt.multi_agent_prompt import (
     executor_prompt,
     formatter_multi_prompt,
@@ -107,6 +111,8 @@ class ChemGraph:
         executor_prompt: str = executor_prompt,
         aggregator_prompt: str = aggregator_prompt,
         formatter_multi_prompt: str = formatter_multi_prompt,
+        generate_report: bool = False,
+        report_prompt: str = report_prompt,
     ):
         try:
             if model_name in supported_openai_models:
@@ -159,6 +165,8 @@ class ChemGraph:
         self.system_prompt = system_prompt
         self.formatter_prompt = formatter_prompt
         self.structured_output = structured_output
+        self.generate_report = generate_report
+        self.report_prompt = report_prompt
         self.return_option = return_option
         self.recursion_limit = recursion_limit
         self.planner_prompt = planner_prompt
@@ -182,6 +190,8 @@ class ChemGraph:
                 self.system_prompt,
                 self.structured_output,
                 self.formatter_prompt,
+                self.generate_report,
+                self.report_prompt,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](

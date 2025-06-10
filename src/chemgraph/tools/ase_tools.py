@@ -143,7 +143,7 @@ def is_linear_molecule(atomsdata: AtomsData, tol=1e-3) -> bool:
     return (s[1] / s[0]) < tol
 
 
-def load_calculator(calculator: dict):
+def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
     """Load an ASE calculator based on the provided configuration.
 
     Parameters
@@ -200,7 +200,7 @@ def load_calculator(calculator: dict):
     if hasattr(calc, "get_atoms_properties"):
         extra_info = calc.get_atoms_properties()
 
-    return calc.get_calculator(), extra_info
+    return calc.get_calculator(), extra_info, calc
 
 
 @tool
@@ -234,7 +234,10 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     driver = params.driver
     pressure = params.pressure
 
-    calc, system_info = load_calculator(calculator)
+    calc, system_info, calc_model = load_calculator(calculator)
+    params.calculator = calc_model
+
+    
     if calc is None:
         e = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
         raise ValueError(e)
@@ -289,7 +292,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             converged = True
 
         final_coords = atoms.positions
-
+        single_point_energy = atoms.get_potential_energy()
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=final_coords,
@@ -377,6 +380,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             vibrational_frequencies=vib_data,
             thermochemistry=thermo_data,
             success=True,
+            single_point_energy=single_point_energy,
         )
         return simulation_output
 
