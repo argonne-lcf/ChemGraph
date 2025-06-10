@@ -12,11 +12,13 @@ from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_atomsdata,
 )
+from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator
 from chemgraph.models.agent_response import ResponseFormatter
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
+    report_prompt,
 )
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.state.state import State
@@ -172,12 +174,46 @@ def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     response = llm_structured_output.invoke(messages).model_dump_json()
     return {"messages": [response]}
 
+def ReportAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=[generate_html]):
+    """LLM node that generates a report from the messages.
+
+    Parameters
+    ----------
+    state : State
+        The current state containing messages and remaining steps
+    llm : ChatOpenAI
+        The language model to use for processing
+    system_prompt : str
+        The system prompt to guide the LLM's behavior
+    tools : list, optional
+        List of tools available to the agent, by default [generate_html]
+
+    Returns
+    -------
+    dict
+        Updated state containing the LLM's response
+    """
+
+    # Load default tools if no tool is specified.
+    if tools is None:
+        tools = [
+            generate_html,
+        ]
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"{state['messages']}"},
+    ]
+    llm_with_tools = llm.bind_tools(tools=tools)
+    return {"messages": [llm_with_tools.invoke(messages)]}
+
 
 def construct_single_agent_graph(
     llm: ChatOpenAI,
     system_prompt: str = single_agent_prompt,
     structured_output: bool = False,
     formatter_prompt: str = formatter_prompt,
+    generate_report: bool = False,
+    report_prompt: str = report_prompt,
     tools: list = None,
 ):
     """Construct a geometry optimization graph.
@@ -192,15 +228,19 @@ def construct_single_agent_graph(
         Whether to use structured output, by default False
     formatter_prompt : str, optional
         The prompt to guide the LLM's formatting behavior, by default formatter_prompt
+    generate_report: bool, optional
+        Whether to generate a report, by default False
+    report_prompt: str, optional
+        The prompt to guide the LLM's report generation behavior, by default report_prompt
     tool: list, optional
-        The list of tools for the agent, by default None
+        The list of tools for the main agent, by default None
     Returns
     -------
     StateGraph
-        The constructed geometry optimization graph
+        The constructed single agent graph
     """
     try:
-        logger.info("Constructing geometry optimization graph")
+        logger.info("Constructing single agent graph")
         checkpointer = MemorySaver()
         if tools is None:
             tools = [
@@ -220,13 +260,37 @@ def construct_single_agent_graph(
                 lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
             )
             graph_builder.add_node("tools", tool_node)
-            graph_builder.add_conditional_edges(
-                "ChemGraphAgent",
-                route_tools,
-                {"tools": "tools", "done": END},
-            )
-            graph_builder.add_edge("tools", "ChemGraphAgent")
             graph_builder.add_edge(START, "ChemGraphAgent")
+
+            if generate_report:
+                tool_node_report = BasicToolNode(tools=[generate_html])
+                graph_builder.add_node("report_tools", tool_node_report)
+
+                graph_builder.add_node(
+                    "ReportAgent",
+                    lambda state: ReportAgent(state, llm, system_prompt=report_prompt, tools=[generate_html]),
+                )
+                graph_builder.add_conditional_edges(
+                    "ChemGraphAgent",
+                    route_tools,
+                    {"tools": "tools", "done": "ReportAgent"},
+                )
+                graph_builder.add_edge("tools", "ChemGraphAgent")
+                graph_builder.add_conditional_edges(
+                    "ReportAgent",
+                    route_tools,
+                    {"tools": "report_tools", "done": END},
+                )
+                graph_builder.add_edge("report_tools", "ReportAgent")
+            else:
+                graph_builder.add_conditional_edges(
+                    "ChemGraphAgent",
+                    route_tools,
+                    {"tools": "tools", "done": END},
+                )
+                graph_builder.add_edge("tools", "ChemGraphAgent")
+                graph_builder.add_edge("ChemGraphAgent", END)
+
             graph = graph_builder.compile(checkpointer=checkpointer)
             logger.info("Graph construction completed")
             return graph

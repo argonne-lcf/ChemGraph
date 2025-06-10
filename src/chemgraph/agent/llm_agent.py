@@ -22,7 +22,6 @@ from chemgraph.prompt.multi_agent_prompt import (
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import contruct_multi_agent_graph
-from chemgraph.graphs.single_agent_report import construct_single_agent_report_graph
 
 import logging
 
@@ -112,6 +111,7 @@ class ChemGraph:
         executor_prompt: str = executor_prompt,
         aggregator_prompt: str = aggregator_prompt,
         formatter_multi_prompt: str = formatter_multi_prompt,
+        generate_report: bool = False,
         report_prompt: str = report_prompt,
     ):
         try:
@@ -165,6 +165,7 @@ class ChemGraph:
         self.system_prompt = system_prompt
         self.formatter_prompt = formatter_prompt
         self.structured_output = structured_output
+        self.generate_report = generate_report
         self.report_prompt = report_prompt
         self.return_option = return_option
         self.recursion_limit = recursion_limit
@@ -176,7 +177,6 @@ class ChemGraph:
             "single_agent": {"constructor": construct_single_agent_graph},
             "multi_agent": {"constructor": contruct_multi_agent_graph},
             "python_relp": {"constructor": construct_relp_graph},
-            "single_agent_report": {"constructor": construct_single_agent_report_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -190,6 +190,8 @@ class ChemGraph:
                 self.system_prompt,
                 self.structured_output,
                 self.formatter_prompt,
+                self.generate_report,
+                self.report_prompt,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -204,12 +206,6 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 self.system_prompt,
-            )
-        elif self.workflow_type == "single_agent_report":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm,
-                self.system_prompt,
-                self.report_prompt,
             )
 
     def visualize(self):
@@ -368,7 +364,7 @@ class ChemGraph:
             # Construct the workflow graph
             workflow = self.workflow
 
-            if self.workflow_type == "single_agent" or self.workflow_type == "python_relp" or self.workflow_type == "single_agent_report":
+            if self.workflow_type == "single_agent" or self.workflow_type == "python_relp":
                 inputs = {"messages": query}
 
                 prev_messages = []
