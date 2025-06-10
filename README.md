@@ -1,14 +1,18 @@
 # ChemGraph
 
-## Overview
+<details>
+  <summary><strong>Overview</strong></summary>
 
 **ChemGraph** is an agentic framework that can automate molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, from structure generation to thermochemistry calculations, with a natural language interface. 
 ChemGraph supports diverse simulation backends, including ab initio quantum chemistry methods (e.g. coupled-cluster, DFT via NWChem, ORCA), semi-empirical methods (e.g., XTB via TBLite), and machine learning potentials (e.g, MACE, UMA) through a modular integration with `ASE`. 
 
-## Installation
+</details>
+
+<details>
+  <summary><strong>Installation Instruction</strong></summary>
 
 Ensure you have **Python 3.10 or higher** installed on your system. 
-### Using pip (Recommended for most users)
+**Using pip (Recommended for most users)**
 
 1. Clone the repository:
    ```bash
@@ -29,13 +33,12 @@ Ensure you have **Python 3.10 or higher** installed on your system.
    pip install -e .
    ```
 
-### Using Conda (Alternative)
+**Using Conda (Alternative)**
 
 > ⚠️ **Note on Compatibility**  
 > ChemGraph supports both MACE and UMA (Meta's machine learning potential). However, due to the current dependency conflicts, particularly with `e3nn`—**you cannot install both in the same environment**.  
 > To use both libraries, create **separate Conda environments**, one for each.
 
-#### Steps for Conda Installation
 1. Clone the repository:
    ```bash
    git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
@@ -52,7 +55,7 @@ Ensure you have **Python 3.10 or higher** installed on your system.
     ```
 4. Install `ChemGraph` and its dependencies:
    
-#### Option: Install with UMA support
+**Optional: Install with UMA support**
 
 > **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 
 > If you need to install UMA support in an environment where `mace-torch` might cause this conflict, you can try the following workaround:
@@ -73,25 +76,55 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 ```bash
 pip install -e ".[uma]"
 ```
+</details>
+
+<details>
+  <summary><strong>Example Usage</strong></summary>
+
+1. Before exploring example usage in the `notebooks/` directory, ensure you have specified the necessary API tokens in your environment. For example, you can set the OpenAI API token and Anthropic API token using the following commands:
+
+   ```bash
+   # Set OpenAI API token
+   export OPENAI_API_KEY="your_openai_api_key_here"
+
+   # Set Anthropic API token
+   export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
+   ```
+
+2. **Explore Example Notebooks**: Navigate to the `notebooks/` directory to explore various example notebooks demonstrating different capabilities of ChemGraph.
+
+   - **[Single-Agent System with MACE](notebooks/Demo_single_agent.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with MACE/xTB support.
+
+   - **[Single-Agent System with UMA](notebooks/Demo_single_agent_UMA.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with UMA support.
+
+   - **[Multi-Agent System](notebooks/Demo_multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where different agents (Planner, Executor and Aggregator) handle various tasks exemplifying the collaborative potential of ChemGraph.
+
+</details>
+
+<details>
+  <summary><strong>Project Structure</strong></summary>
+
+```
+chemgraph/
+│
+├── src/                       # Source code
+│   ├── chemgraph/             # Top-level package
+│   │   ├── agent/             # Agent-based task management
+│   │   ├── graphs/            # Workflow graph utilities
+│   │   ├── models/            # Different Pydantic models
+│   │   ├── prompt/            # Agent prompt
+│   │   ├── state/             # Agent state
+│   │   ├── tools/             # Tools for molecular simulations
+│   │   ├── utils/             # Other utility functions
+│
+├── pyproject.toml             # Project configuration
+└── README.md                  # Project documentation
 ```
 
-## Usage
+</details>
 
-Explore example usage in the notebooks/directory:
-
-### [Single-Agent System with MACE](notebooks/Demo_single_agent.ipynb)
-- Demonstrates a single agent with multiple tools (for MACE-support).
-
-### [Single-Agent System with UMA](notebooks/Demo_single_agent_UMA.ipynb)
-- Demonstrates a single agent with multiple tools (for UMA-support).
-
-### [Multi-Agent System](notebooks/Demo_multi_agent.ipynb)
-- Demonstrates multiple agents handling different tasks.
-
----
-
-## Running Local Models with vLLM
-
+<details>
+  <summary><strong>Running Local Models with vLLM</strong></summary>
 This section describes how to set up and run local language models using the vLLM inference server.
 
 ### Inference Backend Setup (Remote/Local)
@@ -176,54 +209,20 @@ The script will:
 - The server runs in the background via `nohup`.
 
 This standalone script is an alternative to running vLLM via Docker Compose and is primarily for users who manage their vLLM instances directly.
+</details>
 
----
-
-## Project Structure
-
-```
-chemgraph/
-│
-├── src/                       # Source code
-│   ├── chemgraph/       # Top-level package
-│   │   ├── agent/             # Agent-based task management
-│   │   ├── graphs/            # Workflow graph utilities
-│   │   ├── models/            # Different Pydantic models
-│   │   ├── prompt/            # Agent prompt
-│   │   ├── state/             # Agent state
-│   │   ├── tools/             # Tools for molecular simulations
-│
-├── pyproject.toml             # Project configuration
-└── README.md                  # Project documentation
-```
-
----
-
-## Code Formatting & Linting
-
-This project uses [Ruff](https://github.com/astral-sh/ruff) for **both formatting and linting**.
-
-### **Setup**
-To ensure all code follows our style guidelines, install the pre-commit hook:
-
-```sh
-pip install pre-commit
-pre-commit install
-```
-
----
-
-## Docker Support with Docker Compose (Recommended for vLLM)
+<details>
+  <summary><strong>Docker Support with Docker Compose (Recommended for vLLM)</strong></summary>
 
 This project uses Docker Compose to manage multi-container applications, providing a consistent development and deployment environment. This setup allows you to run the `chemgraph` (with JupyterLab) and a local vLLM model server as separate, inter-communicating services.
 
-### Prerequisites
+**Prerequisites**
 
 - [Docker](https://docs.docker.com/get-docker/) installed on your system.
 - [Docker Compose](https://docs.docker.com/compose/install/) installed on your system.
 - [vllm](https://github.com/vllm-project/vllm) cloned into the project root. `git clone https://github.com/vllm-project/vllm.git`
 
-### Overview
+**Overview**
 
 The `docker-compose.yml` file defines two main services:
 1.  **`jupyter_lab`**: 
@@ -236,7 +235,7 @@ The `docker-compose.yml` file defines two main services:
     *   Starts an OpenAI-compatible API server using vLLM, serving a pre-configured model (e.g., `meta-llama/Llama-3-8B-Instruct` as per the current `docker-compose.yml`).
     *   Listens on port 8000 within the Docker network (and is exposed to host port 8001 by default).
 
-### Building and Running with Docker Compose
+**Building and Running with Docker Compose**
 
 Navigate to the root directory of the project (where `docker-compose.yml` is located) and run:
 
@@ -275,7 +274,7 @@ When you initialize `ChemGraph` in your Jupyter notebooks (running within the `j
 **Example in a notebook:**
 
 ```python
-from chemgraph.agent import ChemGraph
+from chemgraph.agent.llm_agent import ChemGraph
 
 # The model name should match what vLLM is serving.
 # The base_url and api_key will be picked up from environment variables
@@ -351,7 +350,7 @@ This will start only the JupyterLab container without the vLLM server. In this s
 **Example for OpenAI:**
 ```python
 import os
-from chemgraph.agent import ChemGraph
+from chemgraph.agent.llm_agent import ChemGraph
 
 # Set your OpenAI API key as an environment variable or pass it directly
 os.environ["OPENAI_API_KEY"] = "your-openai-api-key-here"
@@ -365,7 +364,7 @@ agent = ChemGraph(
 **Example for Anthropic Claude:**
 ```python
 import os
-from chemgraph.agent import ChemGraph
+from chemgraph.agent.llm_agent import ChemGraph
 
 # Set your Anthropic API key
 os.environ["ANTHROPIC_API_KEY"] = "your-anthropic-api-key-here"
@@ -388,8 +387,20 @@ Once JupyterLab is running (via `docker-compose up` or `docker-compose up jupyte
 
 The `tblite` package is installed via pip within the `jupyter_lab` service. For the full Python API functionality of TBLite (especially for XTB), you might need to follow separate installation instructions as mentioned in the [TBLite documentation](https://tblite.readthedocs.io/en/latest/installation.html). If you require this, you may need to modify the main `Dockerfile` to include these additional installation steps or perform them inside a running container and commit the changes to a new image for the `jupyter_lab` service.
 
----
+</details>
 
-## License
+<details>
+  <summary><strong>Code Formatting & Linting</strong></summary>
 
+This project uses [Ruff](https://github.com/astral-sh/ruff) for **both formatting and linting**. To ensure all code follows our style guidelines, install the pre-commit hook:
+
+```sh
+pip install pre-commit
+pre-commit install
+```
+</details>
+
+<details>
+  <summary><strong>License</strong></summary>
 This project is licensed under the Apache 2.0 License.
+</details>
