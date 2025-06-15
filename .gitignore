@@ -37,7 +37,6 @@ tests/vib/
 # Log files
 *run_logs/
 *vib/
-graspa*
 plots/
 initial_evaluations/
 test/
