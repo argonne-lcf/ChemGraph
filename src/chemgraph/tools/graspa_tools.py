@@ -7,7 +7,7 @@ import ase
 from chemgraph.models.graspa_input import GRASPAInputSchema
 from langchain_core.tools import tool
 
-_file_dir = Path(__file__).parent / "files" 
+_file_dir = Path(__file__).parent / "files" / "template"
 
 
 @tool
