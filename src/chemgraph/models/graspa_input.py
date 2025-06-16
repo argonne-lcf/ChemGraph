@@ -19,7 +19,7 @@ class GRASPAInputSchema(BaseModel):
     )
     cutoff: float = Field(default=12.8, description="The LJ and Coulomb cutoff in Angstrom")
     graspa_cmd: str= Field(
-        default="/eagle/projects/HPCBot/thang/soft/gRASPA/src_clean/nvc_main.x >> raspa.log",
+        default="/eagle/projects/HPCBot/thang/soft/gRASPA/src_clean/nvc_main.x > raspa.err 2> raspa.log",
         description="The command to run gRASPA. If not provided, the default command will be used."
     )
     graspa_version: str = Field(

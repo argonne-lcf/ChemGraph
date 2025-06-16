@@ -125,14 +125,15 @@ def run_graspa(graspa_input: GRASPAInputSchema):
     )
 
     # Get output from raspa.log when simulation is done
-    with open(f"{out_dir}/raspa.log", "r") as rf:
-        for line in rf:
-            if "UnitCells" in line:
-                unitcell_line = line.strip()
-            elif "Overall: Average:" in line:
-                uptake_line = line.strip()
 
     if graspa_version == 'sycl':
+        with open(f"{out_dir}/raspa.log", "r") as rf:
+            for line in rf:
+                if "UnitCells" in line:
+                    unitcell_line = line.strip()
+                elif "Overall: Average:" in line:
+                    uptake_line = line.strip()
+
         unitcell = unitcell_line.split()[4:]
         unitcell = [int(float(i)) for i in unitcell]
         uptake_total_molecule = float(uptake_line.split()[2][:-1])
@@ -162,11 +163,17 @@ def run_graspa(graspa_input: GRASPAInputSchema):
         uptake_g_L = uptake_total_molecule / (6.022 * 1e23) * molar_mass / framework_vol_in_L
         error_g_L = error_total_molecule / (6.022 * 1e23) * molar_mass / framework_vol_in_L
     elif graspa_version == 'cuda':
-        result_mol_kg = uptake_line[6].split(",")
+        uptake_lines = []
+        with open(f"{out_dir}/raspa.log", "r") as rf:
+            for line in rf:
+                if "Overall: Average" in line:
+                    uptake_lines.append(line.strip())
+
+        result_mol_kg = uptake_lines[11].split(",")
         uptake_mol_kg = result_mol_kg[0].split()[-1]
         error_mol_kg = result_mol_kg[1].split()[-1]
 
-        result_g_L = uptake_line[7].split(",")
+        result_g_L = uptake_lines[13].split(",")
         uptake_g_L = result_g_L[0].split()[-1]
         error_g_L = result_g_L[1].split()[-1]
     else:
