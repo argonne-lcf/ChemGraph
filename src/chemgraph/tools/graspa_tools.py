@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 import numpy as np
 import ase
+from ase.io import read as ase_read
 from chemgraph.models.graspa_input import GRASPAInputSchema
 from langchain_core.tools import tool
 
@@ -84,9 +85,8 @@ def run_graspa(graspa_input: GRASPAInputSchema):
     # Create output directory
     out_dir = output_path / f"{mof_name}_{adsorbate}_{temperature}_{pressure:0e}"
     out_dir.mkdir(parents=True, exist_ok=True)
-
     # Calculate unit cell size
-    atoms = ase.io.read(cif_path)
+    atoms = ase_read(cif_path)
     [uc_x, uc_y, uc_z] = _calculate_cell_size(atoms=atoms)
 
     # Copy other input files (simulation.input, force fields and definition files) from template folder.
