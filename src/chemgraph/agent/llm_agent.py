@@ -22,6 +22,7 @@ from chemgraph.prompt.multi_agent_prompt import (
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import contruct_multi_agent_graph
+from chemgraph.graphs.graspa_agent import construct_graspa_graph
 
 import logging
 
@@ -177,6 +178,7 @@ class ChemGraph:
             "single_agent": {"constructor": construct_single_agent_graph},
             "multi_agent": {"constructor": contruct_multi_agent_graph},
             "python_relp": {"constructor": construct_relp_graph},
+            "graspa": {"constructor": construct_graspa_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -206,6 +208,13 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 self.system_prompt,
+            )
+        elif self.workflow_type == "graspa":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm,
+                self.system_prompt,
+                self.structured_output,
+                self.formatter_prompt,
             )
 
     def visualize(self):
@@ -364,7 +373,7 @@ class ChemGraph:
             # Construct the workflow graph
             workflow = self.workflow
 
-            if self.workflow_type == "single_agent" or self.workflow_type == "python_relp":
+            if self.workflow_type == "single_agent" or self.workflow_type == "python_relp" or self.workflow_type == "graspa":
                 inputs = {"messages": query}
 
                 prev_messages = []
