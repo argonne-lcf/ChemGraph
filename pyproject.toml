@@ -38,6 +38,10 @@ uma = [
     "fairchem-core==2.1.0",
     "e3nn>=0.5",
 ]
+gui = [
+    "chainlit",
+    "py3Dmol",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
