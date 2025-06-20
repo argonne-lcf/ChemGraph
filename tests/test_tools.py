@@ -90,7 +90,7 @@ def base_ase_input():
         },
         "optimizer": "bfgs",
         "calculator": {
-            "calculator_type": "emt",
+            "calculator_type": "EMTCalc",
         },
     }
 
