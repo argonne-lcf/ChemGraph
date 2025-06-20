@@ -5,12 +5,6 @@ import json
 from cg_ui.tasks import run_workflow_async
 from cg_ui.components import mol_viewer, log_tail
 
-# Check for API key and fail fast
-if not os.getenv("OPENAI_API_KEY"):
-    raise ValueError(
-        "OPENAI_API_KEY environment variable not set. Please set it before running."
-    )
-
 
 @cl.on_chat_start
 async def start_chat():
