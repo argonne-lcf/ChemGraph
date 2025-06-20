@@ -57,7 +57,9 @@ class TBLiteCalc(BaseModel):
         default="GFN2-xTB",
         description="Underlying method for energy and forces. Options are GFN2-xTB and GFN1-xTB.",
     )
-    charge: Optional[float] = Field(default=None, description="Total charge of the system")
+    charge: Optional[float] = Field(
+        default=None, description="Total charge of the system"
+    )
     multiplicity: Optional[int] = Field(
         default=None, description="Total multiplicity of the system"
     )
@@ -65,7 +67,8 @@ class TBLiteCalc(BaseModel):
         default=1.0, description="Numerical accuracy of the calculation"
     )
     electronic_temperature: float = Field(
-        default=300.0, description="Electronic temperature in Kelvin for xTB calculations"
+        default=300.0,
+        description="Electronic temperature in Kelvin for xTB calculations",
     )
     max_iterations: int = Field(
         default=250, description="Iterations for self-consistent evaluation"
