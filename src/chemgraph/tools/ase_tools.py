@@ -163,7 +163,7 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
     """
     calc_type = calculator["calculator_type"].lower()
 
-    if "emt" == calc_type:
+    if "emt" in calc_type:
         from chemgraph.models.calculators.emt_calc import EMTCalc
 
         calc = EMTCalc(**calculator)
@@ -171,22 +171,22 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
         from chemgraph.models.calculators.tblite_calc import TBLiteCalc
 
         calc = TBLiteCalc(**calculator)
-    elif "orca" == calc_type:
+    elif "orca" in calc_type:
         from chemgraph.models.calculators.orca_calc import OrcaCalc
 
         calc = OrcaCalc(**calculator)
 
-    elif "nwchem" == calc_type:
+    elif "nwchem" in calc_type:
         from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 
         calc = NWChemCalc(**calculator)
 
-    elif "fairchem" == calc_type:
+    elif "fairchem" in calc_type:
         from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
 
         calc = FAIRChemCalc(**calculator)
 
-    elif "mace_mp" == calc_type:
+    elif "mace" in calc_type:
         from chemgraph.models.calculators.mace_calc import MaceCalc
 
         calc = MaceCalc(**calculator)
@@ -237,7 +237,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     calc, system_info, calc_model = load_calculator(calculator)
     params.calculator = calc_model
 
-    
     if calc is None:
         e = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
         raise ValueError(e)
@@ -349,7 +348,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                     vib_energies = vib.get_energies()
 
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-                    symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
+                    symmetrynumber = get_symmetry_number.invoke(
+                        {"atomsdata": final_structure}
+                    )
 
                     if linear:
                         geometry = "linear"
@@ -364,7 +365,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                         spin=0,  # Only support spin=0
                     )
 
-                    thermo_data["enthalpy"] = thermo.get_enthalpy(temperature=temperature)
+                    thermo_data["enthalpy"] = thermo.get_enthalpy(
+                        temperature=temperature
+                    )
                     thermo_data["entropy"] = thermo.get_entropy(
                         temperature=temperature, pressure=pressure
                     )
