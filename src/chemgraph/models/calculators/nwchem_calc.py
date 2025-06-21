@@ -1,7 +1,7 @@
 # Main keywords and parameters obtained from https://wiki.fysik.dtu.dk/ase/_modules/ase/calculators/nwchem.html
 # Parameters for NWChem calculator in CompChemAgent
 
-from typing import Optional, Union, Dict, List
+from typing import Optional, Union, Dict
 from pydantic import BaseModel, Field
 from ase.calculators.nwchem import NWChem
 
@@ -61,15 +61,6 @@ class NWChemCalc(BaseModel):
         default=None,
         description="Command to execute NWChem (e.g., 'nwchem PREFIX.nwi > PREFIX.nwo').",
     )
-    charge: int = Field(default=0, description="Total charge of the system")
-    geometry_options: List[str] = Field(
-        default=["units angstroms", "center", "noautosym"],
-        description="Geometry options for NWChem",
-    )
-    set_options: Dict[str, Union[str, int, float]] = Field(
-        default={"lindep": 5, "tolscf": "1.0e-9"},
-        description="Additional options for the NWChem calculation",
-    )
 
     def get_calculator(self):
         """Get an ASE-compatible NWChem calculator instance.
@@ -96,7 +87,4 @@ class NWChemCalc(BaseModel):
             kpts=self.kpts,
             directory=self.directory,
             command=self.command,
-            charge=self.charge,
-            geometry_options=self.geometry_options,
-            set=self.set_options,
         )
