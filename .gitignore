@@ -36,10 +36,17 @@ tests/vib/
 # Log files
 *run_logs/
 *vib/
-graspa*
 plots/
-scripts/
 initial_evaluations/
 test/
 
 .venv
+combine*
+vllm/
+logs/
+error_log.txt
+.env
+test.csv
+nwchem/
+nwchem.nwi
+nwchem.nwo

@@ -3,43 +3,45 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "comp_chem_agent"
+name = "ChemGraph"
 version = "0.1.0"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
-    { name = "Thang Pham", email = "tpham@anl.gov" }
+    { name = "Thang Pham", email = "tpham@anl.gov" },
+    { name = "Murat Keçeli", email = "keceli@anl.gov" },
+    { name = "Aditya Tanikanti", email = "atanikanti@anl.gov" }
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "ase==3.24.0",
-    "rdkit==2024.03.5",
-    "langgraph==0.2.59",
-    "langchain-openai==0.2.12",
-    "langchain-ollama==0.2.1",
-    "langchain-anthropic==0.3.13",
-    "pydantic==2.10.3",
-    "pandas>=2.2",
-    "mace-torch==0.3.9",
-    "torch<2.6",
-    "torch-dftd==0.5.1",
-    "pubchempy==1.0.4",
-    "pyppeteer==2.0.0",
-    "numpy<2",
-    "qcelemental==0.29.0",
-    "qcengine==0.31.0",
-    "tblite==0.4.0",
-    "langchain-experimental==0.3.4",
-    "numexpr==2.10.2",
-    "deepdiff==8.4.2",
-    "langchain-core>=0.1.0",
-    "pymatgen>=2024.2.8",
-    "typing-extensions>=4.9.0",
-    "getpass-asterisk>=0.1.0"
+    "ase",
+    "rdkit",
+    "langgraph>=0.3",
+    "langchain-openai>=0.2.12",
+    "langchain-ollama>=0.2.1",
+    "langchain-anthropic>=0.3.13",
+    "pydantic",
+    "pandas",
+    "pubchempy",
+    "pyppeteer",
+    "numpy>=2",
+    "langchain-experimental>=0.3.4",
+    "numexpr",
+    "tblite>=0.4.0",
+    "pytest",
+    "deepdiff",
+    "pymatgen",
+    "mace-torch>=0.3.13",
+    ]
+
+[project.optional-dependencies]
+uma = [
+    "fairchem-core==2.1.0",
+    "e3nn>=0.5",
 ]
 
 [project.urls]
-"Homepage" = "https://example.com/your-project"
-"Repository" = "https://github.com/Autonomous-Scientific-Agents/CompChemAgent/tree/main"
+"Homepage" = "https://github.com/argonne-lcf/ChemGraph"
+"Repository" = "https://github.com/argonne-lcf/ChemGraph"
 
 [tool.setuptools.packages.find]
 where = ["src/"]
