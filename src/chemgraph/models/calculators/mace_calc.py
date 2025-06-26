@@ -1,11 +1,11 @@
-# Keywords and parameters obtained from https://github.com/ACEsuit/mace/blob/main/mace/calculators/foundations_models.py
-# MACE foundation models parameters for CompChemAgent
+"""MACE foundation models parameters for ChemGraph
+Reference: https://github.com/ACEsuit/mace/blob/main/mace/calculators/foundations_models.py"""
 
+import os
+from pathlib import Path
 from typing import Optional, Union
 from pydantic import BaseModel, Field
-from pathlib import Path
 import torch
-import os
 
 
 class MaceCalc(BaseModel):
@@ -20,7 +20,7 @@ class MaceCalc(BaseModel):
     calculator_type : str, optional
         Type of calculator to use. Options: 'mace_mp' (default), 'mace_off', or 'mace_anicc'
     model : str or Path, optional
-        Path to the model file. If None, uses default model for selected calculator type
+        Name or path to the model file. If None, uses default model for selected calculator type.
     device : str, optional
         Device to use for calculations ('cpu' or 'cuda'), by default 'cuda' if available
     default_dtype : str, optional
@@ -44,7 +44,8 @@ class MaceCalc(BaseModel):
     )
     model: Optional[Union[str, Path]] = Field(
         default=None,
-        description="Path to the model. If None, it will use the default model for the selected calculator type.",
+        description="Path to the model. If None, it will use the default model for the selected calculator type. "
+        "Options: 'small', 'medium', 'large', 'small-0b', 'medium-0b', 'small-0b2', 'medium-0b2','large-0b2', 'medium-0b3', 'medium-mpa-0', 'medium-omat-0', 'mace-matpes-pbe-0', 'mace-matpes-r2scan-0'",
     )
     device: str = Field(
         default="cuda" if torch.cuda.is_available() else "cpu",
