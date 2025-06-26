@@ -9,8 +9,8 @@ from chemgraph.models.supported_models import (
     supported_alcf_models,
 )
 from chemgraph.prompt.single_agent_prompt import (
-    single_agent_prompt, 
-    formatter_prompt, 
+    single_agent_prompt,
+    formatter_prompt,
     report_prompt,
 )
 from chemgraph.prompt.multi_agent_prompt import (
@@ -23,6 +23,7 @@ from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import contruct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
+from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 
 import logging
 
@@ -42,7 +43,9 @@ def serialize_state(state):
     Any
         A JSON-serializable version of the input state
     """
-    if isinstance(state, list):
+    if isinstance(state, (int, float, bool)) or state is None:
+        return state
+    elif isinstance(state, list):
         return [serialize_state(item) for item in state]
     elif isinstance(state, dict):
         return {key: serialize_state(value) for key, value in state.items()}
@@ -179,6 +182,7 @@ class ChemGraph:
             "multi_agent": {"constructor": contruct_multi_agent_graph},
             "python_relp": {"constructor": construct_relp_graph},
             "graspa": {"constructor": construct_graspa_graph},
+            "mock_agent": {"constructor": construct_mock_agent_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -215,6 +219,11 @@ class ChemGraph:
                 self.system_prompt,
                 self.structured_output,
                 self.formatter_prompt,
+            )
+        elif self.workflow_type == "mock_agent":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm=llm,
+                system_prompt=self.system_prompt,
             )
 
     def visualize(self):
@@ -373,7 +382,12 @@ class ChemGraph:
             # Construct the workflow graph
             workflow = self.workflow
 
-            if self.workflow_type == "single_agent" or self.workflow_type == "python_relp" or self.workflow_type == "graspa":
+            if (
+                self.workflow_type == "single_agent"
+                or self.workflow_type == "python_relp"
+                or self.workflow_type == "graspa"
+                or self.workflow_type == "mock_agent"
+            ):
                 inputs = {"messages": query}
 
                 prev_messages = []
