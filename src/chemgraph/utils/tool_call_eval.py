@@ -111,9 +111,12 @@ def single_function_checker(
 
     # Have a special case for run_ase due to complex input schema
     if tool_name_model == "run_ase":
-        model_args = ASEInputSchema(**model_args_raw["params"]).model_dump()
-        answer_args = ASEInputSchema(**answer_args_raw["params"]).model_dump()
-
+        try:
+            model_args = ASEInputSchema(**model_args_raw["params"]).model_dump()
+            answer_args = ASEInputSchema(**answer_args_raw["params"]).model_dump()
+        except Exception as e:
+            result = {"valid": False, "error": e}
+            return result
         # Apply lower case to both sides
         model_args = lowercase_dict(model_args)
         answer_args = lowercase_dict(answer_args)
@@ -193,7 +196,8 @@ def multi_function_checker_with_order(
     result = {
         "valid": True,
         "error": "",
-        "n_toolcalls": len(answers),
+        "n_true_toolcalls": len(answers),
+        "n_llm_tool_calls": len(model_outputs),
         "acc_n_toolcalls": 0,
         "args_differences": {},
     }
@@ -226,4 +230,66 @@ def multi_function_checker_with_order(
             else:
                 result["args_differences"][tool_name_model] = result_single["error"]
 
+    return result
+
+
+def multi_function_checker_without_order(
+    func_descriptions: dict,
+    model_outputs: list,
+    answers: list,
+    ignore_fields=None,
+) -> dict:
+    """Evaluate multiple function calls.
+
+    Args:
+        func_description (dict): _description_
+        model_output (list): _description_
+        answer (list): _description_
+        ignore_fields (_type_, optional): _description_. Defaults to None.
+
+    Returns:
+        dict: _description_
+    """
+    if ignore_fields is None:
+        ignore_fields = ["cell", "pbc"]
+
+    # Initialize result
+    result = {
+        "valid": True,
+        "error": "",
+        "n_true_toolcalls": len(answers),
+        "n_llm_tool_calls": len(model_outputs),
+        "acc_n_toolcalls": 0,
+        "answers_without_match": [],
+    }
+
+    for model_id, model_output in enumerate(model_outputs):
+        for answer_id, answer in enumerate(answers):
+            tool_name_model, model_args_raw = next(iter(model_output.items()))
+
+            # Get function description
+            func_description = find_description(
+                func_descriptions=func_descriptions,
+                func_name=tool_name_model,
+            )
+            if func_description is None:
+                result["error"] += f"Function {tool_name_model} is not in the given functions.\n"
+                continue
+            else:
+                result_single = single_function_checker(
+                    func_description=func_description,
+                    model_output=model_output,
+                    answer=answer,
+                )
+
+                if result_single["valid"] is True:
+                    result["acc_n_toolcalls"] += 1
+
+                    # Remove accurate answer from future comparison after a match.
+                    answers.remove(answer)
+                else:
+                    continue
+    if len(answers) != 0:
+        for answer in answers:
+            result["answers_without_match"].append(answer)
     return result
