@@ -31,12 +31,20 @@ dependencies = [
     "deepdiff",
     "pymatgen",
     "mace-torch>=0.3.13",
+    "streamlit",
+    "stmol",
+    "ipython-genutils",
     ]
 
 [project.optional-dependencies]
 uma = [
     "fairchem-core==2.1.0",
     "e3nn>=0.5",
+]
+ui = [
+    "streamlit",
+    "stmol",
+    "ipython-genutils",
 ]
 
 [project.urls]
