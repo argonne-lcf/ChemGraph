@@ -3,14 +3,21 @@
 import os
 from getpass import getpass
 from langchain_openai import ChatOpenAI
-from chemgraph.models.supported_models import supported_openai_models
+from chemgraph.models.supported_models import (
+    supported_openai_models,
+    supported_argo_models,
+)
 from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
 
 def load_openai_model(
-    model_name: str, temperature: float, api_key: str = None, prompt: str = None
+    model_name: str,
+    temperature: float,
+    api_key: str = None,
+    prompt: str = None,
+    base_url: str = None,
 ) -> ChatOpenAI:
     """Load an OpenAI chat model into LangChain.
 
@@ -62,18 +69,30 @@ def load_openai_model(
             api_key = getpass("Please enter your OpenAI API key: ")
             os.environ["OPENAI_API_KEY"] = api_key
 
-    if model_name not in supported_openai_models:
+    if (
+        model_name not in supported_openai_models
+        and model_name not in supported_argo_models
+    ):
         raise ValueError(
             f"Unsupported model '{model_name}'. Supported models are: {supported_openai_models}."
         )
 
     try:
-        logger.info(f"Loading OpenAI model: {model_name}")
-        llm = ChatOpenAI(
-            model=model_name,
-            temperature=temperature,
-            api_key=api_key,
-        )
+        if base_url is not None:
+            logger.info(f"Using custom base URL: {base_url}")
+            llm = ChatOpenAI(
+                model=model_name,
+                temperature=temperature,
+                api_key=api_key,
+                base_url=base_url,
+            )
+        else:
+            logger.info(f"Loading OpenAI model: {model_name}")
+            llm = ChatOpenAI(
+                model=model_name,
+                temperature=temperature,
+                api_key=api_key,
+            )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")
         logger.info("OpenAI model loaded successfully")
