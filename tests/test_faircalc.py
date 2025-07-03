@@ -50,7 +50,11 @@ def base_ase_input():
             "pbc": None,
         },
         "optimizer": "bfgs",
-        "calculator": {"calculator_type": "FAIRChem", "task_name": "omol"},
+        "calculator": {
+            "calculator_type": "FAIRChem",
+            "task_name": "omol",
+            "model_name": "uma-s-1p1",
+        },
     }
 
 
