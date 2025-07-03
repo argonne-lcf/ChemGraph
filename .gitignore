@@ -39,6 +39,8 @@ tests/vib/
 plots/
 initial_evaluations/
 test/
+
+.venv
 combine*
 vllm/
 logs/

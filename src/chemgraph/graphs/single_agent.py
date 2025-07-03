@@ -150,7 +150,7 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
 
 
 def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
-    """An LLM agent responsible for formatting final messag
+    """An LLM agent responsible for formatting final message
 
     Parameters
     ----------
