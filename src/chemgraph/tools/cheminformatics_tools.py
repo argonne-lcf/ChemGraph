@@ -21,8 +21,36 @@ def molecule_name_to_smiles(name: str) -> str:
     ------
     IndexError
         If the molecule name is not found in PubChem.
+    ValueError
+        If the SMILES data is not available for the compound.
     """
-    return pubchempy.get_compounds(str(name), "name")[0].canonical_smiles
+    compounds = pubchempy.get_compounds(str(name), "name")
+    if not compounds:
+        raise IndexError(f"No compounds found for '{name}' in PubChem")
+
+    compound = compounds[0]
+    smiles = compound.canonical_smiles
+
+    # If canonical_smiles is None, try alternative methods
+    if smiles is None:
+        # Try to get SMILES using direct property request
+        try:
+            smiles = pubchempy.get(str(name), "name", "property/CanonicalSMILES", "TXT")
+            if smiles:
+                smiles = smiles.strip()
+        except:
+            pass
+
+    # If still None, try isomeric SMILES
+    if smiles is None:
+        smiles = compound.isomeric_smiles
+
+    if smiles is None:
+        raise ValueError(
+            f"SMILES data not available for '{name}' (CID: {compound.cid})"
+        )
+
+    return smiles
 
 
 @tool
