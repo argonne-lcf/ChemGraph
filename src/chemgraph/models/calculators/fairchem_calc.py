@@ -49,7 +49,7 @@ class FAIRChemCalc(BaseModel):
     seed: int = Field(default=42, description="Random seed for inference reproducibility.")
     spin: Optional[int] = Field(default=1, description="Total spin multiplicity of the system.")
     charge: Optional[int] = Field(default=0, description="Total system charge.")
-    model_name: str = Field(default="uma-sm", description="Model name")
+    model_name: str = Field(default="uma-s-1", description="Model name")
     device: str = Field(
         default="cuda" if torch.cuda.is_available() else "cpu",
         description="Computation device to use, either 'cpu' or 'cuda'.",
