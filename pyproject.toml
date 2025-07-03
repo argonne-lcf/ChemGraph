@@ -21,7 +21,7 @@ dependencies = [
     "langchain-anthropic>=0.3.13",
     "pydantic",
     "pandas",
-    "pubchempy",
+    "pubchempy @ git+https://github.com/keceli/PubChemPy.git@main",
     "pyppeteer",
     "numpy>=2",
     "langchain-experimental>=0.3.4",
