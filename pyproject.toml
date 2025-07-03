@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 uma = [
-    "fairchem-core==2.2.0",
+    "fairchem-core==2.3.0",
     "e3nn>=0.5",
 ]
 
