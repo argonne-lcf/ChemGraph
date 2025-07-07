@@ -2,12 +2,14 @@ from chemgraph.tools.openai_loader import load_openai_model
 from chemgraph.tools.alcf_loader import load_alcf_model
 from chemgraph.tools.local_model_loader import load_ollama_model
 from chemgraph.tools.anthropic_loader import load_anthropic_model
+from chemgraph.tools.gemini_loader import load_gemini_model
 from chemgraph.models.supported_models import (
     supported_openai_models,
     supported_ollama_models,
     supported_anthropic_models,
     supported_alcf_models,
     supported_argo_models,
+    supported_gemini_models,
 )
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
@@ -71,6 +73,7 @@ class ChemGraph:
         - "single_agent"
         - "multi_agent"
         - "python_relp"
+        - "graspa_agent"
         by default "single_agent"
     base_url : str, optional
         Base URL for API calls, by default None
@@ -120,23 +123,23 @@ class ChemGraph:
         report_prompt: str = report_prompt,
     ):
         try:
-            if (
-                model_name in supported_openai_models
-                or model_name in supported_argo_models
-            ):
+            if model_name in supported_openai_models or model_name in supported_argo_models:
                 llm = load_openai_model(
                     model_name=model_name, temperature=temperature, base_url=base_url
                 )
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
             elif model_name in supported_alcf_models:
-                llm = load_alcf_model(
-                    model_name=model_name, base_url=base_url, api_key=api_key
-                )
+                llm = load_alcf_model(model_name=model_name, base_url=base_url, api_key=api_key)
             elif model_name in supported_anthropic_models:
                 llm = load_anthropic_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
                 )
+            elif model_name in supported_gemini_models:
+                llm = load_gemini_model(
+                    model_name=model_name, api_key=api_key, temperature=temperature
+                )
+
             else:  # Assume it might be a vLLM or other custom OpenAI-compatible endpoint
                 import os
 
@@ -144,9 +147,7 @@ class ChemGraph:
                 # These would be set by docker-compose for the jupyter_lab service
                 vllm_base_url = os.getenv("VLLM_BASE_URL", base_url)
                 # ChatOpenAI requires an api_key, even if the endpoint doesn't use it.
-                vllm_api_key = os.getenv(
-                    "OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key"
-                )
+                vllm_api_key = os.getenv("OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key")
 
                 if vllm_base_url:
                     logger.info(
@@ -168,9 +169,7 @@ class ChemGraph:
                     logger.error(
                         f"Model '{model_name}' is not in any supported list and no VLLM_BASE_URL/base_url provided."
                     )
-                    raise ValueError(
-                        f"Unsupported model or missing base URL for: {model_name}"
-                    )
+                    raise ValueError(f"Unsupported model or missing base URL for: {model_name}")
 
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
@@ -265,9 +264,7 @@ class ChemGraph:
             Image(
                 self.workflow.get_graph().draw_mermaid_png(
                     curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(
-                        first="#ffdfba", last="#baffc9", default="#fad7de"
-                    ),
+                    node_colors=NodeStyles(first="#ffdfba", last="#baffc9", default="#fad7de"),
                     wrap_label_n_words=9,
                     output_file_path=None,
                     draw_method=MermaidDrawMethod.PYPPETEER,
@@ -293,9 +290,7 @@ class ChemGraph:
         """
         return self.workflow.get_state(config).values
 
-    def write_state(
-        self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"
-    ):
+    def write_state(self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"):
         """Write log of CCA run to a file.
 
         Parameters
@@ -340,9 +335,7 @@ class ChemGraph:
             serialized_state = serialize_state(state)
             try:
                 git_commit = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"])
-                    .decode("utf-8")
-                    .strip()
+                    subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
                 )
             except subprocess.CalledProcessError:
                 git_commit = "unknown"
@@ -393,9 +386,7 @@ class ChemGraph:
             if config is None:
                 config = {}
             if not isinstance(config, dict):
-                raise TypeError(
-                    f"`config` must be a dictionary, got {type(config).__name__}"
-                )
+                raise TypeError(f"`config` must be a dictionary, got {type(config).__name__}")
             config.setdefault("configurable", {}).setdefault("thread_id", "1")
             config["recursion_limit"] = self.recursion_limit
 

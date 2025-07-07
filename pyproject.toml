@@ -31,6 +31,7 @@ dependencies = [
     "deepdiff",
     "pymatgen",
     "mace-torch>=0.3.13",
+    "langsmith<0.4"
     ]
 
 [project.optional-dependencies]
