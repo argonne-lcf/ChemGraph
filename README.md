@@ -89,6 +89,9 @@ pip install -e ".[uma]"
 
    # Set Anthropic API token
    export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
+   
+   # Set Google API token
+   export GOOGLE_API_KEY="your_google_api_key_here"
    ```
 
 2. **Explore Example Notebooks**: Navigate to the `notebooks/` directory to explore various example notebooks demonstrating different capabilities of ChemGraph.
@@ -479,6 +482,7 @@ agent = ChemGraph(
 **Available Environment Variables for External Services:**
 - `OPENAI_API_KEY`: For OpenAI models
 - `ANTHROPIC_API_KEY`: For Anthropic Claude models
+- `GOOGLE_API_KEY`: For Gemini models
 
 ### Working with Example Notebooks
 

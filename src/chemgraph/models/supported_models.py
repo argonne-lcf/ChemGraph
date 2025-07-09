@@ -3,7 +3,12 @@ Lists of supported models for different LLM providers.
 """
 
 # OpenAI models that are supported
-supported_openai_models = ["gpt-4o-mini", "gpt-4o", "gpt-4.1", "gpt-3.5-turbo-0125"]
+supported_openai_models = [
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-4.1",
+    "gpt-3.5-turbo-0125",
+]
 
 # Ollama models that are supported
 supported_ollama_models = ["llama3.2", "llama3.1"]
@@ -34,6 +39,12 @@ supported_anthropic_models = [
     "claude-3-opus-20240229",
     "claude-3-sonnet-20240229",
     "claude-3-haiku-20240307",
+]
+
+# Gemini models. gemini-2.0 doesn't work with toolcall in our last test.
+supported_gemini_models = [
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
 ]
 
 supported_argo_models = [
