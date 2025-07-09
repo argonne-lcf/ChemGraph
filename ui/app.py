@@ -27,6 +27,7 @@ from chemgraph.tools.ase_tools import (
     create_xyz_string,
     extract_ase_atoms_from_tool_result,
 )
+from chemgraph.models.supported_models import all_supported_models
 
 # -----------------------------------------------------------------------------
 # Optional 3-D viewer - stmol + py3Dmol
@@ -61,7 +62,7 @@ natural-language queries.
 # -----------------------------------------------------------------------------
 st.sidebar.header("Configuration")
 
-model_options = ["gpt-4o-mini", "gpt-4o", "claude-3-5-haiku-20241022"]
+model_options = all_supported_models
 selected_model = st.sidebar.selectbox("Select LLM Model", model_options, index=0)
 
 workflow_options = ["single_agent", "multi_agent", "python_repl", "graspa"]
