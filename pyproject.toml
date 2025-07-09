@@ -21,7 +21,7 @@ dependencies = [
     "langchain-anthropic>=0.3.13",
     "pydantic",
     "pandas",
-    "pubchempy",
+    "pubchempy @ git+https://github.com/keceli/PubChemPy.git@main",
     "pyppeteer",
     "numpy>=2",
     "langchain-experimental>=0.3.4",
@@ -38,7 +38,7 @@ dependencies = [
 
 [project.optional-dependencies]
 uma = [
-    "fairchem-core==2.2.0",
+    "fairchem-core==2.3.0",
     "e3nn>=0.5",
 ]
 ui = [

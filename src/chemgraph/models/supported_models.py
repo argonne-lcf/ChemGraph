@@ -35,3 +35,28 @@ supported_anthropic_models = [
     "claude-3-sonnet-20240229",
     "claude-3-haiku-20240307",
 ]
+
+supported_argo_models = [
+    "argo:gpt-3.5-turbo",
+    "argo:gpt-3.5-turbo-16k",
+    "argo:gpt-4",
+    "argo:gpt-4-32k",
+    "argo:gpt-4-turbo",
+    "argo:gpt-4o",
+    "argo:gpt-4o-latest",
+    "argo:gpt-o1-preview",
+    "argo:o1-preview",
+    "argo:gpt-o1-mini",
+    "argo:o1-mini",
+    "argo:gpt-o3-mini",
+    "argo:o3-mini",
+    "argo:gpt-o1",
+    "argo:o1",
+    "argo:gpt-o3",
+    "argo:o3",
+    "argo:gpt-o4-mini",
+    "argo:o4-mini",
+    "argo:gpt-4.1",
+    "argo:gpt-4.1-mini",
+    "argo:gpt-4.1-nano",
+]
