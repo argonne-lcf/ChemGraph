@@ -22,9 +22,9 @@ class MaceCalc(BaseModel):
     model : str or Path, optional
         Name or path to the model file. If None, uses default model for selected calculator type.
     device : str, optional
-        Device to use for calculations ('cpu' or 'cuda'), by default 'cuda' if available
+        Device to use for calculations ('cpu' or 'cuda' or 'xpu'), by default 'cpu'
     default_dtype : str, optional
-        Default data type for the model ('float32' or 'float64'), by default 'float64'
+        Default data type for the model, by default 'float64'. Use 'float32' if device is 'xpu'.
     dispersion : bool, optional
         Whether to use D3 dispersion corrections (only for 'mace_mp'), by default False
     damping : str, optional
@@ -48,8 +48,8 @@ class MaceCalc(BaseModel):
         "Options: 'small', 'medium', 'large', 'small-0b', 'medium-0b', 'small-0b2', 'medium-0b2','large-0b2', 'medium-0b3', 'medium-mpa-0', 'medium-omat-0', 'mace-matpes-pbe-0', 'mace-matpes-r2scan-0'",
     )
     device: str = Field(
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        description="Device to use for calculations (e.g., 'cpu', 'cuda').",
+        default="cpu",
+        description="Device to use for calculations (e.g., 'cpu', 'cuda', 'xpu').",
     )
     default_dtype: str = Field(
         default="float64",
