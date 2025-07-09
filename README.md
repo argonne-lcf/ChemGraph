@@ -403,6 +403,32 @@ pre-commit install
 </details>
 
 <details>
+  <summary><strong>Troubleshooting</strong></summary>
+
+### PubChemPy Issues
+
+If you encounter issues with PubChemPy (e.g., network errors, missing SMILES data, or API failures), you can install an enhanced version:
+
+```bash
+pip install git+https://github.com/keceli/PubChemPy.git@main
+```
+
+This custom version includes improved error handling and fallback mechanisms for better reliability when working with PubChem data.
+
+### Common Issues
+
+1. **Import Errors**: Make sure all optional dependencies are installed:
+   ```bash
+   pip install chemgraphagent[ui,uma]
+   ```
+
+2. **Calculator Issues**: Some quantum chemistry calculators require additional software installation (ORCA, Psi4, etc.).
+
+3. **Network Timeouts**: For cloud-based LLM services, ensure your network connection is stable and API keys are valid.
+
+</details>
+
+<details>
   <summary><strong>License</strong></summary>
 This project is licensed under the Apache 2.0 License.
 </details>

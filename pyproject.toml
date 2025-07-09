@@ -3,15 +3,34 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ChemGraph"
+name = "chemgraphagent"
 version = "0.1.0"
 description = "A computational chemistry agent for molecular simulation tasks."
+readme = "README.md"
+license = "Apache-2.0"
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
     { name = "Murat Keçeli", email = "keceli@anl.gov" },
     { name = "Aditya Tanikanti", email = "atanikanti@anl.gov" }
 ]
+maintainers = [
+    { name = "Thang Pham", email = "tpham@anl.gov" },
+    { name = "Murat Keçeli", email = "keceli@anl.gov" }
+]
 requires-python = ">=3.10"
+keywords = ["computational chemistry", "molecular simulation", "llm", "agent", "chemistry", "ase", "quantum chemistry"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "ase",
     "rdkit",
@@ -21,7 +40,7 @@ dependencies = [
     "langchain-anthropic>=0.3.13",
     "pydantic",
     "pandas",
-    "pubchempy @ git+https://github.com/keceli/PubChemPy.git@main",
+    "pubchempy>=1.0.4",
     "pyppeteer",
     "numpy>=2",
     "langchain-experimental>=0.3.4",
@@ -31,6 +50,9 @@ dependencies = [
     "deepdiff",
     "pymatgen",
     "mace-torch>=0.3.13",
+    "streamlit",
+    "stmol", 
+    "ipython-genutils",
     ]
 
 [project.optional-dependencies]
@@ -38,10 +60,17 @@ uma = [
     "fairchem-core==2.3.0",
     "e3nn>=0.5",
 ]
+ui = [
+    "streamlit",
+    "stmol", 
+    "ipython-genutils",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
 "Repository" = "https://github.com/argonne-lcf/ChemGraph"
+"Bug Tracker" = "https://github.com/argonne-lcf/ChemGraph/issues"
+"Documentation" = "https://github.com/argonne-lcf/ChemGraph"
 
 [tool.setuptools.packages.find]
 where = ["src/"]
