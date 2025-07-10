@@ -39,21 +39,114 @@ try:
     from stmol import showmol
 
     STMOL_AVAILABLE = True
-    st.success("✅ 3D molecular visualization available!")
 except ImportError as e:
     STMOL_AVAILABLE = False
     st.warning("⚠️ **stmol** not available – falling back to text/table view.")
     st.info("To enable 3D visualization, install with: `pip install stmol`")
 
 # -----------------------------------------------------------------------------
+# Page Navigation
+# -----------------------------------------------------------------------------
+st.sidebar.title("🧪 ChemGraph")
+page = st.sidebar.radio(
+    "Navigate",
+    ["🏠 Main Interface", "📖 About ChemGraph"],
+    index=0,
+    key="page_navigation",
+)
+
+# -----------------------------------------------------------------------------
+# About Page
+# -----------------------------------------------------------------------------
+if page == "📖 About ChemGraph":
+    st.title("📖 About ChemGraph")
+
+    st.markdown(
+        """
+    ## AI Agents for Computational Chemistry
+    
+    ChemGraph is an **agentic framework** for computational chemistry and materials science workflows. 
+    It enables researchers to perform complex computational chemistry tasks using natural language queries 
+    powered by large language models (LLMs) and specialized AI agents.
+    
+    ### 🔬 Key Features
+    
+    - **Multi-Agent Workflows**: Coordinate multiple AI agents for complex computational tasks
+    - **Natural Language Interface**: Interact with computational chemistry tools using plain English
+    - **Molecular Visualization**: 3D interactive molecular structure visualization
+    - **Multiple Calculators**: Support for various quantum chemistry packages (ORCA, Psi4, MACE, etc.)
+    - **Report Generation**: Automated generation of computational chemistry reports
+    - **Flexible Backends**: Support for various LLM providers (OpenAI, Anthropic, local models)
+    
+    ### 📚 Resources
+    
+    #### 🐙 GitHub Repository
+    **Source Code & Documentation**  
+    [https://github.com/argonne-lcf/ChemGraph](https://github.com/argonne-lcf/ChemGraph)
+    
+    - ⭐ Star the repository to stay updated
+    - 📝 Submit issues and feature requests
+    - 🤝 Contribute to the open-source project
+    - 📖 Access detailed documentation and examples
+    
+    #### 📄 Research Paper
+    **ArXiv Preprint**  
+    [https://arxiv.org/abs/2506.06363](https://arxiv.org/abs/2506.06363)
+    
+    - 🔬 Read about the scientific methodology
+    - 📊 View benchmark results and case studies
+    - 🎯 Understand the technical architecture
+    - 📋 Cite this work in your research
+    
+    ### 🏛️ Developed at Argonne National Laboratory
+    
+    ChemGraph is developed at **Argonne National Laboratory** as part of advancing 
+    computational chemistry and materials science research through AI-driven automation.
+    
+    ### 📄 License
+    
+    This project is licensed under the **Apache License 2.0** - see the 
+    [LICENSE](https://github.com/argonne-lcf/ChemGraph/blob/main/LICENSE) file for details.
+    
+    ### 🙏 Citation
+    
+    If you use ChemGraph in your research, please cite our work:
+    
+    ```bibtex
+    @article{chemgraph2024,
+        title={ChemGraph: AI Agents for Computational Chemistry},
+        author={[Authors]},
+        journal={arXiv preprint arXiv:2506.06363},
+        year={2024},
+        url={https://arxiv.org/abs/2506.06363}
+    }
+    ```
+    
+    ---
+    
+    ### 🚀 Get Started
+    
+    Ready to use ChemGraph? Switch to the **🏠 Main Interface** using the navigation menu on the left 
+    to start running computational chemistry workflows with AI agents!
+    """
+    )
+
+    # Stop execution here for About page
+    st.stop()
+
+# -----------------------------------------------------------------------------
+# Main Interface (only runs if not on About page)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 # Main title & description
 # -----------------------------------------------------------------------------
-st.title("🧪 ChemGraph — AI Agents for Computational Chemistry")
+st.title("🧪 ChemGraph ")
 
 st.markdown(
     """
-ChemGraph enables you to perform various **computational chemistry** tasks using
-natural-language queries.
+ChemGraph enables you to perform various **computational chemistry** tasks with
+natural-language queries using AI agents.
 """
 )
 
@@ -85,6 +178,8 @@ if "agent" not in st.session_state:
     st.session_state.agent = None
 if "conversation_history" not in st.session_state:
     st.session_state.conversation_history = []
+if "last_config" not in st.session_state:
+    st.session_state.last_config = None
 
 # -----------------------------------------------------------------------------
 # Agent status section
@@ -92,17 +187,19 @@ if "conversation_history" not in st.session_state:
 st.sidebar.header("🅒🅖 Agent Status")
 
 if st.session_state.agent:
-    st.sidebar.success("✅ Agent Ready")
+    st.sidebar.success("✅ Agents Ready")
     st.sidebar.info(f"🧠 Model: {selected_model}")
     st.sidebar.info(f"⚙️ Workflow: {selected_workflow}")
     st.sidebar.info(f"🔗 Thread ID: {thread_id}")
     st.sidebar.info(f"💬 Messages: {len(st.session_state.conversation_history)}")
 
-    # if st.sidebar.button("📊 Visualize Workflow"):
-
-    #     st.sidebar.image("📈 Workflow visualization placeholder")
+    # Add a manual refresh button for troubleshooting
+    if st.sidebar.button("🔄 Refresh Agents"):
+        st.session_state.agent = None  # Force re-initialization
+        st.rerun()
 else:
-    st.sidebar.warning("⚠️ Agent Not Initialized")
+    st.sidebar.error("❌ Agents Not Ready")
+    st.sidebar.info("Agents will initialize automatically...")
 
 
 # -----------------------------------------------------------------------------
@@ -258,10 +355,6 @@ def find_structure_in_messages(messages):
             if structure:
                 return structure
     return None
-
-
-# NOTE: ASE helper functions moved to src/chemgraph/tools/ase_tools.py
-# Functions now imported: create_ase_atoms, create_xyz_string, extract_ase_atoms_from_tool_result
 
 
 # Streamlit-specific wrapper for ASE functions
@@ -469,47 +562,27 @@ def initialize_agent(model_name, workflow_type, structured_output, return_option
 
 
 # -----------------------------------------------------------------------------
-# Structure Test Section (after function definitions)
+# Auto-initialize agent when configuration changes
 # -----------------------------------------------------------------------------
-st.sidebar.header("🧪 Structure Test")
-if st.sidebar.button("Test Structure Parsing"):
-    # Test with the sample data from the user
-    test_json = '{"answer":{"numbers":[8,1,1],"positions":[[0.0,0.0,0.0],[0.0,0.0,0.96],[0.0,0.76,-0.32]],"cell":null,"pbc":null}}'
+current_config = (selected_model, selected_workflow, structured_output, selected_output)
 
-    st.sidebar.write("**Testing with sample JSON:**")
-    structure = extract_molecular_structure(test_json)
+if st.session_state.agent is None or st.session_state.last_config != current_config:
 
-    if structure:
-        st.sidebar.success("✅ Structure parsing works!")
-        st.sidebar.write(f"Found {len(structure['atomic_numbers'])} atoms")
-
-        # Display the test structure
-        display_molecular_structure(
-            structure["atomic_numbers"],
-            structure["positions"],
-            title="Test Structure (Water Molecule)",
-        )
-    else:
-        st.sidebar.error("❌ Structure parsing failed")
-
-
-# -----------------------------------------------------------------------------
-# Sidebar button: initialize agent
-# -----------------------------------------------------------------------------
-if st.sidebar.button("Initialize Agent"):
-    with st.spinner("Initializing ChemGraph…"):
+    with st.spinner("🚀 Initializing ChemGraph agents..."):
         st.session_state.agent = initialize_agent(
             selected_model, selected_workflow, structured_output, selected_output
         )
+        st.session_state.last_config = current_config
+
         if st.session_state.agent:
-            st.sidebar.success("Agent initialized!")
+            st.success("✅ ChemGraph agents ready!")
         else:
-            st.sidebar.error("Agent initialization failed.")
+            st.error("❌ Agent initialization failed.")
+
 
 # -----------------------------------------------------------------------------
 # Main chat interface
 # -----------------------------------------------------------------------------
-st.header("💬 Chat Interface")
 
 # Conversation history display
 if st.session_state.conversation_history:
@@ -639,39 +712,41 @@ if st.session_state.conversation_history:
 # -----------------------------------------------------------------------------
 # New query input
 # -----------------------------------------------------------------------------
-st.subheader("💭 Ask a New Question")
 
 with st.expander("💡 Example Queries"):
     examples = [
         "What is the SMILES string for caffeine?",
-        "Optimize the geometry of water molecule using DFT",
-        "Calculate the single point energy of methane and show the structure",
+        "Optimize the geometry of water molecule using MACE",
+        "Calculate the single point energy of methane with DFT and show the structure",
     ]
     for ex in examples:
         if st.button(ex, key=f"ex_{ex}"):
-            st.session_state.selected_example = ex
+            # Set the example text directly in the text area state
+            st.session_state.query_input = ex
             st.rerun()
 
-# Use the selected example if available, otherwise empty
-initial_value = st.session_state.get("selected_example", "")
-if "selected_example" in st.session_state:
-    del st.session_state.selected_example  # Clear it after using
+# Initialize query input if not exists
+if "query_input" not in st.session_state:
+    st.session_state.query_input = ""
 
 query = st.text_area(
-    "Enter your computational chemistry question:",
-    value=initial_value,
+    "Enter your computational chemistry query:",
+    value=st.session_state.query_input,
     height=100,
-    key="query_input",
+    key="query_text_area",  # Different key to avoid conflicts
 )
+
+# Update session state with current text area value
+if query != st.session_state.query_input:
+    st.session_state.query_input = query
 
 col_send, col_clear, col_refresh = st.columns([2, 1, 1])
 
 send = col_send.button("🚀 Send", type="primary", use_container_width=True)
 if col_clear.button("🗑️ Clear Chat", use_container_width=True):
     st.session_state.conversation_history.clear()
-    # Clear the query input by using a different key approach
-    if "query_input" in st.session_state:
-        del st.session_state.query_input
+    # Clear the query input
+    st.session_state.query_input = ""
     st.rerun()
 if col_refresh.button("🔄 Refresh", use_container_width=True):
     st.rerun()
@@ -681,11 +756,13 @@ if col_refresh.button("🔄 Refresh", use_container_width=True):
 # -----------------------------------------------------------------------------
 if send:
     if not st.session_state.agent:
-        st.error("Please initialize the agent from the sidebar.")
+        st.error("❌ Agent not ready. Please check configuration and try again.")
+        if st.button("🔄 Try Again"):
+            st.rerun()
     elif not query.strip():
         st.warning("Please enter a question.")
     else:
-        with st.spinner("Agent thinking…"):
+        with st.spinner("ChemGraph agents working...", show_time=True):
             try:
                 cfg = {"configurable": {"thread_id": thread_id}}
                 result = st.session_state.agent.run(query.strip(), config=cfg)
@@ -693,10 +770,7 @@ if send:
                     {"query": query.strip(), "result": result, "thread_id": thread_id}
                 )
                 # Clear the input after successful processing
-                # Check if there's an HTML file to display
-
-                if "query_input" in st.session_state:
-                    del st.session_state.query_input
+                st.session_state.query_input = ""
                 st.success("✅ Done!")
                 st.rerun()
             except Exception as exc:
@@ -708,16 +782,10 @@ if send:
 st.markdown("---")
 st.markdown(
     """
-### About ChemGraph  
+### Quick Help
 
-Natural-language interface to computational chemistry tools.
+**Main Features:** Molecular optimization, vibrational frequencies, SMILES ↔ structure conversions, 3D visualization
 
-**Features**
-
-* Molecular geometry optimisation  
-* Vibrational-frequency calculations  
-* SMILES ↔ structure conversions  
-* 3-D interactive visualisation (via *stmol*)  
-* Download structures as XYZ or JSON
+📖 For detailed information, documentation, and links to research papers, visit the **About ChemGraph** page.
 """
 )
