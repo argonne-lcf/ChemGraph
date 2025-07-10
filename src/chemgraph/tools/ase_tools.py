@@ -1,10 +1,11 @@
+import numpy as np
+import time
 from langchain_core.tools import tool
 from chemgraph.models.atomsdata import AtomsData
 from chemgraph.models.ase_input import (
     ASEInputSchema,
     ASEOutputSchema,
 )
-import numpy as np
 
 
 @tool
@@ -226,6 +227,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         calculator = params.calculator.model_dump()
     except Exception as e:
         return f"Missing calculator parameter for the simulation. Raised exception: {str(e)}"
+    
+    # Calculate wall time.
+    start_time = time.time()
 
     atomsdata = params.atomsdata
     optimizer = params.optimizer
@@ -263,12 +267,16 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
     if driver == "energy":
         energy = atoms.get_potential_energy()
+
+        end_time = time.time()
+        wall_time = end_time - start_time
         simulation_output = ASEOutputSchema(
             converged=True,
             final_structure=atomsdata,
             simulation_input=params,
             success=True,
             single_point_energy=energy,
+            wall_time=wall_time
         )
         return simulation_output
 
@@ -376,6 +384,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                     )
                     thermo_data["unit"] = "eV"
 
+        end_time = time.time()
+        wall_time = end_time - start_time
+
         simulation_output = ASEOutputSchema(
             converged=converged,
             final_structure=final_structure,
@@ -384,15 +395,20 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             thermochemistry=thermo_data,
             success=True,
             single_point_energy=single_point_energy,
+            wall_time=wall_time
         )
         return simulation_output
 
     except Exception as e:
+        end_time = time.time()
+        wall_time = end_time - start_time
+
         simulation_output = ASEOutputSchema(
             converged=False,
             final_structure=atomsdata,
             simulation_input=params,
             error=str(e),
             success=False,
+            wall_time=wall_time
         )
         return simulation_output
