@@ -71,3 +71,12 @@ supported_argo_models = [
     "argo:gpt-4.1-mini",
     "argo:gpt-4.1-nano",
 ]
+
+all_supported_models = (
+    supported_openai_models
+    + supported_ollama_models
+    + supported_alcf_models
+    + supported_anthropic_models
+    + supported_argo_models
+    + supported_gemini_models
+)

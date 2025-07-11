@@ -8,6 +8,137 @@ from chemgraph.models.ase_input import (
 )
 
 
+def create_ase_atoms(atomic_numbers, positions, cell=None, pbc=None):
+    """Create ASE Atoms object from atomic numbers and positions.
+
+    Parameters
+    ----------
+    atomic_numbers : list
+        List of atomic numbers
+    positions : list
+        List of atomic positions
+    cell : list, optional
+        List of cell vectors
+    pbc : list, optional
+        List of periodic boundary conditions
+    Returns
+    -------
+    ase.Atoms or None
+        ASE Atoms object or None if creation fails
+    """
+    try:
+        from ase import Atoms
+
+        return Atoms(numbers=atomic_numbers, positions=positions, cell=cell, pbc=pbc)
+    except Exception as exc:
+        # Use print for general use, but allow caller to handle error display
+        print(f"Error creating ASE Atoms object: {exc}")
+        return None
+
+
+def create_xyz_string(atomic_numbers, positions):
+    """Create XYZ format string from atomic numbers and positions.
+
+    Parameters
+    ----------
+    atomic_numbers : list
+        List of atomic numbers
+    positions : list
+        List of atomic positions
+
+    Returns
+    -------
+    str or None
+        XYZ format string or None if creation fails
+    """
+    atoms = create_ase_atoms(atomic_numbers, positions)
+    if atoms is None:
+        return None
+
+    lines = [str(len(atoms)), "ChemGraph Structure"]
+    for atom in atoms:
+        x, y, z = atom.position
+        lines.append(f"{atom.symbol} {x:.6f} {y:.6f} {z:.6f}")
+    return "\n".join(lines)
+
+
+def extract_ase_atoms_from_tool_result(tool_result: dict):
+    """Extract ASE atoms data from tool result dictionary.
+
+    Parameters
+    ----------
+    tool_result : dict
+        Dictionary containing tool result data
+
+    Returns
+    -------
+    tuple
+        (atomic_numbers, positions) or (None, None) if extraction fails
+    """
+    for keyset in (
+        {"numbers", "positions"},
+        {"atomic_numbers", "positions"},
+    ):
+        if keyset.issubset(tool_result.keys()):
+            return tool_result[keyset.pop()], tool_result["positions"]
+
+    if "atoms" in tool_result:
+        atoms_data = tool_result["atoms"]
+        if {"numbers", "positions"}.issubset(atoms_data):
+            return atoms_data["numbers"], atoms_data["positions"]
+
+    return None, None
+
+
+def atoms_to_atomsdata(atoms):
+    """Convert ASE Atoms object to AtomsData.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms
+        ASE Atoms object
+
+    Returns
+    -------
+    AtomsData
+        ChemGraph AtomsData object
+    """
+    return AtomsData(
+        numbers=atoms.numbers.tolist(),
+        positions=atoms.positions.tolist(),
+        cell=atoms.cell.tolist(),
+        pbc=atoms.pbc.tolist(),
+    )
+
+
+def atomsdata_to_atoms(atomsdata: AtomsData):
+    """Convert AtomsData to ASE Atoms object.
+
+    Parameters
+    ----------
+    atomsdata : AtomsData
+        ChemGraph AtomsData object
+
+    Returns
+    -------
+    ase.Atoms
+        ASE Atoms object
+    """
+    from ase import Atoms
+
+    return Atoms(
+        numbers=atomsdata.numbers,
+        positions=atomsdata.positions,
+        cell=atomsdata.cell,
+        pbc=atomsdata.pbc,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Original tool functions
+# -----------------------------------------------------------------------------
+
+
 @tool
 def file_to_atomsdata(fname: str) -> AtomsData:
     """Convert a structure file to AtomsData format using ASE.

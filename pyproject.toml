@@ -32,7 +32,12 @@ dependencies = [
     "deepdiff",
     "pymatgen",
     "mace-torch>=0.3.13",
+    "streamlit",
+    "stmol",
+    "ipython-genutils",
     "langsmith<0.4",
+    "rich>=13.0.0",
+    "toml",
     ]
 
 [project.optional-dependencies]
@@ -40,10 +45,18 @@ uma = [
     "fairchem-core==2.3.0",
     "e3nn>=0.5",
 ]
+ui = [
+    "streamlit",
+    "stmol",
+    "ipython-genutils",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
 "Repository" = "https://github.com/argonne-lcf/ChemGraph"
+
+[project.scripts]
+chemgraph = "ui.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src/"]
