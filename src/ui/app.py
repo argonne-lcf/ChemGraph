@@ -10,10 +10,13 @@ st.set_page_config(
 
 import json
 import ast
+import toml
+import os
 from io import StringIO
 from uuid import uuid4
 import re
-from typing import Optional
+from typing import Optional, Dict, Any
+from pathlib import Path
 
 # Third-party imports
 import numpy as np
@@ -28,6 +31,117 @@ from chemgraph.tools.ase_tools import (
     extract_ase_atoms_from_tool_result,
 )
 from chemgraph.models.supported_models import all_supported_models
+
+
+# -----------------------------------------------------------------------------
+# Configuration Management
+# -----------------------------------------------------------------------------
+def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
+    """Load configuration from TOML file."""
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                config = toml.load(f)
+                # Validate configuration structure
+                default_config = get_default_config()
+
+                # Ensure all required sections exist
+                for section in ["general", "llm", "api", "chemistry", "output"]:
+                    if section not in config:
+                        config[section] = default_config[section]
+                    elif isinstance(config[section], dict) and isinstance(
+                        default_config[section], dict
+                    ):
+                        # Merge missing keys from default
+                        for key, value in default_config[section].items():
+                            if key not in config[section]:
+                                config[section][key] = value
+
+                return config
+        else:
+            # Create default configuration file if it doesn't exist
+            default_config = get_default_config()
+            save_config(default_config, config_path)
+            return default_config
+    except Exception as e:
+        st.error(f"Error loading configuration: {e}")
+        return get_default_config()
+
+
+def save_config(config: Dict[str, Any], config_path: str = "config.toml") -> bool:
+    """Save configuration to TOML file."""
+    try:
+        with open(config_path, "w") as f:
+            toml.dump(config, f)
+        return True
+    except Exception as e:
+        st.error(f"Error saving configuration: {e}")
+        return False
+
+
+def get_default_config() -> Dict[str, Any]:
+    """Return default configuration."""
+    return {
+        "general": {
+            "model": "gpt-4o-mini",
+            "workflow": "single_agent",
+            "output": "state",
+            "structured": False,
+            "report": True,
+            "thread": 1,
+            "recursion_limit": 20,
+            "verbose": False,
+        },
+        "llm": {
+            "temperature": 0.1,
+            "max_tokens": 4000,
+            "top_p": 0.95,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+        },
+        "api": {
+            "openai": {"base_url": "https://api.openai.com/v1", "timeout": 30},
+            "anthropic": {"base_url": "https://api.anthropic.com", "timeout": 30},
+            "google": {
+                "base_url": "https://generativelanguage.googleapis.com/v1beta",
+                "timeout": 30,
+            },
+            "local": {"base_url": "http://localhost:11434", "timeout": 60},
+        },
+        "chemistry": {
+            "optimization": {"method": "BFGS", "fmax": 0.05, "steps": 200},
+            "calculators": {"default": "mace_mp", "fallback": "emt"},
+        },
+        "output": {
+            "files": {
+                "directory": "./chemgraph_output",
+                "formats": ["xyz", "json", "html"],
+            },
+            "visualization": {"enable_3d": True, "viewer": "py3dmol"},
+        },
+    }
+
+
+def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Flatten nested configuration for easier access."""
+    flattened = {}
+
+    # Handle general settings
+    if "general" in config:
+        flattened.update(config["general"])
+
+    # Handle other sections
+    for section in ["llm", "api", "chemistry", "output"]:
+        if section in config:
+            for key, value in config[section].items():
+                if isinstance(value, dict):
+                    for subkey, subvalue in value.items():
+                        flattened[f"{section}_{key}_{subkey}"] = subvalue
+                else:
+                    flattened[f"{section}_{key}"] = value
+
+    return flattened
+
 
 # -----------------------------------------------------------------------------
 # Optional 3-D viewer - stmol + py3Dmol
@@ -50,7 +164,7 @@ except ImportError as e:
 st.sidebar.title("🧪 ChemGraph")
 page = st.sidebar.radio(
     "Navigate",
-    ["🏠 Main Interface", "📖 About ChemGraph"],
+    ["🏠 Main Interface", "⚙️ Configuration", "📖 About ChemGraph"],
     index=0,
     key="page_navigation",
 )
@@ -135,7 +249,374 @@ if page == "📖 About ChemGraph":
     st.stop()
 
 # -----------------------------------------------------------------------------
-# Main Interface (only runs if not on About page)
+# Configuration Page
+# -----------------------------------------------------------------------------
+elif page == "⚙️ Configuration":
+    st.title("⚙️ Configuration")
+    st.markdown(
+        """
+    Edit and manage your ChemGraph configuration settings. Changes are saved to `config.toml`.
+    """
+    )
+
+    # Initialize session state for config
+    if "config" not in st.session_state:
+        st.session_state.config = load_config()
+
+    config = st.session_state.config
+
+    # Configuration tabs
+    tab1, tab2, tab3 = st.tabs(
+        ["🔧 General Settings", "🧠 LLM Settings", "📝 Raw TOML"]
+    )
+
+    with tab1:
+        st.subheader("General Settings")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("**Model & Workflow**")
+            config["general"]["model"] = st.selectbox(
+                "Model",
+                all_supported_models,
+                index=(
+                    all_supported_models.index(config["general"]["model"])
+                    if config["general"]["model"] in all_supported_models
+                    else 0
+                ),
+                key="config_model",
+            )
+
+            config["general"]["workflow"] = st.selectbox(
+                "Workflow",
+                ["single_agent", "multi_agent", "python_repl", "graspa"],
+                index=(
+                    ["single_agent", "multi_agent", "python_repl", "graspa"].index(
+                        config["general"]["workflow"]
+                    )
+                    if config["general"]["workflow"]
+                    in ["single_agent", "multi_agent", "python_repl", "graspa"]
+                    else 0
+                ),
+                key="config_workflow",
+            )
+
+            config["general"]["output"] = st.selectbox(
+                "Output Format",
+                ["state", "last_message"],
+                index=(
+                    ["state", "last_message"].index(config["general"]["output"])
+                    if config["general"]["output"] in ["state", "last_message"]
+                    else 0
+                ),
+                key="config_output",
+            )
+
+            config["general"]["structured"] = st.checkbox(
+                "Structured Output",
+                value=config["general"]["structured"],
+                key="config_structured",
+            )
+
+            config["general"]["report"] = st.checkbox(
+                "Generate Report",
+                value=config["general"]["report"],
+                key="config_report",
+            )
+
+            config["general"]["verbose"] = st.checkbox(
+                "Verbose Output",
+                value=config["general"]["verbose"],
+                key="config_verbose",
+            )
+
+        with col2:
+            st.write("**Execution Settings**")
+            config["general"]["thread"] = st.number_input(
+                "Thread ID",
+                min_value=1,
+                max_value=1000,
+                value=config["general"]["thread"],
+                key="config_thread",
+            )
+
+            config["general"]["recursion_limit"] = st.number_input(
+                "Recursion Limit",
+                min_value=1,
+                max_value=100,
+                value=config["general"]["recursion_limit"],
+                key="config_recursion",
+            )
+
+        st.subheader("Chemistry Settings")
+
+        col3, col4 = st.columns(2)
+
+        with col3:
+            st.write("**Optimization**")
+            config["chemistry"]["optimization"]["method"] = st.selectbox(
+                "Method",
+                ["BFGS", "L-BFGS-B", "CG", "Newton-CG"],
+                index=(
+                    ["BFGS", "L-BFGS-B", "CG", "Newton-CG"].index(
+                        config["chemistry"]["optimization"]["method"]
+                    )
+                    if config["chemistry"]["optimization"]["method"]
+                    in ["BFGS", "L-BFGS-B", "CG", "Newton-CG"]
+                    else 0
+                ),
+                key="config_opt_method",
+            )
+
+            config["chemistry"]["optimization"]["fmax"] = st.number_input(
+                "Force Max (eV/Å)",
+                min_value=0.001,
+                max_value=1.0,
+                value=config["chemistry"]["optimization"]["fmax"],
+                format="%.3f",
+                key="config_fmax",
+            )
+
+            config["chemistry"]["optimization"]["steps"] = st.number_input(
+                "Max Steps",
+                min_value=1,
+                max_value=1000,
+                value=config["chemistry"]["optimization"]["steps"],
+                key="config_steps",
+            )
+
+        with col4:
+            st.write("**Calculators**")
+            calc_options = ["mace_mp", "emt", "nwchem", "orca", "psi4", "tblite"]
+            config["chemistry"]["calculators"]["default"] = st.selectbox(
+                "Default Calculator",
+                calc_options,
+                index=(
+                    calc_options.index(config["chemistry"]["calculators"]["default"])
+                    if config["chemistry"]["calculators"]["default"] in calc_options
+                    else 0
+                ),
+                key="config_calc_default",
+            )
+
+            config["chemistry"]["calculators"]["fallback"] = st.selectbox(
+                "Fallback Calculator",
+                calc_options,
+                index=(
+                    calc_options.index(config["chemistry"]["calculators"]["fallback"])
+                    if config["chemistry"]["calculators"]["fallback"] in calc_options
+                    else 1
+                ),
+                key="config_calc_fallback",
+            )
+
+    with tab2:
+        st.subheader("LLM Settings")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.write("**Generation Parameters**")
+            config["llm"]["temperature"] = st.slider(
+                "Temperature",
+                min_value=0.0,
+                max_value=2.0,
+                value=config["llm"]["temperature"],
+                step=0.1,
+                key="config_temperature",
+            )
+
+            config["llm"]["max_tokens"] = st.number_input(
+                "Max Tokens",
+                min_value=100,
+                max_value=32000,
+                value=config["llm"]["max_tokens"],
+                key="config_max_tokens",
+            )
+
+            config["llm"]["top_p"] = st.slider(
+                "Top P",
+                min_value=0.0,
+                max_value=1.0,
+                value=config["llm"]["top_p"],
+                step=0.05,
+                key="config_top_p",
+            )
+
+        with col2:
+            st.write("**Penalties**")
+            config["llm"]["frequency_penalty"] = st.slider(
+                "Frequency Penalty",
+                min_value=-2.0,
+                max_value=2.0,
+                value=config["llm"]["frequency_penalty"],
+                step=0.1,
+                key="config_freq_penalty",
+            )
+
+            config["llm"]["presence_penalty"] = st.slider(
+                "Presence Penalty",
+                min_value=-2.0,
+                max_value=2.0,
+                value=config["llm"]["presence_penalty"],
+                step=0.1,
+                key="config_pres_penalty",
+            )
+
+        st.subheader("API Settings")
+
+        api_tabs = st.tabs(["OpenAI", "Anthropic", "Google", "Local"])
+
+        with api_tabs[0]:
+            config["api"]["openai"]["base_url"] = st.text_input(
+                "Base URL",
+                value=config["api"]["openai"]["base_url"],
+                key="config_openai_url",
+            )
+            config["api"]["openai"]["timeout"] = st.number_input(
+                "Timeout (seconds)",
+                min_value=1,
+                max_value=300,
+                value=config["api"]["openai"]["timeout"],
+                key="config_openai_timeout",
+            )
+
+        with api_tabs[1]:
+            config["api"]["anthropic"]["base_url"] = st.text_input(
+                "Base URL",
+                value=config["api"]["anthropic"]["base_url"],
+                key="config_anthropic_url",
+            )
+            config["api"]["anthropic"]["timeout"] = st.number_input(
+                "Timeout (seconds)",
+                min_value=1,
+                max_value=300,
+                value=config["api"]["anthropic"]["timeout"],
+                key="config_anthropic_timeout",
+            )
+
+        with api_tabs[2]:
+            config["api"]["google"]["base_url"] = st.text_input(
+                "Base URL",
+                value=config["api"]["google"]["base_url"],
+                key="config_google_url",
+            )
+            config["api"]["google"]["timeout"] = st.number_input(
+                "Timeout (seconds)",
+                min_value=1,
+                max_value=300,
+                value=config["api"]["google"]["timeout"],
+                key="config_google_timeout",
+            )
+
+        with api_tabs[3]:
+            config["api"]["local"]["base_url"] = st.text_input(
+                "Base URL",
+                value=config["api"]["local"]["base_url"],
+                key="config_local_url",
+            )
+            config["api"]["local"]["timeout"] = st.number_input(
+                "Timeout (seconds)",
+                min_value=1,
+                max_value=300,
+                value=config["api"]["local"]["timeout"],
+                key="config_local_timeout",
+            )
+
+    with tab3:
+        st.subheader("Raw TOML Configuration")
+        st.markdown(
+            """
+        Edit the raw TOML configuration directly. Be careful with syntax!
+        """
+        )
+
+        try:
+            config_text = toml.dumps(config)
+        except Exception as e:
+            st.error(f"Error serializing config: {e}")
+            config_text = ""
+
+        edited_config = st.text_area(
+            "TOML Content", value=config_text, height=400, key="config_raw_toml"
+        )
+
+        if st.button("📝 Update from TOML", key="update_from_toml"):
+            try:
+                new_config = toml.loads(edited_config)
+                st.session_state.config = new_config
+                st.success("✅ Configuration updated from TOML!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Invalid TOML syntax: {e}")
+
+    # Action buttons
+    st.markdown("---")
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        if st.button("💾 Save Configuration", type="primary"):
+            if save_config(config):
+                st.success("✅ Configuration saved to config.toml!")
+            else:
+                st.error("❌ Failed to save configuration")
+
+    with col2:
+        if st.button("🔄 Reload Configuration"):
+            st.session_state.config = load_config()
+            st.success("✅ Configuration reloaded!")
+            st.rerun()
+
+    with col3:
+        if st.button("🗑️ Reset to Defaults"):
+            st.session_state.config = get_default_config()
+            st.success("✅ Configuration reset to defaults!")
+            st.rerun()
+
+    with col4:
+        # Download button for config file
+        try:
+            config_download = toml.dumps(config)
+            st.download_button(
+                "📥 Download TOML",
+                config_download,
+                "config.toml",
+                mime="application/toml",
+            )
+        except Exception as e:
+            st.error(f"Error preparing download: {e}")
+
+    # Configuration preview
+    with st.expander("📊 Configuration Summary", expanded=False):
+        st.write("**Current Configuration:**")
+        st.write(f"- Model: {config['general']['model']}")
+        st.write(f"- Workflow: {config['general']['workflow']}")
+        st.write(f"- Temperature: {config['llm']['temperature']}")
+        st.write(f"- Max Tokens: {config['llm']['max_tokens']}")
+        st.write(
+            f"- Default Calculator: {config['chemistry']['calculators']['default']}"
+        )
+
+        # Environment variables check
+        st.write("**Environment Variables:**")
+        api_keys = {
+            "OPENAI_API_KEY": "OpenAI",
+            "ANTHROPIC_API_KEY": "Anthropic",
+            "GEMINI_API_KEY": "Google",
+        }
+
+        for env_var, provider in api_keys.items():
+            if os.getenv(env_var):
+                st.write(f"- {provider}: ✅ Set")
+            else:
+                st.write(f"- {provider}: ❌ Not set")
+
+    # Stop execution here for Config page
+    st.stop()
+
+# -----------------------------------------------------------------------------
+# Main Interface (only runs if not on About or Config page)
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -150,29 +631,24 @@ natural-language queries using AI agents.
 """
 )
 
-# -----------------------------------------------------------------------------
-# Sidebar – configuration
-# -----------------------------------------------------------------------------
-st.sidebar.header("Configuration")
-
-model_options = all_supported_models
-selected_model = st.sidebar.selectbox("Select LLM Model", model_options, index=0)
-
-workflow_options = ["single_agent", "multi_agent", "python_repl", "graspa"]
-selected_workflow = st.sidebar.selectbox("Workflow Type", workflow_options, index=0)
-
-output_options = ["state", "last_message"]
-selected_output = st.sidebar.selectbox("Return Option", output_options, index=0)
-
-structured_output = st.sidebar.checkbox("Structured Output", value=False)
-generate_report = st.sidebar.checkbox("Generate Report", value=False)
-
-thread_id = st.sidebar.number_input(
-    "Thread ID", min_value=1, max_value=1000, value=1, help="Conversation thread"
-)
+# Configuration status
+col1, col2, col3 = st.columns([2, 1, 1])
+with col1:
+    st.info(
+        f"📋 **Configuration:** Using {selected_model} with {selected_workflow} workflow"
+    )
+with col2:
+    if st.button("⚙️ Edit Config"):
+        st.session_state.page_navigation = "⚙️ Configuration"
+        st.rerun()
+with col3:
+    if st.button("🔄 Reload Config"):
+        st.session_state.config = load_config()
+        st.success("✅ Configuration reloaded!")
+        st.rerun()
 
 # -----------------------------------------------------------------------------
-# Session-state init
+# Session-state init and configuration loading
 # -----------------------------------------------------------------------------
 if "agent" not in st.session_state:
     st.session_state.agent = None
@@ -180,6 +656,59 @@ if "conversation_history" not in st.session_state:
     st.session_state.conversation_history = []
 if "last_config" not in st.session_state:
     st.session_state.last_config = None
+if "config" not in st.session_state:
+    st.session_state.config = load_config()
+
+# Get configuration values
+config = st.session_state.config
+selected_model = config["general"]["model"]
+selected_workflow = config["general"]["workflow"]
+selected_output = config["general"]["output"]
+structured_output = config["general"]["structured"]
+generate_report = config["general"]["report"]
+thread_id = config["general"]["thread"]
+
+# -----------------------------------------------------------------------------
+# Sidebar – configuration display and quick settings
+# -----------------------------------------------------------------------------
+st.sidebar.header("Configuration")
+
+st.sidebar.markdown(f"**Model:** {selected_model}")
+st.sidebar.markdown(f"**Workflow:** {selected_workflow}")
+st.sidebar.markdown(f"**Output:** {selected_output}")
+st.sidebar.markdown(f"**Thread ID:** {thread_id}")
+st.sidebar.markdown(f"**Temperature:** {config['llm']['temperature']}")
+st.sidebar.markdown(f"**Max Tokens:** {config['llm']['max_tokens']}")
+
+# Quick settings override
+with st.sidebar.expander("🔧 Quick Settings"):
+    st.write("Override settings for this session:")
+
+    # Model override
+    if st.checkbox("Override Model"):
+        selected_model = st.selectbox(
+            "Select Model",
+            all_supported_models,
+            index=(
+                all_supported_models.index(selected_model)
+                if selected_model in all_supported_models
+                else 0
+            ),
+        )
+
+    # Thread ID override
+    if st.checkbox("Override Thread ID"):
+        thread_id = st.number_input(
+            "Thread ID", min_value=1, max_value=1000, value=thread_id
+        )
+
+    st.info("💡 To make permanent changes, use the Configuration page.")
+
+# Reload config button
+if st.sidebar.button("🔄 Reload Config"):
+    st.session_state.config = load_config()
+    st.success("✅ Configuration reloaded!")
+    st.rerun()
 
 # -----------------------------------------------------------------------------
 # Agent status section
@@ -200,6 +729,14 @@ if st.session_state.agent:
 else:
     st.sidebar.error("❌ Agents Not Ready")
     st.sidebar.info("Agents will initialize automatically...")
+
+# Configuration page link
+st.sidebar.markdown("---")
+st.sidebar.markdown("**⚙️ Configuration**")
+st.sidebar.markdown(
+    "Use the Configuration page to modify settings, API endpoints, and chemistry parameters."
+)
+st.sidebar.markdown("Current config loaded from: `config.toml`")
 
 
 # -----------------------------------------------------------------------------
@@ -545,16 +1082,23 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
 # Agent initializer (cached)
 # -----------------------------------------------------------------------------
 @st.cache_resource
-def initialize_agent(model_name, workflow_type, structured_output, return_option):
+def initialize_agent(
+    model_name,
+    workflow_type,
+    structured_output,
+    return_option,
+    generate_report,
+    recursion_limit,
+):
     try:
         from chemgraph.agent.llm_agent import ChemGraph
 
         return ChemGraph(
             model_name=model_name,
             workflow_type=workflow_type,
-            generate_report=True,
-            return_option="state",
-            recursion_limit=20,
+            generate_report=generate_report,
+            return_option=return_option,
+            recursion_limit=recursion_limit,
         )
     except Exception as exc:
         st.error(f"Failed to initialize agent: {exc}")
@@ -564,13 +1108,25 @@ def initialize_agent(model_name, workflow_type, structured_output, return_option
 # -----------------------------------------------------------------------------
 # Auto-initialize agent when configuration changes
 # -----------------------------------------------------------------------------
-current_config = (selected_model, selected_workflow, structured_output, selected_output)
+current_config = (
+    selected_model,
+    selected_workflow,
+    structured_output,
+    selected_output,
+    generate_report,
+    config["general"]["recursion_limit"],
+)
 
 if st.session_state.agent is None or st.session_state.last_config != current_config:
 
     with st.spinner("🚀 Initializing ChemGraph agents..."):
         st.session_state.agent = initialize_agent(
-            selected_model, selected_workflow, structured_output, selected_output
+            selected_model,
+            selected_workflow,
+            structured_output,
+            selected_output,
+            generate_report,
+            config["general"]["recursion_limit"],
         )
         st.session_state.last_config = current_config
 
@@ -714,10 +1270,20 @@ if st.session_state.conversation_history:
 # -----------------------------------------------------------------------------
 
 with st.expander("💡 Example Queries"):
+    st.markdown("**Based on your current configuration:**")
+    st.markdown(f"- Model: {selected_model}")
+    st.markdown(
+        f"- Default Calculator: {config['chemistry']['calculators']['default']}"
+    )
+    st.markdown(f"- Temperature: {config['llm']['temperature']}")
+
     examples = [
         "What is the SMILES string for caffeine?",
-        "Optimize the geometry of water molecule using MACE",
-        "Calculate the single point energy of methane with DFT and show the structure",
+        f"Optimize the geometry of water molecule using {config['chemistry']['calculators']['default']}",
+        "Calculate the single point energy of methane and show the structure",
+        "Generate the molecular structure of aspirin and calculate its vibrational frequencies",
+        "Compare the energy of different conformers of ethane",
+        "What are the bond lengths in optimized CO2 molecule?",
     ]
     for ex in examples:
         if st.button(ex, key=f"ex_{ex}"):
