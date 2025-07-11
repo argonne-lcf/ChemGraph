@@ -39,6 +39,7 @@ eggs/
 plots/
 initial_evaluations/
 test/
+test_outputs/
 
 .venv
 combine*
