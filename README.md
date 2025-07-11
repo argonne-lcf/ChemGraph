@@ -9,7 +9,7 @@ ChemGraph supports diverse simulation backends, including ab initio quantum chem
 </details>
 
 <details>
-  <summary><strong>Installation Instruction</strong></summary>
+  <summary><strong>Installation Instructions</strong></summary>
 
 Ensure you have **Python 3.10 or higher** installed on your system. 
 **Using pip (Recommended for most users)**
@@ -398,36 +398,291 @@ chemgraph --config config.toml -q "Your query"
 
 ### Command Line Interface
 
-ChemGraph includes a comprehensive command-line interface with rich formatting:
+ChemGraph includes a powerful command-line interface (CLI) that provides all the functionality of the web interface through the terminal. The CLI features rich formatting, interactive mode, and comprehensive configuration options.
+
+#### Installation & Setup
+
+The CLI is included by default when you install ChemGraph:
 
 ```bash
-# Basic usage
+pip install -e .
+```
+
+#### Basic Usage
+
+##### Quick Start
+
+```bash
+# Basic query
 chemgraph -q "What is the SMILES string for water?"
 
-# With configuration
-chemgraph --config config.toml -q "Calculate CO2 frequencies"
+# With model selection
+chemgraph -q "Optimize methane geometry" -m gpt-4o
 
-# Check API key status
-chemgraph --check-keys
+# With report generation
+chemgraph -q "Calculate CO2 vibrational frequencies" -r
 
-# List available models
-chemgraph --list-models
+# Using configuration file
+chemgraph --config config.toml -q "Your query here"
+```
 
-# Interactive mode
+##### Command Syntax
+
+```bash
+chemgraph [OPTIONS] -q "YOUR_QUERY"
+```
+
+#### Command Line Options
+
+**Core Arguments:**
+
+| Option         | Short | Description                                  | Default        |
+| -------------- | ----- | -------------------------------------------- | -------------- |
+| `--query`      | `-q`  | The computational chemistry query to execute | Required       |
+| `--model`      | `-m`  | LLM model to use                             | `gpt-4o-mini`  |
+| `--workflow`   | `-w`  | Workflow type                                | `single_agent` |
+| `--output`     | `-o`  | Output format (`state`, `last_message`)      | `state`        |
+| `--structured` | `-s`  | Use structured output format                 | `False`        |
+| `--report`     | `-r`  | Generate detailed report                     | `False`        |
+| `--thread`     | `-t`  | Thread ID for conversation context           | `1`            |
+
+**Model Selection:**
+
+```bash
+# OpenAI models
+chemgraph -q "Your query" -m gpt-4o
+chemgraph -q "Your query" -m gpt-4o-mini
+chemgraph -q "Your query" -m o1-preview
+
+# Anthropic models
+chemgraph -q "Your query" -m claude-3-5-sonnet-20241022
+chemgraph -q "Your query" -m claude-3-opus-20240229
+
+# Google models
+chemgraph -q "Your query" -m gemini-1.5-pro
+
+# Local models (requires vLLM server)
+chemgraph -q "Your query" -m llama-3.1-70b-instruct
+```
+
+**Workflow Types:**
+
+```bash
+# Single agent (default) - best for most tasks
+chemgraph -q "Optimize water molecule" -w single_agent
+
+# Multi-agent - complex tasks with planning
+chemgraph -q "Complex analysis" -w multi_agent
+
+# Python REPL - interactive coding
+chemgraph -q "Write analysis code" -w python_repl
+
+# gRASPA - molecular simulation
+chemgraph -q "Run adsorption simulation" -w graspa
+```
+
+**Output Formats:**
+
+```bash
+# Full state output (default)
+chemgraph -q "Your query" -o state
+
+# Last message only
+chemgraph -q "Your query" -o last_message
+
+# Structured output
+chemgraph -q "Your query" -s
+
+# Generate detailed report
+chemgraph -q "Your query" -r
+```
+
+#### Interactive Mode
+
+Start an interactive session for continuous conversations:
+
+```bash
 chemgraph --interactive
+```
 
-# Get help
+**Interactive Features:**
+- **Persistent conversation**: Maintain context across queries
+- **Model switching**: Change models mid-conversation
+- **Workflow switching**: Switch between different agent types
+- **Built-in commands**: Help, clear, config, etc.
+
+**Interactive Commands:**
+```bash
+# In interactive mode, type:
+help                    # Show available commands
+clear                   # Clear screen
+config                  # Show current configuration
+quit                    # Exit interactive mode
+model gpt-4o           # Change model
+workflow multi_agent   # Change workflow
+```
+
+#### Utility Commands
+
+**List Available Models:**
+```bash
+chemgraph --list-models
+```
+
+**Check API Keys:**
+```bash
+chemgraph --check-keys
+```
+
+**Get Help:**
+```bash
 chemgraph --help
 ```
 
+#### Configuration File Support
+
+Use TOML configuration files for consistent settings:
+
+```bash
+chemgraph --config config.toml -q "Your query"
+```
+
+#### Environment Variables
+
+Set environment-specific configurations:
+
+```bash
+# Use development settings
+export CHEMGRAPH_ENV=development
+chemgraph --config config.toml -q "Your query"
+
+# Use production settings
+export CHEMGRAPH_ENV=production
+chemgraph --config config.toml -q "Your query"
+```
+
+#### Advanced Options
+
+**Timeout and Error Handling:**
+```bash
+# Set recursion limit
+chemgraph -q "Complex query" --recursion-limit 30
+
+# Verbose output for debugging
+chemgraph -q "Your query" -v
+
+# Save output to file
+chemgraph -q "Your query" --output-file results.txt
+```
+
+**Thread Management:**
+```bash
+# Conversation thread 1
+chemgraph -q "Optimize water" -t 1
+
+# Conversation thread 2
+chemgraph -q "Analyze methane" -t 2
+
+# Continue thread 1
+chemgraph -q "Now calculate frequencies" -t 1
+```
+
+#### Example Workflows
+
+**Basic Molecular Analysis:**
+```bash
+# Get molecular structure
+chemgraph -q "What is the SMILES string for caffeine?"
+
+# Optimize geometry
+chemgraph -q "Optimize the geometry of caffeine using DFT" -m gpt-4o -r
+
+# Calculate properties
+chemgraph -q "Calculate the vibrational frequencies of optimized caffeine" -r
+```
+
+**Interactive Research Session:**
+```bash
+# Start interactive mode
+chemgraph --interactive
+
+# Select model and workflow
+> model gpt-4o
+> workflow single_agent
+
+# Conduct analysis
+> What is the structure of aspirin?
+> Optimize its geometry using DFT
+> Calculate its electronic properties
+> Compare with ibuprofen
+```
+
+**Batch Processing:**
+```bash
+# Process multiple queries
+chemgraph -q "Analyze water molecule" --output-file water_analysis.txt
+chemgraph -q "Analyze methane molecule" --output-file methane_analysis.txt
+chemgraph -q "Analyze ammonia molecule" --output-file ammonia_analysis.txt
+```
+
+#### API Key Setup
+
+**Required API Keys:**
+```bash
+# OpenAI (for GPT models)
+export OPENAI_API_KEY="your_openai_key_here"
+
+# Anthropic (for Claude models)
+export ANTHROPIC_API_KEY="your_anthropic_key_here"
+
+# Google (for Gemini models)
+export GEMINI_API_KEY="your_gemini_key_here"
+```
+
+**Getting API Keys:**
+- **OpenAI**: Visit [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+- **Anthropic**: Visit [console.anthropic.com](https://console.anthropic.com/)
+- **Google**: Visit [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+
+#### Performance Tips
+
+- Use `gpt-4o-mini` for faster, cost-effective queries
+- Use `gpt-4o` for complex analysis requiring higher reasoning
+- Enable `--report` for detailed documentation
+- Use `--structured` output for programmatic parsing
+- Leverage configuration files for consistent settings
+
+#### Troubleshooting
+
+**Common Issues:**
+```bash
+# Check API key status
+chemgraph --check-keys
+
+# Verify model availability
+chemgraph --list-models
+
+# Test with verbose output
+chemgraph -q "test query" -v
+
+# Check configuration
+chemgraph --config config.toml -q "test" --verbose
+```
+
+**Error Messages:**
+- **"Invalid model"**: Use `--list-models` to see available options
+- **"API key not found"**: Use `--check-keys` to verify setup
+- **"Query required"**: Use `-q` to specify your query
+- **"Timeout"**: Increase `--recursion-limit` or simplify query
+
 The CLI provides:
-- **Beautiful terminal output** with colors and formatting
+- **Beautiful terminal output** with colors and formatting powered by Rich
 - **API key validation** before agent initialization
-- **Timeout protection** to prevent hanging
+- **Timeout protection** to prevent hanging processes
 - **Interactive mode** for continuous conversations
 - **Configuration file support** with TOML format
 - **Environment-specific settings** for development/production
-- **Comprehensive help** and examples
+- **Comprehensive help** and examples for all features
 
 </details>
 
