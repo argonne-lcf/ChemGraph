@@ -1,0 +1,57 @@
+# ChemGraph Configuration File - Local Models
+# This configuration uses local models that don't require API keys
+
+[general]
+# Use a local model that doesn't require API keys
+model = "llama3.2"
+workflow = "single_agent"
+output = "state"
+structured = false
+report = true
+thread = 1
+recursion_limit = 20
+verbose = true
+
+[llm]
+# Temperature for LLM responses (0.0 to 1.0)
+temperature = 0.1
+# Maximum tokens for responses
+max_tokens = 4000
+# Top-p sampling parameter
+top_p = 0.95
+
+[api]
+# For local models like Ollama
+[api.local]
+base_url = "http://localhost:11434"
+timeout = 60
+
+[chemistry]
+# Default calculation settings
+[chemistry.optimization]
+method = "BFGS"
+fmax = 0.05
+steps = 200
+
+[chemistry.calculators]
+# Use EMT calculator as it's always available
+default = "emt"
+fallback = "emt"
+
+[output]
+# Output file settings
+[output.files]
+directory = "./chemgraph_output"
+formats = ["xyz", "json", "html"]
+
+[output.visualization]
+enable_3d = true
+viewer = "py3dmol"
+
+[logging]
+level = "INFO"
+console = true
+
+[features]
+enable_cache = true
+cache_dir = "./cache" 

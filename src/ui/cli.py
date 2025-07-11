@@ -7,7 +7,7 @@ capabilities through natural language queries powered by AI agents.
 """
 
 import argparse
-import json
+import toml
 import sys
 import time
 import os
@@ -100,10 +100,10 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
 
     # Check Google models
     elif "gemini" in model_lower:
-        if not os.getenv("GOOGLE_API_KEY"):
+        if not os.getenv("GEMINI_API_KEY"):
             return (
                 False,
-                "Google API key not found. Please set GOOGLE_API_KEY environment variable.",
+                "Gemini API key not found. Please set GEMINI_API_KEY environment variable.",
             )
 
     # Check local models (no API key needed)
@@ -141,8 +141,10 @@ Examples:
   %(prog)s -q "Optimize water molecule geometry" -m gpt-4o -w single_agent
   %(prog)s -q "Calculate CO2 vibrational frequencies" -m claude-3-sonnet-20240229 -r
   %(prog)s -q "Show me the structure of caffeine" -o last_message -s
+  %(prog)s --config config.toml -q "Calculate frequencies"
   %(prog)s --interactive
   %(prog)s --list-models
+  %(prog)s --check-keys
         """,
     )
 
@@ -231,7 +233,7 @@ Examples:
     parser.add_argument("--output-file", type=str, help="Save output to file")
 
     # Configuration file
-    parser.add_argument("--config", type=str, help="Load configuration from JSON file")
+    parser.add_argument("--config", type=str, help="Load configuration from TOML file")
 
     return parser
 
@@ -297,7 +299,7 @@ def check_api_keys_status():
         },
         {
             "provider": "Google",
-            "env_var": "GOOGLE_API_KEY",
+            "env_var": "GEMINI_API_KEY",
             "examples": "gemini-pro, gemini-1.5-pro",
         },
         {
@@ -333,21 +335,72 @@ def check_api_keys_status():
     console.print("\n[bold]🔗 Get API keys:[/bold]")
     console.print("• [cyan]OpenAI:[/cyan] https://platform.openai.com/api-keys")
     console.print("• [cyan]Anthropic:[/cyan] https://console.anthropic.com/")
-    console.print("• [cyan]Google:[/cyan] https://makersuite.google.com/app/apikey")
+    console.print("• [cyan]Google:[/cyan] https://aistudio.google.com/apikey")
 
 
 def load_config(config_file: str) -> Dict[str, Any]:
-    """Load configuration from JSON file."""
+    """Load configuration from TOML file."""
     try:
         with open(config_file, "r") as f:
-            config = json.load(f)
+            config = toml.load(f)
         console.print(f"[green]✓[/green] Configuration loaded from {config_file}")
-        return config
+
+        # Flatten nested configuration for backward compatibility
+        flattened = {}
+
+        # Handle general settings
+        if "general" in config:
+            flattened.update(config["general"])
+
+        # Handle LLM settings
+        if "llm" in config:
+            for key, value in config["llm"].items():
+                flattened[f"llm_{key}"] = value
+
+        # Handle API settings
+        if "api" in config:
+            for provider, settings in config["api"].items():
+                for key, value in settings.items():
+                    flattened[f"api_{provider}_{key}"] = value
+
+        # Handle chemistry settings
+        if "chemistry" in config:
+            for section, settings in config["chemistry"].items():
+                for key, value in settings.items():
+                    flattened[f"chemistry_{section}_{key}"] = value
+
+        # Handle output settings
+        if "output" in config:
+            for section, settings in config["output"].items():
+                for key, value in settings.items():
+                    flattened[f"output_{section}_{key}"] = value
+
+        # Handle other top-level sections
+        for section in ["logging", "features", "security", "advanced"]:
+            if section in config:
+                if isinstance(config[section], dict):
+                    for key, value in config[section].items():
+                        if isinstance(value, dict):
+                            for subkey, subvalue in value.items():
+                                flattened[f"{section}_{key}_{subkey}"] = subvalue
+                        else:
+                            flattened[f"{section}_{key}"] = value
+                else:
+                    flattened[section] = config[section]
+
+        # Handle environment-specific settings
+        if "environments" in config:
+            env = os.getenv("CHEMGRAPH_ENV", "development")
+            if env in config["environments"]:
+                flattened.update(config["environments"][env])
+
+        return flattened
+
     except FileNotFoundError:
         console.print(f"[red]✗[/red] Configuration file not found: {config_file}")
         sys.exit(1)
-    except json.JSONDecodeError as e:
-        console.print(f"[red]✗[/red] Invalid JSON in configuration file: {e}")
+    except toml.TomlDecodeError as e:
+        console.print(f"[red]✗[/red] Invalid TOML in configuration file: {e}")
         sys.exit(1)
 
 

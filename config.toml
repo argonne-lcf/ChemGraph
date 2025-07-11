@@ -1,0 +1,158 @@
+# ChemGraph Configuration File
+# This file contains all configuration settings for ChemGraph CLI and agents
+# Save this file as config.toml in your project directory
+
+[general]
+# Default model to use for queries
+model = "gpt-4o-mini"
+# Workflow type: single_agent, multi_agent, python_repl, graspa
+workflow = "single_agent"
+# Output format: state, last_message
+output = "state"
+# Enable structured output
+structured = false
+# Generate detailed reports
+report = true
+# Thread ID for conversation context
+thread = 1
+# Recursion limit for agent workflows
+recursion_limit = 20
+# Enable verbose output
+verbose = false
+
+[llm]
+# Temperature for LLM responses (0.0 to 1.0)
+temperature = 0.1
+# Maximum tokens for responses
+max_tokens = 4000
+# Top-p sampling parameter
+top_p = 0.95
+# Frequency penalty (-2.0 to 2.0)
+frequency_penalty = 0.0
+# Presence penalty (-2.0 to 2.0)
+presence_penalty = 0.0
+
+[api]
+# Custom base URLs for different providers
+[api.openai]
+base_url = "https://api.openai.com/v1"
+timeout = 30
+
+[api.anthropic]
+base_url = "https://api.anthropic.com"
+timeout = 30
+
+[api.google]
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+timeout = 30
+
+[api.local]
+# For local models like Ollama
+base_url = "http://localhost:11434"
+timeout = 60
+
+[chemistry]
+# Default calculation settings
+[chemistry.optimization]
+# Optimization method: BFGS, L-BFGS-B, CG, etc.
+method = "BFGS"
+# Force tolerance for convergence
+fmax = 0.05
+# Maximum optimization steps
+steps = 200
+
+[chemistry.frequencies]
+# Displacement for finite difference
+displacement = 0.01
+# Number of processes for parallel calculation
+nprocs = 1
+
+[chemistry.calculators]
+# Default calculator for different tasks
+default = "mace_mp"
+# Available calculators: mace_mp, emt, nwchem, orca, psi4, tblite
+fallback = "emt"
+
+[output]
+# Output file settings
+[output.files]
+# Default output directory
+directory = "./chemgraph_output"
+# File naming pattern
+pattern = "{timestamp}_{query_hash}"
+# Supported formats: xyz, json, html, png
+formats = ["xyz", "json", "html"]
+
+[output.visualization]
+# 3D visualization settings
+enable_3d = true
+# Molecular viewer: py3dmol, ase_gui
+viewer = "py3dmol"
+# Image resolution for saved figures
+dpi = 300
+
+[logging]
+# Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+level = "INFO"
+# Log file location
+file = "./chemgraph.log"
+# Enable console logging
+console = true
+# Log format
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[features]
+# Enable experimental features
+enable_experimental = false
+# Enable caching of results
+enable_cache = true
+# Cache directory
+cache_dir = "./cache"
+# Cache expiration time in hours
+cache_expiry = 24
+
+[security]
+# Enable API key validation
+validate_keys = true
+# Enable request rate limiting
+rate_limit = true
+# Max requests per minute
+max_requests_per_minute = 60
+
+[advanced]
+# Advanced settings for power users
+[advanced.agent]
+# Custom system prompts
+custom_system_prompt = ""
+# Memory settings
+max_memory_tokens = 8000
+# Enable function calling
+enable_function_calling = true
+
+[advanced.parallel]
+# Enable parallel processing
+enable_parallel = false
+# Number of worker processes
+num_workers = 2
+
+# Environment-specific configurations
+[environments]
+[environments.development]
+model = "gpt-4o-mini"
+temperature = 0.2
+verbose = true
+enable_cache = false
+
+[environments.production]
+model = "gpt-4o"
+temperature = 0.1
+verbose = false
+enable_cache = true
+rate_limit = true
+
+[environments.testing]
+model = "gpt-4o-mini"
+temperature = 0.0
+verbose = true
+enable_cache = false
+max_tokens = 1000 

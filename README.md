@@ -91,7 +91,7 @@ pip install -e ".[uma]"
    export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
    
    # Set Google API token
-   export GOOGLE_API_KEY="your_google_api_key_here"
+   export GEMINI_API_KEY="your_google_api_key_here"
    ```
 
 2. **Explore Example Notebooks**: Navigate to the `notebooks/` directory to explore various example notebooks demonstrating different capabilities of ChemGraph.
@@ -202,6 +202,232 @@ The interface automatically detects molecular structure data in agent responses 
 - For large molecular systems, visualization may take longer to load
 - Use the refresh button if the interface becomes unresponsive
 - Clear conversation history to improve performance with many queries
+
+</details>
+
+<details>
+  <summary><strong>Configuration with TOML</strong></summary>
+
+ChemGraph supports comprehensive configuration through TOML files, allowing you to customize model settings, API configurations, chemistry parameters, and more.
+
+### Configuration File Structure
+
+Create a `config.toml` file in your project directory to configure ChemGraph behavior:
+
+```toml
+# ChemGraph Configuration File
+# This file contains all configuration settings for ChemGraph CLI and agents
+
+[general]
+# Default model to use for queries
+model = "gpt-4o-mini"
+# Workflow type: single_agent, multi_agent, python_repl, graspa
+workflow = "single_agent"
+# Output format: state, last_message
+output = "state"
+# Enable structured output
+structured = false
+# Generate detailed reports
+report = true
+# Thread ID for conversation context
+thread = 1
+# Recursion limit for agent workflows
+recursion_limit = 20
+# Enable verbose output
+verbose = false
+
+[llm]
+# Temperature for LLM responses (0.0 to 1.0)
+temperature = 0.1
+# Maximum tokens for responses
+max_tokens = 4000
+# Top-p sampling parameter
+top_p = 0.95
+# Frequency penalty (-2.0 to 2.0)
+frequency_penalty = 0.0
+# Presence penalty (-2.0 to 2.0)
+presence_penalty = 0.0
+
+[api]
+# Custom base URLs for different providers
+[api.openai]
+base_url = "https://api.openai.com/v1"
+timeout = 30
+
+[api.anthropic]
+base_url = "https://api.anthropic.com"
+timeout = 30
+
+[api.google]
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+timeout = 30
+
+[api.local]
+# For local models like Ollama
+base_url = "http://localhost:11434"
+timeout = 60
+
+[chemistry]
+# Default calculation settings
+[chemistry.optimization]
+# Optimization method: BFGS, L-BFGS-B, CG, etc.
+method = "BFGS"
+# Force tolerance for convergence
+fmax = 0.05
+# Maximum optimization steps
+steps = 200
+
+[chemistry.frequencies]
+# Displacement for finite difference
+displacement = 0.01
+# Number of processes for parallel calculation
+nprocs = 1
+
+[chemistry.calculators]
+# Default calculator for different tasks
+default = "mace_mp"
+# Available calculators: mace_mp, emt, nwchem, orca, psi4, tblite
+fallback = "emt"
+
+[output]
+# Output file settings
+[output.files]
+# Default output directory
+directory = "./chemgraph_output"
+# File naming pattern
+pattern = "{timestamp}_{query_hash}"
+# Supported formats: xyz, json, html, png
+formats = ["xyz", "json", "html"]
+
+[output.visualization]
+# 3D visualization settings
+enable_3d = true
+# Molecular viewer: py3dmol, ase_gui
+viewer = "py3dmol"
+# Image resolution for saved figures
+dpi = 300
+
+[logging]
+# Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+level = "INFO"
+# Log file location
+file = "./chemgraph.log"
+# Enable console logging
+console = true
+
+[features]
+# Enable experimental features
+enable_experimental = false
+# Enable caching of results
+enable_cache = true
+# Cache directory
+cache_dir = "./cache"
+# Cache expiration time in hours
+cache_expiry = 24
+
+[security]
+# Enable API key validation
+validate_keys = true
+# Enable request rate limiting
+rate_limit = true
+# Max requests per minute
+max_requests_per_minute = 60
+
+# Environment-specific configurations
+[environments]
+[environments.development]
+model = "gpt-4o-mini"
+temperature = 0.2
+verbose = true
+enable_cache = false
+
+[environments.production]
+model = "gpt-4o"
+temperature = 0.1
+verbose = false
+enable_cache = true
+rate_limit = true
+
+[environments.testing]
+model = "gpt-4o-mini"
+temperature = 0.0
+verbose = true
+enable_cache = false
+max_tokens = 1000
+```
+
+### Using Configuration Files
+
+#### With the Command Line Interface
+
+```bash
+# Use configuration file
+chemgraph --config config.toml -q "What is the SMILES string for water?"
+
+# Override specific settings
+chemgraph --config config.toml -q "Optimize methane" -m gpt-4o --verbose
+```
+
+#### Environment-Specific Configuration
+
+Set the `CHEMGRAPH_ENV` environment variable to use environment-specific settings:
+
+```bash
+# Use development environment settings
+export CHEMGRAPH_ENV=development
+chemgraph --config config.toml -q "Your query"
+
+# Use production environment settings
+export CHEMGRAPH_ENV=production
+chemgraph --config config.toml -q "Your query"
+```
+
+### Configuration Sections
+
+| Section          | Description                                             |
+| ---------------- | ------------------------------------------------------- |
+| `[general]`      | Basic settings like model, workflow, and output format  |
+| `[llm]`          | LLM-specific parameters (temperature, max_tokens, etc.) |
+| `[api]`          | API endpoints and timeouts for different providers      |
+| `[chemistry]`    | Chemistry-specific calculation settings                 |
+| `[output]`       | Output file formats and visualization settings          |
+| `[logging]`      | Logging configuration and verbosity levels              |
+| `[features]`     | Feature flags and experimental settings                 |
+| `[security]`     | Security settings and rate limiting                     |
+| `[environments]` | Environment-specific configuration overrides            |
+
+### Command Line Interface
+
+ChemGraph includes a comprehensive command-line interface with rich formatting:
+
+```bash
+# Basic usage
+chemgraph -q "What is the SMILES string for water?"
+
+# With configuration
+chemgraph --config config.toml -q "Calculate CO2 frequencies"
+
+# Check API key status
+chemgraph --check-keys
+
+# List available models
+chemgraph --list-models
+
+# Interactive mode
+chemgraph --interactive
+
+# Get help
+chemgraph --help
+```
+
+The CLI provides:
+- **Beautiful terminal output** with colors and formatting
+- **API key validation** before agent initialization
+- **Timeout protection** to prevent hanging
+- **Interactive mode** for continuous conversations
+- **Configuration file support** with TOML format
+- **Environment-specific settings** for development/production
+- **Comprehensive help** and examples
 
 </details>
 
@@ -482,7 +708,7 @@ agent = ChemGraph(
 **Available Environment Variables for External Services:**
 - `OPENAI_API_KEY`: For OpenAI models
 - `ANTHROPIC_API_KEY`: For Anthropic Claude models
-- `GOOGLE_API_KEY`: For Gemini models
+- `GEMINI_API_KEY`: For Gemini models
 
 ### Working with Example Notebooks
 
