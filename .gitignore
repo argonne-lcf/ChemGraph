@@ -29,8 +29,6 @@ eggs/
 
 # Jupyter Notebook checkpoints and modified notebooks
 .ipynb_checkpoints/
-# Prevent accidental commits of modified notebook files (except in specific dirs)
-notebooks/*.ipynb
 
 # Generated molecular structure files
 *.xyz
