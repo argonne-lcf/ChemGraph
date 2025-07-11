@@ -33,7 +33,7 @@ def load_gemini_model(
         deterministic.
     api_key : str, optional
         The Google API key. If not provided, the function will attempt to retrieve it
-        from the environment variable `GOOGLE_API_KEY`.
+        from the environment variable `GEMINI_API_KEY`.
     prompt : str, optional
         Custom prompt to use when requesting the API key from the user.
 
@@ -60,11 +60,11 @@ def load_gemini_model(
     """
 
     if api_key is None:
-        api_key = os.getenv("GOOGLE_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             logger.info("Google API key not found in environment variables.")
             api_key = getpass("Please enter your Google API key: ")
-            os.environ["GOOGLE_API_KEY"] = api_key
+            os.environ["GEMINI_API_KEY"] = api_key
 
     if model_name not in supported_gemini_models:
         raise ValueError(
@@ -88,7 +88,7 @@ def load_gemini_model(
         if "AuthenticationError" in str(e) or "invalid_api_key" in str(e):
             logger.warning("Invalid Google API key.")
             api_key = getpass("Please enter a valid Google API key: ")
-            os.environ["GOOGLE_API_KEY"] = api_key
+            os.environ["GEMINI_API_KEY"] = api_key
             # Retry with new API key
             return load_gemini_model(model_name, temperature, api_key, prompt)
         else:

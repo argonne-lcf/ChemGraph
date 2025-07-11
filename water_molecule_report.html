@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>XYZ Molecule Viewer</title>
+    <script src="https://unpkg.com/ngl@2.0.0-dev.37/dist/ngl.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+        }
+        h2 {
+            color: #2c3e50;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        h2::before {
+            content: '▼';
+            font-size: 0.8em;
+            margin-right: 0.5rem;
+            transition: transform 0.3s ease;
+        }
+        h2.collapsed::before {
+            transform: rotate(-90deg);
+        }
+        #viewer {
+            width: 100%;
+            height: 600px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: white;
+            margin: 1rem 0;
+        }
+        .info-section {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 2rem;
+        }
+        .info-section ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .info-section li {
+            padding: 0;
+            border: none;
+            margin: 0;
+        }
+        .sub-section {
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 0.5rem;
+            background: #fafafa;
+        }
+        .sub-section h3 {
+            color: #2c3e50;
+            margin: 0;
+            padding: 0.5rem;
+            font-size: 1.1em;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .sub-section h3::before {
+            content: '▼';
+            font-size: 0.8em;
+            margin-right: 0.5rem;
+            transition: transform 0.3s ease;
+            display: inline-block;
+        }
+        .sub-section h3.collapsed::before {
+            transform: rotate(-90deg);
+        }
+        .sub-section-content {
+            display: block;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        .sub-section-content.collapsed {
+            display: none;
+        }
+        .table-container {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            margin: 0.5rem 0;
+        }
+        .table-container table {
+            margin: 0;
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .table-container thead {
+            position: sticky;
+            top: 0;
+            background: #f8f9fa;
+            z-index: 1;
+        }
+        .table-container th {
+            border-bottom: 2px solid #dee2e6;
+        }
+        .table-container tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .unit-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0.5rem 0;
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .unit-toggle button {
+            padding: 0.25rem 0.5rem;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .unit-toggle button.active {
+            background: #2c3e50;
+            color: white;
+            border-color: #2c3e50;
+        }
+        .unit-toggle button:hover:not(.active) {
+            background: #e9ecef;
+        }
+        .energy-value {
+            display: inline-block;
+            min-width: 100px;
+        }
+        .regular-item {
+            padding: 0.5rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.5rem 0;
+            font-size: 0.9em;
+        }
+        th, td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 0.5rem 0;
+        }
+        code {
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 0.9em;
+        }
+        .collapsible-content {
+            transition: max-height 0.3s ease-out;
+            max-height: 2000px;
+            overflow: hidden;
+        }
+        .collapsible-content.collapsed {
+            max-height: 0;
+        }
+        .vibrational-mode {
+            background-color: #e8f5e9;
+        }
+        .trans-rot-mode {
+            background-color: #fff3e0;
+        }
+        .mode-explanation {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+        }
+        .mode-explanation p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>XYZ Molecule Viewer</h1>
+        <div id="viewer"></div>
+        <div class="info-section">
+            <h2 onclick="toggleSection('calculation-results')">Calculation Results</h2>
+            <div id="calculation-results" class="collapsible-content">
+                <ul>
+        <li>
+            <div class="sub-section">
+                <h3 onclick="toggleSubSection('optimized-coords')">Optimized Coordinates</h3>
+                <div id="optimized-coords" class="sub-section-content">
+                    <pre><code>3
+Optimized Structure
+O 0.000000 0.000000 0.000000
+H 0.000000 0.760000 0.580000
+H 0.000000 -0.760000 0.580000</code></pre>
+                </div>
+            </div>
+        </li>
+
+        <li class='regular-item'>
+            <div class="unit-toggle">
+                <span>Energy Unit:</span>
+                <button onclick="toggleEnergyUnit('ev')" class="active" data-unit="ev">eV</button>
+                <button onclick="toggleEnergyUnit('kjmol')" data-unit="kjmol">kJ/mol</button>
+                <button onclick="toggleEnergyUnit('kcalmol')" data-unit="kcalmol">kcal/mol</button>
+            </div>
+            <div>
+                <strong>Single Point Energy</strong> (<span class="energy-unit">eV</span>): 
+                <span class="energy-value" data-ev="-76.000000"></span>
+            </div>
+        </li>
+<li class='regular-item'><strong>Vibrational Frequencies:</strong> N/A</li>
+<li class='regular-item'><strong>Thermochemistry Values:</strong> N/A</li>
+<li class='regular-item'><strong>Optimization Status:</strong> <span style='color: #28a745;'>Converged</span></li></ul>
+            </div>
+        </div>
+        <div class="info-section">
+            <h2 onclick="toggleSection('simulation-details')">Simulation Details</h2>
+            <div id="simulation-details" class="collapsible-content">
+                <ul><li><strong>Simulation Type:</strong> opt</li>
+<li><strong>Calculator:</strong> mace_mp</li>
+
+        <li>
+            <div class='sub-section'>
+                <h3 onclick='toggleSubSection("calc-params")'>Calculator Parameters</h3>
+                <div id='calc-params' class='sub-section-content'>
+                    <div class='table-container' style='max-height: 200px; overflow-y: auto;'>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Parameter</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>Calculator Type</td><td>mace_mp</td></tr><tr><td>Model</td><td>None</td></tr><tr><td>Device</td><td>cpu</td></tr><tr><td>Default Dtype</td><td>float64</td></tr><tr><td>Dispersion</td><td>False</td></tr><tr><td>Damping</td><td>bj</td></tr><tr><td>Dispersion Xc</td><td>pbe</td></tr><tr><td>Dispersion Cutoff</td><td>21.1671</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </li>
+<li><strong>Optimizer:</strong> bfgs</li>
+<li><strong>Force Convergence (fmax):</strong> 0.01 eV/Å</li>
+<li><strong>Maximum Steps:</strong> 1000</li></ul>
+            </div>
+        </div>
+    </div>
+    <script>
+        function toggleSection(sectionId) {
+            const content = document.getElementById(sectionId);
+            const header = content.previousElementSibling;
+            content.classList.toggle('collapsed');
+            header.classList.toggle('collapsed');
+        }
+
+        function toggleSubSection(sectionId) {
+            const content = document.getElementById(sectionId);
+            const header = content.previousElementSibling;
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                header.classList.remove('collapsed');
+            } else {
+                content.style.display = 'none';
+                header.classList.add('collapsed');
+            }
+        }
+
+        // Initialize all sub-sections as expanded
+        document.addEventListener('DOMContentLoaded', function() {
+            const subSections = document.querySelectorAll('.sub-section-content');
+            subSections.forEach(section => {
+                section.style.display = 'block';
+            });
+        });
+
+        const stage = new NGL.Stage("viewer", { backgroundColor: "white" });
+
+        function xyzToPDB(xyzContent) {
+            const lines = xyzContent.trim().split("\n");
+            const numAtoms = parseInt(lines[0]);
+            let pdbContent = '';
+            for (let i = 2; i < lines.length && i < numAtoms + 2; i++) {
+                const parts = lines[i].trim().split(/\s+/);
+                if (parts.length >= 4) {
+                    const [atom, x, y, z] = parts;
+                    const atomName = atom.padEnd(3);
+                    const serial = String(i - 1).padStart(5);
+                    const xStr = parseFloat(x).toFixed(3).padStart(8);
+                    const yStr = parseFloat(y).toFixed(3).padStart(8);
+                    const zStr = parseFloat(z).toFixed(3).padStart(8);
+                    pdbContent += `HETATM${serial} ${atomName} MOL     1    ${xStr}${yStr}${zStr}  1.00  0.00\n`;
+                }
+            }
+            pdbContent += 'END\n';
+            return pdbContent;
+        }
+
+        const xyzData = atob("MwpPcHRpbWl6ZWQgU3RydWN0dXJlCk8gMC4wMDAwMDAgMC4wMDAwMDAgMC4wMDAwMDAKSCAwLjAwMDAwMCAwLjc2MDAwMCAwLjU4MDAwMApIIDAuMDAwMDAwIC0wLjc2MDAwMCAwLjU4MDAwMA==");
+
+        const pdbContent = xyzToPDB(xyzData);
+        stage.loadFile(new Blob([pdbContent], { type: 'text/plain' }), { ext: 'pdb' }).then(component => {
+            component.addRepresentation("ball+stick");
+            component.autoView();
+        });
+    </script>
+
+        <script>
+            // Conversion factors
+            const EV_TO_KJMOL = 96.485;  // 1 eV = 96.485 kJ/mol
+            const EV_TO_KCALMOL = 23.061;  // 1 eV = 23.061 kcal/mol
+            
+            function toggleEnergyUnit(unit) {
+                // Update button states
+                document.querySelectorAll('.unit-toggle button').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.unit === unit);
+                });
+                
+                // Update unit labels
+                document.querySelectorAll('.energy-unit').forEach(label => {
+                    label.textContent = unit === 'ev' ? 'eV' : 
+                                     unit === 'kjmol' ? 'kJ/mol' : 'kcal/mol';
+                });
+                
+                // Convert all energy values
+                document.querySelectorAll('.energy-value').forEach(cell => {
+                    const evValue = parseFloat(cell.dataset.ev);
+                    let convertedValue;
+                    let precision;
+                    
+                    if (unit === 'ev') {
+                        convertedValue = evValue;
+                        precision = 6;
+                    } else if (unit === 'kjmol') {
+                        convertedValue = evValue * EV_TO_KJMOL;
+                        precision = 2;
+                    } else {  // kcal/mol
+                        convertedValue = evValue * EV_TO_KCALMOL;
+                        precision = 2;
+                    }
+                    
+                    // Get the label from the parent div's strong element
+                    const label = cell.parentElement.querySelector('strong').textContent;
+                    // Update only the value part
+                    cell.textContent = convertedValue.toFixed(precision);
+                });
+            }
+
+            // Initialize energy values in eV when the page loads
+            document.addEventListener('DOMContentLoaded', function() {
+                // Set initial unit to eV
+                document.querySelectorAll('.unit-toggle button[data-unit="ev"]').forEach(btn => {
+                    btn.click();
+                });
+            });
+        </script>
+        </body>
+        
+</html>
