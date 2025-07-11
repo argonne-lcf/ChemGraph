@@ -158,7 +158,7 @@ pip install -e ".[uma]"
 #### Configuration
 - **Model Selection**: Choose from GPT-4o, GPT-4o-mini, or Claude models
 - **Workflow Type**: Select single-agent, multi-agent, Python REPL, or gRASPA workflows
-- **Thread Management**: Use thread IDs to maintain separate conversation contexts
+
 
 #### Interaction
 1. **Initialize Agent**: Click "Initialize Agent" in the sidebar to set up your ChemGraph instance
@@ -229,8 +229,7 @@ output = "state"
 structured = false
 # Generate detailed reports
 report = true
-# Thread ID for conversation context
-thread = 1
+
 # Recursion limit for agent workflows
 recursion_limit = 20
 # Enable verbose output
@@ -444,7 +443,6 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 | `--output`     | `-o`  | Output format (`state`, `last_message`)      | `state`        |
 | `--structured` | `-s`  | Use structured output format                 | `False`        |
 | `--report`     | `-r`  | Generate detailed report                     | `False`        |
-| `--thread`     | `-t`  | Thread ID for conversation context           | `1`            |
 
 **Model Selection:**
 
@@ -575,17 +573,7 @@ chemgraph -q "Your query" -v
 chemgraph -q "Your query" --output-file results.txt
 ```
 
-**Thread Management:**
-```bash
-# Conversation thread 1
-chemgraph -q "Optimize water" -t 1
 
-# Conversation thread 2
-chemgraph -q "Analyze methane" -t 2
-
-# Continue thread 1
-chemgraph -q "Now calculate frequencies" -t 1
-```
 
 #### Example Workflows
 

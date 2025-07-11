@@ -191,15 +191,6 @@ Examples:
         "-r", "--report", action="store_true", help="Generate detailed report"
     )
 
-    # Thread ID
-    parser.add_argument(
-        "-t",
-        "--thread",
-        type=int,
-        default=1,
-        help="Thread ID for conversation context (default: 1)",
-    )
-
     # Recursion limit
     parser.add_argument(
         "--recursion-limit",
@@ -599,7 +590,7 @@ def interactive_mode():
 
     # Get initial configuration
     model = Prompt.ask(
-        "Select model", choices=all_supported_models[:10], default="gpt-4o-mini"
+        "Select model", choices=all_supported_models, default="gpt-4o-mini"
     )
     workflow = Prompt.ask(
         "Select workflow",
@@ -616,7 +607,6 @@ def interactive_mode():
         "[green]✓ Ready! You can now ask computational chemistry questions.[/green]\n"
     )
 
-    thread_id = 1
     while True:
         try:
             query = Prompt.ask("\n[bold cyan]🧪 ChemGraph[/bold cyan]")
@@ -653,7 +643,6 @@ Example queries:
             elif query.lower() == "config":
                 console.print(f"Model: {model}")
                 console.print(f"Workflow: {workflow}")
-                console.print(f"Thread ID: {thread_id}")
                 continue
             elif query.startswith("model "):
                 new_model = query[6:].strip()
@@ -684,7 +673,7 @@ Example queries:
                 continue
 
             # Execute query
-            result = run_query(agent, query, thread_id, verbose=False)
+            result = run_query(agent, query, 1, verbose=False)
             if result:
                 format_response(result, verbose=False)
 
@@ -766,7 +755,7 @@ def main():
 
     # Execute query
     console.print(f"[bold blue]Query:[/bold blue] {args.query}")
-    result = run_query(agent, args.query, args.thread, args.verbose)
+    result = run_query(agent, args.query, 1, args.verbose)
 
     if result:
         format_response(result, args.verbose)
