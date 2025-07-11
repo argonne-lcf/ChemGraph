@@ -36,6 +36,7 @@ dependencies = [
     "stmol",
     "ipython-genutils",
     "langsmith<0.4",
+    "rich>=13.0.0",
     ]
 
 [project.optional-dependencies]
@@ -52,6 +53,9 @@ ui = [
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
 "Repository" = "https://github.com/argonne-lcf/ChemGraph"
+
+[project.scripts]
+chemgraph = "ui.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src/"]
