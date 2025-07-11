@@ -12,14 +12,6 @@ thread = 1
 recursion_limit = 20
 verbose = true
 
-[llm]
-# Temperature for LLM responses (0.0 to 1.0)
-temperature = 0.1
-# Maximum tokens for responses
-max_tokens = 4000
-# Top-p sampling parameter
-top_p = 0.95
-
 [api]
 # For local models like Ollama
 [api.local]

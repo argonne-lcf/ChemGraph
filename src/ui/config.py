@@ -17,7 +17,7 @@ def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
                 default_config = get_default_config()
 
                 # Ensure all required sections exist
-                for section in ["general", "llm", "api", "chemistry", "output"]:
+                for section in ["general", "api", "chemistry", "output"]:
                     if section not in config:
                         config[section] = default_config[section]
                     elif isinstance(config[section], dict) and isinstance(
@@ -63,13 +63,6 @@ def get_default_config() -> Dict[str, Any]:
             "recursion_limit": 20,
             "verbose": False,
         },
-        "llm": {
-            "temperature": 0.1,
-            "max_tokens": 4000,
-            "top_p": 0.95,
-            "frequency_penalty": 0.0,
-            "presence_penalty": 0.0,
-        },
         "api": {
             "openai": {"base_url": "https://api.openai.com/v1", "timeout": 30},
             "anthropic": {"base_url": "https://api.anthropic.com", "timeout": 30},
@@ -102,7 +95,7 @@ def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
         flattened.update(config["general"])
 
     # Handle other sections
-    for section in ["llm", "api", "chemistry", "output"]:
+    for section in ["api", "chemistry", "output"]:
         if section in config:
             for key, value in config[section].items():
                 if isinstance(value, dict):

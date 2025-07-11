@@ -85,6 +85,10 @@ def load_openai_model(
                 temperature=temperature,
                 api_key=api_key,
                 base_url=base_url,
+                max_tokens=4000,
+                top_p=1.0,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
             )
         else:
             logger.info(f"Loading OpenAI model: {model_name}")
@@ -92,6 +96,10 @@ def load_openai_model(
                 model=model_name,
                 temperature=temperature,
                 api_key=api_key,
+                max_tokens=4000,
+                top_p=1.0,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
             )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")

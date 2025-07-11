@@ -118,12 +118,11 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
 def create_banner():
     """Create a welcome banner for ChemGraph CLI."""
     banner_text = """
+
     ╔═══════════════════════════════════════════════════════════════╗
     ║                                                               ║
-    ║               🧪 ChemGraph CLI                                ║
-    ║          AI Agents for Computational Chemistry                ║
-    ║                                                               ║
-    ║      Natural Language Interface to Quantum Chemistry          ║
+    ║                           ChemGraph                           ║
+    ║             AI Agents for Computational Chemistry             ║
     ║                                                               ║
     ╚═══════════════════════════════════════════════════════════════╝
     """
@@ -351,11 +350,6 @@ def load_config(config_file: str) -> Dict[str, Any]:
         # Handle general settings
         if "general" in config:
             flattened.update(config["general"])
-
-        # Handle LLM settings
-        if "llm" in config:
-            for key, value in config["llm"].items():
-                flattened[f"llm_{key}"] = value
 
         # Handle API settings
         if "api" in config:

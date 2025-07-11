@@ -78,4 +78,5 @@ all_supported_models = (
     + supported_alcf_models
     + supported_anthropic_models
     + supported_argo_models
+    + supported_gemini_models
 )

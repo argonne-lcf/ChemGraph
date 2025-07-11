@@ -143,12 +143,12 @@ if page == "📖 About ChemGraph":
     If you use ChemGraph in your research, please cite our work:
     
     ```bibtex
-    @article{chemgraph2024,
-        title={ChemGraph: AI Agents for Computational Chemistry},
-        author={[Authors]},
-        journal={arXiv preprint arXiv:2506.06363},
-        year={2024},
-        url={https://arxiv.org/abs/2506.06363}
+    @article{pham2025chemgraph,
+    title={ChemGraph: An Agentic Framework for Computational Chemistry Workflows},
+    author={Pham, Thang D and Tanikanti, Aditya and Keçeli, Murat},
+    journal={arXiv preprint arXiv:2506.06363},
+    year={2025}
+    url={https://arxiv.org/abs/2506.06363}
     }
     ```
     
@@ -183,7 +183,7 @@ elif page == "⚙️ Configuration":
 
     # Configuration tabs
     tab1, tab2, tab3 = st.tabs(
-        ["🔧 General Settings", "🧠 LLM Settings", "📝 Raw TOML"]
+        ["🔧 General Settings", "🔗 API Settings", "📝 Raw TOML"]
     )
 
     with tab1:
@@ -328,58 +328,6 @@ elif page == "⚙️ Configuration":
             )
 
     with tab2:
-        st.subheader("LLM Settings")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.write("**Generation Parameters**")
-            config["llm"]["temperature"] = st.slider(
-                "Temperature",
-                min_value=0.0,
-                max_value=2.0,
-                value=config["llm"]["temperature"],
-                step=0.1,
-                key="config_temperature",
-            )
-
-            config["llm"]["max_tokens"] = st.number_input(
-                "Max Tokens",
-                min_value=100,
-                max_value=32000,
-                value=config["llm"]["max_tokens"],
-                key="config_max_tokens",
-            )
-
-            config["llm"]["top_p"] = st.slider(
-                "Top P",
-                min_value=0.0,
-                max_value=1.0,
-                value=config["llm"]["top_p"],
-                step=0.05,
-                key="config_top_p",
-            )
-
-        with col2:
-            st.write("**Penalties**")
-            config["llm"]["frequency_penalty"] = st.slider(
-                "Frequency Penalty",
-                min_value=-2.0,
-                max_value=2.0,
-                value=config["llm"]["frequency_penalty"],
-                step=0.1,
-                key="config_freq_penalty",
-            )
-
-            config["llm"]["presence_penalty"] = st.slider(
-                "Presence Penalty",
-                min_value=-2.0,
-                max_value=2.0,
-                value=config["llm"]["presence_penalty"],
-                step=0.1,
-                key="config_pres_penalty",
-            )
-
         st.subheader("API Settings")
 
         api_tabs = st.tabs(["OpenAI", "Anthropic", "Google", "Local"])
@@ -508,8 +456,8 @@ elif page == "⚙️ Configuration":
         st.write("**Current Configuration:**")
         st.write(f"- Model: {config['general']['model']}")
         st.write(f"- Workflow: {config['general']['workflow']}")
-        st.write(f"- Temperature: {config['llm']['temperature']}")
-        st.write(f"- Max Tokens: {config['llm']['max_tokens']}")
+        st.write("- Temperature: 0.0 (optimized for tool calling)")
+        st.write("- Max Tokens: 4000")
         st.write(
             f"- Default Calculator: {config['chemistry']['calculators']['default']}"
         )
@@ -571,34 +519,6 @@ ChemGraph enables you to perform various **computational chemistry** tasks with
 natural-language queries using AI agents.
 """
 )
-
-# Configuration status
-col1, col2, col3 = st.columns([2, 1, 1])
-with col1:
-    st.info(
-        f"📋 **Configuration:** Using {selected_model} with {selected_workflow} workflow"
-    )
-with col2:
-    if st.button("⚙️ Edit Config"):
-        st.session_state.page_navigation = "⚙️ Configuration"
-        st.rerun()
-with col3:
-    if st.button("🔄 Reload Config"):
-        st.session_state.config = load_config()
-        st.success("✅ Configuration reloaded!")
-        st.rerun()
-
-# -----------------------------------------------------------------------------
-# Sidebar – configuration display and quick settings
-# -----------------------------------------------------------------------------
-st.sidebar.header("Configuration")
-
-st.sidebar.markdown(f"**Model:** {selected_model}")
-st.sidebar.markdown(f"**Workflow:** {selected_workflow}")
-st.sidebar.markdown(f"**Output:** {selected_output}")
-st.sidebar.markdown(f"**Thread ID:** {thread_id}")
-st.sidebar.markdown(f"**Temperature:** {config['llm']['temperature']}")
-st.sidebar.markdown(f"**Max Tokens:** {config['llm']['max_tokens']}")
 
 # Quick settings override
 with st.sidebar.expander("🔧 Quick Settings"):
@@ -1195,7 +1115,7 @@ with st.expander("💡 Example Queries"):
     st.markdown(
         f"- Default Calculator: {config['chemistry']['calculators']['default']}"
     )
-    st.markdown(f"- Temperature: {config['llm']['temperature']}")
+    st.markdown("- Temperature: 0.0 (optimized for tool calling)")
 
     examples = [
         "What is the SMILES string for caffeine?",
