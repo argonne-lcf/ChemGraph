@@ -1,3 +1,5 @@
+import datetime
+import os
 from chemgraph.tools.openai_loader import load_openai_model
 from chemgraph.tools.alcf_loader import load_alcf_model
 from chemgraph.tools.local_model_loader import load_ollama_model
@@ -248,8 +250,6 @@ class ChemGraph:
         Requires IPython and nest_asyncio to be installed.
         The visualization uses Mermaid diagrams with custom styling.
         """
-        self.workflow
-
         import nest_asyncio
         from IPython.display import Image, display
         from langchain_core.runnables.graph import (
@@ -290,49 +290,43 @@ class ChemGraph:
         """
         return self.workflow.get_state(config).values
 
-    def write_state(self, config={"configurable": {"thread_id": "1"}}, output_dir="run_logs"):
-        """Write log of CCA run to a file.
+    def write_state(
+        self,
+        config={"configurable": {"thread_id": "1"}},
+        file_path: str = None,
+        file_name: str = None,
+    ):
+        """Write log of ChemGraph run to a JSON file, including workflow-specific prompts.
 
         Parameters
         ----------
         config : dict, optional
-            Configuration dictionary containing thread information,
-            by default {"configurable": {"thread_id": "1"}}
-        output_dir : str, optional
-            Output directory to save log, by default "run_logs"
+            Workflow config, must include 'configurable.thread_id'
+        file_path : str, optional
+            Full path to output file. If not provided, writes to 'run_logs/state_thread_<thread_id>_<timestamp>.json'
+        file_name : str, optional
+            Optional filename to use if file_path is not provided
 
         Returns
         -------
         dict or str
-            If successful, returns a dictionary containing:
-            - timestamp: ISO format timestamp
-            - model_name: Name of the model used
-            - system_prompt: The system prompt used
-            - state: Serialized state
-            - thread_id: Thread identifier
-            - git_commit: Current git commit hash
-            If error occurs, returns "Error"
-
-        Notes
-        -----
-        The output file is saved as a JSON file with format:
-        state_{thread_id}_{timestamp}.json
+            Dictionary of metadata if successful, or "Error" if failed.
         """
-        import datetime
-        import os
         import json
         import subprocess
 
         try:
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            os.makedirs(output_dir, exist_ok=True)
             thread_id = config["configurable"]["thread_id"]
-            file_name = f"state_{thread_id}_{timestamp}.json"
-            file_path = os.path.join(output_dir, file_name)
+            if not file_path:
+                os.makedirs("run_logs", exist_ok=True)
+                if not file_name:
+                    file_name = f"state_thread_{thread_id}_{timestamp}.json"
+                file_path = os.path.join("run_logs", file_name)
 
             state = self.get_state(config=config)
-
             serialized_state = serialize_state(state)
+
             try:
                 git_commit = (
                     subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
@@ -340,14 +334,38 @@ class ChemGraph:
             except subprocess.CalledProcessError:
                 git_commit = "unknown"
 
+            # Base log info
             output_data = {
                 "timestamp": datetime.datetime.now().isoformat(),
                 "model_name": self.model_name,
-                "system_prompt": self.system_prompt,
-                "state": serialized_state,
                 "thread_id": thread_id,
                 "git_commit": git_commit,
+                "state": serialized_state,
             }
+
+            # Add prompts depending on workflow_type
+            if self.workflow_type in {"single_agent", "graspa", "python_relp"}:
+                output_data.update({
+                    "system_prompt": self.system_prompt,
+                    "formatter_prompt": self.formatter_prompt,
+                })
+            elif self.workflow_type == "mock_agent":
+                output_data.update({
+                    "system_prompt": self.system_prompt,
+                })
+            elif self.workflow_type == "multi_agent":
+                output_data.update({
+                    "planner_prompt": self.planner_prompt,
+                    "executor_prompt": self.executor_prompt,
+                    "aggregator_prompt": self.aggregator_prompt,
+                    "formatter_prompt": self.formatter_multi_prompt,
+                })
+            else:
+                output_data.update({
+                    "system_prompt": "unknown",
+                    "formatter_prompt": "unknown",
+                })
+
             with open(file_path, "w", encoding="utf-8") as json_file:
                 json.dump(output_data, json_file, indent=4)
             return output_data
@@ -382,6 +400,8 @@ class ChemGraph:
         Exception
             If there is an error running the workflow
         """
+        import uuid
+
         try:
             if config is None:
                 config = {}
@@ -393,12 +413,7 @@ class ChemGraph:
             # Construct the workflow graph
             workflow = self.workflow
 
-            if (
-                self.workflow_type == "single_agent"
-                or self.workflow_type == "python_relp"
-                or self.workflow_type == "graspa"
-                or self.workflow_type == "mock_agent"
-            ):
+            if self.workflow_type in {"single_agent", "graspa", "python_relp", "mock_agent"}:
                 inputs = {"messages": query}
 
                 prev_messages = []
@@ -409,6 +424,13 @@ class ChemGraph:
                         new_message.pretty_print()
                         logger.info(new_message)
                         prev_messages = s["messages"]
+                log_id = str(uuid.uuid4())
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                log_dir = os.path.join("logs", log_id)
+                os.makedirs(log_dir, exist_ok=True)
+                log_path = os.path.join(log_dir, f"{timestamp}.json")
+                self.write_state(config=config, file_path=log_path)
+
                 if self.return_option == "last_message":
                     return s["messages"][-1]
                 elif self.return_option == "state":
@@ -427,6 +449,14 @@ class ChemGraph:
                         new_message.pretty_print()
                         logger.info(new_message)
                         prev_messages = s["messages"]
+
+                log_id = str(uuid.uuid4())
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                log_dir = os.path.join("logs", log_id)
+                os.makedirs(log_dir, exist_ok=True)
+                log_path = os.path.join(log_dir, f"{timestamp}.json")
+                self.write_state(config=config, file_path=log_path)
+
                 if self.return_option == "last_message":
                     return s["messages"][-1]
                 elif self.return_option == "state":
