@@ -425,10 +425,9 @@ class ChemGraph:
                         logger.info(new_message)
                         prev_messages = s["messages"]
                 log_id = str(uuid.uuid4())
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 log_dir = os.path.join("logs", log_id)
                 os.makedirs(log_dir, exist_ok=True)
-                log_path = os.path.join(log_dir, f"{timestamp}.json")
+                log_path = os.path.join(log_dir, "state.json")
                 self.write_state(config=config, file_path=log_path)
 
                 if self.return_option == "last_message":
@@ -451,10 +450,9 @@ class ChemGraph:
                         prev_messages = s["messages"]
 
                 log_id = str(uuid.uuid4())
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                 log_dir = os.path.join("logs", log_id)
                 os.makedirs(log_dir, exist_ok=True)
-                log_path = os.path.join(log_dir, f"{timestamp}.json")
+                log_path = os.path.join(log_dir, "state.json")
                 self.write_state(config=config, file_path=log_path)
 
                 if self.return_option == "last_message":
