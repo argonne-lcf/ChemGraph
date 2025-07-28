@@ -27,11 +27,11 @@ eggs/
 # MacOS
 .DS_Store
 
-# Jupyter Notebook checkpoints
+# Jupyter Notebook checkpoints and modified notebooks
 .ipynb_checkpoints/
-test/
-notebooks/vib/
-tests/vib/
+
+# Generated molecular structure files
+*.xyz
 
 # Log files
 *run_logs/
@@ -39,6 +39,9 @@ tests/vib/
 plots/
 initial_evaluations/
 test/
+test_outputs/
+
+.venv
 combine*
 vllm/
 logs/

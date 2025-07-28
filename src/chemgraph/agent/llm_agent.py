@@ -81,8 +81,6 @@ class ChemGraph:
         Base URL for API calls, by default None
     api_key : str, optional
         API key for authentication, by default None
-    temperature : float, optional
-        Temperature parameter for model generation, by default 0
     system_prompt : str, optional
         System prompt for the language model, by default single_agent_prompt
     formatter_prompt : str, optional
@@ -111,7 +109,6 @@ class ChemGraph:
         workflow_type: str = "single_agent",
         base_url: str = None,
         api_key: str = None,
-        temperature: float = 0,
         system_prompt: str = single_agent_prompt,
         formatter_prompt: str = formatter_prompt,
         structured_output: bool = False,
@@ -125,14 +122,26 @@ class ChemGraph:
         report_prompt: str = report_prompt,
     ):
         try:
-            if model_name in supported_openai_models or model_name in supported_argo_models:
+            # Use hardcoded optimal values for tool calling
+            temperature = 0.0  # Deterministic responses
+            max_tokens = 4000  # Sufficient for most tasks
+            top_p = 1.0  # No nucleus sampling filtering
+            frequency_penalty = 0.0  # No repetition penalty
+            presence_penalty = 0.0  # No presence penalty
+
+            if (
+                model_name in supported_openai_models
+                or model_name in supported_argo_models
+            ):
                 llm = load_openai_model(
                     model_name=model_name, temperature=temperature, base_url=base_url
                 )
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
             elif model_name in supported_alcf_models:
-                llm = load_alcf_model(model_name=model_name, base_url=base_url, api_key=api_key)
+                llm = load_alcf_model(
+                    model_name=model_name, base_url=base_url, api_key=api_key
+                )
             elif model_name in supported_anthropic_models:
                 llm = load_anthropic_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
@@ -149,7 +158,9 @@ class ChemGraph:
                 # These would be set by docker-compose for the jupyter_lab service
                 vllm_base_url = os.getenv("VLLM_BASE_URL", base_url)
                 # ChatOpenAI requires an api_key, even if the endpoint doesn't use it.
-                vllm_api_key = os.getenv("OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key")
+                vllm_api_key = os.getenv(
+                    "OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key"
+                )
 
                 if vllm_base_url:
                     logger.info(
@@ -162,7 +173,10 @@ class ChemGraph:
                         temperature=temperature,
                         base_url=vllm_base_url,
                         api_key=vllm_api_key,
-                        max_tokens=4096,  # Default, can be adjusted
+                        max_tokens=max_tokens,
+                        top_p=top_p,
+                        frequency_penalty=frequency_penalty,
+                        presence_penalty=presence_penalty,
                     )
                     logger.info(
                         f"Successfully initialized ChatOpenAI for model '{model_name}' at {vllm_base_url}"
@@ -171,7 +185,9 @@ class ChemGraph:
                     logger.error(
                         f"Model '{model_name}' is not in any supported list and no VLLM_BASE_URL/base_url provided."
                     )
-                    raise ValueError(f"Unsupported model or missing base URL for: {model_name}")
+                    raise ValueError(
+                        f"Unsupported model or missing base URL for: {model_name}"
+                    )
 
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
@@ -264,7 +280,9 @@ class ChemGraph:
             Image(
                 self.workflow.get_graph().draw_mermaid_png(
                     curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(first="#ffdfba", last="#baffc9", default="#fad7de"),
+                    node_colors=NodeStyles(
+                        first="#ffdfba", last="#baffc9", default="#fad7de"
+                    ),
                     wrap_label_n_words=9,
                     output_file_path=None,
                     draw_method=MermaidDrawMethod.PYPPETEER,
@@ -329,7 +347,9 @@ class ChemGraph:
 
             try:
                 git_commit = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+                    subprocess.check_output(["git", "rev-parse", "HEAD"])
+                    .decode("utf-8")
+                    .strip()
                 )
             except subprocess.CalledProcessError:
                 git_commit = "unknown"
@@ -406,7 +426,9 @@ class ChemGraph:
             if config is None:
                 config = {}
             if not isinstance(config, dict):
-                raise TypeError(f"`config` must be a dictionary, got {type(config).__name__}")
+                raise TypeError(
+                    f"`config` must be a dictionary, got {type(config).__name__}"
+                )
             config.setdefault("configurable", {}).setdefault("thread_id", "1")
             config["recursion_limit"] = self.recursion_limit
 

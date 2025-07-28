@@ -1,0 +1,90 @@
+[general]
+model = "gemini-2.5-flash"
+workflow = "single_agent"
+output = "state"
+structured = true
+report = true
+thread = 1
+recursion_limit = 20
+verbose = false
+
+[logging]
+level = "INFO"
+file = "./chemgraph.log"
+console = true
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[features]
+enable_experimental = false
+enable_cache = true
+cache_dir = "./cache"
+cache_expiry = 24
+
+[security]
+validate_keys = true
+rate_limit = true
+max_requests_per_minute = 60
+
+[api.openai]
+base_url = "https://api.openai.com/v1"
+timeout = 30
+
+[api.anthropic]
+base_url = "https://api.anthropic.com"
+timeout = 30
+
+[api.google]
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+timeout = 30
+
+[api.local]
+base_url = "http://localhost:11434"
+timeout = 60
+
+[chemistry.optimization]
+method = "BFGS"
+fmax = 0.05
+steps = 200
+
+[chemistry.frequencies]
+displacement = 0.01
+nprocs = 1
+
+[chemistry.calculators]
+default = "mace_mp"
+fallback = "emt"
+
+[output.files]
+directory = "./chemgraph_output"
+pattern = "{timestamp}_{query_hash}"
+formats = [ "xyz", "json", "html",]
+
+[output.visualization]
+enable_3d = true
+viewer = "py3dmol"
+dpi = 300
+
+[advanced.agent]
+custom_system_prompt = ""
+max_memory_tokens = 8000
+enable_function_calling = true
+
+[advanced.parallel]
+enable_parallel = false
+num_workers = 2
+
+[environments.development]
+model = "gpt-4o-mini"
+verbose = true
+enable_cache = false
+
+[environments.production]
+model = "gpt-4o"
+verbose = false
+enable_cache = true
+rate_limit = true
+
+[environments.testing]
+model = "gpt-4o-mini"
+verbose = true
+enable_cache = false

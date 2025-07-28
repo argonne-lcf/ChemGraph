@@ -57,7 +57,7 @@ class ResponseFormatter(BaseModel):
         description=(
             "Structured answer to the user's query. Use:\n"
             "- `str` for general or explanatory responses or SMILES string.\n"
-            "- `VibrationalFrequency` for vibrational frequecies.\n"
+            "- `VibrationalFrequency` for vibrational frequencies.\n"
             "- `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
             "- `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
         )

@@ -179,3 +179,7 @@ class ASEOutputSchema(BaseModel):
         default=False, description="Indicates if the simulation finished correctly."
     )
     error: str = Field(default="", description="Error captured during the simulation")
+    wall_time: float = Field(
+        default=None,
+        description="Total wall time (in seconds) taken to complete the simulation.",
+    )

@@ -56,12 +56,13 @@ def load_anthropic_model(
         )
 
     try:
-        logger.info(f"Loading OpenAI model: {model_name}")
+        logger.info(f"Loading Anthropic model: {model_name}")
         llm = ChatAnthropic(
             model=model_name,
             temperature=temperature,
             api_key=api_key,
-            max_tokens=5000,
+            max_tokens=4000,
+            top_p=1.0,
         )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")
