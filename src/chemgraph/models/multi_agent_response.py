@@ -26,9 +26,7 @@ class PlannerResponse(BaseModel):
         to Worker agents for tool execution or computation.
     """
 
-    worker_tasks: list[WorkerTask] = Field(
-        ..., description="List of task to assign for Worker"
-    )
+    worker_tasks: list[WorkerTask] = Field(..., description="List of task to assign for Worker")
 
 
 class VibrationalFrequency(BaseModel):
@@ -78,15 +76,12 @@ class ResponseFormatter(BaseModel):
         ScalarResult,
         VibrationalFrequency,
         AtomsData,
-        list[AtomsData],
-        list[VibrationalFrequency],
-        list[ScalarResult],
     ] = Field(
         description=(
             "Structured answer to the user's query. Use:\n"
-            "- `str` for general or explanatory responses or SMILES string.\n"
-            "- `VibrationalFrequency` for vibrational frequencies.\n"
-            "- `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
-            "- `AtomsData` for atomic geometries and molecular structures."
+            "1. `str` for general or explanatory responses or SMILES string.\n"
+            "2. `VibrationalFrequency` for vibrational frequencies.\n"
+            "3. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
+            "4. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
         )
     )
