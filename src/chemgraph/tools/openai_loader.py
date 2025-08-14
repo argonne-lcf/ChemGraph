@@ -69,10 +69,7 @@ def load_openai_model(
             api_key = getpass("Please enter your OpenAI API key: ")
             os.environ["OPENAI_API_KEY"] = api_key
 
-    if (
-        model_name not in supported_openai_models
-        and model_name not in supported_argo_models
-    ):
+    if model_name not in supported_openai_models and model_name not in supported_argo_models:
         raise ValueError(
             f"Unsupported model '{model_name}'. Supported models are: {supported_openai_models}."
         )
@@ -96,10 +93,7 @@ def load_openai_model(
                 model=model_name,
                 temperature=temperature,
                 api_key=api_key,
-                max_tokens=4000,
-                top_p=1.0,
-                frequency_penalty=0.0,
-                presence_penalty=0.0,
+                max_tokens=6000,
             )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")

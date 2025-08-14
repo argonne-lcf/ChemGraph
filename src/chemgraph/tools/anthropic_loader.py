@@ -61,8 +61,7 @@ def load_anthropic_model(
             model=model_name,
             temperature=temperature,
             api_key=api_key,
-            max_tokens=4000,
-            top_p=1.0,
+            max_tokens=6000,
         )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")
