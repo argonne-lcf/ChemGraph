@@ -358,7 +358,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         calculator = params.calculator.model_dump()
     except Exception as e:
         return f"Missing calculator parameter for the simulation. Raised exception: {str(e)}"
-    
+
     # Calculate wall time.
     start_time = time.time()
 
@@ -407,7 +407,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             simulation_input=params,
             success=True,
             single_point_energy=energy,
-            wall_time=wall_time
+            wall_time=wall_time,
         )
         return simulation_output
 
@@ -478,7 +478,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 if len(atoms) == 1:
                     thermo_data["enthalpy"] = atoms.get_potential_energy()
                     thermo_data["entropy"] = 0
-                    thermo_data["gibbs_free_energy"] = atoms.get_potential_energy()
+                    thermo_data["gibbs_free_energy"] = float(atoms.get_potential_energy())
                     thermo_data["unit"] = "eV"
                 else:
                     from ase.thermochemistry import IdealGasThermo
@@ -487,9 +487,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                     vib_energies = vib.get_energies()
 
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-                    symmetrynumber = get_symmetry_number.invoke(
-                        {"atomsdata": final_structure}
-                    )
+                    symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
 
                     if linear:
                         geometry = "linear"
@@ -504,14 +502,16 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                         spin=0,  # Only support spin=0
                     )
 
-                    thermo_data["enthalpy"] = thermo.get_enthalpy(
-                        temperature=temperature
+                    thermo_data["enthalpy"] = float(
+                        thermo.get_enthalpy(
+                            temperature=temperature,
+                        )
                     )
-                    thermo_data["entropy"] = thermo.get_entropy(
-                        temperature=temperature, pressure=pressure
+                    thermo_data["entropy"] = float(
+                        thermo.get_entropy(temperature=temperature, pressure=pressure)
                     )
-                    thermo_data["gibbs_free_energy"] = thermo.get_gibbs_energy(
-                        temperature=temperature, pressure=pressure
+                    thermo_data["gibbs_free_energy"] = float(
+                        thermo.get_gibbs_energy(temperature=temperature, pressure=pressure)
                     )
                     thermo_data["unit"] = "eV"
 
@@ -526,7 +526,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             thermochemistry=thermo_data,
             success=True,
             single_point_energy=single_point_energy,
-            wall_time=wall_time
+            wall_time=wall_time,
         )
         return simulation_output
 
@@ -540,6 +540,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             simulation_input=params,
             error=str(e),
             success=False,
-            wall_time=wall_time
+            wall_time=wall_time,
         )
         return simulation_output
