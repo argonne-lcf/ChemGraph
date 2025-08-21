@@ -1,4 +1,5 @@
 import json
+from pydantic import BaseModel
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import ToolMessage
 from langchain_openai import ChatOpenAI
@@ -34,39 +35,32 @@ class BasicToolNode:
     This class processes tool calls from AI messages and executes the corresponding
     tools, handling their results and any potential errors. It maintains separate
     message channels for different workers.
-
-    Parameters
-    ----------
-    tools : list
-        List of tool objects that can be called by the node
-
-    Attributes
-    ----------
-    tools_by_name : dict
-        Dictionary mapping tool names to their corresponding tool objects
     """
 
     def __init__(self, tools: list) -> None:
         self.tools_by_name = {tool.name: tool for tool in tools}
 
+    def _json_sanitize(self, x):
+        """Recursively convert Pydantic BaseModel and other
+        nested objects to JSON-serializable types."""
+        if isinstance(x, BaseModel):
+            # pydantic v2 preferred
+            try:
+                return self._json_sanitize(x.model_dump(exclude_none=True))
+            except Exception:
+                # pydantic v1 fallback
+                return self._json_sanitize(x.dict(exclude_none=True))
+        if isinstance(x, dict):
+            return {k: self._json_sanitize(v) for k, v in x.items()}
+        if isinstance(x, (list, tuple)):
+            return [self._json_sanitize(v) for v in x]
+        if isinstance(x, (str, int, float, bool)) or x is None:
+            return x
+        # Last resort: stringify unknown objects
+        return str(x)
+
     def __call__(self, inputs: ManagerWorkerState) -> ManagerWorkerState:
-        """Execute tools requested in the last message for the current worker.
-
-        Parameters
-        ----------
-        inputs : ManagerWorkerState
-            The current state containing worker channels and messages
-
-        Returns
-        -------
-        ManagerWorkerState
-            Updated state containing tool execution results
-
-        Raises
-        ------
-        ValueError
-            If no messages are found for the current worker
-        """
+        """Execute tools requested in the last message for the current worker."""
         worker_id = inputs["current_worker"]
 
         # Access that worker's messages
@@ -74,24 +68,55 @@ class BasicToolNode:
         if not messages:
             raise ValueError(f"No messages found for worker {worker_id}")
 
-        message = messages[-1]  # Last AI message that called tools
+        message = messages[-1]  # Last assistant message that called tools
+
+        # Support both LC AIMessage and dict-based assistant messages
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls is None and isinstance(message, dict):
+            tool_calls = message.get("tool_calls", [])
+        if not tool_calls:
+            # Nothing to do
+            return inputs
 
         outputs = []
 
-        for tool_call in message.tool_calls:
+        for tool_call in tool_calls:
             try:
-                tool_name = tool_call.get("name")
+                # Accept both {"name": ..., "args": ...} and OpenAI {"function": {...}}
+                if "function" in tool_call:
+                    fn = tool_call["function"]
+                    tool_name = fn.get("name")
+                    raw_args = fn.get("arguments", {})
+                else:
+                    tool_name = tool_call.get("name")
+                    raw_args = tool_call.get("args", {})
+
                 if not tool_name or tool_name not in self.tools_by_name:
                     raise ValueError(f"Invalid tool name: {tool_name}")
 
-                tool_result = self.tools_by_name[tool_name].invoke(tool_call.get("args", {}))
+                # If args is a JSON string, parse it; else use as object
+                if isinstance(raw_args, str):
+                    try:
+                        args_obj = json.loads(raw_args) if raw_args.strip() else {}
+                    except Exception:
+                        args_obj = {}
+                else:
+                    args_obj = raw_args or {}
 
-                # Handle tool output: make it a dict or string
-                result_content = (
-                    tool_result.dict()
-                    if hasattr(tool_result, "dict")
-                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
-                )
+                # Sanitize Pydantic calculators (e.g., TBLiteCalc)
+                args_obj = self._json_sanitize(args_obj)
+
+                # Invoke tool
+                tool = self.tools_by_name[tool_name]
+                tool_result = tool.invoke(args_obj)
+
+                # Prepare result payload
+                if hasattr(tool_result, "dict"):
+                    result_content = tool_result.dict()
+                elif isinstance(tool_result, dict):
+                    result_content = tool_result
+                else:
+                    result_content = {"result": str(tool_result)}
 
                 outputs.append(
                     ToolMessage(
@@ -106,13 +131,14 @@ class BasicToolNode:
                     ToolMessage(
                         content=json.dumps({"error": str(e)}),
                         name=tool_name if tool_name else "unknown_tool",
-                        tool_call_id=tool_call.get("id", ""),
+                        tool_call_id=tool_call.get(
+                            "id", tool_call.get("function", {}).get("id", "")
+                        ),
                     )
                 )
 
-        # Now, append the tool outputs directly into the worker's channel
+        # Append tool outputs to the worker's channel
         inputs["worker_channel"][worker_id].extend(outputs)
-
         return inputs
 
 
