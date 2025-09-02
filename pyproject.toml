@@ -37,6 +37,7 @@ dependencies = [
     "ipython-genutils==0.2.0",
     "langsmith==0.3.45",
     "rich==14.1.0",
+    "toml==0.10.2"
     ]
 
 [project.optional-dependencies]
