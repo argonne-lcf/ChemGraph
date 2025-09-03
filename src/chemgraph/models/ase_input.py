@@ -54,8 +54,11 @@ class ASEInputSchema(BaseModel):
 
     Attributes
     ----------
-    atomsdata : AtomsData
-        The atomic structure and associated metadata for the simulation.
+    input_structure_file : str
+        Path to the input coordinate file (e.g., CIF, XYZ, POSCAR) containing
+        the atomic structure for the simulation.
+    output_results_file: str
+        Path to a JSON file where simulation results will be saved.
     driver : str
         Specifies the type of simulation to perform. Options:
         - 'energy': Single-point electronic energy calculation.
@@ -80,8 +83,12 @@ class ASEInputSchema(BaseModel):
         Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
     """
 
-    atomsdata: AtomsData = Field(
-        description="The atomsdata object to be used for the simulation."
+    input_structure_file: str = Field(
+        description="Path to the input coordinate file (e.g., CIF, XYZ, POSCAR) containing the atomic structure for the simulation."
+    )
+    output_results_file: str = Field(
+        default="output.json",
+        description="Path to a JSON file where simulation results will be saved.",
     )
     driver: str = Field(
         default=None,
@@ -128,9 +135,7 @@ class ASEInputSchema(BaseModel):
         if isinstance(calc, dict):
             calc_name = calc.get("calculator_type")
             if not calc_name:
-                raise ValueError(
-                    "Calculator dictionary must have a 'calculator_type' key."
-                )
+                raise ValueError("Calculator dictionary must have a 'calculator_type' key.")
 
             if calc_name[:4].lower() not in available_calcs:
                 raise ValueError(
@@ -156,6 +161,16 @@ class ASEInputSchema(BaseModel):
 
 
 class ASEOutputSchema(BaseModel):
+    """
+    Schema for defining outputs from ASE-based molecular simulations.
+    """
+
+    input_structure_file: str = Field(
+        description=(
+            "Path to the input coordinate file (e.g., CIF, XYZ, POSCAR) "
+            "containing the initial atomic structure for the simulation."
+        )
+    )
     converged: bool = Field(
         default=False,
         description="Indicates if the optimization successfully converged.",
@@ -167,9 +182,7 @@ class ASEOutputSchema(BaseModel):
     single_point_energy: float = Field(
         default=None, description="Single-point energy/Potential energy"
     )
-    energy_unit: str = Field(
-        default="eV", description="The unit of the energy reported."
-    )
+    energy_unit: str = Field(default="eV", description="The unit of the energy reported.")
     vibrational_frequencies: dict = Field(
         default={},
         description="Vibrational frequencies (in cm-1) and energies (in eV).",
