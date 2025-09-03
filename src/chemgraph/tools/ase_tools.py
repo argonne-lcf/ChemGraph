@@ -1,6 +1,9 @@
 import os
-import numpy as np
 import time
+import json
+import numpy as np
+from typing import Any, Dict
+
 from langchain_core.tools import tool
 from chemgraph.models.atomsdata import AtomsData
 from chemgraph.models.ase_input import (
@@ -9,58 +12,31 @@ from chemgraph.models.ase_input import (
 )
 
 
-def create_ase_atoms(atomic_numbers, positions, cell=None, pbc=None):
-    """Create ASE Atoms object from atomic numbers and positions.
+@tool
+def extract_output_json(json_file: str) -> Dict[str, Any]:
+    """
+    Load simulation results from a JSON file produced by run_ase.
 
     Parameters
     ----------
-    atomic_numbers : list
-        List of atomic numbers
-    positions : list
-        List of atomic positions
-    cell : list, optional
-        List of cell vectors
-    pbc : list, optional
-        List of periodic boundary conditions
-    Returns
-    -------
-    ase.Atoms or None
-        ASE Atoms object or None if creation fails
-    """
-    try:
-        from ase import Atoms
-
-        return Atoms(numbers=atomic_numbers, positions=positions, cell=cell, pbc=pbc)
-    except Exception as exc:
-        # Use print for general use, but allow caller to handle error display
-        print(f"Error creating ASE Atoms object: {exc}")
-        return None
-
-
-def create_xyz_string(atomic_numbers, positions):
-    """Create XYZ format string from atomic numbers and positions.
-
-    Parameters
-    ----------
-    atomic_numbers : list
-        List of atomic numbers
-    positions : list
-        List of atomic positions
+    json_file : str
+        Path to the JSON file containing ASE simulation results.
 
     Returns
     -------
-    str or None
-        XYZ format string or None if creation fails
-    """
-    atoms = create_ase_atoms(atomic_numbers, positions)
-    if atoms is None:
-        return None
+    Dict[str, Any]
+        Parsed results from the JSON file as a Python dictionary.
 
-    lines = [str(len(atoms)), "ChemGraph Structure"]
-    for atom in atoms:
-        x, y, z = atom.position
-        lines.append(f"{atom.symbol} {x:.6f} {y:.6f} {z:.6f}")
-    return "\n".join(lines)
+    Raises
+    ------
+    FileNotFoundError
+        If the specified file does not exist.
+    json.JSONDecodeError
+        If the file is not valid JSON.
+    """
+    with open(json_file, "r") as f:
+        data = json.load(f)
+    return data
 
 
 def extract_ase_atoms_from_tool_result(tool_result: dict):
@@ -552,7 +528,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 "result": {"vibrational_frequencies": vib_data},
                 "message": (
                     "Vibrational analysis completed; frequencies returned. "
-                    f"Full results (ASEOutputSchema) saved to {output_results_file}."
+                    f"Full results (structure, vibrations and metadata) saved to {output_results_file}."
                 ),
             }
         elif driver == "thermo":
@@ -561,8 +537,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 "result": {"thermochemistry": thermo_data},  # small payload for LLMs
                 "message": (
                     "Thermochemistry computed and returned. "
-                    f"Full results (ASEOutputSchema) saved to {output_results_file} "
-                    "including structure, vibrations, and metadata."
+                    f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}"
                 ),
             }
 
