@@ -495,7 +495,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             ir.clean()
             ir.run()
 
-            freq_intensity = ir.get_spectrum(start=800, end =4000)
+            IR_SPECTRUM_START = 800  # Start of IR spectrum range
+            IR_SPECTRUM_END = 4000  # End of IR spectrum range
+            freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
             linear = is_linear_molecule.invoke({"atomsdata": final_structure})
 
                     
@@ -555,6 +557,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             final_structure=final_structure,
             simulation_input=params,
             vibrational_frequencies=vib_data,
+            ir_spectrum=ir_data,
             thermochemistry=thermo_data,
             success=True,
             single_point_energy=single_point_energy,
