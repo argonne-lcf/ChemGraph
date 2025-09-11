@@ -104,6 +104,9 @@ pip install -e ".[uma]"
 
    - **[Single-Agent System with gRASPA](notebooks/Demo_graspa_agent.ipynb)**: This notebook provides a sample guide on executing a gRASPA simulation using a single agent. For gRASPA-related installation instructions, visit the [gRASPA GitHub repository](https://github.com/snurr-group/gRASPA). The notebook's functionality has been validated on a single compute node at ALCF Polaris.
 
+   - **[Infrared absorption spectrum prediction](notebooks/Demo_infrared_spectrum.ipynb)**: This notebook demonstrates how to calculate an infrared absorption spectrum.
+
+
 </details>
 
 <details>
