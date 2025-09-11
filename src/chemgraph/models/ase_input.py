@@ -90,7 +90,7 @@ class ASEInputSchema(BaseModel):
     )
     driver: str = Field(
         default=None,
-        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
     )
     optimizer: str = Field(
         default="bfgs",
@@ -174,6 +174,14 @@ class ASEOutputSchema(BaseModel):
     )
     energy_unit: str = Field(
         default="eV", description="The unit of the energy reported."
+    )
+    dipole_value: list = Field(
+        default=[None,None,None], 
+        description="The value of the dipole moment reported."
+    )
+    dipole_unit: str = Field(
+        default=" e * angstrom", 
+        description="The unit of the dipole moment reported."
     )
     vibrational_frequencies: dict = Field(
         default={},
