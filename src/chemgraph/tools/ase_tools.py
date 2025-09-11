@@ -481,8 +481,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             from ase import units
             from ase.vibrations import Infrared
 
-            ir_data["energies"] = []
-            ir_data["energy_unit"] = "meV"
 
             ir_data["frequencies"] = []
             ir_data["frequency_unit"] = "cm-1"

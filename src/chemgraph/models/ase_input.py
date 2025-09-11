@@ -174,6 +174,12 @@ class ASEOutputSchema(BaseModel):
         default={},
         description="Vibrational frequencies (in cm-1) and energies (in eV).",
     )
+
+    ir_spectrum: dict = Field(
+        default={},
+        description="Infrared spectrum data including frequencies (in cm-1) and intensities (in D/Å^2 amu^-1).",
+    )
+
     thermochemistry: dict = Field(default={}, description="Thermochemistry data in eV.")
     success: bool = Field(
         default=False, description="Indicates if the simulation finished correctly."

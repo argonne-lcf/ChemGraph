@@ -19,6 +19,30 @@ class VibrationalFrequency(BaseModel):
         description="List of vibrational frequencies in cm-1.",
     )
 
+class IRSpectrum(BaseModel):
+    """
+    Schema for storing vibrational frequency  and intensities from a simulation.
+
+    Attributes
+    ----------
+    frequency_cm1 : list[str]
+        List of vibrational frequencies in inverse centimeters (cm⁻¹).
+        Each entry is a string representation of the frequency value.
+    intensity : list[str]
+        List of vibrational intensities.
+        Each entry is a string representation of the intensity value.
+    """
+
+    frequency_cm1: list[str] = Field(
+        ...,
+        description="List of vibrational frequencies in cm-1.",
+    )
+
+    intensity: list[str] = Field(
+        ...,
+        description="List of intensities in D/Å^2 amu^-1.",
+    )
+
 
 class ScalarResult(BaseModel):
     """
@@ -49,13 +73,15 @@ class ResponseFormatter(BaseModel):
         str,
         ScalarResult,
         VibrationalFrequency,
+        IRSpectrum,
         AtomsData,
     ] = Field(
         description=(
             "Structured answer to the user's query. Use:\n"
             "1. `str` for general or explanatory responses or SMILES string.\n"
             "2. `VibrationalFrequency` for vibrational frequencies.\n"
-            "3. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
-            "4. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
+            "3. `IRSpectrum` for vibrational frequencies and intensities.\n"
+            "4. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
+            "5. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
         )
     )
