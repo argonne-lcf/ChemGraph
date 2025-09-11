@@ -44,8 +44,8 @@ Follow these rules for selecting the output type:
    - Must contain a list or array of frequencies (typically in cm⁻¹)
    - Do **not** use `ScalarResult` for these — frequencies are not single-valued
 
-4. Use `IRSpectrum` for vibrational mode outputs:
-   - Must contain a list or array of frequencies (typically in cm⁻¹) and intesnities ()
+4. Use `IRSpectrum` for vibrational frequencies and intensities as outputs:
+   - Must contain a list or array of frequencies (typically in cm⁻¹) and intensities (units like D/Å² amu⁻¹)
    
 5. Use `ScalarResult` only for a single numeric value representing:
    - Enthalpy
