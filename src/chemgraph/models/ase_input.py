@@ -66,6 +66,7 @@ class ASEInputSchema(BaseModel):
         - 'energy': Single-point electronic energy calculation.
         - 'opt': Geometry optimization.
         - 'vib': Vibrational frequency analysis.
+        - 'ir': Infrared spectrum calculation.
         - 'thermo': Thermochemical property calculation (enthalpy, entropy, Gibbs free energy).
     optimizer : str
         Optimization algorithm for geometry optimization. Options:
@@ -90,7 +91,7 @@ class ASEInputSchema(BaseModel):
     )
     driver: str = Field(
         default=None,
-        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
     )
     optimizer: str = Field(
         default="bfgs",
@@ -186,6 +187,10 @@ class ASEOutputSchema(BaseModel):
     vibrational_frequencies: dict = Field(
         default={},
         description="Vibrational frequencies (in cm-1) and energies (in eV).",
+    )
+    ir_spectrum: dict = Field(
+        default={},
+        description="Infrared spectrum: frequencies (in cm-1) and intensities (in (D/Å)^2 amu^-1).",
     )
     thermochemistry: dict = Field(default={}, description="Thermochemistry data in eV.")
     success: bool = Field(
