@@ -498,9 +498,10 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
                 linear = is_linear_molecule.invoke({"atomsdata": final_structure})
 
-                        
-                ir_data["frequencies"] = f"{freq_intensity[0]}"
-                ir_data["intensities"] = f"{freq_intensity[1]}"
+                for f, inten in zip(freq_intensity[0], freq_intensity[1]):
+                    ir_data["frequencies"].append(f"{f}")
+                    ir_data["intensities"].append(f"{inten}")
+                         
 
 
             if driver == "thermo":
