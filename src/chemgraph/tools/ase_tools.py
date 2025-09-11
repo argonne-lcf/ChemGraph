@@ -439,6 +439,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         )
         vib_data = {}
         thermo_data = {}
+        ir_data = {}
 
         if driver == "vib" or driver == "thermo":
             temperature = params.temperature
@@ -472,6 +473,37 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
                 vib_data["energies"].append(f"{energy_meV}{c}")
                 vib_data["frequencies"].append(f"{freq_cm1}{c}")
+
+        if driver == "ir":
+            temperature = params.temperature
+
+            from ase.vibrations import Vibrations
+            from ase import units
+            from ase.vibrations import Infrared
+
+            ir_data["energies"] = []
+            ir_data["energy_unit"] = "meV"
+
+            ir_data["frequencies"] = []
+            ir_data["frequency_unit"] = "cm-1"
+
+            ir_data["intensities"] = []
+            ir_data["intensity_unit"] = "D/Å^2 amu^-1"
+
+
+            ir = Infrared(atoms)
+            ir.clean()
+            ir.run()
+
+            freq_intensity = ir.get_spectrum(start=800, end =4000)
+            linear = is_linear_molecule.invoke({"atomsdata": final_structure})
+
+                    
+            ir_data["frequencies"] = freq_intensity[0]
+            ir_data["intensities"] = freq_intensity[1]
+
+
+
 
             if driver == "thermo":
                 # Approximation for system with a single atom.

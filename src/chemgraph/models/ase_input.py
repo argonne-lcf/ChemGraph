@@ -85,7 +85,7 @@ class ASEInputSchema(BaseModel):
     )
     driver: str = Field(
         default=None,
-        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for infrared spectrum and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
     )
     optimizer: str = Field(
         default="bfgs",
