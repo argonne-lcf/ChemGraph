@@ -1,0 +1,42 @@
+[general]
+model = "gpt-4o-mini"
+workflow = "single_agent"
+output = "state"
+structured = false
+report = true
+thread = 1
+recursion_limit = 20
+verbose = false
+
+[api.openai]
+base_url = "https://api.openai.com/v1"
+timeout = 30
+
+[api.anthropic]
+base_url = "https://api.anthropic.com"
+timeout = 30
+
+[api.google]
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+timeout = 30
+
+[api.local]
+base_url = "http://localhost:11434"
+timeout = 60
+
+[chemistry.optimization]
+method = "BFGS"
+fmax = 0.05
+steps = 200
+
+[chemistry.calculators]
+default = "mace_mp"
+fallback = "emt"
+
+[output.files]
+directory = "./chemgraph_output"
+formats = [ "xyz", "json", "html",]
+
+[output.visualization]
+enable_3d = true
+viewer = "py3dmol"

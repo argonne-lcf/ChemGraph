@@ -1,7 +1,6 @@
 """
 Lists of supported models for different LLM providers.
 """
-
 # OpenAI models that are supported
 supported_openai_models = [
     "gpt-4o-mini",
@@ -9,10 +8,8 @@ supported_openai_models = [
     "gpt-4.1",
     "gpt-3.5-turbo-0125",
 ]
-
 # Ollama models that are supported
 supported_ollama_models = ["llama3.2", "llama3.1"]
-
 # ALCF models that are supported (these would be models available through ALCF's infrastructure)
 supported_alcf_models = [
     "AuroraGPT-IT-v4-0125_2",
@@ -27,7 +24,6 @@ supported_alcf_models = [
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
 ]
-
 # Anthropic models
 supported_anthropic_models = [
     "claude-opus-4-20250514",
@@ -40,11 +36,26 @@ supported_anthropic_models = [
     "claude-3-sonnet-20240229",
     "claude-3-haiku-20240307",
 ]
-
 # Gemini models. gemini-2.0 doesn't work with toolcall in our last test.
 supported_gemini_models = [
     "gemini-2.5-pro",
     "gemini-2.5-flash",
+]
+
+# GROQ models
+supported_groq_models = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama-3.1-70b-versatile",
+    "llama-3.2-1b-preview",
+    "llama-3.2-3b-preview",
+    "llama-3.2-11b-text-preview",
+    "llama-3.2-90b-text-preview",
+    "mixtral-8x7b-32768",
+    "gemma-7b-it",
+    "gemma2-9b-it",
 ]
 
 supported_argo_models = [
@@ -71,7 +82,6 @@ supported_argo_models = [
     "argo:gpt-4.1-mini",
     "argo:gpt-4.1-nano",
 ]
-
 all_supported_models = (
     supported_openai_models
     + supported_ollama_models
@@ -79,4 +89,5 @@ all_supported_models = (
     + supported_anthropic_models
     + supported_argo_models
     + supported_gemini_models
+    + supported_groq_models
 )
