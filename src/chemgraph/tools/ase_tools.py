@@ -401,8 +401,12 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     atoms.info.update(system_info)
     atoms.calc = calc
 
-    if driver == "energy":
+    if driver == "energy" or driver == "dipole":
         energy = atoms.get_potential_energy()
+
+        dipole = [None,None,None]
+        if  driver == "dipole":
+            dipole = list(atoms.get_dipole_moment())
 
         end_time = time.time()
         wall_time = end_time - start_time
@@ -411,6 +415,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             final_structure=atomsdata,
             simulation_input=params,
             success=True,
+            dipole_value=dipole,
             single_point_energy=energy,
             wall_time=wall_time,
         )
