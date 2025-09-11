@@ -5,6 +5,10 @@ from chemgraph.models.calculators.tblite_calc import TBLiteCalc
 from chemgraph.models.calculators.emt_calc import EMTCalc
 from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 from chemgraph.models.calculators.orca_calc import OrcaCalc
+try:
+    from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
+except ImportError:
+    AIMNET2Calc = None
 
 
 # Attempt to import optional calculators
@@ -27,6 +31,7 @@ _all_calculator_classes: List[Optional[Type[BaseModel]]] = [
     TBLiteCalc,
     OrcaCalc,
     EMTCalc,
+    AIMNET2Calc,
 ]
 
 # Filter out unavailable calculators
@@ -65,7 +70,7 @@ class ASEInputSchema(BaseModel):
     optimizer : str
         Optimization algorithm for geometry optimization. Options:
         - 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'.
-    calculator : Union[FAIRChemCalc, MaceCalc, NWChemCalc, OrcaCalc, TBLiteCalc, EMTCalc]
+    calculator : Union[FAIRChemCalc, MaceCalc, NWChemCalc, OrcaCalc, TBLiteCalc, EMTCalc, AIMNET2Calc]
         ASE-compatible calculator used for the simulation. Supported types are determined
         by installed packages and may include:
         - FAIRChem, MACE, NWChem, Orca, TBLite and EMT. The order determines the priority of the calculators.

@@ -323,9 +323,14 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
 
         calc = MaceCalc(**calculator)
 
+    elif "aimnet2" in calc_type:
+        from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
+
+        calc = AIMNET2Calc(**calculator)
+
     else:
         raise ValueError(
-            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem or MACE."
+            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem or MACE or AIMNET2."
         )
     # Extract additional args like spin/charge if the model defines it
     extra_info = {}
