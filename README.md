@@ -41,7 +41,7 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+   git clone --depth 1 https://github.com/argonne-lcf/ChemGraph
    cd ChemGraph
     ```
 2. Create and activate a new Conda environment:
