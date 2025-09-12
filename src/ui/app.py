@@ -17,6 +17,7 @@ from uuid import uuid4
 import re
 from typing import Optional, Dict, Any
 from pathlib import Path
+import base64
 
 # Third-party imports
 import numpy as np
@@ -1079,35 +1080,76 @@ if st.session_state.conversation_history:
         # Check for embedded HTML plots/snippets in all messages
 
 
+        # Detect if we are in Streamlit
+        try:
+            import streamlit as st
+            IN_STREAMLIT = True
+        except ImportError:
+            IN_STREAMLIT = False
 
+        # For Jupyter rendering
+        try:
+            from IPython.display import display, Image, HTML
+            IN_JUPYTER = True
+        except ImportError:
+            IN_JUPYTER = False
 
         for message in messages:
+            # Extract content
             content = getattr(message, "content", "") if hasattr(message, "content") else message.get("content", "")
-            
-            if content:
-                try:
-                    data = json.loads(content)
-                    ir_data = data.get("ir_spectrum", {})
-                    plot_data = ir_data.get("plot", None)  # <-- get from nested dict
 
-                    if plot_data:
+            if not content:
+                continue
+
+            try:
+                # Attempt to parse JSON content
+                data = json.loads(content)
+            except Exception:
+                data = {}
+
+            # -----------------------
+            # Render IR spectrum data
+            # -----------------------
+            ir_spectrum = data.get("ir_spectrum", {})
+            if ir_spectrum:
+                frequencies = ir_spectrum.get("frequency_cm1", [])
+                intensities = ir_spectrum.get("intensity", [])
+                plot_data = ir_spectrum.get("plot")
+
+                # Display frequencies and intensities
+                freq_text = "\n".join([f"* {f} cm⁻¹, intensity: {i} D/Å² amu⁻¹" for f, i in zip(frequencies, intensities)])
+                if IN_STREAMLIT:
+                    st.subheader("🌡️ Vibrational Frequencies")
+                    st.text(freq_text)
+                elif IN_JUPYTER:
+                    display(HTML(f"<h3>🌡️ Vibrational Frequencies</h3><pre>{freq_text}</pre>"))
+
+                # Display the IR spectrum plot
+                if plot_data:
+                    if plot_data.startswith("data:image/png;base64,"):
+                        plot_data = plot_data.split("base64,")[1]
+
+                    image_bytes = base64.b64decode(plot_data)
+
+                    if IN_STREAMLIT:
                         st.subheader("📊 IR Spectrum Plot")
-                        st.image(plot_data, use_column_width=True)
+                        st.image(image_bytes, use_column_width=True)
+                    elif IN_JUPYTER:
+                        display(HTML("<h3>📊 IR Spectrum Plot</h3>"))
+                        display(Image(image_bytes))
 
-                    # Show frequencies and intensities
-                    frequencies = ir_data.get("frequencies", [])
-                    intensities = ir_data.get("intensities", [])
-                    if frequencies:
-                        st.write("**Frequencies (cm⁻¹):**", ", ".join(frequencies))
-                    if intensities:
-                        st.write("**Intensities:**", ", ".join(intensities))
-
-                except json.JSONDecodeError:
-                    # fallback for non-JSON content
-                    st.write(content)
-
-
-
+            # -----------------------
+            # Render any HTML/other plots
+            # -----------------------
+            if any(tag in content.lower() for tag in ["<div", "<svg", "<canvas", "<iframe"]):
+                if IN_STREAMLIT:
+                    st.subheader("📊 Generated HTML Plot / Snippet")
+                    try:
+                        st.components.v1.html(content, height=500, scrolling=True)
+                    except Exception as plot_error:
+                        st.error(f"Error displaying HTML/plot: {plot_error}")
+                elif IN_JUPYTER:
+                    display(HTML(content))
 
 
 
