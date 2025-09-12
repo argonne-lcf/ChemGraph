@@ -106,8 +106,16 @@ selected_mode = st.selectbox("Select vibrational mode to visualize:", mode_optio
 # Get selected index and visualize
 if selected_mode:
     mode_idx = int(selected_mode.split('(')[1].split(')')[0])
-    vib.write_mode(mode_idx)
-    traj = Trajectory(f'vib.{mode_idx}.traj')
-    view = visualize_trajectory(traj)
-    showmol(view, height = 400, width=800)
+    import tempfile
+    import os
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        #traj_path = os.path.join(tmpdir, f'vib.{mode_idx}.traj')
+        #vib.write_mode(mode_idx, traj_path)
+        vib.write_mode()
+        vib.write_mode(mode_idx)
+        traj_path = f'vib.{mode_idx}.traj'
+        traj = Trajectory(traj_path)
+        view = visualize_trajectory(traj)
+        showmol(view, height = 400, width=800)
 
