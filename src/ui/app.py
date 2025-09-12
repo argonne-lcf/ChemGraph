@@ -919,13 +919,23 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
         return False
 
 
+# Function for IR spectrum rendering
+
+import base64
+import json
+import base64
+from io import BytesIO
+from PIL import Image
 
 import matplotlib.pyplot as plt
+import numpy as np
 
-def render_ir_spectrum_interactive(message):
+def render_ir_spectrum(message):
     """
-    Render IR spectrum from message data as an interactive Matplotlib plot
-    in Jupyter notebooks and Streamlit.
+    Render IR spectrum from a message.
+    1️⃣ If ir_spectrum['plot'] (base64 PNG) exists, render it directly.
+    2️⃣ Otherwise, generate an interactive stem plot from frequencies and intensities.
+    Works in both Jupyter notebooks and Streamlit.
     """
     # Detect environment
     try:
@@ -935,7 +945,7 @@ def render_ir_spectrum_interactive(message):
         IN_STREAMLIT = False
 
     try:
-        from IPython.display import display, HTML
+        from IPython.display import display
         IN_JUPYTER = True
     except ImportError:
         IN_JUPYTER = False
@@ -945,49 +955,61 @@ def render_ir_spectrum_interactive(message):
     if not content:
         return
 
-    # Parse JSON (our schema)
+    # Parse JSON
     try:
         data = json.loads(content)
     except Exception:
         data = {}
 
     ir_spectrum = data.get("ir_spectrum", {})
-    if not ir_spectrum:
+    plot_base64 = ir_spectrum.get("plot") or data.get("ir_spectrum_plot")
+
+    # --- Case 1: Base64 plot exists ---
+    if plot_base64:
+        if plot_base64.startswith("data:image/png;base64,"):
+            plot_base64 = plot_base64.split("data:image/png;base64,")[1]
+        try:
+            img_data = base64.b64decode(plot_base64)
+            img = Image.open(BytesIO(img_data))
+            if IN_STREAMLIT:
+                st.subheader("📊 IR Spectrum Plot (Base64)")
+                st.image(img, use_column_width=True)
+            elif IN_JUPYTER:
+                display(img)
+            return
+        except Exception:
+            pass  # fallback to plotting from lists
+
+    # --- Case 2: Generate plot from frequency & intensity lists ---
+    freq_list = ir_spectrum.get("frequency_cm1", [])
+    inten_list = ir_spectrum.get("intensity", [])
+
+    if not freq_list or not inten_list:
+        return  # Nothing to plot
+
+    # Convert string lists to floats
+    try:
+        freq = np.array([float(f) for f in freq_list])
+        inten = np.array([float(i) for i in inten_list])
+    except Exception:
         return
 
-    frequencies = [float(f) for f in ir_spectrum.get("frequency_cm1", [])]
-    intensities = [float(i) for i in ir_spectrum.get("intensity", [])]
-
-    if not frequencies or not intensities:
-        return
-
-    # -----------------------
-    # Render frequencies text
-    # -----------------------
-    freq_text = "\n".join([f"{f:.2f} cm⁻¹, intensity: {i:.2f} D/Å² amu⁻¹" 
-                           for f, i in zip(frequencies, intensities)])
-    if freq_text:
-        if IN_STREAMLIT:
-            st.subheader("🌡️ Vibrational Frequencies")
-            st.text(freq_text)
-        elif IN_JUPYTER:
-            display(HTML(f"<h3>🌡️ Vibrational Frequencies</h3><pre>{freq_text}</pre>"))
-
-    # -----------------------
-    # Plot IR spectrum
-    # -----------------------
+    # Create stem plot
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.stem(frequencies, intensities, basefmt=" ", use_line_collection=True)
+    markerline, stemlines, baseline = ax.stem(freq, inten, use_line_collection=True)
     ax.set_xlabel("Frequency (cm⁻¹)")
     ax.set_ylabel("Intensity (D/Å² amu⁻¹)")
-    ax.set_title("Infrared (IR) Spectrum")
+    ax.set_title("Infrared Spectrum")
     ax.grid(True)
 
     if IN_STREAMLIT:
-        st.subheader("📊 IR Spectrum Plot")
+        import streamlit as st
+        st.subheader("📊 IR Spectrum (Generated Plot)")
         st.pyplot(fig)
     elif IN_JUPYTER:
         plt.show()
+        plt.close(fig)
+    
 
 
 # -----------------------------------------------------------------------------
@@ -1150,7 +1172,7 @@ if st.session_state.conversation_history:
         # Check for embedded HTML plots/snippets in all messages
 
         for msg in messages:
-            render_ir_spectrum_interactive(msg)
+            render_ir_spectrum(msg)
 
 
 
