@@ -918,6 +918,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
         return False
 
 
+
 # -----------------------------------------------------------------------------
 # Agent initializer (cached)
 # -----------------------------------------------------------------------------
@@ -1073,6 +1074,32 @@ if st.session_state.conversation_history:
                     st.warning(f"HTML file '{html_filename}' not found")
                 except Exception as e:
                     st.error(f"Error displaying HTML: {e}")
+
+
+        # Check for embedded HTML plots/snippets in all messages
+
+        for message in messages:
+            # Extract content
+            content = getattr(message, "content", "") if hasattr(message, "content") else message.get("content", "")
+
+            # Render HTML plots or snippets if detected
+            if content:
+                # Heuristic: look for <div>, <svg>, <canvas>, or <iframe> in content
+                if any(tag in content.lower() for tag in ["<div", "<svg", "<canvas", "<iframe"]):
+                    st.subheader("📊 Generated Plot / HTML")
+                    try:
+                        st.components.v1.html(content, height=500, scrolling=True)
+                    except Exception as plot_error:
+                        st.error(f"Error displaying HTML/plot: {plot_error}")
+
+
+
+
+
+
+
+
+
         # Optional debug information
         with st.expander(f"🔍 Verbose Info (Query {idx})", expanded=False):
             st.write(f"**Number of messages:** {len(messages)}")
