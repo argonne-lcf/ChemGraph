@@ -32,7 +32,7 @@ eggs/
 
 # Generated molecular structure files
 *.xyz
-
+*.py
 # env
 chemgraph-env/
 # env

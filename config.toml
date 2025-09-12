@@ -55,7 +55,7 @@ displacement = 0.01
 nprocs = 1
 
 [chemistry.calculators]
-default = "uma-s-1p1"
+default = "mace_mp"
 fallback = "emt"
 
 [output.files]
