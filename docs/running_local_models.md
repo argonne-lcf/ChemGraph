@@ -1,4 +1,4 @@
-!!!note
+!!! note
     This section describes how to set up and run local language models using the vLLM inference server.
 
 ### Inference Backend Setup (Remote/Local)
