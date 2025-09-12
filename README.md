@@ -16,7 +16,7 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+   git clone https://github.com/argonne-lcf/ChemGraph
    cd ChemGraph
     ```
 2. Create and activate a virtual environment:
@@ -43,17 +43,19 @@ Ensure you have **Python 3.10 or higher** installed on your system.
    ```bash
    git clone --depth 1 https://github.com/argonne-lcf/ChemGraph
    cd ChemGraph
-    ```
-2. Create and activate a new Conda environment:
+   ```
+
+2. Create and activate the conda environment from the provided environment.yml:
    ```bash
-    conda create -n chemgraph python=3.10 -y
-    conda activate chemgraph
-    ```
-3. Install required Conda dependencies: 
-    ```bash
-    conda install -c conda-forge nwchem
-    ```
-4. Install `ChemGraph` and its dependencies:
+   conda env create -f environment.yml
+   conda activate chemgraph
+   ```
+
+   The `environment.yml` file automatically installs all required dependencies including:
+   - Python 3.10
+   - Core packages (numpy, pandas, pytest, rich, toml)
+   - Computational chemistry packages (nwchem, tblite)
+   - All ChemGraph dependencies via pip
    
 
 **Using uv (Alternative)**

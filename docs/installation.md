@@ -29,20 +29,44 @@
 
 === "**install with conda**"
 
+      **Option 1: Using environment.yml (Recommended)**
+
       - Clone the repository:
          ```bash
          git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
          cd ChemGraph
          ```
+
+      - Create and activate the conda environment from the provided environment.yml:
+         ```bash
+         conda env create -f environment.yml
+         conda activate chemgraph
+         ```
+
+      - Install additional conda dependencies if needed:
+         ```bash
+         conda install -c conda-forge nwchem
+         ```
+
+      **Option 2: Manual conda setup**
+
+      - Clone the repository:
+         ```bash
+         git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+         cd ChemGraph
+         ```
+
       - Create and activate a new Conda environment:
          ```bash
          conda create -n chemgraph python=3.10 -y
          conda activate chemgraph
          ```
+
       - Install required Conda dependencies: 
          ```bash
          conda install -c conda-forge nwchem
          ```
+
       - Install `ChemGraph` and its dependencies:
 
 === "**install with uv**"
