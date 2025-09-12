@@ -91,9 +91,7 @@ class ASEInputSchema(BaseModel):
         Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
     """
 
-    atomsdata: AtomsData = Field(
-        description="The atomsdata object to be used for the simulation."
-    )
+    atomsdata: AtomsData = Field(description="The atomsdata object to be used for the simulation.")
     driver: str = Field(
         default=None,
         description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
@@ -139,9 +137,7 @@ class ASEInputSchema(BaseModel):
         if isinstance(calc, dict):
             calc_name = calc.get("calculator_type")
             if not calc_name:
-                raise ValueError(
-                    "Calculator dictionary must have a 'calculator_type' key."
-                )
+                raise ValueError("Calculator dictionary must have a 'calculator_type' key.")
 
             if calc_name[:4].lower() not in available_calcs:
                 raise ValueError(
@@ -178,9 +174,7 @@ class ASEOutputSchema(BaseModel):
     single_point_energy: float = Field(
         default=None, description="Single-point energy/Potential energy"
     )
-    energy_unit: str = Field(
-        default="eV", description="The unit of the energy reported."
-    )
+    energy_unit: str = Field(default="eV", description="The unit of the energy reported.")
     dipole_value: list = Field(
         default=[None, None, None],
         description="The value of the dipole moment reported.",
@@ -192,9 +186,9 @@ class ASEOutputSchema(BaseModel):
         default={},
         description="Vibrational frequencies (in cm-1) and energies (in eV).",
     )
-    ir_spectrum: dict = Field(
+    ir_data: dict = Field(
         default={},
-        description="Infrared spectrum: frequencies (in cm-1) and intensities (in (D/Å)^2 amu^-1).",
+        description="Infrared spectrum related data.",
     )
     thermochemistry: dict = Field(default={}, description="Thermochemistry data in eV.")
     success: bool = Field(

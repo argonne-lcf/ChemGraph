@@ -1,3 +1,4 @@
+from pathlib import Path
 import numpy as np
 import time
 from langchain_core.tools import tool
@@ -485,6 +486,25 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 vib_data["energies"].append(f"{energy_meV}{c}")
                 vib_data["frequencies"].append(f"{freq_cm1}{c}")
 
+            # Remove existing frequencies.txt and .traj files
+            import os, glob
+
+            for traj_file in glob.glob("*.traj"):
+                os.remove(traj_file)
+
+            # Write frequencies into frequencies.txt
+            freq_file = Path("frequencies.csv")
+            if freq_file.exists():
+                freq_file.unlink()
+
+            with freq_file.open("w") as f:
+                for i, freq in enumerate(vib_data["frequencies"], start=1):
+                    f.write(f"vib.{i}.traj,{freq}\n")
+
+            # Write normal modes .traj files
+            for i in range(len(energies)):
+                vib.write_mode(n=None, kT=units.kB * 300, nimages=30)
+
             if driver == "ir":
                 from ase.vibrations import Infrared
                 import matplotlib.pyplot as plt
@@ -501,14 +521,12 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
                 IR_SPECTRUM_START = 500  # Start of IR spectrum range
                 IR_SPECTRUM_END = 4000  # End of IR spectrum range
-                freq_intensity = ir.get_spectrum(
-                    start=IR_SPECTRUM_START, end=IR_SPECTRUM_END, width=15
-                )
-
+                freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
+                """
                 for f, inten in zip(freq_intensity[0], freq_intensity[1]):
                     ir_data["spectrum_frequencies"].append(f"{f}")
                     ir_data["spectrum_intensities"].append(f"{inten}")
-
+                """
                 # Generate IR spectrum plot
                 fig, ax = plt.subplots()
                 ax.plot(freq_intensity[0], freq_intensity[1])
@@ -517,6 +535,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 ax.set_title("Infrared Spectrum")
                 ax.grid(True)
                 fig.savefig("ir_spectrum.png", format="png", dpi=300)
+
+                ir_data["IR Plot"] = "Saved to ir_spectrum.png"
+                ir_data["Normal mode data"] = "Normal modes saved as individual .traj files"
 
             if driver == "thermo":
                 # Approximation for system with a single atom.
@@ -576,6 +597,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             vibrational_frequencies=vib_data,
             thermochemistry=thermo_data,
             success=True,
+            ir_data=ir_data,
             single_point_energy=single_point_energy,
             wall_time=wall_time,
         )
