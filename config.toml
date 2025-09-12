@@ -29,6 +29,10 @@ max_requests_per_minute = 60
 base_url = "https://api.openai.com/v1"
 timeout = 30
 
+[api.groq]
+base_url = "https://api.groq.com/openai/v1"
+timeout = 30
+
 [api.anthropic]
 base_url = "https://api.anthropic.com"
 timeout = 30

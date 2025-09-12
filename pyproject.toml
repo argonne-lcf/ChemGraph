@@ -20,6 +20,7 @@ dependencies = [
     "langchain-ollama==0.3.4",
     "langchain-anthropic==0.3.17",
     "langchain-google-genai==2.1.7",
+    "langchain-groq",
     "langchain-experimental==0.3.4",
     "pydantic==2.11.7",
     "pandas==2.2.3",
