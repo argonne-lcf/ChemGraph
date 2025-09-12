@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Union
+from typing import Union, Optional
 from chemgraph.models.atomsdata import AtomsData
 
 
@@ -18,6 +18,32 @@ class VibrationalFrequency(BaseModel):
         ...,
         description="List of vibrational frequencies in cm-1.",
     )
+
+class IRSpectrum(BaseModel):
+    """
+    Schema for storing vibrational frequency  and intensities from a simulation.
+
+    Attributes
+    ----------
+    frequency_cm1 : list[str]
+        List of vibrational frequencies in inverse centimeters (cm⁻¹).
+        Each entry is a string representation of the frequency value.
+    intensity : list[str]
+        List of vibrational intensities.
+        Each entry is a string representation of the intensity value.
+    """
+
+    frequency_cm1: list[str] = Field(
+        ...,
+        description="List of vibrational frequencies in cm-1.",
+    )
+
+    intensity: list[str] = Field(
+        ...,
+        description="List of intensities in D/Å^2 amu^-1.",
+    )
+
+    plot: Optional[str] = None   # base64 PNG image
 
 
 class InfraredSpectrum(BaseModel):
@@ -72,6 +98,7 @@ class ResponseFormatter(BaseModel):
         str,
         ScalarResult,
         VibrationalFrequency,
+        IRSpectrum,
         AtomsData,
     ] = Field(
         description=(
