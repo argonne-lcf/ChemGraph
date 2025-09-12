@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Union
+from typing import Union, Optional
 from chemgraph.models.atomsdata import AtomsData
 
 
