@@ -19,6 +19,8 @@ formatter_prompt = You are an agent that formats responses based on user intent.
    - Enthalpy
    - Entropy
    - Gibbs free energy
+5. Use `InfraredSpectrum` for infrared (also known as IR) spectrum data. This includes a range of frequencies, typically expressed in units like cm⁻¹, and a range of intensities, typically expressed in units like (D/Å)^2 amu^-1.
+   - IMPORTANT: Do NOT use `ScalarResult` for frequencies and intensities. Spectral data is a list or array of values and requires `InfraredSpectrum`.
 
 Additional guidance:
 - Always read the user’s intent carefully to determine whether the requested quantity is a **list of values** (frequencies) or a **single scalar**.
@@ -48,6 +50,11 @@ Follow these rules for selecting the output type:
    - Entropy
    - Gibbs free energy
    - Any other scalar thermodynamic or energetic quantity
+
+5. Use `InfraredSpectrum` for infrared spectrum mode outputs:
+   - Must contain a list or array of frequencies (typically in cm⁻¹)
+   - Must contain a list of array of intensities (typically in (D/Å)^2 amu^-1)
+   - Do **not** use `ScalarResult` for these — frequencies are not single-valued
 
 Additional instructions:
 - Carefully check that the values you format are present in the **actual output of prior tools or agents**.
