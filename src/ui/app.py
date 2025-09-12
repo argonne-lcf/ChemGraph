@@ -589,7 +589,7 @@ from datetime import datetime, timezone, timedelta
 # -----------------------------------------------------------------------------
 
 
-def changed_recently(path="ir_spectrum.png", window_seconds=60) -> bool:
+def changed_recently(path="ir_spectrum.png", window_seconds=300) -> bool:
     """
     Return True if `path` exists and was modified within the last `window_seconds`.
     """
@@ -969,6 +969,41 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
         return False
 
 
+def visualize_trajectory(traj):
+    """Create an animated 3D visualization of a trajectory.
+
+    Args:
+        traj: ASE Trajectory object
+
+    Returns:
+        view: py3Dmol view object with animated trajectory
+    """
+    # Convert all frames to a single multi-model XYZ string
+    import py3Dmol
+    xyz_frames = []
+    for i, atoms in enumerate(traj):
+        symbols = atoms.get_chemical_symbols()
+        pos = atoms.get_positions()  # Å
+        lines = [str(len(symbols)), f'Frame {i}']
+        lines += [f"{s} {x:.6f} {y:.6f} {z:.6f}" for s, (x, y, z) in zip(symbols, pos)]
+        xyz_frames.append("\n".join(lines))
+    xyz_str = "\n".join(xyz_frames)
+
+    # Initialize viewer and add frames
+    view = py3Dmol.view(width=800, height=400)
+    view.addModelsAsFrames(xyz_str, 'xyz')   # load all frames at once
+
+    # Style & camera
+    view.setViewStyle({"style": "outline", "width": 0.05})
+    view.setStyle({"stick": {}, "sphere": {"scale": 0.25}})
+    view.zoomTo()
+
+    # Animate (interval in ms)
+    view.animate({"loop": "Forward", "interval": 100})
+
+    return view
+
+
 # Function for IR spectrum rendering
 
 import base64
@@ -1142,7 +1177,29 @@ if st.session_state.conversation_history:
         if is_infrared_requested(messages):
             if changed_recently():
                 with st.expander(f"🔍 IR Spectrum", expanded=True):
-                    st.image("ir_spectrum.png")
+                    col1, col2 = st.columns([1, 1])
+
+                    with col1:
+                        st.image("ir_spectrum.png")
+                    with col2:
+                        df = pd.read_csv("frequencies.csv",index_col=False,names=['filename','frequency']).iloc[6:] #remove the first 6 translation/rotation modes
+
+                        # Create a dropdown menu for frequency selection
+                        st.write("**Select a frequency to visualize:**")
+                        freq_options = {f"{float(row['frequency'].strip('i')):.2f} cm⁻¹":i for i, row in df.iterrows()}
+                        selected_freq = st.selectbox("Frequency", list(freq_options.keys()), index=0)
+                        # Display the selected frequency
+                        #st.metric(label="frequency (cm⁻¹)", value=selected_freq)
+                        selected_freq_value = selected_freq.strip(' cm⁻¹')
+                        #st.write(selected_freq_value)
+                        traj_file = df.loc[freq_options[selected_freq]]['filename']
+                        #st.write(df)
+                        from ase.io.trajectory import Trajectory
+                        traj = Trajectory(traj_file)
+                        view = visualize_trajectory(traj)
+                        showmol(view, height = 400, width=700)
+
+
             else:
                 st.warning("IR spectrum not found.")
 

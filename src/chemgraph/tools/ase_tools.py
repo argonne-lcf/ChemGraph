@@ -498,7 +498,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 freq_file.unlink()
 
             with freq_file.open("w") as f:
-                for i, freq in enumerate(vib_data["frequencies"], start=1):
+                for i, freq in enumerate(vib_data["frequencies"], start=0):
                     f.write(f"vib.{i}.traj,{freq}\n")
 
             # Write normal modes .traj files
