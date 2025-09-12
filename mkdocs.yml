@@ -1,0 +1,79 @@
+site_name: ChemGraph Docs
+repo_name: ChemGraph
+repo_url: https://github.com/argonne-lcf/ChemGraph/tree/
+
+theme:
+  name: material
+
+  # Font settings
+  font:
+    text: Merriweather Sans
+    code: Roboto Mono
+
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - navigation.footer
+    - search.suggest
+    - header.autohide
+    - navigation.tabs
+
+  palette:
+    # Automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Light Mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+      primary: green
+      accent: deep purple
+
+    # Dark Mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preferences
+      primary: indigo
+      accent: deep orange
+
+plugins:
+  - mkdocstrings
+  - search
+
+nav:
+  - Overview: index.md
+  - Installation: installation.md
+  - Example Usage: example_usage.md
+  - Streamlit Web Interface: streamlit_web_interface.md
+  - Configuration with TOML: configuration_with_toml.md
+  - Project Structure: project_structure.md
+  - Running Local Models with vLLM: running_local_models.md
+  - Docker Support with Docker Compose (Recommended for vLLM): docker_support.md
+  - Code Formatting & Linting: code_formatting_and_linting.md
+  - Citation: citation.md
+  - Acknowledgements: acknowledgements.md
+  - License: license.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
+  - admonition
+  - pymdownx.tabbed:
+      alternate_style: true
+      combine_header_slug: true
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true

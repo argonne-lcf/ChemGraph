@@ -55,6 +55,30 @@ Ensure you have **Python 3.10 or higher** installed on your system.
     ```
 4. Install `ChemGraph` and its dependencies:
    
+
+**Using uv (Alternative)**
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+   cd ChemGraph
+   ```
+
+2. Create and activate a virtual environment using uv:
+    ```bash
+    uv venv chemgraph-env
+    uv venv --python 3.11 chemgraph-env # For specific python version
+
+    source chemgraph-env/bin/activate # Unix/macos
+    # OR
+    .\chemgraph-env\Scripts\activate  # On Windows
+   ```
+
+3. Install ChemGraph using uv:
+    ```bash
+    uv pip install -e .
+    ```
+
 **Optional: Install with UMA support**
 
 > **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 
