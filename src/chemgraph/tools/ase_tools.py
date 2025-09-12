@@ -501,6 +501,27 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 for f, inten in zip(freq_intensity[0], freq_intensity[1]):
                     ir_data["frequencies"].append(f"{f}")
                     ir_data["intensities"].append(f"{inten}")
+
+                import matplotlib.pyplot as plt
+                import io, base64
+
+                # Generate IR spectrum plot
+                fig, ax = plt.subplots()
+                ax.plot(freq_intensity[0], freq_intensity[1])
+                ax.set_xlabel("Frequency (cm⁻¹)")
+                ax.set_ylabel("Intensity (a.u.)")
+                ax.set_title("Infrared Spectrum")
+                ax.grid(True)
+
+                buf = io.BytesIO()
+                fig.savefig(buf, format="png", dpi=300)
+                buf.seek(0)
+                img_bytes = buf.read()
+                buf.close()
+                plt.close(fig)
+
+                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+                ir_data["plot"] = f"data:image/png;base64,{img_b64}"
                          
 
 
