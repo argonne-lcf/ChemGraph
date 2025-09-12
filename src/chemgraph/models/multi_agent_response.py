@@ -57,6 +57,8 @@ class IRSpectrum(BaseModel):
     intensity : list[str]
         List of vibrational intensities.
         Each entry is a string representation of the intensity value.
+    plot : Optional[str]
+        Base64-encoded PNG image of the IR spectrum plot.
     """
 
     frequency_cm1: list[str] = Field(
@@ -108,7 +110,7 @@ class ResponseFormatter(BaseModel):
             "Structured answer to the user's query. Use:\n"
             "1. `str` for general or explanatory responses or SMILES string.\n"
             "2. `VibrationalFrequency` for vibrational frequencies.\n"
-            "3. `IRSpectrum` for vibrational frequencies and intensities.\n"
+            "3. `IRSpectrum` for vibrational frequencies and intensities and the IR spectrum plot.\n"
             "4. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
             "5. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
         )
