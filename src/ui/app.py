@@ -1078,24 +1078,32 @@ if st.session_state.conversation_history:
 
         # Check for embedded HTML plots/snippets in all messages
 
-        for message in messages:
-            # Extract content
-            content = getattr(message, "content", "") if hasattr(message, "content") else message.get("content", "")
 
+
+
+        for message in messages:
+            content = getattr(message, "content", "") if hasattr(message, "content") else message.get("content", "")
+            
             if content:
-                # 1️⃣ Check for base64 PNG plot
-                if content.startswith("data:image/png;base64,"):
-                    st.subheader("📊 Generated Plot")
-                    st.image(content, use_column_width=True)
-                # 2️⃣ Check for HTML snippets (div, svg, canvas, iframe)
-                elif any(tag in content.lower() for tag in ["<div", "<svg", "<canvas", "<iframe"]):
-                    st.subheader("📊 Generated HTML / Plot")
-                    try:
-                        st.components.v1.html(content, height=500, scrolling=True)
-                    except Exception as plot_error:
-                        st.error(f"Error displaying HTML/plot: {plot_error}")
-                else:
-                    # fallback: display text content
+                try:
+                    data = json.loads(content)
+                    ir_data = data.get("ir_spectrum", {})
+                    plot_data = ir_data.get("plot", None)  # <-- get from nested dict
+
+                    if plot_data:
+                        st.subheader("📊 IR Spectrum Plot")
+                        st.image(plot_data, use_column_width=True)
+
+                    # Show frequencies and intensities
+                    frequencies = ir_data.get("frequencies", [])
+                    intensities = ir_data.get("intensities", [])
+                    if frequencies:
+                        st.write("**Frequencies (cm⁻¹):**", ", ".join(frequencies))
+                    if intensities:
+                        st.write("**Intensities:**", ", ".join(intensities))
+
+                except json.JSONDecodeError:
+                    # fallback for non-JSON content
                     st.write(content)
 
 
