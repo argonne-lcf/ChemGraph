@@ -404,8 +404,8 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     if driver == "energy" or driver == "dipole":
         energy = atoms.get_potential_energy()
 
-        dipole = [None,None,None]
-        if  driver == "dipole":
+        dipole = [None, None, None]
+        if driver == "dipole":
             dipole = list(atoms.get_dipole_moment())
 
         end_time = time.time()
@@ -495,14 +495,15 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 ir_data["spectrum_intensities"] = []
                 ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
 
-
                 ir = Infrared(atoms)
                 ir.clean()
                 ir.run()
 
-                IR_SPECTRUM_START = 800  # Start of IR spectrum range
+                IR_SPECTRUM_START = 500  # Start of IR spectrum range
                 IR_SPECTRUM_END = 4000  # End of IR spectrum range
-                freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
+                freq_intensity = ir.get_spectrum(
+                    start=IR_SPECTRUM_START, end=IR_SPECTRUM_END, width=15
+                )
 
                 for f, inten in zip(freq_intensity[0], freq_intensity[1]):
                     ir_data["spectrum_frequencies"].append(f"{f}")
@@ -522,7 +523,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 if len(atoms) == 1:
                     thermo_data["enthalpy"] = atoms.get_potential_energy()
                     thermo_data["entropy"] = 0
-                    thermo_data["gibbs_free_energy"] = float(atoms.get_potential_energy())
+                    thermo_data["gibbs_free_energy"] = float(
+                        atoms.get_potential_energy()
+                    )
                     thermo_data["unit"] = "eV"
                 else:
                     from ase.thermochemistry import IdealGasThermo
@@ -531,7 +534,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                     vib_energies = vib.get_energies()
 
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-                    symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
+                    symmetrynumber = get_symmetry_number.invoke(
+                        {"atomsdata": final_structure}
+                    )
 
                     if linear:
                         geometry = "linear"
@@ -555,7 +560,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                         thermo.get_entropy(temperature=temperature, pressure=pressure)
                     )
                     thermo_data["gibbs_free_energy"] = float(
-                        thermo.get_gibbs_energy(temperature=temperature, pressure=pressure)
+                        thermo.get_gibbs_energy(
+                            temperature=temperature, pressure=pressure
+                        )
                     )
                     thermo_data["unit"] = "eV"
 

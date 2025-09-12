@@ -581,6 +581,27 @@ st.sidebar.markdown(
 st.sidebar.markdown("Current config loaded from: `config.toml`")
 
 
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+
+# -----------------------------------------------------------------------------
+# Helper: check if IR spectrum file has changed within last minute
+# -----------------------------------------------------------------------------
+
+
+def changed_recently(path="ir_spectrum.png", window_seconds=60) -> bool:
+    """
+    Return True if `path` exists and was modified within the last `window_seconds`.
+    """
+    p = Path(path)
+    if not p.exists():
+        return False
+
+    mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+    now = datetime.now(timezone.utc)
+    return (now - mtime) <= timedelta(seconds=window_seconds)
+
+
 # -----------------------------------------------------------------------------
 # Helper: extract molecular structure from plain-text message
 # -----------------------------------------------------------------------------
@@ -744,6 +765,24 @@ def find_structure_in_messages(messages):
             if structure:
                 return structure
     return None
+
+
+def is_infrared_requested(messages):
+    """Look through all messages to find infrared data."""
+    for message in messages:
+        # Handle different message formats
+        content = ""
+        if hasattr(message, "content"):
+            content = getattr(message, "content", "")
+        elif isinstance(message, dict):
+            content = message.get("content", "")
+        elif isinstance(message, str):
+            content = message
+        else:
+            content = str(message)
+
+        if content and (("infrared" in content.lower()) or ("IR" in content)):
+            return True
 
 
 # Streamlit-specific wrapper for ASE functions
@@ -941,87 +980,6 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
 
-def render_ir_spectrum(message):
-    """
-    Render IR spectrum from a message.
-    1️⃣ If ir_spectrum['plot'] (base64 PNG) exists, render it directly.
-    2️⃣ Otherwise, generate an interactive stem plot from frequencies and intensities.
-    Works in both Jupyter notebooks and Streamlit.
-    """
-    # Detect environment
-    try:
-        import streamlit as st
-        IN_STREAMLIT = True
-    except ImportError:
-        IN_STREAMLIT = False
-
-    try:
-        from IPython.display import display
-        IN_JUPYTER = True
-    except ImportError:
-        IN_JUPYTER = False
-
-    # Extract content
-    content = getattr(message, "content", "") if hasattr(message, "content") else message.get("content", "")
-    if not content:
-        return
-
-    # Parse JSON
-    try:
-        data = json.loads(content)
-    except Exception:
-        data = {}
-
-    ir_spectrum = data.get("ir_spectrum", {})
-    plot_base64 = ir_spectrum.get("plot") or data.get("ir_spectrum_plot")
-
-    # --- Case 1: Base64 plot exists ---
-    if plot_base64:
-        if plot_base64.startswith("data:image/png;base64,"):
-            plot_base64 = plot_base64.split("data:image/png;base64,")[1]
-        try:
-            img_data = base64.b64decode(plot_base64)
-            img = Image.open(BytesIO(img_data))
-            if IN_STREAMLIT:
-                st.subheader("📊 IR Spectrum Plot (Base64)")
-                st.image(img, use_column_width=True)
-            elif IN_JUPYTER:
-                display(img)
-            return
-        except Exception:
-            pass  # fallback to plotting from lists
-
-    # --- Case 2: Generate plot from frequency & intensity lists ---
-    freq_list = ir_spectrum.get("frequency_cm1", [])
-    inten_list = ir_spectrum.get("intensity", [])
-
-    if not freq_list or not inten_list:
-        return  # Nothing to plot
-
-    # Convert string lists to floats
-    try:
-        freq = np.array([float(f) for f in freq_list])
-        inten = np.array([float(i) for i in inten_list])
-    except Exception:
-        return
-
-    # Create stem plot
-    fig, ax = plt.subplots(figsize=(8, 4))
-    markerline, stemlines, baseline = ax.stem(freq, inten, use_line_collection=True)
-    ax.set_xlabel("Frequency (cm⁻¹)")
-    ax.set_ylabel("Intensity (D/Å² amu⁻¹)")
-    ax.set_title("Infrared Spectrum")
-    ax.grid(True)
-
-    if IN_STREAMLIT:
-        import streamlit as st
-        st.subheader("📊 IR Spectrum (Generated Plot)")
-        st.pyplot(fig)
-    elif IN_JUPYTER:
-        plt.show()
-        plt.close(fig)
-    
-
 
 # -----------------------------------------------------------------------------
 # Agent initializer (cached)
@@ -1179,15 +1137,14 @@ if st.session_state.conversation_history:
                 except Exception as e:
                     st.error(f"Error displaying HTML: {e}")
 
-
         # Check for embedded HTML plots/snippets in all messages
 
-        for msg in messages:
-            render_ir_spectrum(msg)
-
-
-
- 
+        if is_infrared_requested(messages):
+            if changed_recently():
+                with st.expander(f"🔍 IR Spectrum", expanded=True):
+                    st.image("ir_spectrum.png")
+            else:
+                st.warning("IR spectrum not found.")
 
         # Optional debug information
         with st.expander(f"🔍 Verbose Info (Query {idx})", expanded=False):
