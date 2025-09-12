@@ -1189,7 +1189,7 @@ if st.session_state.conversation_history:
                         freq_options = {f"{float(row['frequency'].strip('i')):.2f} cm⁻¹":i for i, row in df.iterrows()}
                         selected_freq = st.selectbox("Frequency", list(freq_options.keys()), index=0)
                         # Display the selected frequency
-                        st.metric(label="frequency (cm⁻¹)", value=selected_freq)
+                        #st.metric(label="frequency (cm⁻¹)", value=selected_freq)
                         selected_freq_value = selected_freq.strip(' cm⁻¹')
                         #st.write(selected_freq_value)
                         traj_file = df.loc[freq_options[selected_freq]]['filename']
