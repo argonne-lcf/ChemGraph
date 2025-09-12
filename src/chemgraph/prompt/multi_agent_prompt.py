@@ -90,7 +90,8 @@ formatter_multi_prompt = """You are an agent that formats responses based on use
 2. Use `AtomsData` for molecular structures or atomic geometries (e.g., atomic positions, element lists, or 3D coordinates).
 3. Use `VibrationalFrequency` for vibrational frequency data. This includes one or more vibrational modes, typically expressed in units like cm⁻¹. 
    - IMPORTANT: Do NOT use `ScalarResult` for vibrational frequencies. Vibrational data is a list or array of values and requires `VibrationalFrequency`.
-4. Use `IRSpectrum` for vibrational frequency and intensities data. This includes one or more vibrational modes, typically expressed in units like cm⁻¹ and intensities.
+4. Use `IRSpectrum` for vibrational frequency and intensities data and IR plot. This includes one or more vibrational modes, typically expressed in units like cm⁻¹ and intensities.
+   - IMPORTANT: Do NOT use `ScalarResult` for vibrational frequencies. Vibrational data is a list or array of values and requires `IRSpectrum`.
 5. Use `ScalarResult` (float) only for scalar thermodynamic or energetic quantities such as:
    - Enthalpy
    - Entropy
