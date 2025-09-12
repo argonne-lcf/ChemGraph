@@ -43,6 +43,8 @@ class IRSpectrum(BaseModel):
         description="List of intensities in D/Å^2 amu^-1.",
     )
 
+    plot: Optional[str] = None   # base64 PNG image
+
 
 class ScalarResult(BaseModel):
     """

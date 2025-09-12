@@ -180,6 +180,11 @@ class ASEOutputSchema(BaseModel):
         description="Infrared spectrum data including frequencies (in cm-1) and intensities (in D/Å^2 amu^-1).",
     )
 
+    ir_spectrum_plot: str | None = Field(
+        default=None,
+        description="Base64-encoded PNG image of the IR spectrum plot.",
+    )
+
     thermochemistry: dict = Field(default={}, description="Thermochemistry data in eV.")
     success: bool = Field(
         default=False, description="Indicates if the simulation finished correctly."
