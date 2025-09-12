@@ -66,8 +66,8 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 
 2. Create and activate a virtual environment using uv:
     ```bash
-    uv venv chemgraph-env
-    uv venv --python 3.11 chemgraph-env # For specific python version
+    uv venv --python 3.11 chemgraph-env
+    # uv venv --python 3.11 chemgraph-env # For specific python version
 
     source chemgraph-env/bin/activate # Unix/macos
     # OR
