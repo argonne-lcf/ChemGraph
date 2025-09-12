@@ -1082,16 +1082,21 @@ if st.session_state.conversation_history:
             # Extract content
             content = getattr(message, "content", "") if hasattr(message, "content") else message.get("content", "")
 
-            # Render HTML plots or snippets if detected
             if content:
-                # Heuristic: look for <div>, <svg>, <canvas>, or <iframe> in content
-                if any(tag in content.lower() for tag in ["<div", "<svg", "<canvas", "<iframe"]):
-                    st.subheader("📊 Generated Plot / HTML")
+                # 1️⃣ Check for base64 PNG plot
+                if content.startswith("data:image/png;base64,"):
+                    st.subheader("📊 Generated Plot")
+                    st.image(content, use_column_width=True)
+                # 2️⃣ Check for HTML snippets (div, svg, canvas, iframe)
+                elif any(tag in content.lower() for tag in ["<div", "<svg", "<canvas", "<iframe"]):
+                    st.subheader("📊 Generated HTML / Plot")
                     try:
                         st.components.v1.html(content, height=500, scrolling=True)
                     except Exception as plot_error:
                         st.error(f"Error displaying HTML/plot: {plot_error}")
-
+                else:
+                    # fallback: display text content
+                    st.write(content)
 
 
 
