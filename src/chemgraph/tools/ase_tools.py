@@ -519,7 +519,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 ir.clean()
                 ir.run()
 
-                IR_SPECTRUM_START = 800  # Start of IR spectrum range
+                IR_SPECTRUM_START = 500  # Start of IR spectrum range
                 IR_SPECTRUM_END = 4000  # End of IR spectrum range
                 freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
                 """
@@ -544,7 +544,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 if len(atoms) == 1:
                     thermo_data["enthalpy"] = atoms.get_potential_energy()
                     thermo_data["entropy"] = 0
-                    thermo_data["gibbs_free_energy"] = float(atoms.get_potential_energy())
+                    thermo_data["gibbs_free_energy"] = float(
+                        atoms.get_potential_energy()
+                    )
                     thermo_data["unit"] = "eV"
                 else:
                     from ase.thermochemistry import IdealGasThermo
@@ -553,7 +555,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                     vib_energies = vib.get_energies()
 
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-                    symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
+                    symmetrynumber = get_symmetry_number.invoke(
+                        {"atomsdata": final_structure}
+                    )
 
                     if linear:
                         geometry = "linear"
@@ -577,7 +581,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                         thermo.get_entropy(temperature=temperature, pressure=pressure)
                     )
                     thermo_data["gibbs_free_energy"] = float(
-                        thermo.get_gibbs_energy(temperature=temperature, pressure=pressure)
+                        thermo.get_gibbs_energy(
+                            temperature=temperature, pressure=pressure
+                        )
                     )
                     thermo_data["unit"] = "eV"
 
