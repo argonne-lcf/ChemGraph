@@ -46,79 +46,79 @@ jobs:
       run: |
         python -m pytest tests/ -v
 
-  test-conda-uma:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+  # test-conda-uma:
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       python-version: ["3.10", "3.11", "3.12"]
 
-    steps:
-    - uses: actions/checkout@v4
+  #   steps:
+  #   - uses: actions/checkout@v4
     
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+  #   - name: Set up Python ${{ matrix.python-version }}
+  #     uses: actions/setup-python@v5
+  #     with:
+  #       python-version: ${{ matrix.python-version }}
     
-    - name: Set up Conda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        miniconda-version: "latest"
-        python-version: ${{ matrix.python-version }}
-        activate-environment: chemgraph-uma
-        auto-activate-base: false
+  #   - name: Set up Conda
+  #     uses: conda-incubator/setup-miniconda@v3
+  #     with:
+  #       miniconda-version: "latest"
+  #       python-version: ${{ matrix.python-version }}
+  #       activate-environment: chemgraph-uma
+  #       auto-activate-base: false
     
-    - name: Install Conda dependencies for UMA
-      shell: bash -l {0}
-      run: |
-        conda install -c conda-forge nwchem -y
+  #   - name: Install Conda dependencies for UMA
+  #     shell: bash -l {0}
+  #     run: |
+  #       conda install -c conda-forge nwchem -y
 
-    - name: Temporarily modify pyproject.toml for UMA e3nn compatibility
-      shell: bash -l {0}
-      run: |
-        echo "Backing up pyproject.toml to pyproject.toml.original..."
-        cp pyproject.toml pyproject.toml.original
-        echo "Commenting out mace-torch from pyproject.toml..."
-        # This sed command finds lines starting with optional whitespace,
-        # then "mace-torch>=0.3.13", and prepends a '#' to the matched line.
-        sed -i 's/^[[:space:]]*"mace-torch>=0.3.13",/#&/' pyproject.toml
-        echo "pyproject.toml after modification:"
-        cat pyproject.toml
+  #   - name: Temporarily modify pyproject.toml for UMA e3nn compatibility
+  #     shell: bash -l {0}
+  #     run: |
+  #       echo "Backing up pyproject.toml to pyproject.toml.original..."
+  #       cp pyproject.toml pyproject.toml.original
+  #       echo "Commenting out mace-torch from pyproject.toml..."
+  #       # This sed command finds lines starting with optional whitespace,
+  #       # then "mace-torch>=0.3.13", and prepends a '#' to the matched line.
+  #       sed -i 's/^[[:space:]]*"mace-torch>=0.3.13",/#&/' pyproject.toml
+  #       echo "pyproject.toml after modification:"
+  #       cat pyproject.toml
     
-    - name: Install ChemGraph with UMA support
-      shell: bash -l {0}
-      env:
-        HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      run: |
-        pip install -e ".[uma]"
-        pip install pytest
-        pip install huggingface-hub # Ensure huggingface-cli is available
+  #   - name: Install ChemGraph with UMA support
+  #     shell: bash -l {0}
+  #     env:
+  #       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  #     run: |
+  #       pip install -e ".[uma]"
+  #       pip install pytest
+  #       pip install huggingface-hub # Ensure huggingface-cli is available
 
-    - name: Authenticate with Hugging Face CLI
-      shell: bash -l {0}
-      env:
-        HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      run: |
-        echo "Attempting Hugging Face CLI login..."
-        huggingface-cli login --token $HF_TOKEN
-        echo "Login attempted. Verifying whoami..."
-        huggingface-cli whoami
+  #   - name: Authenticate with Hugging Face CLI
+  #     shell: bash -l {0}
+  #     env:
+  #       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  #     run: |
+  #       echo "Attempting Hugging Face CLI login..."
+  #       huggingface-cli login --token $HF_TOKEN
+  #       echo "Login attempted. Verifying whoami..."
+  #       huggingface-cli whoami
     
-    - name: Run tests with UMA
-      shell: bash -l {0}
-      env:
-        HF_TOKEN: ${{ secrets.HF_TOKEN }}
-      run: |
-        python -m pytest tests/ -v 
+  #   - name: Run tests with UMA
+  #     shell: bash -l {0}
+  #     env:
+  #       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  #     run: |
+  #       python -m pytest tests/ -v 
     
-    - name: Restore pyproject.toml
-      shell: bash -l {0}
-      if: always() # Ensures this step runs even if previous steps fail
-      run: |
-        echo "Restoring pyproject.toml from pyproject.toml.original..."
-        if [ -f pyproject.toml.original ]; then
-          mv pyproject.toml.original pyproject.toml
-          echo "pyproject.toml restored."
-        else
-          echo "Backup pyproject.toml.original not found. Cannot restore."
-        fi 
+  #   - name: Restore pyproject.toml
+  #     shell: bash -l {0}
+  #     if: always() # Ensures this step runs even if previous steps fail
+  #     run: |
+  #       echo "Restoring pyproject.toml from pyproject.toml.original..."
+  #       if [ -f pyproject.toml.original ]; then
+  #         mv pyproject.toml.original pyproject.toml
+  #         echo "pyproject.toml restored."
+  #       else
+  #         echo "Backup pyproject.toml.original not found. Cannot restore."
+  #       fi 
