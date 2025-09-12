@@ -323,9 +323,14 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
 
         calc = MaceCalc(**calculator)
 
+    elif "aimnet2" in calc_type:
+        from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
+
+        calc = AIMNET2Calc(**calculator)
+
     else:
         raise ValueError(
-            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem or MACE."
+            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem or MACE or AIMNET2."
         )
     # Extract additional args like spin/charge if the model defines it
     extra_info = {}
@@ -396,8 +401,12 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     atoms.info.update(system_info)
     atoms.calc = calc
 
-    if driver == "energy":
+    if driver == "energy" or driver == "dipole":
         energy = atoms.get_potential_energy()
+
+        dipole = [None,None,None]
+        if  driver == "dipole":
+            dipole = list(atoms.get_dipole_moment())
 
         end_time = time.time()
         wall_time = end_time - start_time
@@ -406,6 +415,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             final_structure=atomsdata,
             simulation_input=params,
             success=True,
+            dipole_value=dipole,
             single_point_energy=energy,
             wall_time=wall_time,
         )
@@ -439,9 +449,10 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         )
         vib_data = {}
         thermo_data = {}
+        # Infrared
         ir_data = {}
 
-        if driver == "vib" or driver =="ir" or driver == "thermo":
+        if driver == "vib" or driver == "thermo" or driver == "ir":
             temperature = params.temperature
 
             from ase.vibrations import Vibrations
@@ -475,18 +486,14 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 vib_data["frequencies"].append(f"{freq_cm1}{c}")
 
             if driver == "ir":
-                temperature = params.temperature
-
-                from ase.vibrations import Vibrations
-                from ase import units
                 from ase.vibrations import Infrared
+                import matplotlib.pyplot as plt
 
+                ir_data["spectrum_frequencies"] = []
+                ir_data["spectrum_frequencies_units"] = "cm-1"
 
-                ir_data["frequencies"] = []
-                ir_data["frequency_unit"] = "cm-1"
-
-                ir_data["intensities"] = []
-                ir_data["intensity_unit"] = "D/Å^2 amu^-1"
+                ir_data["spectrum_intensities"] = []
+                ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
 
 
                 ir = Infrared(atoms)
@@ -496,14 +503,10 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 IR_SPECTRUM_START = 800  # Start of IR spectrum range
                 IR_SPECTRUM_END = 4000  # End of IR spectrum range
                 freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
-                linear = is_linear_molecule.invoke({"atomsdata": final_structure})
 
                 for f, inten in zip(freq_intensity[0], freq_intensity[1]):
-                    ir_data["frequencies"].append(f"{f}")
-                    ir_data["intensities"].append(f"{inten}")
-
-                import matplotlib.pyplot as plt
-                import io, base64
+                    ir_data["spectrum_frequencies"].append(f"{f}")
+                    ir_data["spectrum_intensities"].append(f"{inten}")
 
                 # Generate IR spectrum plot
                 fig, ax = plt.subplots()
@@ -512,18 +515,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 ax.set_ylabel("Intensity (a.u.)")
                 ax.set_title("Infrared Spectrum")
                 ax.grid(True)
-
-                buf = io.BytesIO()
-                fig.savefig(buf, format="png", dpi=300)
-                buf.seek(0)
-                img_bytes = buf.read()
-                buf.close()
-                plt.close(fig)
-
-                img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-                ir_data["plot"] = f"data:image/png;base64,{img_b64}"
-                         
-
+                fig.savefig("ir_spectrum.png", format="png", dpi=300)
 
             if driver == "thermo":
                 # Approximation for system with a single atom.
@@ -575,7 +567,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             final_structure=final_structure,
             simulation_input=params,
             vibrational_frequencies=vib_data,
-            ir_spectrum=ir_data,
             thermochemistry=thermo_data,
             success=True,
             single_point_energy=single_point_energy,

@@ -1,10 +1,19 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Union, Optional, Any, List, Type
 from chemgraph.models.atomsdata import AtomsData
-from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+
+try:
+    from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+except ImportError:
+    TBLiteCalc = None
 from chemgraph.models.calculators.emt_calc import EMTCalc
 from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 from chemgraph.models.calculators.orca_calc import OrcaCalc
+
+try:
+    from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
+except ImportError:
+    AIMNET2Calc = None
 
 
 # Attempt to import optional calculators
@@ -27,6 +36,7 @@ _all_calculator_classes: List[Optional[Type[BaseModel]]] = [
     TBLiteCalc,
     OrcaCalc,
     EMTCalc,
+    AIMNET2Calc,
 ]
 
 # Filter out unavailable calculators
@@ -61,11 +71,12 @@ class ASEInputSchema(BaseModel):
         - 'energy': Single-point electronic energy calculation.
         - 'opt': Geometry optimization.
         - 'vib': Vibrational frequency analysis.
+        - 'ir': Infrared spectrum calculation.
         - 'thermo': Thermochemical property calculation (enthalpy, entropy, Gibbs free energy).
     optimizer : str
         Optimization algorithm for geometry optimization. Options:
         - 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'.
-    calculator : Union[FAIRChemCalc, MaceCalc, NWChemCalc, OrcaCalc, TBLiteCalc, EMTCalc]
+    calculator : Union[FAIRChemCalc, MaceCalc, NWChemCalc, OrcaCalc, TBLiteCalc, EMTCalc, AIMNET2Calc]
         ASE-compatible calculator used for the simulation. Supported types are determined
         by installed packages and may include:
         - FAIRChem, MACE, NWChem, Orca, TBLite and EMT. The order determines the priority of the calculators.
@@ -85,7 +96,7 @@ class ASEInputSchema(BaseModel):
     )
     driver: str = Field(
         default=None,
-        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for infrared spectrum and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
     )
     optimizer: str = Field(
         default="bfgs",
@@ -170,21 +181,21 @@ class ASEOutputSchema(BaseModel):
     energy_unit: str = Field(
         default="eV", description="The unit of the energy reported."
     )
+    dipole_value: list = Field(
+        default=[None, None, None],
+        description="The value of the dipole moment reported.",
+    )
+    dipole_unit: str = Field(
+        default=" e * angstrom", description="The unit of the dipole moment reported."
+    )
     vibrational_frequencies: dict = Field(
         default={},
         description="Vibrational frequencies (in cm-1) and energies (in eV).",
     )
-
     ir_spectrum: dict = Field(
         default={},
-        description="Infrared spectrum data including frequencies (in cm-1) and intensities (in D/Å^2 amu^-1).",
+        description="Infrared spectrum: frequencies (in cm-1) and intensities (in (D/Å)^2 amu^-1).",
     )
-
-    ir_spectrum_plot: str | None = Field(
-        default=None,
-        description="Base64-encoded PNG image of the IR spectrum plot.",
-    )
-
     thermochemistry: dict = Field(default={}, description="Thermochemistry data in eV.")
     success: bool = Field(
         default=False, description="Indicates if the simulation finished correctly."

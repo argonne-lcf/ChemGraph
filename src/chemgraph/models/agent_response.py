@@ -46,6 +46,29 @@ class IRSpectrum(BaseModel):
     plot: Optional[str] = None   # base64 PNG image
 
 
+class InfraredSpectrum(BaseModel):
+    """
+    Schema for calculating infrared spectrum from a simulation.
+
+    Attributes
+    ----------
+    frequency_spec_cm1 : list[str]
+        List of range of frequencies in inverse centimeters (cm⁻¹)
+        Each entry is a string representation of the frequency value.
+    intensity_spec_D2A2amu1 : list[str]
+        List of range of intensities in (D/Å)^2 amu⁻¹
+        Each entry is a string representation of the intensity value.
+    """
+    frequency_spec_cm1: list[str] = Field(
+        ...,
+        description="Range of frequencies for plotting spectrum in cm-1.",
+    )
+    
+    intensity_spec_D2A2amu1: list[str] = Field(
+        ...,
+        description="Values of intensities for plotting spectrum in (D/Å)^2 amu^-1.",
+    )
+
 class ScalarResult(BaseModel):
     """
     Schema for storing a scalar numerical result from a simulation or calculation.
@@ -82,8 +105,8 @@ class ResponseFormatter(BaseModel):
             "Structured answer to the user's query. Use:\n"
             "1. `str` for general or explanatory responses or SMILES string.\n"
             "2. `VibrationalFrequency` for vibrational frequencies.\n"
-            "3. `IRSpectrum` for vibrational frequencies and intensities.\n"
-            "4. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
-            "5. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
+            "3. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
+            "4. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
+            "5. `InfraredSpectrum` for calculating infrared spectra."
         )
     )

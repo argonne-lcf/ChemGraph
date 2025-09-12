@@ -70,6 +70,7 @@ try:
     from stmol import showmol
 
     STMOL_AVAILABLE = True
+    st.info("3D visualization is available via stmol.")
 except ImportError as e:
     STMOL_AVAILABLE = False
     st.warning("⚠️ **stmol** not available – falling back to text/table view.")
@@ -714,7 +715,17 @@ def extract_messages_from_result(result):
     if isinstance(result, list):
         return result  # Already a list of messages
     elif isinstance(result, dict) and "messages" in result:
-        return result["messages"]  # Extract from messages key
+        messages = result["messages"]
+
+        # For multi-agent workflows, also extract messages from worker_channel
+        if "worker_channel" in result:
+            worker_channel = result["worker_channel"]
+            # Flatten all worker messages into the main messages list
+            for worker_id, worker_messages in worker_channel.items():
+                if isinstance(worker_messages, list):
+                    messages.extend(worker_messages)
+
+        return messages
     else:
         return [result]  # Treat as single message
 

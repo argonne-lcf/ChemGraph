@@ -41,7 +41,7 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+   git clone --depth 1 https://github.com/argonne-lcf/ChemGraph
    cd ChemGraph
     ```
 2. Create and activate a new Conda environment:
@@ -55,6 +55,30 @@ Ensure you have **Python 3.10 or higher** installed on your system.
     ```
 4. Install `ChemGraph` and its dependencies:
    
+
+**Using uv (Alternative)**
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+   cd ChemGraph
+   ```
+
+2. Create and activate a virtual environment using uv:
+    ```bash
+    uv venv --python 3.11 chemgraph-env
+    # uv venv --python 3.11 chemgraph-env # For specific python version
+
+    source chemgraph-env/bin/activate # Unix/macos
+    # OR
+    .\chemgraph-env\Scripts\activate  # On Windows
+   ```
+
+3. Install ChemGraph using uv:
+    ```bash
+    uv pip install -e .
+    ```
+
 **Optional: Install with UMA support**
 
 > **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 
@@ -103,6 +127,9 @@ pip install -e ".[uma]"
    - **[Multi-Agent System](notebooks/Demo_multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where different agents (Planner, Executor and Aggregator) handle various tasks exemplifying the collaborative potential of ChemGraph.
 
    - **[Single-Agent System with gRASPA](notebooks/Demo_graspa_agent.ipynb)**: This notebook provides a sample guide on executing a gRASPA simulation using a single agent. For gRASPA-related installation instructions, visit the [gRASPA GitHub repository](https://github.com/snurr-group/gRASPA). The notebook's functionality has been validated on a single compute node at ALCF Polaris.
+
+   - **[Infrared absorption spectrum prediction](notebooks/Demo_infrared_spectrum.ipynb)**: This notebook demonstrates how to calculate an infrared absorption spectrum.
+
 
 </details>
 
