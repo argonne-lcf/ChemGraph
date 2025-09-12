@@ -1,10 +1,15 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Union, Optional, Any, List, Type
 from chemgraph.models.atomsdata import AtomsData
-from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+
+try:
+    from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+except ImportError:
+    TBLiteCalc = None
 from chemgraph.models.calculators.emt_calc import EMTCalc
 from chemgraph.models.calculators.nwchem_calc import NWChemCalc
 from chemgraph.models.calculators.orca_calc import OrcaCalc
+
 try:
     from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
 except ImportError:
@@ -176,12 +181,11 @@ class ASEOutputSchema(BaseModel):
         default="eV", description="The unit of the energy reported."
     )
     dipole_value: list = Field(
-        default=[None,None,None], 
-        description="The value of the dipole moment reported."
+        default=[None, None, None],
+        description="The value of the dipole moment reported.",
     )
     dipole_unit: str = Field(
-        default=" e * angstrom", 
-        description="The unit of the dipole moment reported."
+        default=" e * angstrom", description="The unit of the dipole moment reported."
     )
     vibrational_frequencies: dict = Field(
         default={},
