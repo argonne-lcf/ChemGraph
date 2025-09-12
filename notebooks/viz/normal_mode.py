@@ -41,7 +41,7 @@ def get_vibrations(atoms) -> Vibrations:
     return vib
 
 
-def visualize_trajectory(traj):
+def visualize_trajectory(atoms,traj):
     """Create an animated 3D visualization of a trajectory.
     
     Args:
@@ -116,6 +116,6 @@ if selected_mode:
         vib.write_mode(mode_idx)
         traj_path = f'vib.{mode_idx}.traj'
         traj = Trajectory(traj_path)
-        view = visualize_trajectory(traj)
+        view = visualize_trajectory(h2o, traj)
         showmol(view, height = 400, width=800)
 
