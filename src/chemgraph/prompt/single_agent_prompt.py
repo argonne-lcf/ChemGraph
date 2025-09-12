@@ -46,20 +46,11 @@ Follow these rules for selecting the output type:
    - Must contain a list or array of frequencies (typically in cm⁻¹)
    - Do **not** use `ScalarResult` for these — frequencies are not single-valued
 
-4. Use `IRSpectrum` for vibrational frequencies, intensities and the plot as outputs:
-   - Must contain a list or array of frequencies (typically in cm⁻¹) and intensities (units like D/Å² amu⁻¹) and optionally a plot
-   - Do **not** use `ScalarResult` for these   
-
-5. Use `ScalarResult` only for a single numeric value representing:
+4. Use `ScalarResult` only for a single numeric value representing:
    - Enthalpy
    - Entropy
    - Gibbs free energy
    - Any other scalar thermodynamic or energetic quantity
-
-5. Use `InfraredSpectrum` for infrared spectrum mode outputs:
-   - Must contain a list or array of frequencies (typically in cm⁻¹)
-   - Must contain a list of array of intensities (typically in (D/Å)^2 amu^-1)
-   - Do **not** use `ScalarResult` for these — frequencies are not single-valued
 
 Additional instructions:
 - Carefully check that the values you format are present in the **actual output of prior tools or agents**.
