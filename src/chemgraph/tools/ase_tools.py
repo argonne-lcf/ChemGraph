@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+import numpy as np
 import time
 import json
 import numpy as np
@@ -300,9 +302,14 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
 
         calc = MaceCalc(**calculator)
 
+    elif "aimnet2" in calc_type:
+        from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
+
+        calc = AIMNET2Calc(**calculator)
+
     else:
         raise ValueError(
-            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem or MACE."
+            f"Unsupported calculator: {calculator}. Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), Orca and FAIRChem or MACE or AIMNET2."
         )
     # Extract additional args like spin/charge if the model defines it
     extra_info = {}
@@ -377,11 +384,18 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     atoms.info.update(system_info)
     atoms.calc = calc
 
-    if driver == "energy":
+    if driver == "energy" or driver == "dipole":
         energy = atoms.get_potential_energy()
         final_structure = atoms_to_atomsdata(atoms=atoms)
 
-        # Calculate walltime
+        dipole = [None, None, None]
+        if driver == "dipole":
+            # Catch exception if calculator doesn't have get_dipole_moment()
+            try:
+                dipole = list(atoms.get_dipole_moment())
+            except Exception as e:
+                pass
+              
         end_time = time.time()
         wall_time = end_time - start_time
 
@@ -391,6 +405,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             final_structure=final_structure,
             simulation_input=params,
             success=True,
+            dipole_value=dipole,
             single_point_energy=energy,
             wall_time=wall_time,
         )
@@ -431,8 +446,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         )
         thermo_data = {}
         vib_data = {}
+        ir_data = {}
 
-        if driver in {"vib", "thermo"}:
+        if driver in {"vib", "thermo", "ir"}:
             from ase.vibrations import Vibrations
             from ase import units
 
@@ -460,6 +476,59 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 vib_data["energies"].append(f"{energy_meV}{suffix}")
                 vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
+            # Remove existing frequencies.txt and .traj files
+            import os, glob
+
+            for traj_file in glob.glob("*.traj"):
+                os.remove(traj_file)
+
+            # Write frequencies into frequencies.txt
+            freq_file = Path("frequencies.csv")
+            if freq_file.exists():
+                freq_file.unlink()
+
+            with freq_file.open("w") as f:
+                for i, freq in enumerate(vib_data["frequencies"], start=0):
+                    f.write(f"vib.{i}.traj,{freq}\n")
+
+            # Write normal modes .traj files
+            for i in range(len(energies)):
+                vib.write_mode(n=None, kT=units.kB * 300, nimages=30)
+
+            if driver == "ir":
+                from ase.vibrations import Infrared
+                import matplotlib.pyplot as plt
+
+                ir_data["spectrum_frequencies"] = []
+                ir_data["spectrum_frequencies_units"] = "cm-1"
+
+                ir_data["spectrum_intensities"] = []
+                ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
+
+                ir = Infrared(atoms)
+                ir.clean()
+                ir.run()
+
+                IR_SPECTRUM_START = 500  # Start of IR spectrum range
+                IR_SPECTRUM_END = 4000  # End of IR spectrum range
+                freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
+                """
+                for f, inten in zip(freq_intensity[0], freq_intensity[1]):
+                    ir_data["spectrum_frequencies"].append(f"{f}")
+                    ir_data["spectrum_intensities"].append(f"{inten}")
+                """
+                # Generate IR spectrum plot
+                fig, ax = plt.subplots()
+                ax.plot(freq_intensity[0], freq_intensity[1])
+                ax.set_xlabel("Frequency (cm⁻¹)")
+                ax.set_ylabel("Intensity (a.u.)")
+                ax.set_title("Infrared Spectrum")
+                ax.grid(True)
+                fig.savefig("ir_spectrum.png", format="png", dpi=300)
+
+                ir_data["IR Plot"] = "Saved to ir_spectrum.png"
+                ir_data["Normal mode data"] = "Normal modes saved as individual .traj files"
+
             if driver == "thermo":
                 # Approximation for a single atom system.
                 if len(atoms) == 1:
@@ -474,9 +543,8 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
                     geometry = "linear" if linear else "nonlinear"
-
                     symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
-
+                    
                     thermo = IdealGasThermo(
                         vib_energies=energies,
                         potentialenergy=single_point_energy,
@@ -507,6 +575,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             vibrational_frequencies=vib_data,
             thermochemistry=thermo_data,
             success=True,
+            ir_data=ir_data,
             single_point_energy=single_point_energy,
             wall_time=wall_time,
         )
@@ -519,13 +588,13 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             return {
                 "status": "success",
                 "message": f"Simulation completed. Results saved to {output_results_file}",
-                "final_energy": single_point_energy,
+                "single_point_energy": single_point_energy, # small payload for LLMs
                 "unit": "eV",
             }
         elif driver == "vib":
             return {
                 "status": "success",
-                "result": {"vibrational_frequencies": vib_data},
+                "result": {"vibrational_frequencies": vib_data}, # small payload for LLMs
                 "message": (
                     "Vibrational analysis completed; frequencies returned. "
                     f"Full results (structure, vibrations and metadata) saved to {output_results_file}."

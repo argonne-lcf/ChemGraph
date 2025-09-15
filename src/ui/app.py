@@ -17,6 +17,7 @@ from uuid import uuid4
 import re
 from typing import Optional, Dict, Any
 from pathlib import Path
+import base64
 
 # Third-party imports
 import numpy as np
@@ -69,6 +70,7 @@ try:
     from stmol import showmol
 
     STMOL_AVAILABLE = True
+    st.info("3D visualization is available via stmol.")
 except ImportError as e:
     STMOL_AVAILABLE = False
     st.warning("⚠️ **stmol** not available – falling back to text/table view.")
@@ -579,6 +581,27 @@ st.sidebar.markdown(
 st.sidebar.markdown("Current config loaded from: `config.toml`")
 
 
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
+
+# -----------------------------------------------------------------------------
+# Helper: check if IR spectrum file has changed within last minute
+# -----------------------------------------------------------------------------
+
+
+def changed_recently(path="ir_spectrum.png", window_seconds=300) -> bool:
+    """
+    Return True if `path` exists and was modified within the last `window_seconds`.
+    """
+    p = Path(path)
+    if not p.exists():
+        return False
+
+    mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+    now = datetime.now(timezone.utc)
+    return (now - mtime) <= timedelta(seconds=window_seconds)
+
+
 # -----------------------------------------------------------------------------
 # Helper: extract molecular structure from plain-text message
 # -----------------------------------------------------------------------------
@@ -713,7 +736,17 @@ def extract_messages_from_result(result):
     if isinstance(result, list):
         return result  # Already a list of messages
     elif isinstance(result, dict) and "messages" in result:
-        return result["messages"]  # Extract from messages key
+        messages = result["messages"]
+
+        # For multi-agent workflows, also extract messages from worker_channel
+        if "worker_channel" in result:
+            worker_channel = result["worker_channel"]
+            # Flatten all worker messages into the main messages list
+            for worker_id, worker_messages in worker_channel.items():
+                if isinstance(worker_messages, list):
+                    messages.extend(worker_messages)
+
+        return messages
     else:
         return [result]  # Treat as single message
 
@@ -732,6 +765,24 @@ def find_structure_in_messages(messages):
             if structure:
                 return structure
     return None
+
+
+def is_infrared_requested(messages):
+    """Look through all messages to find infrared data."""
+    for message in messages:
+        # Handle different message formats
+        content = ""
+        if hasattr(message, "content"):
+            content = getattr(message, "content", "")
+        elif isinstance(message, dict):
+            content = message.get("content", "")
+        elif isinstance(message, str):
+            content = message
+        else:
+            content = str(message)
+
+        if content and (("infrared" in content.lower()) or ("IR" in content)):
+            return True
 
 
 # Streamlit-specific wrapper for ASE functions
@@ -918,6 +969,53 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
         return False
 
 
+def visualize_trajectory(traj):
+    """Create an animated 3D visualization of a trajectory.
+
+    Args:
+        traj: ASE Trajectory object
+
+    Returns:
+        view: py3Dmol view object with animated trajectory
+    """
+    # Convert all frames to a single multi-model XYZ string
+    import py3Dmol
+    xyz_frames = []
+    for i, atoms in enumerate(traj):
+        symbols = atoms.get_chemical_symbols()
+        pos = atoms.get_positions()  # Å
+        lines = [str(len(symbols)), f'Frame {i}']
+        lines += [f"{s} {x:.6f} {y:.6f} {z:.6f}" for s, (x, y, z) in zip(symbols, pos)]
+        xyz_frames.append("\n".join(lines))
+    xyz_str = "\n".join(xyz_frames)
+
+    # Initialize viewer and add frames
+    view = py3Dmol.view(width=800, height=400)
+    view.addModelsAsFrames(xyz_str, 'xyz')   # load all frames at once
+
+    # Style & camera
+    view.setViewStyle({"style": "outline", "width": 0.05})
+    view.setStyle({"stick": {}, "sphere": {"scale": 0.25}})
+    view.zoomTo()
+
+    # Animate (interval in ms)
+    view.animate({"loop": "Forward", "interval": 100})
+
+    return view
+
+
+# Function for IR spectrum rendering
+
+import base64
+import json
+import base64
+from io import BytesIO
+from PIL import Image
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+
 # -----------------------------------------------------------------------------
 # Agent initializer (cached)
 # -----------------------------------------------------------------------------
@@ -1073,6 +1171,38 @@ if st.session_state.conversation_history:
                     st.warning(f"HTML file '{html_filename}' not found")
                 except Exception as e:
                     st.error(f"Error displaying HTML: {e}")
+
+        # Check for embedded HTML plots/snippets in all messages
+
+        if is_infrared_requested(messages):
+            if changed_recently():
+                with st.expander(f"🔍 IR Spectrum", expanded=True):
+                    col1, col2 = st.columns([1, 1])
+
+                    with col1:
+                        st.image("ir_spectrum.png")
+                    with col2:
+                        df = pd.read_csv("frequencies.csv",index_col=False,names=['filename','frequency']).iloc[6:] #remove the first 6 translation/rotation modes
+
+                        # Create a dropdown menu for frequency selection
+                        st.write("**Select a frequency to visualize:**")
+                        freq_options = {f"{float(row['frequency'].strip('i')):.2f} cm⁻¹":i for i, row in df.iterrows()}
+                        selected_freq = st.selectbox("Frequency", list(freq_options.keys()), index=0)
+                        # Display the selected frequency
+                        #st.metric(label="frequency (cm⁻¹)", value=selected_freq)
+                        selected_freq_value = selected_freq.strip(' cm⁻¹')
+                        #st.write(selected_freq_value)
+                        traj_file = df.loc[freq_options[selected_freq]]['filename']
+                        #st.write(df)
+                        from ase.io.trajectory import Trajectory
+                        traj = Trajectory(traj_file)
+                        view = visualize_trajectory(traj)
+                        showmol(view, height = 400, width=700)
+
+
+            else:
+                st.warning("IR spectrum not found.")
+
         # Optional debug information
         with st.expander(f"🔍 Verbose Info (Query {idx})", expanded=False):
             st.write(f"**Number of messages:** {len(messages)}")

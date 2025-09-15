@@ -32,7 +32,10 @@ eggs/
 
 # Generated molecular structure files
 *.xyz
-
+# env
+chemgraph-env/
+# env
+.env
 # Log files
 *run_logs/
 *vib/
@@ -40,6 +43,7 @@ plots/
 initial_evaluations/
 test/
 test_outputs/
+*ir/
 
 .venv
 combine*

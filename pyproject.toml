@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ChemGraph"
-version = "0.1.0"
+version = "1.0.0"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
@@ -13,31 +13,32 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "ase",
-    "rdkit",
-    "langgraph>=0.3",
-    "langchain-openai>=0.2.12",
-    "langchain-ollama>=0.2.1",
-    "langchain-anthropic>=0.3.13",
-    "langchain-google-genai",
-    "pydantic",
-    "pandas",
+    "ase==3.25.0",
+    "rdkit==2025.3.3",
+    "langgraph==0.4.7",
+    "langchain-openai==0.3.27",
+    "langchain-ollama==0.3.4",
+    "langchain-anthropic==0.3.17",
+    "langchain-google-genai==2.1.7",
+    "langchain-groq",
+    "langchain-experimental==0.3.4",
+    "pydantic==2.11.7",
+    "pandas==2.2.3",
     "pubchempy @ git+https://github.com/keceli/PubChemPy.git@main",
-    "pyppeteer",
-    "numpy>=2",
-    "langchain-experimental>=0.3.4",
-    "numexpr",
-    "tblite>=0.4.0",
-    "pytest",
-    "deepdiff",
-    "pymatgen",
-    "mace-torch>=0.3.13",
-    "streamlit",
-    "stmol",
-    "ipython-genutils",
-    "langsmith<0.4",
-    "rich>=13.0.0",
-    "toml",
+    "pyppeteer==2.0.0",
+    "numpy==2.2.6",
+    "numexpr==2.11.0",
+    "tblite==0.4.0",
+    "pytest==8.4.1",
+    "deepdiff==8.5.0",
+    "pymatgen==2025.3.10",
+    "mace-torch==0.3.13",
+    "streamlit==1.48.1",
+    "stmol==0.0.9",
+    "ipython-genutils==0.2.0",
+    "langsmith==0.3.45",
+    "rich==14.1.0",
+    "toml==0.10.2"
     ]
 
 [project.optional-dependencies]
@@ -63,7 +64,7 @@ where = ["src/"]
 
 [tool.ruff]
 line-length = 88  # Match Black's default (adjust as needed)
-target-version = "py311"  # Adjust based on your Python version
+target-version = "py310"  # Adjust based on your Python version
 exclude = ["notebooks/"]  # Add files/folders to ignore
 
 [tool.ruff.format]

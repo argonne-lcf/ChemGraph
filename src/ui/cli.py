@@ -83,12 +83,13 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
     model_lower = model_name.lower()
 
     # Check OpenAI models
-    if any(provider in model_lower for provider in ["gpt", "openai", "o1", "o3", "o4"]):
+    if any(provider in model_lower for provider in ["o1", "o3", "o4"]):
         if not os.getenv("OPENAI_API_KEY"):
             return (
                 False,
                 "OpenAI API key not found. Please set OPENAI_API_KEY environment variable.",
             )
+    
 
     # Check Anthropic models
     elif "claude" in model_lower:
@@ -105,7 +106,13 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
                 False,
                 "Gemini API key not found. Please set GEMINI_API_KEY environment variable.",
             )
-
+    # check GROQ models
+    elif "groq" in model_lower:
+        if not os.getenv("GROQ_API_KEY"):
+            return (
+                False,
+                "GROQ API key not found. Please set GROQ_API_KEY environment variable.",
+            )
     # Check local models (no API key needed)
     elif any(local in model_lower for local in ["llama", "qwen", "ollama"]):
         # For local models, we might want to check if the service is running
@@ -246,6 +253,7 @@ def list_models():
         "llama": {"provider": "Meta", "type": "Local/Cloud"},
         "qwen": {"provider": "Alibaba", "type": "Local/Cloud"},
         "ollama": {"provider": "Ollama", "type": "Local"},
+        "groq": {"provider": "GROQ", "type": "Cloud"},
     }
 
     for model in all_supported_models:
@@ -291,6 +299,11 @@ def check_api_keys_status():
             "provider": "Google",
             "env_var": "GEMINI_API_KEY",
             "examples": "gemini-pro, gemini-1.5-pro",
+        },
+        {
+            "provider": "GROQ",
+            "env_var": "GROQ_API_KEY",
+            "examples": "gpt-oss-20b, gpt-oss-120b",
         },
         {
             "provider": "Local/Ollama",

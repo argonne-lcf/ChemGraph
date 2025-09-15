@@ -5,6 +5,7 @@ from chemgraph.tools.alcf_loader import load_alcf_model
 from chemgraph.tools.local_model_loader import load_ollama_model
 from chemgraph.tools.anthropic_loader import load_anthropic_model
 from chemgraph.tools.gemini_loader import load_gemini_model
+from chemgraph.tools.groq_loader import load_groq_model
 from chemgraph.models.supported_models import (
     supported_openai_models,
     supported_ollama_models,
@@ -12,6 +13,7 @@ from chemgraph.models.supported_models import (
     supported_alcf_models,
     supported_argo_models,
     supported_gemini_models,
+    supported_groq_models,
 )
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
@@ -150,7 +152,11 @@ class ChemGraph:
                 llm = load_gemini_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
                 )
-
+            elif model_name in supported_groq_models:
+                llm = load_groq_model(
+                    model_name=model_name, api_key=api_key, temperature=temperature
+                )
+                
             else:  # Assume it might be a vLLM or other custom OpenAI-compatible endpoint
                 import os
 
