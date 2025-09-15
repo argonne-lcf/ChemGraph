@@ -7,6 +7,8 @@ from chemgraph.tools.ase_tools import (
 )
 from chemgraph.models.ase_input import ASEOutputSchema, ASEInputSchema
 
+TEST_DIR = Path(__file__).parent
+
 
 def is_fairchem_installed():
     try:
@@ -26,8 +28,8 @@ if is_fairchem_installed():
 def base_ase_input():
     """Base fixture for ASE input with common parameters"""
     return {
-        "input_structure_file": "water.xyz",
-        "output_results_file": "water_output.json",
+        "input_structure_file": str(TEST_DIR / "water.xyz"),
+        "output_results_file": str(TEST_DIR / "water_output.json"),
         "optimizer": "bfgs",
         "calculator": {
             "calculator_type": "mace_mp",

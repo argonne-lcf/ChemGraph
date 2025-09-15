@@ -6,9 +6,11 @@ from datetime import datetime
 from chemgraph.models.ase_input import ASEOutputSchema
 from chemgraph.tools.report_tools import generate_html
 
+TEST_DIR = Path(__file__).parent
+
 # Sample ASE output data from the test file
 sample_ase_output = {
-    "input_structure_file": "water.xyz",
+    "input_structure_file": str(TEST_DIR / "water.xyz"),
     "converged": True,
     "final_structure": {
         "numbers": [8, 1, 1],

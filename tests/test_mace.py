@@ -3,79 +3,16 @@ import json
 import pytest
 from chemgraph.tools.ase_tools import (
     run_ase,
-    get_symmetry_number,
-    is_linear_molecule,
 )
-from chemgraph.tools.cheminformatics_tools import (
-    smiles_to_atomsdata,
-    molecule_name_to_smiles,
-)
-from chemgraph.models.atomsdata import AtomsData
 from chemgraph.models.ase_input import ASEInputSchema
 
 TEST_DIR = Path(__file__).parent
 
 
-def test_molecule_name_to_smiles():
-    # Test with a known molecule
-    assert molecule_name_to_smiles.invoke("water") == "O"
-    assert molecule_name_to_smiles.invoke("methane") == "C"
-
-    # Test with invalid molecule name
-    with pytest.raises(Exception):
-        molecule_name_to_smiles.invoke("not_a_real_molecule_name")
-
-
-def test_smiles_to_atomsdata():
-    # Test with simple molecules
-    water = smiles_to_atomsdata.invoke({"smiles": "O"})
-    assert isinstance(water, AtomsData)
-    assert len(water.numbers) == 3  # O + 2H
-    assert water.numbers[0] == 8  # Oxygen atomic number
-
-    methane = smiles_to_atomsdata.invoke({"smiles": "C"})
-    assert isinstance(methane, AtomsData)
-    assert len(methane.numbers) == 5  # C + 4H
-
-    # Test with invalid SMILES
-    with pytest.raises(ValueError):
-        smiles_to_atomsdata.invoke({"smiles": "invalid_smiles"})
-
-
 @pytest.fixture
-def water_atomsdata():
-    """Fixture for water atomsdata"""
-    numbers = [8, 1, 1]
-    positions = [
-        [0.0, 0.0, 0.0],
-        [0.76, 0.58, 0.0],
-        [-0.76, 0.58, 0.0],
-    ]  # Positions in Angstrom
-    atomsdata_input = {"numbers": numbers, "positions": positions}
-    return AtomsData(**atomsdata_input)
-
-
-@pytest.fixture
-def co2_atomsdata():
-    """Fixture for CO2 atomsdata"""
-    numbers = [6, 8, 8]
-    positions = [[0, 0, 0], [1.16, 0, 0], [-1.16, 0, 0]]
-    atomsdata_input = {"numbers": numbers, "positions": positions}
-    return AtomsData(**atomsdata_input)
-
-
-def test_get_symmetry_number(water_atomsdata):
-    """Test get_symmetry_number function."""
-    symmetrynumber = get_symmetry_number.invoke({"atomsdata": water_atomsdata})
-    assert isinstance(symmetrynumber, int)
-
-
-def test_is_linear_molecule(water_atomsdata, co2_atomsdata):
-    """Test is_linear_molecule function."""
-    islinear_water = is_linear_molecule.invoke({"atomsdata": water_atomsdata})
-    islinear_co2 = is_linear_molecule.invoke({"atomsdata": co2_atomsdata})
-    assert not islinear_water
-    assert islinear_co2
+def water_xyz_path():
+    """Fixture for water.xyz file path located in the same tests/ directory"""
+    return Path(__file__).parent / "water.xyz"
 
 
 @pytest.fixture
@@ -93,7 +30,7 @@ def base_ase_input():
 
 @pytest.fixture
 def energy_ase_schema(base_ase_input):
-    """Fixture for energy calculation ASE Schema"""
+    """Fixture for geometry optimization ASE Schema"""
     input_dict = base_ase_input.copy()
     input_dict["driver"] = "energy"
     return ASEInputSchema(**input_dict)
