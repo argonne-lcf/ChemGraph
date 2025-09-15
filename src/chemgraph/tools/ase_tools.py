@@ -1,6 +1,10 @@
 from pathlib import Path
 import numpy as np
 import time
+import json
+import numpy as np
+from typing import Any, Dict
+
 from langchain_core.tools import tool
 from chemgraph.models.atomsdata import AtomsData
 from chemgraph.models.ase_input import (
@@ -9,58 +13,31 @@ from chemgraph.models.ase_input import (
 )
 
 
-def create_ase_atoms(atomic_numbers, positions, cell=None, pbc=None):
-    """Create ASE Atoms object from atomic numbers and positions.
+@tool
+def extract_output_json(json_file: str) -> Dict[str, Any]:
+    """
+    Load simulation results from a JSON file produced by run_ase.
 
     Parameters
     ----------
-    atomic_numbers : list
-        List of atomic numbers
-    positions : list
-        List of atomic positions
-    cell : list, optional
-        List of cell vectors
-    pbc : list, optional
-        List of periodic boundary conditions
-    Returns
-    -------
-    ase.Atoms or None
-        ASE Atoms object or None if creation fails
-    """
-    try:
-        from ase import Atoms
-
-        return Atoms(numbers=atomic_numbers, positions=positions, cell=cell, pbc=pbc)
-    except Exception as exc:
-        # Use print for general use, but allow caller to handle error display
-        print(f"Error creating ASE Atoms object: {exc}")
-        return None
-
-
-def create_xyz_string(atomic_numbers, positions):
-    """Create XYZ format string from atomic numbers and positions.
-
-    Parameters
-    ----------
-    atomic_numbers : list
-        List of atomic numbers
-    positions : list
-        List of atomic positions
+    json_file : str
+        Path to the JSON file containing ASE simulation results.
 
     Returns
     -------
-    str or None
-        XYZ format string or None if creation fails
-    """
-    atoms = create_ase_atoms(atomic_numbers, positions)
-    if atoms is None:
-        return None
+    Dict[str, Any]
+        Parsed results from the JSON file as a Python dictionary.
 
-    lines = [str(len(atoms)), "ChemGraph Structure"]
-    for atom in atoms:
-        x, y, z = atom.position
-        lines.append(f"{atom.symbol} {x:.6f} {y:.6f} {z:.6f}")
-    return "\n".join(lines)
+    Raises
+    ------
+    FileNotFoundError
+        If the specified file does not exist.
+    json.JSONDecodeError
+        If the file is not valid JSON.
+    """
+    with open(json_file, "r") as f:
+        data = json.load(f)
+    return data
 
 
 def extract_ase_atoms_from_tool_result(tool_result: dict):
@@ -360,6 +337,10 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     ValueError
         If the calculator is not supported or if the calculation fails
     """
+    import os
+    from ase.io import read
+    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
+
     try:
         calculator = params.calculator.model_dump()
     except Exception as e:
@@ -368,59 +349,74 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     # Calculate wall time.
     start_time = time.time()
 
-    atomsdata = params.atomsdata
+    input_structure_file = params.input_structure_file
+    output_results_file = params.output_results_file
     optimizer = params.optimizer
     fmax = params.fmax
     steps = params.steps
     driver = params.driver
+    temperature = params.temperature
     pressure = params.pressure
+
+    # # Validate that the input structure file exists
+    if not os.path.isfile(input_structure_file):
+        err = f"Input structure file {input_structure_file} does not exist."
+        raise ValueError(err)
+
+    # Validate the output results file (if provided)
+    if not output_results_file.endswith(".json"):
+        err = f"Output results file must end with '.json', got: {params.output_results_file}"
+        raise ValueError(err)
 
     calc, system_info, calc_model = load_calculator(calculator)
     params.calculator = calc_model
 
     if calc is None:
-        e = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
-        raise ValueError(e)
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
-            success=False,
-        )
-        return simulation_output
+        err = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
+        raise ValueError(err)
 
-    from ase import Atoms
-    from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
+    try:
+        atoms = read(input_structure_file)
+    except Exception as e:
+        err = f"Cannot read {input_structure_file} using ASE. Exception from ASE: {e}"
+        raise ValueError(err)
 
-    atoms = Atoms(
-        numbers=atomsdata.numbers,
-        positions=atomsdata.positions,
-        cell=atomsdata.cell,
-        pbc=atomsdata.pbc,
-    )
     atoms.info.update(system_info)
     atoms.calc = calc
 
     if driver == "energy" or driver == "dipole":
         energy = atoms.get_potential_energy()
+        final_structure = atoms_to_atomsdata(atoms=atoms)
 
         dipole = [None, None, None]
         if driver == "dipole":
-            dipole = list(atoms.get_dipole_moment())
+            # Catch exception if calculator doesn't have get_dipole_moment()
+            try:
+                dipole = list(atoms.get_dipole_moment())
+            except Exception as e:
+                pass
 
         end_time = time.time()
         wall_time = end_time - start_time
+
         simulation_output = ASEOutputSchema(
+            input_structure_file=input_structure_file,
             converged=True,
-            final_structure=atomsdata,
+            final_structure=final_structure,
             simulation_input=params,
             success=True,
             dipole_value=dipole,
             single_point_energy=energy,
             wall_time=wall_time,
         )
-        return simulation_output
+        with open(output_results_file, "w") as wf:
+            wf.write(simulation_output.model_dump_json(indent=4))
+        return {
+            "status": "success",
+            "message": f"Simulation completed. Results saved to {output_results_file}",
+            "single_point_energy": energy,
+            "unit": "eV",
+        }
 
     OPTIMIZERS = {
         "bfgs": BFGS,
@@ -432,7 +428,8 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     try:
         optimizer_class = OPTIMIZERS.get(optimizer.lower())
         if optimizer_class is None:
-            raise ValueError(f"Unsupported optimizer: {params['optimizer']}")
+            raise ValueError(f"Unsupported optimizer: {optimizer_class}")
+
         # Do optimization only if number of atoms > 1 to avoid error.
         if len(atoms) > 1:
             dyn = optimizer_class(atoms)
@@ -440,51 +437,44 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         else:
             converged = True
 
-        final_coords = atoms.positions
-        single_point_energy = atoms.get_potential_energy()
+        single_point_energy = float(atoms.get_potential_energy())
         final_structure = AtomsData(
             numbers=atoms.numbers,
-            positions=final_coords,
+            positions=atoms.positions,
             cell=atoms.cell,
             pbc=atoms.pbc,
         )
-        vib_data = {}
         thermo_data = {}
-        # Infrared
+        vib_data = {}
         ir_data = {}
 
-        if driver == "vib" or driver == "thermo" or driver == "ir":
-            temperature = params.temperature
-
+        if driver in {"vib", "thermo", "ir"}:
             from ase.vibrations import Vibrations
             from ase import units
 
-            vib_data["energies"] = []
-            vib_data["energy_unit"] = "meV"
-
-            vib_data["frequencies"] = []
-            vib_data["frequency_unit"] = "cm-1"
-
             vib = Vibrations(atoms)
+
             vib.clean()
             vib.run()
+
+            vib_data = {
+                "energies": [],
+                "energy_unit": "meV",
+                "frequencies": [],
+                "frequency_unit": "cm-1",
+            }
 
             energies = vib.get_energies()
             linear = is_linear_molecule.invoke({"atomsdata": final_structure})
 
             for idx, e in enumerate(energies):
-                if abs(e.imag) > 1e-8:
-                    c = "i"
-                    e_val = e.imag
-                else:
-                    c = ""
-                    e_val = e.real
-
+                is_imag = abs(e.imag) > 1e-8
+                e_val = e.imag if is_imag else e.real
                 energy_meV = 1e3 * e_val
                 freq_cm1 = e_val / units.invcm
-
-                vib_data["energies"].append(f"{energy_meV}{c}")
-                vib_data["frequencies"].append(f"{freq_cm1}{c}")
+                suffix = "i" if is_imag else ""
+                vib_data["energies"].append(f"{energy_meV}{suffix}")
+                vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
             # Remove existing frequencies.txt and .traj files
             import os, glob
@@ -540,57 +530,45 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 ir_data["Normal mode data"] = "Normal modes saved as individual .traj files"
 
             if driver == "thermo":
-                # Approximation for system with a single atom.
+                # Approximation for a single atom system.
                 if len(atoms) == 1:
-                    thermo_data["enthalpy"] = atoms.get_potential_energy()
-                    thermo_data["entropy"] = 0
-                    thermo_data["gibbs_free_energy"] = float(
-                        atoms.get_potential_energy()
-                    )
-                    thermo_data["unit"] = "eV"
+                    thermo_data = {
+                        "enthalpy": single_point_energy,
+                        "entropy": 0.0,
+                        "gibbs_free_energy": single_point_energy,
+                        "unit": "eV",
+                    }
                 else:
                     from ase.thermochemistry import IdealGasThermo
 
-                    potentialenergy = atoms.get_potential_energy()
-                    vib_energies = vib.get_energies()
-
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-                    symmetrynumber = get_symmetry_number.invoke(
-                        {"atomsdata": final_structure}
-                    )
+                    geometry = "linear" if linear else "nonlinear"
+                    symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
 
-                    if linear:
-                        geometry = "linear"
-                    else:
-                        geometry = "nonlinear"
                     thermo = IdealGasThermo(
-                        vib_energies=vib_energies,
-                        potentialenergy=potentialenergy,
+                        vib_energies=energies,
+                        potentialenergy=single_point_energy,
                         atoms=atoms,
                         geometry=geometry,
                         symmetrynumber=symmetrynumber,
                         spin=0,  # Only support spin=0
                     )
-
-                    thermo_data["enthalpy"] = float(
-                        thermo.get_enthalpy(
-                            temperature=temperature,
-                        )
-                    )
-                    thermo_data["entropy"] = float(
-                        thermo.get_entropy(temperature=temperature, pressure=pressure)
-                    )
-                    thermo_data["gibbs_free_energy"] = float(
-                        thermo.get_gibbs_energy(
-                            temperature=temperature, pressure=pressure
-                        )
-                    )
-                    thermo_data["unit"] = "eV"
+                    thermo_data = {
+                        "enthalpy": float(thermo.get_enthalpy(temperature=temperature)),
+                        "entropy": float(
+                            thermo.get_entropy(temperature=temperature, pressure=pressure)
+                        ),
+                        "gibbs_free_energy": float(
+                            thermo.get_gibbs_energy(temperature=temperature, pressure=pressure)
+                        ),
+                        "unit": "eV",
+                    }
 
         end_time = time.time()
         wall_time = end_time - start_time
 
         simulation_output = ASEOutputSchema(
+            input_structure_file=input_structure_file,
             converged=converged,
             final_structure=final_structure,
             simulation_input=params,
@@ -601,18 +579,51 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             single_point_energy=single_point_energy,
             wall_time=wall_time,
         )
-        return simulation_output
+
+        with open(output_results_file, "w") as wf:
+            wf.write(simulation_output.model_dump_json(indent=4))
+
+        # Return message based on driver. Keep the return output minimal.
+        if driver == "opt":
+            return {
+                "status": "success",
+                "message": f"Simulation completed. Results saved to {output_results_file}",
+                "single_point_energy": single_point_energy,  # small payload for LLMs
+                "unit": "eV",
+            }
+        elif driver == "vib":
+            return {
+                "status": "success",
+                "result": {
+                    "vibrational_frequencies": vib_data,
+                },  # small payload for LLMs
+                "message": (
+                    "Vibrational analysis completed; frequencies returned. "
+                    f"Full results (structure, vibrations and metadata) saved to {output_results_file}."
+                ),
+            }
+        elif driver == "thermo":
+            return {
+                "status": "success",
+                "result": {"thermochemistry": thermo_data},  # small payload for LLMs
+                "message": (
+                    "Thermochemistry computed and returned. "
+                    f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}"
+                ),
+            }
+        elif driver == "ir":
+            return {
+                "status": "success",
+                "result": {
+                    "vibrational_frequencies": vib_data
+                },  # small payload for LLMs,  # small payload for LLMs
+                "message": (
+                    "Infrared computer and returned"
+                    f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}. "
+                    "IR plot Saved to ir_spectrum.png. Normal modes saved as individual .traj files"
+                ),
+            }
 
     except Exception as e:
-        end_time = time.time()
-        wall_time = end_time - start_time
-
-        simulation_output = ASEOutputSchema(
-            converged=False,
-            final_structure=atomsdata,
-            simulation_input=params,
-            error=str(e),
-            success=False,
-            wall_time=wall_time,
-        )
-        return simulation_output
+        err = f"ASE simulation gave an exception:{e}"
+        raise ValueError(err)

@@ -11,6 +11,7 @@ from chemgraph.tools.ase_tools import (
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_atomsdata,
+    smiles_to_coordinate_file,
 )
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator
@@ -135,7 +136,8 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
     if tools is None:
         tools = [
             file_to_atomsdata,
-            smiles_to_atomsdata,
+            # smiles_to_atomsdata,
+            smiles_to_coordinate_file,
             run_ase,
             molecule_name_to_smiles,
             save_atomsdata_to_file,
@@ -173,6 +175,7 @@ def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     llm_structured_output = llm.with_structured_output(ResponseFormatter)
     response = llm_structured_output.invoke(messages).model_dump_json()
     return {"messages": [response]}
+
 
 def ReportAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=[generate_html]):
     """LLM node that generates a report from the messages.
@@ -245,7 +248,8 @@ def construct_single_agent_graph(
         if tools is None:
             tools = [
                 file_to_atomsdata,
-                smiles_to_atomsdata,
+                # smiles_to_atomsdata,
+                smiles_to_coordinate_file,
                 run_ase,
                 molecule_name_to_smiles,
                 save_atomsdata_to_file,
@@ -268,7 +272,9 @@ def construct_single_agent_graph(
 
                 graph_builder.add_node(
                     "ReportAgent",
-                    lambda state: ReportAgent(state, llm, system_prompt=report_prompt, tools=[generate_html]),
+                    lambda state: ReportAgent(
+                        state, llm, system_prompt=report_prompt, tools=[generate_html]
+                    ),
                 )
                 graph_builder.add_conditional_edges(
                     "ChemGraphAgent",

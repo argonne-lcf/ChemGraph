@@ -64,8 +64,11 @@ class ASEInputSchema(BaseModel):
 
     Attributes
     ----------
-    atomsdata : AtomsData
-        The atomic structure and associated metadata for the simulation.
+    input_structure_file : str
+        Path to the input coordinate file (e.g., CIF, XYZ, POSCAR) containing
+        the atomic structure for the simulation.
+    output_results_file: str
+        Path to a JSON file where simulation results will be saved.
     driver : str
         Specifies the type of simulation to perform. Options:
         - 'energy': Single-point electronic energy calculation.
@@ -91,7 +94,13 @@ class ASEInputSchema(BaseModel):
         Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
     """
 
-    atomsdata: AtomsData = Field(description="The atomsdata object to be used for the simulation.")
+    input_structure_file: str = Field(
+        description="Path to the input coordinate file (e.g., CIF, XYZ, POSCAR) containing the atomic structure for the simulation."
+    )
+    output_results_file: str = Field(
+        default="output.json",
+        description="Path to a JSON file where simulation results will be saved.",
+    )
     driver: str = Field(
         default=None,
         description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
@@ -163,6 +172,16 @@ class ASEInputSchema(BaseModel):
 
 
 class ASEOutputSchema(BaseModel):
+    """
+    Schema for defining outputs from ASE-based molecular simulations.
+    """
+
+    input_structure_file: str = Field(
+        description=(
+            "Path to the input coordinate file (e.g., CIF, XYZ, POSCAR) "
+            "containing the initial atomic structure for the simulation."
+        )
+    )
     converged: bool = Field(
         default=False,
         description="Indicates if the optimization successfully converged.",
