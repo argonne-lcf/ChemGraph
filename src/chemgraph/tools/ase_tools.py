@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import numpy as np
 import time
@@ -338,6 +337,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     ValueError
         If the calculator is not supported or if the calculation fails
     """
+    import os
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
@@ -395,7 +395,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 dipole = list(atoms.get_dipole_moment())
             except Exception as e:
                 pass
-              
+
         end_time = time.time()
         wall_time = end_time - start_time
 
@@ -544,7 +544,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
                     geometry = "linear" if linear else "nonlinear"
                     symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
-                    
+
                     thermo = IdealGasThermo(
                         vib_energies=energies,
                         potentialenergy=single_point_energy,
@@ -588,13 +588,13 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             return {
                 "status": "success",
                 "message": f"Simulation completed. Results saved to {output_results_file}",
-                "single_point_energy": single_point_energy, # small payload for LLMs
+                "single_point_energy": single_point_energy,  # small payload for LLMs
                 "unit": "eV",
             }
         elif driver == "vib":
             return {
                 "status": "success",
-                "result": {"vibrational_frequencies": vib_data}, # small payload for LLMs
+                "result": {"vibrational_frequencies": vib_data},  # small payload for LLMs
                 "message": (
                     "Vibrational analysis completed; frequencies returned. "
                     f"Full results (structure, vibrations and metadata) saved to {output_results_file}."
