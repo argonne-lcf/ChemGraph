@@ -594,7 +594,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         elif driver == "vib":
             return {
                 "status": "success",
-                "result": {"vibrational_frequencies": vib_data},  # small payload for LLMs
+                "result": {
+                    "vibrational_frequencies": vib_data,
+                },  # small payload for LLMs
                 "message": (
                     "Vibrational analysis completed; frequencies returned. "
                     f"Full results (structure, vibrations and metadata) saved to {output_results_file}."
@@ -607,6 +609,18 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 "message": (
                     "Thermochemistry computed and returned. "
                     f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}"
+                ),
+            }
+        elif driver == "ir":
+            return {
+                "status": "success",
+                "result": {
+                    "vibrational_frequencies": vib_data
+                },  # small payload for LLMs,  # small payload for LLMs
+                "message": (
+                    "Infrared computer and returned"
+                    f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}. "
+                    "IR plot Saved to ir_spectrum.png. Normal modes saved as individual .traj files"
                 ),
             }
 
