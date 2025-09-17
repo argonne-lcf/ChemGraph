@@ -66,8 +66,6 @@ supported_groq_models = [
 ]
 
 
-
-
 supported_argo_models = [
     "argo:gpt-3.5-turbo",
     "argo:gpt-3.5-turbo-16k",
@@ -91,6 +89,7 @@ supported_argo_models = [
     "argo:gpt-4.1",
     "argo:gpt-4.1-mini",
     "argo:gpt-4.1-nano",
+    "argo:gpt-4o-mini"
 ]
 
 all_supported_models = (

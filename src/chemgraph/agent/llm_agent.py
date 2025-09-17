@@ -213,7 +213,11 @@ class ChemGraph:
         self.executor_prompt = executor_prompt
         self.aggregator_prompt = aggregator_prompt
         self.formatter_multi_prompt = formatter_multi_prompt
-        self.support_structured_output = support_structured_output
+
+        if model_name in supported_argo_models:
+            self.support_structured_output = False
+        else:
+            self.support_structured_output = support_structured_output
 
         self.workflow_map = {
             "single_agent": {"constructor": construct_single_agent_graph},
