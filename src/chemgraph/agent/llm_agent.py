@@ -122,6 +122,7 @@ class ChemGraph:
         formatter_multi_prompt: str = formatter_multi_prompt,
         generate_report: bool = False,
         report_prompt: str = report_prompt,
+        support_structured_output: bool = True
     ):
         try:
             # Use hardcoded optimal values for tool calling
@@ -212,6 +213,8 @@ class ChemGraph:
         self.executor_prompt = executor_prompt
         self.aggregator_prompt = aggregator_prompt
         self.formatter_multi_prompt = formatter_multi_prompt
+        self.support_structured_output = support_structured_output
+
         self.workflow_map = {
             "single_agent": {"constructor": construct_single_agent_graph},
             "multi_agent": {"constructor": contruct_multi_agent_graph},
@@ -242,6 +245,7 @@ class ChemGraph:
                 executor_prompt=self.executor_prompt,
                 formatter_prompt=self.formatter_multi_prompt,
                 structured_output=self.structured_output,
+                support_structured_output=self.support_structured_output
             )
         elif self.workflow_type == "python_relp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](

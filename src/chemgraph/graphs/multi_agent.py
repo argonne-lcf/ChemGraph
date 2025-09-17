@@ -6,18 +6,18 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from chemgraph.tools.ase_tools import (
     run_ase,
-    save_atomsdata_to_file,
-    file_to_atomsdata,
+    extract_output_json
 )
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
-    smiles_to_atomsdata,
+    smiles_to_coordinate_file,
 )
 from chemgraph.prompt.multi_agent_prompt import (
     planner_prompt,
     executor_prompt,
     aggregator_prompt,
     formatter_multi_prompt,
+    planner_prompt_json
 )
 from chemgraph.models.multi_agent_response import (
     PlannerResponse,
@@ -171,7 +171,7 @@ def route_tools(state: ManagerWorkerState):
     return "done"
 
 
-def PlannerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str):
+def PlannerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, support_structured_output: bool):
     """An LLM agent that decomposes tasks into subtasks for workers.
 
     Parameters
@@ -192,9 +192,52 @@ def PlannerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str)
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
-    structured_llm = llm.with_structured_output(PlannerResponse)
-    response = structured_llm.invoke(messages).model_dump_json()
-    return {"messages": [response]}
+    if support_structured_output is True:
+        structured_llm = llm.with_structured_output(PlannerResponse)
+        response = structured_llm.invoke(messages).model_dump_json()
+        return {"messages": [response]}
+    else:
+        raw_response = llm.invoke(messages).content
+        try:
+            # Always parse from string
+            parsed = json.loads(raw_response)
+
+            # If model mistakenly returned a bare list, wrap it
+            if isinstance(parsed, list):
+                parsed = {"worker_tasks": parsed}
+
+            # Validate structure
+            if not isinstance(parsed, dict) or "worker_tasks" not in parsed:
+                raise ValueError("Output must be a JSON object with a 'worker_tasks' key")
+
+            response_json = json.dumps(parsed)
+            return {"messages": [response_json]}
+
+        except Exception as e:
+            retry_message = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"{state.get('messages', '')}"},
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Error: {str(e)}. Please output a valid JSON object with a 'worker_tasks' key, "
+                        "where 'worker_tasks' is a list of tasks in the format:\n"
+                        '{"worker_tasks": [\n'
+                        '  {"task_index": 1, "prompt": "Calculate ..."},\n'
+                        '  {"task_index": 2, "prompt": "Calculate ..."}\n'
+                        ']}'
+                    ),
+                },
+            ]
+            retry_response = llm.invoke(retry_message).content
+            parsed_retry = json.loads(retry_response)
+
+            # Normalize again in case it’s a list
+            if isinstance(parsed_retry, list):
+                parsed_retry = {"worker_tasks": parsed_retry}
+
+            response_json = json.dumps(parsed_retry)
+            return {"messages": [response_json]}
 
 
 def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, tools=None):
@@ -218,11 +261,10 @@ def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, 
     """
     if tools is None:
         tools = [
-            file_to_atomsdata,
-            smiles_to_atomsdata,
             run_ase,
             molecule_name_to_smiles,
-            save_atomsdata_to_file,
+            smiles_to_coordinate_file,
+            extract_output_json
         ]
 
     worker_id = state["current_worker"]
@@ -404,6 +446,7 @@ def contruct_multi_agent_graph(
     formatter_prompt: str = formatter_multi_prompt,
     structured_output: bool = False,
     tools: list = None,
+    support_structured_output: bool = True
 ):
     """Construct a graph for manager-worker workflow.
 
@@ -446,10 +489,17 @@ def contruct_multi_agent_graph(
         checkpointer = MemorySaver()
 
         graph_builder = StateGraph(ManagerWorkerState)
-        graph_builder.add_node(
-            "PlannerAgent",
-            lambda state: PlannerAgent(state, llm, system_prompt=planner_prompt),
-        )
+        if support_structured_output is True:
+            graph_builder.add_node(
+                "PlannerAgent",
+                lambda state: PlannerAgent(state, llm, system_prompt=planner_prompt, support_structured_output=support_structured_output),
+            )
+        else:
+            graph_builder.add_node(
+                "PlannerAgent",
+                lambda state: PlannerAgent(state, llm, system_prompt=planner_prompt_json, support_structured_output=support_structured_output),
+            )
+
         graph_builder.add_node("extract_tasks", extract_tasks)
         graph_builder.add_node("loop_control", loop_control)
 
@@ -459,11 +509,10 @@ def contruct_multi_agent_graph(
         )
         if tools is None:
             tools = [
-                file_to_atomsdata,
-                smiles_to_atomsdata,
                 run_ase,
                 molecule_name_to_smiles,
-                save_atomsdata_to_file,
+                smiles_to_coordinate_file,
+                extract_output_json
             ]
 
         graph_builder.add_node(

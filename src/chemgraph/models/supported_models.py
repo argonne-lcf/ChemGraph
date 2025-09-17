@@ -23,6 +23,8 @@ supported_alcf_models = [
     "Qwen/Qwen3-32B",
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b"
 ]
 # Anthropic models
 supported_anthropic_models = [
