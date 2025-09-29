@@ -3,6 +3,7 @@ from langchain_core.messages import ToolMessage
 import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import ToolNode
 from chemgraph.tools.ase_tools import (
     run_ase,
     save_atomsdata_to_file,
@@ -25,67 +26,6 @@ from chemgraph.utils.logging_config import setup_logger
 from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
-
-
-class BasicToolNode:
-    """A node that executes tools requested in the last AIMessage.
-
-    This class processes tool calls from AI messages and executes the corresponding
-    tools, handling their results and any potential errors.
-
-    Parameters
-    ----------
-    tools : list
-        List of tool objects that can be called by the node
-
-    Attributes
-    ----------
-    tools_by_name : dict
-        Dictionary mapping tool names to their corresponding tool objects
-    """
-
-    def __init__(self, tools: list) -> None:
-        self.tools_by_name = {tool.name: tool for tool in tools}
-
-    def __call__(self, inputs: State) -> State:
-        if messages := inputs.get("messages", []):
-            message = messages[-1]
-        else:
-            raise ValueError("No message found in input")
-
-        outputs = []
-        for tool_call in message.tool_calls:
-            try:
-                tool_name = tool_call.get("name")
-                if not tool_name or tool_name not in self.tools_by_name:
-                    raise ValueError(f"Invalid tool name: {tool_name}")
-
-                tool_result = self.tools_by_name[tool_name].invoke(tool_call.get("args", {}))
-
-                # Handle different types of tool results
-                result_content = (
-                    tool_result.dict()
-                    if hasattr(tool_result, "dict")
-                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
-                )
-
-                outputs.append(
-                    ToolMessage(
-                        content=json.dumps(result_content),
-                        name=tool_name,
-                        tool_call_id=tool_call.get("id", ""),
-                    )
-                )
-
-            except Exception as e:
-                outputs.append(
-                    ToolMessage(
-                        content=json.dumps({"error": str(e)}),
-                        name=tool_name if tool_name else "unknown_tool",
-                        tool_call_id=tool_call.get("id", ""),
-                    )
-                )
-        return {"messages": outputs}
 
 
 def route_tools(state: State):
@@ -255,7 +195,7 @@ def construct_single_agent_graph(
                 save_atomsdata_to_file,
                 calculator,
             ]
-        tool_node = BasicToolNode(tools=tools)
+        tool_node = ToolNode(tools=tools)
         graph_builder = StateGraph(State)
 
         if not structured_output:
@@ -267,7 +207,7 @@ def construct_single_agent_graph(
             graph_builder.add_edge(START, "ChemGraphAgent")
 
             if generate_report:
-                tool_node_report = BasicToolNode(tools=[generate_html])
+                tool_node_report = ToolNode(tools=[generate_html])
                 graph_builder.add_node("report_tools", tool_node_report)
 
                 graph_builder.add_node(
