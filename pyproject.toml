@@ -16,6 +16,7 @@ dependencies = [
     "ase==3.25.0",
     "rdkit==2025.3.3",
     "langgraph==0.4.7",
+    "langgraph-prebuilt==0.2.2",
     "langchain-openai==0.3.27",
     "langchain-ollama==0.3.4",
     "langchain-anthropic==0.3.17",
