@@ -44,5 +44,9 @@ Keep this terminal open while using ChemGraph. This ensures that all traffic to 
 ### 5. Launch ChemGraph
 In another terminal session on the same login node used in Step 4, run ChemGraph and connect it to the MCP server (listening on port 9001 by default):
 ```bash
+# Load environment modules and activate your Python environment
+module load frameworks
+source /path/to/venv/bin/activate
+
 python run_chemgraph.py
 ```
