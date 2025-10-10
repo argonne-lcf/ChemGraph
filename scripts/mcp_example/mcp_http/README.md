@@ -4,7 +4,8 @@ This directory provides an example of how to use **MCP (Model Control Protocol)*
 
 ## Prerequisites
 
-- ChemGraph installed in your environment  
+- ChemGraph installed in your environment
+- `OPENAI_API_KEY` set (or enter interactively when running ChemGraph)
 
 ## Step-by-Step Instructions
 
@@ -17,7 +18,7 @@ qsub -I -q debug -l select=1,walltime=60:00 -A your_account_name -l filesystems=
 ```
 ### 2. SSH to the Compute Node
 ```bash
-ssh YOUR_LOGIN_NODE_ID
+ssh YOUR_COMPUTE_NODE_ID
 ```
 ### 3. Launch the MCP Server
 Navigate to this directory and start the MCP server:
@@ -31,15 +32,15 @@ module load frameworks
 source /path/to/venv/bin/activate
 
 # Start MCP server
-python mcp_tools_http.py
+python start_mcp_server.py
 ```
 The server will run on port 9001 by default.
 ### 4. Set Up Port Forwarding
 Open a new terminal on the login node, forwarding port 9001 so you can access the MCP server running on the compute node:
 ```bash
-ssh -N -L 9001:localhost:9001 YOUR_LOGIN_NODE_ID
+ssh -N -L 9001:localhost:9001 YOUR_COMPUTE_NODE_ID
 ```
-Keep this terminal open while using ChemGraph. This ensures that all traffic to localhost:9001 on your local machine is securely routed to the MCP server on Aurora.
+Keep this terminal open while using ChemGraph. This ensures that all traffic from Aurora compute node to login node is routed through port 9001.
 
 ### 5. Launch ChemGraph
 In another terminal session on the same login node used in Step 4, run ChemGraph and connect it to the MCP server (listening on port 9001 by default):
@@ -48,5 +49,22 @@ In another terminal session on the same login node used in Step 4, run ChemGraph
 module load frameworks
 source /path/to/venv/bin/activate
 
+python run_chemgraph.py
+```
+
+### Troubleshooting
+
+If you get an error like this:
+```
+httpx.HTTPStatusError: Server error '503 Service Unavailable' for url 'http://127.0.0.1:9001/mcp/'
+```
+Try:
+```
+export NO_PROXY=127.0.0.1,localhost,::1
+export no_proxy=127.0.0.1,localhost,::1
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
+```
+And run ChemGraph again.
+```
 python run_chemgraph.py
 ```
