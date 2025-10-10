@@ -6,11 +6,13 @@ cd ChemGraph
 git fetch origin
 git checkout mcp_dev
 
+# Create and activate a Python virtual environment
 module load frameworks
 python3 -m venv /path/to/venv --system-site-packages
-
 source activate /path/to/venv
+
+# Install ChemGraph in editable mode
 pip install -e . 
 ```
 
-Note: We had a conda-based installation and are moving toward using frameworks module. Some dependencies conflict are there (numpy), and are working with Khalid to fix this. This may affect certain simulation software, but examples are good.
+Note: The installation may take up to 10 minutes due to several backend simulation packages being installed.
