@@ -37,11 +37,16 @@ python start_mcp_server.py
 The server will run on port 9001 by default.
 
 You can also launch the MCP server as a batch job using the `start_mcp_server.sub` script.
-First, open the script and update the placeholders for your al name and virtual environment path.
+First, open the script and update the placeholders for your account name and path to your virtual environment.
 Then submit the job with:
 ```bash
 qsub start_mcp_server.sub
 ```
+Once the job is running, you can find the compute node ID with:
+```bash
+qstat -f <JOB_ID> | awk -F'=' '/exec_host =/ {gsub(/^[ \t]+/,"",$2); sub(/\/.*/,"",$2); print $2}'
+```
+
 ### 4. Set Up Port Forwarding
 Open a new terminal on the login node, forwarding port 9001 so you can access the MCP server running on the compute node:
 ```bash
