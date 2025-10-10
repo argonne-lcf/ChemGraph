@@ -1,10 +1,11 @@
 # Using MCP via stdio on Aurora (ALCF)
 
-This directory provides an example of how to use **MCP (Model Control Protocol)** with stdio on **Aurora HPC at ALCF**. The instructions below guide you through launching the MCP server and connecting ChemGraph to it.
+This directory provides an example of how to use **MCP (Model Control Protocol)** with stdio on **Aurora at ALCF**. The instructions below guide you through launching the MCP server and connecting ChemGraph to it.
 
 ## Prerequisites
 
-- ChemGraph installed in your environment  
+- ChemGraph installed in your environment 
+- `OPENAI_API_KEY` set (or enter interactively when running ChemGraph)
 
 ## Step-by-Step Instructions
 
