@@ -40,7 +40,8 @@ dependencies = [
     "rich==14.1.0",
     "toml==0.10.2",
     "langchain-mcp-adapters==0.1.10",
-    "mcp==1.15.0"
+    "mcp==1.15.0",
+    "langgraph-prebuilt==0.2.3"
     ]
 
 [project.optional-dependencies]
