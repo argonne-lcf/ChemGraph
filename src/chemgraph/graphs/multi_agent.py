@@ -1,13 +1,13 @@
 import json
+from typing import Any
 from pydantic import BaseModel
+
+from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, END
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from chemgraph.tools.ase_tools import (
-    run_ase,
-    extract_output_json
-)
+from chemgraph.tools.ase_tools import run_ase, extract_output_json
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_coordinate_file,
@@ -17,7 +17,7 @@ from chemgraph.prompt.multi_agent_prompt import (
     executor_prompt,
     aggregator_prompt,
     formatter_multi_prompt,
-    planner_prompt_json
+    planner_prompt_json,
 )
 from chemgraph.models.multi_agent_response import (
     PlannerResponse,
@@ -29,117 +29,29 @@ from chemgraph.state.multi_agent_state import ManagerWorkerState
 logger = setup_logger(__name__)
 
 
-class BasicToolNode:
-    """A node that executes tools requested in the last AIMessage.
+### Help Functions
+def _to_jsonable(obj: Any) -> Any:
+    """Recursively convert Pydantic models to plain dicts."""
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
+    elif isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    else:
+        return obj
 
-    This class processes tool calls from AI messages and executes the corresponding
-    tools, handling their results and any potential errors. It maintains separate
-    message channels for different workers.
-    """
-
-    def __init__(self, tools: list) -> None:
-        self.tools_by_name = {tool.name: tool for tool in tools}
-
-    def _json_sanitize(self, x):
-        """Recursively convert Pydantic BaseModel and other
-        nested objects to JSON-serializable types."""
-        if isinstance(x, BaseModel):
-            # pydantic v2 preferred
-            try:
-                return self._json_sanitize(x.model_dump(exclude_none=True))
-            except Exception:
-                # pydantic v1 fallback
-                return self._json_sanitize(x.dict(exclude_none=True))
-        if isinstance(x, dict):
-            return {k: self._json_sanitize(v) for k, v in x.items()}
-        if isinstance(x, (list, tuple)):
-            return [self._json_sanitize(v) for v in x]
-        if isinstance(x, (str, int, float, bool)) or x is None:
-            return x
-        # Last resort: stringify unknown objects
-        return str(x)
-
-    def __call__(self, inputs: ManagerWorkerState) -> ManagerWorkerState:
-        """Execute tools requested in the last message for the current worker."""
-        worker_id = inputs["current_worker"]
-
-        # Access that worker's messages
-        messages = inputs["worker_channel"].get(worker_id, [])
-        if not messages:
-            raise ValueError(f"No messages found for worker {worker_id}")
-
-        message = messages[-1]  # Last assistant message that called tools
-
-        # Support both LC AIMessage and dict-based assistant messages
-        tool_calls = getattr(message, "tool_calls", None)
-        if tool_calls is None and isinstance(message, dict):
-            tool_calls = message.get("tool_calls", [])
-        if not tool_calls:
-            # Nothing to do
-            return inputs
-
-        outputs = []
-
-        for tool_call in tool_calls:
-            try:
-                # Accept both {"name": ..., "args": ...} and OpenAI {"function": {...}}
-                if "function" in tool_call:
-                    fn = tool_call["function"]
-                    tool_name = fn.get("name")
-                    raw_args = fn.get("arguments", {})
-                else:
-                    tool_name = tool_call.get("name")
-                    raw_args = tool_call.get("args", {})
-
-                if not tool_name or tool_name not in self.tools_by_name:
-                    raise ValueError(f"Invalid tool name: {tool_name}")
-
-                # If args is a JSON string, parse it; else use as object
-                if isinstance(raw_args, str):
-                    try:
-                        args_obj = json.loads(raw_args) if raw_args.strip() else {}
-                    except Exception:
-                        args_obj = {}
-                else:
-                    args_obj = raw_args or {}
-
-                # Sanitize Pydantic calculators (e.g., TBLiteCalc)
-                args_obj = self._json_sanitize(args_obj)
-
-                # Invoke tool
-                tool = self.tools_by_name[tool_name]
-                tool_result = tool.invoke(args_obj)
-
-                # Prepare result payload
-                if hasattr(tool_result, "dict"):
-                    result_content = tool_result.dict()
-                elif isinstance(tool_result, dict):
-                    result_content = tool_result
-                else:
-                    result_content = {"result": str(tool_result)}
-
-                outputs.append(
-                    ToolMessage(
-                        content=json.dumps(result_content),
-                        name=tool_name,
-                        tool_call_id=tool_call.get("id", ""),
-                    )
-                )
-
-            except Exception as e:
-                outputs.append(
-                    ToolMessage(
-                        content=json.dumps({"error": str(e)}),
-                        name=tool_name if tool_name else "unknown_tool",
-                        tool_call_id=tool_call.get(
-                            "id", tool_call.get("function", {}).get("id", "")
-                        ),
-                    )
-                )
-
-        # Append tool outputs to the worker's channel
-        inputs["worker_channel"][worker_id].extend(outputs)
-        return inputs
+def sanitize_tool_calls(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Ensure tool_call['args'] contains only JSON-serializable data."""
+    for m in messages:
+        if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
+            new_tool_calls = []
+            for tc in m.tool_calls:
+                tc = dict(tc)
+                tc["args"] = _to_jsonable(tc.get("args"))
+                new_tool_calls.append(tc)
+            m.tool_calls = new_tool_calls
+    return messages
 
 
 def route_tools(state: ManagerWorkerState):
@@ -161,17 +73,20 @@ def route_tools(state: ManagerWorkerState):
         If no messages are found for the current worker
     """
     worker_id = state["current_worker"]
-    if messages := state["worker_channel"].get(worker_id, []):
-        ai_message = messages[-1]
-    else:
-        raise ValueError(f"No messages found for worker {worker_id} in worker_channel.")
+    messages = state.get("worker_messages", [])
 
-    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+    if not messages:
+        raise ValueError(f"No messages found for worker {worker_id} in worker_messages.")
+
+    ai_message = messages[-1]
+    if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
         return "tools"
     return "done"
 
 
-def PlannerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, support_structured_output: bool):
+def PlannerAgent(
+    state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, support_structured_output: bool
+):
     """An LLM agent that decomposes tasks into subtasks for workers.
 
     Parameters
@@ -260,24 +175,22 @@ def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, 
         Updated state containing the worker's response and results
     """
     if tools is None:
-        tools = [
-            run_ase,
-            molecule_name_to_smiles,
-            smiles_to_coordinate_file,
-            extract_output_json
-        ]
+        tools = [run_ase, molecule_name_to_smiles, smiles_to_coordinate_file, extract_output_json]
 
     worker_id = state["current_worker"]
-    history = state["worker_channel"].get(worker_id, [])
+    history = state.get("worker_messages", [])
+
+    history = sanitize_tool_calls(history)
 
     messages = [{"role": "system", "content": system_prompt}] + history
     llm_with_tools = llm.bind_tools(tools=tools)
     response = llm_with_tools.invoke(messages)
-
+    
     # Append new LLM response directly back into the worker's channel
-    state["worker_channel"][worker_id].append(response)
+    state["worker_messages"].append(response)
+    state["worker_channel"][worker_id] = state["worker_messages"]
 
-    # (optional) if no tool call, save it as worker_result
+    # If no tool call, save it as worker_result
     if not getattr(response, "tool_calls", None):
         state["worker_result"] = [response]
 
@@ -362,7 +275,6 @@ def extract_tasks(state: ManagerWorkerState):
     state["current_task_index"] = 0
     return state
 
-
 def loop_control(state: ManagerWorkerState):
     """Prepare the next task for the current worker.
 
@@ -395,6 +307,8 @@ def loop_control(state: ManagerWorkerState):
         state["worker_channel"][worker_id] = []
 
     state["worker_channel"][worker_id].append({"role": "user", "content": task_prompt})
+    state["worker_messages"] = state["worker_channel"][worker_id]
+
     print(f"[Worker {worker_id}] Now processing task: '{task_prompt}'")
     return state
 
@@ -446,7 +360,7 @@ def contruct_multi_agent_graph(
     formatter_prompt: str = formatter_multi_prompt,
     structured_output: bool = False,
     tools: list = None,
-    support_structured_output: bool = True
+    support_structured_output: bool = True,
 ):
     """Construct a graph for manager-worker workflow.
 
@@ -492,12 +406,22 @@ def contruct_multi_agent_graph(
         if support_structured_output is True:
             graph_builder.add_node(
                 "PlannerAgent",
-                lambda state: PlannerAgent(state, llm, system_prompt=planner_prompt, support_structured_output=support_structured_output),
+                lambda state: PlannerAgent(
+                    state,
+                    llm,
+                    system_prompt=planner_prompt,
+                    support_structured_output=support_structured_output,
+                ),
             )
         else:
             graph_builder.add_node(
                 "PlannerAgent",
-                lambda state: PlannerAgent(state, llm, system_prompt=planner_prompt_json, support_structured_output=support_structured_output),
+                lambda state: PlannerAgent(
+                    state,
+                    llm,
+                    system_prompt=planner_prompt_json,
+                    support_structured_output=support_structured_output,
+                ),
             )
 
         graph_builder.add_node("extract_tasks", extract_tasks)
@@ -512,12 +436,12 @@ def contruct_multi_agent_graph(
                 run_ase,
                 molecule_name_to_smiles,
                 smiles_to_coordinate_file,
-                extract_output_json
+                extract_output_json,
             ]
-
+        tools_node = ToolNode(tools=tools, 
+                              messages_key="worker_messages")
         graph_builder.add_node(
-            "tools",
-            BasicToolNode(tools=tools),
+            "tools", tools_node
         )
         graph_builder.add_node("increment", increment_index)
         graph_builder.add_node(

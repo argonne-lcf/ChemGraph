@@ -369,7 +369,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         raise ValueError(err)
 
     calc, system_info, calc_model = load_calculator(calculator)
-    params.calculator = calc_model
 
     if calc is None:
         err = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
@@ -398,7 +397,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
         end_time = time.time()
         wall_time = end_time - start_time
-
         simulation_output = ASEOutputSchema(
             input_structure_file=input_structure_file,
             converged=True,
@@ -579,7 +577,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             single_point_energy=single_point_energy,
             wall_time=wall_time,
         )
-
         with open(output_results_file, "w") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
 
@@ -626,4 +623,8 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
     except Exception as e:
         err = f"ASE simulation gave an exception:{e}"
-        raise ValueError(err)
+        return {
+            "status": "failure",
+            "error_type": type(e).__name__,
+            "message": str(e),
+        }

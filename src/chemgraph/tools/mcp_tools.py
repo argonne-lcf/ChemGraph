@@ -11,7 +11,7 @@ from mcp.server.fastmcp import FastMCP
 import pubchempy as pcp
 from ase import Atoms
 
-from chemgraph.tools.mcp_tools import (
+from chemgraph.tools.mcp_helper import (
     load_calculator,
     atoms_to_atomsdata,
     is_linear_molecule,
