@@ -2,7 +2,7 @@ import asyncio
 import os
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from chemgraph.agent.llm_agent_mcp import ChemGraph
+from chemgraph.agent.llm_agent import ChemGraph
 
 #REMOTE_HOST = "YOUR_COMPUTE_NODE"
 #REMOTE_ENV = "/path/to/venv"

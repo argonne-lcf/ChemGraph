@@ -1,7 +1,7 @@
 import asyncio
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from chemgraph.agent.llm_agent_mcp import ChemGraph
+from chemgraph.agent.llm_agent import ChemGraph
 
 # prompt_single = "What is the enthalpy of water using TBLite GFN2-xTB at 400K?"
 prompt_single = "What is the enthalpy of CO2 using MACE medium at 500K?"
@@ -23,7 +23,7 @@ async def bootstrap():
         tools=tools,
     )
     result = await cg.run(prompt_single)
-
+    print(result)
     """ Optional to print the entire state
     print("######## MESSAGE STATE #########")
     print(result)
