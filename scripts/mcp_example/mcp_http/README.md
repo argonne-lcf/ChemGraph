@@ -1,6 +1,6 @@
 # Using MCP via Port-Forwarding on Aurora (ALCF)
 
-This directory provides an example of how to use **MCP (Model Control Protocol)** with port-forwarding on **Aurora HPC at ALCF**. The instructions below guide you through launching the MCP server and connecting ChemGraph to it.
+This directory provides an example of how to use **MCP (Model Control Protocol)** with port-forwarding on **Aurora at ALCF**. The instructions below guide you through launching the MCP server and connecting ChemGraph to it.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ qsub -I -q debug -l select=1,walltime=60:00 -A your_account_name -l filesystems=
 ssh YOUR_COMPUTE_NODE_ID
 ```
 ### 3. Launch the MCP Server
-Navigate to this directory and start the MCP server:
+Navigate to this directory, activate the environment and start the MCP server:
 ```bash
 # Set proxy for tools that query external databases 
 export http_proxy="proxy.alcf.anl.gov:3128"
@@ -77,6 +77,10 @@ export no_proxy=127.0.0.1,localhost,::1
 unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
 ```
 And run ChemGraph again.
+=======
+Finally, in another terminal, activate the environment and run ChemGraph to connect to the MCP server, which listens on port 9001.
+```bash
+python scripts/mcp_example/mcp_http/run_mcp.py
 ```
 python run_chemgraph.py
 ```
