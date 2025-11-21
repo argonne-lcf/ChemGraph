@@ -26,7 +26,7 @@ def molecule_name_to_smiles(name: str) -> str:
     IndexError
         If the molecule name is not found in PubChem.
     """
-    return pubchempy.get_compounds(str(name), "name")[0].canonical_smiles
+    return pubchempy.get_compounds(str(name), "name")[0].connectivity_smiles
 
 
 @tool

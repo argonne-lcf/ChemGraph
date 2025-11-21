@@ -1,12 +1,11 @@
-# Using MCP via Port-Forwarding on Aurora (ALCF)
+# Using MCP via stdio on Aurora (ALCF)
 
-This directory provides an example of how to use **MCP (Model Control Protocol)** with port-forwarding on **Aurora HPC at ALCF**. The instructions below guide you through launching the MCP server and connecting ChemGraph to it.
+This directory provides an example of how to use **MCP (Model Control Protocol)** with stdio on **Aurora at ALCF**. The instructions below guide you through launching the MCP server and connecting ChemGraph to it.
 
 ## Prerequisites
 
-- ChemGraph installed in your environment  
-- Access to Aurora HPC at ALCF  
-- A valid ALCF account
+- ChemGraph installed in your environment 
+- `OPENAI_API_KEY` set (or enter interactively when running ChemGraph)
 
 ## Step-by-Step Instructions
 
@@ -17,13 +16,21 @@ Request an interactive job on a compute node:
 ```bash
 qsub -I -q debug -l select=1,walltime=60:00 -A your_account_name -l filesystems=flare
 ```
-### 2. Edit the following variables in run_mcp.py file
+### 2. Edit variables in run_chemgraph.py
+Update the following variables to match your setup:
 ```
-REMOTE_HOST = "YOUR_COMPUTE_NODE" # Your compute node ID from step 1
-CONDA_ENV = "YOUR_CONDA_ENV" # Environment with ChemGraph installed
-MCP_SERVER = "PATH/TO/mcp_tools_stdio.py"
+REMOTE_HOST = "YOUR_COMPUTE_NODE_ID"
+REMOTE_ENV = "path/to/venv"
 ```
-### 3. Launch both MCP server and ChemGraph
+### 3. Launch MCP server and ChemGraph on a login node
 ```bash
-python run_mcp.py
+# Load the environments
+module load frameworks
+source /path/to/venv/bin/activate
+
+# Set your API key for the OpenAI model (GPT-4o-mini in this example)
+export OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"
+
+# Start ChemGraph
+python run_chemgraph.py
 ```
