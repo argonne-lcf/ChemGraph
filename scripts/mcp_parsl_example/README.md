@@ -30,6 +30,7 @@ export https_proxy="proxy.alcf.anl.gov:3128"
 # Load environment modules and activate your Python environment
 module load frameworks
 source /path/to/venv/bin/activate
+pip install parsl # Run this to install Parsl (not yet included in ChemGraph pyproject.toml)
 
 # Start MCP server
 python -m chemgraph.tools.mcp_parsl
@@ -61,7 +62,7 @@ In another terminal session on the same login node used in Step 4, run ChemGraph
 module load frameworks
 source /path/to/venv/bin/activate
 
-python run_chemgraph.py
+python run_mcp_parsl.py
 ```
 
 ### Troubleshooting
