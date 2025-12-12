@@ -35,6 +35,7 @@ from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.multi_agent_mcp import contruct_multi_agent_mcp_graph
+from chemgraph.graphs.graspa_mcp import contruct_graspa_mcp_graph
 import logging
 
 logger = logging.getLogger(__name__)
@@ -136,14 +137,19 @@ class ChemGraph:
             frequency_penalty = 0.0  # No repetition penalty
             presence_penalty = 0.0  # No presence penalty
 
-            if model_name in supported_openai_models or model_name in supported_argo_models:
+            if (
+                model_name in supported_openai_models
+                or model_name in supported_argo_models
+            ):
                 llm = load_openai_model(
                     model_name=model_name, temperature=temperature, base_url=base_url
                 )
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)
             elif model_name in supported_alcf_models:
-                llm = load_alcf_model(model_name=model_name, base_url=base_url, api_key=api_key)
+                llm = load_alcf_model(
+                    model_name=model_name, base_url=base_url, api_key=api_key
+                )
             elif model_name in supported_anthropic_models:
                 llm = load_anthropic_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
@@ -164,7 +170,9 @@ class ChemGraph:
                 # These would be set by docker-compose for the jupyter_lab service
                 vllm_base_url = os.getenv("VLLM_BASE_URL", base_url)
                 # ChatOpenAI requires an api_key, even if the endpoint doesn't use it.
-                vllm_api_key = os.getenv("OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key")
+                vllm_api_key = os.getenv(
+                    "OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key"
+                )
 
                 if vllm_base_url:
                     logger.info(
@@ -189,7 +197,9 @@ class ChemGraph:
                     logger.error(
                         f"Model '{model_name}' is not in any supported list and no VLLM_BASE_URL/base_url provided."
                     )
-                    raise ValueError(f"Unsupported model or missing base URL for: {model_name}")
+                    raise ValueError(
+                        f"Unsupported model or missing base URL for: {model_name}"
+                    )
 
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
@@ -223,6 +233,7 @@ class ChemGraph:
             "mock_agent": {"constructor": construct_mock_agent_graph},
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
             "multi_agent_mcp": {"constructor": contruct_multi_agent_mcp_graph},
+            "graspa_mcp": {"constructor": contruct_graspa_mcp_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -283,6 +294,11 @@ class ChemGraph:
                 structured_output=self.structured_output,
                 support_structured_output=self.support_structured_output,
             )
+        elif self.workflow_type == "graspa_mcp":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm=llm,
+                tools=self.tools,
+            )
 
     def visualize(self):
         """Visualize the LangGraph graph structure.
@@ -309,7 +325,9 @@ class ChemGraph:
             Image(
                 self.workflow.get_graph().draw_mermaid_png(
                     curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(first="#ffdfba", last="#baffc9", default="#fad7de"),
+                    node_colors=NodeStyles(
+                        first="#ffdfba", last="#baffc9", default="#fad7de"
+                    ),
                     wrap_label_n_words=9,
                     output_file_path=None,
                     draw_method=MermaidDrawMethod.PYPPETEER,
@@ -374,7 +392,9 @@ class ChemGraph:
 
             try:
                 git_commit = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+                    subprocess.check_output(["git", "rev-parse", "HEAD"])
+                    .decode("utf-8")
+                    .strip()
                 )
             except subprocess.CalledProcessError:
                 git_commit = "unknown"
@@ -390,26 +410,34 @@ class ChemGraph:
 
             # Add prompts depending on workflow_type
             if self.workflow_type in {"single_agent", "graspa", "python_relp"}:
-                output_data.update({
-                    "system_prompt": self.system_prompt,
-                    "formatter_prompt": self.formatter_prompt,
-                })
+                output_data.update(
+                    {
+                        "system_prompt": self.system_prompt,
+                        "formatter_prompt": self.formatter_prompt,
+                    }
+                )
             elif self.workflow_type == "mock_agent":
-                output_data.update({
-                    "system_prompt": self.system_prompt,
-                })
+                output_data.update(
+                    {
+                        "system_prompt": self.system_prompt,
+                    }
+                )
             elif self.workflow_type == "multi_agent":
-                output_data.update({
-                    "planner_prompt": self.planner_prompt,
-                    "executor_prompt": self.executor_prompt,
-                    "aggregator_prompt": self.aggregator_prompt,
-                    "formatter_prompt": self.formatter_multi_prompt,
-                })
+                output_data.update(
+                    {
+                        "planner_prompt": self.planner_prompt,
+                        "executor_prompt": self.executor_prompt,
+                        "aggregator_prompt": self.aggregator_prompt,
+                        "formatter_prompt": self.formatter_multi_prompt,
+                    }
+                )
             else:
-                output_data.update({
-                    "system_prompt": "unknown",
-                    "formatter_prompt": "unknown",
-                })
+                output_data.update(
+                    {
+                        "system_prompt": "unknown",
+                        "formatter_prompt": "unknown",
+                    }
+                )
 
             with open(file_path, "w", encoding="utf-8") as json_file:
                 json.dump(output_data, json_file, indent=4)
@@ -432,7 +460,9 @@ class ChemGraph:
             if cfg is None:
                 cfg = {}
             if not isinstance(cfg, dict):
-                raise TypeError(f"`config` must be a dictionary, got {type(cfg).__name__}")
+                raise TypeError(
+                    f"`config` must be a dictionary, got {type(cfg).__name__}"
+                )
             cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
             cfg["recursion_limit"] = self.recursion_limit
             return cfg
@@ -459,7 +489,9 @@ class ChemGraph:
         prev_messages = []
         last_state = None
         try:
-            async for s in self.workflow.astream(inputs, stream_mode="values", config=config):
+            async for s in self.workflow.astream(
+                inputs, stream_mode="values", config=config
+            ):
                 if "messages" in s and s["messages"] != prev_messages:
                     new_message = s["messages"][-1]
                     try:

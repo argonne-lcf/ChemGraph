@@ -2,12 +2,92 @@ import subprocess
 import os
 from pathlib import Path
 import shutil
+import random
+import time
 import numpy as np
+
 import ase
 from ase.io import read as ase_read
-from chemgraph.models.graspa_input import GRASPAInputSchema
+
 from langchain_core.tools import tool
 
+from chemgraph.schemas.graspa_schema import (
+    graspa_input_schema,
+    graspa_input_schema_ensemble,
+)
+from chemgraph.models.graspa_input import GRASPAInputSchema
+
+
+def mock_graspa(params: graspa_input_schema) -> dict:
+    def rand_uptake(
+        low: float, high: float, ndigits: int = 3, min_positive: float | None = None
+    ) -> float:
+        """Random uptake with rounding and optional minimum positive value."""
+        value = random.uniform(low, high)
+        value = round(value, ndigits)
+        if min_positive is not None and value == 0.0:
+            value = min_positive
+        return value
+
+    time.sleep(random.uniform(20, 40))
+    n_ads = len(params.adsorbates)
+
+    if n_ads == 1:
+        uptake_co2 = rand_uptake(0, 2, ndigits=3)
+        return {
+            "co2_uptake_mol_per_kg": uptake_co2,
+        }
+
+    elif n_ads == 2:
+        uptake_co2 = rand_uptake(0, 2, ndigits=3)
+        # prevent rounded value from becoming exactly zero
+        uptake_n2 = rand_uptake(0, 0.5, ndigits=3, min_positive=1e-3)
+
+        try:
+            selectivity = uptake_co2 / uptake_n2
+        except Exception:
+            selectivity = 1e4
+
+        return {
+            "co2_uptake_mol_per_kg": uptake_co2,
+            "n2_uptake_mol_per_kg": uptake_n2,
+            "co2_n2_selectivity": round(selectivity, 2),
+        }
+
+    elif n_ads == 3:
+        uptake_co2 = rand_uptake(0, 2, ndigits=3)
+        uptake_n2 = rand_uptake(0, 0.5, ndigits=3, min_positive=1e-3)
+        uptake_h2o = rand_uptake(0, 5, ndigits=3)
+
+        try:
+            selectivity = uptake_co2 / uptake_n2
+        except Exception:
+            selectivity = 1e4
+
+        return {
+            "co2_uptake_mol_per_kg": uptake_co2,
+            "n2_uptake_mol_per_kg": uptake_n2,
+            "h2o_uptake_mol_per_kg": uptake_h2o,
+            "co2_n2_selectivity": round(selectivity, 2),
+        }
+
+    else:
+        raise ValueError("Only supports 1–3 adsorbates only.")
+
+
+def run_graspa_core(params: graspa_input_schema):
+    """Run a single gRASPA calculations using specified input parameters.
+
+    Parameters
+    ----------
+    params : graspa_input_schema
+        Input parameters for the gRASPA calculation
+    """
+
+    return mock_graspa(params)
+
+
+# LangGraph gRASPA tools.
 _file_dir = Path(__file__).parent / "files" / "template"
 
 
@@ -26,7 +106,9 @@ def run_graspa(graspa_input: GRASPAInputSchema):
             - E (g/L)
     """
 
-    def _calculate_cell_size(atoms: ase.Atoms, cutoff: float = 12.8) -> list[int, int, int]:
+    def _calculate_cell_size(
+        atoms: ase.Atoms, cutoff: float = 12.8
+    ) -> list[int, int, int]:
         """Method to calculate Unitcells (for periodic boundary condition) for GCMC
 
         Args:
@@ -147,7 +229,9 @@ def run_graspa(graspa_input: GRASPAInputSchema):
 
         # Get unit in g/L
         framework_vol = atoms.get_volume()  # in Angstrom^3
-        framework_vol_in_L = framework_vol * 1e-27 * unitcell[0] * unitcell[1] * unitcell[2]
+        framework_vol_in_L = (
+            framework_vol * 1e-27 * unitcell[0] * unitcell[1] * unitcell[2]
+        )
 
         # Hard code for CO2 and H2
         if adsorbate == "CO2":
@@ -160,8 +244,12 @@ def run_graspa(graspa_input: GRASPAInputSchema):
             molar_mass = 28.01
         else:
             raise ValueError(f"Adsorbate {adsorbate} is not supported.")
-        uptake_g_L = uptake_total_molecule / (6.022 * 1e23) * molar_mass / framework_vol_in_L
-        error_g_L = error_total_molecule / (6.022 * 1e23) * molar_mass / framework_vol_in_L
+        uptake_g_L = (
+            uptake_total_molecule / (6.022 * 1e23) * molar_mass / framework_vol_in_L
+        )
+        error_g_L = (
+            error_total_molecule / (6.022 * 1e23) * molar_mass / framework_vol_in_L
+        )
     elif graspa_version == 'cuda':
         uptake_lines = []
         with open(f"{out_dir}/raspa.log", "r") as rf:
@@ -178,6 +266,5 @@ def run_graspa(graspa_input: GRASPAInputSchema):
         error_g_L = result_g_L[1].split()[-1]
     else:
         raise ValueError(f"gRASPA version {graspa_version} is not supported.")
-    
 
     return uptake_mol_kg, error_mol_kg, uptake_g_L, error_g_L
