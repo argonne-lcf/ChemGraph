@@ -1,10 +1,13 @@
+import json
+
+
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import ToolMessage
-import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
+
 from chemgraph.tools.graspa_tools import run_graspa
-from chemgraph.models.agent_response import ResponseFormatter
+from chemgraph.schemas.agent_response import ResponseFormatter
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
@@ -48,13 +51,19 @@ class BasicToolNode:
                 if not tool_name or tool_name not in self.tools_by_name:
                     raise ValueError(f"Invalid tool name: {tool_name}")
 
-                tool_result = self.tools_by_name[tool_name].invoke(tool_call.get("args", {}))
+                tool_result = self.tools_by_name[tool_name].invoke(
+                    tool_call.get("args", {})
+                )
 
                 # Handle different types of tool results
                 result_content = (
                     tool_result.dict()
                     if hasattr(tool_result, "dict")
-                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
+                    else (
+                        tool_result
+                        if isinstance(tool_result, dict)
+                        else str(tool_result)
+                    )
                 )
 
                 outputs.append(
@@ -194,7 +203,9 @@ def construct_graspa_graph(
         if not structured_output:
             graph_builder.add_node(
                 "ChemGraphAgent",
-                lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                lambda state: ChemGraphAgent(
+                    state, llm, system_prompt=system_prompt, tools=tools
+                ),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_conditional_edges(
@@ -210,12 +221,16 @@ def construct_graspa_graph(
         else:
             graph_builder.add_node(
                 "ChemGraphAgent",
-                lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                lambda state: ChemGraphAgent(
+                    state, llm, system_prompt=system_prompt, tools=tools
+                ),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_node(
                 "ResponseAgent",
-                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
+                lambda state: ResponseAgent(
+                    state, llm, formatter_prompt=formatter_prompt
+                ),
             )
             graph_builder.add_conditional_edges(
                 "ChemGraphAgent",

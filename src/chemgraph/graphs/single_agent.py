@@ -1,6 +1,4 @@
 from langgraph.graph import StateGraph, START, END
-from langchain_core.messages import ToolMessage
-import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
@@ -11,12 +9,11 @@ from chemgraph.tools.ase_tools import (
 )
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
-    smiles_to_atomsdata,
     smiles_to_coordinate_file,
 )
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator
-from chemgraph.models.agent_response import ResponseFormatter
+from chemgraph.schemas.agent_response import ResponseFormatter
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
@@ -76,7 +73,6 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
     if tools is None:
         tools = [
             file_to_atomsdata,
-            # smiles_to_atomsdata,
             smiles_to_coordinate_file,
             run_ase,
             molecule_name_to_smiles,
@@ -117,7 +113,9 @@ def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     return {"messages": [response]}
 
 
-def ReportAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=[generate_html]):
+def ReportAgent(
+    state: State, llm: ChatOpenAI, system_prompt: str, tools=[generate_html]
+):
     """LLM node that generates a report from the messages.
 
     Parameters
@@ -188,7 +186,6 @@ def construct_single_agent_graph(
         if tools is None:
             tools = [
                 file_to_atomsdata,
-                # smiles_to_atomsdata,
                 smiles_to_coordinate_file,
                 run_ase,
                 molecule_name_to_smiles,
@@ -201,7 +198,9 @@ def construct_single_agent_graph(
         if not structured_output:
             graph_builder.add_node(
                 "ChemGraphAgent",
-                lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                lambda state: ChemGraphAgent(
+                    state, llm, system_prompt=system_prompt, tools=tools
+                ),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_edge(START, "ChemGraphAgent")
@@ -243,12 +242,16 @@ def construct_single_agent_graph(
         else:
             graph_builder.add_node(
                 "ChemGraphAgent",
-                lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                lambda state: ChemGraphAgent(
+                    state, llm, system_prompt=system_prompt, tools=tools
+                ),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_node(
                 "ResponseAgent",
-                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
+                lambda state: ResponseAgent(
+                    state, llm, formatter_prompt=formatter_prompt
+                ),
             )
             graph_builder.add_conditional_edges(
                 "ChemGraphAgent",
