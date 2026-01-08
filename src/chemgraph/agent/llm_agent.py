@@ -1,6 +1,6 @@
 import datetime
 import os
-from typing import List, Any
+from typing import List
 
 from chemgraph.tools.openai_loader import load_openai_model
 from chemgraph.tools.alcf_loader import load_alcf_model
@@ -37,7 +37,6 @@ from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.multi_agent_mcp import contruct_multi_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import contruct_graspa_mcp_graph
 
-from chemgraph.graphs.graspa_mcp_multi import contruct_graspa_mcp_graph_multi
 import logging
 
 logger = logging.getLogger(__name__)
@@ -238,7 +237,6 @@ class ChemGraph:
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
             "multi_agent_mcp": {"constructor": contruct_multi_agent_mcp_graph},
             "graspa_mcp": {"constructor": contruct_graspa_mcp_graph},
-            "graspa_mcp_multi": {"constructor": contruct_graspa_mcp_graph_multi},
         }
 
         if workflow_type not in self.workflow_map:
@@ -300,12 +298,6 @@ class ChemGraph:
                 support_structured_output=self.support_structured_output,
             )
         elif self.workflow_type == "graspa_mcp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm=llm,
-                executor_tools=self.tools,
-                analysis_tools=self.data_tools,
-            )
-        elif self.workflow_type == "graspa_mcp_multi":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 executor_tools=self.tools,
@@ -428,6 +420,14 @@ class ChemGraph:
                         "formatter_prompt": self.formatter_prompt,
                     }
                 )
+
+            elif self.workflow_type == "graspa_mcp":
+                output_data.update(
+                    {
+                        "system_prompt": self.system_prompt,
+                    }
+                )
+
             elif self.workflow_type == "mock_agent":
                 output_data.update(
                     {
