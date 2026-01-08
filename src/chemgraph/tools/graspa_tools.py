@@ -15,7 +15,7 @@ from langchain_core.tools import tool
 from chemgraph.schemas.graspa_schema import (
     graspa_input_schema,
 )
-from chemgraph.models.graspa_input import GRASPAInputSchema
+from chemgraph.schemas.graspa_input import GRASPAInputSchema
 
 # LangGraph gRASPA tools.
 _file_dir = Path(__file__).parent / "files" / "template_graspa_sycl"

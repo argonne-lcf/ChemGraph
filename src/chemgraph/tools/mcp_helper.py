@@ -1,6 +1,6 @@
 ### Helper functions for mcp_tools.py ###
 
-from chemgraph.models.atomsdata import AtomsData
+from chemgraph.schemas.atomsdata import AtomsData
 
 
 def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
