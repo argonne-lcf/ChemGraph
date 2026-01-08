@@ -36,6 +36,8 @@ from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.multi_agent_mcp import contruct_multi_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import contruct_graspa_mcp_graph
+
+from chemgraph.graphs.graspa_mcp_multi import contruct_graspa_mcp_graph_multi
 import logging
 
 logger = logging.getLogger(__name__)
@@ -128,6 +130,7 @@ class ChemGraph:
         report_prompt: str = report_prompt,
         support_structured_output: bool = True,
         tools: List = None,
+        data_tools: List = None,
     ):
         try:
             # Use hardcoded optimal values for tool calling
@@ -219,6 +222,7 @@ class ChemGraph:
         self.aggregator_prompt = aggregator_prompt
         self.formatter_multi_prompt = formatter_multi_prompt
         self.tools = tools
+        self.data_tools = data_tools
 
         if model_name in supported_argo_models:
             self.support_structured_output = False
@@ -234,6 +238,7 @@ class ChemGraph:
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
             "multi_agent_mcp": {"constructor": contruct_multi_agent_mcp_graph},
             "graspa_mcp": {"constructor": contruct_graspa_mcp_graph},
+            "graspa_mcp_multi": {"constructor": contruct_graspa_mcp_graph_multi},
         }
 
         if workflow_type not in self.workflow_map:
@@ -297,7 +302,14 @@ class ChemGraph:
         elif self.workflow_type == "graspa_mcp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
-                tools=self.tools,
+                executor_tools=self.tools,
+                analysis_tools=self.data_tools,
+            )
+        elif self.workflow_type == "graspa_mcp_multi":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm=llm,
+                executor_tools=self.tools,
+                analysis_tools=self.data_tools,
             )
 
     def visualize(self):

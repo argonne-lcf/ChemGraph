@@ -1,4 +1,22 @@
+# The gRASPA schema is configured to work within the capability of the SYCL version. Further modifications are needed to
+# make it compatible with gRASPA-CUDA.
+from typing import Union
 from pydantic import BaseModel, Field
+
+
+class SimulationCondition(BaseModel):
+    """
+    Helper model to group temperature and pressure for a single simulation state.
+    """
+
+    temperature: float = Field(
+        default=298.15,
+        description="Temperature in Kelvin (K).",
+    )
+    pressure: float = Field(
+        default=101325.0,
+        description="Pressure in Pascal (Pa).",
+    )
 
 
 class graspa_input_schema(BaseModel):
@@ -7,7 +25,7 @@ class graspa_input_schema(BaseModel):
     )
     output_result_file: str = Field(
         default="raspa.log",
-        description="Name of a JSON file where simulation results will be saved.",
+        description="Name of a file where simulation results will be saved.",
     )
     temperature: float = Field(
         default=298.15,
@@ -21,37 +39,27 @@ class graspa_input_schema(BaseModel):
         default=10000,
         description="Number of Monte Carlo cycles",
     )
-    adsorbates: list[str] = Field(
-        description="List of adsorbates for the simulations. Supported adsorbates are CO2, N2 and H2O",
-    )
-    adsorbate_compositions: list[float] = Field(
-        description="List of adsorbate compositions in the same order as list of adsorbates."
+    adsorbate: str = Field(
+        description="Adsorbate name for the simulations. Supported adsorbate is 'H2O'",
     )
 
 
 class graspa_input_schema_ensemble(BaseModel):
-    input_structure_directory: str = Field(
-        description="Path to a folder of input structures containing the atomic structure for the simulations."
+    input_structures: Union[str, list[str]] = Field(
+        description="Path to a directory of CIF files OR a specific list of file paths."
     )
     output_result_file: str = Field(
         default="raspa.log",
-        description="Name of a JSON file where simulation results will be saved.",
+        description="Name of a file where each simulation results will be saved.",
     )
-    temperature: float = Field(
-        default=298.15,
-        description="Temperature in Kelvin (K).",
-    )
-    pressure: float = Field(
-        default=101325.0,
-        description="Pressure in Pascal (Pa).",
+    conditions: list[SimulationCondition] = Field(
+        default_factory=lambda: [SimulationCondition()],
+        description="List of temperature (K) and pressure (Pa) conditions to simulate.",
     )
     n_cycles: int = Field(
         default=10000,
         description="Number of Monte Carlo cycles",
     )
-    adsorbates: list[str] = Field(
-        description="List of adsorbates for the simulations. Supported adsorbates are CO2, N2 and H2O",
-    )
-    adsorbate_compositions: list[float] = Field(
-        description="List of adsorbate compositions in the same order as list of adsorbates."
+    adsorbate: str = Field(
+        description="Adsorbate name for the simulations. Supported adsorbate is 'H2O'",
     )

@@ -1,3 +1,4 @@
+from typing import Union
 from functools import partial
 
 from langgraph.prebuilt import ToolNode
@@ -15,7 +16,8 @@ from chemgraph.state.graspa_state import (
 from chemgraph.prompt.graspa_prompt import (
     planner_prompt,
     executor_prompt,
-    aggregator_prompt,
+    batch_orchestrator_prompt,
+    analyst_prompt,
 )
 
 logger = setup_logger(__name__)
@@ -26,14 +28,82 @@ def planner_agent(
     llm: ChatOpenAI,
     system_prompt: str,
 ):
+    executor_outputs = state.get("executor_results", [])
+    content_block = f"Current Conversation History: {state['messages']}"
+    if executor_outputs:
+        results_text = "\n".join(executor_outputs)
+        content_block += (
+            f"\n\n### UPDATED: Results from Executor Tasks ###\n{results_text}"
+        )
+
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"{state['messages']}"},
+        {"role": "assistant", "content": content_block},
     ]
+
     structured_llm = llm.with_structured_output(PlannerResponse)
     response_obj = structured_llm.invoke(messages)
+    print(f"PLANNER: {response_obj.model_dump_json()}")
+    return {
+        "messages": [response_obj.thought_process],
+        "next_step": response_obj.next_step,
+        "tasks": response_obj.tasks if response_obj.tasks else [],
+    }
 
-    return {"messages": [response_obj.model_dump_json()], "tasks": response_obj.tasks}
+
+def unified_planner_router(state: PlannerState) -> Union[str, list[Send]]:
+    """
+    Routes based on the Planner's structured 'next_step'.
+    """
+    next_step = state.get("next_step")
+
+    # --- PATH A: PARALLEL EXECUTION ---
+    if next_step == "executor_subgraph":
+        tasks = state.get("tasks", [])
+        return [
+            Send(
+                "executor_subgraph",
+                {
+                    "executor_id": f"worker_{getattr(t, 'task_index', i + 1)}",
+                    "messages": [getattr(t, 'prompt')],
+                },
+            )
+            for i, t in enumerate(tasks)
+        ]
+
+    # --- PATH B: STANDARD ROUTING ---
+    elif next_step == "batch_orchestrator":
+        return "batch_orchestrator"
+
+    elif next_step == "insight_analyst":
+        return "insight_analyst"
+
+    # --- PATH D: TERMINATION ---
+    return END
+
+
+def batch_orchestrator_agent(
+    state: PlannerState, llm: ChatOpenAI, tools: list, system_prompt: str
+):
+    """Decides to call the split tool."""
+    messages = [{"role": "system", "content": system_prompt}] + state["messages"]
+
+    llm_with_tools = llm.bind_tools(tools)
+    response = llm_with_tools.invoke(messages)
+
+    return {"messages": [response]}
+
+
+def route_batch_orchestrator(state: PlannerState):
+    """
+    If the agent called a tool, go to ToolNode.
+    Otherwise (or after tool execution), go back to Planner to decide next steps.
+    """
+    last_msg = state["messages"][-1]
+    if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+        return "batch_tools"
+
+    return "Planner"
 
 
 async def executor_model_node(
@@ -47,17 +117,10 @@ async def executor_model_node(
     It sees its own 'task_prompt' and its own 'messages' history.
     """
     messages = state["messages"]
-
-    # If this is the first step, prepend the System Prompt and the Task
-    if not messages:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Your Task: {state['task_prompt']}"},
-        ]
-
     llm_with_tools = llm.bind_tools(tools)
     response = await llm_with_tools.ainvoke(messages)
 
+    # print(f"EXECUTOR: {response}")
     return {"messages": [response]}
 
 
@@ -85,55 +148,6 @@ def format_executor_output(state: ExecutorState) -> PlannerState:
     }
 
 
-def distribute_tasks(state: PlannerState):
-    """
-    Iterates over the list of tasks and creates a `Send` object for each.
-    Each `Send` targets the 'executor_graph' node with a specific input state.
-    """
-    tasks = state.get("tasks", [])
-    sends = []
-
-    for i, task in enumerate(tasks):
-        executor_id = getattr(task, "executor_id", f"executor_{i}")
-        prompt = getattr(task, "prompt", "Analyze this.")
-
-        payload = {
-            "executor_id": executor_id,
-            "task_prompt": prompt,
-            "messages": [],
-        }
-
-        sends.append(Send("executor_subgraph", payload))
-
-    return sends
-
-
-def aggreagator_agent(
-    state: PlannerState,
-    llm: ChatOpenAI,
-    system_prompt: str,
-):
-    """Synthesizes all collected results from state['executor_results']."""
-    results = state.get("executor_results", [])
-
-    formatted_results = "\n\n".join(
-        [f"Report {i + 1} ---\n{res}" for i, res in enumerate(results)]
-    )
-    summary_query = (
-        "All executor tasks are complete. Here are their collected reports:\n\n"
-        f"{formatted_results}\n\n"
-        "Please synthesize these results to answer the original user request."
-    )
-    state["messages"].append(summary_query)
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"{state['messages']}"},
-    ]
-
-    response = llm.invoke(messages)
-    return {"messages": [response]}
-
-
 def construct_executor_subgraph(llm: ChatOpenAI, tools: list, system_prompt: str):
     """Builds the reusable executor subgraph (Agent -> Tools -> Agent)."""
     workflow = StateGraph(ExecutorState)
@@ -159,12 +173,49 @@ def construct_executor_subgraph(llm: ChatOpenAI, tools: list, system_prompt: str
     return workflow.compile()
 
 
+def insight_analyst_node(
+    state: PlannerState,
+    llm: ChatOpenAI,
+    tools: list,
+    system_prompt: str,
+):
+    """Analyzes the gathered results."""
+    results_text = "\n".join(state["executor_results"])
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "assistant",
+            "content": f"Previous Messages: {state['messages']}\n\nExecution Results:\n{results_text}",
+        },
+    ]
+
+    # Simple single-step analyst (can be expanded to loop like Executor)
+    response = llm.bind_tools(tools).invoke(messages)
+    return {"messages": [response]}
+
+
+def route_analyst(state: PlannerState):
+    """
+    Determines if the Analyst is calling a tool or giving the final answer.
+    """
+    last_msg = state["messages"][-1]
+
+    # If the Analyst wants to use Python/Pandas -> Go to ToolNode
+    if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+        return "analyst_tools"
+
+    # If the Analyst is done -> Go back to Planner (who will then trigger FINISH)
+    return "Planner"
+
+
 def contruct_graspa_mcp_graph(
     llm: ChatOpenAI,
     planner_prompt: str = planner_prompt,
     executor_prompt: str = executor_prompt,
-    aggregator_prompt: str = aggregator_prompt,
-    tools: list = None,
+    batch_orchestrator_prompt: str = batch_orchestrator_prompt,
+    analyst_prompt: str = analyst_prompt,
+    executor_tools: list = None,
+    analysis_tools: list = None,
 ):
     """
     Constructs the Main Graph using the Map-Reduce (Send) pattern.
@@ -172,7 +223,11 @@ def contruct_graspa_mcp_graph(
     checkpointer = MemorySaver()
 
     # Create the Executor subgraph
-    executor_subgraph = construct_executor_subgraph(llm, tools, executor_prompt)
+    executor_subgraph = construct_executor_subgraph(
+        llm,
+        executor_tools,
+        executor_prompt,
+    )
 
     # Create the Main Manager Graph
     graph_builder = StateGraph(PlannerState)
@@ -187,18 +242,32 @@ def contruct_graspa_mcp_graph(
         ),
     )
 
+    # batch_orchestrator agent
+    graph_builder.add_node(
+        "batch_orchestrator",
+        partial(
+            batch_orchestrator_agent,
+            llm=llm,
+            tools=analysis_tools,
+            system_prompt=batch_orchestrator_prompt,
+        ),
+    )
     # Executor agent
     graph_builder.add_node("executor_subgraph", executor_subgraph)
 
-    # Aggregator agent
+    # Analyst agent
     graph_builder.add_node(
-        "Aggregator",
-        lambda state: aggreagator_agent(
-            state,
-            llm,
-            aggregator_prompt,
+        "insight_analyst",
+        partial(
+            insight_analyst_node,
+            llm=llm,
+            tools=analysis_tools,
+            system_prompt=analyst_prompt,
         ),
     )
+    # Tool nodes
+    graph_builder.add_node("batch_tools", ToolNode(analysis_tools))
+    graph_builder.add_node("analyst_tools", ToolNode(analysis_tools))
 
     # -- Edges --
     graph_builder.set_entry_point("Planner")
@@ -206,10 +275,29 @@ def contruct_graspa_mcp_graph(
     # Conditional Edge: Planner -> [Send(executor)...]
     graph_builder.add_conditional_edges(
         "Planner",
-        distribute_tasks,
-        ["executor_subgraph"],
+        unified_planner_router,
+        [
+            "batch_orchestrator",
+            "insight_analyst",
+            "executor_subgraph",
+            END,
+        ],
     )
-    graph_builder.add_edge("executor_subgraph", "Aggregator")
-    graph_builder.add_edge("Aggregator", END)
+    graph_builder.add_conditional_edges(
+        "batch_orchestrator",
+        route_batch_orchestrator,
+        {"batch_tools": "batch_tools", "Planner": "Planner"},
+    )
+    graph_builder.add_edge("batch_tools", "batch_orchestrator")
+    graph_builder.add_edge("executor_subgraph", "Planner")
+    graph_builder.add_conditional_edges(
+        "insight_analyst",
+        route_analyst,
+        {
+            "analyst_tools": "analyst_tools",
+            "Planner": END,
+        },
+    )
+    graph_builder.add_edge("analyst_tools", "insight_analyst")
 
     return graph_builder.compile(checkpointer=checkpointer)

@@ -1,4 +1,4 @@
-from typing import TypedDict, Annotated, Any
+from typing import TypedDict, Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 from langgraph.graph import add_messages
@@ -13,10 +13,18 @@ class ExecutorState(TypedDict):
     messages: Annotated[list, add_messages]
     executor_id: str
     task_prompt: str
+    inner_messages: Annotated[list, add_messages]
+    next_worker_instruction: str
 
 
 class PlannerState(TypedDict):
     messages: Annotated[list, add_messages]
+    next_step: Literal[
+        "batch_orchestrator",
+        "executor_subgraph",
+        "insight_analyst",
+        "FINISH",
+    ]
     tasks: list[dict[str, Any]]
     executor_results: Annotated[list, add_messages]
     executor_logs: Annotated[dict[str, list], merge_dicts]
@@ -49,6 +57,26 @@ class PlannerResponse(BaseModel):
         to executor agents for tool execution or computation.
     """
 
+    thought_process: str = Field(
+        description="Your reasoning for the current decision. If delegating to an agent, provide specific instructions here."
+    )
+    next_step: Literal[
+        "batch_orchestrator",
+        "executor_subgraph",
+        "insight_analyst",
+    ] = Field(description="The next node to activate in the workflow.")
     tasks: list[ExecutorTask] = Field(
         description="List of task to assign for executor",
+        default=None,
+    )
+
+
+class SubPlannerDecision(BaseModel):
+    """Output schema for the Sub-Planner's decision."""
+
+    next_step: Literal["delegate_to_executor", "finish"] = Field(
+        description="Check if more info is needed (delegate) or if the task is done (finish)."
+    )
+    instruction: str = Field(
+        description="If delegating, the precise instruction for the Executor. If finishing, the final answer."
     )
