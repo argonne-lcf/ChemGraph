@@ -52,15 +52,19 @@ scripts\build_windows.bat
 windows_packaging\scripts\build_windows.bat
 ```
 
+**Important:** The script is located at `windows_packaging\scripts\build_windows.bat` (note the `scripts\` subdirectory).
+
 This will:
-- Check Python installation
+- Check Python installation (tries both `python` and `py` commands)
 - Install PyInstaller
 - Install ChemGraph dependencies
 - Build the standalone executable
 
 **Output:** `windows_packaging\dist\chemgraph\chemgraph.exe`
 
-**Note:** The script automatically handles path navigation, so you can run it from either location.
+**Note:** 
+- The script automatically handles path navigation, so you can run it from either location
+- If you get "Python is not installed" error, see [RUNNING_ON_WINDOWS.md](RUNNING_ON_WINDOWS.md) for troubleshooting
 
 ### Step 2: Create the Installer
 

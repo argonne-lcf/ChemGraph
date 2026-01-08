@@ -39,6 +39,8 @@ cd C:\Users\YourName\Documents\ChemGraph
 
 ### 3. Run the Build Script
 
+**Important:** The script is located at `windows_packaging\scripts\build_windows.bat`
+
 **Option A: From windows_packaging directory (Recommended)**
 
 ```batch
@@ -51,6 +53,8 @@ scripts\build_windows.bat
 ```batch
 windows_packaging\scripts\build_windows.bat
 ```
+
+**Note:** If you see "Python is not installed", see the troubleshooting section below. The script now automatically tries both `python` and `py` commands.
 
 ### 4. Wait for Build to Complete
 
@@ -85,16 +89,39 @@ scripts\build_installer.bat
 
 ## Common Issues
 
-### "Python is not recognized"
+### "Python is not recognized" or "Python is not installed"
 
-**Problem:** Python is not in your PATH.
+**Problem:** Python is not found in your PATH, or you're using the wrong command.
 
-**Solution:**
-1. Reinstall Python and check "Add Python to PATH" during installation
-2. Or use the full path to Python:
-   ```batch
-   C:\Python310\python.exe -m pip install -e .
-   ```
+**Solutions:**
+
+**Option 1: Check if Python is installed**
+```batch
+python --version
+```
+or
+```batch
+py --version
+```
+
+**Option 2: If Python is installed but not in PATH:**
+1. Find your Python installation (usually `C:\Python3XX\` or `C:\Users\YourName\AppData\Local\Programs\Python\`)
+2. Add Python to PATH:
+   - Right-click "This PC" → Properties
+   - Advanced system settings → Environment Variables
+   - Edit "Path" under System variables
+   - Add the Python directory and the Scripts subdirectory
+   - Restart Command Prompt
+
+**Option 3: Reinstall Python with PATH option:**
+1. Download Python from https://www.python.org/downloads/
+2. During installation, check "Add Python to PATH"
+3. Restart Command Prompt after installation
+
+**Option 4: Use Python Launcher (py command):**
+The script now automatically tries both `python` and `py` commands, so if `py` works, the script should work.
+
+**Note:** The script is located at `windows_packaging\scripts\build_windows.bat`, not `windows_packaging\build_windows.bat`
 
 ### "The system cannot find the path specified"
 
