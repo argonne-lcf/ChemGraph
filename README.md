@@ -81,6 +81,25 @@ Ensure you have **Python 3.10 or higher** installed on your system.
     uv pip install -e .
     ```
 
+**Windows Standalone Package (No Python Required)**
+
+For Windows users who want a simple installation without Python setup:
+
+1. **Download the installer**: Get `ChemGraph-Setup.exe` from the [releases page](https://github.com/argonne-lcf/ChemGraph/releases) (when available)
+
+2. **Run the installer**: Double-click `ChemGraph-Setup.exe` and follow the installation wizard
+
+3. **Use ChemGraph**: After installation, you can use `chemgraph` from any command prompt:
+   ```batch
+   chemgraph -q "What is the SMILES string for water?"
+   ```
+
+4. **Set API keys**: Configure your API keys as environment variables (see API Key Setup section below)
+
+> **Note**: The standalone package includes the CLI only. For the Streamlit web interface or Jupyter notebooks, use the standard Python installation method above.
+
+> **For Developers**: To build your own Windows standalone package, see the [Windows Packaging Guide](windows_packaging/README.md).
+
 **Optional: Install with UMA support**
 
 > **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 

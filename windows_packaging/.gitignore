@@ -1,0 +1,12 @@
+# Build outputs
+dist/
+build/
+*.spec.bak
+
+# Installer outputs
+*.exe
+ChemGraph-Setup.exe
+
+# Temporary files
+*.log
+*.tmp

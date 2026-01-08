@@ -1,0 +1,5 @@
+# Additional requirements for building Windows package
+# These are in addition to the main project dependencies
+
+pyinstaller>=5.13.0
+
