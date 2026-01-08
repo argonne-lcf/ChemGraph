@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 import json
-from datetime import datetime
 
 import parsl
 from parsl import python_app
