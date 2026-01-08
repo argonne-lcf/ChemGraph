@@ -3,20 +3,17 @@ from parsl.config import Config
 from parsl.providers import LocalProvider
 from parsl.executors import HighThroughputExecutor
 from parsl.launchers import MpiExecLauncher
-from parsl.utils import get_all_checkpoints
+from parsl.addresses import address_by_interface
 
 
-def get_polaris_config(
+def get_aurora_config(
     run_dir=None,
-    worker_init: str = "export TMPDIR=/tmp",
 ):
-    tile_names = [f'{gid}.{tid}' for gid in range(6) for tid in range(2)]
-
     if run_dir is None:
         run_dir = os.getcwd()
 
-    # Load previous checkpoints if they exist
-    checkpoints = get_all_checkpoints(run_dir)
+    # Hard-wired worker_init for aurora
+    worker_init = f"export TMPDIR=/tmp; cd {run_dir}; module load frameworks"
 
     # Get the number of nodes:
     node_file = os.getenv("PBS_NODEFILE")
@@ -26,16 +23,18 @@ def get_polaris_config(
             num_nodes = len(node_list)
     else:
         # Fallback for testing/local runs without PBS
-        print("Warning: PBS_NODEFILE not found. Defaulting to 1 node.")
+        raise ValueError("Warning: PBS_NODEFILE not found. Defaulting to 1 node.")
         num_nodes = 1
 
-    aurora_single_tile_config = Config(
+    config = Config(
         executors=[
             HighThroughputExecutor(
-                available_accelerators=tile_names,
-                max_workers_per_node=12,
-                cpu_affinity="list:1-8,105-112:9-16,113-120:17-24,121-128:25-32,129-136:33-40,137-144:41-48,145-152:53-60,157-164:61-68,165-172:69-76,173-180:77-84,181-188:85-92,189-196:93-100,197-204",
-                prefetch_capacity=0,
+                label="htex",
+                heartbeat_period=30,
+                heartbeat_threshold=240,
+                available_accelerators=12,
+                max_workers_per_node=9,
+                address=address_by_interface('bond0'),
                 provider=LocalProvider(
                     nodes_per_block=num_nodes,
                     launcher=MpiExecLauncher(
@@ -44,13 +43,11 @@ def get_polaris_config(
                     init_blocks=1,
                     worker_init=worker_init,
                     max_blocks=1,
+                    min_blocks=0,
                 ),
-            ),
+            )
         ],
-        checkpoint_files=checkpoints,
         run_dir=run_dir,
-        checkpoint_mode="task_exit",
-        app_cache=True,
     )
 
-    return aurora_single_tile_config
+    return config

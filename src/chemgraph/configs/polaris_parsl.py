@@ -34,8 +34,8 @@ def get_polaris_config(
         executors=[
             HighThroughputExecutor(
                 label="htex",
-                heartbeat_period=15,
-                heartbeat_threshold=120,
+                heartbeat_period=30,
+                heartbeat_threshold=360,
                 worker_debug=True,
                 available_accelerators=4,
                 cpu_affinity="list:24-31,56-63:16-23,48-55:8-15,40-47:0-7,32-39",
