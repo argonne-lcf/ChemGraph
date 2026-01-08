@@ -52,7 +52,8 @@ echo PyInstaller installed successfully
 
 echo.
 echo [3/6] Getting version information...
-cd /d "%~dp0\.."
+REM Get project root (two levels up from script directory)
+cd /d "%~dp0\..\.."
 for /f "delims=" %%v in ('python windows_packaging\scripts\get_version.py') do set VERSION=%%v
 echo Building version: !VERSION!
 
@@ -67,7 +68,8 @@ if errorlevel 1 (
 
 echo.
 echo [5/6] Building standalone executable with PyInstaller...
-cd /d "%~dp0\.."
+REM Ensure we're in project root
+cd /d "%~dp0\..\.."
 if not exist "windows_packaging\dist" mkdir "windows_packaging\dist"
 if not exist "windows_packaging\build" mkdir "windows_packaging\build"
 

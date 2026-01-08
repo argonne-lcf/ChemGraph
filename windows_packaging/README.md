@@ -25,22 +25,61 @@ windows_packaging/
 
 ## Quick Start
 
+### Prerequisites
+
+1. **Open Command Prompt (cmd.exe)** on Windows
+   - Press `Win + R`, type `cmd`, press Enter
+   - Or search for "Command Prompt" in Start Menu
+
+2. **Navigate to the ChemGraph project directory**
+   ```batch
+   cd C:\path\to\ChemGraph
+   ```
+   (Replace with your actual path to the ChemGraph folder)
+
 ### Step 1: Build the Executable
+
+**In Command Prompt, navigate to the windows_packaging directory:**
 
 ```batch
 cd windows_packaging
 scripts\build_windows.bat
 ```
 
-This creates `dist\chemgraph\chemgraph.exe`
+**Or from the project root:**
+
+```batch
+windows_packaging\scripts\build_windows.bat
+```
+
+This will:
+- Check Python installation
+- Install PyInstaller
+- Install ChemGraph dependencies
+- Build the standalone executable
+
+**Output:** `windows_packaging\dist\chemgraph\chemgraph.exe`
+
+**Note:** The script automatically handles path navigation, so you can run it from either location.
 
 ### Step 2: Create the Installer
 
+**In Command Prompt, from the `windows_packaging` directory:**
+
 ```batch
+cd windows_packaging
 scripts\build_installer.bat
 ```
 
-This creates `ChemGraph-Setup.exe` in the `windows_packaging` directory.
+**Or from the project root:**
+
+```batch
+windows_packaging\scripts\build_installer.bat
+```
+
+This creates `ChemGraph-Setup-{VERSION}.exe` in the `windows_packaging` directory.
+
+**Note:** Make sure Step 1 completed successfully before running this step.
 
 ## Prerequisites
 
@@ -60,6 +99,7 @@ This creates `ChemGraph-Setup.exe` in the `windows_packaging` directory.
 
 ## Detailed Documentation
 
+- **[RUNNING_ON_WINDOWS.md](RUNNING_ON_WINDOWS.md)** - **Start here!** Step-by-step guide for running on Windows
 - **[QUICKSTART.md](docs/QUICKSTART.md)** - Quick reference for building
 - **[PACKAGING_SUMMARY.md](docs/PACKAGING_SUMMARY.md)** - Technical details and architecture
 - **[BEST_PRACTICES.md](docs/BEST_PRACTICES.md)** - Best practices and implementation details

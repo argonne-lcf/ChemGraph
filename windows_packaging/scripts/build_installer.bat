@@ -22,7 +22,8 @@ echo [1/3] Checking NSIS installation...
 makensis /VERSION
 
 echo.
-echo [2/3] Checking if PyInstaller build exists...
+echo [2/4] Checking if PyInstaller build exists...
+REM Go to windows_packaging directory (one level up from scripts)
 cd /d "%~dp0\.."
 if not exist "dist\chemgraph\chemgraph.exe" (
     echo ERROR: PyInstaller build not found!
@@ -44,12 +45,14 @@ if not exist "%NSISDIR%\Plugins\x86-unicode\EnVar.dll" (
 )
 
 echo [3/4] Getting version information...
-cd /d "%~dp0\.."
+REM Go to project root (two levels up from scripts)
+cd /d "%~dp0\..\.."
 for /f "delims=" %%v in ('python windows_packaging\scripts\get_version.py') do set VERSION=%%v
 echo Building installer for version: !VERSION!
 
 echo.
 echo [4/4] Building installer...
+REM Go back to windows_packaging directory
 cd windows_packaging
 makensis /DVERSION=!VERSION! config\build_installer.nsi
 
