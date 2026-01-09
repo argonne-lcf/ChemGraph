@@ -27,7 +27,7 @@ jobs:
         miniconda-version: "latest"
         python-version: ${{ matrix.python-version }}
         activate-environment: chemgraph-mace
-        auto-activate-base: false
+        auto-activate-base: true  # Activate base to install mamba there
         use-only-tar-bz2: true  # Use more efficient package format
     
     - name: Check disk space before installation
@@ -35,13 +35,24 @@ jobs:
       run: |
         df -h
     
+    - name: Install mamba in base environment
+      shell: bash -l {0}
+      run: |
+        # Install mamba in base environment (supports all Python versions)
+        conda install -n base -c conda-forge mamba -y
+    
     - name: Install Conda dependencies for MACE
       shell: bash -l {0}
       run: |
-        # Install mamba first (faster and more efficient)
-        conda install -c conda-forge mamba -y
-        # Use mamba for faster installations
-        mamba install -c conda-forge nwchem -y
+        # Activate the test environment
+        conda activate chemgraph-mace
+        # Use mamba if available (from base), otherwise fall back to conda
+        # For Python 3.12, mamba may not be available, so use conda
+        if command -v mamba &> /dev/null; then
+          mamba install -c conda-forge nwchem -y
+        else
+          conda install -c conda-forge nwchem -y
+        fi
         # Clean up conda cache immediately
         conda clean --all -y
     
