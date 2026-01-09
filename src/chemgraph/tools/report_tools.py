@@ -359,7 +359,7 @@ def generate_html(output_path: Path, ase_output: ASEOutputSchema, xyz_path: Opti
     # Add additional information to the HTML content
     html_content = add_additional_info_to_html(html_content, ase_output)
 
-    with open(output_path, 'w') as f:
+    with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     print(f"✅ HTML viewer created: {output_path}")
     return str(output_path)
