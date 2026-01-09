@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]  # nwchem doesn't support Python 3.12+
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
@@ -40,8 +40,13 @@ jobs:
       run: |
         # Activate the test environment
         conda activate chemgraph-mace
-        # Use conda directly (more reliable than mamba with Python version compatibility issues)
-        conda install -c conda-forge nwchem -y
+        # Install nwchem only for Python versions that support it (3.10, 3.11)
+        # nwchem doesn't support Python 3.12+ yet
+        if [[ "${{ matrix.python-version }}" != "3.12" ]]; then
+          conda install -c conda-forge nwchem -y
+        else
+          echo "Skipping nwchem installation for Python 3.12 (not supported yet)"
+        fi
         # Clean up conda cache immediately
         conda clean --all -y
     
