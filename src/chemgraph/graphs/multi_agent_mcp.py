@@ -392,7 +392,7 @@ def increment_index(state: ManagerWorkerState):
     return state
 
 
-def contruct_multi_agent_mcp_graph(
+def construct_multi_agent_mcp_graph(
     llm: ChatOpenAI,
     planner_prompt: str = planner_prompt,
     executor_prompt: str = executor_prompt,

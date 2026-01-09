@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Union, Optional
-from chemgraph.models.atomsdata import AtomsData
+from chemgraph.schemas.atomsdata import AtomsData
 
 
 class VibrationalFrequency(BaseModel):
