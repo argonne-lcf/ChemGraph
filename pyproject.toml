@@ -3,8 +3,8 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ChemGraph"
-version = "1.0.0"
+name = "chemgraphagent"
+version = "0.2.0"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
@@ -24,7 +24,7 @@ dependencies = [
     "langchain-experimental==0.3.4",
     "pydantic==2.11.7",
     "pandas==2.2.3",
-    "pubchempy @ git+https://github.com/keceli/PubChemPy.git@main",
+    "pubchempy==1.0.5",
     "pyppeteer==2.0.0",
     "numpy==2.2.6",
     "numexpr==2.11.0",
