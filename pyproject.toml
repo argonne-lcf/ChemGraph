@@ -28,7 +28,6 @@ dependencies = [
     "pyppeteer==2.0.0",
     "numpy==2.2.6",
     "numexpr==2.11.0",
-    "tblite==0.4.0",
     "pytest==8.4.1",
     "deepdiff==8.5.0",
     "pymatgen==2025.3.10",
