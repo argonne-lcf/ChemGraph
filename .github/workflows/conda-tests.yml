@@ -28,23 +28,57 @@ jobs:
         python-version: ${{ matrix.python-version }}
         activate-environment: chemgraph-mace
         auto-activate-base: false
+        use-only-tar-bz2: true  # Use more efficient package format
+    
+    - name: Check disk space before installation
+      shell: bash -l {0}
+      run: |
+        df -h
     
     - name: Install Conda dependencies for MACE
       shell: bash -l {0}
       run: |
-        conda install -c conda-forge nwchem -y
-        conda install -c conda-forge mamba -y
+        # Activate the test environment
+        conda activate chemgraph-mace
+        # Install nwchem only for Python versions that support it (3.10, 3.11)
+        # nwchem doesn't support Python 3.12+ yet
+        if [[ "${{ matrix.python-version }}" != "3.12" ]]; then
+          conda install -c conda-forge nwchem -y
+        else
+          echo "Skipping nwchem installation for Python 3.12 (not supported yet)"
+        fi
+        # Clean up conda cache immediately
+        conda clean --all -y
+    
+    - name: Clean up disk space
+      shell: bash -l {0}
+      run: |
+        # Remove pip cache
+        pip cache purge || true
+        # Clean conda cache again
+        conda clean --all -y
+        # Check disk space
+        df -h
     
     - name: Install ChemGraph with MACE support
       shell: bash -l {0}
       run: |
-        pip install -e .
-        pip install pytest
+        pip install --no-cache-dir -e .
+        pip install --no-cache-dir pytest
     
     - name: Run tests with MACE
       shell: bash -l {0}
       run: |
         python -m pytest tests/ -v
+    
+    - name: Final cleanup
+      if: always()
+      shell: bash -l {0}
+      run: |
+        # Final cleanup to free space
+        conda clean --all -y
+        pip cache purge || true
+        df -h
 
   # test-conda-uma:
   #   runs-on: ubuntu-latest

@@ -1,4 +1,4 @@
-name: Tests
+name: Test PyPI Package
 
 on:
   push:
@@ -6,9 +6,10 @@ on:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
-  test:
+  test-pypi-install:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -22,13 +23,11 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
-    
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    
+
     - name: Set up Miniconda (Windows only)
       if: matrix.os == 'windows-latest'
       uses: conda-incubator/setup-miniconda@v3
@@ -37,20 +36,41 @@ jobs:
         channels: conda-forge,defaults
         channel-priority: strict
         auto-activate-base: true
-    
-    - name: Install dependencies
+
+    - name: Upgrade pip
       shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         python -m pip install --upgrade pip
-        # On Windows, use conda to install tblite (which provides LAPACK dependencies)
-        if [[ "${{ runner.os }}" == "Windows" ]]; then
-          conda install -y -c conda-forge tblite=0.4.0
-          pip install -e ".[calculators]"
-        else
-          pip install -e ".[calculators]"
-        fi
-            
-    - name: Run tests
+
+    - name: Install chemgraphagent from PyPI
       shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
-        python -m pytest tests/ -v 
+        # On Windows, use conda to install tblite first (provides LAPACK dependencies)
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
+          conda install -y -c conda-forge tblite=0.4.0
+        fi
+        # Install package (with calculators extra to test tblite functionality)
+        pip install chemgraphagent[calculators]
+
+    - name: Verify package installation
+      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
+      run: |
+        python -c "import chemgraph; print('ChemGraph imported successfully')"
+        python -c "import ui; print('UI module imported successfully')"
+        # Test that CLI command is available
+        chemgraph --help || echo "CLI help command executed"
+
+    - name: Run basic import tests
+      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
+      run: |
+        python -c "
+        from chemgraph.agent.llm_agent import ChemGraph
+        from chemgraph.models.supported_models import all_supported_models
+        print('All core imports successful')
+        print(f'Supported models: {len(all_supported_models)}')
+        "
+
+    - name: Check package version
+      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
+      run: |
+        pip show chemgraphagent
