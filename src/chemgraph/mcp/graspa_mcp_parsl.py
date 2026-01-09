@@ -48,12 +48,12 @@ def load_parsl_config(system_name: str):
     print(f"Initializing Parsl for system: {system_name}")
 
     if system_name == "polaris":
-        from chemgraph.configs.polaris_parsl import get_polaris_config
+        from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
 
         return get_polaris_config(run_dir=run_dir)
 
     elif system_name == "aurora":
-        from chemgraph.configs.aurora_parsl import get_aurora_config
+        from chemgraph.hpc_configs.aurora_parsl import get_aurora_config
 
         return get_aurora_config(run_dir=run_dir)
 
@@ -174,7 +174,6 @@ async def run_graspa_ensemble(
                 "message": str(e),
             }
 
-    # This is the magic step that lets Agent 2 start while Agent 1 waits.
     results = await asyncio.gather(
         *(wait_for_task(name, fut) for name, fut in pending_tasks)
     )
