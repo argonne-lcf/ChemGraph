@@ -38,22 +38,25 @@ jobs:
         auto-activate-base: true
 
     - name: Upgrade pip
-      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         python -m pip install --upgrade pip
 
-    - name: Install chemgraphagent from PyPI
-      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
+    - name: Install chemgraphagent from PyPI (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: bash -l {0}
       run: |
         # On Windows, use conda to install tblite first (provides LAPACK dependencies)
-        if [[ "${{ runner.os }}" == "Windows" ]]; then
-          conda install -y -c conda-forge tblite=0.4.0
-        fi
+        conda install -y -c conda-forge tblite=0.4.0
+        # Install package (with calculators extra to test tblite functionality)
+        pip install chemgraphagent[calculators]
+
+    - name: Install chemgraphagent from PyPI (Non-Windows)
+      if: matrix.os != 'windows-latest'
+      run: |
         # Install package (with calculators extra to test tblite functionality)
         pip install chemgraphagent[calculators]
 
     - name: Verify package installation
-      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         python -c "import chemgraph; print('ChemGraph imported successfully')"
         python -c "import ui; print('UI module imported successfully')"
@@ -61,7 +64,6 @@ jobs:
         chemgraph --help || echo "CLI help command executed"
 
     - name: Run basic import tests
-      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         python -c "
         from chemgraph.agent.llm_agent import ChemGraph
@@ -71,6 +73,5 @@ jobs:
         "
 
     - name: Check package version
-      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         pip show chemgraphagent
