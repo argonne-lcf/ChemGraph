@@ -42,6 +42,9 @@ dependencies = [
     ]
 
 [project.optional-dependencies]
+calculators = [
+    "tblite==0.4.0",
+]
 uma = [
     "fairchem-core==2.3.0",
     "e3nn>=0.5",
