@@ -34,13 +34,15 @@ jobs:
         python-version: ${{ matrix.python-version }}
         channels: conda-forge,defaults
         channel-priority: strict
+        auto-activate-base: true
 
     - name: Upgrade pip
+      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         python -m pip install --upgrade pip
 
     - name: Install chemgraphagent from PyPI
-      shell: bash
+      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         # On Windows, use conda to install tblite first (provides LAPACK dependencies)
         if [[ "${{ runner.os }}" == "Windows" ]]; then
@@ -50,6 +52,7 @@ jobs:
         pip install chemgraphagent[calculators]
 
     - name: Verify package installation
+      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         python -c "import chemgraph; print('ChemGraph imported successfully')"
         python -c "import ui; print('UI module imported successfully')"
@@ -57,6 +60,7 @@ jobs:
         chemgraph --help || echo "CLI help command executed"
 
     - name: Run basic import tests
+      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         python -c "
         from chemgraph.agent.llm_agent import ChemGraph
@@ -66,5 +70,6 @@ jobs:
         "
 
     - name: Check package version
+      shell: ${{ matrix.os == 'windows-latest' && 'bash -l {0}' || 'bash' }}
       run: |
         pip show chemgraphagent
