@@ -45,7 +45,8 @@ jobs:
         python -m pip install --upgrade pip
         # On Windows, use conda to install tblite (which provides LAPACK dependencies)
         conda install -y -c conda-forge tblite=0.4.0
-        pip install -e ".[calculators]"
+        # Install package without calculators extra (tblite already installed via conda)
+        pip install -e .
     
     - name: Install dependencies (Non-Windows)
       if: matrix.os != 'windows-latest'
