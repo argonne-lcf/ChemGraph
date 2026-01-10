@@ -16,7 +16,31 @@ ChemGraph supports diverse simulation backends, including ab initio quantum chem
   <summary><strong>Installation Instructions</strong></summary>
 
 Ensure you have **Python 3.10 or higher** installed on your system. 
-**Using pip (Recommended for most users)**
+
+**Install from PyPI (Recommended)**
+
+The easiest way to install ChemGraph is from PyPI:
+
+```bash
+pip install chemgraphagent
+```
+
+For Windows users, you may need to install `tblite` separately via conda:
+```bash
+conda install -c conda-forge tblite=0.4.0
+pip install chemgraphagent
+```
+
+To install with calculator extras (includes `tblite`):
+```bash
+pip install chemgraphagent[calculators]
+```
+
+**Install from Source (Alternative Methods)**
+
+If you need to install from source for the latest version:
+
+**Using pip from source**
 
 1. Clone the repository:
    ```bash
@@ -37,7 +61,7 @@ Ensure you have **Python 3.10 or higher** installed on your system.
    pip install -e .
    ```
 
-**Using Conda (Alternative)**
+**Using Conda from source**
 
 > ⚠️ **Note on Compatibility**  
 > ChemGraph supports both MACE and UMA (Meta's machine learning potential). However, due to the current dependency conflicts, particularly with `e3nn`—**you cannot install both in the same environment**.  
@@ -62,11 +86,11 @@ Ensure you have **Python 3.10 or higher** installed on your system.
    - All ChemGraph dependencies via pip
    
 
-**Using uv (Alternative)**
+**Using uv from source**
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Autonomous-Scientific-Agents/ChemGraph
+   git clone https://github.com/argonne-lcf/ChemGraph
    cd ChemGraph
    ```
 
@@ -87,8 +111,15 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 
 **Optional: Install with UMA support**
 
-> **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 
-> If you need to install UMA support in an environment where `mace-torch` might cause this conflict, you can try the following workaround:
+> ⚠️ **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 
+> 
+> **For PyPI installations**, you can try:
+> ```bash
+> pip install chemgraphagent[uma]
+> ```
+> However, this may fail due to the e3nn version conflict. If it does, you'll need to install from source using the workaround below.
+>
+> **For source installations**, if you need to install UMA support in an environment where `mace-torch` might cause this conflict, you can try the following workaround:
 > 1. **Temporarily modify `pyproject.toml`**: Open the `pyproject.toml` file in the root of the ChemGraph project.
 > 2. Find the line containing `"mace-torch>=0.3.13",` in the `dependencies` list.
 > 3. Comment out this line by adding a `#` at the beginning (e.g., `#    "mace-torch>=0.3.13",`).
@@ -102,10 +133,6 @@ Ensure you have **Python 3.10 or higher** installed on your system.
 > 2. Log in with your Hugging Face account.
 > 3. Accept the model's terms and conditions if prompted.
 > Your environment (local or CI) must also be authenticated with Hugging Face, typically by logging in via `huggingface-cli login` or ensuring `HF_TOKEN` is set and recognized.
-
-```bash
-pip install -e ".[uma]"
-```
 </details>
 
 <details>
