@@ -2,7 +2,7 @@ name: Test PyPI Package
 
 on:
   push:
-    branches: [ main, pip_package ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, ready_for_review]
@@ -14,12 +14,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
-        exclude:
-          # Reduce matrix size: test fewer Python versions on Windows/macOS
-          - os: windows-latest
-            python-version: "3.11"
-          - os: macos-latest
-            python-version: "3.11"
     runs-on: ${{ matrix.os }}
 
     steps:

@@ -1,5 +1,9 @@
 # ChemGraph
 
+![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)
+![Conda Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/conda-tests.yml/badge.svg)
+![Test PyPI Package](https://github.com/argonne-lcf/ChemGraph/actions/workflows/test-pypi-package.yml/badge.svg)
+
 <details>
   <summary><strong>Overview</strong></summary>
 
