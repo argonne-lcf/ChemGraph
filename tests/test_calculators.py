@@ -1,9 +1,9 @@
 import pytest
 import numpy as np
-from chemgraph.models.calculators.emt_calc import EMTCalc
-from chemgraph.models.calculators.mace_calc import MaceCalc
-from chemgraph.models.calculators.tblite_calc import TBLiteCalc
-from chemgraph.models.calculators.orca_calc import OrcaCalc
+from chemgraph.schemas.calculators.emt_calc import EMTCalc
+from chemgraph.schemas.calculators.mace_calc import MaceCalc
+from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
+from chemgraph.schemas.calculators.orca_calc import OrcaCalc
 from ase import Atoms
 
 

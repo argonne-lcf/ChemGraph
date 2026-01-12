@@ -208,7 +208,7 @@ def route_analyst(state: PlannerState):
     return "Planner"
 
 
-def contruct_graspa_mcp_graph(
+def construct_graspa_mcp_graph(
     llm: ChatOpenAI,
     planner_prompt: str = planner_prompt,
     executor_prompt: str = executor_prompt,

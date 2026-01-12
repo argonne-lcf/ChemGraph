@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import shutil
 from datetime import datetime
-from chemgraph.models.ase_input import ASEOutputSchema
+from chemgraph.schemas.ase_input import ASEOutputSchema
 from chemgraph.tools.report_tools import generate_html
 
 TEST_DIR = Path(__file__).parent

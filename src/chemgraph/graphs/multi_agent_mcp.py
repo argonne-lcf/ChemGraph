@@ -19,7 +19,7 @@ from chemgraph.prompt.multi_agent_prompt import (
     formatter_multi_prompt,
     planner_prompt_json,
 )
-from chemgraph.models.multi_agent_response import (
+from chemgraph.schemas.multi_agent_response import (
     PlannerResponse,
     ResponseFormatter,
 )
@@ -202,7 +202,9 @@ def PlannerAgent(
             if isinstance(parsed, list):
                 parsed = {"worker_tasks": parsed}
             if not isinstance(parsed, dict) or "worker_tasks" not in parsed:
-                raise ValueError("Output must be a JSON object with a 'worker_tasks' key")
+                raise ValueError(
+                    "Output must be a JSON object with a 'worker_tasks' key"
+                )
             response_json = json.dumps(parsed)
             return {"messages": [response_json]}
         except Exception as e:
@@ -236,7 +238,12 @@ def WorkerAgent(
     tools: list = None,
 ):
     if tools is None:
-        tools = [run_ase, molecule_name_to_smiles, smiles_to_coordinate_file, extract_output_json]
+        tools = [
+            run_ase,
+            molecule_name_to_smiles,
+            smiles_to_coordinate_file,
+            extract_output_json,
+        ]
 
     worker_id = state["current_worker"]
     history = state["worker_channel"].get(worker_id, [])
@@ -329,7 +336,9 @@ def loop_control(state: ManagerWorkerState):
         return state
 
     task_prompt = task_list["worker_tasks"][task_idx]["prompt"]
-    worker_id = task_list["worker_tasks"][task_idx].get("worker_id", f"worker_{task_idx}")
+    worker_id = task_list["worker_tasks"][task_idx].get(
+        "worker_id", f"worker_{task_idx}"
+    )
 
     state["current_worker"] = worker_id
 
@@ -383,7 +392,7 @@ def increment_index(state: ManagerWorkerState):
     return state
 
 
-def contruct_multi_agent_mcp_graph(
+def construct_multi_agent_mcp_graph(
     llm: ChatOpenAI,
     planner_prompt: str = planner_prompt,
     executor_prompt: str = executor_prompt,
@@ -501,7 +510,9 @@ def contruct_multi_agent_mcp_graph(
         else:
             graph_builder.add_node(
                 "ResponseAgent",
-                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
+                lambda state: ResponseAgent(
+                    state, llm, formatter_prompt=formatter_prompt
+                ),
             )
             graph_builder.add_edge("AggregatorAgent", "ResponseAgent")
             graph_builder.add_edge("ResponseAgent", END)

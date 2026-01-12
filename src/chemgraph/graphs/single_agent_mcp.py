@@ -2,13 +2,14 @@ from typing import List, Any
 
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
+
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
 )
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.state.state import State
-from langgraph.prebuilt import ToolNode
 
 logger = setup_logger(__name__)
 
@@ -84,7 +85,9 @@ def construct_single_agent_mcp_graph(
         The constructed single agent graph
     """
     if not tools:
-        raise ValueError("No MCP tools loaded. Ensure MCP servers are configured and reachable.")
+        raise ValueError(
+            "No MCP tools loaded. Ensure MCP servers are configured and reachable."
+        )
     logger.info("Constructing single agent MCP graph (sync)")
 
     checkpointer = MemorySaver()
@@ -93,7 +96,9 @@ def construct_single_agent_mcp_graph(
 
     graph_builder.add_node(
         "ChemGraphAgent",
-        lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
+        lambda state: ChemGraphAgent(
+            state, llm, system_prompt=system_prompt, tools=tools
+        ),
     )
     graph_builder.add_node("tools", tool_node)
     graph_builder.add_edge(START, "ChemGraphAgent")

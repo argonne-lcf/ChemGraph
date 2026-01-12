@@ -1,4 +1,6 @@
 from __future__ import annotations
+import sys
+import argparse
 import os
 import glob
 import json
@@ -17,7 +19,7 @@ from chemgraph.tools.mcp_helper import (
     is_linear_molecule,
     get_symmetry_number,
 )
-from chemgraph.models.ase_input import ASEInputSchema, ASEOutputSchema
+from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
 
 mcp = FastMCP(
     name="Chemistry Tools MCP",
@@ -193,7 +195,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
     """
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
-    from chemgraph.models.atomsdata import AtomsData
+    from chemgraph.schemas.atomsdata import AtomsData
 
     try:
         calculator = params.calculator.model_dump()
@@ -482,4 +484,24 @@ async def run_ase(params: ASEInputSchema) -> dict:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    parser = argparse.ArgumentParser(description="Run Chemistry Tools MCP Server")
+    parser.add_argument(
+        "--transport", 
+        choices=["stdio", "sse"], 
+        default="stdio", 
+        help="Transport protocol to use (default: stdio)"
+    )
+    parser.add_argument(
+        "--port", 
+        type=int, 
+        default=9000, 
+        help="Port for SSE transport (default: 9000)"
+    )
+    
+    args = parser.parse_args()
+
+    if args.transport == "sse":
+        print(f"Starting MCP server on port {args.port} via SSE...", file=sys.stderr)
+        mcp.run(transport="sse", port=args.port)
+    else:
+        mcp.run(transport="stdio")

@@ -1,10 +1,12 @@
 import os
 from typing import Literal
+
 import pubchempy
 from langchain_core.tools import tool
 from ase.io import write as ase_write
 from ase import Atoms
-from chemgraph.models.atomsdata import AtomsData
+
+from chemgraph.schemas.atomsdata import AtomsData
 
 
 @tool

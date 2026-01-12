@@ -22,3 +22,17 @@ def setup_test_env():
 def simple_h2_molecule():
     """Fixture providing a simple H2 molecule for testing"""
     return Atoms("H2", positions=[[0, 0, 0], [0, 0, 1]])
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-llm", action="store_true", default=False, help="run tests that call LLM APIs"
+    )
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-llm"):
+        # --run-llm given in cli: do not skip llm tests
+        return
+    skip_llm = pytest.mark.skip(reason="need --run-llm option to run")
+    for item in items:
+        if "llm" in item.keywords:
+            item.add_marker(skip_llm)

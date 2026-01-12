@@ -4,7 +4,7 @@ import pytest
 from chemgraph.tools.ase_tools import (
     run_ase,
 )
-from chemgraph.models.ase_input import ASEInputSchema
+from chemgraph.schemas.ase_input import ASEInputSchema
 
 TEST_DIR = Path(__file__).parent
 

@@ -1,29 +1,29 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Union, Optional, Any, List, Type
-from chemgraph.models.atomsdata import AtomsData
+from chemgraph.schemas.atomsdata import AtomsData
 
 try:
-    from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+    from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
 except ImportError:
     TBLiteCalc = None
-from chemgraph.models.calculators.emt_calc import EMTCalc
-from chemgraph.models.calculators.nwchem_calc import NWChemCalc
-from chemgraph.models.calculators.orca_calc import OrcaCalc
+from chemgraph.schemas.calculators.emt_calc import EMTCalc
+from chemgraph.schemas.calculators.nwchem_calc import NWChemCalc
+from chemgraph.schemas.calculators.orca_calc import OrcaCalc
 
 try:
-    from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
+    from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
 except ImportError:
     AIMNET2Calc = None
 
 
 # Attempt to import optional calculators
 try:
-    from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
+    from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
 except ImportError:
     FAIRChemCalc = None
 
 try:
-    from chemgraph.models.calculators.mace_calc import MaceCalc
+    from chemgraph.schemas.calculators.mace_calc import MaceCalc
 except ImportError:
     MaceCalc = None
 

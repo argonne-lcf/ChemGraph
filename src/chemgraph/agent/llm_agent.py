@@ -1,13 +1,13 @@
 import datetime
 import os
-from typing import List, Any
+from typing import List
 
-from chemgraph.tools.openai_loader import load_openai_model
-from chemgraph.tools.alcf_loader import load_alcf_model
-from chemgraph.tools.local_model_loader import load_ollama_model
-from chemgraph.tools.anthropic_loader import load_anthropic_model
-from chemgraph.tools.gemini_loader import load_gemini_model
-from chemgraph.tools.groq_loader import load_groq_model
+from chemgraph.models.openai import load_openai_model
+from chemgraph.models.alcf_endpoints import load_alcf_model
+from chemgraph.models.local_model import load_ollama_model
+from chemgraph.models.anthropic import load_anthropic_model
+from chemgraph.models.gemini import load_gemini_model
+from chemgraph.models.groq import load_groq_model
 from chemgraph.models.supported_models import (
     supported_openai_models,
     supported_ollama_models,
@@ -17,6 +17,7 @@ from chemgraph.models.supported_models import (
     supported_gemini_models,
     supported_groq_models,
 )
+
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
@@ -30,14 +31,13 @@ from chemgraph.prompt.multi_agent_prompt import (
 )
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
-from chemgraph.graphs.multi_agent import contruct_multi_agent_graph
+from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
-from chemgraph.graphs.multi_agent_mcp import contruct_multi_agent_mcp_graph
-from chemgraph.graphs.graspa_mcp import contruct_graspa_mcp_graph
+from chemgraph.graphs.multi_agent_mcp import construct_multi_agent_mcp_graph
+from chemgraph.graphs.graspa_mcp import construct_executor_subgraph, construct_graspa_mcp_graph
 
-from chemgraph.graphs.graspa_mcp_multi import contruct_graspa_mcp_graph_multi
 import logging
 
 logger = logging.getLogger(__name__)
@@ -231,14 +231,13 @@ class ChemGraph:
 
         self.workflow_map = {
             "single_agent": {"constructor": construct_single_agent_graph},
-            "multi_agent": {"constructor": contruct_multi_agent_graph},
+            "multi_agent": {"constructor": construct_multi_agent_graph},
             "python_relp": {"constructor": construct_relp_graph},
             "graspa": {"constructor": construct_graspa_graph},
             "mock_agent": {"constructor": construct_mock_agent_graph},
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
-            "multi_agent_mcp": {"constructor": contruct_multi_agent_mcp_graph},
-            "graspa_mcp": {"constructor": contruct_graspa_mcp_graph},
-            "graspa_mcp_multi": {"constructor": contruct_graspa_mcp_graph_multi},
+            "multi_agent_mcp": {"constructor": construct_multi_agent_mcp_graph},
+            "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -300,12 +299,6 @@ class ChemGraph:
                 support_structured_output=self.support_structured_output,
             )
         elif self.workflow_type == "graspa_mcp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm=llm,
-                executor_tools=self.tools,
-                analysis_tools=self.data_tools,
-            )
-        elif self.workflow_type == "graspa_mcp_multi":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 executor_tools=self.tools,
@@ -428,6 +421,14 @@ class ChemGraph:
                         "formatter_prompt": self.formatter_prompt,
                     }
                 )
+
+            elif self.workflow_type == "graspa_mcp":
+                output_data.update(
+                    {
+                        "system_prompt": self.system_prompt,
+                    }
+                )
+
             elif self.workflow_type == "mock_agent":
                 output_data.update(
                     {

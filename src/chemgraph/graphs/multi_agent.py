@@ -19,7 +19,7 @@ from chemgraph.prompt.multi_agent_prompt import (
     formatter_multi_prompt,
     planner_prompt_json,
 )
-from chemgraph.models.multi_agent_response import (
+from chemgraph.schemas.multi_agent_response import (
     PlannerResponse,
     ResponseFormatter,
 )
@@ -40,6 +40,7 @@ def _to_jsonable(obj: Any) -> Any:
         return [_to_jsonable(v) for v in obj]
     else:
         return obj
+
 
 def sanitize_tool_calls(messages: list[BaseMessage]) -> list[BaseMessage]:
     """Ensure tool_call['args'] contains only JSON-serializable data."""
@@ -76,7 +77,9 @@ def route_tools(state: ManagerWorkerState):
     messages = state.get("worker_messages", [])
 
     if not messages:
-        raise ValueError(f"No messages found for worker {worker_id} in worker_messages.")
+        raise ValueError(
+            f"No messages found for worker {worker_id} in worker_messages."
+        )
 
     ai_message = messages[-1]
     if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
@@ -85,7 +88,10 @@ def route_tools(state: ManagerWorkerState):
 
 
 def PlannerAgent(
-    state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, support_structured_output: bool
+    state: ManagerWorkerState,
+    llm: ChatOpenAI,
+    system_prompt: str,
+    support_structured_output: bool,
 ):
     """An LLM agent that decomposes tasks into subtasks for workers.
 
@@ -123,7 +129,9 @@ def PlannerAgent(
 
             # Validate structure
             if not isinstance(parsed, dict) or "worker_tasks" not in parsed:
-                raise ValueError("Output must be a JSON object with a 'worker_tasks' key")
+                raise ValueError(
+                    "Output must be a JSON object with a 'worker_tasks' key"
+                )
 
             response_json = json.dumps(parsed)
             return {"messages": [response_json]}
@@ -155,7 +163,9 @@ def PlannerAgent(
             return {"messages": [response_json]}
 
 
-def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, tools=None):
+def WorkerAgent(
+    state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, tools=None
+):
     """An LLM agent that executes assigned tasks using available tools.
 
     Parameters
@@ -175,7 +185,12 @@ def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, 
         Updated state containing the worker's response and results
     """
     if tools is None:
-        tools = [run_ase, molecule_name_to_smiles, smiles_to_coordinate_file, extract_output_json]
+        tools = [
+            run_ase,
+            molecule_name_to_smiles,
+            smiles_to_coordinate_file,
+            extract_output_json,
+        ]
 
     worker_id = state["current_worker"]
     history = state.get("worker_messages", [])
@@ -185,7 +200,7 @@ def WorkerAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, 
     messages = [{"role": "system", "content": system_prompt}] + history
     llm_with_tools = llm.bind_tools(tools=tools)
     response = llm_with_tools.invoke(messages)
-    
+
     # Append new LLM response directly back into the worker's channel
     state["worker_messages"].append(response)
     state["worker_channel"][worker_id] = state["worker_messages"]
@@ -230,7 +245,9 @@ def AggregatorAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: s
 
 
 def ResponseAgent(
-    state: ManagerWorkerState, llm: ChatOpenAI, formatter_prompt: str = formatter_multi_prompt
+    state: ManagerWorkerState,
+    llm: ChatOpenAI,
+    formatter_prompt: str = formatter_multi_prompt,
 ):
     """An LLM agent responsible for formatting the final response.
 
@@ -275,6 +292,7 @@ def extract_tasks(state: ManagerWorkerState):
     state["current_task_index"] = 0
     return state
 
+
 def loop_control(state: ManagerWorkerState):
     """Prepare the next task for the current worker.
 
@@ -296,7 +314,9 @@ def loop_control(state: ManagerWorkerState):
         return state
 
     task_prompt = task_list["worker_tasks"][task_idx]["prompt"]
-    worker_id = task_list["worker_tasks"][task_idx].get("worker_id", f"worker_{task_idx}")
+    worker_id = task_list["worker_tasks"][task_idx].get(
+        "worker_id", f"worker_{task_idx}"
+    )
 
     state["current_worker"] = worker_id
 
@@ -352,7 +372,7 @@ def increment_index(state: ManagerWorkerState):
     return state
 
 
-def contruct_multi_agent_graph(
+def construct_multi_agent_graph(
     llm: ChatOpenAI,
     planner_prompt: str = planner_prompt,
     executor_prompt: str = executor_prompt,
@@ -438,11 +458,8 @@ def contruct_multi_agent_graph(
                 smiles_to_coordinate_file,
                 extract_output_json,
             ]
-        tools_node = ToolNode(tools=tools, 
-                              messages_key="worker_messages")
-        graph_builder.add_node(
-            "tools", tools_node
-        )
+        tools_node = ToolNode(tools=tools, messages_key="worker_messages")
+        graph_builder.add_node("tools", tools_node)
         graph_builder.add_node("increment", increment_index)
         graph_builder.add_node(
             "AggregatorAgent",
@@ -470,7 +487,9 @@ def contruct_multi_agent_graph(
         else:
             graph_builder.add_node(
                 "ResponseAgent",
-                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
+                lambda state: ResponseAgent(
+                    state, llm, formatter_prompt=formatter_prompt
+                ),
             )
             graph_builder.add_edge("AggregatorAgent", "ResponseAgent")
             graph_builder.add_edge("ResponseAgent", END)
