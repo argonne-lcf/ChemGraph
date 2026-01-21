@@ -56,6 +56,9 @@ ui = [
     "stmol",
     "ipython-genutils",
 ]
+parsl = [
+    "parsl",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
