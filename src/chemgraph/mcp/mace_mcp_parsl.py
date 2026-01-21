@@ -1,24 +1,23 @@
+import json
 import os
 from pathlib import Path
-import json
 
-import parsl
-from parsl import python_app
-
-import uvicorn
 from mcp.server.fastmcp import FastMCP
-
 from parsl.config import Config
-from parsl.providers import LocalProvider
 from parsl.executors import HighThroughputExecutor
 from parsl.launchers import MpiExecLauncher
+from parsl.providers import LocalProvider
 from parsl.utils import get_all_checkpoints
 
+import parsl
+
+from chemgraph.mcp.server_utils import run_mcp_server
 from chemgraph.tools.parsl_tools import (
-    run_mace_core,
     mace_input_schema,
     mace_input_schema_ensemble,
+    run_mace_core,
 )
+from parsl import python_app
 
 
 @python_app
@@ -52,20 +51,20 @@ def run_mace_parsl_app(job: dict):
 
 
 mcp = FastMCP(
-    name="Chemistry Tools MCP",
-    instructions=(
-        "You expose tools for running MACE simulations and reading their results. "
-        "The available tools are:\n"
-        "1. run_mace_single: run a single MACE calculation using the specified input schema.\n"
-        "2. run_mace_ensemble: run MACE calculations over all structures in a directory using Parsl.\n"
-        "3. extract_output_json: load simulation results from a JSON file.\n\n"
-        "Guidelines:\n"
-        "• Use each tool only when its input schema matches the user request.\n"
-        "• Do not guess numerical values; report tool errors exactly as they occur.\n"
-        "• Keep responses compact — full results are written to the output files defined in the schemas.\n"
-        "• When returning paths, use absolute paths.\n"
-        "• Energies are in eV and wall times are in seconds."
-    ),
+    name="ChemGraph MACE Tools",
+    instructions="""
+        You expose tools for running MACE simulations and reading their results.
+        The available tools are:\n
+        1. run_mace_single: run a single MACE calculation using the specified input schema.\n
+        2. run_mace_ensemble: run MACE calculations over all structures in a directory using Parsl.\n
+        3. extract_output_json: load simulation results from a JSON file.\n\n
+        Guidelines:\n
+        • Use each tool only when its input schema matches the user request.\n
+        • Do not guess numerical values; report tool errors exactly as they occur.\n
+        • Keep responses compact — full results are written to the output files defined in the schemas.\n
+        • When returning paths, use absolute paths.\n
+        • Energies are in eV and wall times are in seconds.\n
+    """,
 )
 
 
@@ -73,15 +72,15 @@ mcp = FastMCP(
     name="run_mace_single",
     description="Run a single MACE calculation",
 )
-def run_mace_single(mace_input_schema: mace_input_schema):
-    return run_mace_core(mace_input_schema)
+def run_mace_single(params: mace_input_schema):
+    return run_mace_core(params)
 
 
 @mcp.tool(
     name="run_mace_ensemble",
     description="Run an ensemble of MACE calculations",
 )
-def run_mace_ensemble(mace_input_schema_ensemble: mace_input_schema_ensemble):
+def run_mace_ensemble(params: mace_input_schema_ensemble):
     """
     Run an ensemble of MACE calculations over all structure files in a directory
     using Parsl for parallel execution.
@@ -96,7 +95,7 @@ def run_mace_ensemble(mace_input_schema_ensemble: mace_input_schema_ensemble):
     dict
         Summary of all jobs with minimal per-job results.
     """
-    input_dir = Path(mace_input_schema_ensemble.input_structure_directory)
+    input_dir = Path(params.input_structure_directory)
 
     if not input_dir.is_dir():
         raise ValueError(
@@ -109,7 +108,7 @@ def run_mace_ensemble(mace_input_schema_ensemble: mace_input_schema_ensemble):
         raise ValueError(f"No structure files found in directory '{input_dir}'")
 
     # Base output file name used as a pattern for per-structure outputs
-    base_output = Path(mace_input_schema_ensemble.output_result_file)
+    base_output = Path(params.output_result_file)
     base_stem = base_output.stem
     base_suffix = base_output.suffix or ".json"
 
@@ -124,14 +123,14 @@ def run_mace_ensemble(mace_input_schema_ensemble: mace_input_schema_ensemble):
         job = {
             "input_structure_file": str(struct_path),
             "output_result_file": str(per_struct_output),
-            "driver": mace_input_schema_ensemble.driver,
-            "model": mace_input_schema_ensemble.model,
-            "device": mace_input_schema_ensemble.device,
-            "temperature": mace_input_schema_ensemble.temperature,
-            "pressure": mace_input_schema_ensemble.pressure,
-            "fmax": mace_input_schema_ensemble.fmax,
-            "steps": mace_input_schema_ensemble.steps,
-            "optimizer": mace_input_schema_ensemble.optimizer,
+            "driver": params.driver,
+            "model": params.model,
+            "device": params.device,
+            "temperature": params.temperature,
+            "pressure": params.pressure,
+            "fmax": params.fmax,
+            "steps": params.steps,
+            "optimizer": params.optimizer,
         }
 
         fut = run_mace_parsl_app(job)
@@ -205,15 +204,18 @@ def extract_output_json(json_file: str) -> dict:
 
 # User-specific paths and settings
 run_dir = os.getcwd()
-worker_init = "module use /soft/modulefiles; module load conda; conda activate /lus/grand/projects/IQC/thang/ChemGraph/env/polaris_env; export TMPDIR=/tmp"
+worker_init = """
+module use /soft/modulefiles; module load conda;
+conda activate /lus/grand/projects/IQC/thang/ChemGraph/env/polaris_env; export TMPDIR=/tmp
+"""
 
 # Load previous checkpoints
 checkpoints = get_all_checkpoints(run_dir)
 
 # Get the number of nodes:
 node_file = os.getenv("PBS_NODEFILE")
-with open(node_file, "r") as f:
-    node_list = f.readlines()
+with open(node_file, "r", encoding="utf-8") as f_nodes:
+    node_list = f_nodes.readlines()
     num_nodes = len(node_list)
 
 # Configure Parsl
@@ -250,7 +252,5 @@ config = Config(
 parsl.load(config)
 
 # Start MCP server
-app = mcp.streamable_http_app()
-
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=9001)
+    run_mcp_server(mcp, default_port=9004)

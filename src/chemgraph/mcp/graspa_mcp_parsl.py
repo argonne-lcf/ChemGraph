@@ -1,19 +1,21 @@
-import os
-from pathlib import Path
 import asyncio
 import json
+import logging
+import os
+from pathlib import Path
 
-import parsl
-from parsl import python_app
-
-import uvicorn
 from mcp.server.fastmcp import FastMCP
 
-from chemgraph.tools.graspa_tools import run_graspa_core
+import parsl
+from chemgraph.hpc_configs.aurora_parsl import get_aurora_config
+from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
+from chemgraph.mcp.server_utils import run_mcp_server
 from chemgraph.schemas.graspa_schema import (
     graspa_input_schema,
     graspa_input_schema_ensemble,
 )
+from chemgraph.tools.graspa_tools import run_graspa_core
+from parsl import python_app
 
 
 @python_app
@@ -45,21 +47,17 @@ def load_parsl_config(system_name: str):
     system_name = system_name.lower()
     run_dir = os.getcwd()
 
-    print(f"Initializing Parsl for system: {system_name}")
+    logging.info("Initializing Parsl for system: %s", system_name)
 
     if system_name == "polaris":
-        from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
-
         return get_polaris_config(run_dir=run_dir)
 
     elif system_name == "aurora":
-        from chemgraph.hpc_configs.aurora_parsl import get_aurora_config
-
         return get_aurora_config(run_dir=run_dir)
 
     else:
         raise ValueError(
-            f"Unknown system specified: '{system_name}'. Supported: polaris, aurora, local"
+            f"Unknown system specified: '{system_name}'. Supported: polaris, aurora"
         )
 
 
@@ -69,19 +67,20 @@ parsl.load(load_parsl_config(target_system))
 
 # Start MCP server
 mcp = FastMCP(
-    name="Chemistry Tools MCP",
-    instructions=(
-        "You expose tools for running graspa simulations and reading their results. "
-        "The available tools are:\n"
-        "1. run_graspa_single: run a single graspa calculation using the specified input schema.\n"
-        "2. run_graspa_ensemble: run graspa calculations over all structures in a directory using Parsl.\n"
-        "Guidelines:\n"
-        "• Use each tool only when its input schema matches the user request.\n"
-        "• Do not guess numerical values; report tool errors exactly as they occur.\n"
-        "• Keep responses compact — full results are written to the output files defined in the schemas.\n"
-        "• When returning paths, use absolute paths.\n"
-        "• Energies are in eV and wall times are in seconds."
-    ),
+    name="ChemGraph Graspa Tools",
+    instructions="""
+        You expose tools for running graspa simulations and reading their results.
+        The available tools are:
+        1. run_graspa_single: run a single graspa calculation using the specified input schema.
+        2. run_graspa_ensemble: run graspa calculations over all structures in a directory using Parsl.
+
+        Guidelines:
+        - Use each tool only when its input schema matches the user request.
+        - Do not guess numerical values; report tool errors exactly as they occur.
+        - Keep responses compact — full results are written to the output files defined in the schemas.
+        - When returning paths, use absolute paths.
+        - Energies are in eV and wall times are in seconds.
+    """,
 )
 
 """
@@ -99,7 +98,7 @@ def run_graspa_single(graspa_input_schema: graspa_input_schema):
     description="Run an ensemble of graspa calculations for multiple input files.",
 )
 async def run_graspa_ensemble(
-    graspa_input_schema_ensemble: graspa_input_schema_ensemble,
+    params: graspa_input_schema_ensemble,
 ):
     """
     Run an ensemble of graspa calculations over all structure files in a directory
@@ -107,10 +106,10 @@ async def run_graspa_ensemble(
 
     Parameters
     ----------
-    graspa_input_schema_ensemble : graspa_input_schema_ensemble
+    params : graspa_input_schema_ensemble
         Input parameters for the ensemble of gRASPA calculations.
     """
-    input_source = graspa_input_schema_ensemble.input_structures
+    input_source = params.input_structures
     structure_files: list[Path] = []
     output_dir: Path = Path.cwd()  # Default fallback
 
@@ -132,7 +131,7 @@ async def run_graspa_ensemble(
         raise ValueError("No structure files found to simulate.")
 
     # Base output file name
-    base_output = Path(graspa_input_schema_ensemble.output_result_file).resolve()
+    base_output = Path(params.output_result_file).resolve()
     base_suffix = base_output.suffix if base_output.suffix else ".log"
     base_stem = base_output.stem
 
@@ -140,7 +139,7 @@ async def run_graspa_ensemble(
 
     for struct_path in structure_files:
         mof_name = struct_path.stem
-        for condition in graspa_input_schema_ensemble.conditions:
+        for condition in params.conditions:
             per_struct_output = base_output.with_name(
                 f"{struct_path.stem}_{base_stem}{base_suffix}"
             )
@@ -149,8 +148,8 @@ async def run_graspa_ensemble(
                 "output_result_file": str(per_struct_output),
                 "temperature": condition.temperature,
                 "pressure": condition.pressure,
-                "adsorbate": graspa_input_schema_ensemble.adsorbate,
-                "n_cycles": graspa_input_schema_ensemble.n_cycles,
+                "adsorbate": params.adsorbate,
+                "n_cycles": params.n_cycles,
             }
 
             fut = run_graspa_parsl_app(job)
@@ -180,7 +179,7 @@ async def run_graspa_ensemble(
     summary_log_path = output_dir / "simulation_results.jsonl"
 
     success_count = 0
-    with open(summary_log_path, "a") as f:
+    with open(summary_log_path, "a", encoding="utf-8") as f:
         for res in results:
             if res.get("status") == "success":
                 success_count += 1
@@ -193,8 +192,5 @@ async def run_graspa_ensemble(
     )
 
 
-# Start MCP server
-app = mcp.streamable_http_app()
-
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=9001)
+    run_mcp_server(mcp, default_port=9001)
