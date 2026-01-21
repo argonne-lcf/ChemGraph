@@ -15,7 +15,6 @@ from langchain_core.tools import tool
 from chemgraph.schemas.graspa_schema import (
     graspa_input_schema,
 )
-from chemgraph.models.graspa_input import GRASPAInputSchema
 
 # LangGraph gRASPA tools.
 _file_dir = Path(__file__).parent / "files" / "template_graspa_sycl"
@@ -288,144 +287,27 @@ def run_graspa_core(params: graspa_input_schema):
 
 
 @tool
-def run_graspa(graspa_input: GRASPAInputSchema):
-    """Run a gRASPA simulation and return the uptakes and errors. Only support single adsorbate.
-
-    Args:
-        graspa_input (str): a GRASPAInputSchema.
-
-    Returns:
-        Computed uptake (U) and error (E) from gRASPA-sycl in the following order:
-            - U (mol/kg)
-            - E (mol/kg)
-            - U (g/L)
-            - E (g/L)
+def run_graspa(graspa_input: graspa_input_schema):
     """
-
-    def _calculate_cell_size(
-        atoms: ase.Atoms, cutoff: float = 12.8
-    ) -> list[int, int, int]:
-        """Method to calculate Unitcells (for periodic boundary condition) for GCMC
-
-        Args:
-            atoms (ase.Atoms): ASE atom object
-            cutoff (float, optional): Cutoff in Angstrom. Defaults to 12.8.
-
-        Returns:
-            list[int, int, int]: Unit cell in x, y and z
-        """
-        unit_cell = atoms.cell[:]
-        # Unit cell vectors
-        a = unit_cell[0]
-        b = unit_cell[1]
-        c = unit_cell[2]
-        # minimum distances between unit cell faces
-        wa = np.divide(
-            np.linalg.norm(np.dot(np.cross(b, c), a)),
-            np.linalg.norm(np.cross(b, c)),
-        )
-        wb = np.divide(
-            np.linalg.norm(np.dot(np.cross(c, a), b)),
-            np.linalg.norm(np.cross(c, a)),
-        )
-        wc = np.divide(
-            np.linalg.norm(np.dot(np.cross(a, b), c)),
-            np.linalg.norm(np.cross(a, b)),
-        )
-
-        uc_x = int(np.ceil(cutoff / (0.5 * wa)))
-        uc_y = int(np.ceil(cutoff / (0.5 * wb)))
-        uc_z = int(np.ceil(cutoff / (0.5 * wc)))
-
-        return [uc_x, uc_y, uc_z]
-
-    output_path = Path(graspa_input.output_path)
-    mof_name = graspa_input.mof_name
-    cif_path = graspa_input.cif_path
-    adsorbate = graspa_input.adsorbate
-    temperature = graspa_input.temperature
-    pressure = graspa_input.pressure
-    n_cycle = graspa_input.n_cycle
-    cutoff = graspa_input.cutoff
-    graspa_cmd = graspa_input.graspa_cmd
-    graspa_version = graspa_input.graspa_version
-
-    # Check cif file exists and '.cif' extension
-    if not cif_path.endswith('.cif'):
-        raise ValueError(f"CIF file {cif_path} does not have '.cif' extension.")
-    if not os.path.exists(cif_path):
-        raise FileNotFoundError(f"CIF file {cif_path} does not exist.")
-
-    # Check if the mof_name contains ".cif"
-    if mof_name.endswith('.cif'):
-        mof_name = mof_name[:-4]
-
-    # Create output directory
-    out_dir = output_path / f"{mof_name}_{adsorbate}_{temperature}_{pressure:0e}"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    # Calculate unit cell size
-    atoms = ase_read(cif_path)
-    [uc_x, uc_y, uc_z] = _calculate_cell_size(atoms=atoms)
-
-    # Copy other input files (simulation.input, force fields and definition files) from template folder.
-    subprocess.run(f"cp {_file_dir}/* {out_dir}/", shell=True)
-    shutil.copy2(cif_path, os.path.join(out_dir, mof_name + '.cif'))
-
-    # Modify input from template simulation.input
-    with (
-        open(f"{out_dir}/simulation.input", "r") as f_in,
-        open(f"{out_dir}/simulation.input.tmp", "w") as f_out,
-    ):
-        for line in f_in:
-            if "NCYCLE" in line:
-                line = line.replace("NCYCLE", str(n_cycle))
-            if "ADSORBATE" in line:
-                line = line.replace("ADSORBATE", adsorbate)
-            if "TEMPERATURE" in line:
-                line = line.replace("TEMPERATURE", str(temperature))
-            if "PRESSURE" in line:
-                line = line.replace("PRESSURE", str(pressure))
-            if "UC_X UC_Y UC_Z" in line:
-                line = line.replace("UC_X UC_Y UC_Z", f"{uc_x} {uc_y} {uc_z}")
-            if "CUTOFF" in line:
-                line = line.replace("CUTOFF", str(cutoff))
-            if "CIFFILE" in line:
-                line = line.replace("CIFFILE", mof_name)
-            f_out.write(line)
-
-    shutil.move(f"{out_dir}/simulation.input.tmp", f"{out_dir}/simulation.input")
-
-    # Run gRASPA-sycl
-    subprocess.run(
-        graspa_cmd,
-        shell=True,
-        cwd=out_dir,
+    Run a gRASPA simulation using the core engine and return the uptakes.
+    This tool acts as a wrapper for the agentic workflow.
+    """
+    # Map GRASPAInputSchema fields to the internal schema expected by run_graspa_core
+    params = graspa_input_schema(
+        input_structure_file=graspa_input.cif_path,
+        adsorbate=graspa_input.adsorbate,
+        temperature=graspa_input.temperature,
+        pressure=graspa_input.pressure,
+        n_cycles=graspa_input.n_cycle,
+        output_result_file="raspa.log"
     )
 
-    # Get output from raspa.log when simulation is done
-    with open(f"{out_dir}/raspa.log", "r") as rf:
-        for line in rf:
-            if "UnitCells" in line:
-                unitcell_line = line.strip()
-            elif "Overall: Average:" in line:
-                uptake_line = line.strip()
+    # Execute core logic
+    result = run_graspa_core(params)
 
-    unitcell = unitcell_line.split()[4:]
-    unitcell = [int(float(i)) for i in unitcell]
-    uptake_total_molecule = float(uptake_line.split()[2][:-1])
-    error_total_molecule = float(uptake_line.split()[4][:-1])
-
-    # Get unit in mol/kg
-    framework_mass = sum(atoms.get_masses())
-    framework_mass = framework_mass * unitcell[0] * unitcell[1] * unitcell[2]
-    uptake_mol_kg = uptake_total_molecule / framework_mass * 1000
-    error_mol_kg = error_total_molecule / framework_mass * 1000
-
-    results = {
-        "mof_path": os.abspath(cif_path),
-        "temperature": temperature,
-        "pressure": pressure,
-        "uptake_in_mol_kg": uptake_mol_kg,
-    }
-
-    return uptake_mol_kg, error_mol_kg
+    # Return the parsed metrics
+    # Note: run_graspa_core returns a dict; we extract what the tool usually expects
+    if result["status"] == "success":
+        return result["uptake_in_mol_kg"]
+    else:
+        raise RuntimeError(f"gRASPA simulation failed for {graspa_input.mof_name}")

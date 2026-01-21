@@ -1,13 +1,12 @@
 from pathlib import Path
-import numpy as np
 import time
 import json
 import numpy as np
 from typing import Any, Dict
 
 from langchain_core.tools import tool
-from chemgraph.models.atomsdata import AtomsData
-from chemgraph.models.ase_input import (
+from chemgraph.schemas.atomsdata import AtomsData
+from chemgraph.schemas.ase_input import (
     ASEInputSchema,
     ASEOutputSchema,
 )
@@ -110,11 +109,6 @@ def atomsdata_to_atoms(atomsdata: AtomsData):
         cell=atomsdata.cell,
         pbc=atomsdata.pbc,
     )
-
-
-# -----------------------------------------------------------------------------
-# Original tool functions
-# -----------------------------------------------------------------------------
 
 
 @tool
@@ -274,35 +268,35 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
     calc_type = calculator["calculator_type"].lower()
 
     if "emt" in calc_type:
-        from chemgraph.models.calculators.emt_calc import EMTCalc
+        from chemgraph.schemas.calculators.emt_calc import EMTCalc
 
         calc = EMTCalc(**calculator)
     elif "tblite" in calc_type:
-        from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+        from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
 
         calc = TBLiteCalc(**calculator)
     elif "orca" in calc_type:
-        from chemgraph.models.calculators.orca_calc import OrcaCalc
+        from chemgraph.schemas.calculators.orca_calc import OrcaCalc
 
         calc = OrcaCalc(**calculator)
 
     elif "nwchem" in calc_type:
-        from chemgraph.models.calculators.nwchem_calc import NWChemCalc
+        from chemgraph.schemas.calculators.nwchem_calc import NWChemCalc
 
         calc = NWChemCalc(**calculator)
 
     elif "fairchem" in calc_type:
-        from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
+        from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
 
         calc = FAIRChemCalc(**calculator)
 
     elif "mace" in calc_type:
-        from chemgraph.models.calculators.mace_calc import MaceCalc
+        from chemgraph.schemas.calculators.mace_calc import MaceCalc
 
         calc = MaceCalc(**calculator)
 
     elif "aimnet2" in calc_type:
-        from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
+        from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
 
         calc = AIMNET2Calc(**calculator)
 
@@ -509,7 +503,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
                 IR_SPECTRUM_START = 500  # Start of IR spectrum range
                 IR_SPECTRUM_END = 4000  # End of IR spectrum range
-                freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
+                freq_intensity = ir.get_spectrum(
+                    start=IR_SPECTRUM_START, end=IR_SPECTRUM_END
+                )
                 """
                 for f, inten in zip(freq_intensity[0], freq_intensity[1]):
                     ir_data["spectrum_frequencies"].append(f"{f}")
@@ -525,7 +521,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 fig.savefig("ir_spectrum.png", format="png", dpi=300)
 
                 ir_data["IR Plot"] = "Saved to ir_spectrum.png"
-                ir_data["Normal mode data"] = "Normal modes saved as individual .traj files"
+                ir_data["Normal mode data"] = (
+                    "Normal modes saved as individual .traj files"
+                )
 
             if driver == "thermo":
                 # Approximation for a single atom system.
@@ -541,7 +539,9 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
                     linear = is_linear_molecule.invoke({"atomsdata": final_structure})
                     geometry = "linear" if linear else "nonlinear"
-                    symmetrynumber = get_symmetry_number.invoke({"atomsdata": final_structure})
+                    symmetrynumber = get_symmetry_number.invoke(
+                        {"atomsdata": final_structure}
+                    )
 
                     thermo = IdealGasThermo(
                         vib_energies=energies,
@@ -554,10 +554,14 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                     thermo_data = {
                         "enthalpy": float(thermo.get_enthalpy(temperature=temperature)),
                         "entropy": float(
-                            thermo.get_entropy(temperature=temperature, pressure=pressure)
+                            thermo.get_entropy(
+                                temperature=temperature, pressure=pressure
+                            )
                         ),
                         "gibbs_free_energy": float(
-                            thermo.get_gibbs_energy(temperature=temperature, pressure=pressure)
+                            thermo.get_gibbs_energy(
+                                temperature=temperature, pressure=pressure
+                            )
                         ),
                         "unit": "eV",
                     }
@@ -632,21 +636,21 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
 def create_ase_atoms(atomic_numbers, positions):
     """Create an ASE Atoms object from atomic numbers and positions.
-    
+
     Parameters
     ----------
     atomic_numbers : list or array
         List of atomic numbers
     positions : list or array
         List of atomic positions (3D coordinates)
-        
+
     Returns
     -------
     ase.Atoms
         ASE Atoms object
     """
     from ase import Atoms
-    
+
     try:
         atoms = Atoms(numbers=atomic_numbers, positions=positions)
         return atoms
@@ -657,32 +661,35 @@ def create_ase_atoms(atomic_numbers, positions):
 
 def create_xyz_string(atomic_numbers, positions):
     """Create an XYZ format string from atomic numbers and positions.
-    
+
     Parameters
     ----------
     atomic_numbers : list or array
         List of atomic numbers
     positions : list or array
         List of atomic positions (3D coordinates)
-        
+
     Returns
     -------
     str
         XYZ format string
     """
     from ase import Atoms
-    from ase.data import chemical_symbols
-    
+
     try:
         atoms = Atoms(numbers=atomic_numbers, positions=positions)
-        
+
         # Create XYZ string manually
         xyz_lines = [str(len(atoms))]
         xyz_lines.append("Generated by ChemGraph")
-        
-        for i, (symbol, pos) in enumerate(zip(atoms.get_chemical_symbols(), atoms.positions)):
-            xyz_lines.append(f"{symbol:2s} {pos[0]:12.6f} {pos[1]:12.6f} {pos[2]:12.6f}")
-        
+
+        for i, (symbol, pos) in enumerate(
+            zip(atoms.get_chemical_symbols(), atoms.positions)
+        ):
+            xyz_lines.append(
+                f"{symbol:2s} {pos[0]:12.6f} {pos[1]:12.6f} {pos[2]:12.6f}"
+            )
+
         return "\n".join(xyz_lines)
     except Exception as e:
         print(f"Error creating XYZ string: {e}")

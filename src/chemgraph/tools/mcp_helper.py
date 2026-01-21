@@ -1,6 +1,4 @@
-### Helper functions for mcp_tools.py ###
-
-from chemgraph.models.atomsdata import AtomsData
+from chemgraph.schemas.atomsdata import AtomsData
 
 
 def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
@@ -24,35 +22,35 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
     calc_type = calculator["calculator_type"].lower()
 
     if "emt" in calc_type:
-        from chemgraph.models.calculators.emt_calc import EMTCalc
+        from chemgraph.schemas.calculators.emt_calc import EMTCalc
 
         calc = EMTCalc(**calculator)
     elif "tblite" in calc_type:
-        from chemgraph.models.calculators.tblite_calc import TBLiteCalc
+        from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
 
         calc = TBLiteCalc(**calculator)
     elif "orca" in calc_type:
-        from chemgraph.models.calculators.orca_calc import OrcaCalc
+        from chemgraph.schemas.calculators.orca_calc import OrcaCalc
 
         calc = OrcaCalc(**calculator)
 
     elif "nwchem" in calc_type:
-        from chemgraph.models.calculators.nwchem_calc import NWChemCalc
+        from chemgraph.schemas.calculators.nwchem_calc import NWChemCalc
 
         calc = NWChemCalc(**calculator)
 
     elif "fairchem" in calc_type:
-        from chemgraph.models.calculators.fairchem_calc import FAIRChemCalc
+        from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
 
         calc = FAIRChemCalc(**calculator)
 
     elif "mace" in calc_type:
-        from chemgraph.models.calculators.mace_calc import MaceCalc
+        from chemgraph.schemas.calculators.mace_calc import MaceCalc
 
         calc = MaceCalc(**calculator)
 
     elif "aimnet2" in calc_type:
-        from chemgraph.models.calculators.aimnet2_calc import AIMNET2Calc
+        from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
 
         calc = AIMNET2Calc(**calculator)
 

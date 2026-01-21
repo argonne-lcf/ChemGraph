@@ -4,9 +4,10 @@ import glob
 import json
 import time
 from pathlib import Path
-
 from typing import Literal
+
 from mcp.server.fastmcp import FastMCP
+
 
 import pubchempy as pcp
 from ase import Atoms
@@ -17,20 +18,21 @@ from chemgraph.tools.mcp_helper import (
     is_linear_molecule,
     get_symmetry_number,
 )
-from chemgraph.models.ase_input import ASEInputSchema, ASEOutputSchema
+from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
+
 
 mcp = FastMCP(
-    name="Chemistry Tools MCP",
-    instructions=(
-        "You provide chemistry tools for converting molecule names to SMILES, "
-        "building 3D coordinates, running ASE simulations (geometry optimization, thermochemistry, vibrational calculations), and reading results. "
-        "Each tool has its own description — follow those to decide when to use them.\n\n"
-        "General guidance:\n"
-        "• Keep outputs compact; large results are written to files.\n"
-        "• Do not invent data. If a tool raises an error, report it as-is.\n"
-        "• Use absolute file paths when returning artifacts.\n"
-        "• Energies are in eV, vibrational frequencies in cm⁻¹, wall times in seconds.\n"
-    ),
+    name="ChemGraph General Tools",
+    instructions="""
+        You provide chemistry tools for converting molecule names to SMILES,
+        building 3D coordinates, running ASE simulations (geometry optimization, thermochemistry, vibrational calculations), and reading results. "
+        Each tool has its own description — follow those to decide when to use them.\n\n
+        General guidance:\n
+        • Keep outputs compact; large results are written to files.\n
+        • Do not invent data. If a tool raises an error, report it as-is.\n
+        • Use absolute file paths when returning artifacts.\n
+        • Energies are in eV, vibrational frequencies in cm⁻¹, wall times in seconds.
+    """,
 )
 
 
@@ -75,7 +77,7 @@ async def molecule_name_to_smiles(name: str) -> str:
 async def smiles_to_coordinate_file(
     smiles: str,
     output_file: str = "molecule.xyz",
-    randomSeed: int = 2025,
+    seed: int = 2025,
     fmt: Literal["xyz"] = "xyz",
 ) -> dict:
     """Convert a SMILES string to a coordinate file.
@@ -86,7 +88,7 @@ async def smiles_to_coordinate_file(
         SMILES string representation of the molecule.
     output_file : str, optional
         Path to save the output coordinate file (currently XYZ only).
-    randomSeed : int, optional
+    seed : int, optional
         Random seed for RDKit 3D structure generation, by default 2025.
     fmt : {"xyz"}, optional
         Output format. Only "xyz" supported for now.
@@ -95,7 +97,14 @@ async def smiles_to_coordinate_file(
     -------
     str
         A single-line JSON string LLMs can parse, e.g.
-        {"ok": true, "artifact": "coordinate_file", "format": "xyz", "path": "...", "smiles": "...", "natoms": 12}
+        {
+            "ok": true,
+            "artifact": "coordinate_file",
+            "format": "xyz",
+            "path": "...",
+            "smiles": "...",
+            "natoms": 12
+        }
 
     Raises
     ------
@@ -113,7 +122,7 @@ async def smiles_to_coordinate_file(
 
     # Add hydrogens and optimize 3D structure
     mol = Chem.AddHs(mol)
-    if AllChem.EmbedMolecule(mol, randomSeed=randomSeed) != 0:
+    if AllChem.EmbedMolecule(mol, randomSeed=seed) != 0:
         raise ValueError("Failed to generate 3D coordinates.")
     if AllChem.UFFOptimizeMolecule(mol) != 0:
         raise ValueError("Failed to optimize 3D geometry.")
@@ -164,7 +173,7 @@ def extract_output_json(json_file: str) -> dict:
     json.JSONDecodeError
         If the file is not valid JSON.
     """
-    with open(json_file, "r") as f:
+    with open(json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data
 
@@ -193,7 +202,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
     """
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
-    from chemgraph.models.atomsdata import AtomsData
+    from chemgraph.schemas.atomsdata import AtomsData
 
     try:
         calculator = params.calculator.model_dump()
@@ -226,14 +235,17 @@ async def run_ase(params: ASEInputSchema) -> dict:
     params.calculator = calc_model
 
     if calc is None:
-        err = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
+        err = (
+            f"Unsupported calculator: {calculator}. Available calculators are MACE"
+            "(mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
+        )
         raise ValueError(err)
 
     try:
         atoms = read(input_structure_file)
     except Exception as e:
         err = f"Cannot read {input_structure_file} using ASE. Exception from ASE: {e}"
-        raise ValueError(err)
+        raise ValueError(err) from e
 
     atoms.info.update(system_info)
     atoms.calc = calc
@@ -263,7 +275,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
             single_point_energy=energy,
             wall_time=wall_time,
         )
-        with open(output_results_file, "w") as wf:
+        with open(output_results_file, "w", encoding="utf-8") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
         return {
             "status": "success",
@@ -339,7 +351,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
             if freq_file.exists():
                 freq_file.unlink()
 
-            with freq_file.open("w") as f:
+            with freq_file.open("w", encoding="utf-8") as f:
                 for i, freq in enumerate(vib_data["frequencies"], start=0):
                     f.write(f"vib.{i}.traj,{freq}\n")
 
@@ -363,12 +375,9 @@ async def run_ase(params: ASEInputSchema) -> dict:
 
                 IR_SPECTRUM_START = 500  # Start of IR spectrum range
                 IR_SPECTRUM_END = 4000  # End of IR spectrum range
-                freq_intensity = ir.get_spectrum(start=IR_SPECTRUM_START, end=IR_SPECTRUM_END)
-                """
-                for f, inten in zip(freq_intensity[0], freq_intensity[1]):
-                    ir_data["spectrum_frequencies"].append(f"{f}")
-                    ir_data["spectrum_intensities"].append(f"{inten}")
-                """
+                freq_intensity = ir.get_spectrum(
+                    start=IR_SPECTRUM_START, end=IR_SPECTRUM_END
+                )
                 # Generate IR spectrum plot
                 fig, ax = plt.subplots()
                 ax.plot(freq_intensity[0], freq_intensity[1])
@@ -379,7 +388,9 @@ async def run_ase(params: ASEInputSchema) -> dict:
                 fig.savefig("ir_spectrum.png", format="png", dpi=300)
 
                 ir_data["IR Plot"] = "Saved to ir_spectrum.png"
-                ir_data["Normal mode data"] = "Normal modes saved as individual .traj files"
+                ir_data["Normal mode data"] = (
+                    "Normal modes saved as individual .traj files"
+                )
 
             if driver == "thermo":
                 # Approximation for a single atom system.
@@ -408,10 +419,14 @@ async def run_ase(params: ASEInputSchema) -> dict:
                     thermo_data = {
                         "enthalpy": float(thermo.get_enthalpy(temperature=temperature)),
                         "entropy": float(
-                            thermo.get_entropy(temperature=temperature, pressure=pressure)
+                            thermo.get_entropy(
+                                temperature=temperature, pressure=pressure
+                            )
                         ),
                         "gibbs_free_energy": float(
-                            thermo.get_gibbs_energy(temperature=temperature, pressure=pressure)
+                            thermo.get_gibbs_energy(
+                                temperature=temperature, pressure=pressure
+                            )
                         ),
                         "unit": "eV",
                     }
@@ -432,7 +447,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
             wall_time=wall_time,
         )
 
-        with open(output_results_file, "w") as wf:
+        with open(output_results_file, "w", encoding="utf-8") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
 
         # Return message based on driver. Keep the return output minimal.
@@ -478,8 +493,10 @@ async def run_ase(params: ASEInputSchema) -> dict:
 
     except Exception as e:
         err = f"ASE simulation gave an exception:{e}"
-        raise ValueError(err)
+        raise ValueError(err) from e
 
 
 if __name__ == "__main__":
-    mcp.run()
+    from chemgraph.mcp.server_utils import run_mcp_server
+
+    run_mcp_server(mcp, default_port=9003)

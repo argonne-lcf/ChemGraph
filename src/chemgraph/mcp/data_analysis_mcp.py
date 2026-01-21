@@ -1,18 +1,24 @@
+import math
 import os
 import shutil
-import math
-import pandas as pd
-import uvicorn
+import logging
+import json
 from typing import Optional
+
+import pandas as pd
+
 from mcp.server.fastmcp import FastMCP
 
 # Initialize the MCP Server
-mcp = FastMCP("DataAnalyst-MOF")
+mcp = FastMCP("ChemGraph Data Analyst")
 
 
 @mcp.tool(
     name="split_cif_dataset",
-    description="Split a folder of CIFs file into batches. The batch size/number of batches is based on batch_size or num_workers",
+    description="""
+    Split a folder of CIFs file into batches.
+    The batch size/number of batches is based on batch_size or num_workers.
+    """,
 )
 def split_cif_dataset(
     input_dir: str,
@@ -20,6 +26,18 @@ def split_cif_dataset(
     num_workers: int = 0,
     batch_size: int = 0,
 ) -> str:
+    """
+    Splits a folder of CIF files into batches based on worker count or batch size.
+
+    Args:
+        input_dir: Directory containing the source .cif files.
+        output_root: Directory where batch subdirectories will be created.
+        num_workers: Number of workers to distribute files across (used to calculate batch size).
+        batch_size: Explicit number of files per batch.
+
+    Returns:
+        A summary string describing the outcome of the split operation.
+    """
     if not os.path.exists(input_dir):
         return f"Error: Input directory '{input_dir}' does not exist."
 
@@ -40,7 +58,7 @@ def split_cif_dataset(
         return "Error: You must specify either 'num_workers' or 'batch_size'."
 
     if not os.path.exists(output_root):
-        os.makedirs(output_root)
+        os.makedirs(output_root, exist_ok=True)
 
     created_batches = []
 
@@ -58,20 +76,22 @@ def split_cif_dataset(
         for f in batch_files:
             src = os.path.join(input_dir, f)
             dst = os.path.join(batch_dir_path, f)
-            shutil.move(src, dst)
+            shutil.copy2(src, dst)
 
         created_batches.append(f"{batch_dir_name} ({len(batch_files)} files)")
 
     return (
-        f"Success: Split {total_files} files into {len(created_batches)} batches at '{output_root}'.\n"
+        f"Success: Split {total_files} files into "
+        f"{len(created_batches)} batches at '{output_root}'.\n"
         f"Batches created: {', '.join(created_batches)}"
     )
 
 
 @mcp.tool(
     name="aggregate_simulation_results",
-    description="""Reads a list of JSONL simulation files (one JSON object per line) and combines them into a CSV.
-    Extracts nested result data (uptake, T, P) and splits file paths into base directory and filename.
+    description="""Reads a list of JSONL simulation files (one JSON object per line) and 
+    combines them into a CSV. Extracts nested result data (uptake, T, P) and splits file paths 
+    into base directory and filename.
 """,
 )
 def aggregate_simulation_results(
@@ -82,10 +102,6 @@ def aggregate_simulation_results(
     Reads a provided list of specific JSONL simulation file paths and combines them into a CSV.
     Splits the absolute 'cif_path' into 'cif_base_path' and 'cif_filename'.
     """
-    import json
-    import os
-    import pandas as pd
-
     all_data = []
 
     for file_path in file_paths:
@@ -93,7 +109,7 @@ def aggregate_simulation_results(
             continue
 
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, 'r', encoding='utf-8') as f:
                 for line in f:
                     if not line.strip():
                         continue
@@ -122,7 +138,7 @@ def aggregate_simulation_results(
                         continue
 
         except (IOError, FileNotFoundError):
-            print(f"Warning: Could not read file {file_path}")
+            logging.warning("Could not read file %s", file_path)
             continue
 
     if not all_data:
@@ -170,8 +186,6 @@ def rank_mofs_performance(
         top_percentile: Fraction to return (e.g. 0.10 for top 10%).
         min_cutoff: Optional. Minimum value (mol/kg) to include.
     """
-    import os
-
     if not os.path.exists(input_csv_path):
         return f"Error: CSV file '{input_csv_path}' not found."
 
@@ -182,7 +196,10 @@ def rank_mofs_performance(
 
     # Check for required column
     if 'cif_filename' not in df.columns:
-        return "Error: CSV is missing 'cif_filename' column. Ensure it was created by the updated aggregator."
+        return (
+            "Error: CSV is missing 'cif_filename' column. "
+            "Ensure it was created by the updated aggregator."
+        )
 
     # Ensure numeric types
     for col in ['uptake_in_mol_kg', 'temperature', 'pressure']:
@@ -227,11 +244,13 @@ def rank_mofs_performance(
                 metric_val = val_ads - val_des
                 results.append(
                     {
-                        "mof_name": cif_name,  # cif_name is already the filename now
+                        "mof_name": cif_name,
                         metric_name: metric_val,
                         "uptake_ads": val_ads,
                         "uptake_des": val_des,
-                        "conditions": f"Ads({ads_temp}K, {ads_pressure}Pa) -> Des({des_temp}K, {des_pressure}Pa)",
+                        "conditions": (
+                            f"Ads({ads_temp}K, {ads_pressure}Pa) -> Des({des_temp}K, {des_pressure}Pa)"
+                        ),
                     }
                 )
         else:
@@ -241,7 +260,7 @@ def rank_mofs_performance(
                     {
                         "mof_name": cif_name,
                         metric_name: val_ads,
-                        "conditions": f"Point({ads_temp}K, {ads_pressure}Pa)",
+                        "conditions": (f"Point({ads_temp}K, {ads_pressure}Pa)"),
                     }
                 )
 
@@ -279,7 +298,7 @@ def rank_mofs_performance(
     )
 
 
-app = mcp.streamable_http_app()
-
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=9002)
+    from chemgraph.mcp.server_utils import run_mcp_server
+
+    run_mcp_server(mcp, default_port=9002)

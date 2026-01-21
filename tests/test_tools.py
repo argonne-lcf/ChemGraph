@@ -10,8 +10,8 @@ from chemgraph.tools.cheminformatics_tools import (
     smiles_to_atomsdata,
     molecule_name_to_smiles,
 )
-from chemgraph.models.atomsdata import AtomsData
-from chemgraph.models.ase_input import ASEInputSchema
+from chemgraph.schemas.atomsdata import AtomsData
+from chemgraph.schemas.ase_input import ASEInputSchema
 
 TEST_DIR = Path(__file__).parent
 
@@ -178,6 +178,7 @@ def test_run_ase_vib(vib_ase_schema):
 def test_run_ase_thermo(thermo_ase_schema):
     """Test ASE thermochemistry calculation."""
     result = run_ase.invoke({"params": thermo_ase_schema})
+    print(result)
 
     assert isinstance(result, dict)
     # Path to expected output file

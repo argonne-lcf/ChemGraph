@@ -993,6 +993,57 @@ The `tblite` package is installed via pip within the `jupyter_lab` service. For 
 </details>
 
 <details>
+  <summary><strong>Model Context Protocol (MCP) Servers</strong></summary>
+
+ChemGraph provides several **MCP servers** that expose its capabilities as standardized tools conforming to the [Model Context Protocol](https://modelcontextprotocol.io/). These can be connected to MCP-compliant clients or other agentic frameworks.
+
+### Available Servers
+
+The servers are located in `src/chemgraph/mcp/`:
+
+*   **`mcp_tools.py`**: General-purpose chemistry tools powered by ASE. Supports:
+    *   Geometry optimization (GetStructure, RunASE)
+    *   Energy/Thermochemistry calculations
+    *   File I/O (handling XYZ, JSON, etc.)
+*   **`mace_mcp_parsl.py`**: Tools for running **MACE** (Machine Learning Potential) simulations.
+    *   Supports single-structure calculations.
+    *   Supports **ensemble** calculations (directories of structures) using **Parsl** for parallel execution on HPC systems (e.g., Polaris, Aurora).
+*   **`graspa_mcp_parsl.py`**: Tools for **gRASPA** simulations (Gas Adsorption in MOFs).
+    *   Supports single and ensemble runs via Parsl.
+*   **`data_analysis_mcp.py`**: Tools for analyzing simulation results.
+    *   Aggregating JSONL logs from ensemble runs into CSV/DataFrames.
+    *   Plotting isotherms and other data.
+
+### Running a Server
+
+You can run the servers using Python. They support both `stdio` (default) and `streamable_http` (SSE) transports.
+
+**Basic Usage (stdio)**
+Connect this directly to your MCP client (e.g., Claude Desktop config):
+
+```bash
+python src/chemgraph/mcp/mcp_tools.py
+```
+
+**Using HTTP/SSE**
+To run a server that listens for HTTP connections (useful for remote deployment or debugging):
+
+```bash
+python src/chemgraph/mcp/mcp_tools.py --transport streamable_http --port 8000
+```
+
+**Configuration via Arguments**
+All servers in `src/chemgraph/mcp/` support the following arguments:
+*   `--transport`: `stdio` (default) or `streamable_http`.
+*   `--port`: Port number (for HTTP transport).
+*   `--host`: Host address (default: 127.0.0.1).
+
+**Note on HPC Servers:**
+For `mace_mcp_parsl.py` and `graspa_mcp_parsl.py`, ensure your environment is configured for the target HPC system if running actual parallel jobs. They leverage `chemgraph.hpc_configs` to load system-specific Parsl configurations (like `polaris` or `aurora`).
+
+</details>
+
+<details>
   <summary><strong>Code Formatting & Linting</strong></summary>
 
 This project uses [Ruff](https://github.com/astral-sh/ruff) for **both formatting and linting**. To ensure all code follows our style guidelines, install the pre-commit hook:
@@ -1006,17 +1057,20 @@ pre-commit install
 <details>
   <summary><strong>Citation</strong></summary>
     
-    If you use ChemGraph in your research, please cite our work:
+  If you use ChemGraph in your research, please cite our work:
     
-    ```bibtex
-    @article{pham2025chemgraph,
-    title={ChemGraph: An Agentic Framework for Computational Chemistry Workflows},
-    author={Pham, Thang D and Tanikanti, Aditya and Keçeli, Murat},
-    journal={arXiv preprint arXiv:2506.06363},
-    year={2025}
-    url={https://arxiv.org/abs/2506.06363}
+  ```bibtex
+    @article{pham_chemgraph_2026,
+      title = {{ChemGraph} as an agentic framework for computational chemistry workflows},
+      issn = {2399-3669},
+      url = {https://doi.org/10.1038/s42004-025-01776-9},
+      doi = {10.1038/s42004-025-01776-9},
+      journaltitle = {Communications Chemistry},
+      shortjournal = {Communications Chemistry},
+      author = {Pham, Thang D. and Tanikanti, Aditya and Keçeli, Murat},
+      date = {2026-01-08},
     }
-    ```
+  ```
  </details>
 <details>
   <summary><strong>Acknowledgments</strong></summary>

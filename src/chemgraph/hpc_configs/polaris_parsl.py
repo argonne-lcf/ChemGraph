@@ -3,7 +3,6 @@ from parsl.config import Config
 from parsl.providers import LocalProvider
 from parsl.executors import HighThroughputExecutor
 from parsl.launchers import MpiExecLauncher
-from parsl.utils import get_all_checkpoints
 
 
 def get_polaris_config(
@@ -15,9 +14,6 @@ def get_polaris_config(
     """
     if run_dir is None:
         run_dir = os.getcwd()
-
-    # Load previous checkpoints if they exist
-    checkpoints = get_all_checkpoints(run_dir)
 
     # Get the number of nodes from the PBS environment
     node_file = os.getenv("PBS_NODEFILE")
@@ -34,8 +30,8 @@ def get_polaris_config(
         executors=[
             HighThroughputExecutor(
                 label="htex",
-                heartbeat_period=15,
-                heartbeat_threshold=120,
+                heartbeat_period=30,
+                heartbeat_threshold=360,
                 worker_debug=True,
                 available_accelerators=4,
                 cpu_affinity="list:24-31,56-63:16-23,48-55:8-15,40-47:0-7,32-39",
@@ -52,10 +48,7 @@ def get_polaris_config(
                 ),
             ),
         ],
-        checkpoint_files=checkpoints,
         run_dir=run_dir,
-        checkpoint_mode="task_exit",
-        app_cache=True,
     )
 
     return config

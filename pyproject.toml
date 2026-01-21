@@ -43,7 +43,7 @@ dependencies = [
     "langsmith==0.3.45",
     "rich==14.1.0",
     "toml==0.10.2",
-    "mcp==1.15.0"
+    "mcp"
     ]
 
 [project.optional-dependencies]
@@ -55,6 +55,9 @@ ui = [
     "streamlit",
     "stmol",
     "ipython-genutils",
+]
+parsl = [
+    "parsl",
 ]
 
 [project.urls]
