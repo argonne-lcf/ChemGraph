@@ -7,8 +7,6 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 import parsl
-from chemgraph.hpc_configs.aurora_parsl import get_aurora_config
-from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
 from chemgraph.mcp.server_utils import run_mcp_server
 from chemgraph.schemas.graspa_schema import (
     graspa_input_schema,
@@ -50,9 +48,13 @@ def load_parsl_config(system_name: str):
     logging.info("Initializing Parsl for system: %s", system_name)
 
     if system_name == "polaris":
+        from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
+
         return get_polaris_config(run_dir=run_dir)
 
     elif system_name == "aurora":
+        from chemgraph.hpc_configs.aurora_parsl import get_aurora_config
+
         return get_aurora_config(run_dir=run_dir)
 
     else:
