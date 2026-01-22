@@ -36,7 +36,7 @@ from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.multi_agent_mcp import construct_multi_agent_mcp_graph
-from chemgraph.graphs.graspa_mcp import construct_executor_subgraph, construct_graspa_mcp_graph
+from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
 
 import logging
 
@@ -305,7 +305,7 @@ class ChemGraph:
                 analysis_tools=self.data_tools,
             )
 
-    def visualize(self):
+    def visualize(self, method: str = "ascii"):
         """Visualize the LangGraph graph structure.
 
         This method creates and displays a visual representation of the workflow graph
@@ -324,23 +324,26 @@ class ChemGraph:
             NodeStyles,
         )
 
-        nest_asyncio.apply()  # Required for Jupyter Notebook to run async functions
+        if method == "ascii":
+            return self.workflow.get_graph().draw_ascii()
+        else:
+            nest_asyncio.apply()  # Required for Jupyter Notebook to run async functions
 
-        display(
-            Image(
-                self.workflow.get_graph().draw_mermaid_png(
-                    curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(
-                        first="#ffdfba", last="#baffc9", default="#fad7de"
-                    ),
-                    wrap_label_n_words=9,
-                    output_file_path=None,
-                    draw_method=MermaidDrawMethod.PYPPETEER,
-                    background_color="white",
-                    padding=6,
+            display(
+                Image(
+                    self.workflow.get_graph().draw_mermaid_png(
+                        curve_style=CurveStyle.LINEAR,
+                        node_colors=NodeStyles(
+                            first="#ffdfba", last="#baffc9", default="#fad7de"
+                        ),
+                        wrap_label_n_words=9,
+                        output_file_path=None,
+                        draw_method=MermaidDrawMethod.PYPPETEER,
+                        background_color="white",
+                        padding=6,
+                    )
                 )
             )
-        )
 
     def get_state(self, config={"configurable": {"thread_id": "1"}}):
         """Get the current state of the workflow.
