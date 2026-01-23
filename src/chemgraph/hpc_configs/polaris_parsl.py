@@ -18,7 +18,7 @@ def get_polaris_config(
     # Get the number of nodes from the PBS environment
     node_file = os.getenv("PBS_NODEFILE")
     if node_file and os.path.exists(node_file):
-        with open(node_file, "r") as f:
+        with open(node_file, "r", encoding="utf-8") as f:
             node_list = f.readlines()
             num_nodes = len(node_list)
     else:
