@@ -45,6 +45,8 @@ supported_anthropic_models = [
 ]
 # Gemini models. gemini-2.0 doesn't work with toolcall in our last test.
 supported_gemini_models = [
+    "gemini-3-pro-preview",
+    "gemini-3-flash-preview",
     "gemini-2.5-pro",
     "gemini-2.5-flash",
 ]
