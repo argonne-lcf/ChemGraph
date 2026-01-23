@@ -43,7 +43,8 @@ dependencies = [
     "langsmith==0.3.45",
     "rich==14.1.0",
     "toml==0.10.2",
-    "mcp"
+    "mcp",
+    "fastmcp"
     ]
 
 [project.optional-dependencies]
