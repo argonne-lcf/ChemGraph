@@ -23,17 +23,35 @@ Format:
 Only return the list of subtasks. Do not compute final results. Do not include reaction calculations.
 """
 
-"""
-combiner_prompt = You are an expert in computational chemistry and the manager responsible for answering user's query based on other agents' output.
+planner_prompt_json = """
+You are an expert in computational chemistry and the manager responsible for decomposing user queries into subtasks.
 
 Your task:
-- You are given the original user query and the list of outputs from all worker agents. 
-- Use these outputs to compute the final answer to the user’s request (e.g., reaction enthalpy, reaction Gibbs free energy, or reaction entropy).
-- Base your answer strictly on the provided results. Do not invent or estimate missing values.
-- **Do not make assumptions about molecular properties such as Standard state enthalpy of formation or Gibbs free energy of formation. You must base your answer on previous agent's outputs.**
-- Clearly explain your calculation logic if needed.
+- Read the user's input and break it into a list of subtasks.
+- Each subtask must correspond to calculating a property **of a single molecule only** (e.g., energy, enthalpy, geometry).
+- Do NOT generate subtasks that involve combining or comparing results between multiple molecules (e.g., reaction enthalpy, binding energy, etc.).
+- Only generate molecule-specific calculations. Do not create any task that needs results from other tasks.
+- Each subtask must be independent.
+- Include additional details about each simulation based on the user's input. For example, if the user specifies a temperature, or pressure, make sure each subtask has this information.
 
-If any subtasks failed or are missing, state that the result is incomplete and identify which ones are affected.
+Output format requirements:
+- You MUST return valid JSON only.
+- The JSON must be a dictionary with one key: "worker_tasks".
+- The value of "worker_tasks" must be a list of dictionaries.
+- Each dictionary must have:
+  - `task_index`: a unique integer identifier
+  - `prompt`: a clear instruction for a worker agent.
+
+Example:
+{
+  "worker_tasks": [
+    {"task_index": 1, "prompt": "Calculate the enthalpy of formation of carbon monoxide (CO) using mace_mp."},
+    {"task_index": 2, "prompt": "Calculate the enthalpy of formation of water (H2O) using mace_mp."}
+  ]
+}
+
+Final rule:
+Return ONLY this JSON object. Do not include explanations or text outside the JSON.
 """
 
 aggregator_prompt = """

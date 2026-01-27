@@ -1,11 +1,13 @@
 import datetime
 import os
-from chemgraph.tools.openai_loader import load_openai_model
-from chemgraph.tools.alcf_loader import load_alcf_model
-from chemgraph.tools.local_model_loader import load_ollama_model
-from chemgraph.tools.anthropic_loader import load_anthropic_model
-from chemgraph.tools.gemini_loader import load_gemini_model
-from chemgraph.tools.groq_loader import load_groq_model
+from typing import List
+
+from chemgraph.models.openai import load_openai_model
+from chemgraph.models.alcf_endpoints import load_alcf_model
+from chemgraph.models.local_model import load_ollama_model
+from chemgraph.models.anthropic import load_anthropic_model
+from chemgraph.models.gemini import load_gemini_model
+from chemgraph.models.groq import load_groq_model
 from chemgraph.models.supported_models import (
     supported_openai_models,
     supported_ollama_models,
@@ -15,6 +17,7 @@ from chemgraph.models.supported_models import (
     supported_gemini_models,
     supported_groq_models,
 )
+
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
@@ -28,9 +31,12 @@ from chemgraph.prompt.multi_agent_prompt import (
 )
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
-from chemgraph.graphs.multi_agent import contruct_multi_agent_graph
+from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
+from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
+from chemgraph.graphs.multi_agent_mcp import construct_multi_agent_mcp_graph
+from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
 
 import logging
 
@@ -122,6 +128,9 @@ class ChemGraph:
         formatter_multi_prompt: str = formatter_multi_prompt,
         generate_report: bool = False,
         report_prompt: str = report_prompt,
+        support_structured_output: bool = True,
+        tools: List = None,
+        data_tools: List = None,
     ):
         try:
             # Use hardcoded optimal values for tool calling
@@ -156,7 +165,7 @@ class ChemGraph:
                 llm = load_groq_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
                 )
-                
+
             else:  # Assume it might be a vLLM or other custom OpenAI-compatible endpoint
                 import os
 
@@ -212,12 +221,23 @@ class ChemGraph:
         self.executor_prompt = executor_prompt
         self.aggregator_prompt = aggregator_prompt
         self.formatter_multi_prompt = formatter_multi_prompt
+        self.tools = tools
+        self.data_tools = data_tools
+
+        if model_name in supported_argo_models:
+            self.support_structured_output = False
+        else:
+            self.support_structured_output = support_structured_output
+
         self.workflow_map = {
             "single_agent": {"constructor": construct_single_agent_graph},
-            "multi_agent": {"constructor": contruct_multi_agent_graph},
+            "multi_agent": {"constructor": construct_multi_agent_graph},
             "python_relp": {"constructor": construct_relp_graph},
             "graspa": {"constructor": construct_graspa_graph},
             "mock_agent": {"constructor": construct_mock_agent_graph},
+            "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
+            "multi_agent_mcp": {"constructor": construct_multi_agent_mcp_graph},
+            "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -233,6 +253,7 @@ class ChemGraph:
                 self.formatter_prompt,
                 self.generate_report,
                 self.report_prompt,
+                self.tools,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -242,6 +263,7 @@ class ChemGraph:
                 executor_prompt=self.executor_prompt,
                 formatter_prompt=self.formatter_multi_prompt,
                 structured_output=self.structured_output,
+                support_structured_output=self.support_structured_output,
             )
         elif self.workflow_type == "python_relp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -260,8 +282,30 @@ class ChemGraph:
                 llm=llm,
                 system_prompt=self.system_prompt,
             )
+        elif self.workflow_type == "single_agent_mcp":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm=llm,
+                system_prompt=self.system_prompt,
+                tools=self.tools,
+            )
+        elif self.workflow_type == "multi_agent_mcp":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm,
+                planner_prompt=self.planner_prompt,
+                aggregator_prompt=self.aggregator_prompt,
+                executor_prompt=self.executor_prompt,
+                formatter_prompt=self.formatter_multi_prompt,
+                structured_output=self.structured_output,
+                support_structured_output=self.support_structured_output,
+            )
+        elif self.workflow_type == "graspa_mcp":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm=llm,
+                executor_tools=self.tools,
+                analysis_tools=self.data_tools,
+            )
 
-    def visualize(self):
+    def visualize(self, method: str = "ascii"):
         """Visualize the LangGraph graph structure.
 
         This method creates and displays a visual representation of the workflow graph
@@ -280,23 +324,26 @@ class ChemGraph:
             NodeStyles,
         )
 
-        nest_asyncio.apply()  # Required for Jupyter Notebook to run async functions
+        if method == "ascii":
+            return self.workflow.get_graph().draw_ascii()
+        else:
+            nest_asyncio.apply()  # Required for Jupyter Notebook to run async functions
 
-        display(
-            Image(
-                self.workflow.get_graph().draw_mermaid_png(
-                    curve_style=CurveStyle.LINEAR,
-                    node_colors=NodeStyles(
-                        first="#ffdfba", last="#baffc9", default="#fad7de"
-                    ),
-                    wrap_label_n_words=9,
-                    output_file_path=None,
-                    draw_method=MermaidDrawMethod.PYPPETEER,
-                    background_color="white",
-                    padding=6,
+            display(
+                Image(
+                    self.workflow.get_graph().draw_mermaid_png(
+                        curve_style=CurveStyle.LINEAR,
+                        node_colors=NodeStyles(
+                            first="#ffdfba", last="#baffc9", default="#fad7de"
+                        ),
+                        wrap_label_n_words=9,
+                        output_file_path=None,
+                        draw_method=MermaidDrawMethod.PYPPETEER,
+                        background_color="white",
+                        padding=6,
+                    )
                 )
             )
-        )
 
     def get_state(self, config={"configurable": {"thread_id": "1"}}):
         """Get the current state of the workflow.
@@ -371,26 +418,42 @@ class ChemGraph:
 
             # Add prompts depending on workflow_type
             if self.workflow_type in {"single_agent", "graspa", "python_relp"}:
-                output_data.update({
-                    "system_prompt": self.system_prompt,
-                    "formatter_prompt": self.formatter_prompt,
-                })
+                output_data.update(
+                    {
+                        "system_prompt": self.system_prompt,
+                        "formatter_prompt": self.formatter_prompt,
+                    }
+                )
+
+            elif self.workflow_type == "graspa_mcp":
+                output_data.update(
+                    {
+                        "system_prompt": self.system_prompt,
+                    }
+                )
+
             elif self.workflow_type == "mock_agent":
-                output_data.update({
-                    "system_prompt": self.system_prompt,
-                })
+                output_data.update(
+                    {
+                        "system_prompt": self.system_prompt,
+                    }
+                )
             elif self.workflow_type == "multi_agent":
-                output_data.update({
-                    "planner_prompt": self.planner_prompt,
-                    "executor_prompt": self.executor_prompt,
-                    "aggregator_prompt": self.aggregator_prompt,
-                    "formatter_prompt": self.formatter_multi_prompt,
-                })
+                output_data.update(
+                    {
+                        "planner_prompt": self.planner_prompt,
+                        "executor_prompt": self.executor_prompt,
+                        "aggregator_prompt": self.aggregator_prompt,
+                        "formatter_prompt": self.formatter_multi_prompt,
+                    }
+                )
             else:
-                output_data.update({
-                    "system_prompt": "unknown",
-                    "formatter_prompt": "unknown",
-                })
+                output_data.update(
+                    {
+                        "system_prompt": "unknown",
+                        "formatter_prompt": "unknown",
+                    }
+                )
 
             with open(file_path, "w", encoding="utf-8") as json_file:
                 json.dump(output_data, json_file, indent=4)
@@ -400,104 +463,66 @@ class ChemGraph:
             print("Error with write_state: ", str(e))
             return "Error"
 
-    def run(self, query: str, config=None):
-        """Run the specified workflow with the given query.
-
-        Parameters
-        ----------
-        query : str
-            The user's input query
-        config : dict, optional
-            Configuration dictionary for the workflow run, by default None
-
-        Returns
-        -------
-        Any
-            The result depends on return_option:
-            - If "last_message": returns the last message from the workflow
-            - If "state": returns the complete message state
-
-        Raises
-        ------
-        TypeError
-            If config is not a dictionary
-        ValueError
-            If return_option is not supported
-        Exception
-            If there is an error running the workflow
+    async def run(self, query: str, config=None):
         """
+        Async-only runner. Requires `self.workflow.astream(...)`.
+        Streams values, logs new messages, writes state, and returns according to
+        `self.return_option` ("last_message" or "state").
+        """
+        import os
         import uuid
 
-        try:
-            if config is None:
-                config = {}
-            if not isinstance(config, dict):
+        def _validate_config(cfg):
+            if cfg is None:
+                cfg = {}
+            if not isinstance(cfg, dict):
                 raise TypeError(
-                    f"`config` must be a dictionary, got {type(config).__name__}"
+                    f"`config` must be a dictionary, got {type(cfg).__name__}"
                 )
-            config.setdefault("configurable", {}).setdefault("thread_id", "1")
-            config["recursion_limit"] = self.recursion_limit
+            cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
+            cfg["recursion_limit"] = self.recursion_limit
+            return cfg
 
-            # Construct the workflow graph
-            workflow = self.workflow
+        def _save_state_and_select_return(last_state, cfg):
+            log_id = str(uuid.uuid4())
+            log_dir = os.path.join("logs", log_id)
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = os.path.join(log_dir, "state.json")
+            self.write_state(config=cfg, file_path=log_path)
 
-            if self.workflow_type in {"single_agent", "graspa", "python_relp", "mock_agent"}:
-                inputs = {"messages": query}
-
-                prev_messages = []
-
-                for s in workflow.stream(inputs, stream_mode="values", config=config):
-                    if "messages" in s and s["messages"] != prev_messages:
-                        new_message = s["messages"][-1]
-                        new_message.pretty_print()
-                        logger.info(new_message)
-                        prev_messages = s["messages"]
-                log_id = str(uuid.uuid4())
-                log_dir = os.path.join("logs", log_id)
-                os.makedirs(log_dir, exist_ok=True)
-                log_path = os.path.join(log_dir, "state.json")
-                self.write_state(config=config, file_path=log_path)
-
-                if self.return_option == "last_message":
-                    return s["messages"][-1]
-                elif self.return_option == "state":
-                    return serialize_state(self.get_state(config=config))
-                else:
-                    raise ValueError(
-                        f"Return option {self.return_option} is not supported. Only supports 'last_message' or 'state'."
-                    )
-            elif self.workflow_type == "multi_agent":
-                inputs = {"messages": query}
-                prev_messages = []
-
-                for s in workflow.stream(inputs, stream_mode="values", config=config):
-                    if "messages" in s and s["messages"] != prev_messages:
-                        new_message = s["messages"][-1]
-                        new_message.pretty_print()
-                        logger.info(new_message)
-                        prev_messages = s["messages"]
-
-                log_id = str(uuid.uuid4())
-                log_dir = os.path.join("logs", log_id)
-                os.makedirs(log_dir, exist_ok=True)
-                log_path = os.path.join(log_dir, "state.json")
-                self.write_state(config=config, file_path=log_path)
-
-                if self.return_option == "last_message":
-                    return s["messages"][-1]
-                elif self.return_option == "state":
-                    return serialize_state(self.get_state(config=config))
-                else:
-                    raise ValueError(
-                        f"Return option {self.return_option} is not supported. Only supports 'last_message' or 'state'."
-                    )
-
+            if self.return_option == "last_message":
+                return last_state["messages"][-1]
+            elif self.return_option == "state":
+                return serialize_state(self.get_state(config=cfg))
             else:
-                logger.error(
-                    f"Workflow {self.workflow_type} is not supported. Please select either multi_agent_ase or single_agent_ase"
+                raise ValueError(
+                    f"Unsupported return_option: {self.return_option}. Use 'last_message' or 'state'."
                 )
-                raise ValueError(f"Workflow {self.workflow_type} is not supported")
+
+        config = _validate_config(config)
+        inputs = {"messages": query}
+
+        prev_messages = []
+        last_state = None
+        try:
+            async for s in self.workflow.astream(
+                inputs, stream_mode="values", config=config
+            ):
+                if "messages" in s and s["messages"] != prev_messages:
+                    new_message = s["messages"][-1]
+                    try:
+                        new_message.pretty_print()
+                    except Exception:
+                        pass
+                    logger.info(new_message)
+                    prev_messages = s["messages"]
+                last_state = s
+
+            if last_state is None:
+                raise RuntimeError("Workflow produced no states.")
+
+            return _save_state_and_select_return(last_state, config)
 
         except Exception as e:
-            logger.error(f"Error running workflow {self.workflow_type}: {str(e)}")
+            logger.error(f"Error running workflow {self.workflow_type}: {e}")
             raise

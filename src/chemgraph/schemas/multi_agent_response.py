@@ -1,6 +1,32 @@
 from pydantic import BaseModel, Field
 from typing import Union, Optional
-from chemgraph.models.atomsdata import AtomsData
+from chemgraph.schemas.atomsdata import AtomsData
+
+
+class WorkerTask(BaseModel):
+    """
+    Represents a task assigned to a worker agent for performing tool-based computations.
+
+    Attributes:
+        task_index (int): The index or ID of the task, typically used to track execution order.
+        prompt (str): A natural language prompt that describes the task or request for which
+                      the worker is expected to generate tool calls.
+    """
+
+    task_index: int = Field(..., description="Task index")
+    prompt: str = Field(..., description="Prompt to send to worker for tool calls")
+
+
+class PlannerResponse(BaseModel):
+    """
+    Response model from the Task Decomposer agent containing a list of tasks.
+
+    Attributes:
+        worker_tasks (list[WorkerTask]): A list of tasks that are to be assigned
+        to Worker agents for tool execution or computation.
+    """
+
+    worker_tasks: list[WorkerTask] = Field(..., description="List of task to assign for Worker")
 
 
 class VibrationalFrequency(BaseModel):
@@ -31,6 +57,8 @@ class IRSpectrum(BaseModel):
     intensity : list[str]
         List of vibrational intensities.
         Each entry is a string representation of the intensity value.
+    plot : Optional[str]
+        Base64-encoded PNG image of the IR spectrum plot.
     """
 
     frequency_cm1: list[str] = Field(
@@ -69,6 +97,7 @@ class InfraredSpectrum(BaseModel):
         description="Values of intensities for plotting spectrum in (D/Å)^2 amu^-1.",
     )
 
+
 class ScalarResult(BaseModel):
     """
     Schema for storing a scalar numerical result from a simulation or calculation.
@@ -92,7 +121,7 @@ class ScalarResult(BaseModel):
 
 
 class ResponseFormatter(BaseModel):
-    """Defined structured output to the user."""
+    """Defined structured response to the user."""
 
     answer: Union[
         str,

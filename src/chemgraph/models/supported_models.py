@@ -1,8 +1,13 @@
 """
 Lists of supported models for different LLM providers.
 """
+
 # OpenAI models that are supported
 supported_openai_models = [
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "gpt-5.1",
+    "gpt-5",
     "gpt-4o-mini",
     "gpt-4o",
     "gpt-4.1",
@@ -23,6 +28,8 @@ supported_alcf_models = [
     "Qwen/Qwen3-32B",
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
 ]
 # Anthropic models
 supported_anthropic_models = [
@@ -38,6 +45,8 @@ supported_anthropic_models = [
 ]
 # Gemini models. gemini-2.0 doesn't work with toolcall in our last test.
 supported_gemini_models = [
+    "gemini-3-pro-preview",
+    "gemini-3-flash-preview",
     "gemini-2.5-pro",
     "gemini-2.5-flash",
 ]
@@ -64,8 +73,6 @@ supported_groq_models = [
 ]
 
 
-
-
 supported_argo_models = [
     "argo:gpt-3.5-turbo",
     "argo:gpt-3.5-turbo-16k",
@@ -89,6 +96,7 @@ supported_argo_models = [
     "argo:gpt-4.1",
     "argo:gpt-4.1-mini",
     "argo:gpt-4.1-nano",
+    "argo:gpt-4o-mini",
 ]
 
 all_supported_models = (

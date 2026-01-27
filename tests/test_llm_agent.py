@@ -16,7 +16,7 @@ def test_chemgraph_initialization():
         assert hasattr(agent, "workflow")
 
 
-def test_agent_query(mock_llm):
+async def test_agent_query(mock_llm):
     with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
         # Set up the mock chain
         mock_chain = Mock()
@@ -25,7 +25,7 @@ def test_agent_query(mock_llm):
         mock_load.return_value = mock_llm
 
         agent = ChemGraph(model_name="gpt-4o-mini")
-        response = agent.run("What is the SMILES string for water?")
+        response = await agent.run("What is the SMILES string for water?")
         assert isinstance(response, AIMessage)
         assert response.content == "Test response"
         mock_llm.bind_tools.assert_called_once()

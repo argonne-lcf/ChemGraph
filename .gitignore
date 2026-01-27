@@ -30,8 +30,6 @@ eggs/
 # Jupyter Notebook checkpoints and modified notebooks
 .ipynb_checkpoints/
 
-# Generated molecular structure files
-*.xyz
 # env
 chemgraph-env/
 # env
@@ -55,3 +53,5 @@ test.csv
 nwchem/
 nwchem.nwi
 nwchem.nwo
+
+vib*.traj
