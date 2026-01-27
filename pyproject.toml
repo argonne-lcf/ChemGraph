@@ -3,8 +3,8 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ChemGraph"
-version = "1.0.0"
+name = "chemgraphagent"
+version = "0.2.2"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
@@ -25,11 +25,11 @@ dependencies = [
     "langgraph-prebuilt",
     "pydantic",
     "pandas==2.2.3",
-    "pubchempy",
+    "pubchempy==1.0.5",
     "pyppeteer==2.0.0",
     "numpy==2.2.6",
     "numexpr==2.11.0",
-    "pytest",
+    "pytest==8.4.1",
     "deepdiff==8.5.0",
     "ase",
     "rdkit",
@@ -49,6 +49,9 @@ dependencies = [
     ]
 
 [project.optional-dependencies]
+calculators = [
+    "tblite==0.4.0",
+]
 uma = [
     "fairchem-core==2.3.0",
     "e3nn>=0.5",

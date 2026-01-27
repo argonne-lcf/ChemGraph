@@ -5,13 +5,15 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v4
@@ -21,10 +23,30 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     
-    - name: Install dependencies
+    - name: Set up Miniconda (Windows only)
+      if: matrix.os == 'windows-latest'
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        channels: conda-forge,defaults
+        channel-priority: strict
+        auto-activate-base: true
+    
+    - name: Install dependencies (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: bash -l {0}
       run: |
         python -m pip install --upgrade pip
+        # On Windows, use conda to install tblite (which provides LAPACK dependencies)
+        conda install -y -c conda-forge tblite=0.4.0
+        # Install package without calculators extra (tblite already installed via conda)
         pip install -e .
+    
+    - name: Install dependencies (Non-Windows)
+      if: matrix.os != 'windows-latest'
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[calculators]"
             
     - name: Run tests
       run: |
