@@ -37,11 +37,31 @@ def run_mcp_server(
 
     # Configure logging to write to stderr.
     # This is CRITICAL for stdio transport mode, as stdout is used for communication.
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        stream=sys.stderr,
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
     )
+
+    # Always log to stderr
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setFormatter(formatter)
+    logger.addHandler(stderr_handler)
+
+    # If CHEMGRAPH_LOG_DIR is set, also log to a file
+    import os
+
+    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+    if log_dir:
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+            log_file = os.path.join(log_dir, f"mcp_server_{mcp.name}.log")
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+            logging.info(f"Logging to file: {log_file}")
+        except Exception as e:
+            logging.error(f"Failed to setup file logging to {log_dir}: {e}")
 
     if args.transport == "streamable_http":
         logging.info(

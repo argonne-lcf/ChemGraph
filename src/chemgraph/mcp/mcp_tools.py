@@ -21,6 +21,15 @@ from chemgraph.tools.mcp_helper import (
 from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
 
 
+def _resolve_path(path: str) -> str:
+    """If CHEMGRAPH_LOG_DIR is set and path is relative, prepend it."""
+    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+    if log_dir and not os.path.isabs(path):
+        os.makedirs(log_dir, exist_ok=True)
+        return os.path.join(log_dir, path)
+    return path
+
+
 mcp = FastMCP(
     name="ChemGraph General Tools",
     instructions="""
@@ -133,8 +142,10 @@ async def smiles_to_coordinate_file(
 
     # Create Atoms object
     atoms = Atoms(numbers=numbers, positions=positions)
+
+    final_output_file = _resolve_path(output_file)
     ase_write(
-        output_file,
+        final_output_file,
         atoms,
     )
 
@@ -142,7 +153,7 @@ async def smiles_to_coordinate_file(
     return {
         "ok": True,
         "artifact": "coordinate_file",
-        "path": os.path.abspath(output_file),
+        "path": os.path.abspath(final_output_file),
         "smiles": smiles,
         "natoms": len(numbers),
     }
@@ -217,7 +228,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
         start_time = time.time()
 
         input_structure_file = params.input_structure_file
-        output_results_file = params.output_results_file
+        output_results_file = _resolve_path(params.output_results_file)
         optimizer = params.optimizer
         fmax = params.fmax
         steps = params.steps
@@ -285,7 +296,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
                 wf.write(simulation_output.model_dump_json(indent=4))
             return {
                 "status": "success",
-                "message": f"Simulation completed. Results saved to {output_results_file}",
+                "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
                 "single_point_energy": energy,
                 "unit": "eV",
             }
@@ -324,7 +335,8 @@ async def run_ase(params: ASEInputSchema) -> dict:
                 from ase.vibrations import Vibrations
                 from ase import units
 
-                vib = Vibrations(atoms)
+                vib_name = _resolve_path("vib")
+                vib = Vibrations(atoms, name=vib_name)
 
                 vib.clean()
                 vib.run()
@@ -349,11 +361,16 @@ async def run_ase(params: ASEInputSchema) -> dict:
                     vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
                 # Remove existing frequencies.txt and .traj files
-                for traj_file in glob.glob("*.traj"):
+                # Note: This glob might need adjustment if we are writing elsewhere,
+                # but vib.clean() should handle its own files.
+                # We will just remove any stray .traj files in the target dir if needed.
+                # using the resolved name pattern
+                for traj_file in glob.glob(f"{vib_name}.*.traj"):
                     os.remove(traj_file)
 
                 # Write frequencies into frequencies.txt
-                freq_file = Path("frequencies.csv")
+                freq_file_path = _resolve_path("frequencies.csv")
+                freq_file = Path(freq_file_path)
                 if freq_file.exists():
                     freq_file.unlink()
 
@@ -375,7 +392,8 @@ async def run_ase(params: ASEInputSchema) -> dict:
                     ir_data["spectrum_intensities"] = []
                     ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
 
-                    ir = Infrared(atoms)
+                    ir_name = _resolve_path("ir")
+                    ir = Infrared(atoms, name=ir_name)
                     ir.clean()
                     ir.run()
 
@@ -391,11 +409,12 @@ async def run_ase(params: ASEInputSchema) -> dict:
                     ax.set_ylabel("Intensity (a.u.)")
                     ax.set_title("Infrared Spectrum")
                     ax.grid(True)
-                    fig.savefig("ir_spectrum.png", format="png", dpi=300)
+                    ir_plot_path = _resolve_path("ir_spectrum.png")
+                    fig.savefig(ir_plot_path, format="png", dpi=300)
 
-                    ir_data["IR Plot"] = "Saved to ir_spectrum.png"
+                    ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
                     ir_data["Normal mode data"] = (
-                        "Normal modes saved as individual .traj files"
+                        f"Normal modes saved as individual .traj files in {os.path.abspath(ir_name)}"
                     )
 
                 if driver == "thermo":
@@ -462,7 +481,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
             if driver == "opt":
                 return {
                     "status": "success",
-                    "message": f"Simulation completed. Results saved to {output_results_file}",
+                    "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
                     "single_point_energy": single_point_energy,  # small payload for LLMs
                     "unit": "eV",
                 }
@@ -474,7 +493,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
                     },  # small payload for LLMs
                     "message": (
                         "Vibrational analysis completed; frequencies returned. "
-                        f"Full results (structure, vibrations and metadata) saved to {output_results_file}."
+                        f"Full results (structure, vibrations and metadata) saved to {os.path.abspath(output_results_file)}."
                     ),
                 }
             elif driver == "thermo":
@@ -485,7 +504,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
                     },  # small payload for LLMs
                     "message": (
                         "Thermochemistry computed and returned. "
-                        f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}"
+                        f"Full results (structure, vibrations, thermochemistry and metadata) saved to {os.path.abspath(output_results_file)}"
                     ),
                 }
             elif driver == "ir":
@@ -496,8 +515,8 @@ async def run_ase(params: ASEInputSchema) -> dict:
                     },  # small payload for LLMs,  # small payload for LLMs
                     "message": (
                         "Infrared computer and returned"
-                        f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}. "
-                        "IR plot Saved to ir_spectrum.png. Normal modes saved as individual .traj files"
+                        f"Full results (structure, vibrations, thermochemistry and metadata) saved to {os.path.abspath(output_results_file)}. "
+                        f"IR plot Saved to {os.path.abspath(ir_plot_path)}. Normal modes saved as individual .traj files"
                     ),
                 }
 
