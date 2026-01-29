@@ -44,7 +44,8 @@ dependencies = [
     "toml==0.10.2",
     "mcp",
     "fastmcp",
-    "pytest-asyncio"
+    "pytest-asyncio",
+    "grandalf==0.8"
     ]
 
 [project.optional-dependencies]
