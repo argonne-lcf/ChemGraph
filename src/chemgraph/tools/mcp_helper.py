@@ -1,4 +1,15 @@
+import os
 from chemgraph.schemas.atomsdata import AtomsData
+
+
+def _resolve_path(path: str) -> str:
+    """If CHEMGRAPH_LOG_DIR is set and path is relative, prepend it."""
+    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+    if log_dir and not os.path.isabs(path):
+        # Create directory if it doesn't exist (race condition safe-ish)
+        os.makedirs(log_dir, exist_ok=True)
+        return os.path.join(log_dir, path)
+    return path
 
 
 def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
@@ -108,7 +119,7 @@ def is_linear_molecule(atomsdata: AtomsData, tol=1e-3) -> bool:
     # Center the coordinates.
     centered = coords - np.mean(coords, axis=0)
     # Singular value decomposition.
-    U, s, Vt = np.linalg.svd(centered)
+    _, s, _ = np.linalg.svd(centered)
     # For a linear molecule, only one singular value is significantly nonzero.
     if s[0] == 0:
         return False  # degenerate case (all atoms at one point)

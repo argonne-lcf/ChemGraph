@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import time
 import json
 import numpy as np
@@ -10,6 +11,7 @@ from chemgraph.schemas.ase_input import (
     ASEInputSchema,
     ASEOutputSchema,
 )
+from chemgraph.tools.mcp_helper import _resolve_path
 
 
 @tool
@@ -34,7 +36,7 @@ def extract_output_json(json_file: str) -> Dict[str, Any]:
     json.JSONDecodeError
         If the file is not valid JSON.
     """
-    with open(json_file, "r") as f:
+    with open(json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data
 
@@ -181,8 +183,9 @@ def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> s
             cell=atomsdata.cell,
             pbc=atomsdata.pbc,
         )
-        write(fname, atoms)
-        return f"Successfully saved atomsdata to {fname}"
+        final_fname = _resolve_path(fname)
+        write(final_fname, atoms)
+        return f"Successfully saved atomsdata to {os.path.abspath(final_fname)}"
     except Exception as e:
         raise ValueError(f"Failed to save atomsdata to file: {str(e)}")
 
@@ -331,7 +334,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     ValueError
         If the calculator is not supported or if the calculation fails
     """
-    import os
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
@@ -344,7 +346,8 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     start_time = time.time()
 
     input_structure_file = params.input_structure_file
-    output_results_file = params.output_results_file
+    input_structure_file = params.input_structure_file
+    output_results_file = _resolve_path(params.output_results_file)
     optimizer = params.optimizer
     fmax = params.fmax
     steps = params.steps
@@ -386,7 +389,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             # Catch exception if calculator doesn't have get_dipole_moment()
             try:
                 dipole = list(atoms.get_dipole_moment())
-            except Exception as e:
+            except Exception:
                 pass
 
         end_time = time.time()
@@ -401,11 +404,11 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             single_point_energy=energy,
             wall_time=wall_time,
         )
-        with open(output_results_file, "w") as wf:
+        with open(output_results_file, "w", encoding="utf-8") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
         return {
             "status": "success",
-            "message": f"Simulation completed. Results saved to {output_results_file}",
+            "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
             "single_point_energy": energy,
             "unit": "eV",
         }
@@ -444,7 +447,10 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             from ase.vibrations import Vibrations
             from ase import units
 
-            vib = Vibrations(atoms)
+            vib_name = _resolve_path("vib")
+            vib = Vibrations(atoms, name=vib_name)
+
+            vib.clean()
 
             vib.clean()
             vib.run()
@@ -469,13 +475,15 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
             # Remove existing frequencies.txt and .traj files
-            import os, glob
+            import glob
 
-            for traj_file in glob.glob("*.traj"):
+            # Remove any existing .traj files that match the new pattern
+            for traj_file in glob.glob(f"{vib_name}.*.traj"):
                 os.remove(traj_file)
 
             # Write frequencies into frequencies.txt
-            freq_file = Path("frequencies.csv")
+            freq_file_path = _resolve_path("frequencies.csv")
+            freq_file = Path(freq_file_path)
             if freq_file.exists():
                 freq_file.unlink()
 
@@ -497,7 +505,10 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 ir_data["spectrum_intensities"] = []
                 ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
 
-                ir = Infrared(atoms)
+                ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
+
+                ir_name = _resolve_path("ir")
+                ir = Infrared(atoms, name=ir_name)
                 ir.clean()
                 ir.run()
 
@@ -518,11 +529,14 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 ax.set_ylabel("Intensity (a.u.)")
                 ax.set_title("Infrared Spectrum")
                 ax.grid(True)
-                fig.savefig("ir_spectrum.png", format="png", dpi=300)
+                ax.set_title("Infrared Spectrum")
+                ax.grid(True)
+                ir_plot_path = _resolve_path("ir_spectrum.png")
+                fig.savefig(ir_plot_path, format="png", dpi=300)
 
-                ir_data["IR Plot"] = "Saved to ir_spectrum.png"
+                ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
                 ir_data["Normal mode data"] = (
-                    "Normal modes saved as individual .traj files"
+                    f"Normal modes saved as individual .traj files in {os.path.abspath(ir_name)}"
                 )
 
             if driver == "thermo":
@@ -588,7 +602,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         if driver == "opt":
             return {
                 "status": "success",
-                "message": f"Simulation completed. Results saved to {output_results_file}",
+                "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
                 "single_point_energy": single_point_energy,  # small payload for LLMs
                 "unit": "eV",
             }
@@ -600,7 +614,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 },  # small payload for LLMs
                 "message": (
                     "Vibrational analysis completed; frequencies returned. "
-                    f"Full results (structure, vibrations and metadata) saved to {output_results_file}."
+                    f"Full results (structure, vibrations and metadata) saved to {os.path.abspath(output_results_file)}."
                 ),
             }
         elif driver == "thermo":
@@ -609,7 +623,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 "result": {"thermochemistry": thermo_data},  # small payload for LLMs
                 "message": (
                     "Thermochemistry computed and returned. "
-                    f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}"
+                    f"Full results (structure, vibrations, thermochemistry and metadata) saved to {os.path.abspath(output_results_file)}"
                 ),
             }
         elif driver == "ir":
@@ -620,8 +634,8 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 },  # small payload for LLMs,  # small payload for LLMs
                 "message": (
                     "Infrared computer and returned"
-                    f"Full results (structure, vibrations, thermochemistry and metadata) saved to {output_results_file}. "
-                    "IR plot Saved to ir_spectrum.png. Normal modes saved as individual .traj files"
+                    f"Full results (structure, vibrations, thermochemistry and metadata) saved to {os.path.abspath(output_results_file)}. "
+                    f"IR plot Saved to {os.path.abspath(ir_plot_path)}. Normal modes saved as individual .traj files"
                 ),
             }
 

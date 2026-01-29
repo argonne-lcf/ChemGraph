@@ -390,10 +390,11 @@ class ChemGraph:
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             thread_id = config["configurable"]["thread_id"]
             if not file_path:
-                os.makedirs("run_logs", exist_ok=True)
+                log_dir = os.environ.get("CHEMGRAPH_LOG_DIR", "run_logs")
+                os.makedirs(log_dir, exist_ok=True)
                 if not file_name:
                     file_name = f"state_thread_{thread_id}_{timestamp}.json"
-                file_path = os.path.join("run_logs", file_name)
+                file_path = os.path.join(log_dir, file_name)
 
             state = self.get_state(config=config)
             serialized_state = serialize_state(state)
@@ -484,8 +485,12 @@ class ChemGraph:
             return cfg
 
         def _save_state_and_select_return(last_state, cfg):
-            log_id = str(uuid.uuid4())
-            log_dir = os.path.join("logs", log_id)
+            # CHEMGRAPH_LOG_DIR is guaranteed to be set by now (or we use fallback)
+            log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+            if not log_dir:
+                # Fallback just in case env var was cleared
+                log_dir = "run_logs"
+
             os.makedirs(log_dir, exist_ok=True)
             log_path = os.path.join(log_dir, "state.json")
             self.write_state(config=cfg, file_path=log_path)
@@ -500,6 +505,20 @@ class ChemGraph:
                 )
 
         config = _validate_config(config)
+
+        # Initialize logging directory before determining inputs or running workflow
+        # Check if CHEMGRAPH_LOG_DIR is already set
+        log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+        if not log_dir:
+            # Create a new session log directory under .log/
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            log_id = str(uuid.uuid4())[:8]
+            # Use abspath to ensure tools getting this env var have a full path
+            log_dir = os.path.join(os.getcwd(), "logs", f"session_{timestamp}_{log_id}")
+            os.makedirs(log_dir, exist_ok=True)
+            # Set env var for tools to pick up
+            os.environ["CHEMGRAPH_LOG_DIR"] = log_dir
+
         inputs = {"messages": query}
 
         prev_messages = []

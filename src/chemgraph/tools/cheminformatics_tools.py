@@ -7,6 +7,7 @@ from ase.io import write as ase_write
 from ase import Atoms
 
 from chemgraph.schemas.atomsdata import AtomsData
+from chemgraph.tools.mcp_helper import _resolve_path
 
 
 @tool
@@ -133,8 +134,10 @@ def smiles_to_coordinate_file(
 
     # Create Atoms object
     atoms = Atoms(numbers=numbers, positions=positions)
+
+    final_output_file = _resolve_path(output_file)
     ase_write(
-        output_file,
+        final_output_file,
         atoms,
     )
 
@@ -142,7 +145,7 @@ def smiles_to_coordinate_file(
     return {
         "ok": True,
         "artifact": "coordinate_file",
-        "path": os.path.abspath(output_file),
+        "path": os.path.abspath(final_output_file),
         "smiles": smiles,
         "natoms": len(numbers),
     }
