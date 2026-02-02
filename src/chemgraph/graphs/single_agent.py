@@ -10,6 +10,14 @@ from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_coordinate_file,
 )
+from chemgraph.tools.xanes_tools import (
+    run_xanes_workflow,
+    fetch_xanes_data,
+    create_xanes_inputs,
+    run_xanes_parsl,
+    expand_xanes_db,
+    plot_xanes_results,
+)
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator
 from chemgraph.schemas.agent_response import ResponseFormatter
@@ -173,6 +181,15 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
             molecule_name_to_smiles,
             extract_output_json,
             calculator,
+            molecule_name_to_smiles,
+            save_atomsdata_to_file,
+            calculator,
+            run_xanes_workflow,
+            fetch_xanes_data,
+            create_xanes_inputs,
+            run_xanes_parsl,
+            expand_xanes_db,
+            plot_xanes_results,
         ]
     messages = [
         {"role": "system", "content": system_prompt},
@@ -289,6 +306,15 @@ def construct_single_agent_graph(
                 run_ase,
                 extract_output_json,
                 calculator,
+                molecule_name_to_smiles,
+                save_atomsdata_to_file,
+                calculator,
+                run_xanes_workflow,
+                fetch_xanes_data,
+                create_xanes_inputs,
+                run_xanes_parsl,
+                expand_xanes_db,
+                plot_xanes_results,
             ]
         tool_node = ToolNode(tools=tools)
         graph_builder = StateGraph(State)
