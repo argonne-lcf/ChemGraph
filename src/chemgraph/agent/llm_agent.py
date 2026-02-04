@@ -1,6 +1,7 @@
 import datetime
 import os
 from typing import List
+import uuid
 
 from chemgraph.models.openai import load_openai_model
 from chemgraph.models.alcf_endpoints import load_alcf_model
@@ -20,14 +21,14 @@ from chemgraph.models.supported_models import (
 
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
-    formatter_prompt,
-    report_prompt,
+    formatter_prompt as default_formatter_prompt,
+    report_prompt as default_report_prompt,
 )
 from chemgraph.prompt.multi_agent_prompt import (
-    executor_prompt,
-    formatter_multi_prompt,
-    aggregator_prompt,
-    planner_prompt,
+    executor_prompt as default_executor_prompt,
+    formatter_multi_prompt as default_formatter_multi_prompt,
+    aggregator_prompt as default_aggregator_prompt,
+    planner_prompt as default_planner_prompt,
 )
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
@@ -118,20 +119,36 @@ class ChemGraph:
         base_url: str = None,
         api_key: str = None,
         system_prompt: str = single_agent_prompt,
-        formatter_prompt: str = formatter_prompt,
+        formatter_prompt: str = default_formatter_prompt,
         structured_output: bool = False,
         return_option: str = "last_message",
         recursion_limit: int = 50,
-        planner_prompt: str = planner_prompt,
-        executor_prompt: str = executor_prompt,
-        aggregator_prompt: str = aggregator_prompt,
-        formatter_multi_prompt: str = formatter_multi_prompt,
+        planner_prompt: str = default_planner_prompt,
+        executor_prompt: str = default_executor_prompt,
+        aggregator_prompt: str = default_aggregator_prompt,
+        formatter_multi_prompt: str = default_formatter_multi_prompt,
         generate_report: bool = False,
-        report_prompt: str = report_prompt,
+        report_prompt: str = default_report_prompt,
         support_structured_output: bool = True,
         tools: List = None,
         data_tools: List = None,
     ):
+        # Initialize log directory
+        self.log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+        if not self.log_dir:
+            # Create a new session log directory under cg_logs/
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            self.uuid = str(uuid.uuid4())[:8]
+            # Use abspath to ensure tools getting this env var have a full path
+            self.log_dir = os.path.join(
+                os.getcwd(), "cg_logs", f"session_{timestamp}_{self.uuid}"
+            )
+            os.makedirs(self.log_dir, exist_ok=True)
+            # Set env var for tools to pick up
+            os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
+        else:
+            self.uuid = None
+
         try:
             # Use hardcoded optimal values for tool calling
             temperature = 0.0  # Deterministic responses
@@ -167,8 +184,6 @@ class ChemGraph:
                 )
 
             else:  # Assume it might be a vLLM or other custom OpenAI-compatible endpoint
-                import os
-
                 # Use environment variables for vLLM base_url and a dummy api_key if not provided
                 # These would be set by docker-compose for the jupyter_lab service
                 vllm_base_url = os.getenv("VLLM_BASE_URL", base_url)
@@ -363,7 +378,7 @@ class ChemGraph:
 
     def write_state(
         self,
-        config={"configurable": {"thread_id": "1"}},
+        config: dict = None,
         file_path: str = None,
         file_name: str = None,
     ):
@@ -374,7 +389,7 @@ class ChemGraph:
         config : dict, optional
             Workflow config, must include 'configurable.thread_id'
         file_path : str, optional
-            Full path to output file. If not provided, writes to 'run_logs/state_thread_<thread_id>_<timestamp>.json'
+            Full path to output file. If not provided, writes to 'cg_logs/state_thread_<thread_id>_<timestamp>.json'
         file_name : str, optional
             Optional filename to use if file_path is not provided
 
@@ -387,10 +402,14 @@ class ChemGraph:
         import subprocess
 
         try:
+            if config is None:
+                config = {"configurable": {"thread_id": "1"}}
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             thread_id = config["configurable"]["thread_id"]
             if not file_path:
-                log_dir = os.environ.get("CHEMGRAPH_LOG_DIR", "run_logs")
+                log_dir = getattr(self, "log_dir", None) or os.environ.get(
+                    "CHEMGRAPH_LOG_DIR", "cg_logs"
+                )
                 os.makedirs(log_dir, exist_ok=True)
                 if not file_name:
                     file_name = f"state_thread_{thread_id}_{timestamp}.json"
@@ -470,8 +489,6 @@ class ChemGraph:
         Streams values, logs new messages, writes state, and returns according to
         `self.return_option` ("last_message" or "state").
         """
-        import os
-        import uuid
 
         def _validate_config(cfg):
             if cfg is None:
@@ -480,19 +497,24 @@ class ChemGraph:
                 raise TypeError(
                     f"`config` must be a dictionary, got {type(cfg).__name__}"
                 )
+
+            # Support top-level thread_id for convenience
+            if "thread_id" in cfg:
+                if "configurable" not in cfg:
+                    cfg["configurable"] = {}
+                cfg["configurable"]["thread_id"] = str(cfg["thread_id"])
+
             cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
             cfg["recursion_limit"] = self.recursion_limit
             return cfg
 
         def _save_state_and_select_return(last_state, cfg):
-            # CHEMGRAPH_LOG_DIR is guaranteed to be set by now (or we use fallback)
-            log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+            log_dir = self.log_dir
             if not log_dir:
-                # Fallback just in case env var was cleared
-                log_dir = "run_logs"
+                log_dir = "cg_logs"
 
             os.makedirs(log_dir, exist_ok=True)
-            log_path = os.path.join(log_dir, "state.json")
+            log_path = None
             self.write_state(config=cfg, file_path=log_path)
 
             if self.return_option == "last_message":
@@ -504,20 +526,14 @@ class ChemGraph:
                     f"Unsupported return_option: {self.return_option}. Use 'last_message' or 'state'."
                 )
 
+        print(f"DEBUG: run called with config={config}")
         config = _validate_config(config)
+        print(f"DEBUG: validated config={config}")
 
         # Initialize logging directory before determining inputs or running workflow
         # Check if CHEMGRAPH_LOG_DIR is already set
-        log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-        if not log_dir:
-            # Create a new session log directory under .log/
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            log_id = str(uuid.uuid4())[:8]
-            # Use abspath to ensure tools getting this env var have a full path
-            log_dir = os.path.join(os.getcwd(), "logs", f"session_{timestamp}_{log_id}")
-            os.makedirs(log_dir, exist_ok=True)
-            # Set env var for tools to pick up
-            os.environ["CHEMGRAPH_LOG_DIR"] = log_dir
+        if not os.environ.get("CHEMGRAPH_LOG_DIR"):
+            os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
 
         inputs = {"messages": query}
 
