@@ -11,7 +11,7 @@ from chemgraph.tools.mcp_helper import _resolve_path
 
 
 @tool
-def molecule_name_to_smiles(name: str) -> str:
+def molecule_name_to_smiles(name: str) -> dict:
     """Convert a molecule name to SMILES format.
 
     Parameters
@@ -21,15 +21,16 @@ def molecule_name_to_smiles(name: str) -> str:
 
     Returns
     -------
-    str
-        The SMILES string representation of the molecule.
+    dict
+        A JSON-serializable dict with the resolved SMILES.
 
     Raises
     ------
     IndexError
         If the molecule name is not found in PubChem.
     """
-    return pubchempy.get_compounds(str(name), "name")[0].connectivity_smiles
+    smiles = pubchempy.get_compounds(str(name), "name")[0].connectivity_smiles
+    return {"name": str(name), "smiles": smiles}
 
 
 @tool

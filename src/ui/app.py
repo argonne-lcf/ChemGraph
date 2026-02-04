@@ -18,11 +18,89 @@ import re
 from typing import Optional, Dict, Any
 from pathlib import Path
 import base64
+import asyncio
+import threading
+
+WORKFLOW_ALIASES = {
+    "python_repl": "python_relp",
+    "graspa_agent": "graspa",
+}
+WORKFLOW_OPTIONS = [
+    "single_agent",
+    "multi_agent",
+    "python_relp",
+    "graspa",
+    "mock_agent",
+]
+
+
+def normalize_workflow_name(value: str) -> str:
+    if not value:
+        return value
+    return WORKFLOW_ALIASES.get(value, value)
+
+
+def resolve_output_path(path: str) -> str:
+    """Resolve output paths relative to CHEMGRAPH_LOG_DIR when set."""
+    if not path:
+        return path
+    if os.path.isabs(path):
+        return path
+    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+    if log_dir:
+        return os.path.join(log_dir, path)
+    return path
+
+
+def get_base_url_for_model(model_name: str, config: Dict[str, Any]) -> Optional[str]:
+    if model_name not in supported_openai_models and model_name not in supported_argo_models:
+        return None
+    base_url = config["api"]["openai"]["base_url"]
+    if not base_url:
+        return None
+    # Normalize Argo endpoints to the OpenAI-compatible base URL.
+    if "apps-dev.inside.anl.gov/argoapi" in base_url or "apps.inside.anl.gov/argoapi" in base_url:
+        base_url = re.sub(r"/api/v1/resource/(chat|embed)/?$", "", base_url)
+        base_url = re.sub(r"/docs/?$", "", base_url)
+        base_url = re.sub(r"/api/v1/?$", "/v1", base_url)
+        base_url = base_url.rstrip("/")
+    return base_url
+
+
+def get_model_options(config: Dict[str, Any]) -> list:
+    base_url = config["api"]["openai"]["base_url"]
+    if base_url and "argoapi" in base_url:
+        return supported_argo_models
+    return all_supported_models
+
+
+def run_async_callable(fn):
+    """Run an async callable and return its result in sync context."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(fn())
+    result_container = {}
+    error_container = {}
+
+    def runner():
+        try:
+            result_container["value"] = asyncio.run(fn())
+        except Exception as exc:
+            error_container["error"] = exc
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join()
+    if "error" in error_container:
+        raise error_container["error"]
+    return result_container.get("value")
 
 # Third-party imports
 import numpy as np
 import pandas as pd
 from ase import Atoms
+from ase.io import read as ase_read
 from ase.data import chemical_symbols
 
 # ChemGraph imports
@@ -31,7 +109,11 @@ from chemgraph.tools.ase_tools import (
     create_xyz_string,
     extract_ase_atoms_from_tool_result,
 )
-from chemgraph.models.supported_models import all_supported_models
+from chemgraph.models.supported_models import (
+    all_supported_models,
+    supported_openai_models,
+    supported_argo_models,
+)
 
 # Configuration management
 try:
@@ -70,7 +152,6 @@ try:
     from stmol import showmol
 
     STMOL_AVAILABLE = True
-    st.info("3D visualization is available via stmol.")
 except ImportError as e:
     STMOL_AVAILABLE = False
     st.warning("⚠️ **stmol** not available – falling back to text/table view.")
@@ -195,26 +276,27 @@ elif page == "⚙️ Configuration":
 
         with col1:
             st.write("**Model & Workflow**")
+            model_options = get_model_options(config)
             config["general"]["model"] = st.selectbox(
                 "Model",
-                all_supported_models,
+                model_options,
                 index=(
-                    all_supported_models.index(config["general"]["model"])
-                    if config["general"]["model"] in all_supported_models
+                    model_options.index(config["general"]["model"])
+                    if config["general"]["model"] in model_options
                     else 0
                 ),
                 key="config_model",
             )
 
+            config["general"]["workflow"] = normalize_workflow_name(
+                config["general"]["workflow"]
+            )
             config["general"]["workflow"] = st.selectbox(
                 "Workflow",
-                ["single_agent", "multi_agent", "python_repl", "graspa"],
+                WORKFLOW_OPTIONS,
                 index=(
-                    ["single_agent", "multi_agent", "python_repl", "graspa"].index(
-                        config["general"]["workflow"]
-                    )
-                    if config["general"]["workflow"]
-                    in ["single_agent", "multi_agent", "python_repl", "graspa"]
+                    WORKFLOW_OPTIONS.index(config["general"]["workflow"])
+                    if config["general"]["workflow"] in WORKFLOW_OPTIONS
                     else 0
                 ),
                 key="config_workflow",
@@ -306,7 +388,17 @@ elif page == "⚙️ Configuration":
 
         with col4:
             st.write("**Calculators**")
-            calc_options = ["mace_mp", "emt", "nwchem", "orca", "psi4", "tblite"]
+            calc_options = [
+                "mace_mp",
+                "mace_off",
+                "mace_anicc",
+                "fairchem",
+                "aimnet2",
+                "emt",
+                "tblite",
+                "orca",
+                "nwchem",
+            ]
             config["chemistry"]["calculators"]["default"] = st.selectbox(
                 "Default Calculator",
                 calc_options,
@@ -499,15 +591,26 @@ if "last_config" not in st.session_state:
     st.session_state.last_config = None
 if "config" not in st.session_state:
     st.session_state.config = load_config()
+if "last_run_error" not in st.session_state:
+    st.session_state.last_run_error = None
+if "last_run_result" not in st.session_state:
+    st.session_state.last_run_result = None
+if "last_run_query" not in st.session_state:
+    st.session_state.last_run_query = None
 
 # Get configuration values
 config = st.session_state.config
 selected_model = config["general"]["model"]
-selected_workflow = config["general"]["workflow"]
+selected_workflow = normalize_workflow_name(config["general"]["workflow"])
 selected_output = config["general"]["output"]
 structured_output = config["general"]["structured"]
 generate_report = config["general"]["report"]
 thread_id = config["general"]["thread"]
+
+# Argo OpenAI-compatible endpoint often returns plain text; disable structured output.
+if selected_model in supported_argo_models and structured_output:
+    structured_output = False
+    st.info("Structured output is disabled for Argo models to avoid JSON parsing errors.")
 
 # -----------------------------------------------------------------------------
 # Main Interface Header
@@ -528,12 +631,13 @@ with st.sidebar.expander("🔧 Quick Settings"):
 
     # Model override
     if st.checkbox("Override Model"):
+        model_options = get_model_options(config)
         selected_model = st.selectbox(
             "Select Model",
-            all_supported_models,
+            model_options,
             index=(
-                all_supported_models.index(selected_model)
-                if selected_model in all_supported_models
+                model_options.index(selected_model)
+                if selected_model in model_options
                 else 0
             ),
         )
@@ -563,6 +667,8 @@ if st.session_state.agent:
     st.sidebar.info(f"⚙️ Workflow: {selected_workflow}")
     st.sidebar.info(f"🔗 Thread ID: {thread_id}")
     st.sidebar.info(f"💬 Messages: {len(st.session_state.conversation_history)}")
+    if st.session_state.last_run_error:
+        st.sidebar.error("Last run error (see verbose info).")
 
     # Add a manual refresh button for troubleshooting
     if st.sidebar.button("🔄 Refresh Agents"):
@@ -593,7 +699,7 @@ def changed_recently(path="ir_spectrum.png", window_seconds=300) -> bool:
     """
     Return True if `path` exists and was modified within the last `window_seconds`.
     """
-    p = Path(path)
+    p = Path(resolve_output_path(path))
     if not p.exists():
         return False
 
@@ -966,7 +1072,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
         return True
     except Exception as exc:
         st.error(f"Error displaying structure: {exc}")
-        return False
+    return False
 
 
 def visualize_trajectory(traj):
@@ -1004,6 +1110,105 @@ def visualize_trajectory(traj):
     return view
 
 
+def find_latest_xyz_file() -> Optional[str]:
+    """Find the most recently modified .xyz file in the log dir or cwd."""
+    search_dirs = []
+    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+    if log_dir:
+        search_dirs.append(log_dir)
+    search_dirs.append(os.getcwd())
+
+    latest_path = None
+    latest_mtime = -1.0
+    for base in search_dirs:
+        if not base or not os.path.isdir(base):
+            continue
+        for path in Path(base).rglob("*.xyz"):
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+                latest_path = str(path)
+    return latest_path
+
+
+def find_latest_xyz_file_in_dir(directory: str) -> Optional[str]:
+    """Find the most recently modified .xyz file under a specific directory."""
+    if not directory or not os.path.isdir(directory):
+        return None
+    latest_path = None
+    latest_mtime = -1.0
+    for path in Path(directory).rglob("*.xyz"):
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if mtime > latest_mtime:
+            latest_mtime = mtime
+            latest_path = str(path)
+    return latest_path
+
+
+def extract_log_dir_from_messages(messages) -> Optional[str]:
+    """Extract a directory path from message content that references an output file."""
+    if not messages:
+        return None
+    patterns = [
+        r"(/[^\\s'\"`]+?\\.json)",
+        r"(/[^\\s'\"`]+?\\.xyz)",
+        r"(/[^\\s'\"`]+?\\.html)",
+        r"(/[^\\s'\"`]+?\\.csv)",
+    ]
+
+    def _scan_value(value):
+        if isinstance(value, str):
+            for pattern in patterns:
+                match = re.search(pattern, value)
+                if match:
+                    path = match.group(1)
+                    if os.path.isabs(path):
+                        return str(Path(path).parent)
+        elif isinstance(value, dict):
+            for v in value.values():
+                found = _scan_value(v)
+                if found:
+                    return found
+        elif isinstance(value, list):
+            for v in value:
+                found = _scan_value(v)
+                if found:
+                    return found
+        return None
+    for message in reversed(messages):
+        content = ""
+        if hasattr(message, "content"):
+            content = getattr(message, "content", "")
+        elif isinstance(message, dict):
+            content = message.get("content", "")
+        elif isinstance(message, str):
+            content = message
+        else:
+            content = str(message)
+        if not content:
+            continue
+        found = _scan_value(content)
+        if found:
+            return found
+
+        # Also scan structured tool outputs if present
+        if hasattr(message, "additional_kwargs"):
+            found = _scan_value(message.additional_kwargs)
+            if found:
+                return found
+        if isinstance(message, dict):
+            found = _scan_value(message)
+            if found:
+                return found
+    return None
+
+
 # Function for IR spectrum rendering
 
 import base64
@@ -1027,6 +1232,7 @@ def initialize_agent(
     return_option,
     generate_report,
     recursion_limit,
+    base_url,
 ):
     try:
         from chemgraph.agent.llm_agent import ChemGraph
@@ -1034,6 +1240,8 @@ def initialize_agent(
         return ChemGraph(
             model_name=model_name,
             workflow_type=workflow_type,
+            base_url=base_url,
+            structured_output=structured_output,
             generate_report=generate_report,
             return_option=return_option,
             recursion_limit=recursion_limit,
@@ -1053,6 +1261,7 @@ current_config = (
     selected_output,
     generate_report,
     config["general"]["recursion_limit"],
+    get_base_url_for_model(selected_model, config),
 )
 
 if st.session_state.agent is None or st.session_state.last_config != current_config:
@@ -1065,6 +1274,7 @@ if st.session_state.agent is None or st.session_state.last_config != current_con
             selected_output,
             generate_report,
             config["general"]["recursion_limit"],
+            get_base_url_for_model(selected_model, config),
         )
         st.session_state.last_config = current_config
 
@@ -1159,12 +1369,30 @@ if st.session_state.conversation_history:
                     structure_from_text["positions"],
                     title=f"Structure from Response {idx}",
                 )
+            else:
+                log_dir = extract_log_dir_from_messages(messages)
+                latest_xyz = None
+                if log_dir and os.path.isdir(log_dir):
+                    latest_xyz = find_latest_xyz_file_in_dir(log_dir)
+                if latest_xyz is None:
+                    latest_xyz = find_latest_xyz_file()
+                if latest_xyz:
+                    try:
+                        atoms = ase_read(latest_xyz)
+                        display_molecular_structure(
+                            atoms.get_atomic_numbers().tolist(),
+                            atoms.get_positions().tolist(),
+                            title=f"Structure from {Path(latest_xyz).name}",
+                        )
+                    except Exception as exc:
+                        st.warning(f"Failed to load XYZ structure: {exc}")
         html_filename = find_html_filename(messages)
         if html_filename:
             with st.expander(f"📊 Report", expanded=False):
                 # st.subheader(" Generated Report")
                 try:
-                    with open(html_filename, "r", encoding="utf-8") as f:
+                    resolved_html = resolve_output_path(html_filename)
+                    with open(resolved_html, "r", encoding="utf-8") as f:
                         html_content = f.read()
                     st.components.v1.html(html_content, height=600, scrolling=True)
                 except FileNotFoundError:
@@ -1180,24 +1408,55 @@ if st.session_state.conversation_history:
                     col1, col2 = st.columns([1, 1])
 
                     with col1:
-                        st.image("ir_spectrum.png")
+                        ir_path = resolve_output_path("ir_spectrum.png")
+                        if os.path.exists(ir_path):
+                            st.image(ir_path)
+                        else:
+                            st.warning("IR spectrum plot not found.")
                     with col2:
-                        df = pd.read_csv("frequencies.csv",index_col=False,names=['filename','frequency']).iloc[6:] #remove the first 6 translation/rotation modes
+                        freq_path = resolve_output_path("frequencies.csv")
+                        if not os.path.exists(freq_path):
+                            st.warning("Frequencies file not found.")
+                        else:
+                            df = (
+                                pd.read_csv(
+                                    freq_path,
+                                    index_col=False,
+                                    names=["filename", "frequency"],
+                                )
+                                .iloc[6:]
+                            )  # remove the first 6 translation/rotation modes
 
-                        # Create a dropdown menu for frequency selection
-                        st.write("**Select a frequency to visualize:**")
-                        freq_options = {f"{float(row['frequency'].strip('i')):.2f} cm⁻¹":i for i, row in df.iterrows()}
-                        selected_freq = st.selectbox("Frequency", list(freq_options.keys()), index=0)
-                        # Display the selected frequency
-                        #st.metric(label="frequency (cm⁻¹)", value=selected_freq)
-                        selected_freq_value = selected_freq.strip(' cm⁻¹')
-                        #st.write(selected_freq_value)
-                        traj_file = df.loc[freq_options[selected_freq]]['filename']
-                        #st.write(df)
-                        from ase.io.trajectory import Trajectory
-                        traj = Trajectory(traj_file)
-                        view = visualize_trajectory(traj)
-                        showmol(view, height = 400, width=700)
+                            if not df.empty:
+                                # Create a dropdown menu for frequency selection
+                                st.write("**Select a frequency to visualize:**")
+                                freq_options = {
+                                    f"{float(row['frequency'].strip('i')):.2f} cm⁻¹": i
+                                    for i, row in df.iterrows()
+                                }
+                                selected_freq = st.selectbox(
+                                    "Frequency", list(freq_options.keys()), index=0
+                                )
+                                traj_file = df.loc[freq_options[selected_freq]][
+                                    "filename"
+                                ]
+                                traj_path = resolve_output_path(traj_file)
+                                if not os.path.exists(traj_path):
+                                    st.warning(
+                                        f"Trajectory file '{traj_file}' not found."
+                                    )
+                                elif not STMOL_AVAILABLE:
+                                    st.info(
+                                        "3D viewer not available; install stmol to animate trajectories."
+                                    )
+                                else:
+                                    from ase.io.trajectory import Trajectory
+
+                                    traj = Trajectory(traj_path)
+                                    view = visualize_trajectory(traj)
+                                    showmol(view, height=400, width=700)
+                            else:
+                                st.warning("No vibrational frequencies found.")
 
 
             else:
@@ -1207,6 +1466,13 @@ if st.session_state.conversation_history:
         with st.expander(f"🔍 Verbose Info (Query {idx})", expanded=False):
             st.write(f"**Number of messages:** {len(messages)}")
             st.write(f"**Structure found:** {'Yes' if structure else 'No'}")
+            if st.session_state.last_run_query == entry.get("query"):
+                if st.session_state.last_run_error:
+                    st.write("**Last run error:**")
+                    st.code(str(st.session_state.last_run_error))
+                if st.session_state.last_run_result is not None:
+                    st.write("**Raw result (repr):**")
+                    st.code(repr(st.session_state.last_run_result))
 
             # Show message types and content summaries
             for i, msg in enumerate(messages):
@@ -1301,7 +1567,13 @@ if send:
         with st.spinner("ChemGraph agents working...", show_time=True):
             try:
                 cfg = {"configurable": {"thread_id": thread_id}}
-                result = st.session_state.agent.run(query.strip(), config=cfg)
+                st.session_state.last_run_query = query.strip()
+                st.session_state.last_run_error = None
+                st.session_state.last_run_result = None
+                result = run_async_callable(
+                    lambda: st.session_state.agent.run(query.strip(), config=cfg)
+                )
+                st.session_state.last_run_result = result
                 st.session_state.conversation_history.append(
                     {"query": query.strip(), "result": result, "thread_id": thread_id}
                 )
@@ -1310,6 +1582,7 @@ if send:
                 st.success("✅ Done!")
                 st.rerun()
             except Exception as exc:
+                st.session_state.last_run_error = exc
                 st.error(f"Processing error: {exc}")
 
 # -----------------------------------------------------------------------------
