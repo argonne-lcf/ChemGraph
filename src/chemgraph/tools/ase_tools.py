@@ -357,25 +357,21 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
     # # Validate that the input structure file exists
     if not os.path.isfile(input_structure_file):
-        err = f"Input structure file {input_structure_file} does not exist."
-        raise ValueError(err)
+        return f"Input structure file {input_structure_file} does not exist."
 
     # Validate the output results file (if provided)
     if not output_results_file.endswith(".json"):
-        err = f"Output results file must end with '.json', got: {params.output_results_file}"
-        raise ValueError(err)
+        return f"Output results file must end with '.json', got: {params.output_results_file}"
 
     calc, system_info, calc_model = load_calculator(calculator)
 
     if calc is None:
-        err = f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
-        raise ValueError(err)
+        return f"Unsupported calculator: {calculator}. Available calculators are MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
 
     try:
         atoms = read(input_structure_file)
     except Exception as e:
-        err = f"Cannot read {input_structure_file} using ASE. Exception from ASE: {e}"
-        raise ValueError(err)
+        return f"Cannot read {input_structure_file} using ASE. Exception from ASE: {e}"
 
     atoms.info.update(system_info)
     atoms.calc = calc
