@@ -68,6 +68,8 @@ jobs:
         fi
 
     - name: Run tests
+      env:
+        HF_TOKEN: ${{ secrets.HF_TOKEN }}
       run: |
         if [ "${{ matrix.install_extras }}" == "uma" ]; then
            python -m pytest tests/test_faircalc.py -v
