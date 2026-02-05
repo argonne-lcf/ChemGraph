@@ -18,8 +18,8 @@ TEST_DIR = Path(__file__).parent
 
 def test_molecule_name_to_smiles():
     # Test with a known molecule
-    assert molecule_name_to_smiles.invoke("water") == "O"
-    assert molecule_name_to_smiles.invoke("methane") == "C"
+    assert molecule_name_to_smiles.invoke("water")['smiles'] == "O"
+    assert molecule_name_to_smiles.invoke("methane")['smiles'] == "C"
 
     # Test with invalid molecule name
     with pytest.raises(Exception):
