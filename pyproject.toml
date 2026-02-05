@@ -13,8 +13,8 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "langgraph",
-    "langchain",
+    "langgraph==1.0.7",
+    "langchain==1.2.9",
     "langchain-openai",
     "langchain-ollama",
     "langchain-anthropic",
@@ -26,7 +26,6 @@ dependencies = [
     "pydantic",
     "pandas==2.2.3",
     "pubchempy==1.0.5",
-    "pyppeteer==2.0.0",
     "numpy==2.2.6",
     "numexpr==2.11.0",
     "pytest==8.4.1",
@@ -45,7 +44,7 @@ dependencies = [
     "mcp",
     "fastmcp",
     "pytest-asyncio",
-    "grandalf==0.8"
+
     ]
 
 [project.optional-dependencies]
@@ -53,7 +52,7 @@ calculators = [
     "tblite==0.4.0",
 ]
 uma = [
-    "fairchem-core==2.3.0",
+    "fairchem-core==2.13.0",
     "e3nn>=0.5",
 ]
 ui = [
@@ -63,6 +62,11 @@ ui = [
 ]
 parsl = [
     "parsl",
+]
+viz = [
+    "pyppeteer==2.0.0",
+    "grandalf==0.8",
+    "nest_asyncio",
 ]
 
 [project.urls]
