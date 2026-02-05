@@ -11,6 +11,35 @@ from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
+ARGO_MODEL_MAP = {
+    "argo:gpt-4o": "gpt4o",
+    "argo:gpt-4o-latest": "gpt4olatest",
+    "argo:gpt-4.1": "gpt41",
+    "argo:gpt-4.1-mini": "gpt41mini",
+    "argo:gpt-4.1-nano": "gpt41nano",
+    "argo:gpt-o1-preview": "gpto1preview",
+    "argo:o1-preview": "gpto1preview",
+    "argo:gpt-o1-mini": "gpto1mini",
+    "argo:o1-mini": "gpto1mini",
+    "argo:gpt-o3-mini": "gpto3mini",
+    "argo:o3-mini": "gpto3mini",
+    "argo:gpt-o1": "gpto1",
+    "argo:o1": "gpto1",
+    "argo:gpt-o3": "gpto3",
+    "argo:o3": "gpto3",
+    "argo:gpt-o4-mini": "gpto4mini",
+    "argo:o4-mini": "gpto4mini",
+}
+
+
+def _normalize_argo_model(model_name: str, base_url: str) -> str:
+    if not base_url or "argoapi" not in base_url:
+        return model_name
+    normalized = ARGO_MODEL_MAP.get(model_name, model_name)
+    if normalized != model_name:
+        logger.info("Normalized Argo model '%s' -> '%s'", model_name, normalized)
+    return normalized
+
 
 def load_openai_model(
     model_name: str,
@@ -77,6 +106,7 @@ def load_openai_model(
     try:
         if base_url is not None:
             logger.info(f"Using custom base URL: {base_url}")
+            model_name = _normalize_argo_model(model_name, base_url)
             llm = ChatOpenAI(
                 model=model_name,
                 temperature=temperature,
