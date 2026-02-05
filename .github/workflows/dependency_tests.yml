@@ -1,0 +1,88 @@
+name: Dependency Tests
+
+on:
+  push:
+    branches: [ toml_dev ]
+  pull_request:
+    branches: [ toml_dev ]
+
+jobs:
+  test_install:
+    name: Verify Install (${{ matrix.install_extras }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        install_extras: [core, calculators, uma, ui, parsl, viz, all]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ "${{ matrix.install_extras }}" == "core" ]; then
+          pip install .
+        elif [ "${{ matrix.install_extras }}" == "all" ]; then
+          pip install ".[calculators,uma,ui,parsl,viz]"
+        else
+          pip install ".[${{ matrix.install_extras }}]"
+        fi
+
+    - name: Verify Imports
+      run: |
+        python -c "
+        import importlib
+        import sys
+
+        def check_import(package_name):
+            try:
+                importlib.import_module(package_name)
+                print(f'✅ {package_name} imported successfully')
+                return True
+            except ImportError as e:
+                print(f'❌ {package_name} failed to import: {e}')
+                return False
+
+        extras = '${{ matrix.install_extras }}'
+        failures = []
+
+        # Core imports that should always work
+        core_packages = ['chemgraph']
+        for pkg in core_packages:
+            if not check_import(pkg):
+                failures.append(pkg)
+
+        # Mapping of extras to key packages they provide
+        extra_packages = {
+            'calculators': ['tblite'],
+            'uma': ['fairchem.core', 'e3nn'],
+            'ui': ['streamlit', 'stmol'],
+            'parsl': ['parsl'],
+            'viz': ['pyppeteer', 'grandalf', 'nest_asyncio']
+        }
+
+        if extras == 'all':
+            for group, pkgs in extra_packages.items():
+                for pkg in pkgs:
+                    if not check_import(pkg):
+                        failures.append(pkg)
+        elif extras != 'core':
+             # Check packages for specific extra
+             if extras in extra_packages:
+                 for pkg in extra_packages[extras]:
+                     if not check_import(pkg):
+                         failures.append(pkg)
+
+        if failures:
+            print(f'Failed to import: {failures}')
+            sys.exit(1)
+        else:
+            print('All expected packages active!')
+        "
