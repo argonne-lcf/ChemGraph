@@ -63,7 +63,6 @@ parsl = [
     "parsl",
 ]
 viz = [
-    "pyppeteer==2.0.0",
     "grandalf==0.8",
     "nest_asyncio",
 ]
