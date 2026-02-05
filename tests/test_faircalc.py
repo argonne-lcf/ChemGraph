@@ -24,15 +24,17 @@ if is_fairchem_installed():
     from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
 
 
-@pytest.fixture
-def base_ase_input():
+@pytest.fixture(name="base_ase_input")
+def fixture_base_ase_input():
     """Base fixture for ASE input with common parameters"""
     return {
         "input_structure_file": str(TEST_DIR / "water.xyz"),
         "output_results_file": str(TEST_DIR / "water_output.json"),
         "optimizer": "bfgs",
         "calculator": {
-            "calculator_type": "mace_mp",
+            "calculator_type": "FAIRChem",
+            "task_name": "omol",
+            "model_name": "uma-s-1p1",
         },
     }
 
@@ -78,7 +80,7 @@ def test_run_ase_opt(opt_ase_schema):
     assert output_file.exists()
 
     # Optionally validate JSON content
-    with open(output_file) as f:
+    with open(output_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     assert data["simulation_input"]["driver"] == "opt"
@@ -98,7 +100,7 @@ def test_run_ase_vib(vib_ase_schema):
     assert output_file.exists()
 
     # Optionally validate JSON content
-    with open(output_file) as f:
+    with open(output_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     assert data["simulation_input"]["driver"] == "vib"
@@ -118,7 +120,7 @@ def test_run_ase_thermo(thermo_ase_schema):
     assert output_file.exists()
 
     # Optionally validate JSON content
-    with open(output_file) as f:
+    with open(output_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     assert data["simulation_input"]["driver"] == "thermo"
