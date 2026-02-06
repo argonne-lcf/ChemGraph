@@ -317,7 +317,7 @@ def expand_database_results(root_dir: Path, runs_dir: Path):
     with open(root_dir / 'atoms_db_expanded.pkl', 'wb') as f:
         pickle.dump(expanded_atoms_list, f)
 
-def plot_xanes_results(root_dir: Path, runs_dir: Path):
+def _plot_xanes_results_internal(root_dir: Path, runs_dir: Path):
     """Plot XANES results."""
     print("Plotting results...")
     # Naive plotting for now: plot whatever is found in the last few runs
@@ -476,7 +476,7 @@ def run_xanes_workflow(chemsys: list[str]) -> str:
         expand_database_results(data_dir, runs_dir)
         
         # 5. Plot
-        plot_xanes_results(data_dir, runs_dir)
+        _plot_xanes_results_internal(data_dir, runs_dir)
         
         return f"XANES workflow completed successfully for {chemsys}. Results in {data_dir}"
         
