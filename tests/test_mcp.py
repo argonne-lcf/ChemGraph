@@ -5,12 +5,13 @@ from pathlib import Path
 
 import pytest
 
-TextContent = pytest.importorskip("mcp.types").TextContent
-fastmcp = pytest.importorskip("fastmcp")
-Client = fastmcp.Client
-
-from chemgraph.mcp.mcp_tools import mcp
-from chemgraph.mcp.data_analysis_mcp import mcp as data_mcp
+try:
+    from mcp.types import TextContent
+    from fastmcp import Client
+    from chemgraph.mcp.mcp_tools import mcp
+    from chemgraph.mcp.data_analysis_mcp import mcp as data_mcp
+except ModuleNotFoundError:
+    pytest.skip("MCP test dependencies are not installed", allow_module_level=True)
 
 TEST_DIR = Path(__file__).parent
 

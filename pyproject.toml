@@ -50,7 +50,7 @@ dependencies = [
 
 [project.optional-dependencies]
 calculators = [
-    "tblite==0.5.0",
+    "tblite==0.5.0; not (python_version >= '3.13' and platform_system == 'Darwin')",
 ]
 uma = [
     "fairchem-core==2.3.0",
