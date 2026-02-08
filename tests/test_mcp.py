@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
-from fastmcp import Client
-from mcp.types import TextContent
+
+TextContent = pytest.importorskip("mcp.types").TextContent
+fastmcp = pytest.importorskip("fastmcp")
+Client = fastmcp.Client
 
 from chemgraph.mcp.mcp_tools import mcp
 from chemgraph.mcp.data_analysis_mcp import mcp as data_mcp
