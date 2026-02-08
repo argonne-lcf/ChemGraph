@@ -51,10 +51,11 @@ jobs:
         fi
         mkdir -p "$RUNNER_TEMP/fortran-bin"
         ln -sf "$GFORTRAN_BIN" "$RUNNER_TEMP/fortran-bin/gfortran"
+        export PATH="$RUNNER_TEMP/fortran-bin:$PATH"
         echo "$RUNNER_TEMP/fortran-bin" >> "$GITHUB_PATH"
         echo "FC=$GFORTRAN_BIN" >> "$GITHUB_ENV"
         echo "F77=$GFORTRAN_BIN" >> "$GITHUB_ENV"
-        gfortran --version
+        "$GFORTRAN_BIN" --version
 
     - name: Install dependencies (Non-Windows, Python < 3.13)
       if: matrix.os != 'windows-latest' && matrix.python-version != '3.13'
