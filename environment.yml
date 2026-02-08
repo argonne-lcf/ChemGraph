@@ -16,19 +16,28 @@ dependencies:
     - ase==3.25.0
     - rdkit==2025.3.3
     - langgraph==0.4.7
+    - langchain
     - langchain-openai==0.3.27
     - langchain-ollama==0.3.4
     - langchain-anthropic==0.3.17
     - langchain-google-genai==2.1.7
+    - langchain-groq
     - langchain-experimental==0.3.4
+    - langchain-mcp-adapters
+    - langgraph-prebuilt
     - pydantic==2.11.7
-    - pubchempy @ git+https://github.com/keceli/PubChemPy.git@main
+    - pubchempy==1.0.5
     - pyppeteer==2.0.0
     - numexpr==2.11.0
     - deepdiff==8.5.0
     - pymatgen==2025.3.10
     - mace-torch==0.3.13
+    - globus-sdk
     - streamlit==1.48.1
     - stmol==0.0.9
     - ipython-genutils==0.2.0
     - langsmith==0.3.45
+    - mcp
+    - fastmcp
+    - pytest-asyncio
+    - grandalf==0.8
