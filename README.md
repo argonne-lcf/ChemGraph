@@ -25,16 +25,17 @@ The easiest way to install ChemGraph is from PyPI:
 pip install chemgraphagent
 ```
 
-For Windows users, you may need to install `tblite` separately via conda:
-```bash
-conda install -c conda-forge tblite=0.4.0
-pip install chemgraphagent
-```
+> Default installation does **not** require `tblite`.
+> `tblite` is only installed when using the optional `calculators` extra.
 
 To install with calculator extras (includes `tblite`):
 ```bash
 pip install chemgraphagent[calculators]
 ```
+
+> Note: On some platforms/Python combinations (especially where no prebuilt `tblite`
+> wheel is available), installing the `calculators` extra may require a local
+> Fortran toolchain.
 
 **Install from Source (Alternative Methods)**
 
@@ -121,8 +122,8 @@ If you need to install from source for the latest version:
 >
 > **For source installations**, if you need to install UMA support in an environment where `mace-torch` might cause this conflict, you can try the following workaround:
 > 1. **Temporarily modify `pyproject.toml`**: Open the `pyproject.toml` file in the root of the ChemGraph project.
-> 2. Find the line containing `"mace-torch>=0.3.13",` in the `dependencies` list.
-> 3. Comment out this line by adding a `#` at the beginning (e.g., `#    "mace-torch>=0.3.13",`).
+> 2. Find the line containing `"mace-torch",` in the `dependencies` list.
+> 3. Comment out this line by adding a `#` at the beginning (e.g., `#    "mace-torch",`).
 > 4. **Install UMA extras**: Run `pip install -e ".[uma]"`.
 > 5. **(Optional) Restore `pyproject.toml`**: After installation, you can uncomment the `mace-torch` line if you still need it for other purposes in the same environment. Be aware that `mace-torch` might not function correctly due to the `e3nn` version mismatch (`e3nn>=0.5` will be present for UMA).
 >
@@ -209,7 +210,7 @@ pip install -e ".[uma]"
 
 2. **Launch the Streamlit app**:
    ```bash
-   streamlit run ui/app.py
+   streamlit run src/ui/app.py
    ```
 
 3. **Access the interface**: Open your browser to `http://localhost:8501`
