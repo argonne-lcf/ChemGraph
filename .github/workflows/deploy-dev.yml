@@ -39,7 +39,12 @@ jobs:
         conda install -y -c conda-forge tblite=0.5.0
         # Install package without calculators extra (tblite already installed via conda)
         pip install -e .
-    
+
+    - name: Install Fortran compiler (macOS, Python < 3.13)
+      if: matrix.os == 'macos-latest' && matrix.python-version != '3.13'
+      run: |
+        brew install gcc
+
     - name: Install dependencies (Non-Windows, Python < 3.13)
       if: matrix.os != 'windows-latest' && matrix.python-version != '3.13'
       run: |
