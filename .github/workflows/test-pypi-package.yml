@@ -14,6 +14,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          # Current PyPI metadata may still pull tblite on this lane.
+          # Exclude until a new release is published without tblite in base deps.
+          - os: macos-latest
+            python-version: "3.13"
     runs-on: ${{ matrix.os }}
 
     steps:
