@@ -597,6 +597,8 @@ if "last_run_result" not in st.session_state:
     st.session_state.last_run_result = None
 if "last_run_query" not in st.session_state:
     st.session_state.last_run_query = None
+if "ui_notice" not in st.session_state:
+    st.session_state.ui_notice = None
 
 # Get configuration values
 config = st.session_state.config
@@ -610,7 +612,9 @@ thread_id = config["general"]["thread"]
 # Argo OpenAI-compatible endpoint often returns plain text; disable structured output.
 if selected_model in supported_argo_models and structured_output:
     structured_output = False
-    st.info("Structured output is disabled for Argo models to avoid JSON parsing errors.")
+    st.session_state.ui_notice = (
+        "Structured output is disabled for Argo models to avoid JSON parsing errors."
+    )
 
 # -----------------------------------------------------------------------------
 # Main Interface Header
@@ -1265,7 +1269,6 @@ current_config = (
 )
 
 if st.session_state.agent is None or st.session_state.last_config != current_config:
-
     with st.spinner("🚀 Initializing ChemGraph agents..."):
         st.session_state.agent = initialize_agent(
             selected_model,
@@ -1277,11 +1280,6 @@ if st.session_state.agent is None or st.session_state.last_config != current_con
             get_base_url_for_model(selected_model, config),
         )
         st.session_state.last_config = current_config
-
-        if st.session_state.agent:
-            st.success("✅ ChemGraph agents ready!")
-        else:
-            st.error("❌ Agent initialization failed.")
 
 
 # -----------------------------------------------------------------------------
@@ -1454,7 +1452,9 @@ if st.session_state.conversation_history:
 
                                     traj = Trajectory(traj_path)
                                     view = visualize_trajectory(traj)
-                                    showmol(view, height=400, width=700)
+                                    _, center_col, _ = st.columns([1, 4, 1])
+                                    with center_col:
+                                        showmol(view, height=400, width=500)
                             else:
                                 st.warning("No vibrational frequencies found.")
 
@@ -1516,10 +1516,8 @@ with st.expander("💡 Example Queries"):
     examples = [
         "What is the SMILES string for caffeine?",
         f"Optimize the geometry of water molecule using {config['chemistry']['calculators']['default']}",
-        "Calculate the single point energy of methane and show the structure",
-        "Generate the molecular structure of aspirin and calculate its vibrational frequencies",
-        "Compare the energy of different conformers of ethane",
-        "What are the bond lengths in optimized CO2 molecule?",
+        "Calculate the infrared spectrum of methanol with xtb calculator",
+        "What is the reaction enthalpy of methane combustion",
     ]
     for ex in examples:
         if st.button(ex, key=f"ex_{ex}"):
@@ -1598,3 +1596,6 @@ st.markdown(
 📖 For detailed information, documentation, and links to research papers, visit the **About ChemGraph** page.
 """
 )
+
+if st.session_state.ui_notice:
+    st.info(st.session_state.ui_notice)
