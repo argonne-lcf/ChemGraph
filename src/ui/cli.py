@@ -13,6 +13,7 @@ import time
 import os
 import signal
 import threading
+import asyncio
 import platform
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -272,6 +273,30 @@ def list_models():
     console.print(
         f"\n[bold green]Total models available: {len(all_supported_models)}[/bold green]"
     )
+
+
+def run_async_callable(fn):
+    """Run an async callable and return its result in sync context."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(fn())
+
+    result_container = {}
+    error_container = {}
+
+    def runner():
+        try:
+            result_container["value"] = asyncio.run(fn())
+        except Exception as exc:
+            error_container["error"] = exc
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join()
+    if "error" in error_container:
+        raise error_container["error"]
+    return result_container.get("value")
 
 
 def check_api_keys_status():
@@ -577,7 +602,7 @@ def run_query(agent, query: str, thread_id: int, verbose: bool = False):
 
         try:
             config = {"configurable": {"thread_id": thread_id}}
-            result = agent.run(query, config=config)
+            result = run_async_callable(lambda: agent.run(query, config=config))
 
             progress.update(task, description="[green]Query completed!")
             time.sleep(0.5)
