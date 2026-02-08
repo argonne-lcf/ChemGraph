@@ -1,4 +1,30 @@
+import ast
+import asyncio
+from datetime import datetime, timezone, timedelta
+import json
+import os
+from pathlib import Path
+import re
+import threading
+from typing import Optional, Dict, Any
+from uuid import uuid4
+
+from ase.data import chemical_symbols
+from ase.io import read as ase_read
+import numpy as np
+import pandas as pd
 import streamlit as st
+import toml
+
+from chemgraph.tools.ase_tools import (
+    create_ase_atoms,
+    create_xyz_string,
+)
+from chemgraph.models.supported_models import (
+    all_supported_models,
+    supported_openai_models,
+    supported_argo_models,
+)
 
 # Page configuration -- MUST be first Streamlit call
 st.set_page_config(
@@ -7,19 +33,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-import json
-import ast
-import toml
-import os
-from io import StringIO
-from uuid import uuid4
-import re
-from typing import Optional, Dict, Any
-from pathlib import Path
-import base64
-import asyncio
-import threading
 
 WORKFLOW_ALIASES = {
     "python_repl": "python_relp",
@@ -96,32 +109,12 @@ def run_async_callable(fn):
         raise error_container["error"]
     return result_container.get("value")
 
-# Third-party imports
-import numpy as np
-import pandas as pd
-from ase import Atoms
-from ase.io import read as ase_read
-from ase.data import chemical_symbols
-
-# ChemGraph imports
-from chemgraph.tools.ase_tools import (
-    create_ase_atoms,
-    create_xyz_string,
-    extract_ase_atoms_from_tool_result,
-)
-from chemgraph.models.supported_models import (
-    all_supported_models,
-    supported_openai_models,
-    supported_argo_models,
-)
-
 # Configuration management
 try:
-    from .config import load_config, save_config, get_default_config, flatten_config
+    from .config import load_config, save_config, get_default_config
 except ImportError:
     # Handle case when running as script (not as package)
     import sys
-    import os
 
     # Get current directory - handle both package and script execution
     if "__file__" in globals():
@@ -133,13 +126,13 @@ except ImportError:
         sys.path.insert(0, current_dir)
 
     try:
-        from config import load_config, save_config, get_default_config, flatten_config
+        from config import load_config, save_config, get_default_config
     except ImportError:
         # Fallback: assume we're in the project root
         config_dir = os.path.join(os.getcwd(), "src", "ui")
         if config_dir not in sys.path:
             sys.path.insert(0, config_dir)
-        from config import load_config, save_config, get_default_config, flatten_config
+        from config import load_config, save_config, get_default_config
 
 
 # -----------------------------------------------------------------------------
@@ -152,7 +145,7 @@ try:
     from stmol import showmol
 
     STMOL_AVAILABLE = True
-except ImportError as e:
+except ImportError:
     STMOL_AVAILABLE = False
     st.warning("⚠️ **stmol** not available – falling back to text/table view.")
     st.info("To enable 3D visualization, install with: `pip install stmol`")
@@ -690,10 +683,6 @@ st.sidebar.markdown(
 )
 st.sidebar.markdown("Current config loaded from: `config.toml`")
 
-
-from pathlib import Path
-from datetime import datetime, timezone, timedelta
-
 # -----------------------------------------------------------------------------
 # Helper: check if IR spectrum file has changed within last minute
 # -----------------------------------------------------------------------------
@@ -1019,15 +1008,15 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
             try:
                 total_mass = atoms.get_masses().sum()
                 st.write(f"**Total Mass:** {total_mass:.2f} amu")
-            except:
+            except Exception:
                 st.write("**Total Mass:** Not available")
 
             # Center of mass
             try:
                 com = atoms.get_center_of_mass()
-                st.write(f"**Center of Mass:**")
+                st.write("**Center of Mass:**")
                 st.write(f"  [{com[0]:.3f}, {com[1]:.3f}, {com[2]:.3f}] Å")
-            except:
+            except Exception:
                 st.write("**Center of Mass:** Not available")
 
             # Additional properties
@@ -1215,14 +1204,7 @@ def extract_log_dir_from_messages(messages) -> Optional[str]:
 
 # Function for IR spectrum rendering
 
-import base64
-import json
-import base64
-from io import BytesIO
-from PIL import Image
 
-import matplotlib.pyplot as plt
-import numpy as np
 
 
 # -----------------------------------------------------------------------------
@@ -1386,7 +1368,7 @@ if st.session_state.conversation_history:
                         st.warning(f"Failed to load XYZ structure: {exc}")
         html_filename = find_html_filename(messages)
         if html_filename:
-            with st.expander(f"📊 Report", expanded=False):
+            with st.expander("📊 Report", expanded=False):
                 # st.subheader(" Generated Report")
                 try:
                     resolved_html = resolve_output_path(html_filename)
@@ -1402,7 +1384,7 @@ if st.session_state.conversation_history:
 
         if is_infrared_requested(messages):
             if changed_recently():
-                with st.expander(f"🔍 IR Spectrum", expanded=True):
+                with st.expander("🔍 IR Spectrum", expanded=True):
                     col1, col2 = st.columns([1, 1])
 
                     with col1:

@@ -514,7 +514,6 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             1,
         ):
             # First 5 (linear) or 6 (non-linear) modes are translation/rotation
-            is_vibrational = i > trans_rot_modes
             mode_type = (
                 "Translation/Rotation" if i <= trans_rot_modes else "Vibrational"
             )
@@ -562,7 +561,6 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
     # Thermochemistry Values
     if ase_output.thermochemistry:
         thermo_info = []
-        unit = ase_output.thermochemistry.get("unit", "eV")
 
         # Add data attributes for conversion with labels
         if "enthalpy" in ase_output.thermochemistry:

@@ -158,48 +158,6 @@ def get_gibbs_energy_from_smiles(smiles: str, calculator: dict, temperature: flo
         return workflow
 
 
-def get_geometry_optimization_from_smiles(smiles: str, calculator: dict) -> dict:
-    """Run and return a workflow of geometry optimization using SMILES and a calculator as input.
-
-    Args:
-        smiles (str): SMILES string.
-        calculator (dict): details of input calculator/method.
-
-    Returns:
-        dict: Workflow details including input parameters and results.
-    """
-
-    workflow = {
-        "tool_calls": [],
-        "result": None,
-    }
-    atomsdata = smiles_to_atomsdata.invoke({"smiles": smiles})
-    input_dict = {
-        "atomsdata": atomsdata,
-        "driver": "opt",
-        "calculator": calculator,
-    }
-    try:
-        params = ASEInputSchema(**input_dict)
-        aseoutput = run_ase.invoke({"params": params})
-
-        result = aseoutput.final_structure.model_dump()
-
-        # Populate workflow with relevant data.
-        workflow["tool_calls"].append({"smiles_to_atomsdata": {"smiles": smiles}})
-        input_dict["atomsdata"] = input_dict["atomsdata"].model_dump()
-        workflow["tool_calls"].append({"run_ase": {"params": input_dict}})
-        workflow["result"] = result
-
-        return workflow
-    except Exception as e:
-        workflow["tool_calls"].append({"smiles_to_atomsdata": {"smiles": smiles}})
-        input_dict["atomsdata"] = input_dict["atomsdata"].model_dump()
-        workflow["tool_calls"].append({"run_ase": {"params": input_dict}})
-        workflow["result"] = f"ERROR - {e}"
-        return workflow
-
-
 def get_saved_file_from_smiles(
     smiles: str, calculator: dict, output_path: str = "manual_files"
 ) -> dict:

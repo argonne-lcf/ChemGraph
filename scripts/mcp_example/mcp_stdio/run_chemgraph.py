@@ -37,7 +37,7 @@ async def bootstrap():
         return_option="state",
         tools=tools,
     )
-    result = await cg.run(prompt_single)
+    await cg.run(prompt_single)
 
     """ Optional to print the entire state
     print("######## MESSAGE STATE #########")

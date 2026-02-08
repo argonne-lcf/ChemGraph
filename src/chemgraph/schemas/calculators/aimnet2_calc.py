@@ -1,11 +1,9 @@
 """AIMNET2 foundation models parameters for ChemGraph
 """
 
-import os
 from pathlib import Path
 from typing import Optional, Union
 from pydantic import BaseModel, Field
-import torch
 
 
 class AIMNET2Calc(BaseModel):

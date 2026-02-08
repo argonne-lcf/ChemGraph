@@ -83,8 +83,6 @@ def _read_graspa_sycl_output(
             raise ValueError(f"Could not resolve CIF path in {output_path}")
 
         uptake_total_molecule = float(uptake_line.split()[2][:-1])
-        error_total_molecule = float(uptake_line.split()[4][:-1])
-
         # Parse UnitCells (robust to whitespace)
         unitcell = unitcell_line.split()[4:]
         unitcell = [int(float(i)) for i in unitcell]
@@ -95,8 +93,6 @@ def _read_graspa_sycl_output(
         )
 
         uptake_mol_kg = round((uptake_total_molecule / framework_mass) * 1000, 2)
-        error_mol_kg = (error_total_molecule / framework_mass) * 1000
-
         result["uptake_in_mol_kg"] = float(uptake_mol_kg)
         # result["error_in_mol_kg"] = float(error_mol_kg)
         result["status"] = "success"
@@ -272,9 +268,7 @@ def run_graspa_core(params: graspa_input_schema):
         open(os.path.join(sim_dir, output_filename), "w") as fp,
         open(os.path.join(sim_dir, "raspa.err"), "w") as fe,
     ):
-        result = subprocess.run(
-            graspa_cmd, cwd=sim_dir, stdout=fp, stderr=fe, shell=True
-        )
+        subprocess.run(graspa_cmd, cwd=sim_dir, stdout=fp, stderr=fe, shell=True)
 
     return _read_graspa_sycl_output(
         output_path=str(sim_dir),

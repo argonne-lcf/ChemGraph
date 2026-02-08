@@ -1,21 +1,15 @@
 from pydantic import BaseModel, Field
 
-from typing import Optional, Union, Dict
-from pathlib import Path
+from typing import Optional, Dict, Any
 import torch
 import logging
 
 try:
-    from fairchem.core import FAIRChemCalculator
-    from fairchem.core.units.mlip_unit.mlip_unit import MLIPPredictUnit
-    from fairchem.core.units.mlip_unit.api.inference import UMATask
-
-
+    from fairchem.core import FAIRChemCalculator, pretrained_mlip
 except ImportError:
     logging.warning("fairchem is not installed. .")
-
-
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
+    FAIRChemCalculator = None
+    pretrained_mlip = None
 
 
 class FAIRChemCalc(BaseModel):
@@ -60,7 +54,7 @@ class FAIRChemCalc(BaseModel):
         default="default", description="Settings for inference. Can be 'default' or 'turbo'"
     )
 
-    def get_calculator(self) -> FAIRChemCalculator:
+    def get_calculator(self) -> Any:
         """Return a configured FAIRChemCalculator.
 
         Parameters
@@ -73,6 +67,9 @@ class FAIRChemCalc(BaseModel):
         FAIRChemCalculator
             ASE-compatible calculator instance.
         """
+
+        if pretrained_mlip is None or FAIRChemCalculator is None:
+            raise ImportError("fairchem is not installed.")
 
         predict_unit = pretrained_mlip.get_predict_unit(
             model_name=self.model_name,

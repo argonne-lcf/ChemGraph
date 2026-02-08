@@ -1,27 +1,25 @@
 from pathlib import Path
+import importlib.util
 import json
 import pytest
-from ase import Atoms
 from chemgraph.tools.ase_tools import (
     run_ase,
 )
-from chemgraph.schemas.ase_input import ASEOutputSchema, ASEInputSchema
+from chemgraph.schemas.ase_input import ASEInputSchema
 
 TEST_DIR = Path(__file__).parent
 
 
 def is_fairchem_installed():
     try:
-        import fairchem.core
-
-        return True
-    except ImportError:
+        return importlib.util.find_spec("fairchem.core") is not None
+    except (ImportError, ModuleNotFoundError):
         return False
 
 
 # Only import FAIRChemCalc if fairchem is installed
 if is_fairchem_installed():
-    from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
+    pass
 
 
 @pytest.fixture

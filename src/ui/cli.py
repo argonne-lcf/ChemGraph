@@ -15,21 +15,17 @@ import signal
 import threading
 import asyncio
 import platform
-from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from contextlib import contextmanager
 
 # Rich imports for beautiful terminal output
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.markdown import Markdown
-from rich.prompt import Prompt, Confirm
-from rich.live import Live
-from rich.layout import Layout
+from rich.prompt import Prompt
 from rich.align import Align
 
 # ChemGraph imports
@@ -43,18 +39,7 @@ console = Console()
 def timeout(seconds):
     """Context manager for timeout functionality - works on Unix and Windows."""
     if platform.system() == "Windows":
-        # Use threading-based timeout for Windows
-        result = [None]
-        exception = [None]
-
-        def target():
-            try:
-                # This will be overridden by the actual operation
-                pass
-            except Exception as e:
-                exception[0] = e
-
-        # For Windows, we'll handle timeout differently in the actual implementation
+        # Signals are unavailable on Windows; no-op timeout in this context.
         yield
         return
 
@@ -439,7 +424,7 @@ def initialize_agent(
     """Initialize ChemGraph agent with progress indication."""
 
     if verbose:
-        console.print(f"[blue]Initializing agent with:[/blue]")
+        console.print("[blue]Initializing agent with:[/blue]")
         console.print(f"  Model: {model_name}")
         console.print(f"  Workflow: {workflow_type}")
         console.print(f"  Structured Output: {structured_output}")
@@ -486,16 +471,16 @@ def initialize_agent(
             return agent
 
         except TimeoutError:
-            progress.update(task, description=f"[red]Agent initialization timed out!")
+            progress.update(task, description="[red]Agent initialization timed out!")
             console.print(
-                f"[red]✗ Agent initialization timed out after 30 seconds[/red]"
+                "[red]✗ Agent initialization timed out after 30 seconds[/red]"
             )
             console.print(
                 "[dim]💡 This might indicate network issues or invalid API credentials[/dim]"
             )
             return None
         except Exception as e:
-            progress.update(task, description=f"[red]Agent initialization failed!")
+            progress.update(task, description="[red]Agent initialization failed!")
             console.print(f"[red]✗ Error initializing agent: {e}[/red]")
 
             # Provide more helpful error messages
@@ -610,7 +595,7 @@ def run_query(agent, query: str, thread_id: int, verbose: bool = False):
             return result
 
         except Exception as e:
-            progress.update(task, description=f"[red]Query failed!")
+            progress.update(task, description="[red]Query failed!")
             console.print(f"[red]✗ Error processing query: {e}[/red]")
             return None
 

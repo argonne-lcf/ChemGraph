@@ -85,3 +85,7 @@ quote-style = "preserve"  # Keep existing quote style
 indent-style = "space"  # Use spaces for indentation
 skip-magic-trailing-comma = false  # Ensure Black-style formatting
 
+[tool.pytest.ini_options]
+markers = [
+    "llm: marks tests as requiring LLM API access (run with --run-llm)",
+]

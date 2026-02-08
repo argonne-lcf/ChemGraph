@@ -1,5 +1,4 @@
 import pytest
-import types
 from chemgraph.agent.llm_agent import ChemGraph
 
 

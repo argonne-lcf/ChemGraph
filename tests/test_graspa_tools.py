@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from pathlib import Path
 import shutil
 
 from chemgraph.tools.graspa_tools import run_graspa_core, graspa_input_schema
@@ -29,7 +28,7 @@ def test_run_graspa_core_execution(mock_parser, mock_subproc, mock_cif):
     mock_parser.return_value = {"status": "success", "uptake_in_mol_kg": 1.5}
     result = run_graspa_core(params)
 
-    expected_dir_name = f"test_mof--CO2-298.0-100000"
+    expected_dir_name = "test_mof--CO2-298.0-100000"
     sim_dir = mock_cif.parent / expected_dir_name
     assert sim_dir.exists()
     

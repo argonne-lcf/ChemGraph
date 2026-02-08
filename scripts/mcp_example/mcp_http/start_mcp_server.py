@@ -247,7 +247,7 @@ async def run_ase(params: ASEInputSchema) -> dict:
             # Catch exception if calculator doesn't have get_dipole_moment()
             try:
                 dipole = list(atoms.get_dipole_moment())
-            except Exception as e:
+            except Exception:
                 pass
 
         end_time = time.time()

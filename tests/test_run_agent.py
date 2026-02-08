@@ -1,6 +1,4 @@
 import pytest
-from langchain_openai import ChatOpenAI
-from sympy import content
 from chemgraph.agent.llm_agent import ChemGraph
 
 @pytest.mark.llm

@@ -238,12 +238,10 @@ def run_mace_core(mace_input_schema: mace_input_schema):
             # Do optimization only if number of atoms > 1 to avoid error.
             if len(atoms) > 1:
                 dyn = optimizer_class(atoms)
-                success = dyn.run(
+                dyn.run(
                     fmax=mace_input_schema.fmax,
                     steps=mace_input_schema.steps,
                 )
-            else:
-                success = True
 
             # Get the single-point energy of the optimized structure
             opt_energy = float(atoms.get_potential_energy())

@@ -636,7 +636,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
             }
 
     except Exception as e:
-        err = f"ASE simulation gave an exception:{e}"
         return {
             "status": "failure",
             "error_type": type(e).__name__,
