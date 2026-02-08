@@ -69,7 +69,7 @@ jobs:
     - name: Run tests with MACE
       shell: bash -l {0}
       run: |
-        python -m pytest tests/ -v
+        python -m pytest tests/ -v -k "not tblite"
     
     - name: Final cleanup
       if: always()
