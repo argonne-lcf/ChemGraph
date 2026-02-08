@@ -35,6 +35,22 @@ jobs:
       run: |
         python -m pip install --upgrade pip
 
+    - name: Install and configure Fortran compiler (macOS, Python < 3.13)
+      if: matrix.os == 'macos-latest' && matrix.python-version != '3.13'
+      run: |
+        brew install gcc
+        GFORTRAN_BIN="$(find "$(brew --prefix)/bin" -maxdepth 1 -name 'gfortran-*' | sort -V | tail -n1)"
+        if [ -z "$GFORTRAN_BIN" ]; then
+          echo "No gfortran binary found after installing gcc"
+          exit 1
+        fi
+        mkdir -p "$RUNNER_TEMP/fortran-bin"
+        ln -sf "$GFORTRAN_BIN" "$RUNNER_TEMP/fortran-bin/gfortran"
+        echo "$RUNNER_TEMP/fortran-bin" >> "$GITHUB_PATH"
+        echo "FC=$GFORTRAN_BIN" >> "$GITHUB_ENV"
+        echo "F77=$GFORTRAN_BIN" >> "$GITHUB_ENV"
+        gfortran --version
+
     - name: Install chemgraphagent from PyPI (Windows)
       if: matrix.os == 'windows-latest'
       shell: bash -l {0}
