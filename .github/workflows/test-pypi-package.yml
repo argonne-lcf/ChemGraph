@@ -40,15 +40,22 @@ jobs:
       shell: bash -l {0}
       run: |
         # On Windows, use conda to install tblite first (provides LAPACK dependencies)
-        conda install -y -c conda-forge tblite=0.4.0
+        conda install -y -c conda-forge tblite=0.5.0
         # Install package without calculators extra (tblite already installed via conda)
         pip install chemgraphagent
 
-    - name: Install chemgraphagent from PyPI (Non-Windows)
-      if: matrix.os != 'windows-latest'
+    - name: Install chemgraphagent from PyPI (Non-Windows, Python < 3.13)
+      if: matrix.os != 'windows-latest' && matrix.python-version != '3.13'
       run: |
         # Install package (with calculators extra to test tblite functionality)
         pip install chemgraphagent[calculators]
+
+    - name: Install chemgraphagent from PyPI (Non-Windows, Python 3.13)
+      if: matrix.os != 'windows-latest' && matrix.python-version == '3.13'
+      run: |
+        # Until a new PyPI release includes Python 3.13-compatible calculator pins,
+        # install base package only on 3.13.
+        pip install chemgraphagent
 
     - name: Verify package installation
       run: |
