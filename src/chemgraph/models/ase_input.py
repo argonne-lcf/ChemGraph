@@ -175,7 +175,7 @@ class ASEOutputSchema(BaseModel):
         default=None, description="Single-point energy/Potential energy"
     )
     energy_unit: str = Field(default="eV", description="The unit of the energy reported.")
-    dipole_value: list = Field(
+    dipole_value: List[Optional[float]] = Field(
         default=[None, None, None],
         description="The value of the dipole moment reported.",
     )
