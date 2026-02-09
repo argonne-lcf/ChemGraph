@@ -314,6 +314,7 @@ presence_penalty = 0.0
 [api.openai]
 base_url = "https://api.openai.com/v1"
 timeout = 30
+argo_user = ""
 
 [api.anthropic]
 base_url = "https://api.anthropic.com"
@@ -393,28 +394,6 @@ validate_keys = true
 rate_limit = true
 # Max requests per minute
 max_requests_per_minute = 60
-
-# Environment-specific configurations
-[environments]
-[environments.development]
-model = "gpt-4o-mini"
-temperature = 0.2
-verbose = true
-enable_cache = false
-
-[environments.production]
-model = "gpt-4o"
-temperature = 0.1
-verbose = false
-enable_cache = true
-rate_limit = true
-
-[environments.testing]
-model = "gpt-4o-mini"
-temperature = 0.0
-verbose = true
-enable_cache = false
-max_tokens = 1000
 ```
 
 ### Using Configuration Files
@@ -429,19 +408,48 @@ chemgraph --config config.toml -q "What is the SMILES string for water?"
 chemgraph --config config.toml -q "Optimize methane" -m gpt-4o --verbose
 ```
 
-#### Environment-Specific Configuration
+#### Using Argo (Argonne Internal)
 
-Set the `CHEMGRAPH_ENV` environment variable to use environment-specific settings:
+ChemGraph supports Argo through its OpenAI-compatible endpoint.
+
+1. Set your Argo/OpenAI base URL in `config.toml`:
+
+```toml
+[api.openai]
+base_url = "https://apps-dev.inside.anl.gov/argoapi/v1"
+timeout = 30
+argo_user = "<your_anl_domain_username>"
+```
+
+2. Set environment variables:
 
 ```bash
-# Use development environment settings
-export CHEMGRAPH_ENV=development
-chemgraph --config config.toml -q "Your query"
+# Required by OpenAI-compatible clients in ChemGraph; for Argo use your ANL username
+export OPENAI_API_KEY="<your_anl_domain_username>"
 
-# Use production environment settings
-export CHEMGRAPH_ENV=production
-chemgraph --config config.toml -q "Your query"
+# Optional fallback only: used when api.openai.argo_user is not set in config.toml
+export ARGO_USER="<your_anl_domain_username>"
 ```
+
+3. Use an Argo model ID (from `supported_argo_models` in `src/chemgraph/models/supported_models.py`):
+
+```text
+gpt4o, gpt4olatest, gpto3mini, gpto1, gpto3, gpto4mini,
+gpt41, gpt41mini, gpt41nano, gpt5, gpt5mini, gpt5nano, gpt51, gpt52,
+gemini25pro, gemini25flash,
+claudeopus46, claudeopus45, claudeopus41, claudeopus4,
+claudehaiku45, claudesonnet45, claudesonnet4, claudesonnet35v2, claudehaiku35
+```
+
+4. Run with config:
+
+```bash
+chemgraph --config config.toml -m gpt4olatest -q "calculate the energy for water molecule using mace_mp"
+```
+
+Notes:
+- Argo endpoints are available on Argonne internal network (or VPN on an Argonne-managed machine).
+- For current Argo endpoint guidance and policy updates, refer to your internal Argo documentation.
 
 ### Configuration Sections
 
@@ -455,7 +463,6 @@ chemgraph --config config.toml -q "Your query"
 | `[logging]`      | Logging configuration and verbosity levels              |
 | `[features]`     | Feature flags and experimental settings                 |
 | `[security]`     | Security settings and rate limiting                     |
-| `[environments]` | Environment-specific configuration overrides            |
 
 ### Command Line Interface
 
@@ -478,10 +485,10 @@ pip install -e .
 chemgraph -q "What is the SMILES string for water?"
 
 # With model selection
-chemgraph -q "Optimize methane geometry" -m gpt-4o
+chemgraph -q "Optimize methane geometry using MACE" -m gpt-4o
 
 # With report generation
-chemgraph -q "Calculate CO2 vibrational frequencies" -r
+chemgraph -q "Calculate CO2 vibrational frequencies using DFT with NWChem" -r
 
 # Using configuration file
 chemgraph --config config.toml -q "Your query here"
@@ -604,20 +611,6 @@ chemgraph --help
 Use TOML configuration files for consistent settings:
 
 ```bash
-chemgraph --config config.toml -q "Your query"
-```
-
-#### Environment Variables
-
-Set environment-specific configurations:
-
-```bash
-# Use development settings
-export CHEMGRAPH_ENV=development
-chemgraph --config config.toml -q "Your query"
-
-# Use production settings
-export CHEMGRAPH_ENV=production
 chemgraph --config config.toml -q "Your query"
 ```
 

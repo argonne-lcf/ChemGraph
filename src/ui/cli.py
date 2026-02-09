@@ -32,6 +32,7 @@ from rich.align import Align
 from chemgraph.models.supported_models import all_supported_models
 from chemgraph.utils.config_utils import (
     flatten_config,
+    get_argo_user_from_flat_config,
     get_base_url_for_model_from_flat_config,
 )
 
@@ -364,12 +365,6 @@ def load_config(config_file: str) -> Dict[str, Any]:
 
         flattened = flatten_config(config)
 
-        # Handle environment-specific settings
-        if "environments" in config:
-            env = os.getenv("CHEMGRAPH_ENV", "development")
-            if env in config["environments"]:
-                flattened.update(config["environments"][env])
-
         return flattened
 
     except FileNotFoundError:
@@ -388,6 +383,7 @@ def initialize_agent(
     generate_report: bool,
     recursion_limit: int,
     base_url: str = None,
+    argo_user: str = None,
     verbose: bool = False,
 ):
     """Initialize ChemGraph agent with progress indication."""
@@ -401,6 +397,7 @@ def initialize_agent(
         console.print(f"  Generate Report: {generate_report}")
         console.print(f"  Recursion Limit: {recursion_limit}")
         console.print(f"  Base URL: {base_url}")
+        console.print(f"  Argo User: {argo_user}")
 
     # Check API keys before attempting initialization
     api_key_available, error_msg = check_api_keys(model_name)
@@ -431,6 +428,7 @@ def initialize_agent(
                     model_name=model_name,
                     workflow_type=workflow_type,
                     base_url=base_url,
+                    argo_user=argo_user,
                     generate_report=generate_report,
                     return_option=return_option,
                     recursion_limit=recursion_limit,
@@ -593,7 +591,9 @@ def interactive_mode():
     )
 
     # Initialize agent
-    agent = initialize_agent(model, workflow, False, "state", True, 20, verbose=True)
+    agent = initialize_agent(
+        model, workflow, False, "state", True, 20, verbose=True
+    )
     if not agent:
         return
 
@@ -719,6 +719,7 @@ def main():
     base_url = (
         get_base_url_for_model_from_flat_config(args.model, config) if config else None
     )
+    argo_user = get_argo_user_from_flat_config(config) if config else None
 
     if args.model not in all_supported_models:
         console.print(
@@ -744,8 +745,9 @@ def main():
         args.output,
         args.report,
         args.recursion_limit,
-        base_url,
-        args.verbose,
+        base_url=base_url,
+        argo_user=argo_user,
+        verbose=args.verbose,
     )
 
     if not agent:

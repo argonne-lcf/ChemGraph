@@ -28,6 +28,12 @@ def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
                         for key, value in default_config[section].items():
                             if key not in config[section]:
                                 config[section][key] = value
+                            elif isinstance(config[section][key], dict) and isinstance(
+                                value, dict
+                            ):
+                                for subkey, subvalue in value.items():
+                                    if subkey not in config[section][key]:
+                                        config[section][key][subkey] = subvalue
 
                 return config
         else:
@@ -65,7 +71,11 @@ def get_default_config() -> Dict[str, Any]:
             "verbose": False,
         },
         "api": {
-            "openai": {"base_url": "https://api.openai.com/v1", "timeout": 30},
+            "openai": {
+                "base_url": "https://api.openai.com/v1",
+                "timeout": 30,
+                "argo_user": "",
+            },
             "anthropic": {"base_url": "https://api.anthropic.com", "timeout": 30},
             "google": {
                 "base_url": "https://generativelanguage.googleapis.com/v1beta",

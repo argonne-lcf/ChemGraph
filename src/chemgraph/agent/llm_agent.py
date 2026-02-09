@@ -118,6 +118,7 @@ class ChemGraph:
         workflow_type: str = "single_agent",
         base_url: str = None,
         api_key: str = None,
+        argo_user: str = None,
         system_prompt: str = single_agent_prompt,
         formatter_prompt: str = default_formatter_prompt,
         structured_output: bool = False,
@@ -161,8 +162,15 @@ class ChemGraph:
                 model_name in supported_openai_models
                 or model_name in supported_argo_models
             ):
+                openai_load_kwargs = {
+                    "model_name": model_name,
+                    "temperature": temperature,
+                    "base_url": base_url,
+                }
+                if argo_user is not None:
+                    openai_load_kwargs["argo_user"] = argo_user
                 llm = load_openai_model(
-                    model_name=model_name, temperature=temperature, base_url=base_url
+                    **openai_load_kwargs,
                 )
             elif model_name in supported_ollama_models:
                 llm = load_ollama_model(model_name=model_name, temperature=temperature)

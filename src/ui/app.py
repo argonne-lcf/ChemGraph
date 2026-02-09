@@ -24,6 +24,7 @@ from chemgraph.models.supported_models import (
     supported_argo_models,
 )
 from chemgraph.utils.config_utils import (
+    get_argo_user_from_nested_config,
     get_base_url_for_model_from_nested_config,
     get_model_options_for_nested_config,
 )
@@ -418,6 +419,12 @@ elif page == "⚙️ Configuration":
                 "Base URL",
                 value=config["api"]["openai"]["base_url"],
                 key="config_openai_url",
+            )
+            config["api"]["openai"]["argo_user"] = st.text_input(
+                "Argo User (optional)",
+                value=config["api"]["openai"].get("argo_user", ""),
+                key="config_openai_argo_user",
+                help="ANL domain username for Argo requests. If blank, ChemGraph falls back to ARGO_USER env var.",
             )
             config["api"]["openai"]["timeout"] = st.number_input(
                 "Timeout (seconds)",
@@ -1267,6 +1274,7 @@ def initialize_agent(
     generate_report,
     recursion_limit,
     base_url,
+    argo_user,
 ):
     try:
         from chemgraph.agent.llm_agent import ChemGraph
@@ -1275,6 +1283,7 @@ def initialize_agent(
             model_name=model_name,
             workflow_type=workflow_type,
             base_url=base_url,
+            argo_user=argo_user,
             structured_output=structured_output,
             generate_report=generate_report,
             return_option=return_option,
@@ -1296,6 +1305,7 @@ current_config = (
     generate_report,
     config["general"]["recursion_limit"],
     get_base_url_for_model(selected_model, config),
+    get_argo_user_from_nested_config(config),
 )
 
 if st.session_state.agent is None or st.session_state.last_config != current_config:
@@ -1308,6 +1318,7 @@ if st.session_state.agent is None or st.session_state.last_config != current_con
             generate_report,
             config["general"]["recursion_limit"],
             get_base_url_for_model(selected_model, config),
+            get_argo_user_from_nested_config(config),
         )
         st.session_state.last_config = current_config
 

@@ -48,6 +48,7 @@ def load_openai_model(
     api_key: str = None,
     prompt: str = None,
     base_url: str = None,
+    argo_user: str = None,
 ) -> ChatOpenAI:
     """Load an OpenAI chat model into LangChain.
 
@@ -107,7 +108,11 @@ def load_openai_model(
         )
 
     is_argo_endpoint = bool(base_url and "argoapi" in base_url)
-    argo_user = os.getenv("ARGO_USER", "chemgraph") if is_argo_endpoint else None
+    argo_user = (
+        argo_user or os.getenv("ARGO_USER", "chemgraph")
+        if is_argo_endpoint
+        else None
+    )
 
     try:
         if base_url is not None:
@@ -126,7 +131,9 @@ def load_openai_model(
             # Argo gateways may require an explicit "user" field in payload.
             if is_argo_endpoint and argo_user:
                 llm_kwargs["user"] = argo_user
-                logger.info("Using Argo user from ARGO_USER/default: %s", argo_user)
+                logger.info(
+                    "Using Argo user from config/ARGO_USER/default: %s", argo_user
+                )
             llm = ChatOpenAI(**llm_kwargs)
         else:
             logger.info(f"Loading OpenAI model: {model_name}")
@@ -147,7 +154,9 @@ def load_openai_model(
             api_key = getpass("Please enter a valid OpenAI API key: ")
             os.environ["OPENAI_API_KEY"] = api_key
             # Retry with new API key
-            return load_openai_model(model_name, temperature, api_key, prompt)
+            return load_openai_model(
+                model_name, temperature, api_key, prompt, base_url, argo_user
+            )
         else:
             logger.error(f"Error loading OpenAI model: {str(e)}")
             raise

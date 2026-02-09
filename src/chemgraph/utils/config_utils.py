@@ -99,3 +99,19 @@ def get_model_options_for_nested_config(config: Dict[str, Any]) -> list[str]:
     if base_url and "argoapi" in base_url:
         return supported_argo_models
     return all_supported_models
+
+
+def get_argo_user_from_nested_config(config: Dict[str, Any]) -> Optional[str]:
+    """Resolve Argo user from nested config (if configured)."""
+    value = config.get("api", {}).get("openai", {}).get("argo_user")
+    if isinstance(value, str):
+        value = value.strip()
+    return value or None
+
+
+def get_argo_user_from_flat_config(config: Dict[str, Any]) -> Optional[str]:
+    """Resolve Argo user from flattened config (if configured)."""
+    value = config.get("api_openai_argo_user")
+    if isinstance(value, str):
+        value = value.strip()
+    return value or None
