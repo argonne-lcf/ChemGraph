@@ -72,8 +72,8 @@ supported_groq_models = [
     "whisper-large-v3-turbo",
 ]
 
-
-supported_argo_models = [
+# ArgoProxy models https://argo-proxy.readthedocs.io/en/latest/usage/models/
+supported_argoproxy_models = [
     "argo:gpt-3.5-turbo",
     "argo:gpt-3.5-turbo-16k",
     "argo:gpt-4",
@@ -99,12 +99,42 @@ supported_argo_models = [
     "argo:gpt-4o-mini",
 ]
 
+# Argo models https://anl.app.box.com/notes/1444961193376?s=ubtrsefonqeo9xppdzcurezy8rzsbs96
+supported_argo_models = [
+    "gpt4o",
+    "gpt4olatest",
+    "gpto3mini",
+    "gpto1",
+    "gpto3",
+    "gpto4mini",
+    "gpt41",
+    "gpt41mini",
+    "gpt41nano",
+    "gpt5",
+    "gpt5mini",
+    "gpt5nano",
+    "gpt51",
+    "gpt52",
+    "gemini25pro",
+    "gemini25flash",
+    "claudeopus46",
+    "claudeopus45",
+    "claudeopus41",
+    "claudeopus4",
+    "claudehaiku45",
+    "claudesonnet45",
+    "claudesonnet4",
+    "claudesonnet35v2",
+    "claudehaiku35",
+]
+
 all_supported_models = (
     supported_openai_models
     + supported_ollama_models
     + supported_alcf_models
     + supported_anthropic_models
     + supported_argo_models
+    + supported_argoproxy_models
     + supported_gemini_models
     + supported_groq_models
 )

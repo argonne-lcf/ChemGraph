@@ -25,6 +25,36 @@ from chemgraph.state.state import State
 logger = setup_logger(__name__)
 
 
+def _tool_call_signature(tool_calls) -> tuple:
+    """Create a comparable signature for a list of tool calls."""
+    signature = []
+    for call in tool_calls or []:
+        name = call.get("name") if isinstance(call, dict) else None
+        args = call.get("args", {}) if isinstance(call, dict) else {}
+        # Normalize args for deterministic comparisons across repeated cycles.
+        if isinstance(args, dict):
+            args_sig = tuple(sorted(args.items()))
+        else:
+            args_sig = str(args)
+        signature.append((name, args_sig))
+    return tuple(signature)
+
+
+def _is_repeated_tool_cycle(messages) -> bool:
+    """Detect if the most recent AI tool-call set repeats the previous AI tool-call set."""
+    ai_with_calls = []
+    for message in messages:
+        if hasattr(message, "tool_calls") and getattr(message, "tool_calls", None):
+            ai_with_calls.append(message)
+
+    if len(ai_with_calls) < 2:
+        return False
+
+    last_calls = _tool_call_signature(ai_with_calls[-1].tool_calls)
+    prev_calls = _tool_call_signature(ai_with_calls[-2].tool_calls)
+    return bool(last_calls) and last_calls == prev_calls
+
+
 def route_tools(state: State):
     """Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
 
@@ -45,8 +75,30 @@ def route_tools(state: State):
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
     if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+        if not isinstance(state, list) and _is_repeated_tool_cycle(messages):
+            return "done"
         return "tools"
     return "done"
+
+
+def route_report_tools(state: State):
+    """Route report tool execution and stop if a report was already generated."""
+    if isinstance(state, list):
+        messages = state
+        ai_message = state[-1] if state else None
+    elif messages := state.get("messages", []):
+        ai_message = messages[-1]
+    else:
+        raise ValueError(f"No messages found in input state to tool_edge: {state}")
+
+    if not (hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0):
+        return "done"
+
+    report_exists = any(
+        isinstance(message, dict) and message.get("name") == "generate_html"
+        for message in messages
+    )
+    return "done" if report_exists else "tools"
 
 
 def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):

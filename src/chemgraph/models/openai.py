@@ -7,6 +7,7 @@ from chemgraph.models.supported_models import (
     supported_openai_models,
     supported_argo_models,
 )
+from chemgraph.utils.config_utils import normalize_openai_base_url
 from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
@@ -91,6 +92,8 @@ def load_openai_model(
     5. Handle any authentication errors by prompting for a new key
     """
 
+    base_url = normalize_openai_base_url(base_url)
+
     if api_key is None:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
@@ -103,11 +106,14 @@ def load_openai_model(
             f"Unsupported model '{model_name}'. Supported models are: {supported_openai_models}."
         )
 
+    is_argo_endpoint = bool(base_url and "argoapi" in base_url)
+    argo_user = os.getenv("ARGO_USER", "chemgraph") if is_argo_endpoint else None
+
     try:
         if base_url is not None:
             logger.info(f"Using custom base URL: {base_url}")
             model_name = _normalize_argo_model(model_name, base_url)
-            llm = ChatOpenAI(
+            llm_kwargs = dict(
                 model=model_name,
                 temperature=temperature,
                 api_key=api_key,
@@ -117,6 +123,11 @@ def load_openai_model(
                 frequency_penalty=0.0,
                 presence_penalty=0.0,
             )
+            # Argo gateways may require an explicit "user" field in payload.
+            if is_argo_endpoint and argo_user:
+                llm_kwargs["user"] = argo_user
+                logger.info("Using Argo user from ARGO_USER/default: %s", argo_user)
+            llm = ChatOpenAI(**llm_kwargs)
         else:
             logger.info(f"Loading OpenAI model: {model_name}")
             llm = ChatOpenAI(

@@ -21,9 +21,11 @@ from chemgraph.tools.ase_tools import (
     create_xyz_string,
 )
 from chemgraph.models.supported_models import (
-    all_supported_models,
-    supported_openai_models,
     supported_argo_models,
+)
+from chemgraph.utils.config_utils import (
+    get_base_url_for_model_from_nested_config,
+    get_model_options_for_nested_config,
 )
 
 # Page configuration -- MUST be first Streamlit call
@@ -66,25 +68,11 @@ def resolve_output_path(path: str) -> str:
 
 
 def get_base_url_for_model(model_name: str, config: Dict[str, Any]) -> Optional[str]:
-    if model_name not in supported_openai_models and model_name not in supported_argo_models:
-        return None
-    base_url = config["api"]["openai"]["base_url"]
-    if not base_url:
-        return None
-    # Normalize Argo endpoints to the OpenAI-compatible base URL.
-    if "apps-dev.inside.anl.gov/argoapi" in base_url or "apps.inside.anl.gov/argoapi" in base_url:
-        base_url = re.sub(r"/api/v1/resource/(chat|embed)/?$", "", base_url)
-        base_url = re.sub(r"/docs/?$", "", base_url)
-        base_url = re.sub(r"/api/v1/?$", "/v1", base_url)
-        base_url = base_url.rstrip("/")
-    return base_url
+    return get_base_url_for_model_from_nested_config(model_name, config)
 
 
 def get_model_options(config: Dict[str, Any]) -> list:
-    base_url = config["api"]["openai"]["base_url"]
-    if base_url and "argoapi" in base_url:
-        return supported_argo_models
-    return all_supported_models
+    return get_model_options_for_nested_config(config)
 
 
 def run_async_callable(fn):
@@ -108,6 +96,7 @@ def run_async_callable(fn):
     if "error" in error_container:
         raise error_container["error"]
     return result_container.get("value")
+
 
 # Configuration management
 try:
@@ -140,9 +129,6 @@ except ImportError:
 # -----------------------------------------------------------------------------
 try:
     import stmol
-
-    # Check if stmol works by testing a simple import
-    from stmol import showmol
 
     STMOL_AVAILABLE = True
 except ImportError:
@@ -280,6 +266,14 @@ elif page == "⚙️ Configuration":
                 ),
                 key="config_model",
             )
+            config_custom_model = st.text_input(
+                "Custom model ID (optional)",
+                value="",
+                key="config_custom_model",
+                help="Enter any provider/model identifier not listed above.",
+            ).strip()
+            if config_custom_model:
+                config["general"]["model"] = config_custom_model
 
             config["general"]["workflow"] = normalize_workflow_name(
                 config["general"]["workflow"]
@@ -638,6 +632,14 @@ with st.sidebar.expander("🔧 Quick Settings"):
                 else 0
             ),
         )
+        quick_custom_model = st.text_input(
+            "Custom model ID (optional)",
+            value="",
+            key="quick_custom_model",
+            help="If set, this overrides the selected model for this session.",
+        ).strip()
+        if quick_custom_model:
+            selected_model = quick_custom_model
 
     # Thread ID override
     if st.checkbox("Override Thread ID"):
@@ -866,6 +868,52 @@ def find_structure_in_messages(messages):
     return None
 
 
+def has_structure_signal(
+    messages, query_text: str = "", final_answer: str = ""
+) -> bool:
+    """Return True when current interaction appears to include structure artifacts."""
+    structure_tools = {
+        "smiles_to_coordinate_file",
+        "run_ase",
+        "file_to_atomsdata",
+        "save_atomsdata_to_file",
+        "generate_html",
+    }
+    structure_markers = (
+        ".xyz",
+        "final_structure",
+        "atomic_numbers",
+        "positions",
+        "coordinate_file",
+    )
+
+    for message in messages:
+        name = getattr(message, "name", None)
+        content = getattr(message, "content", "")
+
+        if isinstance(message, dict):
+            name = message.get("name", name)
+            content = message.get("content", content)
+
+        if name in structure_tools:
+            return True
+
+        if isinstance(content, str):
+            lowered = content.lower()
+            if any(marker in lowered for marker in structure_markers):
+                return True
+
+    combined_text = f"{query_text}\n{final_answer}".lower()
+    keyword_markers = (
+        "geometry",
+        "optimiz",
+        "structure",
+        "coordinates",
+        "xyz",
+    )
+    return any(marker in combined_text for marker in keyword_markers)
+
+
 def is_infrared_requested(messages):
     """Look through all messages to find infrared data."""
     for message in messages:
@@ -1079,18 +1127,19 @@ def visualize_trajectory(traj):
     """
     # Convert all frames to a single multi-model XYZ string
     import py3Dmol
+
     xyz_frames = []
     for i, atoms in enumerate(traj):
         symbols = atoms.get_chemical_symbols()
         pos = atoms.get_positions()  # Å
-        lines = [str(len(symbols)), f'Frame {i}']
+        lines = [str(len(symbols)), f"Frame {i}"]
         lines += [f"{s} {x:.6f} {y:.6f} {z:.6f}" for s, (x, y, z) in zip(symbols, pos)]
         xyz_frames.append("\n".join(lines))
     xyz_str = "\n".join(xyz_frames)
 
     # Initialize viewer and add frames
-    view = py3Dmol.view(width=800, height=400)
-    view.addModelsAsFrames(xyz_str, 'xyz')   # load all frames at once
+    view = py3Dmol.view(width=500, height=400)
+    view.addModelsAsFrames(xyz_str, "xyz")  # load all frames at once
 
     # Style & camera
     view.setViewStyle({"style": "outline", "width": 0.05})
@@ -1174,6 +1223,7 @@ def extract_log_dir_from_messages(messages) -> Optional[str]:
                 if found:
                     return found
         return None
+
     for message in reversed(messages):
         content = ""
         if hasattr(message, "content"):
@@ -1203,8 +1253,6 @@ def extract_log_dir_from_messages(messages) -> Optional[str]:
 
 
 # Function for IR spectrum rendering
-
-
 
 
 # -----------------------------------------------------------------------------
@@ -1350,22 +1398,23 @@ if st.session_state.conversation_history:
                     title=f"Structure from Response {idx}",
                 )
             else:
-                log_dir = extract_log_dir_from_messages(messages)
-                latest_xyz = None
-                if log_dir and os.path.isdir(log_dir):
-                    latest_xyz = find_latest_xyz_file_in_dir(log_dir)
-                if latest_xyz is None:
-                    latest_xyz = find_latest_xyz_file()
-                if latest_xyz:
-                    try:
-                        atoms = ase_read(latest_xyz)
-                        display_molecular_structure(
-                            atoms.get_atomic_numbers().tolist(),
-                            atoms.get_positions().tolist(),
-                            title=f"Structure from {Path(latest_xyz).name}",
-                        )
-                    except Exception as exc:
-                        st.warning(f"Failed to load XYZ structure: {exc}")
+                if has_structure_signal(messages, entry.get("query", ""), final_answer):
+                    log_dir = extract_log_dir_from_messages(messages)
+                    latest_xyz = None
+                    if log_dir and os.path.isdir(log_dir):
+                        latest_xyz = find_latest_xyz_file_in_dir(log_dir)
+                    if latest_xyz is None:
+                        latest_xyz = find_latest_xyz_file()
+                    if latest_xyz:
+                        try:
+                            atoms = ase_read(latest_xyz)
+                            display_molecular_structure(
+                                atoms.get_atomic_numbers().tolist(),
+                                atoms.get_positions().tolist(),
+                                title=f"Structure from {Path(latest_xyz).name}",
+                            )
+                        except Exception as exc:
+                            st.warning(f"Failed to load XYZ structure: {exc}")
         html_filename = find_html_filename(messages)
         if html_filename:
             with st.expander("📊 Report", expanded=False):
@@ -1385,7 +1434,7 @@ if st.session_state.conversation_history:
         if is_infrared_requested(messages):
             if changed_recently():
                 with st.expander("🔍 IR Spectrum", expanded=True):
-                    col1, col2 = st.columns([1, 1])
+                    col1, col2 = st.columns(2, border=True)
 
                     with col1:
                         ir_path = resolve_output_path("ir_spectrum.png")
@@ -1398,14 +1447,13 @@ if st.session_state.conversation_history:
                         if not os.path.exists(freq_path):
                             st.warning("Frequencies file not found.")
                         else:
-                            df = (
-                                pd.read_csv(
-                                    freq_path,
-                                    index_col=False,
-                                    names=["filename", "frequency"],
-                                )
-                                .iloc[6:]
-                            )  # remove the first 6 translation/rotation modes
+                            df = pd.read_csv(
+                                freq_path,
+                                index_col=False,
+                                names=["filename", "frequency"],
+                            ).iloc[
+                                6:
+                            ]  # remove the first 6 translation/rotation modes
 
                             if not df.empty:
                                 # Create a dropdown menu for frequency selection
@@ -1434,12 +1482,12 @@ if st.session_state.conversation_history:
 
                                     traj = Trajectory(traj_path)
                                     view = visualize_trajectory(traj)
-                                    _, center_col, _ = st.columns([1, 4, 1])
-                                    with center_col:
-                                        showmol(view, height=400, width=500)
+                                    # _, center_col, _ = st.columns(3)
+                                    # with center_col:
+                                    view.zoomTo()
+                                    stmol.showmol(view, height=400, width=500)
                             else:
                                 st.warning("No vibrational frequencies found.")
-
 
             else:
                 st.warning("IR spectrum not found.")

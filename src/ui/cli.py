@@ -30,6 +30,10 @@ from rich.align import Align
 
 # ChemGraph imports
 from chemgraph.models.supported_models import all_supported_models
+from chemgraph.utils.config_utils import (
+    flatten_config,
+    get_base_url_for_model_from_flat_config,
+)
 
 # Initialize rich console
 console = Console()
@@ -358,43 +362,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
             config = toml.load(f)
         console.print(f"[green]✓[/green] Configuration loaded from {config_file}")
 
-        # Flatten nested configuration for backward compatibility
-        flattened = {}
-
-        # Handle general settings
-        if "general" in config:
-            flattened.update(config["general"])
-
-        # Handle API settings
-        if "api" in config:
-            for provider, settings in config["api"].items():
-                for key, value in settings.items():
-                    flattened[f"api_{provider}_{key}"] = value
-
-        # Handle chemistry settings
-        if "chemistry" in config:
-            for section, settings in config["chemistry"].items():
-                for key, value in settings.items():
-                    flattened[f"chemistry_{section}_{key}"] = value
-
-        # Handle output settings
-        if "output" in config:
-            for section, settings in config["output"].items():
-                for key, value in settings.items():
-                    flattened[f"output_{section}_{key}"] = value
-
-        # Handle other top-level sections
-        for section in ["logging", "features", "security", "advanced"]:
-            if section in config:
-                if isinstance(config[section], dict):
-                    for key, value in config[section].items():
-                        if isinstance(value, dict):
-                            for subkey, subvalue in value.items():
-                                flattened[f"{section}_{key}_{subkey}"] = subvalue
-                        else:
-                            flattened[f"{section}_{key}"] = value
-                else:
-                    flattened[section] = config[section]
+        flattened = flatten_config(config)
 
         # Handle environment-specific settings
         if "environments" in config:
@@ -419,6 +387,7 @@ def initialize_agent(
     return_option: str,
     generate_report: bool,
     recursion_limit: int,
+    base_url: str = None,
     verbose: bool = False,
 ):
     """Initialize ChemGraph agent with progress indication."""
@@ -431,6 +400,7 @@ def initialize_agent(
         console.print(f"  Return Option: {return_option}")
         console.print(f"  Generate Report: {generate_report}")
         console.print(f"  Recursion Limit: {recursion_limit}")
+        console.print(f"  Base URL: {base_url}")
 
     # Check API keys before attempting initialization
     api_key_available, error_msg = check_api_keys(model_name)
@@ -460,6 +430,7 @@ def initialize_agent(
                 agent = ChemGraph(
                     model_name=model_name,
                     workflow_type=workflow_type,
+                    base_url=base_url,
                     generate_report=generate_report,
                     return_option=return_option,
                     recursion_limit=recursion_limit,
@@ -613,7 +584,7 @@ def interactive_mode():
 
     # Get initial configuration
     model = Prompt.ask(
-        "Select model", choices=all_supported_models, default="gpt-4o-mini"
+        "Select model (or type a custom model ID)", default="gpt-4o-mini"
     )
     workflow = Prompt.ask(
         "Select workflow",
@@ -669,13 +640,10 @@ Example queries:
                 continue
             elif query.startswith("model "):
                 new_model = query[6:].strip()
-                if new_model in all_supported_models:
-                    model = new_model
-                    agent = initialize_agent(model, workflow, False, "state", True, 20)
-                    if agent:
-                        console.print(f"[green]✓ Model changed to: {model}[/green]")
-                else:
-                    console.print(f"[red]✗ Invalid model: {new_model}[/red]")
+                model = new_model
+                agent = initialize_agent(model, workflow, False, "state", True, 20)
+                if agent:
+                    console.print(f"[green]✓ Model changed to: {model}[/green]")
                 continue
             elif query.startswith("workflow "):
                 new_workflow = query[9:].strip()
@@ -744,12 +712,18 @@ def main():
         for key, value in config.items():
             if hasattr(args, key) and getattr(args, key) is None:
                 setattr(args, key, value)
+        # Honor config recursion_limit unless user explicitly provided CLI flag.
+        if "recursion_limit" in config and "--recursion-limit" not in sys.argv:
+            args.recursion_limit = config["recursion_limit"]
 
-    # Validate model
+    base_url = (
+        get_base_url_for_model_from_flat_config(args.model, config) if config else None
+    )
+
     if args.model not in all_supported_models:
-        console.print(f"[red]✗ Invalid model: {args.model}[/red]")
-        console.print("Use --list-models to see available models.")
-        sys.exit(1)
+        console.print(
+            f"[yellow]⚠ Using custom model ID: {args.model} (not in curated list)[/yellow]"
+        )
 
     # Require query for non-interactive mode
     if not args.query:
@@ -770,6 +744,7 @@ def main():
         args.output,
         args.report,
         args.recursion_limit,
+        base_url,
         args.verbose,
     )
 

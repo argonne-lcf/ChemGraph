@@ -5,6 +5,7 @@ Configuration management for ChemGraph Streamlit app.
 import toml
 import os
 from typing import Dict, Any
+from chemgraph.utils.config_utils import flatten_config as _flatten_config
 
 
 def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
@@ -88,20 +89,4 @@ def get_default_config() -> Dict[str, Any]:
 
 def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Flatten nested configuration for easier access."""
-    flattened = {}
-
-    # Handle general settings
-    if "general" in config:
-        flattened.update(config["general"])
-
-    # Handle other sections
-    for section in ["api", "chemistry", "output"]:
-        if section in config:
-            for key, value in config[section].items():
-                if isinstance(value, dict):
-                    for subkey, subvalue in value.items():
-                        flattened[f"{section}_{key}_{subkey}"] = subvalue
-                else:
-                    flattened[f"{section}_{key}"] = value
-
-    return flattened
+    return _flatten_config(config)
