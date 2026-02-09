@@ -88,4 +88,9 @@ skip-magic-trailing-comma = false  # Ensure Black-style formatting
 [tool.pytest.ini_options]
 markers = [
     "llm: marks tests as requiring LLM API access (run with --run-llm)",
+    "asyncio: marks async tests",
+]
+filterwarnings = [
+    "ignore:Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*:UserWarning",
+    "ignore:In future, it will be an error for 'np.bool' scalars to be interpreted as an index:DeprecationWarning",
 ]
