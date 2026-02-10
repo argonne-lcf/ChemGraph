@@ -863,6 +863,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#publish-to-ghcr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Publish to GHCR
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1113,6 +1124,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#publish-to-ghcr" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Publish to GHCR
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1211,7 +1233,19 @@ setting for <code>/app</code> is included.</p>
 <li>If you need local LLM serving, run it as a separate service outside this Docker setup and point ChemGraph to that endpoint via model/base URL configuration.</li>
 <li>Compose startup also runs <code>git config --global --add safe.directory /app</code> to avoid
   Git "dubious ownership" errors in notebooks/Streamlit when the repo is bind-mounted.</li>
+<li>The default <code>Dockerfile</code> installs <code>nwchem</code> and <code>tblite</code> with conda-forge.</li>
 </ul>
+<h2 id="publish-to-ghcr">Publish to GHCR</h2>
+<p>A GitHub Actions workflow (<code>.github/workflows/ghcr-publish.yml</code>) publishes the Docker image to:</p>
+<ul>
+<li><code>ghcr.io/&lt;org-or-user&gt;/chemgraph:&lt;tag&gt;</code></li>
+<li><code>ghcr.io/&lt;org-or-user&gt;/chemgraph:sha-&lt;commit&gt;</code></li>
+</ul>
+<p>How to publish:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.3.0
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.3.0
+</span></code></pre></div>
+<p>You can also trigger the workflow manually from Actions with <code>workflow_dispatch</code>.</p>
 
 
 
