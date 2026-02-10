@@ -1,5 +1,9 @@
 # ChemGraph
 
+<p align="left">
+  <img src="logo/chemgraph_logo2.png" alt="ChemGraph logo" width="240">
+</p>
+
 ![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)
 ![Conda Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/conda-tests.yml/badge.svg)
 ![Test PyPI Package](https://github.com/argonne-lcf/ChemGraph/actions/workflows/test-pypi-package.yml/badge.svg)
@@ -900,7 +904,7 @@ pre-commit install
       doi = {10.1038/s42004-025-01776-9},
       journaltitle = {Communications Chemistry},
       shortjournal = {Communications Chemistry},
-      author = {Pham, Thang D. and Tanikanti, Aditya and Keçeli, Murat},
+      author = {Pham, Thang D. and Tanikanti, Aditya and Ke\c{c}eli, Murat},
       date = {2026-01-08},
     }
   ```
