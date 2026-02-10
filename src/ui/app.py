@@ -21,7 +21,7 @@ from chemgraph.tools.ase_tools import (
     create_xyz_string,
 )
 from chemgraph.models.supported_models import (
-    supported_argo_models,
+    all_supported_models,
 )
 from chemgraph.utils.config_utils import (
     get_argo_user_from_nested_config,
@@ -604,7 +604,7 @@ generate_report = config["general"]["report"]
 thread_id = config["general"]["thread"]
 
 # Argo OpenAI-compatible endpoint often returns plain text; disable structured output.
-if selected_model in supported_argo_models and structured_output:
+if selected_model in all_supported_models and structured_output:
     structured_output = False
     st.session_state.ui_notice = (
         "Structured output is disabled for Argo models to avoid JSON parsing errors."

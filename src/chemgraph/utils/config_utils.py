@@ -94,10 +94,15 @@ def get_base_url_for_model_from_flat_config(
 
 
 def get_model_options_for_nested_config(config: Dict[str, Any]) -> list[str]:
-    """Return model options based on configured endpoint."""
+    """Return model options for UI selection.
+
+    Always show all curated models so users can switch providers from the UI.
+    If Argo endpoint is configured, prioritize Argo model IDs at the top.
+    """
     base_url = config.get("api", {}).get("openai", {}).get("base_url")
     if base_url and "argoapi" in base_url:
-        return supported_argo_models
+        remaining = [m for m in all_supported_models if m not in supported_argo_models]
+        return supported_argo_models + remaining
     return all_supported_models
 
 
