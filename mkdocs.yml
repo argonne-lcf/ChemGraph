@@ -52,6 +52,7 @@ nav:
   - Installation: installation.md
   - Example Usage: example_usage.md
   - Streamlit Web Interface: streamlit_web_interface.md
+  - MCP Servers: mcp_servers.md
   - Configuration with TOML: configuration_with_toml.md
   - Project Structure: project_structure.md
   - Running Local Models with vLLM: running_local_models.md

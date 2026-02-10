@@ -158,19 +158,18 @@ chemgraph --config config.toml -q "What is the SMILES string for water?"
 chemgraph --config config.toml -q "Optimize methane" -m gpt-4o --verbose
 ```
 
-#### Environment-Specific Configuration
+#### Argo/OpenAI-Compatible Endpoints
 
-Set the `CHEMGRAPH_ENV` environment variable to use environment-specific settings:
+For Argo or any OpenAI-compatible endpoint, set `api.openai.base_url` in `config.toml`.
+Optional `api.openai.argo_user` can also be configured.
 
-```bash
-# Use development environment settings
-export CHEMGRAPH_ENV=development
-chemgraph --config config.toml -q "Your query"
-
-# Use production environment settings
-export CHEMGRAPH_ENV=production
-chemgraph --config config.toml -q "Your query"
+```toml
+[api.openai]
+base_url = "https://apps-dev.inside.anl.gov/argoapi/v1"
+argo_user = "your_argo_username"
 ```
+
+`ARGO_USER` is only used as a fallback when `argo_user` is not provided in `config.toml`.
 
 ### Configuration Sections
 
