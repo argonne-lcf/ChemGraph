@@ -1087,7 +1087,7 @@ Make sure your virtual environment is activated.
 </span></code></pre></div>
 For specific hardware acceleration (e.g., CUDA, ROCm), refer to the <a href="https://docs.vllm.ai/en/latest/getting_started/installation.html">official vLLM installation documentation</a>.</p>
 <h4 id="running-the-vllm-server-standalone">Running the vLLM Server (Standalone)</h4>
-<p>A script is provided at <code>scripts/run_vllm_server.sh</code> to help start a vLLM server with features like logging, retry attempts, and timeout. This is useful for running vLLM outside of Docker Compose, for example, directly on a machine with GPU access.</p>
+<p>A script is provided at <code>scripts/run_vllm_server.sh</code> to help start a vLLM server with features like logging, retry attempts, and timeout. This is intended for running vLLM as a separate standalone service (for example, on a machine with GPU access).</p>
 <p><strong>Before running the script:</strong>
 1.  Ensure your vLLM Python virtual environment is activated.
     <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Example: if you used conda</span>
@@ -1116,11 +1116,11 @@ For specific hardware acceleration (e.g., CUDA, ROCm), refer to the <a href="htt
 <p>Many models, such as those from the Llama family by Meta, are gated and require you to accept their terms of use on Hugging Face and use an access token for download. </p>
 </li>
 <li>
-<p>To use such models with vLLM (either via the script or Docker Compose):</p>
+<p>To use such models with vLLM:</p>
 <ol>
 <li><strong>Hugging Face Account and Token</strong>: Ensure you have a Hugging Face account and have generated an access token with <code>read</code> permissions. You can find this in your Hugging Face account settings under "Access Tokens".</li>
 <li><strong>Accept Model License</strong>: Navigate to the Hugging Face page of the specific model you want to use (e.g., <code>meta-llama/Meta-Llama-3-8B-Instruct</code>) and accept its license/terms if prompted.</li>
-<li><strong>Environment Variables</strong>: Before running the vLLM server (either via the script or <code>docker-compose up</code>), you need to set the following environment variables in your terminal session or within your environment configuration (e.g., <code>.bashrc</code>, <code>.zshrc</code>, or by passing them to Docker Compose if applicable):
+<li><strong>Environment Variables</strong>: Before running the vLLM server, set the following environment variables in your terminal session or environment configuration (e.g., <code>.bashrc</code>, <code>.zshrc</code>):
     <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">HF_TOKEN</span><span class="o">=</span><span class="s2">&quot;your_hugging_face_token_here&quot;</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># Optional: Specify a directory for Hugging Face to download models and cache.</span>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># export HF_HOME=&quot;/path/to/your/huggingface_cache_directory&quot;</span>
@@ -1137,7 +1137,7 @@ For specific hardware acceleration (e.g., CUDA, ROCm), refer to the <a href="htt
 </ul>
 </li>
 <li>
-<p>This standalone script is an alternative to running vLLM via Docker Compose and is primarily for users who manage their vLLM instances directly.</p>
+<p>This standalone script is the recommended approach for users who manage their own vLLM instances directly.</p>
 </li>
 </ul>
 </details>

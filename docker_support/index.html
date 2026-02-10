@@ -822,6 +822,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#use-published-ghcr-image-no-local-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use Published GHCR Image (No Local Build)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#build-image" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1083,6 +1094,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#use-published-ghcr-image-no-local-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Use Published GHCR Image (No Local Build)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#build-image" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1206,7 +1228,7 @@
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Docker setup is now intentionally simplified and does <strong>not</strong> include vLLM.
-The same ChemGraph image can be launched in three modes: JupyterLab, Streamlit UI, or MCP server.</p>
+The same ChemGraph image can be launched in four modes: JupyterLab, Streamlit UI, MCP server, or interactive CLI.</p>
 </div>
 <h2 id="prerequisites">Prerequisites</h2>
 <ul>
@@ -1219,26 +1241,48 @@ The same ChemGraph image can be launched in three modes: JupyterLab, Streamlit U
 <li><code>Dockerfile.arm</code>: ARM-friendly variant (same runtime goals, no vLLM)</li>
 <li><code>docker-compose.yml</code>: profile-based launcher for Jupyter/Streamlit/MCP</li>
 </ul>
+<h2 id="use-published-ghcr-image-no-local-build">Use Published GHCR Image (No Local Build)</h2>
+<p>If you do not want a local install, run the published container image directly:</p>
+<p>Run JupyterLab:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8888</span>:8888<span class="w"> </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>jupyter<span class="w"> </span>lab<span class="w"> </span>--ip<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="o">=</span><span class="m">8888</span><span class="w"> </span>--no-browser<span class="w"> </span>--allow-root<span class="w"> </span>--LabApp.token<span class="o">=</span>
+</span></code></pre></div>
+<p>Run Streamlit:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8501</span>:8501<span class="w"> </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py<span class="w"> </span>--server.address<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--server.port<span class="o">=</span><span class="m">8501</span>
+</span></code></pre></div>
+<p>Run MCP server (HTTP):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">9003</span>:9003<span class="w"> </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
+</span></code></pre></div>
+<p>Run interactive CLI shell:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>--entrypoint<span class="w"> </span>/bin/bash<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/work&quot;</span><span class="w"> </span>-w<span class="w"> </span>/work<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>ghcr.io/argonne-lcf/chemgraph:latest
+</span></code></pre></div>
+<p>Then inside the container:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chemgraph<span class="w"> </span>--help
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;calculate the energy for smiles=O using mace_mp&quot;</span>
+</span></code></pre></div>
 <h2 id="build-image">Build Image</h2>
 <p>From project root:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>build
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>build
 </span></code></pre></div>
 <p>If you previously built the image before this update, rebuild so the Git safe-directory
 setting for <code>/app</code> is included.</p>
 <h2 id="run-jupyterlab">Run JupyterLab</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>jupyter<span class="w"> </span>up
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>jupyter<span class="w"> </span>up
 </span></code></pre></div>
 <p>Access: <code>http://localhost:8888</code></p>
 <h2 id="run-streamlit-app">Run Streamlit App</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>streamlit<span class="w"> </span>up
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>streamlit<span class="w"> </span>up
 </span></code></pre></div>
 <p>Access: <code>http://localhost:8501</code></p>
 <h2 id="run-mcp-server-http-transport">Run MCP Server (HTTP transport)</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>mcp<span class="w"> </span>up
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>mcp<span class="w"> </span>up
 </span></code></pre></div>
 <p>MCP endpoint: <code>http://localhost:9003</code></p>
 <p>The compose service launches:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
 </span></code></pre></div>
 <h2 id="environment-variables">Environment Variables</h2>
 <p>The compose file forwards these variables into the container when set on host:</p>
@@ -1251,27 +1295,27 @@ setting for <code>/app</code> is included.</p>
 <li><code>PYTHONPATH</code> is set to <code>/app/src</code> in compose so bind-mounted source code is used.</li>
 </ul>
 <p>Example:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_key&quot;</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>streamlit<span class="w"> </span>up
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_key&quot;</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>streamlit<span class="w"> </span>up
 </span></code></pre></div>
 <h2 id="stop-services">Stop Services</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>down
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>down
 </span></code></pre></div>
 <h2 id="run-without-compose-optional">Run Without Compose (Optional)</h2>
 <p>Build once:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>docker<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>chemgraph:local<span class="w"> </span>.
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>docker<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>chemgraph:local<span class="w"> </span>.
 </span></code></pre></div>
 <p>Jupyter:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8888</span>:8888<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>jupyter<span class="w"> </span>lab<span class="w"> </span>--ip<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="o">=</span><span class="m">8888</span><span class="w"> </span>--no-browser<span class="w"> </span>--allow-root<span class="w"> </span>--LabApp.token<span class="o">=</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8888</span>:8888<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>jupyter<span class="w"> </span>lab<span class="w"> </span>--ip<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="o">=</span><span class="m">8888</span><span class="w"> </span>--no-browser<span class="w"> </span>--allow-root<span class="w"> </span>--LabApp.token<span class="o">=</span>
 </span></code></pre></div>
 <p>Streamlit:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8501</span>:8501<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py<span class="w"> </span>--server.address<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--server.port<span class="o">=</span><span class="m">8501</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8501</span>:8501<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py<span class="w"> </span>--server.address<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--server.port<span class="o">=</span><span class="m">8501</span>
 </span></code></pre></div>
 <p>MCP (HTTP):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">9003</span>:9003<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">9003</span>:9003<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
 </span></code></pre></div>
 <h2 id="notes">Notes</h2>
 <ul>
@@ -1288,8 +1332,8 @@ setting for <code>/app</code> is included.</p>
 <li><code>ghcr.io/&lt;org-or-user&gt;/chemgraph:sha-&lt;commit&gt;</code></li>
 </ul>
 <p>How to publish:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.3.0
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.3.0
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.3.0
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.3.0
 </span></code></pre></div>
 <p>You can also trigger the workflow manually from Actions with <code>workflow_dispatch</code>.</p>
 
