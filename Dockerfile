@@ -1,44 +1,39 @@
 FROM continuumio/miniconda3:latest
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy project files
 COPY . /app
 
-# Install system dependencies
+# System packages required by scientific Python stack and headless browser deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     git \
-    gfortran \
-    liblapack-dev \
-    pkg-config \
     cmake \
+    pkg-config \
+    curl \
     # Dependencies for headless Chrome (pyppeteer)
-    libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libasound2 \
+    libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 \
+    libxrandr2 libxrender1 libxss1 libxtst6 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libdrm2 libgbm1 libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create conda environment with tblite, rdkit and other dependencies that are hard to install with pip
-RUN conda install -c conda-forge -c rdkit -c pytorch \
+# Use conda for packages that are typically more reliable from conda-forge
+RUN conda install -y -c conda-forge \
     python=3.11 \
-    "pytorch<2.6" \
-    cpuonly \
-    tblite=0.4.0 \
     rdkit \
-    -y
+    && conda clean -afy
 
-# Install Python dependencies using modified pyproject.toml (excluding problematic packages)
-RUN grep -v "tblite\|rdkit\|torch<2.6" pyproject.toml > temp_pyproject.toml && \
-    mv temp_pyproject.toml pyproject.toml
+# Install ChemGraph and UI runtime
+RUN pip install --no-cache-dir . && \
+    pip install --no-cache-dir jupyterlab
 
-# Install packages using pip
-RUN pip install --no-cache-dir .
+# Allow git commands in bind-mounted repo paths inside the container.
+RUN git config --system --add safe.directory /app
 
-# Install JupyterLab
-RUN pip install --no-cache-dir jupyterlab
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-# Expose JupyterLab port
-EXPOSE 8888
+EXPOSE 8888 8501 9003
 
-# Command to run JupyterLab
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--LabApp.token=''"]
+# Default container mode: JupyterLab
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--LabApp.token="]

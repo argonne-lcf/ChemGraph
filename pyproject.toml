@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemgraphagent"
-version = "0.2.2"
+version = "0.2.3"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
@@ -13,16 +13,17 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "ase==3.25.0",
-    "rdkit==2025.3.3",
-    "langgraph==0.4.7",
-    "langchain-openai==0.3.27",
-    "langchain-ollama==0.3.4",
-    "langchain-anthropic==0.3.17",
-    "langchain-google-genai==2.1.7",
+    "langgraph",
+    "langchain",
+    "langchain-openai",
+    "langchain-ollama",
+    "langchain-anthropic",
+    "langchain-google-genai",
     "langchain-groq",
-    "langchain-experimental==0.3.4",
-    "pydantic==2.11.7",
+    "langchain-experimental",
+    "langchain-mcp-adapters",
+    "langgraph-prebuilt",
+    "pydantic",
     "pandas==2.2.3",
     "pubchempy==1.0.5",
     "pyppeteer==2.0.0",
@@ -30,19 +31,26 @@ dependencies = [
     "numexpr==2.11.0",
     "pytest==8.4.1",
     "deepdiff==8.5.0",
-    "pymatgen==2025.3.10",
-    "mace-torch==0.3.13",
+    "ase",
+    "rdkit",
+    "pymatgen",
+    "mace-torch",
+    "globus_sdk",
     "streamlit==1.48.1",
     "stmol==0.0.9",
     "ipython-genutils==0.2.0",
     "langsmith==0.3.45",
     "rich==14.1.0",
-    "toml==0.10.2"
+    "toml==0.10.2",
+    "mcp",
+    "fastmcp",
+    "pytest-asyncio",
+    "grandalf==0.8"
     ]
 
 [project.optional-dependencies]
 calculators = [
-    "tblite==0.4.0",
+    "tblite==0.5.0; python_version < '3.13' or platform_system != 'Darwin'",
 ]
 uma = [
     "fairchem-core==2.3.0",
@@ -52,6 +60,9 @@ ui = [
     "streamlit",
     "stmol",
     "ipython-genutils",
+]
+parsl = [
+    "parsl",
 ]
 
 [project.urls]
@@ -74,3 +85,12 @@ quote-style = "preserve"  # Keep existing quote style
 indent-style = "space"  # Use spaces for indentation
 skip-magic-trailing-comma = false  # Ensure Black-style formatting
 
+[tool.pytest.ini_options]
+markers = [
+    "llm: marks tests as requiring LLM API access (run with --run-llm)",
+    "asyncio: marks async tests",
+]
+filterwarnings = [
+    "ignore:Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*:UserWarning",
+    "ignore:In future, it will be an error for 'np.bool' scalars to be interpreted as an index:DeprecationWarning",
+]

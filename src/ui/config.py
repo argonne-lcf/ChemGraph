@@ -5,6 +5,7 @@ Configuration management for ChemGraph Streamlit app.
 import toml
 import os
 from typing import Dict, Any
+from chemgraph.utils.config_utils import flatten_config as _flatten_config
 
 
 def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
@@ -27,6 +28,12 @@ def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
                         for key, value in default_config[section].items():
                             if key not in config[section]:
                                 config[section][key] = value
+                            elif isinstance(config[section][key], dict) and isinstance(
+                                value, dict
+                            ):
+                                for subkey, subvalue in value.items():
+                                    if subkey not in config[section][key]:
+                                        config[section][key][subkey] = subvalue
 
                 return config
         else:
@@ -64,7 +71,11 @@ def get_default_config() -> Dict[str, Any]:
             "verbose": False,
         },
         "api": {
-            "openai": {"base_url": "https://api.openai.com/v1", "timeout": 30},
+            "openai": {
+                "base_url": "https://api.openai.com/v1",
+                "timeout": 30,
+                "argo_user": "",
+            },
             "anthropic": {"base_url": "https://api.anthropic.com", "timeout": 30},
             "google": {
                 "base_url": "https://generativelanguage.googleapis.com/v1beta",
@@ -88,20 +99,4 @@ def get_default_config() -> Dict[str, Any]:
 
 def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Flatten nested configuration for easier access."""
-    flattened = {}
-
-    # Handle general settings
-    if "general" in config:
-        flattened.update(config["general"])
-
-    # Handle other sections
-    for section in ["api", "chemistry", "output"]:
-        if section in config:
-            for key, value in config[section].items():
-                if isinstance(value, dict):
-                    for subkey, subvalue in value.items():
-                        flattened[f"{section}_{key}_{subkey}"] = subvalue
-                else:
-                    flattened[f"{section}_{key}"] = value
-
-    return flattened
+    return _flatten_config(config)

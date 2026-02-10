@@ -2,7 +2,8 @@ import base64
 from pathlib import Path
 from typing import Optional
 from langchain_core.tools import tool
-from chemgraph.models.ase_input import ASEOutputSchema
+
+from chemgraph.schemas.ase_input import ASEOutputSchema
 from chemgraph.tools.ase_tools import is_linear_molecule
 
 
@@ -312,10 +313,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>
 """
 
+
 @tool
-def generate_html(output_path: Path, ase_output: ASEOutputSchema, xyz_path: Optional[Path] = None) -> str:
+def generate_html(
+    output_path: Path, ase_output: ASEOutputSchema, xyz_path: Optional[Path] = None
+) -> str:
     """Generate an HTML report from ASE output, optionally using an XYZ file for visualization.
-    
+
     Parameters
     ----------
     output_path : Path
@@ -324,7 +328,7 @@ def generate_html(output_path: Path, ase_output: ASEOutputSchema, xyz_path: Opti
         The output from an ASE calculation containing energy, frequencies, etc.
     xyz_path : Optional[Path]
         Optional path to an XYZ file. If not provided, the final_structure from ase_output will be used.
-        
+
     Returns
     -------
     str
@@ -338,24 +342,42 @@ def generate_html(output_path: Path, ase_output: ASEOutputSchema, xyz_path: Opti
         # Convert final_structure to XYZ format
         num_atoms = len(ase_output.final_structure.numbers)
         xyz_lines = [str(num_atoms), "Optimized Structure"]
-        
+
         # Map atomic numbers to element symbols
         element_map = {
-            1: "H", 2: "He", 3: "Li", 4: "Be", 5: "B", 6: "C", 7: "N", 8: "O", 9: "F", 10: "Ne",
-            11: "Na", 12: "Mg", 13: "Al", 14: "Si", 15: "P", 16: "S", 17: "Cl", 18: "Ar",
+            1: "H",
+            2: "He",
+            3: "Li",
+            4: "Be",
+            5: "B",
+            6: "C",
+            7: "N",
+            8: "O",
+            9: "F",
+            10: "Ne",
+            11: "Na",
+            12: "Mg",
+            13: "Al",
+            14: "Si",
+            15: "P",
+            16: "S",
+            17: "Cl",
+            18: "Ar",
             # Add more elements as needed
         }
-        
-        for num, pos in zip(ase_output.final_structure.numbers, ase_output.final_structure.positions):
+
+        for num, pos in zip(
+            ase_output.final_structure.numbers, ase_output.final_structure.positions
+        ):
             element = element_map.get(num, f"X{num}")  # Use X{num} for unknown elements
             x, y, z = pos
             xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
-        
+
         xyz_content = "\n".join(xyz_lines)
 
     encoded_xyz = base64.b64encode(xyz_content.encode()).decode()
     html_content = HTML_TEMPLATE.format(encoded_xyz=encoded_xyz)
-    
+
     # Add additional information to the HTML content
     html_content = add_additional_info_to_html(html_content, ase_output)
 
@@ -364,16 +386,17 @@ def generate_html(output_path: Path, ase_output: ASEOutputSchema, xyz_path: Opti
     print(f"✅ HTML viewer created: {output_path}")
     return str(output_path)
 
+
 def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) -> str:
     """Add ASE calculation results to the HTML content.
-    
+
     Parameters
     ----------
     html_content : str
         The base HTML content
     ase_output : ASEOutputSchema
         The output from an ASE calculation
-        
+
     Returns
     -------
     str
@@ -381,25 +404,43 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
     """
     # Calculation Results section
     calc_results = []
-    
+
     # Optimized Coordinates (from final structure)
     if ase_output.final_structure is not None:
         # Convert AtomsData to XYZ format
         num_atoms = len(ase_output.final_structure.numbers)
         xyz_lines = [str(num_atoms), "Optimized Structure"]
-        
+
         # Map atomic numbers to element symbols
         element_map = {
-            1: "H", 2: "He", 3: "Li", 4: "Be", 5: "B", 6: "C", 7: "N", 8: "O", 9: "F", 10: "Ne",
-            11: "Na", 12: "Mg", 13: "Al", 14: "Si", 15: "P", 16: "S", 17: "Cl", 18: "Ar",
+            1: "H",
+            2: "He",
+            3: "Li",
+            4: "Be",
+            5: "B",
+            6: "C",
+            7: "N",
+            8: "O",
+            9: "F",
+            10: "Ne",
+            11: "Na",
+            12: "Mg",
+            13: "Al",
+            14: "Si",
+            15: "P",
+            16: "S",
+            17: "Cl",
+            18: "Ar",
             # Add more elements as needed
         }
-        
-        for num, pos in zip(ase_output.final_structure.numbers, ase_output.final_structure.positions):
+
+        for num, pos in zip(
+            ase_output.final_structure.numbers, ase_output.final_structure.positions
+        ):
             element = element_map.get(num, f"X{num}")  # Use X{num} for unknown elements
             x, y, z = pos
             xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
-        
+
         xyz_str = "\n".join(xyz_lines)
         calc_results.append(f"""
         <li>
@@ -411,8 +452,10 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             </div>
         </li>""")
     else:
-        calc_results.append("<li class='regular-item'><strong>Optimized Coordinates:</strong> N/A</li>")
-    
+        calc_results.append(
+            "<li class='regular-item'><strong>Optimized Coordinates:</strong> N/A</li>"
+        )
+
     # Energy
     if ase_output.single_point_energy is not None:
         energy_ev = ase_output.single_point_energy
@@ -430,18 +473,23 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             </div>
         </li>""")
     else:
-        calc_results.append(f"<li class='regular-item'><strong>Single Point Energy</strong> ({ase_output.energy_unit}): N/A</li>")
-    
+        calc_results.append(
+            f"<li class='regular-item'><strong>Single Point Energy</strong> ({ase_output.energy_unit}): N/A</li>"
+        )
+
     # Vibrational Frequencies
-    if ase_output.vibrational_frequencies and "frequencies" in ase_output.vibrational_frequencies:
+    if (
+        ase_output.vibrational_frequencies
+        and "frequencies" in ase_output.vibrational_frequencies
+    ):
         freq_unit = ase_output.vibrational_frequencies.get("frequency_unit", "cm-1")
         energy_unit = ase_output.vibrational_frequencies.get("energy_unit", "meV")
-        
+
         # Check if molecule is linear
         is_linear = is_linear_molecule.invoke({"atomsdata": ase_output.final_structure})
         num_atoms = len(ase_output.final_structure.numbers)
         trans_rot_modes = 5 if is_linear else 6  # Number of translation/rotation modes
-        
+
         # Create table header
         freq_table = f"""
         <div class="table-container">
@@ -456,17 +504,21 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 </thead>
                 <tbody>
         """
-        
+
         # Add table rows with mode numbers and highlighting
-        for i, (freq, energy) in enumerate(zip(
-            ase_output.vibrational_frequencies["frequencies"],
-            ase_output.vibrational_frequencies["energies"]
-        ), 1):
+        for i, (freq, energy) in enumerate(
+            zip(
+                ase_output.vibrational_frequencies["frequencies"],
+                ase_output.vibrational_frequencies["energies"],
+            ),
+            1,
+        ):
             # First 5 (linear) or 6 (non-linear) modes are translation/rotation
-            is_vibrational = i > trans_rot_modes
-            mode_type = "Translation/Rotation" if i <= trans_rot_modes else "Vibrational"
+            mode_type = (
+                "Translation/Rotation" if i <= trans_rot_modes else "Vibrational"
+            )
             row_class = "trans-rot-mode" if i <= trans_rot_modes else "vibrational-mode"
-            
+
             freq_table += f"""
                     <tr class="{row_class}">
                         <td>{i}</td>
@@ -475,13 +527,13 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                         <td>{mode_type}</td>
                     </tr>
             """
-        
+
         freq_table += """
                 </tbody>
             </table>
         </div>
         """
-        
+
         # Add explanation about the modes
         mode_explanation = f"""
         <div class="mode-explanation">
@@ -490,7 +542,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             <p><em>Note: The first {trans_rot_modes} modes (highlighted in orange) are translation/rotation modes. The remaining modes (highlighted in green) are vibrational modes.</em></p>
         </div>
         """
-        
+
         calc_results.append(f"""
         <li>
             <div class="sub-section">
@@ -502,24 +554,31 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             </div>
         </li>""")
     else:
-        calc_results.append("<li class='regular-item'><strong>Vibrational Frequencies:</strong> N/A</li>")
-    
+        calc_results.append(
+            "<li class='regular-item'><strong>Vibrational Frequencies:</strong> N/A</li>"
+        )
+
     # Thermochemistry Values
     if ase_output.thermochemistry:
         thermo_info = []
-        unit = ase_output.thermochemistry.get("unit", "eV")
-        
+
         # Add data attributes for conversion with labels
         if "enthalpy" in ase_output.thermochemistry:
             enthalpy_ev = ase_output.thermochemistry['enthalpy']
-            thermo_info.append(f'<div><strong>Enthalpy:</strong> <span class="energy-value" data-ev="{enthalpy_ev}">{enthalpy_ev:.6f}</span></div>')
+            thermo_info.append(
+                f'<div><strong>Enthalpy:</strong> <span class="energy-value" data-ev="{enthalpy_ev}">{enthalpy_ev:.6f}</span></div>'
+            )
         if "entropy" in ase_output.thermochemistry:
             entropy_ev = ase_output.thermochemistry['entropy']
-            thermo_info.append(f'<div><strong>Entropy:</strong> <span class="energy-value" data-ev="{entropy_ev}">{entropy_ev:.6f}</span></div>')
+            thermo_info.append(
+                f'<div><strong>Entropy:</strong> <span class="energy-value" data-ev="{entropy_ev}">{entropy_ev:.6f}</span></div>'
+            )
         if "gibbs_free_energy" in ase_output.thermochemistry:
             gibbs_ev = ase_output.thermochemistry['gibbs_free_energy']
-            thermo_info.append(f'<div><strong>Gibbs Free Energy:</strong> <span class="energy-value" data-ev="{gibbs_ev}">{gibbs_ev:.6f}</span></div>')
-        
+            thermo_info.append(
+                f'<div><strong>Gibbs Free Energy:</strong> <span class="energy-value" data-ev="{gibbs_ev}">{gibbs_ev:.6f}</span></div>'
+            )
+
         if thermo_info:
             calc_results.append(f"""
             <li class='regular-item'>
@@ -533,34 +592,44 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 {"".join(thermo_info)}
             </li>""")
         else:
-            calc_results.append("<li class='regular-item'><strong>Thermochemistry Values:</strong> No values available</li>")
+            calc_results.append(
+                "<li class='regular-item'><strong>Thermochemistry Values:</strong> No values available</li>"
+            )
     else:
-        calc_results.append("<li class='regular-item'><strong>Thermochemistry Values:</strong> N/A</li>")
-    
+        calc_results.append(
+            "<li class='regular-item'><strong>Thermochemistry Values:</strong> N/A</li>"
+        )
+
     # Optimization Status
     if ase_output.simulation_input.driver == "opt":
         status = "Converged" if ase_output.converged else "Not Converged"
         status_class = "color: #28a745;" if ase_output.converged else "color: #dc3545;"
-        calc_results.append(f"<li class='regular-item'><strong>Optimization Status:</strong> <span style='{status_class}'>{status}</span></li>")
-    
+        calc_results.append(
+            f"<li class='regular-item'><strong>Optimization Status:</strong> <span style='{status_class}'>{status}</span></li>"
+        )
+
     # Error Information
     if ase_output.error:
-        calc_results.append(f"<li class='regular-item'><strong>Error:</strong> <span style='color: #dc3545;'>{ase_output.error}</span></li>")
+        calc_results.append(
+            f"<li class='regular-item'><strong>Error:</strong> <span style='color: #dc3545;'>{ase_output.error}</span></li>"
+        )
 
     # Join all results with proper spacing
     calc_results_html = "\n".join(calc_results)
-    
+
     # Simulation Details section
     sim_details = []
-    
+
     # Driver and Calculator
-    sim_details.append(f"<li><strong>Simulation Type:</strong> {ase_output.simulation_input.driver or 'N/A'}</li>")
-    
+    sim_details.append(
+        f"<li><strong>Simulation Type:</strong> {ase_output.simulation_input.driver or 'N/A'}</li>"
+    )
+
     if ase_output.simulation_input.calculator:
         calc = ase_output.simulation_input.calculator
         calc_type = calc.calculator_type
         sim_details.append(f"<li><strong>Calculator:</strong> {calc_type}</li>")
-        
+
         # Get calculator parameters directly from the input
         calc_params = calc.model_dump()
 
@@ -569,7 +638,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         for param, value in calc_params.items():
             # Format the parameter name nicely
             param_name = param.replace('_', ' ').title()
-            
+
             # Handle boolean values
             if isinstance(value, bool):
                 value = str(value)
@@ -579,13 +648,15 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             # Handle None values
             elif value is None:
                 value = "None"
-            
+
             calc_params_html.append(f"<tr><td>{param_name}</td><td>{value}</td></tr>")
 
         # If no parameters are set, show an empty table
         if not calc_params_html:
-            calc_params_html.append("<tr><td colspan='2'>No additional parameters set</td></tr>")
-        
+            calc_params_html.append(
+                "<tr><td colspan='2'>No additional parameters set</td></tr>"
+            )
+
         sim_details.append(f"""
         <li>
             <div class='sub-section'>
@@ -610,31 +681,41 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
 
     # Optimization Parameters
     if ase_output.simulation_input.driver == "opt":
-        sim_details.append(f"<li><strong>Optimizer:</strong> {ase_output.simulation_input.optimizer}</li>")
-        sim_details.append(f"<li><strong>Force Convergence (fmax):</strong> {ase_output.simulation_input.fmax} eV/Å</li>")
-        sim_details.append(f"<li><strong>Maximum Steps:</strong> {ase_output.simulation_input.steps}</li>")
-    
+        sim_details.append(
+            f"<li><strong>Optimizer:</strong> {ase_output.simulation_input.optimizer}</li>"
+        )
+        sim_details.append(
+            f"<li><strong>Force Convergence (fmax):</strong> {ase_output.simulation_input.fmax} eV/Å</li>"
+        )
+        sim_details.append(
+            f"<li><strong>Maximum Steps:</strong> {ase_output.simulation_input.steps}</li>"
+        )
+
     # Thermochemistry Parameters
     if ase_output.simulation_input.driver == "thermo":
         if ase_output.simulation_input.temperature:
-            sim_details.append(f"<li><strong>Temperature:</strong> {ase_output.simulation_input.temperature} K</li>")
-        sim_details.append(f"<li><strong>Pressure:</strong> {ase_output.simulation_input.pressure} Pa</li>")
-    
+            sim_details.append(
+                f"<li><strong>Temperature:</strong> {ase_output.simulation_input.temperature} K</li>"
+            )
+        sim_details.append(
+            f"<li><strong>Pressure:</strong> {ase_output.simulation_input.pressure} Pa</li>"
+        )
+
     # Join all simulation details
     sim_details_html = "\n".join(sim_details)
-    
+
     # Replace the empty content in both sections
     html_content = html_content.replace(
         '<ul>\n                    <!-- Results will be populated here -->\n                </ul>',
         f'<ul>{calc_results_html}</ul>',
-        1
+        1,
     )
     html_content = html_content.replace(
         '<ul>\n                    <!-- Simulation details will be populated here -->\n                </ul>',
         f'<ul>{sim_details_html}</ul>',
-        1
+        1,
     )
-    
+
     # Add the JavaScript for unit conversion
     html_content = html_content.replace(
         '</body>',
@@ -689,7 +770,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             });
         </script>
         </body>
-        '''
+        ''',
     )
-    
+
     return html_content

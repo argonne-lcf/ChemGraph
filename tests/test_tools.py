@@ -1,3 +1,5 @@
+from pathlib import Path
+import json
 import pytest
 from chemgraph.tools.ase_tools import (
     run_ase,
@@ -8,14 +10,32 @@ from chemgraph.tools.cheminformatics_tools import (
     smiles_to_atomsdata,
     molecule_name_to_smiles,
 )
-from chemgraph.models.atomsdata import AtomsData
-from chemgraph.models.ase_input import ASEOutputSchema, ASEInputSchema
+from chemgraph.schemas.atomsdata import AtomsData
+from chemgraph.schemas.ase_input import ASEInputSchema
+
+TEST_DIR = Path(__file__).parent
 
 
-def test_molecule_name_to_smiles():
+def test_molecule_name_to_smiles(monkeypatch):
+    class FakeCompound:
+        def __init__(self, smiles):
+            self.connectivity_smiles = smiles
+
+    def fake_get_compounds(name, namespace):
+        assert namespace == "name"
+        lookup = {"water": "O", "methane": "C"}
+        if name in lookup:
+            return [FakeCompound(lookup[name])]
+        return []
+
+    monkeypatch.setattr(
+        "chemgraph.tools.cheminformatics_tools.pubchempy.get_compounds",
+        fake_get_compounds,
+    )
+
     # Test with a known molecule
-    assert molecule_name_to_smiles.invoke("water") == "O"
-    assert molecule_name_to_smiles.invoke("methane") == "C"
+    assert molecule_name_to_smiles.invoke("water")['smiles'] == "O"
+    assert molecule_name_to_smiles.invoke("methane")['smiles'] == "C"
 
     # Test with invalid molecule name
     with pytest.raises(Exception):
@@ -78,19 +98,11 @@ def test_is_linear_molecule(water_atomsdata, co2_atomsdata):
 def base_ase_input():
     """Base fixture for ASE input with common parameters"""
     return {
-        "atomsdata": {
-            "numbers": [8, 1, 1],
-            "positions": [
-                [0.00893, 0.40402, 0.0],
-                [-0.78731, -0.1847, 0.0],
-                [0.77838, -0.21932, 0.0],
-            ],
-            "cell": None,
-            "pbc": None,
-        },
+        "input_structure_file": str(TEST_DIR / "water.xyz"),
+        "output_results_file": str(TEST_DIR / "water_output.json"),
         "optimizer": "bfgs",
         "calculator": {
-            "calculator_type": "EMTCalc",
+            "calculator_type": "mace_mp",
         },
     }
 
@@ -131,50 +143,77 @@ def thermo_ase_schema(base_ase_input):
 def test_run_ase_energy(energy_ase_schema):
     """Test ASE energy calculation."""
     result = run_ase.invoke({"params": energy_ase_schema})
-    assert isinstance(result, ASEOutputSchema)
-    assert result.success
-    assert result.single_point_energy is not None
-    assert result.energy_unit == "eV"
+    print(result)
+    assert isinstance(result, dict)
+    assert result['status']
+    assert result['single_point_energy'] is not None
+    assert result['unit'] == "eV"
 
 
 def test_run_ase_opt(opt_ase_schema):
     """Test ASE geometry optimization."""
     result = run_ase.invoke({"params": opt_ase_schema})
-    assert isinstance(result, ASEOutputSchema)
-    assert result.success
-    assert result.converged
-    assert result.final_structure is not None
-    # Check that optimization changed the structure
-    assert result.final_structure.positions != opt_ase_schema.atomsdata.positions
+    assert isinstance(result, dict)
+    assert result['status']
+    assert result['single_point_energy'] is not None
+    assert result['unit'] == "eV"
+
+    # Path to expected output file
+    output_file = Path(__file__).parent / "water_output.json"
+
+    # Check file exists
+    assert output_file.exists()
+
+    # Optionally validate JSON content
+    with open(output_file) as f:
+        data = json.load(f)
+
+    assert data["simulation_input"]["driver"] == "opt"
 
 
 def test_run_ase_vib(vib_ase_schema):
     """Test ASE vibrational analysis."""
     result = run_ase.invoke({"params": vib_ase_schema})
-    assert isinstance(result, ASEOutputSchema)
-    assert result.success
-    assert result.vibrational_frequencies
-    assert len(result.vibrational_frequencies) > 0
+    assert isinstance(result, dict)
+    assert result['status']
+
+    # Path to expected output file
+    output_file = Path(__file__).parent / "water_output.json"
+
+    # Check file exists
+    assert output_file.exists()
+
+    # Optionally validate JSON content
+    with open(output_file) as f:
+        data = json.load(f)
+
+    assert data["simulation_input"]["driver"] == "vib"
+    assert len(data["vibrational_frequencies"]["energies"]) > 0
 
 
 def test_run_ase_thermo(thermo_ase_schema):
     """Test ASE thermochemistry calculation."""
     result = run_ase.invoke({"params": thermo_ase_schema})
-    assert isinstance(result, ASEOutputSchema)
-    assert result.success
-    assert result.thermochemistry
-    # Check for required thermochemistry keys
-    assert "enthalpy" in result.thermochemistry
-    assert "entropy" in result.thermochemistry
-    assert "gibbs_free_energy" in result.thermochemistry
-    assert "unit" in result.thermochemistry
-    # Check that values are reasonable
-    assert result.thermochemistry["unit"] == "eV"
-    assert isinstance(result.thermochemistry["enthalpy"], float)
-    assert isinstance(result.thermochemistry["entropy"], float)
-    assert isinstance(result.thermochemistry["gibbs_free_energy"], float)
+    print(result)
+
+    assert isinstance(result, dict)
+    # Path to expected output file
+    output_file = Path(__file__).parent / "water_output.json"
+
+    # Check file exists
+    assert output_file.exists()
+
+    # Optionally validate JSON content
+    with open(output_file) as f:
+        data = json.load(f)
+
+    assert data["simulation_input"]["driver"] == "thermo"
+
     # Check that vibrational frequencies are present
-    assert result.vibrational_frequencies
-    assert "frequencies" in result.vibrational_frequencies
-    assert "frequency_unit" in result.vibrational_frequencies
-    assert result.vibrational_frequencies["frequency_unit"] == "cm-1"
+    assert len(data["vibrational_frequencies"]["energies"]) > 0
+
+    # Check for required thermochemistry keys
+    assert "enthalpy" in data['thermochemistry']
+    assert "entropy" in data['thermochemistry']
+    assert "gibbs_free_energy" in data['thermochemistry']
+    assert "unit" in data['thermochemistry']

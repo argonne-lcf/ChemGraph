@@ -1,5 +1,9 @@
 # ChemGraph
 
+<p align="left">
+  <img src="logo/chemgraph_logo2.png" alt="ChemGraph logo" width="240">
+</p>
+
 ![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)
 ![Conda Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/conda-tests.yml/badge.svg)
 ![Test PyPI Package](https://github.com/argonne-lcf/ChemGraph/actions/workflows/test-pypi-package.yml/badge.svg)
@@ -25,16 +29,17 @@ The easiest way to install ChemGraph is from PyPI:
 pip install chemgraphagent
 ```
 
-For Windows users, you may need to install `tblite` separately via conda:
-```bash
-conda install -c conda-forge tblite=0.4.0
-pip install chemgraphagent
-```
+> Default installation does **not** require `tblite`.
+> `tblite` is only installed when using the optional `calculators` extra.
 
 To install with calculator extras (includes `tblite`):
 ```bash
 pip install chemgraphagent[calculators]
 ```
+
+> Note: On some platforms/Python combinations (especially where no prebuilt `tblite`
+> wheel is available), installing the `calculators` extra may require a local
+> Fortran toolchain.
 
 **Install from Source (Alternative Methods)**
 
@@ -121,8 +126,8 @@ If you need to install from source for the latest version:
 >
 > **For source installations**, if you need to install UMA support in an environment where `mace-torch` might cause this conflict, you can try the following workaround:
 > 1. **Temporarily modify `pyproject.toml`**: Open the `pyproject.toml` file in the root of the ChemGraph project.
-> 2. Find the line containing `"mace-torch>=0.3.13",` in the `dependencies` list.
-> 3. Comment out this line by adding a `#` at the beginning (e.g., `#    "mace-torch>=0.3.13",`).
+> 2. Find the line containing `"mace-torch",` in the `dependencies` list.
+> 3. Comment out this line by adding a `#` at the beginning (e.g., `#    "mace-torch",`).
 > 4. **Install UMA extras**: Run `pip install -e ".[uma]"`.
 > 5. **(Optional) Restore `pyproject.toml`**: After installation, you can uncomment the `mace-torch` line if you still need it for other purposes in the same environment. Be aware that `mace-torch` might not function correctly due to the `e3nn` version mismatch (`e3nn>=0.5` will be present for UMA).
 >
@@ -153,12 +158,13 @@ If you need to install from source for the latest version:
 
 2. **Explore Example Notebooks**: Navigate to the `notebooks/` directory to explore various example notebooks demonstrating different capabilities of ChemGraph.
 
-   - **[Single-Agent System with MACE](notebooks/Demo_single_agent.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with MACE/xTB support.
+   - **[Single-Agent System with MACE](notebooks/1_Demo_single_agent.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with MACE/xTB support.
 
    - **[Single-Agent System with UMA](notebooks/Demo_single_agent_UMA.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with UMA support.
 
-   - **[Multi-Agent System](notebooks/Demo_multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where different agents (Planner, Executor and Aggregator) handle various tasks exemplifying the collaborative potential of ChemGraph.
+   - **[Multi-Agent System](notebooks/2_Demo-multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where different agents (Planner, Executor and Aggregator) handle various tasks exemplifying the collaborative potential of ChemGraph.
 
+   - **[Model Context Protocol (MCP) Server](notebooks/3_MCP_server.ipynb)**: This notebook demonstrates how to run an MCP server and connect to ChemGraph.
    - **[Single-Agent System with gRASPA](notebooks/Demo_graspa_agent.ipynb)**: This notebook provides a sample guide on executing a gRASPA simulation using a single agent. For gRASPA-related installation instructions, visit the [gRASPA GitHub repository](https://github.com/snurr-group/gRASPA). The notebook's functionality has been validated on a single compute node at ALCF Polaris.
 
    - **[Infrared absorption spectrum prediction](notebooks/Demo_infrared_spectrum.ipynb)**: This notebook demonstrates how to calculate an infrared absorption spectrum.
@@ -208,7 +214,7 @@ pip install -e ".[uma]"
 
 2. **Launch the Streamlit app**:
    ```bash
-   streamlit run ui/app.py
+   streamlit run src/ui/app.py
    ```
 
 3. **Access the interface**: Open your browser to `http://localhost:8501`
@@ -312,6 +318,7 @@ presence_penalty = 0.0
 [api.openai]
 base_url = "https://api.openai.com/v1"
 timeout = 30
+argo_user = ""
 
 [api.anthropic]
 base_url = "https://api.anthropic.com"
@@ -391,28 +398,6 @@ validate_keys = true
 rate_limit = true
 # Max requests per minute
 max_requests_per_minute = 60
-
-# Environment-specific configurations
-[environments]
-[environments.development]
-model = "gpt-4o-mini"
-temperature = 0.2
-verbose = true
-enable_cache = false
-
-[environments.production]
-model = "gpt-4o"
-temperature = 0.1
-verbose = false
-enable_cache = true
-rate_limit = true
-
-[environments.testing]
-model = "gpt-4o-mini"
-temperature = 0.0
-verbose = true
-enable_cache = false
-max_tokens = 1000
 ```
 
 ### Using Configuration Files
@@ -427,19 +412,48 @@ chemgraph --config config.toml -q "What is the SMILES string for water?"
 chemgraph --config config.toml -q "Optimize methane" -m gpt-4o --verbose
 ```
 
-#### Environment-Specific Configuration
+#### Using Argo (Argonne Internal)
 
-Set the `CHEMGRAPH_ENV` environment variable to use environment-specific settings:
+ChemGraph supports Argo through its OpenAI-compatible endpoint.
+
+1. Set your Argo/OpenAI base URL in `config.toml`:
+
+```toml
+[api.openai]
+base_url = "https://apps-dev.inside.anl.gov/argoapi/v1"
+timeout = 30
+argo_user = "<your_anl_domain_username>"
+```
+
+2. Set environment variables:
 
 ```bash
-# Use development environment settings
-export CHEMGRAPH_ENV=development
-chemgraph --config config.toml -q "Your query"
+# Required by OpenAI-compatible clients in ChemGraph; for Argo use your ANL username
+export OPENAI_API_KEY="<your_anl_domain_username>"
 
-# Use production environment settings
-export CHEMGRAPH_ENV=production
-chemgraph --config config.toml -q "Your query"
+# Optional fallback only: used when api.openai.argo_user is not set in config.toml
+export ARGO_USER="<your_anl_domain_username>"
 ```
+
+3. Use an Argo model ID (from `supported_argo_models` in `src/chemgraph/models/supported_models.py`):
+
+```text
+gpt4o, gpt4olatest, gpto3mini, gpto1, gpto3, gpto4mini,
+gpt41, gpt41mini, gpt41nano, gpt5, gpt5mini, gpt5nano, gpt51, gpt52,
+gemini25pro, gemini25flash,
+claudeopus46, claudeopus45, claudeopus41, claudeopus4,
+claudehaiku45, claudesonnet45, claudesonnet4, claudesonnet35v2, claudehaiku35
+```
+
+4. Run with config:
+
+```bash
+chemgraph --config config.toml -m gpt4olatest -q "calculate the energy for water molecule using mace_mp"
+```
+
+Notes:
+- Argo endpoints are available on Argonne internal network (or VPN on an Argonne-managed machine).
+- For current Argo endpoint guidance and policy updates, refer to your internal Argo documentation.
 
 ### Configuration Sections
 
@@ -453,7 +467,6 @@ chemgraph --config config.toml -q "Your query"
 | `[logging]`      | Logging configuration and verbosity levels              |
 | `[features]`     | Feature flags and experimental settings                 |
 | `[security]`     | Security settings and rate limiting                     |
-| `[environments]` | Environment-specific configuration overrides            |
 
 ### Command Line Interface
 
@@ -476,10 +489,10 @@ pip install -e .
 chemgraph -q "What is the SMILES string for water?"
 
 # With model selection
-chemgraph -q "Optimize methane geometry" -m gpt-4o
+chemgraph -q "Optimize methane geometry using MACE" -m gpt-4o
 
 # With report generation
-chemgraph -q "Calculate CO2 vibrational frequencies" -r
+chemgraph -q "Calculate CO2 vibrational frequencies using DFT with NWChem" -r
 
 # Using configuration file
 chemgraph --config config.toml -q "Your query here"
@@ -519,7 +532,7 @@ chemgraph -q "Your query" -m claude-3-opus-20240229
 # Google models
 chemgraph -q "Your query" -m gemini-1.5-pro
 
-# Local models (requires vLLM server)
+# Local/OpenAI-compatible endpoints
 chemgraph -q "Your query" -m llama-3.1-70b-instruct
 ```
 
@@ -602,20 +615,6 @@ chemgraph --help
 Use TOML configuration files for consistent settings:
 
 ```bash
-chemgraph --config config.toml -q "Your query"
-```
-
-#### Environment Variables
-
-Set environment-specific configurations:
-
-```bash
-# Use development settings
-export CHEMGRAPH_ENV=development
-chemgraph --config config.toml -q "Your query"
-
-# Use production settings
-export CHEMGRAPH_ENV=production
 chemgraph --config config.toml -q "Your query"
 ```
 
@@ -757,269 +756,127 @@ chemgraph/
 </details>
 
 <details>
-  <summary><strong>Running Local Models with vLLM</strong></summary>
-This section describes how to set up and run local language models using the vLLM inference server.
+  <summary><strong>Running With External LLM Endpoints</strong></summary>
 
-### Inference Backend Setup (Remote/Local)
+ChemGraph no longer provides an in-repo vLLM Docker stack. For local or hosted model inference, run your preferred OpenAI-compatible endpoint separately and configure ChemGraph with:
 
-#### Virtual Python Environment
-All instructions below must be executed within a Python virtual environment. Ensure the virtual environment uses the same Python version as your project (e.g., Python 3.11).
+- model name
+- API key environment variable
+- optional base URL (for non-default endpoints)
 
-**Example 1: Using conda**
-```bash
-conda create -n vllm-env python=3.11 -y
-conda activate vllm-env
-```
-
-**Example 2: Using python venv**
-```bash
-python3.11 -m venv vllm-env
-source vllm-env/bin/activate  # On Windows use `vllm-env\\Scripts\\activate`
-```
-
-#### Install Inference Server (vLLM)
-vLLM is recommended for serving many transformer models efficiently.
-
-**Basic vLLM installation from source:**
-Make sure your virtual environment is activated.
-```bash
-# Ensure git is installed
-git clone https://github.com/vllm-project/vllm.git
-cd vllm
-pip install -e .
-```
-For specific hardware acceleration (e.g., CUDA, ROCm), refer to the [official vLLM installation documentation](https://docs.vllm.ai/en/latest/getting_started/installation.html).
-
-#### Running the vLLM Server (Standalone)
-
-A script is provided at `scripts/run_vllm_server.sh` to help start a vLLM server with features like logging, retry attempts, and timeout. This is useful for running vLLM outside of Docker Compose, for example, directly on a machine with GPU access.
-
-**Before running the script:**
-1.  Ensure your vLLM Python virtual environment is activated.
-    ```bash
-    # Example: if you used conda
-    # conda activate vllm-env 
-    # Example: if you used python venv
-    # source path/to/your/vllm-env/bin/activate
-    ```
-2.  Make the script executable:
-    ```bash
-    chmod +x scripts/run_vllm_server.sh
-    ```
-
-**To run the script:**
+For hosted providers:
 
 ```bash
-./scripts/run_vllm_server.sh [MODEL_IDENTIFIER] [PORT] [MAX_MODEL_LENGTH]
+export OPENAI_API_KEY="your_openai_api_key_here"
+export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
+export GEMINI_API_KEY="your_gemini_api_key_here"
 ```
 
--   `[MODEL_IDENTIFIER]` (optional): The Hugging Face model identifier. Defaults to `facebook/opt-125m`.
--   `[PORT]` (optional): The port for the vLLM server. Defaults to `8001`.
--   `[MAX_MODEL_LENGTH]` (optional): The maximum model length. Defaults to `4096`.
-
-**Example:**
-```bash
-./scripts/run_vllm_server.sh meta-llama/Meta-Llama-3-8B-Instruct 8001 8192
-```
-
-**Important Note on Gated Models (e.g., Llama 3):**
-Many models, such as those from the Llama family by Meta, are gated and require you to accept their terms of use on Hugging Face and use an access token for download. 
-
-To use such models with vLLM (either via the script or Docker Compose):
-1.  **Hugging Face Account and Token**: Ensure you have a Hugging Face account and have generated an access token with `read` permissions. You can find this in your Hugging Face account settings under "Access Tokens".
-2.  **Accept Model License**: Navigate to the Hugging Face page of the specific model you want to use (e.g., `meta-llama/Meta-Llama-3-8B-Instruct`) and accept its license/terms if prompted.
-3.  **Environment Variables**: Before running the vLLM server (either via the script or `docker-compose up`), you need to set the following environment variables in your terminal session or within your environment configuration (e.g., `.bashrc`, `.zshrc`, or by passing them to Docker Compose if applicable):
-    ```bash
-    export HF_TOKEN="your_hugging_face_token_here"
-    # Optional: Specify a directory for Hugging Face to download models and cache.
-    # export HF_HOME="/path/to/your/huggingface_cache_directory"
-    ```
-    vLLM will use these environment variables to authenticate with Hugging Face and download the model weights.
-
-The script will:
-- Attempt to start the vLLM OpenAI-compatible API server.
-- Log output to a file in the `logs/` directory (created if it doesn't exist at the project root).
-- The server runs in the background via `nohup`.
-
-This standalone script is an alternative to running vLLM via Docker Compose and is primarily for users who manage their vLLM instances directly.
+Then run CLI, Streamlit, or notebooks normally.
 </details>
 
 <details>
-  <summary><strong>Docker Support with Docker Compose (Recommended for vLLM)</strong></summary>
+  <summary><strong>Docker Support (Jupyter, Streamlit, MCP)</strong></summary>
 
-This project uses Docker Compose to manage multi-container applications, providing a consistent development and deployment environment. This setup allows you to run the `chemgraph` (with JupyterLab) and a local vLLM model server as separate, inter-communicating services.
+The Docker setup is now a single ChemGraph image with profile-based runtime modes:
 
-**Prerequisites**
+- `jupyter` (JupyterLab)
+- `streamlit` (web UI)
+- `mcp` (MCP server over streamable HTTP)
 
-- [Docker](https://docs.docker.com/get-docker/) installed on your system.
-- [Docker Compose](https://docs.docker.com/compose/install/) installed on your system.
-- [vllm](https://github.com/vllm-project/vllm) cloned into the project root. `git clone https://github.com/vllm-project/vllm.git`
+See full guide: [`docs/docker_support.md`](docs/docker_support.md)
 
-**Overview**
-
-The `docker-compose.yml` file defines two main services:
-1.  **`jupyter_lab`**: 
-    *   Builds from the main `Dockerfile`.
-    *   Runs JupyterLab, allowing you to interact with the notebooks and agent code.
-    *   Is configured to communicate with the `vllm_server`.
-2.  **`vllm_server`**:
-    *   Builds from `Dockerfile.arm` by default (located in the project root), which is suitable for running vLLM on macOS (Apple Silicon / ARM-based CPUs). This Dockerfile is a modified version intended for CPU execution.
-    *   For other operating systems or hardware (e.g., Linux with NVIDIA GPUs), you will need to use a different Dockerfile. The vLLM project provides a collection of Dockerfiles for various architectures (CPU, CUDA, ROCm, etc.) available at [https://github.com/vllm-project/vllm/tree/main/docker](https://github.com/vllm-project/vllm/tree/main/docker). You would need to adjust the `docker-compose.yml` to point to the appropriate Dockerfile and context (e.g., by cloning the vLLM repository locally and referencing a Dockerfile within it).
-    *   Starts an OpenAI-compatible API server using vLLM, serving a pre-configured model (e.g., `meta-llama/Llama-3-8B-Instruct` as per the current `docker-compose.yml`).
-    *   Listens on port 8000 within the Docker network (and is exposed to host port 8001 by default).
-
-**Building and Running with Docker Compose**
-
-Navigate to the root directory of the project (where `docker-compose.yml` is located) and run:
+**Quick start**
 
 ```bash
-docker-compose up --build
+docker compose build
 ```
 
-**Note on Hugging Face Token (`HF_TOKEN`):**
-Many models, including the default `meta-llama/Llama-3-8B-Instruct`, are gated and require Hugging Face authentication. To provide your Hugging Face token to the `vllm_server` service:
-
-1.  **Create a `.env` file** in the root directory of the project (the same directory as `docker-compose.yml`).
-2.  Add your Hugging Face token to this file:
-    ```
-    HF_TOKEN="your_actual_hugging_face_token_here"
-    ```
-    
-Docker Compose will automatically load this variable when you run `docker-compose up`. The `vllm_server` in `docker-compose.yml` is configured to use this environment variable.
-
-Breakdown of the command:
-- `docker-compose up`: Starts or restarts all services defined in `docker-compose.yml`.
-- `--build`: Forces Docker Compose to build the images before starting the containers. This is useful if you've made changes to `Dockerfile`, `Dockerfile.arm` (or other vLLM Dockerfiles), or project dependencies.
-
-After running this command:
-- The vLLM server will start, and its logs will be streamed to your terminal.
-- JupyterLab will start, and its logs will also be streamed. JupyterLab will be accessible in your web browser at `http://localhost:8888`. No token is required by default.
-
-To stop the services, press `Ctrl+C` in the terminal where `docker-compose up` is running. To stop and remove the containers, you can use `docker-compose down`.
-
-### Configuring Notebooks to Use the Local vLLM Server
-
-When you initialize `ChemGraph` in your Jupyter notebooks (running within the `jupyter_lab` service), you can now point to the local vLLM server:
-
-1.  **Model Name**: Use the Hugging Face identifier of the model being served by vLLM (e.g., `meta-llama/Llama-3-8B-Instruct` as per default in `docker-compose.yml`).
-2.  **Base URL & API Key**: These are automatically passed as environment variables (`VLLM_BASE_URL` and `OPENAI_API_KEY`) to the `jupyter_lab` service by `docker-compose.yml`. The agent code in `llm_agent.py` has been updated to automatically use these environment variables if a model name is provided that isn't in the pre-defined supported lists (OpenAI, Ollama, ALCF, Anthropic).
-
-**Example in a notebook:**
-
-```python
-from chemgraph.agent.llm_agent import ChemGraph
-
-# The model name should match what vLLM is serving.
-# The base_url and api_key will be picked up from environment variables
-# set in docker-compose.yml if this model_name is not a standard one.
-agent = ChemGraph(
-    model_name="meta-llama/Llama-3-8B-Instruct", # Or whatever model is configured in docker-compose.yml
-    workflow_type="single_agent", 
-    # No need to explicitly pass base_url or api_key here if using the docker-compose setup
-)
-
-# Now you can run the agent
-# response = agent.run("What is the SMILES string for water?")
-# print(response)
-```
-
-The `jupyter_lab` service will connect to `http://vllm_server:8000/v1` (as defined by `VLLM_BASE_URL` in `docker-compose.yml`) to make requests to the language model.
-
-### GPU Support for vLLM (Advanced)
-
-The provided `Dockerfile.arm` and the default `docker-compose.yml` setup are configured for CPU-based vLLM (suitable for macOS). To enable GPU support (typically on Linux with NVIDIA GPUs):
-
-1.  **Choose the Correct vLLM Dockerfile**:
-    *   Do **not** use `Dockerfile.arm`.
-    *   You will need to use a Dockerfile from the official vLLM repository designed for CUDA. Clone the vLLM repository (e.g., into a `./vllm` subdirectory in your project) or use it as a submodule.
-    *   A common choice is `vllm/docker/Dockerfile` (for CUDA) or a specific version like `vllm/docker/Dockerfile.cuda-12.1`. Refer to [vLLM Dockerfiles](https://github.com/vllm-project/vllm/tree/main/docker) for options.
-2.  **Modify `docker-compose.yml`**:
-    *   Change the `build.context` for the `vllm_server` service to point to your local clone of the vLLM repository (e.g., `./vllm`).
-    *   Change the `build.dockerfile` to the path of the CUDA-enabled Dockerfile within that context (e.g., `docker/Dockerfile`).
-    *   Uncomment and configure the `deploy.resources.reservations.devices` section for the `vllm_server` service to grant it GPU access.
-
-    ```yaml
-    # ... in docker-compose.yml, for vllm_server:
-    # build:
-    #   context: ./vllm  # Path to your local vLLM repo clone
-    #   dockerfile: docker/Dockerfile # Path to the CUDA Dockerfile within the vLLM repo
-    # ...
-    # environment:
-      # Remove or comment out:
-      # - VLLM_CPU_ONLY=1 
-      # ...
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1 # or 'all'
-              capabilities: [gpu]
-    ```
-3.  **NVIDIA Container Toolkit**: Ensure you have the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed on your host system for Docker to recognize and use NVIDIA GPUs.
-4.  **Build Arguments**: Some official vLLM Dockerfiles accept build arguments (e.g., `CUDA_VERSION`, `PYTHON_VERSION`). You might need to pass these via the `build.args` section in `docker-compose.yml`.
-
-    ```yaml
-    # ... in docker-compose.yml, for vllm_server build:
-    # args:
-    #   - CUDA_VERSION=12.1.0 
-    #   - PYTHON_VERSION=3.10 
-    ```
-    Consult the specific vLLM Dockerfile you choose for available build arguments.
-
-### Running Only JupyterLab (for External LLM Services)
-
-If you prefer to use external LLM services like OpenAI, Claude, or other hosted providers instead of running a local vLLM server, you can run only the JupyterLab service:
+Run JupyterLab:
 
 ```bash
-docker-compose up jupyter_lab
+docker compose --profile jupyter up
 ```
 
-This will start only the JupyterLab container without the vLLM server. In this setup:
+Run Streamlit:
 
-1. **JupyterLab Access**: JupyterLab will be available at `http://localhost:8888`
-2. **LLM Configuration**: In your notebooks, configure the agent to use external services by providing appropriate model names and API keys:
-
-**Example for OpenAI:**
-```python
-import os
-from chemgraph.agent.llm_agent import ChemGraph
-
-# Set your OpenAI API key as an environment variable or pass it directly
-os.environ["OPENAI_API_KEY"] = "your-openai-api-key-here"
-
-agent = ChemGraph(
-    model_name="gpt-4",  # or "gpt-3.5-turbo", "gpt-4o", etc.
-    workflow_type="single_agent"
-)
+```bash
+docker compose --profile streamlit up
 ```
 
-**Example for Anthropic Claude:**
-```python
-import os
-from chemgraph.agent.llm_agent import ChemGraph
+Run MCP server:
 
-# Set your Anthropic API key
-os.environ["ANTHROPIC_API_KEY"] = "your-anthropic-api-key-here"
-
-agent = ChemGraph(
-    model_name="claude-3-sonnet-20240229",  # or other Claude models
-    workflow_type="single_agent_ase"
-)
+```bash
+docker compose --profile mcp up
 ```
 
-**Available Environment Variables for External Services:**
-- `OPENAI_API_KEY`: For OpenAI models
-- `ANTHROPIC_API_KEY`: For Anthropic Claude models
-- `GEMINI_API_KEY`: For Gemini models
+**Ports**
 
-### Working with Example Notebooks
+- JupyterLab: `8888`
+- Streamlit: `8501`
+- MCP (HTTP): `9003`
 
-Once JupyterLab is running (via `docker-compose up` or `docker-compose up jupyter_lab`), you can navigate to the `notebooks/` directory within the JupyterLab interface to open and run the example notebooks. Modify them as shown above to use either the locally served vLLM model or external LLM services.
+### Running With Colmena
 
-### Notes on TBLite Python API
+If you use [Colmena](https://github.com/exalearn/colmena), run ChemGraph services in containers and let Colmena orchestrate tasks:
 
-The `tblite` package is installed via pip within the `jupyter_lab` service. For the full Python API functionality of TBLite (especially for XTB), you might need to follow separate installation instructions as mentioned in the [TBLite documentation](https://tblite.readthedocs.io/en/latest/installation.html). If you require this, you may need to modify the main `Dockerfile` to include these additional installation steps or perform them inside a running container and commit the changes to a new image for the `jupyter_lab` service.
+1. Start one of the Docker modes above (`jupyter`, `streamlit`, or `mcp`).
+2. In your Colmena workflow, choose one integration pattern:
+   - call the ChemGraph CLI inside a worker task (e.g., `chemgraph -q ...`)
+   - connect to the MCP server (`docker compose --profile mcp up`) from your worker/client
+3. Mount the same project/output volume if Colmena workers and Docker run on the same host.
+
+Use this as an orchestration layer: Colmena schedules tasks; ChemGraph handles chemistry execution.
+</details>
+
+<details>
+  <summary><strong>Model Context Protocol (MCP) Servers</strong></summary>
+
+ChemGraph provides several **MCP servers** that expose its capabilities as standardized tools conforming to the [Model Context Protocol](https://modelcontextprotocol.io/). These can be connected to MCP-compliant clients or other agentic frameworks.
+
+### Available Servers
+
+The servers are located in `src/chemgraph/mcp/`:
+
+*   **`mcp_tools.py`**: General-purpose chemistry tools powered by ASE. Supports:
+    *   Geometry optimization (GetStructure, RunASE)
+    *   Energy/Thermochemistry calculations
+    *   File I/O (handling XYZ, JSON, etc.)
+*   **`mace_mcp_parsl.py`**: Tools for running **MACE** (Machine Learning Potential) simulations.
+    *   Supports single-structure calculations.
+    *   Supports **ensemble** calculations (directories of structures) using **Parsl** for parallel execution on HPC systems (e.g., Polaris, Aurora).
+*   **`graspa_mcp_parsl.py`**: Tools for **gRASPA** simulations (Gas Adsorption in MOFs).
+    *   Supports single and ensemble runs via Parsl.
+*   **`data_analysis_mcp.py`**: Tools for analyzing simulation results.
+    *   Aggregating JSONL logs from ensemble runs into CSV/DataFrames.
+    *   Plotting isotherms and other data.
+
+### Running a Server
+
+You can run the servers using Python. They support both `stdio` (default) and `streamable_http` (SSE) transports.
+
+**Basic Usage (stdio)**
+Connect this directly to your MCP client (e.g., Claude Desktop config):
+
+```bash
+python src/chemgraph/mcp/mcp_tools.py
+```
+
+**Using HTTP/SSE**
+To run a server that listens for HTTP connections (useful for remote deployment or debugging):
+
+```bash
+python src/chemgraph/mcp/mcp_tools.py --transport streamable_http --port 8000
+```
+
+**Configuration via Arguments**
+All servers in `src/chemgraph/mcp/` support the following arguments:
+*   `--transport`: `stdio` (default) or `streamable_http`.
+*   `--port`: Port number (for HTTP transport).
+*   `--host`: Host address (default: 127.0.0.1).
+
+**Note on HPC Servers:**
+For `mace_mcp_parsl.py` and `graspa_mcp_parsl.py`, ensure your environment is configured for the target HPC system if running actual parallel jobs. They leverage `chemgraph.hpc_configs` to load system-specific Parsl configurations (like `polaris` or `aurora`).
 
 </details>
 
@@ -1037,17 +894,20 @@ pre-commit install
 <details>
   <summary><strong>Citation</strong></summary>
     
-    If you use ChemGraph in your research, please cite our work:
+  If you use ChemGraph in your research, please cite our work:
     
-    ```bibtex
-    @article{pham2025chemgraph,
-    title={ChemGraph: An Agentic Framework for Computational Chemistry Workflows},
-    author={Pham, Thang D and Tanikanti, Aditya and Keçeli, Murat},
-    journal={arXiv preprint arXiv:2506.06363},
-    year={2025}
-    url={https://arxiv.org/abs/2506.06363}
+  ```bibtex
+    @article{pham_chemgraph_2026,
+      title = {{ChemGraph} as an agentic framework for computational chemistry workflows},
+      issn = {2399-3669},
+      url = {https://doi.org/10.1038/s42004-025-01776-9},
+      doi = {10.1038/s42004-025-01776-9},
+      journaltitle = {Communications Chemistry},
+      shortjournal = {Communications Chemistry},
+      author = {Pham, Thang D. and Tanikanti, Aditya and Ke\c{c}eli, Murat},
+      date = {2026-01-08},
     }
-    ```
+  ```
  </details>
 <details>
   <summary><strong>Acknowledgments</strong></summary>

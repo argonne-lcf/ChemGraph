@@ -1,8 +1,7 @@
 from langgraph.graph import StateGraph, START, END
-from langchain_core.messages import ToolMessage
-import json
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import ToolNode
 from chemgraph.tools.ase_tools import (
     run_ase,
     save_atomsdata_to_file,
@@ -10,11 +9,11 @@ from chemgraph.tools.ase_tools import (
 )
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
-    smiles_to_atomsdata,
+    smiles_to_coordinate_file,
 )
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator
-from chemgraph.models.agent_response import ResponseFormatter
+from chemgraph.schemas.agent_response import ResponseFormatter
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
@@ -26,65 +25,34 @@ from chemgraph.state.state import State
 logger = setup_logger(__name__)
 
 
-class BasicToolNode:
-    """A node that executes tools requested in the last AIMessage.
-
-    This class processes tool calls from AI messages and executes the corresponding
-    tools, handling their results and any potential errors.
-
-    Parameters
-    ----------
-    tools : list
-        List of tool objects that can be called by the node
-
-    Attributes
-    ----------
-    tools_by_name : dict
-        Dictionary mapping tool names to their corresponding tool objects
-    """
-
-    def __init__(self, tools: list) -> None:
-        self.tools_by_name = {tool.name: tool for tool in tools}
-
-    def __call__(self, inputs: State) -> State:
-        if messages := inputs.get("messages", []):
-            message = messages[-1]
+def _tool_call_signature(tool_calls) -> tuple:
+    """Create a comparable signature for a list of tool calls."""
+    signature = []
+    for call in tool_calls or []:
+        name = call.get("name") if isinstance(call, dict) else None
+        args = call.get("args", {}) if isinstance(call, dict) else {}
+        # Normalize args for deterministic comparisons across repeated cycles.
+        if isinstance(args, dict):
+            args_sig = tuple(sorted(args.items()))
         else:
-            raise ValueError("No message found in input")
+            args_sig = str(args)
+        signature.append((name, args_sig))
+    return tuple(signature)
 
-        outputs = []
-        for tool_call in message.tool_calls:
-            try:
-                tool_name = tool_call.get("name")
-                if not tool_name or tool_name not in self.tools_by_name:
-                    raise ValueError(f"Invalid tool name: {tool_name}")
 
-                tool_result = self.tools_by_name[tool_name].invoke(tool_call.get("args", {}))
+def _is_repeated_tool_cycle(messages) -> bool:
+    """Detect if the most recent AI tool-call set repeats the previous AI tool-call set."""
+    ai_with_calls = []
+    for message in messages:
+        if hasattr(message, "tool_calls") and getattr(message, "tool_calls", None):
+            ai_with_calls.append(message)
 
-                # Handle different types of tool results
-                result_content = (
-                    tool_result.dict()
-                    if hasattr(tool_result, "dict")
-                    else (tool_result if isinstance(tool_result, dict) else str(tool_result))
-                )
+    if len(ai_with_calls) < 2:
+        return False
 
-                outputs.append(
-                    ToolMessage(
-                        content=json.dumps(result_content),
-                        name=tool_name,
-                        tool_call_id=tool_call.get("id", ""),
-                    )
-                )
-
-            except Exception as e:
-                outputs.append(
-                    ToolMessage(
-                        content=json.dumps({"error": str(e)}),
-                        name=tool_name if tool_name else "unknown_tool",
-                        tool_call_id=tool_call.get("id", ""),
-                    )
-                )
-        return {"messages": outputs}
+    last_calls = _tool_call_signature(ai_with_calls[-1].tool_calls)
+    prev_calls = _tool_call_signature(ai_with_calls[-2].tool_calls)
+    return bool(last_calls) and last_calls == prev_calls
 
 
 def route_tools(state: State):
@@ -107,8 +75,30 @@ def route_tools(state: State):
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
     if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+        if not isinstance(state, list) and _is_repeated_tool_cycle(messages):
+            return "done"
         return "tools"
     return "done"
+
+
+def route_report_tools(state: State):
+    """Route report tool execution and stop if a report was already generated."""
+    if isinstance(state, list):
+        messages = state
+        ai_message = state[-1] if state else None
+    elif messages := state.get("messages", []):
+        ai_message = messages[-1]
+    else:
+        raise ValueError(f"No messages found in input state to tool_edge: {state}")
+
+    if not (hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0):
+        return "done"
+
+    report_exists = any(
+        isinstance(message, dict) and message.get("name") == "generate_html"
+        for message in messages
+    )
+    return "done" if report_exists else "tools"
 
 
 def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
@@ -135,7 +125,7 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
     if tools is None:
         tools = [
             file_to_atomsdata,
-            smiles_to_atomsdata,
+            smiles_to_coordinate_file,
             run_ase,
             molecule_name_to_smiles,
             save_atomsdata_to_file,
@@ -174,7 +164,10 @@ def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     response = llm_structured_output.invoke(messages).model_dump_json()
     return {"messages": [response]}
 
-def ReportAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=[generate_html]):
+
+def ReportAgent(
+    state: State, llm: ChatOpenAI, system_prompt: str, tools=[generate_html]
+):
     """LLM node that generates a report from the messages.
 
     Parameters
@@ -245,30 +238,34 @@ def construct_single_agent_graph(
         if tools is None:
             tools = [
                 file_to_atomsdata,
-                smiles_to_atomsdata,
+                smiles_to_coordinate_file,
                 run_ase,
                 molecule_name_to_smiles,
                 save_atomsdata_to_file,
                 calculator,
             ]
-        tool_node = BasicToolNode(tools=tools)
+        tool_node = ToolNode(tools=tools)
         graph_builder = StateGraph(State)
 
         if not structured_output:
             graph_builder.add_node(
                 "ChemGraphAgent",
-                lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                lambda state: ChemGraphAgent(
+                    state, llm, system_prompt=system_prompt, tools=tools
+                ),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_edge(START, "ChemGraphAgent")
 
             if generate_report:
-                tool_node_report = BasicToolNode(tools=[generate_html])
+                tool_node_report = ToolNode(tools=[generate_html])
                 graph_builder.add_node("report_tools", tool_node_report)
 
                 graph_builder.add_node(
                     "ReportAgent",
-                    lambda state: ReportAgent(state, llm, system_prompt=report_prompt, tools=[generate_html]),
+                    lambda state: ReportAgent(
+                        state, llm, system_prompt=report_prompt, tools=[generate_html]
+                    ),
                 )
                 graph_builder.add_conditional_edges(
                     "ChemGraphAgent",
@@ -297,12 +294,16 @@ def construct_single_agent_graph(
         else:
             graph_builder.add_node(
                 "ChemGraphAgent",
-                lambda state: ChemGraphAgent(state, llm, system_prompt=system_prompt, tools=tools),
+                lambda state: ChemGraphAgent(
+                    state, llm, system_prompt=system_prompt, tools=tools
+                ),
             )
             graph_builder.add_node("tools", tool_node)
             graph_builder.add_node(
                 "ResponseAgent",
-                lambda state: ResponseAgent(state, llm, formatter_prompt=formatter_prompt),
+                lambda state: ResponseAgent(
+                    state, llm, formatter_prompt=formatter_prompt
+                ),
             )
             graph_builder.add_conditional_edges(
                 "ChemGraphAgent",

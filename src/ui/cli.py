@@ -13,26 +13,28 @@ import time
 import os
 import signal
 import threading
+import asyncio
 import platform
-from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from contextlib import contextmanager
 
 # Rich imports for beautiful terminal output
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.markdown import Markdown
-from rich.prompt import Prompt, Confirm
-from rich.live import Live
-from rich.layout import Layout
+from rich.prompt import Prompt
 from rich.align import Align
 
 # ChemGraph imports
 from chemgraph.models.supported_models import all_supported_models
+from chemgraph.utils.config_utils import (
+    flatten_config,
+    get_argo_user_from_flat_config,
+    get_base_url_for_model_from_flat_config,
+)
 
 # Initialize rich console
 console = Console()
@@ -42,18 +44,7 @@ console = Console()
 def timeout(seconds):
     """Context manager for timeout functionality - works on Unix and Windows."""
     if platform.system() == "Windows":
-        # Use threading-based timeout for Windows
-        result = [None]
-        exception = [None]
-
-        def target():
-            try:
-                # This will be overridden by the actual operation
-                pass
-            except Exception as e:
-                exception[0] = e
-
-        # For Windows, we'll handle timeout differently in the actual implementation
+        # Signals are unavailable on Windows; no-op timeout in this context.
         yield
         return
 
@@ -274,6 +265,30 @@ def list_models():
     )
 
 
+def run_async_callable(fn):
+    """Run an async callable and return its result in sync context."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(fn())
+
+    result_container = {}
+    error_container = {}
+
+    def runner():
+        try:
+            result_container["value"] = asyncio.run(fn())
+        except Exception as exc:
+            error_container["error"] = exc
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    thread.join()
+    if "error" in error_container:
+        raise error_container["error"]
+    return result_container.get("value")
+
+
 def check_api_keys_status():
     """Display API key availability status."""
     console.print(Panel("🔑 API Key Status", style="bold cyan"))
@@ -348,49 +363,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
             config = toml.load(f)
         console.print(f"[green]✓[/green] Configuration loaded from {config_file}")
 
-        # Flatten nested configuration for backward compatibility
-        flattened = {}
-
-        # Handle general settings
-        if "general" in config:
-            flattened.update(config["general"])
-
-        # Handle API settings
-        if "api" in config:
-            for provider, settings in config["api"].items():
-                for key, value in settings.items():
-                    flattened[f"api_{provider}_{key}"] = value
-
-        # Handle chemistry settings
-        if "chemistry" in config:
-            for section, settings in config["chemistry"].items():
-                for key, value in settings.items():
-                    flattened[f"chemistry_{section}_{key}"] = value
-
-        # Handle output settings
-        if "output" in config:
-            for section, settings in config["output"].items():
-                for key, value in settings.items():
-                    flattened[f"output_{section}_{key}"] = value
-
-        # Handle other top-level sections
-        for section in ["logging", "features", "security", "advanced"]:
-            if section in config:
-                if isinstance(config[section], dict):
-                    for key, value in config[section].items():
-                        if isinstance(value, dict):
-                            for subkey, subvalue in value.items():
-                                flattened[f"{section}_{key}_{subkey}"] = subvalue
-                        else:
-                            flattened[f"{section}_{key}"] = value
-                else:
-                    flattened[section] = config[section]
-
-        # Handle environment-specific settings
-        if "environments" in config:
-            env = os.getenv("CHEMGRAPH_ENV", "development")
-            if env in config["environments"]:
-                flattened.update(config["environments"][env])
+        flattened = flatten_config(config)
 
         return flattened
 
@@ -409,18 +382,22 @@ def initialize_agent(
     return_option: str,
     generate_report: bool,
     recursion_limit: int,
+    base_url: str = None,
+    argo_user: str = None,
     verbose: bool = False,
 ):
     """Initialize ChemGraph agent with progress indication."""
 
     if verbose:
-        console.print(f"[blue]Initializing agent with:[/blue]")
+        console.print("[blue]Initializing agent with:[/blue]")
         console.print(f"  Model: {model_name}")
         console.print(f"  Workflow: {workflow_type}")
         console.print(f"  Structured Output: {structured_output}")
         console.print(f"  Return Option: {return_option}")
         console.print(f"  Generate Report: {generate_report}")
         console.print(f"  Recursion Limit: {recursion_limit}")
+        console.print(f"  Base URL: {base_url}")
+        console.print(f"  Argo User: {argo_user}")
 
     # Check API keys before attempting initialization
     api_key_available, error_msg = check_api_keys(model_name)
@@ -450,6 +427,8 @@ def initialize_agent(
                 agent = ChemGraph(
                     model_name=model_name,
                     workflow_type=workflow_type,
+                    base_url=base_url,
+                    argo_user=argo_user,
                     generate_report=generate_report,
                     return_option=return_option,
                     recursion_limit=recursion_limit,
@@ -461,16 +440,16 @@ def initialize_agent(
             return agent
 
         except TimeoutError:
-            progress.update(task, description=f"[red]Agent initialization timed out!")
+            progress.update(task, description="[red]Agent initialization timed out!")
             console.print(
-                f"[red]✗ Agent initialization timed out after 30 seconds[/red]"
+                "[red]✗ Agent initialization timed out after 30 seconds[/red]"
             )
             console.print(
                 "[dim]💡 This might indicate network issues or invalid API credentials[/dim]"
             )
             return None
         except Exception as e:
-            progress.update(task, description=f"[red]Agent initialization failed!")
+            progress.update(task, description="[red]Agent initialization failed!")
             console.print(f"[red]✗ Error initializing agent: {e}[/red]")
 
             # Provide more helpful error messages
@@ -577,7 +556,7 @@ def run_query(agent, query: str, thread_id: int, verbose: bool = False):
 
         try:
             config = {"configurable": {"thread_id": thread_id}}
-            result = agent.run(query, config=config)
+            result = run_async_callable(lambda: agent.run(query, config=config))
 
             progress.update(task, description="[green]Query completed!")
             time.sleep(0.5)
@@ -585,7 +564,7 @@ def run_query(agent, query: str, thread_id: int, verbose: bool = False):
             return result
 
         except Exception as e:
-            progress.update(task, description=f"[red]Query failed!")
+            progress.update(task, description="[red]Query failed!")
             console.print(f"[red]✗ Error processing query: {e}[/red]")
             return None
 
@@ -603,7 +582,7 @@ def interactive_mode():
 
     # Get initial configuration
     model = Prompt.ask(
-        "Select model", choices=all_supported_models, default="gpt-4o-mini"
+        "Select model (or type a custom model ID)", default="gpt-4o-mini"
     )
     workflow = Prompt.ask(
         "Select workflow",
@@ -612,7 +591,9 @@ def interactive_mode():
     )
 
     # Initialize agent
-    agent = initialize_agent(model, workflow, False, "state", True, 20, verbose=True)
+    agent = initialize_agent(
+        model, workflow, False, "state", True, 20, verbose=True
+    )
     if not agent:
         return
 
@@ -659,13 +640,10 @@ Example queries:
                 continue
             elif query.startswith("model "):
                 new_model = query[6:].strip()
-                if new_model in all_supported_models:
-                    model = new_model
-                    agent = initialize_agent(model, workflow, False, "state", True, 20)
-                    if agent:
-                        console.print(f"[green]✓ Model changed to: {model}[/green]")
-                else:
-                    console.print(f"[red]✗ Invalid model: {new_model}[/red]")
+                model = new_model
+                agent = initialize_agent(model, workflow, False, "state", True, 20)
+                if agent:
+                    console.print(f"[green]✓ Model changed to: {model}[/green]")
                 continue
             elif query.startswith("workflow "):
                 new_workflow = query[9:].strip()
@@ -734,12 +712,19 @@ def main():
         for key, value in config.items():
             if hasattr(args, key) and getattr(args, key) is None:
                 setattr(args, key, value)
+        # Honor config recursion_limit unless user explicitly provided CLI flag.
+        if "recursion_limit" in config and "--recursion-limit" not in sys.argv:
+            args.recursion_limit = config["recursion_limit"]
 
-    # Validate model
+    base_url = (
+        get_base_url_for_model_from_flat_config(args.model, config) if config else None
+    )
+    argo_user = get_argo_user_from_flat_config(config) if config else None
+
     if args.model not in all_supported_models:
-        console.print(f"[red]✗ Invalid model: {args.model}[/red]")
-        console.print("Use --list-models to see available models.")
-        sys.exit(1)
+        console.print(
+            f"[yellow]⚠ Using custom model ID: {args.model} (not in curated list)[/yellow]"
+        )
 
     # Require query for non-interactive mode
     if not args.query:
@@ -760,7 +745,9 @@ def main():
         args.output,
         args.report,
         args.recursion_limit,
-        args.verbose,
+        base_url=base_url,
+        argo_user=argo_user,
+        verbose=args.verbose,
     )
 
     if not agent:

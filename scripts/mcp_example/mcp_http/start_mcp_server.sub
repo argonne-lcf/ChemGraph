@@ -1,0 +1,17 @@
+#!/bin/bash -l
+#PBS -l walltime=01:00:00
+#PBS -l select=1
+#PBS -l filesystems=home:flare
+#PBS -q debug
+#PBS -A your_account
+#PBE -N ChemGraph
+
+cd $PBS_O_WORKDIR
+
+export http_proxy="proxy.alcf.anl.gov:3128"
+export https_proxy="proxy.alcf.anl.gov:3128"
+
+module load frameworks
+source /path/to/venv/bin/activate
+
+python start_mcp_server.py
