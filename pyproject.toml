@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemgraphagent"
-version = "0.3.0"
+version = "0.3.2"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
