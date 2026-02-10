@@ -3,12 +3,9 @@ name: Test PyPI Package
 on:
   push:
     branches: [ main ]
-  # Temporarily disabled on PRs to avoid blocking dev->main while
-  # the currently published PyPI metadata still reflects older deps.
-  # Re-enable this block after publishing the next release.
-  # pull_request:
-  #   branches: [ main ]
-  #   types: [opened, synchronize, reopened, ready_for_review]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
@@ -17,11 +14,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-        exclude:
-          # Current PyPI metadata may still pull tblite on this lane.
-          # Exclude until a new release is published without tblite in base deps.
-          - os: macos-latest
-            python-version: "3.13"
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -36,7 +28,7 @@ jobs:
 
     - name: Install chemgraphagent from PyPI
       run: |
-        pip install chemgraphagent
+        pip install --no-cache-dir --upgrade "chemgraphagent==0.3.0"
 
     - name: Verify package installation
       run: |
@@ -57,3 +49,4 @@ jobs:
     - name: Check package version
       run: |
         pip show chemgraphagent
+        python -c "from importlib.metadata import version; v=version('chemgraphagent'); print('Installed:', v); assert v=='0.3.0', f'Expected 0.3.0, got {v}'"
