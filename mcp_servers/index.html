@@ -9,10 +9,10 @@
       
       
       
-        <link rel="prev" href="../installation/">
+        <link rel="prev" href="../streamlit_web_interface/">
       
       
-        <link rel="next" href="../streamlit_web_interface/">
+        <link rel="next" href="../configuration_with_toml/">
       
       
         
@@ -23,7 +23,7 @@
     
     
       
-        <title>Example Usage - ChemGraph Docs</title>
+        <title>MCP Servers - ChemGraph Docs</title>
       
     
     
@@ -75,6 +75,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#available-servers" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -105,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Example Usage
+              MCP Servers
             
           </span>
         </div>
@@ -264,11 +269,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../example_usage/" class="md-tabs__link">
         
   
   
@@ -304,9 +307,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../mcp_servers/" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -574,17 +579,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../example_usage/" class="md-nav__link">
         
   
   
@@ -600,7 +598,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -636,10 +633,35 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../mcp_servers/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Servers
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -655,6 +677,107 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#available-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available servers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run-a-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run a server
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Run a server">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#stdio-transport-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        stdio transport (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streamable-http-transport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        streamable HTTP transport
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-cli-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common CLI options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#docker-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docker mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-for-parsl-based-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes for Parsl-based servers
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -893,6 +1016,97 @@
   
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#available-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available servers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run-a-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run a server
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Run a server">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#stdio-transport-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        stdio transport (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#streamable-http-transport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        streamable HTTP transport
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-cli-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Common CLI options
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#docker-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docker mode
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#notes-for-parsl-based-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notes for Parsl-based servers
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -911,118 +1125,40 @@
   
 
 
-  <h1>Example Usage</h1>
+  <h1>MCP Servers</h1>
 
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>Before exploring example usage in the <code>notebooks/</code> directory, ensure you have specified the necessary API tokens in your environment. </p>
+<p>ChemGraph exposes tools through Model Context Protocol (MCP) servers in <code>src/chemgraph/mcp/</code>.</p>
 </div>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">OpenAI API Key</label><label for="__tabbed_1_2">Anthropic API Key</label><label for="__tabbed_1_3">Google AI Studio (Gemini) API Key</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<ol>
-<li>
-<p>Log in to your OpenAI account at the OpenAI Platform website. If you don't have an account, you'll need to create one first.</p>
-</li>
-<li>
-<p>Navigate to the API keys section. You can find this by clicking on your profile icon in the top-right corner and selecting "API keys."</p>
-</li>
-<li>
-<p>Click the + Create new secret key button.</p>
-</li>
-<li>
-<p>Give your key a descriptive name (e.g., "ChemGraph").</p>
-</li>
-<li>
-<p>Click Create secret key. A new key will be generated.</p>
-</li>
-<li>
-<p>Copy the key and save it in a secure location. You will not be able to see it again after this step.</p>
-</li>
-<li>
-<p>Set the key in your environment using the command provided in the instructions:
-     <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Unix or macOS</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>setx<span class="w"> </span>OPENAI_API_KEY<span class="w"> </span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Windows</span>
-</span></code></pre></div></p>
-</li>
-<li>Restart your terminal or IDE to ensure the environment variable is loaded.</li>
-</ol>
-</div>
-<div class="tabbed-block">
-<ol>
-<li>
-<p>Sign up or log in to your Anthropic account at the <a href="https://console.anthropic.com/">Anthropic console</a>.</p>
-</li>
-<li>
-<p>In the left-hand navigation menu, select API Keys.</p>
-</li>
-<li>
-<p>Click on the option to create a new API key.</p>
-</li>
-<li>
-<p>Provide a name for your API key (e.g., "ChemGraph").</p>
-</li>
-<li>
-<p>Click Create Key again.</p>
-</li>
-<li>
-<p>Copy the generated key and store it securely, as you may not be able to view it again.</p>
-</li>
-<li>
-<p>Set the key in your environment using the command provided in the instructions:
-     <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Unix or macOS</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>setx<span class="w"> </span>ANTHROPIC_API_KEY<span class="w"> </span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Windows</span>
-</span></code></pre></div></p>
-</li>
-<li>Restart your terminal or IDE to ensure the environment variable is loaded.</li>
-</ol>
-</div>
-<div class="tabbed-block">
-<ol>
-<li>
-<p>Go to the Google AI Studio website at <a href="https://ai.google.com/studio">Google AI Studio</a> and sign in with your Google account.</p>
-</li>
-<li>
-<p>In the left-hand menu, select Get API key.</p>
-</li>
-<li>
-<p>Click the Create API key in new project button. A new key will be instantly generated.</p>
-</li>
-<li>
-<p>Copy the API key by clicking the copy icon next to it.</p>
-</li>
-<li>
-<p>Set the key as an environment variable:
-     <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Unix or macOS</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>setx<span class="w"> </span>GOOGLE_API_KEY<span class="w"> </span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Windows</span>
-</span></code></pre></div></p>
-</li>
-<li>Restart your terminal or IDE to ensure the environment variable is loaded.</li>
-</ol>
-</div>
-</div>
-</div>
-<details class="info" open="open">
-<summary><strong>Explore Example Notebooks</strong></summary>
-<p>Navigate to the <code>notebooks/</code> directory to explore various example notebooks demonstrating different capabilities of ChemGraph.</p>
+<h2 id="available-servers">Available servers</h2>
 <ul>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/1_Demo_single_agent.ipynb">Single-Agent System with MACE</a></strong>: This notebook demonstrates how a single agent can utilize multiple tools with MACE/xTB support.</p>
-</li>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/Demo_single_agent_UMA.ipynb">Single-Agent System with UMA</a></strong>: This notebook demonstrates how a single agent can utilize multiple tools with UMA support.</p>
-</li>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/Demo-multi_agent.ipynb">Multi-Agent System</a></strong>: This notebook demonstrates a multi-agent setup where different agents (Planner, Executor and Aggregator) handle various tasks exemplifying the collaborative potential of ChemGraph.</p>
-</li>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/3_MCP_server.ipynb">Model Context Protocol (MCP) Server</a></strong>: This notebook shows how to run and connect to ChemGraph MCP tooling.</p>
-</li>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/Demo_graspa_agent.ipynb">Single-Agent System with gRASPA</a></strong>: This notebook provides a sample guide on executing a gRASPA simulation using a single agent. For gRASPA-related installation instructions, visit the <a href="https://github.com/snurr-group/gRASPA">gRASPA GitHub repository</a>. The notebook's functionality has been validated on a single compute node at ALCF Polaris.</p>
-</li>
+<li><code>mcp_tools.py</code>: general ASE-powered chemistry tools</li>
+<li><code>mace_mcp_parsl.py</code>: MACE + Parsl workflows</li>
+<li><code>graspa_mcp_parsl.py</code>: gRASPA + Parsl workflows</li>
+<li><code>data_analysis_mcp.py</code>: analysis utilities for generated results</li>
 </ul>
-</details>
+<h2 id="run-a-server">Run a server</h2>
+<h3 id="stdio-transport-default">stdio transport (default)</h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools
+</span></code></pre></div>
+<h3 id="streamable-http-transport">streamable HTTP transport</h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
+</span></code></pre></div>
+<h2 id="common-cli-options">Common CLI options</h2>
+<p>All MCP servers use:</p>
+<ul>
+<li><code>--transport</code> with <code>stdio</code> or <code>streamable_http</code></li>
+<li><code>--host</code> for HTTP mode</li>
+<li><code>--port</code> for HTTP mode</li>
+</ul>
+<h2 id="docker-mode">Docker mode</h2>
+<p>You can run MCP server mode with Docker Compose:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>mcp<span class="w"> </span>up
+</span></code></pre></div>
+<p>Endpoint: <code>http://localhost:9003</code></p>
+<h2 id="notes-for-parsl-based-servers">Notes for Parsl-based servers</h2>
+<p><code>mace_mcp_parsl.py</code> and <code>graspa_mcp_parsl.py</code> rely on Parsl and HPC-specific configuration. Ensure your environment is prepared for the target system before running production jobs.</p>
 
 
 
@@ -1052,7 +1188,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../installation/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Installation">
+          <a href="../streamlit_web_interface/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Streamlit Web Interface">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1062,20 +1198,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                Installation
+                Streamlit Web Interface
               </div>
             </div>
           </a>
         
         
           
-          <a href="../streamlit_web_interface/" class="md-footer__link md-footer__link--next" aria-label="Next: Streamlit Web Interface">
+          <a href="../configuration_with_toml/" class="md-footer__link md-footer__link--next" aria-label="Next: Configuration with TOML">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Streamlit Web Interface
+                Configuration with TOML
               </div>
             </div>
             <div class="md-footer__button md-icon">

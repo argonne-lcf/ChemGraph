@@ -9,7 +9,7 @@
       
       
       
-        <link rel="prev" href="../streamlit_web_interface/">
+        <link rel="prev" href="../mcp_servers/">
       
       
         <link rel="next" href="../project_structure/">
@@ -307,6 +307,25 @@
   
   
   
+  
+    <li class="md-tabs__item">
+      <a href="../mcp_servers/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  MCP Servers
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
     
   
   
@@ -374,7 +393,7 @@
   
     
   
-  Docker Support with Docker Compose (Recommended for vLLM)
+  Docker Support
 
       </a>
     </li>
@@ -614,6 +633,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../mcp_servers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Servers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -707,10 +753,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#environment-specific-configuration" class="md-nav__link">
+  <a href="#argoopenai-compatible-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Environment-Specific Configuration
+        Argo/OpenAI-Compatible Endpoints
       
     </span>
   </a>
@@ -986,7 +1032,7 @@
   <span class="md-ellipsis">
     
   
-    Docker Support with Docker Compose (Recommended for vLLM)
+    Docker Support
   
 
     
@@ -1166,10 +1212,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#environment-specific-configuration" class="md-nav__link">
+  <a href="#argoopenai-compatible-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Environment-Specific Configuration
+        Argo/OpenAI-Compatible Endpoints
       
     </span>
   </a>
@@ -1544,16 +1590,14 @@
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Override specific settings</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Optimize methane&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o<span class="w"> </span>--verbose
 </span></code></pre></div>
-<h4 id="environment-specific-configuration">Environment-Specific Configuration</h4>
-<p>Set the <code>CHEMGRAPH_ENV</code> environment variable to use environment-specific settings:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Use development environment settings</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_ENV</span><span class="o">=</span>development
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># Use production environment settings</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_ENV</span><span class="o">=</span>production
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span>
+<h4 id="argoopenai-compatible-endpoints">Argo/OpenAI-Compatible Endpoints</h4>
+<p>For Argo or any OpenAI-compatible endpoint, set <code>api.openai.base_url</code> in <code>config.toml</code>.
+Optional <code>api.openai.argo_user</code> can also be configured.</p>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[api.openai]</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">base_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://apps-dev.inside.anl.gov/argoapi/v1&quot;</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">argo_user</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;your_argo_username&quot;</span>
 </span></code></pre></div>
+<p><code>ARGO_USER</code> is only used as a fallback when <code>argo_user</code> is not provided in <code>config.toml</code>.</p>
 <h3 id="configuration-sections">Configuration Sections</h3>
 <table>
 <thead>
@@ -1879,7 +1923,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../streamlit_web_interface/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Streamlit Web Interface">
+          <a href="../mcp_servers/" class="md-footer__link md-footer__link--prev" aria-label="Previous: MCP Servers">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1889,7 +1933,7 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                Streamlit Web Interface
+                MCP Servers
               </div>
             </div>
           </a>
