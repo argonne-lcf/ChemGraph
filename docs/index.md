@@ -5,3 +5,8 @@
 !!! info "ChemGraph"
 
     ChemGraph supports diverse simulation backends, including ab initio quantum chemistry methods (e.g. coupled-cluster, DFT via NWChem, ORCA), semi-empirical methods (e.g., XTB via TBLite), and machine learning potentials (e.g, MACE, UMA) through a modular integration with `ASE`.
+
+!!! tip "Docker Image"
+
+    ChemGraph Docker images are published to GHCR at `ghcr.io/argonne-lcf/chemgraph`.
+    See [Docker Support](docker_support.md) for build, run, and publishing details.
