@@ -859,16 +859,45 @@ def extract_messages_from_result(result):
         return [result]  # Treat as single message
 
 
+def normalize_message_content(content: Any) -> str:
+    """Convert varying message content payloads (str/list/dict) into plain text."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                else:
+                    parts.append(str(item))
+            else:
+                parts.append(str(item))
+        return "\n".join(p for p in parts if p)
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str):
+            return text
+        return str(content)
+    return str(content)
+
+
 # Helper: find structure data in messages
 def find_structure_in_messages(messages):
     """Look through all messages to find structure data."""
     for message in messages:
         if hasattr(message, "content") or isinstance(message, dict):
-            content = (
+            raw_content = (
                 getattr(message, "content", "")
                 if hasattr(message, "content")
                 else message.get("content", "")
             )
+            content = normalize_message_content(raw_content)
             structure = extract_molecular_structure(content)
             if structure:
                 return structure
@@ -1349,9 +1378,9 @@ if st.session_state.conversation_history:
             # Handle different message formats
             if hasattr(message, "content") and hasattr(message, "type"):
                 # LangChain message object
-                if message.type == "ai" and message.content.strip():
+                content = normalize_message_content(message.content).strip()
+                if message.type == "ai" and content:
                     # Skip if it's just JSON structure data
-                    content = message.content.strip()
                     if not (
                         content.startswith("{")
                         and content.endswith("}")
@@ -1361,8 +1390,8 @@ if st.session_state.conversation_history:
                         break
             elif isinstance(message, dict):
                 # Dictionary message format
-                if message.get("type") == "ai" and message.get("content", "").strip():
-                    content = message["content"].strip()
+                content = normalize_message_content(message.get("content", "")).strip()
+                if message.get("type") == "ai" and content:
                     if not (
                         content.startswith("{")
                         and content.endswith("}")
@@ -1372,7 +1401,7 @@ if st.session_state.conversation_history:
                         break
             elif hasattr(message, "content"):
                 # Generic message object with content
-                content = getattr(message, "content", "").strip()
+                content = normalize_message_content(getattr(message, "content", "")).strip()
                 if content and not (
                     content.startswith("{")
                     and content.endswith("}")
