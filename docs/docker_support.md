@@ -113,3 +113,20 @@ docker run --rm -it -p 9003:9003 -v "$PWD:/app" chemgraph:local \
 - If you need local LLM serving, run it as a separate service outside this Docker setup and point ChemGraph to that endpoint via model/base URL configuration.
 - Compose startup also runs `git config --global --add safe.directory /app` to avoid
   Git "dubious ownership" errors in notebooks/Streamlit when the repo is bind-mounted.
+- The default `Dockerfile` installs `nwchem` and `tblite` with conda-forge.
+
+## Publish to GHCR
+
+A GitHub Actions workflow (`.github/workflows/ghcr-publish.yml`) publishes the Docker image to:
+
+- `ghcr.io/<org-or-user>/chemgraph:<tag>`
+- `ghcr.io/<org-or-user>/chemgraph:sha-<commit>`
+
+How to publish:
+
+```bash
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+You can also trigger the workflow manually from Actions with `workflow_dispatch`.

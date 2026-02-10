@@ -7,6 +7,7 @@
 ![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)
 ![Conda Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/conda-tests.yml/badge.svg)
 ![Test PyPI Package](https://github.com/argonne-lcf/ChemGraph/actions/workflows/test-pypi-package.yml/badge.svg)
+[![GHCR](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/argonne-lcf/ChemGraph/pkgs/container/chemgraph)
 
 <details>
   <summary><strong>Overview</strong></summary>
