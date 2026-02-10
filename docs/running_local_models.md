@@ -33,7 +33,7 @@ For specific hardware acceleration (e.g., CUDA, ROCm), refer to the [official vL
 
 #### Running the vLLM Server (Standalone)
 
-A script is provided at `scripts/run_vllm_server.sh` to help start a vLLM server with features like logging, retry attempts, and timeout. This is useful for running vLLM outside of Docker Compose, for example, directly on a machine with GPU access.
+A script is provided at `scripts/run_vllm_server.sh` to help start a vLLM server with features like logging, retry attempts, and timeout. This is intended for running vLLM as a separate standalone service (for example, on a machine with GPU access).
 
 **Before running the script:**
 1.  Ensure your vLLM Python virtual environment is activated.
@@ -66,10 +66,10 @@ A script is provided at `scripts/run_vllm_server.sh` to help start a vLLM server
 ???+ info "**Important Note on Gated Models (e.g., Llama 3):**"
     - Many models, such as those from the Llama family by Meta, are gated and require you to accept their terms of use on Hugging Face and use an access token for download. 
 
-    - To use such models with vLLM (either via the script or Docker Compose):
+    - To use such models with vLLM:
         1. **Hugging Face Account and Token**: Ensure you have a Hugging Face account and have generated an access token with `read` permissions. You can find this in your Hugging Face account settings under "Access Tokens".
         2.  **Accept Model License**: Navigate to the Hugging Face page of the specific model you want to use (e.g., `meta-llama/Meta-Llama-3-8B-Instruct`) and accept its license/terms if prompted.
-        3.  **Environment Variables**: Before running the vLLM server (either via the script or `docker-compose up`), you need to set the following environment variables in your terminal session or within your environment configuration (e.g., `.bashrc`, `.zshrc`, or by passing them to Docker Compose if applicable):
+        3.  **Environment Variables**: Before running the vLLM server, set the following environment variables in your terminal session or environment configuration (e.g., `.bashrc`, `.zshrc`):
             ```bash
             export HF_TOKEN="your_hugging_face_token_here"
             # Optional: Specify a directory for Hugging Face to download models and cache.
@@ -82,4 +82,4 @@ A script is provided at `scripts/run_vllm_server.sh` to help start a vLLM server
         - Log output to a file in the `logs/` directory (created if it doesn't exist at the project root).
         - The server runs in the background via `nohup`.
 
-    - This standalone script is an alternative to running vLLM via Docker Compose and is primarily for users who manage their vLLM instances directly.
+    - This standalone script is the recommended approach for users who manage their own vLLM instances directly.

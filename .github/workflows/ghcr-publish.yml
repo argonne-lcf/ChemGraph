@@ -11,8 +11,18 @@ permissions:
   packages: write
 
 jobs:
-  build-and-push:
+  build-arch-images:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            dockerfile: Dockerfile
+          - arch: arm64
+            platform: linux/arm64
+            dockerfile: Dockerfile.arm
 
     steps:
       - name: Checkout code
@@ -37,6 +47,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build and push ${{ matrix.arch }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.prep.outputs.image }}:build-${{ github.sha }}-${{ matrix.arch }}
+
+  create-manifest:
+    runs-on: ubuntu-latest
+    needs: build-arch-images
+
+    steps:
+      - name: Prepare image name
+        id: prep
+        run: |
+          owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          echo "image=ghcr.io/${owner}/chemgraph" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -45,13 +85,22 @@ jobs:
           tags: |
             type=ref,event=tag
             type=sha,prefix=sha-
+            type=raw,value=latest
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Create and push multi-arch manifests
+        env:
+          IMAGE: ${{ steps.prep.outputs.image }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker buildx imagetools create \
+              -t "$tag" \
+              "${IMAGE}:build-${GITHUB_SHA}-amd64" \
+              "${IMAGE}:build-${GITHUB_SHA}-arm64"
+          done <<< "$TAGS"
+
+      - name: Inspect latest manifest
+        env:
+          IMAGE: ${{ steps.prep.outputs.image }}
+        run: docker buildx imagetools inspect "${IMAGE}:latest"

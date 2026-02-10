@@ -52,8 +52,8 @@
 
       5. Set the key as an environment variable:
          ```bash
-         export GOOGLE_API_KEY="your_api_key_here"  # On Unix or macOS
-         setx GOOGLE_API_KEY "your_api_key_here"  # On Windows
+         export GEMINI_API_KEY="your_api_key_here"  # On Unix or macOS
+         setx GEMINI_API_KEY "your_api_key_here"  # On Windows
          ```
       6. Restart your terminal or IDE to ensure the environment variable is loaded.
 

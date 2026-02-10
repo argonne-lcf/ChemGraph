@@ -1,6 +1,6 @@
 !!! note
     Docker setup is now intentionally simplified and does **not** include vLLM.
-    The same ChemGraph image can be launched in three modes: JupyterLab, Streamlit UI, or MCP server.
+    The same ChemGraph image can be launched in four modes: JupyterLab, Streamlit UI, MCP server, or interactive CLI.
 
 ## Prerequisites
 
@@ -12,6 +12,45 @@
 - `Dockerfile`: standard ChemGraph container image
 - `Dockerfile.arm`: ARM-friendly variant (same runtime goals, no vLLM)
 - `docker-compose.yml`: profile-based launcher for Jupyter/Streamlit/MCP
+
+## Use Published GHCR Image (No Local Build)
+
+If you do not want a local install, run the published container image directly:
+
+Run JupyterLab:
+
+```bash
+docker run --rm -it -p 8888:8888 ghcr.io/argonne-lcf/chemgraph:latest \
+  jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --LabApp.token=
+```
+
+Run Streamlit:
+
+```bash
+docker run --rm -it -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+```
+
+Run MCP server (HTTP):
+
+```bash
+docker run --rm -it -p 9003:9003 ghcr.io/argonne-lcf/chemgraph:latest \
+  python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
+```
+
+Run interactive CLI shell:
+
+```bash
+docker run --rm -it --entrypoint /bin/bash -v "$PWD:/work" -w /work \
+  ghcr.io/argonne-lcf/chemgraph:latest
+```
+
+Then inside the container:
+
+```bash
+chemgraph --help
+chemgraph --config config.toml -q "calculate the energy for smiles=O using mace_mp"
+```
 
 ## Build Image
 

@@ -22,6 +22,35 @@ ChemGraph supports diverse simulation backends, including ab initio quantum chem
 
 Ensure you have **Python 3.10 or higher** installed on your system. 
 
+**Install-Free Method (Docker from GHCR)**
+
+Run ChemGraph without local Python/package installation:
+
+For complete Docker usage (GHCR, compose modes, environment variables, and publishing), see [`docs/docker_support.md`](docs/docker_support.md).
+
+Then launch one of:
+
+```bash
+# JupyterLab
+docker run --rm -it -p 8888:8888 ghcr.io/argonne-lcf/chemgraph:latest \
+  jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --LabApp.token=
+
+# Streamlit
+docker run --rm -it -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+
+# MCP server (HTTP)
+docker run --rm -it -p 9003:9003 ghcr.io/argonne-lcf/chemgraph:latest \
+  python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
+
+# Interactive CLI shell
+docker run --rm -it --entrypoint /bin/bash -v "$PWD:/work" -w /work \
+  ghcr.io/argonne-lcf/chemgraph:latest
+# then run: chemgraph --config config.toml -q "your query"
+```
+
+For `config.toml` options and provider/base URL settings, see [`docs/configuration_with_toml.md`](docs/configuration_with_toml.md).
+
 **Install from PyPI (Recommended)**
 
 The easiest way to install ChemGraph is from PyPI:
@@ -777,38 +806,54 @@ Then run CLI, Streamlit, or notebooks normally.
 </details>
 
 <details>
-  <summary><strong>Docker Support (Jupyter, Streamlit, MCP)</strong></summary>
+  <summary><strong>Docker Support (Jupyter, Streamlit, MCP, CLI)</strong></summary>
 
 The Docker setup is now a single ChemGraph image with profile-based runtime modes:
 
 - `jupyter` (JupyterLab)
 - `streamlit` (web UI)
 - `mcp` (MCP server over streamable HTTP)
+- `cli` (interactive shell with `chemgraph` command)
 
 See full guide: [`docs/docker_support.md`](docs/docker_support.md)
 
 **Quick start**
 
+Run JupyterLab (install-free):
+
+```bash
+docker run --rm -it -p 8888:8888 ghcr.io/argonne-lcf/chemgraph:latest \
+  jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --LabApp.token=
+```
+
+Run Streamlit (install-free):
+
+```bash
+docker run --rm -it -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+```
+
+Run MCP server (install-free):
+
+```bash
+docker run --rm -it -p 9003:9003 ghcr.io/argonne-lcf/chemgraph:latest \
+  python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
+```
+
+Run interactive CLI shell (install-free):
+
+```bash
+docker run --rm -it --entrypoint /bin/bash -v "$PWD:/work" -w /work \
+  ghcr.io/argonne-lcf/chemgraph:latest
+# then run: chemgraph --config config.toml -q "your query"
+```
+
+If you want source-mounted development mode with Docker Compose, use:
+
 ```bash
 docker compose build
-```
-
-Run JupyterLab:
-
-```bash
 docker compose --profile jupyter up
-```
-
-Run Streamlit:
-
-```bash
-docker compose --profile streamlit up
-```
-
-Run MCP server:
-
-```bash
-docker compose --profile mcp up
+# or --profile streamlit / --profile mcp
 ```
 
 **Ports**

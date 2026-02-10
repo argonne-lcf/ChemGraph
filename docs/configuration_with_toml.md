@@ -122,28 +122,6 @@ validate_keys = true
 rate_limit = true
 # Max requests per minute
 max_requests_per_minute = 60
-
-# Environment-specific configurations
-[environments]
-[environments.development]
-model = "gpt-4o-mini"
-temperature = 0.2
-verbose = true
-enable_cache = false
-
-[environments.production]
-model = "gpt-4o"
-temperature = 0.1
-verbose = false
-enable_cache = true
-rate_limit = true
-
-[environments.testing]
-model = "gpt-4o-mini"
-temperature = 0.0
-verbose = true
-enable_cache = false
-max_tokens = 1000
 ```
 
 ### Using Configuration Files
@@ -183,7 +161,6 @@ argo_user = "your_argo_username"
 | `[logging]`      | Logging configuration and verbosity levels              |
 | `[features]`     | Feature flags and experimental settings                 |
 | `[security]`     | Security settings and rate limiting                     |
-| `[environments]` | Environment-specific configuration overrides            |
 
 ### Command Line Interface
 
@@ -249,7 +226,7 @@ chemgraph -q "Your query" -m claude-3-opus-20240229
 # Google models
 chemgraph -q "Your query" -m gemini-1.5-pro
 
-# Local models (requires vLLM server)
+# Local models (OpenAI-compatible local endpoint)
 chemgraph -q "Your query" -m llama-3.1-70b-instruct
 ```
 
@@ -337,17 +314,8 @@ chemgraph --config config.toml -q "Your query"
 
 #### Environment Variables
 
-Set environment-specific configurations:
-
-```bash
-# Use development settings
-export CHEMGRAPH_ENV=development
-chemgraph --config config.toml -q "Your query"
-
-# Use production settings
-export CHEMGRAPH_ENV=production
-chemgraph --config config.toml -q "Your query"
-```
+Provider keys and optional endpoint settings are read from environment variables
+and `config.toml` (for example, `api.openai.base_url` and `api.openai.argo_user`).
 
 #### Advanced Options
 

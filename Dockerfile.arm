@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN conda install -y -c conda-forge \
     python=3.11 \
     rdkit \
+    nwchem \
+    tblite \
     && conda clean -afy
 
 RUN pip install --no-cache-dir . && \
