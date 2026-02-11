@@ -1573,7 +1573,10 @@ if st.session_state.conversation_history:
                                     for i, row in df.iterrows()
                                 }
                                 selected_freq = st.selectbox(
-                                    "Frequency", list(freq_options.keys()), index=0
+                                    "Frequency",
+                                    list(freq_options.keys()),
+                                    index=0,
+                                    key=f"ir_frequency_select_{idx}",
                                 )
                                 traj_file = df.loc[freq_options[selected_freq]][
                                     "filename"
