@@ -812,15 +812,16 @@ def find_html_filename(messages: list) -> Optional[str]:
     # Search through messages in reverse order (most recent first)
     for message in reversed(messages):
         # Extract content from different message formats
-        content = ""
+        raw_content = ""
         if hasattr(message, "content"):
-            content = getattr(message, "content", "")
+            raw_content = getattr(message, "content", "")
         elif isinstance(message, dict):
-            content = message.get("content", "")
+            raw_content = message.get("content", "")
         elif isinstance(message, str):
-            content = message
+            raw_content = message
         else:
-            content = str(message)
+            raw_content = str(message)
+        content = normalize_message_content(raw_content)
 
         # Search for HTML pattern in this message content
         if content:
@@ -982,7 +983,6 @@ def has_structure_signal(
         "run_ase",
         "file_to_atomsdata",
         "save_atomsdata_to_file",
-        "generate_html",
     }
     structure_markers = (
         ".xyz",
@@ -1513,21 +1513,18 @@ if st.session_state.conversation_history:
             else:
                 if has_structure_signal(messages, entry.get("query", ""), final_answer):
                     log_dir = extract_log_dir_from_messages(messages)
-                    latest_xyz = None
                     if log_dir and os.path.isdir(log_dir):
                         latest_xyz = find_latest_xyz_file_in_dir(log_dir)
-                    if latest_xyz is None:
-                        latest_xyz = find_latest_xyz_file()
-                    if latest_xyz:
-                        try:
-                            atoms = ase_read(latest_xyz)
-                            display_molecular_structure(
-                                atoms.get_atomic_numbers().tolist(),
-                                atoms.get_positions().tolist(),
-                                title=f"Structure from {Path(latest_xyz).name}",
-                            )
-                        except Exception as exc:
-                            st.warning(f"Failed to load XYZ structure: {exc}")
+                        if latest_xyz:
+                            try:
+                                atoms = ase_read(latest_xyz)
+                                display_molecular_structure(
+                                    atoms.get_atomic_numbers().tolist(),
+                                    atoms.get_positions().tolist(),
+                                    title=f"Structure from {Path(latest_xyz).name}",
+                                )
+                            except Exception as exc:
+                                st.warning(f"Failed to load XYZ structure: {exc}")
         html_filename = find_html_filename(messages)
         if html_filename:
             with st.expander("📊 Report", expanded=False):

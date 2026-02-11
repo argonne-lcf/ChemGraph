@@ -428,11 +428,13 @@ class ChemGraph:
 
             try:
                 git_commit = (
-                    subprocess.check_output(["git", "rev-parse", "HEAD"])
+                    subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+                    )
                     .decode("utf-8")
                     .strip()
                 )
-            except subprocess.CalledProcessError:
+            except (subprocess.CalledProcessError, FileNotFoundError):
                 git_commit = "unknown"
 
             # Base log info
