@@ -24,7 +24,10 @@ RUN conda install -y -c conda-forge \
     tblite \
     && conda clean -afy
 
-RUN pip install --no-cache-dir . && \
+# Validate calculator runtimes at build time.
+RUN which nwchem && python -c "import tblite"
+
+RUN pip install --no-cache-dir ".[calculators]" && \
     pip install --no-cache-dir jupyterlab
 
 RUN git config --system --add safe.directory /app

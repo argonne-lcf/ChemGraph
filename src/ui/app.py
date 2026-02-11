@@ -16,10 +16,8 @@ import pandas as pd
 import streamlit as st
 import toml
 
-from chemgraph.tools.ase_tools import (
-    create_ase_atoms,
-    create_xyz_string,
-)
+from chemgraph import __version__ as chemgraph_version
+from chemgraph.tools.ase_tools import create_ase_atoms, create_xyz_string
 from chemgraph.models.supported_models import (
     all_supported_models,
 )
@@ -30,8 +28,14 @@ from chemgraph.utils.config_utils import (
 )
 
 # Page configuration -- MUST be first Streamlit call
+app_version = (
+    chemgraph_version
+    if isinstance(chemgraph_version, str) and chemgraph_version != "unknown"
+    else "dev"
+)
+
 st.set_page_config(
-    page_title="ChemGraph",
+    page_title=f"ChemGraph v{app_version}",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -173,23 +177,8 @@ if page == "📖 About ChemGraph":
     
     ### 📚 Resources
     
-    #### 🐙 GitHub Repository
-    **Source Code & Documentation**  
-    [https://github.com/argonne-lcf/ChemGraph](https://github.com/argonne-lcf/ChemGraph)
-    
-    - ⭐ Star the repository to stay updated
-    - 📝 Submit issues and feature requests
-    - 🤝 Contribute to the open-source project
-    - 📖 Access detailed documentation and examples
-    
-    #### 📄 Research Paper
-    **ArXiv Preprint**  
-    [https://arxiv.org/abs/2506.06363](https://arxiv.org/abs/2506.06363)
-    
-    - 🔬 Read about the scientific methodology
-    - 📊 View benchmark results and case studies
-    - 🎯 Understand the technical architecture
-    - 📋 Cite this work in your research
+    - **GitHub**: [https://github.com/argonne-lcf/ChemGraph](https://github.com/argonne-lcf/ChemGraph)
+    - **Documentation**: [https://argonne-lcf.github.io/ChemGraph/](https://argonne-lcf.github.io/ChemGraph/)
     
     ### 🏛️ Developed at Argonne National Laboratory
     
@@ -203,17 +192,32 @@ if page == "📖 About ChemGraph":
     
     ### 🙏 Citation
     
-    If you use ChemGraph in your research, please cite our work:
+    If you use ChemGraph in your research, please cite our [work](https://doi.org/10.1038/s42004-025-01776-9):
     
     ```bibtex
-    @article{pham2025chemgraph,
-    title={ChemGraph: An Agentic Framework for Computational Chemistry Workflows},
-    author={Pham, Thang D and Tanikanti, Aditya and Keçeli, Murat},
-    journal={arXiv preprint arXiv:2506.06363},
-    year={2025}
-    url={https://arxiv.org/abs/2506.06363}
+    @article{pham_chemgraph_2026,
+    title = {{ChemGraph} as an agentic framework for computational chemistry workflows},
+    url = {https://doi.org/10.1038/s42004-025-01776-9},
+    doi = {10.1038/s42004-025-01776-9},
+    author = {Pham, Thang D. and Tanikanti, Aditya and Ke\c{c}eli, Murat},
+    date = {2026-01-08},
+    author={Pham, Thang D and Tanikanti, Aditya and Ke{\c{c}}eli, Murat},
+    journal={Communications Chemistry},
+    year={2026},
+    publisher={Nature Publishing Group UK London}
     }
     ```
+
+    ### 🙌 Acknowledgments
+
+    This research used resources of the Argonne Leadership Computing Facility, a U.S.
+    Department of Energy (DOE) Office of Science user facility at Argonne National
+    Laboratory and is based on research supported by the U.S. DOE Office of Science-
+    Advanced Scientific Computing Research Program, under Contract No. DE-AC02-
+    06CH11357. Our work leverages ALCF Inference Endpoints, which provide a robust API
+    for LLM inference on ALCF HPC clusters via Globus Compute. We are thankful to Serkan
+    Altuntas for his contributions to the user interface of ChemGraph and for insightful
+    discussions on AIOps.
     
     ---
     
@@ -412,6 +416,70 @@ elif page == "⚙️ Configuration":
     with tab2:
         st.subheader("API Settings")
 
+        st.markdown("**API Keys (Session Only)**")
+        st.caption(
+            "Keys entered here are applied to this Streamlit session via environment variables and are not saved to config.toml."
+        )
+
+        key_col1, key_col2 = st.columns(2)
+        with key_col1:
+            openai_api_key = st.text_input(
+                "OpenAI API Key",
+                value=st.session_state.get("ui_openai_api_key", ""),
+                type="password",
+                key="ui_openai_api_key_input",
+            )
+            anthropic_api_key = st.text_input(
+                "Anthropic API Key",
+                value=st.session_state.get("ui_anthropic_api_key", ""),
+                type="password",
+                key="ui_anthropic_api_key_input",
+            )
+        with key_col2:
+            gemini_api_key = st.text_input(
+                "Gemini API Key",
+                value=st.session_state.get("ui_gemini_api_key", ""),
+                type="password",
+                key="ui_gemini_api_key_input",
+            )
+            groq_api_key = st.text_input(
+                "Groq API Key",
+                value=st.session_state.get("ui_groq_api_key", ""),
+                type="password",
+                key="ui_groq_api_key_input",
+            )
+
+        key_env_map = {
+            "OPENAI_API_KEY": openai_api_key,
+            "ANTHROPIC_API_KEY": anthropic_api_key,
+            "GEMINI_API_KEY": gemini_api_key,
+            "GROQ_API_KEY": groq_api_key,
+        }
+
+        action_col1, action_col2 = st.columns(2)
+        with action_col1:
+            if st.button("Apply API Keys", key="apply_api_keys"):
+                applied = []
+                for env_name, key_value in key_env_map.items():
+                    clean_value = key_value.strip()
+                    if clean_value:
+                        os.environ[env_name] = clean_value
+                        st.session_state[f"ui_{env_name.lower()}"] = clean_value
+                        applied.append(env_name)
+                if applied:
+                    st.success(f"✅ Applied keys for: {', '.join(applied)}")
+                else:
+                    st.info("No API keys entered.")
+        with action_col2:
+            if st.button("Clear Session API Keys", key="clear_api_keys"):
+                for env_name in key_env_map:
+                    os.environ.pop(env_name, None)
+                    st.session_state.pop(f"ui_{env_name.lower()}", None)
+                    st.session_state.pop(f"ui_{env_name.lower()}_input", None)
+                st.success("✅ Cleared session API keys.")
+                st.rerun()
+
+        st.markdown("---")
         api_tabs = st.tabs(["OpenAI", "Anthropic", "Google", "Local"])
 
         with api_tabs[0]:
@@ -556,6 +624,7 @@ elif page == "⚙️ Configuration":
             "OPENAI_API_KEY": "OpenAI",
             "ANTHROPIC_API_KEY": "Anthropic",
             "GEMINI_API_KEY": "Google",
+            "GROQ_API_KEY": "Groq",
         }
 
         for env_var, provider in api_keys.items():
@@ -614,7 +683,7 @@ if selected_model in all_supported_models and structured_output:
 # Main Interface Header
 # -----------------------------------------------------------------------------
 
-st.title("🧪 ChemGraph ")
+st.title(f"🧪 ChemGraph v{app_version}")
 
 st.markdown(
     """
@@ -859,16 +928,45 @@ def extract_messages_from_result(result):
         return [result]  # Treat as single message
 
 
+def normalize_message_content(content: Any) -> str:
+    """Convert varying message content payloads (str/list/dict) into plain text."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+                else:
+                    parts.append(str(item))
+            else:
+                parts.append(str(item))
+        return "\n".join(p for p in parts if p)
+    if isinstance(content, dict):
+        text = content.get("text")
+        if isinstance(text, str):
+            return text
+        return str(content)
+    return str(content)
+
+
 # Helper: find structure data in messages
 def find_structure_in_messages(messages):
     """Look through all messages to find structure data."""
     for message in messages:
         if hasattr(message, "content") or isinstance(message, dict):
-            content = (
+            raw_content = (
                 getattr(message, "content", "")
                 if hasattr(message, "content")
                 else message.get("content", "")
             )
+            content = normalize_message_content(raw_content)
             structure = extract_molecular_structure(content)
             if structure:
                 return structure
@@ -1099,6 +1197,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
                 xyz_string,
                 f"{title.lower().replace(' ', '_')}.xyz",
                 mime="chemical/x-xyz",
+                key=f"xyz_download_{uuid4().hex}",
             )
 
             structure_json = json.dumps(
@@ -1115,6 +1214,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
                 structure_json,
                 f"{title.lower().replace(' ', '_')}.json",
                 mime="application/json",
+                key=f"json_download_{uuid4().hex}",
             )
 
         return True
@@ -1349,9 +1449,9 @@ if st.session_state.conversation_history:
             # Handle different message formats
             if hasattr(message, "content") and hasattr(message, "type"):
                 # LangChain message object
-                if message.type == "ai" and message.content.strip():
+                content = normalize_message_content(message.content).strip()
+                if message.type == "ai" and content:
                     # Skip if it's just JSON structure data
-                    content = message.content.strip()
                     if not (
                         content.startswith("{")
                         and content.endswith("}")
@@ -1361,8 +1461,8 @@ if st.session_state.conversation_history:
                         break
             elif isinstance(message, dict):
                 # Dictionary message format
-                if message.get("type") == "ai" and message.get("content", "").strip():
-                    content = message["content"].strip()
+                content = normalize_message_content(message.get("content", "")).strip()
+                if message.get("type") == "ai" and content:
                     if not (
                         content.startswith("{")
                         and content.endswith("}")
@@ -1372,7 +1472,9 @@ if st.session_state.conversation_history:
                         break
             elif hasattr(message, "content"):
                 # Generic message object with content
-                content = getattr(message, "content", "").strip()
+                content = normalize_message_content(
+                    getattr(message, "content", "")
+                ).strip()
                 if content and not (
                     content.startswith("{")
                     and content.endswith("}")

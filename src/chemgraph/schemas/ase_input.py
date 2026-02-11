@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field, model_validator
+import json
+from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import Union, Optional, Any, List, Type
 from chemgraph.schemas.atomsdata import AtomsData
 
@@ -218,3 +219,30 @@ class ASEOutputSchema(BaseModel):
         default=None,
         description="Total wall time (in seconds) taken to complete the simulation.",
     )
+
+    @field_validator("vibrational_frequencies", "ir_data", "thermochemistry", mode="before")
+    @classmethod
+    def _coerce_json_string_to_dict(cls, v: Any) -> dict:
+        """Accept dict-like payloads serialized as JSON strings."""
+        if v is None:
+            return {}
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            text = v.strip()
+            if not text:
+                return {}
+            try:
+                parsed = json.loads(text)
+                return parsed if isinstance(parsed, dict) else {}
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
+    @field_validator("error", mode="before")
+    @classmethod
+    def _coerce_error_to_string(cls, v: Any) -> str:
+        """Allow null/non-string error fields from intermediate tool payloads."""
+        if v is None:
+            return ""
+        return v if isinstance(v, str) else str(v)

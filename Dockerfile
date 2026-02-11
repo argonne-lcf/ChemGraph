@@ -25,8 +25,11 @@ RUN conda install -y -c conda-forge \
     tblite \
     && conda clean -afy
 
-# Install ChemGraph and UI runtime
-RUN pip install --no-cache-dir . && \
+# Validate calculator runtimes at build time.
+RUN which nwchem && python -c "import tblite"
+
+# Install ChemGraph (with calculator extras) and UI runtime
+RUN pip install --no-cache-dir ".[calculators]" && \
     pip install --no-cache-dir jupyterlab
 
 # Allow git commands in bind-mounted repo paths inside the container.
