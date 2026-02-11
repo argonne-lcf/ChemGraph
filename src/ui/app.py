@@ -177,23 +177,8 @@ if page == "📖 About ChemGraph":
     
     ### 📚 Resources
     
-    #### 🐙 GitHub Repository
-    **Source Code & Documentation**  
-    [https://github.com/argonne-lcf/ChemGraph](https://github.com/argonne-lcf/ChemGraph)
-    
-    - ⭐ Star the repository to stay updated
-    - 📝 Submit issues and feature requests
-    - 🤝 Contribute to the open-source project
-    - 📖 Access detailed documentation and examples
-    
-    #### 📄 Research Paper
-    **ArXiv Preprint**  
-    [https://arxiv.org/abs/2506.06363](https://arxiv.org/abs/2506.06363)
-    
-    - 🔬 Read about the scientific methodology
-    - 📊 View benchmark results and case studies
-    - 🎯 Understand the technical architecture
-    - 📋 Cite this work in your research
+    - **GitHub**: [https://github.com/argonne-lcf/ChemGraph](https://github.com/argonne-lcf/ChemGraph)
+    - **Documentation**: [https://argonne-lcf.github.io/ChemGraph/](https://argonne-lcf.github.io/ChemGraph/)
     
     ### 🏛️ Developed at Argonne National Laboratory
     
@@ -207,17 +192,32 @@ if page == "📖 About ChemGraph":
     
     ### 🙏 Citation
     
-    If you use ChemGraph in your research, please cite our work:
+    If you use ChemGraph in your research, please cite our [work](https://doi.org/10.1038/s42004-025-01776-9):
     
     ```bibtex
-    @article{pham2025chemgraph,
-    title={ChemGraph: An Agentic Framework for Computational Chemistry Workflows},
-    author={Pham, Thang D and Tanikanti, Aditya and Keçeli, Murat},
-    journal={arXiv preprint arXiv:2506.06363},
-    year={2025}
-    url={https://arxiv.org/abs/2506.06363}
+    @article{pham_chemgraph_2026,
+    title = {{ChemGraph} as an agentic framework for computational chemistry workflows},
+    url = {https://doi.org/10.1038/s42004-025-01776-9},
+    doi = {10.1038/s42004-025-01776-9},
+    author = {Pham, Thang D. and Tanikanti, Aditya and Ke\c{c}eli, Murat},
+    date = {2026-01-08},
+    author={Pham, Thang D and Tanikanti, Aditya and Ke{\c{c}}eli, Murat},
+    journal={Communications Chemistry},
+    year={2026},
+    publisher={Nature Publishing Group UK London}
     }
     ```
+
+    ### 🙌 Acknowledgments
+
+    This research used resources of the Argonne Leadership Computing Facility, a U.S.
+    Department of Energy (DOE) Office of Science user facility at Argonne National
+    Laboratory and is based on research supported by the U.S. DOE Office of Science-
+    Advanced Scientific Computing Research Program, under Contract No. DE-AC02-
+    06CH11357. Our work leverages ALCF Inference Endpoints, which provide a robust API
+    for LLM inference on ALCF HPC clusters via Globus Compute. We are thankful to Serkan
+    Altuntas for his contributions to the user interface of ChemGraph and for insightful
+    discussions on AIOps.
     
     ---
     
@@ -683,7 +683,7 @@ if selected_model in all_supported_models and structured_output:
 # Main Interface Header
 # -----------------------------------------------------------------------------
 
-st.title("🧪 ChemGraph ")
+st.title(f"🧪 ChemGraph v{app_version}")
 
 st.markdown(
     """
@@ -1472,7 +1472,9 @@ if st.session_state.conversation_history:
                         break
             elif hasattr(message, "content"):
                 # Generic message object with content
-                content = normalize_message_content(getattr(message, "content", "")).strip()
+                content = normalize_message_content(
+                    getattr(message, "content", "")
+                ).strip()
                 if content and not (
                     content.startswith("{")
                     and content.endswith("}")

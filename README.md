@@ -487,16 +487,16 @@ Notes:
 
 ### Configuration Sections
 
-| Section          | Description                                             |
-| ---------------- | ------------------------------------------------------- |
-| `[general]`      | Basic settings like model, workflow, and output format  |
-| `[llm]`          | LLM-specific parameters (temperature, max_tokens, etc.) |
-| `[api]`          | API endpoints and timeouts for different providers      |
-| `[chemistry]`    | Chemistry-specific calculation settings                 |
-| `[output]`       | Output file formats and visualization settings          |
-| `[logging]`      | Logging configuration and verbosity levels              |
-| `[features]`     | Feature flags and experimental settings                 |
-| `[security]`     | Security settings and rate limiting                     |
+| Section       | Description                                             |
+| ------------- | ------------------------------------------------------- |
+| `[general]`   | Basic settings like model, workflow, and output format  |
+| `[llm]`       | LLM-specific parameters (temperature, max_tokens, etc.) |
+| `[api]`       | API endpoints and timeouts for different providers      |
+| `[chemistry]` | Chemistry-specific calculation settings                 |
+| `[output]`    | Output file formats and visualization settings          |
+| `[logging]`   | Logging configuration and verbosity levels              |
+| `[features]`  | Feature flags and experimental settings                 |
+| `[security]`  | Security settings and rate limiting                     |
 
 ### Command Line Interface
 
@@ -944,14 +944,15 @@ pre-commit install
     
   ```bibtex
     @article{pham_chemgraph_2026,
-      title = {{ChemGraph} as an agentic framework for computational chemistry workflows},
-      issn = {2399-3669},
-      url = {https://doi.org/10.1038/s42004-025-01776-9},
-      doi = {10.1038/s42004-025-01776-9},
-      journaltitle = {Communications Chemistry},
-      shortjournal = {Communications Chemistry},
-      author = {Pham, Thang D. and Tanikanti, Aditya and Ke\c{c}eli, Murat},
-      date = {2026-01-08},
+    title = {{ChemGraph} as an agentic framework for computational chemistry workflows},
+    url = {https://doi.org/10.1038/s42004-025-01776-9},
+    doi = {10.1038/s42004-025-01776-9},
+    author = {Pham, Thang D. and Tanikanti, Aditya and Ke\c{c}eli, Murat},
+    date = {2026-01-08},
+    author={Pham, Thang D and Tanikanti, Aditya and Ke{\c{c}}eli, Murat},
+    journal={Communications Chemistry},
+    year={2026},
+    publisher={Nature Publishing Group UK London}
     }
   ```
  </details>
