@@ -412,6 +412,70 @@ elif page == "⚙️ Configuration":
     with tab2:
         st.subheader("API Settings")
 
+        st.markdown("**API Keys (Session Only)**")
+        st.caption(
+            "Keys entered here are applied to this Streamlit session via environment variables and are not saved to config.toml."
+        )
+
+        key_col1, key_col2 = st.columns(2)
+        with key_col1:
+            openai_api_key = st.text_input(
+                "OpenAI API Key",
+                value=st.session_state.get("ui_openai_api_key", ""),
+                type="password",
+                key="ui_openai_api_key_input",
+            )
+            anthropic_api_key = st.text_input(
+                "Anthropic API Key",
+                value=st.session_state.get("ui_anthropic_api_key", ""),
+                type="password",
+                key="ui_anthropic_api_key_input",
+            )
+        with key_col2:
+            gemini_api_key = st.text_input(
+                "Gemini API Key",
+                value=st.session_state.get("ui_gemini_api_key", ""),
+                type="password",
+                key="ui_gemini_api_key_input",
+            )
+            groq_api_key = st.text_input(
+                "Groq API Key",
+                value=st.session_state.get("ui_groq_api_key", ""),
+                type="password",
+                key="ui_groq_api_key_input",
+            )
+
+        key_env_map = {
+            "OPENAI_API_KEY": openai_api_key,
+            "ANTHROPIC_API_KEY": anthropic_api_key,
+            "GEMINI_API_KEY": gemini_api_key,
+            "GROQ_API_KEY": groq_api_key,
+        }
+
+        action_col1, action_col2 = st.columns(2)
+        with action_col1:
+            if st.button("Apply API Keys", key="apply_api_keys"):
+                applied = []
+                for env_name, key_value in key_env_map.items():
+                    clean_value = key_value.strip()
+                    if clean_value:
+                        os.environ[env_name] = clean_value
+                        st.session_state[f"ui_{env_name.lower()}"] = clean_value
+                        applied.append(env_name)
+                if applied:
+                    st.success(f"✅ Applied keys for: {', '.join(applied)}")
+                else:
+                    st.info("No API keys entered.")
+        with action_col2:
+            if st.button("Clear Session API Keys", key="clear_api_keys"):
+                for env_name in key_env_map:
+                    os.environ.pop(env_name, None)
+                    st.session_state.pop(f"ui_{env_name.lower()}", None)
+                    st.session_state.pop(f"ui_{env_name.lower()}_input", None)
+                st.success("✅ Cleared session API keys.")
+                st.rerun()
+
+        st.markdown("---")
         api_tabs = st.tabs(["OpenAI", "Anthropic", "Google", "Local"])
 
         with api_tabs[0]:
@@ -556,6 +620,7 @@ elif page == "⚙️ Configuration":
             "OPENAI_API_KEY": "OpenAI",
             "ANTHROPIC_API_KEY": "Anthropic",
             "GEMINI_API_KEY": "Google",
+            "GROQ_API_KEY": "Groq",
         }
 
         for env_var, provider in api_keys.items():
