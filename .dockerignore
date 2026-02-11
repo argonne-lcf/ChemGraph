@@ -1,0 +1,48 @@
+# VCS / metadata
+.git
+.github
+.gitignore
+
+# Python caches / virtualenvs
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Conda / local env
+.conda/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Local logs and generated outputs
+cg_logs/
+logs/
+site/
+tmp/
+output.json
+output.xyz
+report.html
+frequencies.csv
+ir_spectrum.png
+water_optimization_report.html
+methanol_ir_xtb_report.html
+aspirin_ir_report.html
+
+# Common local molecule/output files
+*.xyz
+*.bkp
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
