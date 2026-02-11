@@ -49,6 +49,33 @@ docker run --rm -it --entrypoint /bin/bash -v "$PWD:/work" -w /work \
 # then run: chemgraph --config config.toml -q "your query"
 ```
 
+**Pass API keys securely when running containers**
+
+Required keys depend on provider/model:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GEMINI_API_KEY`
+- `GROQ_API_KEY`
+- Optional: `ARGO_USER` (Argo setups)
+
+Best practice for `docker run` is host variable pass-through:
+
+```bash
+export OPENAI_API_KEY="..."
+docker run --rm -it -e OPENAI_API_KEY -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+```
+
+For multiple keys, use an env file:
+
+```bash
+docker run --rm -it --env-file .env.chemgraph -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+```
+
+Do not commit `.env.chemgraph` and avoid storing API keys in `config.toml`.
+
 For `config.toml` options and provider/base URL settings, see [`docs/configuration_with_toml.md`](docs/configuration_with_toml.md).
 
 **Install from PyPI (Recommended)**
