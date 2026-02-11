@@ -1128,6 +1128,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
                 xyz_string,
                 f"{title.lower().replace(' ', '_')}.xyz",
                 mime="chemical/x-xyz",
+                key=f"xyz_download_{uuid4().hex}",
             )
 
             structure_json = json.dumps(
@@ -1144,6 +1145,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure"):
                 structure_json,
                 f"{title.lower().replace(' ', '_')}.json",
                 mime="application/json",
+                key=f"json_download_{uuid4().hex}",
             )
 
         return True
