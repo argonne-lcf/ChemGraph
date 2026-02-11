@@ -17,6 +17,45 @@
 
 If you do not want a local install, run the published container image directly:
 
+### Pass API Keys Securely (Best Practice)
+
+Required keys depend on the model/provider you use:
+
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GEMINI_API_KEY`
+- `GROQ_API_KEY`
+- Optional: `ARGO_USER` (for Argo setups)
+
+Recommended pattern for `docker run` is host pass-through (do not put secret values inline in command history):
+
+```bash
+export OPENAI_API_KEY="..."
+docker run --rm -it -e OPENAI_API_KEY -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+```
+
+For multiple keys, use an env file:
+
+```bash
+cat > .env.chemgraph << 'EOF'
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+GEMINI_API_KEY=...
+GROQ_API_KEY=...
+ARGO_USER=...
+EOF
+chmod 600 .env.chemgraph
+docker run --rm -it --env-file .env.chemgraph -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+```
+
+Security notes:
+
+- Pass only the key(s) needed for your selected model.
+- Do not commit `.env.chemgraph` or other secret files to git.
+- Avoid storing API keys in `config.toml`.
+
 Run JupyterLab:
 
 ```bash

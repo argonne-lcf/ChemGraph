@@ -94,6 +94,14 @@ def route_report_tools(state: State):
     if not (hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0):
         return "done"
 
+    # Only allow known report tool calls to reach ToolNode.
+    valid_report_tools = {"generate_html"}
+    requested_tools = {
+        call.get("name") for call in getattr(ai_message, "tool_calls", []) if isinstance(call, dict)
+    }
+    if not requested_tools or not requested_tools.issubset(valid_report_tools):
+        return "done"
+
     report_exists = any(
         isinstance(message, dict) and message.get("name") == "generate_html"
         for message in messages
@@ -196,7 +204,11 @@ def ReportAgent(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
-    llm_with_tools = llm.bind_tools(tools=tools)
+    llm_with_tools = llm.bind_tools(
+        tools=tools,
+        tool_choice="generate_html",
+        parallel_tool_calls=False,
+    )
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
@@ -275,7 +287,7 @@ def construct_single_agent_graph(
                 graph_builder.add_edge("tools", "ChemGraphAgent")
                 graph_builder.add_conditional_edges(
                     "ReportAgent",
-                    route_tools,
+                    route_report_tools,
                     {"tools": "report_tools", "done": END},
                 )
                 graph_builder.add_edge("report_tools", "ReportAgent")

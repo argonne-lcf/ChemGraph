@@ -7,10 +7,13 @@ COPY . /app
 # System packages required by scientific Python stack and headless browser deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    gfortran \
     git \
     cmake \
     pkg-config \
     curl \
+    liblapack-dev \
+    libblas-dev \
     # Dependencies for headless Chrome (pyppeteer)
     libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 \
     libxrandr2 libxrender1 libxss1 libxtst6 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
@@ -22,15 +25,19 @@ RUN conda install -y -c conda-forge \
     python=3.11 \
     rdkit \
     nwchem \
-    tblite \
     && conda clean -afy
 
-# Validate calculator runtimes at build time.
-RUN which nwchem && python -c "import tblite"
-
-# Install ChemGraph (with calculator extras) and UI runtime
-RUN pip install --no-cache-dir ".[calculators]" && \
+# Install ChemGraph and UI runtime
+RUN pip install --no-cache-dir . && \
     pip install --no-cache-dir jupyterlab
+
+# Install Python tblite from source with conservative flags to avoid ABI/symbol issues on ARM.
+RUN CFLAGS="-O2 -fno-tree-vectorize" \
+    FFLAGS="-O2 -fno-tree-vectorize" \
+    pip install --no-cache-dir --no-binary=tblite --force-reinstall "tblite==0.5.0"
+
+# Validate calculator runtimes at build time after package install.
+RUN which nwchem && python -c "from tblite.ase import TBLite"
 
 # Allow git commands in bind-mounted repo paths inside the container.
 RUN git config --system --add safe.directory /app
