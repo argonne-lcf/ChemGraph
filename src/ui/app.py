@@ -1,7 +1,6 @@
 import ast
 import asyncio
 from datetime import datetime, timezone, timedelta
-from importlib.metadata import PackageNotFoundError, version
 import json
 import os
 from pathlib import Path
@@ -17,6 +16,7 @@ import pandas as pd
 import streamlit as st
 import toml
 
+from chemgraph import __version__ as chemgraph_version
 from chemgraph.tools.ase_tools import create_ase_atoms, create_xyz_string
 from chemgraph.models.supported_models import (
     all_supported_models,
@@ -28,10 +28,11 @@ from chemgraph.utils.config_utils import (
 )
 
 # Page configuration -- MUST be first Streamlit call
-try:
-    app_version = version("chemgraphagent")
-except PackageNotFoundError:
-    app_version = "dev"
+app_version = (
+    chemgraph_version
+    if isinstance(chemgraph_version, str) and chemgraph_version != "unknown"
+    else "dev"
+)
 
 st.set_page_config(
     page_title=f"ChemGraph v{app_version}",
