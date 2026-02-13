@@ -154,20 +154,21 @@ def fetch_materials_project_data(chemsys: list[str], db_path: Path):
     # Ensure correct API key usage
     with MPRester(MP_API_KEY) as mpr:
         doc_list = mpr.materials.summary.search(
-            fields=['material_id', 'structure', 'xas', 'dos', 'symmetry'],
-            has_props=['dos', 'xas'],
+            fields=['material_id', 'structure'], # 'xas', 'dos', 'symmetry'
+            # has_props=['dos', 'xas'],
             energy_above_hull=(0, 0.001),
-            chemsys=chemsys,
+            formula=chemsys,
             deprecated=False,
             num_chunks=1,
-            chunk_size=10,
+            chunk_size=1,
         )
 
         for doc in doc_list:
             ase_atoms = AseAtomsAdaptor.get_atoms(doc.structure)
             ase_atoms.info.update({'MP-id' : str(doc.material_id),
-                                   'MP-xas': doc.xas,
-                                   'MP-dos': doc.dos})
+                                #    'MP-xas': doc.xas,
+                                #    'MP-dos': doc.dos
+                                })
             atoms_list.append(ase_atoms)
 
     if not db_path.exists():
@@ -225,7 +226,7 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
     # Here we just implement the logic.
     
     # ---------- USER VARIABLES ----------
-    account     = 'a_surface' # account to charge
+    account     = 'xanes_fmCatal' # account to charge
     num_nodes   = 2           # max number of nodes to use
     walltime    = '1:00:00'   # job length
     fdmnes_exe  = '/home/vferreiragrizzi/parallel_fdmnes/mpirun_fdmnes'
@@ -243,9 +244,10 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
 
     @bash_app
     def run_fdmnes(run_dir, ncores, exe, stdout=None, stderr=None, outputs=None, cwd=None):
-        run_cmd = [f'cd "{run_dir}"',
-                   f'"{exe}" -np {ncores}']
-        return "\\n".join(run_cmd)
+        return f"""
+            cd "{run_dir}"
+            "{exe}" -np {ncores}
+            """
 
     try:
         htex = HighThroughputExecutor(
@@ -262,7 +264,7 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
                 scheduler_options='#PBS -N FDMNES_parsl',
                 worker_init="""
                     source ~/miniconda/etc/profile.d/conda.sh
-                    conda activate qc_env
+                    conda activate chemgraph
                     export OMP_NUM_THREADS=1
                 """,
                 launcher=SingleNodeLauncher(),
