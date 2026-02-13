@@ -900,6 +900,19 @@ If you use [Colmena](https://github.com/exalearn/colmena), run ChemGraph service
 3. Mount the same project/output volume if Colmena workers and Docker run on the same host.
 
 Use this as an orchestration layer: Colmena schedules tasks; ChemGraph handles chemistry execution.
+
+### Kubernetes Deployment
+
+ChemGraph Streamlit can also be deployed on Kubernetes clusters. See the [`k8s/`](k8s/) directory for deployment manifests and instructions.
+
+**Quick deployment:**
+
+```bash
+cd k8s
+./deploy.sh deploy
+```
+
+For detailed instructions, see [`k8s/README.md`](k8s/README.md).
 </details>
 
 <details>

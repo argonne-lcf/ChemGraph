@@ -55,3 +55,6 @@ nwchem.nwi
 nwchem.nwo
 
 vib*.traj
+
+# Kubernetes secrets (keep secrets.yaml.template, ignore actual secrets)
+k8s/secrets.yaml

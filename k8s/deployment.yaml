@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chemgraph-streamlit
+  labels:
+    app: chemgraph
+    component: streamlit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chemgraph
+      component: streamlit
+  template:
+    metadata:
+      labels:
+        app: chemgraph
+        component: streamlit
+    spec:
+      containers:
+      - name: streamlit
+        image: ghcr.io/argonne-lcf/chemgraph:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8501
+          name: http
+          protocol: TCP
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: openai-api-key
+              optional: true
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: anthropic-api-key
+              optional: true
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: gemini-api-key
+              optional: true
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: groq-api-key
+              optional: true
+        - name: CHEMGRAPH_LOG_DIR
+          value: /app/cg_logs
+        - name: PYTHONPATH
+          value: /app/src
+        command:
+        - streamlit
+        - run
+        - src/ui/app.py
+        - --server.address=0.0.0.0
+        - --server.port=8501
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /_stcore/health
+            port: 8501
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /_stcore/health
+            port: 8501
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3

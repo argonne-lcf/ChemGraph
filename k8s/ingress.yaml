@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chemgraph-streamlit
+  labels:
+    app: chemgraph
+    component: streamlit
+  annotations:
+    # Adjust these based on your ingress controller
+    # Example for nginx-ingress:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Example for cert-manager (automatic HTTPS):
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx  # Adjust based on your ingress controller
+  rules:
+  - host: chemgraph.example.com  # Replace with your domain
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: chemgraph-streamlit
+            port:
+              number: 8501
+  # Uncomment for HTTPS with cert-manager:
+  # tls:
+  # - hosts:
+  #   - chemgraph.example.com
+  #   secretName: chemgraph-tls-cert
