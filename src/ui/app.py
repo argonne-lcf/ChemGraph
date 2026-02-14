@@ -1022,19 +1022,22 @@ def has_structure_signal(
 def is_infrared_requested(messages):
     """Look through all messages to find infrared data."""
     for message in messages:
-        # Handle different message formats
-        content = ""
+        # Handle different message formats (string/list/dict payloads)
+        raw_content = ""
         if hasattr(message, "content"):
-            content = getattr(message, "content", "")
+            raw_content = getattr(message, "content", "")
         elif isinstance(message, dict):
-            content = message.get("content", "")
+            raw_content = message.get("content", "")
         elif isinstance(message, str):
-            content = message
+            raw_content = message
         else:
-            content = str(message)
+            raw_content = str(message)
 
-        if content and (("infrared" in content.lower()) or ("IR" in content)):
+        content = normalize_message_content(raw_content)
+        lowered = content.lower()
+        if content and (("infrared" in lowered) or re.search(r"\bir\b", lowered)):
             return True
+    return False
 
 
 # Streamlit-specific wrapper for ASE functions
