@@ -54,6 +54,14 @@ spec:
           value: /app/cg_logs
         - name: PYTHONPATH
           value: /app/src
+        - name: HTTP_PROXY
+          value: http://proxy.alcf.anl.gov:3128
+        - name: HTTPS_PROXY
+          value: http://proxy.alcf.anl.gov:3128
+        - name: http_proxy
+          value: http://proxy.alcf.anl.gov:3128
+        - name: https_proxy
+          value: http://proxy.alcf.anl.gov:3128
         command:
         - streamlit
         - run
