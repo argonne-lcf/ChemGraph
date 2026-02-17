@@ -228,7 +228,7 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
     # ---------- USER VARIABLES ----------
     account     = 'xanes_fmCatal' # account to charge
     num_nodes   = 2           # max number of nodes to use
-    walltime    = '1:00:00'   # job length
+    walltime    = '23:00:00'   # job length
     fdmnes_exe  = '/home/vferreiragrizzi/parallel_fdmnes/mpirun_fdmnes'
     num_cores   = int(os.environ.get('PBS_NP', '128'))
     # ----------------------------------------------
@@ -280,6 +280,8 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
 
         futures = []
         for curr_dir in run_dirs:
+            expected_output_file = curr_dir / f"{curr_dir.name}_conv.txt"
+
             futures.append(
                 run_fdmnes(
                     run_dir=str(curr_dir),
@@ -288,7 +290,7 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
                     cwd=str(curr_dir),
                     stdout=str(curr_dir / 'fdmnes_stdout.txt'),
                     stderr=str(curr_dir / 'fdmnes_stderr.txt'),
-                    outputs=[File(str(curr_dir / '_conv.txt'))]
+                    outputs=[File(str(expected_output_file))]
                 )
             )
 
