@@ -55,6 +55,34 @@ def _is_repeated_tool_cycle(messages) -> bool:
     return bool(last_calls) and last_calls == prev_calls
 
 
+def _tool_message_name(message):
+    """Extract tool name from a message-like object."""
+    if isinstance(message, dict):
+        return message.get("name")
+    return getattr(message, "name", None)
+
+
+def _tool_message_content(message):
+    """Extract content text from a message-like object."""
+    if isinstance(message, dict):
+        return message.get("content", "")
+    return getattr(message, "content", "")
+
+
+def _is_successful_report_message(message) -> bool:
+    """Return True when message indicates successful generate_html execution."""
+    if _tool_message_name(message) != "generate_html":
+        return False
+
+    content = _tool_message_content(message)
+    content_text = str(content).strip().lower() if content is not None else ""
+    if not content_text:
+        return False
+
+    # ToolNode formats failures as "Error: ..."; treat only non-error output as success.
+    return not content_text.startswith("error")
+
+
 def route_tools(state: State):
     """Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
 
@@ -102,11 +130,20 @@ def route_report_tools(state: State):
     if not requested_tools or not requested_tools.issubset(valid_report_tools):
         return "done"
 
-    report_exists = any(
-        isinstance(message, dict) and message.get("name") == "generate_html"
-        for message in messages
-    )
-    return "done" if report_exists else "tools"
+    report_generated = any(_is_successful_report_message(message) for message in messages)
+    return "done" if report_generated else "tools"
+
+
+def route_after_report_tools(state: State):
+    """After report tool execution, stop on success; otherwise retry report generation."""
+    if isinstance(state, list):
+        messages = state
+    elif messages := state.get("messages", []):
+        pass
+    else:
+        raise ValueError(f"No messages found in input state to tool_edge: {state}")
+
+    return "done" if _is_successful_report_message(messages[-1]) else "retry"
 
 
 def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
@@ -290,7 +327,11 @@ def construct_single_agent_graph(
                     route_report_tools,
                     {"tools": "report_tools", "done": END},
                 )
-                graph_builder.add_edge("report_tools", "ReportAgent")
+                graph_builder.add_conditional_edges(
+                    "report_tools",
+                    route_after_report_tools,
+                    {"retry": "ReportAgent", "done": END},
+                )
             else:
                 graph_builder.add_conditional_edges(
                     "ChemGraphAgent",
