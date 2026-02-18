@@ -1,6 +1,6 @@
 from typing import TypedDict, Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from langgraph.graph import add_messages
 
 
@@ -69,6 +69,29 @@ class PlannerResponse(BaseModel):
         description="List of task to assign for executor",
         default=None,
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_planner_payload(cls, data: Any) -> Any:
+        """Accept common planner variants and coerce into full PlannerResponse shape."""
+        if isinstance(data, list):
+            return {
+                "thought_process": "Delegating parsed tasks to executors.",
+                "next_step": "executor_subgraph",
+                "tasks": data,
+            }
+
+        if isinstance(data, dict):
+            normalized = dict(data)
+            if "tasks" not in normalized and "worker_tasks" in normalized:
+                normalized["tasks"] = normalized["worker_tasks"]
+            if "tasks" in normalized and "next_step" not in normalized:
+                normalized["next_step"] = "executor_subgraph"
+            if "tasks" in normalized and "thought_process" not in normalized:
+                normalized["thought_process"] = "Delegating parsed tasks to executors."
+            return normalized
+
+        return data
 
 
 class SubPlannerDecision(BaseModel):

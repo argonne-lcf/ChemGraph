@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import Union, Optional
+from typing import Any, Optional, Union
+
+from pydantic import BaseModel, Field, model_validator
 from chemgraph.schemas.atomsdata import AtomsData
 
 
@@ -26,7 +27,19 @@ class PlannerResponse(BaseModel):
         to Worker agents for tool execution or computation.
     """
 
-    worker_tasks: list[WorkerTask] = Field(..., description="List of task to assign for Worker")
+    worker_tasks: list[WorkerTask] = Field(
+        ..., description="List of task to assign for Worker"
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_worker_tasks(cls, data: Any) -> Any:
+        """Accept either a bare list of tasks or an object with `worker_tasks`."""
+        if isinstance(data, list):
+            return {"worker_tasks": data}
+        if isinstance(data, dict) and "worker_tasks" not in data and "tasks" in data:
+            return {"worker_tasks": data["tasks"]}
+        return data
 
 
 class VibrationalFrequency(BaseModel):

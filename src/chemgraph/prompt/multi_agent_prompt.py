@@ -13,14 +13,20 @@ Return each subtask as a dictionary with:
   - `task_index`: a unique integer identifier
   - `prompt`: a clear instruction for a worker agent.
 
-Format:
-[
-  {"task_index": 1, "prompt": "Calculate the enthalpy of formation of carbon monoxide (CO) using mace_mp."},
-  {"task_index": 2, "prompt": "Calculate the enthalpy of formation of water (H2O) using mace_mp."},
-  ...
-]
+Output format requirements:
+- You MUST return valid JSON only.
+- The JSON must be an object with one key: "worker_tasks".
+- The value of "worker_tasks" must be a list of dictionaries.
 
-Only return the list of subtasks. Do not compute final results. Do not include reaction calculations.
+Example:
+{
+  "worker_tasks": [
+    {"task_index": 1, "prompt": "Calculate the enthalpy of formation of carbon monoxide (CO) using mace_mp."},
+    {"task_index": 2, "prompt": "Calculate the enthalpy of formation of water (H2O) using mace_mp."}
+  ]
+}
+
+Only return this JSON object. Do not compute final results. Do not include reaction calculations.
 """
 
 planner_prompt_json = """

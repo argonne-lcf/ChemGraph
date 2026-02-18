@@ -55,6 +55,14 @@ def sanitize_tool_calls(messages: list[BaseMessage]) -> list[BaseMessage]:
     return messages
 
 
+def _parse_planner_response(raw_content: Any) -> PlannerResponse:
+    """Parse and validate planner output from either string or JSON-like data."""
+    payload = raw_content
+    if isinstance(raw_content, str):
+        payload = json.loads(raw_content)
+    return PlannerResponse.model_validate(payload)
+
+
 def route_tools(state: ManagerWorkerState):
     """Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
 
@@ -115,52 +123,43 @@ def PlannerAgent(
     ]
     if support_structured_output is True:
         structured_llm = llm.with_structured_output(PlannerResponse)
-        response = structured_llm.invoke(messages).model_dump_json()
-        return {"messages": [response]}
-    else:
-        raw_response = llm.invoke(messages).content
         try:
-            # Always parse from string
-            parsed = json.loads(raw_response)
-
-            # If model mistakenly returned a bare list, wrap it
-            if isinstance(parsed, list):
-                parsed = {"worker_tasks": parsed}
-
-            # Validate structure
-            if not isinstance(parsed, dict) or "worker_tasks" not in parsed:
-                raise ValueError(
-                    "Output must be a JSON object with a 'worker_tasks' key"
-                )
-
-            response_json = json.dumps(parsed)
-            return {"messages": [response_json]}
-
+            response = structured_llm.invoke(messages)
+            return {"messages": [response.model_dump_json()]}
         except Exception as e:
-            retry_message = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"{state.get('messages', '')}"},
-                {
-                    "role": "assistant",
-                    "content": (
-                        f"Error: {str(e)}. Please output a valid JSON object with a 'worker_tasks' key, "
-                        "where 'worker_tasks' is a list of tasks in the format:\n"
-                        '{"worker_tasks": [\n'
-                        '  {"task_index": 1, "prompt": "Calculate ..."},\n'
-                        '  {"task_index": 2, "prompt": "Calculate ..."}\n'
-                        ']}'
-                    ),
-                },
-            ]
-            retry_response = llm.invoke(retry_message).content
-            parsed_retry = json.loads(retry_response)
+            logger.warning(
+                "Planner structured output failed; falling back to JSON parsing: %s",
+                e,
+            )
 
-            # Normalize again in case it’s a list
-            if isinstance(parsed_retry, list):
-                parsed_retry = {"worker_tasks": parsed_retry}
+    raw_response = llm.invoke(messages).content
+    try:
+        parsed = _parse_planner_response(raw_response)
+        return {"messages": [parsed.model_dump_json()]}
 
-            response_json = json.dumps(parsed_retry)
-            return {"messages": [response_json]}
+    except Exception as e:
+        retry_message = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"{state.get('messages', '')}"},
+            {
+                "role": "assistant",
+                "content": (
+                    f"Error: {str(e)}. Please output a valid JSON object with a 'worker_tasks' key, "
+                    "where 'worker_tasks' is a list of tasks in the format:\n"
+                    '{"worker_tasks": [\n'
+                    '  {"task_index": 1, "prompt": "Calculate ..."},\n'
+                    '  {"task_index": 2, "prompt": "Calculate ..."}\n'
+                    ']}'
+                ),
+            },
+        ]
+        retry_response = llm.invoke(retry_message).content
+        try:
+            parsed_retry = _parse_planner_response(retry_response)
+            return {"messages": [parsed_retry.model_dump_json()]}
+        except Exception as retry_error:
+            logger.error("Planner retry output could not be parsed: %s", retry_error)
+            raise
 
 
 def WorkerAgent(
