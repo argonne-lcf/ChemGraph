@@ -65,7 +65,7 @@ def get_default_config() -> Dict[str, Any]:
             "workflow": "single_agent",
             "output": "state",
             "structured": False,
-            "report": True,
+            "report": False,
             "thread": 1,
             "recursion_limit": 20,
             "verbose": False,
