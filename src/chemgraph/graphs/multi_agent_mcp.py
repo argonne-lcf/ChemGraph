@@ -189,6 +189,22 @@ def _parse_planner_response(raw_content: Any) -> PlannerResponse:
     return PlannerResponse.model_validate(payload)
 
 
+def _is_connection_error(exc: Exception) -> bool:
+    """Heuristic for upstream transport/connectivity failures from model providers."""
+    text = str(exc).lower()
+    signals = (
+        "connection error",
+        "failed to connect",
+        "connection refused",
+        "timeout",
+        "timed out",
+        "max retries exceeded",
+        "name resolution",
+        "network is unreachable",
+    )
+    return any(signal in text for signal in signals)
+
+
 def PlannerAgent(
     state: ManagerWorkerState,
     llm: ChatOpenAI,
@@ -205,6 +221,9 @@ def PlannerAgent(
             response = structured_llm.invoke(messages)
             return {"messages": [response.model_dump_json()]}
         except Exception as e:
+            if _is_connection_error(e):
+                logger.error("Planner request failed due to model connection error: %s", e)
+                raise
             logger.warning(
                 "Planner structured output failed; falling back to JSON parsing: %s",
                 e,

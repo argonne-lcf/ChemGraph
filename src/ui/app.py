@@ -3,10 +3,16 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 import json
 import os
+import platform
 from pathlib import Path
 import re
+import socket
+import subprocess
 import threading
 from typing import Optional, Dict, Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from ase.data import chemical_symbols
@@ -16,10 +22,13 @@ import pandas as pd
 import streamlit as st
 import toml
 
+import chemgraph as chemgraph_pkg
 from chemgraph import __version__ as chemgraph_version
 from chemgraph.tools.ase_tools import create_ase_atoms, create_xyz_string
 from chemgraph.models.supported_models import (
     all_supported_models,
+    supported_argo_models,
+    supported_argoproxy_models,
 )
 from chemgraph.utils.config_utils import (
     get_argo_user_from_nested_config,
@@ -35,7 +44,7 @@ app_version = (
 )
 
 st.set_page_config(
-    page_title=f"ChemGraph v{app_version}",
+    page_title=f"ChemGraph",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -103,6 +112,205 @@ def run_async_callable(fn):
     return result_container.get("value")
 
 
+def _run_command(cmd: list[str], cwd: Optional[Path] = None, timeout: int = 2) -> str:
+    """Run a shell command and return stripped stdout; return empty string on failure."""
+    try:
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=True,
+            cwd=str(cwd) if cwd else None,
+        )
+    except Exception:
+        return ""
+    return completed.stdout.strip()
+
+
+def _find_repo_root(start: Path) -> Optional[Path]:
+    """Find git repo root by walking up parents from a starting path."""
+    start = start.resolve()
+    candidates = [start] + list(start.parents)
+    for candidate in candidates:
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _format_bytes(num_bytes: int) -> str:
+    if num_bytes <= 0:
+        return "Unknown"
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    size = float(num_bytes)
+    for unit in units:
+        if size < 1024.0 or unit == units[-1]:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return "Unknown"
+
+
+def _get_total_memory_bytes() -> int:
+    """Return total system memory in bytes when available."""
+    try:
+        page_size = os.sysconf("SC_PAGE_SIZE")
+        phys_pages = os.sysconf("SC_PHYS_PAGES")
+        total = int(page_size) * int(phys_pages)
+        if total > 0:
+            return total
+    except Exception:
+        pass
+
+    meminfo = Path("/proc/meminfo")
+    if meminfo.exists():
+        try:
+            for line in meminfo.read_text().splitlines():
+                if line.startswith("MemTotal:"):
+                    kb = int(line.split()[1])
+                    return kb * 1024
+        except Exception:
+            return 0
+    return 0
+
+
+def _get_cpu_model() -> str:
+    """Try to get a human-readable CPU model name."""
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.exists():
+        try:
+            for line in cpuinfo.read_text().splitlines():
+                if line.lower().startswith("model name"):
+                    parts = line.split(":", 1)
+                    if len(parts) == 2:
+                        return parts[1].strip()
+        except Exception:
+            pass
+
+    cpu_name = platform.processor().strip()
+    if cpu_name:
+        return cpu_name
+    return platform.machine()
+
+
+def _get_gpu_summary() -> str:
+    """Return GPU summary from nvidia-smi when available."""
+    output = _run_command(
+        [
+            "nvidia-smi",
+            "--query-gpu=name,memory.total",
+            "--format=csv,noheader,nounits",
+        ]
+    )
+    if not output:
+        return "No GPU detected"
+
+    entries = []
+    for line in output.splitlines():
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) >= 2:
+            name, mem_mib = parts[0], parts[1]
+            entries.append(f"{name} ({mem_mib} MiB)")
+        elif parts:
+            entries.append(parts[0])
+    return "; ".join(entries) if entries else "No GPU detected"
+
+
+@st.cache_data(ttl=60)
+def get_host_info() -> Dict[str, str]:
+    """Collect host metadata for sidebar display."""
+    return {
+        "hostname": socket.gethostname(),
+        "platform": f"{platform.system()} {platform.release()}",
+        "cpu_model": _get_cpu_model(),
+        "cpu_cores": str(os.cpu_count() or "Unknown"),
+        "memory_total": _format_bytes(_get_total_memory_bytes()),
+        "gpu": _get_gpu_summary(),
+    }
+
+
+@st.cache_data(ttl=60)
+def get_build_info() -> Dict[str, str]:
+    """Collect app and repository metadata for sidebar display."""
+    app_file = Path(__file__).resolve()
+    chemgraph_file = Path(chemgraph_pkg.__file__).resolve()
+    repo_root = _find_repo_root(app_file) or _find_repo_root(chemgraph_file)
+
+    commit = "Unknown"
+    commit_date = "Unknown"
+    branch = "Unknown"
+
+    if repo_root:
+        commit = _run_command(["git", "rev-parse", "--short", "HEAD"], cwd=repo_root) or "Unknown"
+        commit_date = (
+            _run_command(["git", "show", "-s", "--format=%cd", "--date=iso", "HEAD"], cwd=repo_root)
+            or "Unknown"
+        )
+        branch = _run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_root) or "Unknown"
+
+    return {
+        "chemgraph_version": str(chemgraph_version),
+        "commit": commit,
+        "commit_date": commit_date,
+        "branch": branch,
+        "chemgraph_file": str(chemgraph_file),
+    }
+
+
+def render_sidebar_host_and_build_info():
+    """Render host and build metadata blocks in the left sidebar."""
+    host_info = get_host_info()
+    build_info = get_build_info()
+    now_local = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    with st.sidebar.expander("🖥️ Host Info", expanded=False):
+        st.markdown(f"**Hostname:** `{host_info['hostname']}`")
+        st.markdown(f"**OS:** `{host_info['platform']}`")
+        st.markdown(f"**CPU:** `{host_info['cpu_model']}`")
+        st.markdown(f"**CPU Cores:** `{host_info['cpu_cores']}`")
+        st.markdown(f"**Memory:** `{host_info['memory_total']}`")
+        st.markdown(f"**GPU:** `{host_info['gpu']}`")
+
+    with st.sidebar.expander("📦 Build Info", expanded=False):
+        st.markdown(f"**ChemGraph Version:** `{build_info['chemgraph_version']}`")
+        st.markdown(f"**Branch:** `{build_info['branch']}`")
+        st.markdown(f"**Commit:** `{build_info['commit']}`")
+        st.markdown(f"**Commit Date:** `{build_info['commit_date']}`")
+        st.markdown(f"**ChemGraph File:** `{build_info['chemgraph_file']}`")
+
+
+def _is_local_address(hostname: str) -> bool:
+    host = (hostname or "").strip().lower()
+    return host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
+@st.cache_data(ttl=10)
+def check_local_model_endpoint(base_url: Optional[str]) -> Dict[str, str]:
+    """Quick reachability check for local OpenAI-compatible endpoints."""
+    if not base_url:
+        return {"ok": "true", "message": "No base URL configured."}
+
+    parsed = urlparse(base_url)
+    if not _is_local_address(parsed.hostname or ""):
+        return {"ok": "true", "message": "Skipping non-local endpoint probe."}
+
+    probe = base_url.rstrip("/") + "/models"
+    req = Request(probe, method="GET")
+
+    try:
+        with urlopen(req, timeout=2) as response:
+            code = getattr(response, "status", 200)
+            return {"ok": "true", "message": f"Reachable (HTTP {code})."}
+    except HTTPError as e:
+        # HTTP error still means service/socket is reachable.
+        return {"ok": "true", "message": f"Reachable (HTTP {e.code})."}
+    except URLError as e:
+        reason = getattr(e, "reason", e)
+        return {"ok": "false", "message": f"Unreachable: {reason}"}
+    except Exception as e:
+        return {"ok": "false", "message": f"Unreachable: {e}"}
+
+
 # Configuration management
 try:
     from .config import load_config, save_config, get_default_config
@@ -151,6 +359,7 @@ page = st.sidebar.radio(
     index=0,
     key="page_navigation",
 )
+render_sidebar_host_and_build_info()
 
 # -----------------------------------------------------------------------------
 # About Page
@@ -673,7 +882,10 @@ generate_report = config["general"]["report"]
 thread_id = config["general"]["thread"]
 
 # Argo OpenAI-compatible endpoint often returns plain text; disable structured output.
-if selected_model in all_supported_models and structured_output:
+if (
+    selected_model in supported_argo_models
+    or selected_model in supported_argoproxy_models
+) and structured_output:
     structured_output = False
     st.session_state.ui_notice = (
         "Structured output is disabled for Argo models to avoid JSON parsing errors."
@@ -683,7 +895,7 @@ if selected_model in all_supported_models and structured_output:
 # Main Interface Header
 # -----------------------------------------------------------------------------
 
-st.title(f"🧪 ChemGraph v{app_version}")
+st.title(f"🧪 ChemGraph")
 
 st.markdown(
     """
@@ -725,6 +937,9 @@ with st.sidebar.expander("🔧 Quick Settings"):
 
     st.info("💡 To make permanent changes, use the Configuration page.")
 
+selected_base_url = get_base_url_for_model(selected_model, config)
+endpoint_status = check_local_model_endpoint(selected_base_url)
+
 # Reload config button
 if st.sidebar.button("🔄 Reload Config"):
     st.session_state.config = load_config()
@@ -742,6 +957,10 @@ if st.session_state.agent:
     st.sidebar.info(f"⚙️ Workflow: {selected_workflow}")
     st.sidebar.info(f"🔗 Thread ID: {thread_id}")
     st.sidebar.info(f"💬 Messages: {len(st.session_state.conversation_history)}")
+    if endpoint_status["ok"] == "true":
+        st.sidebar.caption(f"LLM endpoint: {endpoint_status['message']}")
+    else:
+        st.sidebar.error(f"LLM endpoint issue: {endpoint_status['message']}")
     if st.session_state.last_run_error:
         st.sidebar.error("Last run error (see verbose info).")
 
@@ -752,6 +971,8 @@ if st.session_state.agent:
 else:
     st.sidebar.error("❌ Agents Not Ready")
     st.sidebar.info("Agents will initialize automatically...")
+    if endpoint_status["ok"] != "true":
+        st.sidebar.error(f"LLM endpoint issue: {endpoint_status['message']}")
 
 # Configuration page link
 st.sidebar.markdown("---")
@@ -1404,7 +1625,7 @@ current_config = (
     selected_output,
     generate_report,
     config["general"]["recursion_limit"],
-    get_base_url_for_model(selected_model, config),
+    selected_base_url,
     get_argo_user_from_nested_config(config),
 )
 
@@ -1417,7 +1638,7 @@ if st.session_state.agent is None or st.session_state.last_config != current_con
             selected_output,
             generate_report,
             config["general"]["recursion_limit"],
-            get_base_url_for_model(selected_model, config),
+            selected_base_url,
             get_argo_user_from_nested_config(config),
         )
         st.session_state.last_config = current_config
@@ -1698,7 +1919,14 @@ if col_refresh.button("🔄 Refresh", use_container_width=True):
 # Submit query
 # -----------------------------------------------------------------------------
 if send:
-    if not st.session_state.agent:
+    if endpoint_status["ok"] != "true":
+        msg = (
+            f"Cannot reach local model endpoint `{selected_base_url}`. "
+            f"{endpoint_status['message']}"
+        )
+        st.session_state.last_run_error = RuntimeError(msg)
+        st.error(msg)
+    elif not st.session_state.agent:
         st.error("❌ Agent not ready. Please check configuration and try again.")
         if st.button("🔄 Try Again"):
             st.rerun()

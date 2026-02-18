@@ -40,4 +40,6 @@ def setup_logger(name=None, level=logging.INFO):
         logger.addHandler(handler)
 
     logger.setLevel(level)
+    # Prevent double logging when the root logger is also configured by callers (e.g., Streamlit).
+    logger.propagate = False
     return logger
