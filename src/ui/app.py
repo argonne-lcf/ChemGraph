@@ -26,7 +26,6 @@ import chemgraph as chemgraph_pkg
 from chemgraph import __version__ as chemgraph_version
 from chemgraph.tools.ase_tools import create_ase_atoms, create_xyz_string
 from chemgraph.models.supported_models import (
-    all_supported_models,
     supported_argo_models,
     supported_argoproxy_models,
 )
@@ -44,7 +43,7 @@ app_version = (
 )
 
 st.set_page_config(
-    page_title=f"ChemGraph",
+    page_title="ChemGraph",
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -260,8 +259,6 @@ def render_sidebar_host_and_build_info():
     """Render host and build metadata blocks in the left sidebar."""
     host_info = get_host_info()
     build_info = get_build_info()
-    now_local = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
-    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     with st.sidebar.expander("🖥️ Host Info", expanded=False):
         st.markdown(f"**Hostname:** `{host_info['hostname']}`")
@@ -895,7 +892,7 @@ if (
 # Main Interface Header
 # -----------------------------------------------------------------------------
 
-st.title(f"🧪 ChemGraph")
+st.title("🧪 ChemGraph")
 
 st.markdown(
     """
