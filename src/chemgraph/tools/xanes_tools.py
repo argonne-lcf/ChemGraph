@@ -169,10 +169,7 @@ def fetch_materials_project_data(chemsys: list[str], db_path: Path):
 
         for doc in doc_list:
             ase_atoms = AseAtomsAdaptor.get_atoms(doc.structure)
-            ase_atoms.info.update({'MP-id' : str(doc.material_id),
-                                #    'MP-xas': doc.xas,
-                                #    'MP-dos': doc.dos
-                                })
+            ase_atoms.info.update({'MP-id' : str(doc.material_id)})
             atoms_list.append(ase_atoms)
 
     if not db_path.exists():
