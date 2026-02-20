@@ -25,6 +25,15 @@ from chemgraph.schemas.multi_agent_response import (
 )
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.state.multi_agent_state import ManagerWorkerState
+from chemgraph.tools.xanes_tools import (
+    run_xanes_workflow,
+    fetch_xanes_data,
+    create_xanes_inputs,
+    run_xanes_parsl,
+    expand_xanes_db,
+    plot_xanes_results,
+)
+from chemgraph.tools.generic_tools import calculator
 
 logger = setup_logger(__name__)
 
@@ -208,6 +217,12 @@ def WorkerAgent(
             molecule_name_to_smiles,
             smiles_to_coordinate_file,
             extract_output_json,
+            run_xanes_workflow,
+            fetch_xanes_data,
+            create_xanes_inputs,
+            run_xanes_parsl,
+            expand_xanes_db,
+            plot_xanes_results,
         ]
 
     worker_id = state["current_worker"]
@@ -475,6 +490,12 @@ def construct_multi_agent_graph(
                 molecule_name_to_smiles,
                 smiles_to_coordinate_file,
                 extract_output_json,
+                run_xanes_workflow,
+                fetch_xanes_data,
+                create_xanes_inputs,
+                run_xanes_parsl,
+                expand_xanes_db,
+                plot_xanes_results,
             ]
         tools_node = ToolNode(tools=tools, messages_key="worker_messages")
         graph_builder.add_node("tools", tools_node)
