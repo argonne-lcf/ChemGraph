@@ -466,7 +466,7 @@ class ChemGraph:
                     .decode("utf-8")
                     .strip()
                 )
-            except (subprocess.CalledProcessError, FileNotFoundError, ImportError):
+            except (subprocess.CalledProcessError, FileNotFoundError):
                 git_commit = "unknown"
 
             # Base log info

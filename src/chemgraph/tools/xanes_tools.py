@@ -15,6 +15,10 @@ from parsl.providers import PBSProProvider
 from parsl.config import Config
 from parsl.launchers import SingleNodeLauncher
 from langchain_core.tools import tool
+from typing import Union, List
+from chemgraph.models.atomsdata import AtomsData
+from chemgraph.tools.ase_tools import atomsdata_to_atoms
+
 
 # API Configuration
 MP_API_KEY = 'Pgvt9Q4pctLJeK7hDpB2F3ztUIjnDeym'
@@ -180,8 +184,8 @@ def fetch_materials_project_data(chemsys: list[str], db_path: Path):
     print(f"Saved {len(atoms_list)} structures to {db_path / 'atoms_db.pkl'}")
     return atoms_list
 
-def create_fdmnes_inputs(root_dir: Path):
-    """Create FDMNES inputs from the database."""
+def create_fdmnes_inputs(root_dir: Path, atoms_list: List[Atoms] = None, z_absorber: int = None):
+    """Create FDMNES inputs from the database or provided atoms."""
     print("Creating FDMNES inputs...")
     runs_dir = root_dir / 'fdmnes_batch_runs'
     
@@ -198,21 +202,27 @@ def create_fdmnes_inputs(root_dir: Path):
     else:
         runs_dir.mkdir(parents=True)
 
-    with open(root_dir / 'atoms_db.pkl', 'rb') as f:
-        atoms_list = pickle.load(f)
+    if atoms_list is None:
+        db_path = root_dir / 'atoms_db.pkl'
+        if not db_path.exists():
+            raise FileNotFoundError(f"No atoms provided and {db_path} not found.")
+        with open(db_path, 'rb') as f:
+            atoms_list = pickle.load(f)
 
     for i, atoms in enumerate(atoms_list, start=start_idx):
         curr_run_dir = runs_dir / f'run_{i}'
         curr_run_dir.mkdir(parents=True, exist_ok=True)
 
-        z_absorber = max(atoms.get_atomic_numbers())
+        current_z_absorber = z_absorber if z_absorber is not None else max(atoms.get_atomic_numbers())
         write_fdmnes_input(ase_atoms=atoms,
                            input_file_dir=curr_run_dir,
-                           z_absorber=z_absorber,
+                           z_absorber=current_z_absorber,
                            radius=6,
                            magnetism=False)
 
-        pkl_filename = f'Z{z_absorber}_{atoms.info["MP-id"]}_{atoms.get_chemical_formula()}.pkl'
+        mp_id = atoms.info.get("MP-id", "local")
+        formula = atoms.get_chemical_formula()
+        pkl_filename = f'Z{current_z_absorber}_{mp_id}_{formula}.pkl'
         with open(curr_run_dir / pkl_filename, 'wb') as f:
             pickle.dump(atoms, f)
             
@@ -377,14 +387,35 @@ def fetch_xanes_data(chemsys: list[str]) -> str:
         return f"Error fetching data: {e}"
 
 @tool
-def create_xanes_inputs() -> str:
+def create_xanes_inputs(atoms_list: List[Union[AtomsData, dict]] = None, z_absorber: int = None) -> str:
     """
-    Step 2: Create FDMNES input files from the fetched database.
-    Requires 'fetch_xanes_data' to have been run first.
+    Step 2: Create FDMNES input files from the fetched database or explicit AtomsData objects.
+    
+    Parameters:
+    -----------
+    atoms_list : List[Union[AtomsData, dict]], optional
+        List of AtomsData objects or dictionaries representing atoms to run XANES on.
+        If not provided, falls back to using the 'atoms_db.pkl' fetched from 'fetch_xanes_data'.
+    z_absorber : int, optional
+        Atomic number of the absorbing atom for the XANES calculation.
     """
     try:
         data_dir = _get_data_dir()
-        create_fdmnes_inputs(data_dir)
+        ase_atoms_list = None
+        
+        if atoms_list is not None:
+            ase_atoms_list = []
+            for item in atoms_list:
+                if isinstance(item, AtomsData):
+                    ase_atoms_list.append(atomsdata_to_atoms(item))
+                elif isinstance(item, dict):
+                    # Ensure parsing from generic dict to AtomsData if LLM passes raw dict
+                    parsed_item = AtomsData(**item)
+                    ase_atoms_list.append(atomsdata_to_atoms(parsed_item))
+                else:
+                    raise TypeError("Expected AtomsData or dict in atoms_list.")
+                    
+        create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
         return f"Created FDMNES inputs in {data_dir / 'fdmnes_batch_runs'}"
     except Exception as e:
         return f"Error creating inputs: {e}"
@@ -440,37 +471,44 @@ def plot_xanes_results() -> str:
 # -----------------------------------------------------------------------------
 
 @tool
-def run_xanes_workflow(chemsys: list[str]) -> str:
+def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[Union[AtomsData, dict]] = None, z_absorber: int = None) -> str:
     """
-    Run the FULL XANES workflow for a given chemical system.
-    
-    This executes all steps sequentially:
-    1. Fetching materials from Materials Project.
-    2. Creating FDMNES input files.
-    3. Running FDMNES calculations via Parsl.
-    4. Expanding the database with results.
-    5. Plotting the results.
+    Run the FULL XANES workflow.
     
     Parameters:
     -----------
-    chemsys : list[str]
+    chemsys : List[str], optional
         List of chemical systems to search for (e.g. ['Fe2O3', 'CoO'])
-        
-    Returns:
-    --------
-    str
-        Status message indicating completion or failure.
+    atoms_list : List[Union[AtomsData, dict]], optional
+        List of AtomsData objects or generic dicts identifying atoms to be processed.
+    z_absorber : int, optional
+        Atomic number of the absorbing atom.
     """
+    if chemsys is None and atoms_list is None:
+        return "Error: Must provide either 'chemsys' or 'atoms_list' to run_xanes_workflow."
+        
     try:
         data_dir = _get_data_dir()
-            
-        print(f"Starting XANES workflow for {chemsys} in {data_dir}...")
+        
+        target_name = chemsys if chemsys else [data.get('numbers', 'Unknown') if isinstance(data, dict) else data.numbers for data in atoms_list]
+        print(f"Starting XANES workflow for {target_name} in {data_dir}...")
         
         # 1. Fetch Data
-        fetch_materials_project_data(chemsys, data_dir)
+        if chemsys is not None:
+            fetch_materials_project_data(chemsys, data_dir)
         
         # 2. Creates Inputs
-        create_fdmnes_inputs(data_dir)
+        ase_atoms_list = None
+        if atoms_list is not None:
+            ase_atoms_list = []
+            for item in atoms_list:
+                if isinstance(item, AtomsData):
+                    ase_atoms_list.append(atomsdata_to_atoms(item))
+                elif isinstance(item, dict):
+                    parsed_item = AtomsData(**item)
+                    ase_atoms_list.append(atomsdata_to_atoms(parsed_item))
+                    
+        create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
         
         # 3. Parsl Execution
         runs_dir = data_dir / 'fdmnes_batch_runs'
@@ -482,7 +520,7 @@ def run_xanes_workflow(chemsys: list[str]) -> str:
         # 5. Plot
         _plot_xanes_results_internal(data_dir, runs_dir)
         
-        return f"XANES workflow completed successfully for {chemsys}. Results in {data_dir}"
+        return f"XANES workflow completed successfully for {target_name}. Results in {data_dir}"
         
     except Exception as e:
         return f"Error executing XANES workflow: {str(e)}"
