@@ -234,8 +234,8 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
     
     # ---------- USER VARIABLES ----------
     account     = 'xanes_fmCatal' # account to charge
-    num_nodes   = 2           # max number of nodes to use
-    walltime    = '23:00:00'   # job length
+    num_nodes   = 2              # max number of nodes to use
+    walltime    = '23:00:00'     # job length
     fdmnes_exe  = '/home/vferreiragrizzi/parallel_fdmnes/mpirun_fdmnes'
     num_cores   = int(os.environ.get('PBS_NP', '128'))
     # ----------------------------------------------
@@ -491,19 +491,18 @@ def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[Union[AtomsDa
         print(f"Starting XANES workflow for {target_name} in {data_dir}...")
         
         # 1. Fetch Data
-        if chemsys is not None:
+        if atoms_list is None and chemsys is not None:
             fetch_materials_project_data(chemsys, data_dir)
         
         # 2. Creates Inputs
         ase_atoms_list = None
         if atoms_list is not None:
             ase_atoms_list = []
-            for item in atoms_list:
-                if isinstance(item, AtomsData):
-                    ase_atoms_list.append(atomsdata_to_atoms(item))
-                elif isinstance(item, dict):
-                    parsed_item = AtomsData(**item)
-                    ase_atoms_list.append(atomsdata_to_atoms(parsed_item))
+            for atoms in atoms_list:
+                if isinstance(atoms, AtomsData):
+                    ase_atoms_list.append(atomsdata_to_atoms(atoms))
+                elif isinstance(atoms, dict):
+                    ase_atoms_list.append(atomsdata_to_atoms(AtomsData(**atoms)))
                     
         create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
         
