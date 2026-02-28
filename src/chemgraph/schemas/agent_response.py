@@ -94,19 +94,23 @@ class ScalarResult(BaseModel):
 class ResponseFormatter(BaseModel):
     """Defined structured output to the user."""
 
-    answer: Union[
-        str,
-        ScalarResult,
-        VibrationalFrequency,
-        IRSpectrum,
-        AtomsData,
-    ] = Field(
-        description=(
-            "Structured answer to the user's query. Use:\n"
-            "1. `str` for general or explanatory responses or SMILES string.\n"
-            "2. `VibrationalFrequency` for vibrational frequencies.\n"
-            "3. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
-            "4. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
-            "5. `InfraredSpectrum` for calculating infrared spectra."
-        )
+    text_answer: Optional[str] = Field(
+        default=None,
+        description="General or explanatory responses or SMILES string."
+    )
+    scalar_answer: Optional[ScalarResult] = Field(
+        default=None,
+        description="Single numerical properties (e.g. enthalpy)."
+    )
+    vibrational_answer: Optional[VibrationalFrequency] = Field(
+        default=None,
+        description="Vibrational frequencies."
+    )
+    ir_spectrum: Optional[IRSpectrum] = Field(
+        default=None,
+        description="Infrared spectra."
+    )
+    atoms_data: Optional[AtomsData] = Field(
+        default=None,
+        description="Atomic geometries (XYZ coordinate, etc.) and optimized structures."
     )
