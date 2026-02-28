@@ -16,7 +16,7 @@ from parsl.config import Config
 from parsl.launchers import SingleNodeLauncher
 from langchain_core.tools import tool
 from typing import Union, List
-from chemgraph.models.atomsdata import AtomsData
+from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.tools.ase_tools import atomsdata_to_atoms
 
 
