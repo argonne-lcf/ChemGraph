@@ -152,6 +152,7 @@ def extract_conv(fdmnes_output_dir: Path | str) -> np.ndarray:
 
 def fetch_materials_project_data(chemsys: list[str], db_path: Path):
     """Fetch materials data from Materials Project."""
+    import pickle
     print(f"Fetching data from MP for: {chemsys}")
     atoms_list = []
     
@@ -183,6 +184,7 @@ def fetch_materials_project_data(chemsys: list[str], db_path: Path):
 
 def create_fdmnes_inputs(root_dir: Path, atoms_list: List[Atoms] = None, z_absorber: int = None):
     """Create FDMNES inputs from the database or provided atoms."""
+    import pickle
     print("Creating FDMNES inputs...")
     runs_dir = root_dir / 'fdmnes_batch_runs'
     
@@ -311,6 +313,7 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
 
 def expand_database_results(root_dir: Path, runs_dir: Path):
     """Expand the database with XANES results."""
+    import pickle
     print("Expanding database...")
     expanded_atoms_list = []
     for sub_dir in runs_dir.glob('run_*'):
@@ -458,7 +461,7 @@ def plot_xanes_results() -> str:
     try:
         data_dir = _get_data_dir()
         runs_dir = data_dir / 'fdmnes_batch_runs'
-        plot_xanes_results(data_dir, runs_dir)
+        _plot_xanes_results_internal(data_dir, runs_dir)
         return f"Plots generated in subdirectories of {runs_dir}"
     except Exception as e:
         return f"Error plotting results: {e}"
