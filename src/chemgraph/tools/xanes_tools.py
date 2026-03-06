@@ -398,6 +398,10 @@ def create_xanes_inputs(atoms_list: List[AtomsData] = None, z_absorber: int = No
         If not provided, falls back to using the 'atoms_db.pkl' fetched from 'fetch_xanes_data'.
     z_absorber : int, optional
         Atomic number of the absorbing atom for the XANES calculation.
+        
+    CRITICAL INSTRUCTION FOR THE AGENT:
+    To actually create the inputs, you MUST execute this tool call. Do not skip executing this tool.
+    If you are passing `atoms_list`, you MUST include the FULL JSON string for each AtomsData object, no matter how large the arrays for `numbers` and `positions` are. Do not truncate the JSON or hallucinate a completion without calling the tool.
     """
     try:
         data_dir = _get_data_dir()
@@ -483,6 +487,10 @@ def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[AtomsData] = 
         List of AtomsData objects identifying atoms to be processed.
     z_absorber : int, optional
         Atomic number of the absorbing atom.
+        
+    CRITICAL INSTRUCTION FOR THE AGENT:
+    If the user asks to compute or run XANES, you MUST invoke this tool or the individual workflow tools. You cannot just output text saying "it will be calculated" or "it has been processed".
+    If passing `atoms_list`, you MUST painstakingly output the FULL AtomsData JSON from the previous step. Do not truncate the arrays or skip the tool call due to length.
     """
     if chemsys is None and atoms_list is None:
         return "Error: Must provide either 'chemsys' or 'atoms_list' to run_xanes_workflow."
