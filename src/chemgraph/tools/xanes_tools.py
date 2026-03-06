@@ -387,7 +387,7 @@ def fetch_xanes_data(chemsys: list[str]) -> str:
         return f"Error fetching data: {e}"
 
 @tool
-def create_xanes_inputs(atoms_list: List[Union[AtomsData, dict, str]] = None, z_absorber: int = None) -> str:
+def create_xanes_inputs(atoms_list: list[AtomsData | dict | str] = None, z_absorber: int = None) -> str:
     """
     Step 2: Create FDMNES input files from the fetched database or explicit AtomsData objects.
     
@@ -401,7 +401,7 @@ def create_xanes_inputs(atoms_list: List[Union[AtomsData, dict, str]] = None, z_
         
     CRITICAL INSTRUCTION FOR THE AGENT:
     To actually create the inputs, you MUST execute this tool call. Do not skip executing this tool.
-    To avoid output limit errors (LLM laziness), if you have a file path (like POSCAR), you should simply pass the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
+    If you have a file path (like POSCAR), you should simply pass the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
     If you must pass AtomsData directly, you MUST include the FULL JSON string for each AtomsData object.
     """
     try:
@@ -480,7 +480,7 @@ def plot_xanes_results() -> str:
 # -----------------------------------------------------------------------------
 
 @tool
-def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[Union[AtomsData, dict, str]] = None, z_absorber: int = None) -> str:
+def run_xanes_workflow(chemsys: list[str] = None, atoms_list: list[AtomsData | dict | str] = None, z_absorber: int = None) -> str:
     """
     Run the FULL XANES workflow.
     
@@ -495,7 +495,7 @@ def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[Union[AtomsDa
         
     CRITICAL INSTRUCTION FOR THE AGENT:
     If the user asks to compute or run XANES, you MUST invoke this tool or the individual workflow tools. You cannot just output text saying "it will be calculated" or "it has been processed".
-    To avoid output limit errors, if you have a file path (like POSCAR), prefer passing the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
+    If you have a file path (like POSCAR), prefer passing the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
     If passing `atoms_list` as AtomsData, you MUST painstakingly output the FULL AtomsData JSON from the previous step. Do not truncate the arrays or skip the tool call due to length.
     """
     if chemsys is None and atoms_list is None:
