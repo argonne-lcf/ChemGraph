@@ -387,15 +387,17 @@ def fetch_xanes_data(chemsys: list[str]) -> str:
         return f"Error fetching data: {e}"
 
 @tool
-def create_xanes_inputs(atoms_list: List[dict] = None, z_absorber: int = None) -> str:
+def create_xanes_inputs(atoms_list: List[dict] = None, file_paths: List[str] = None, z_absorber: int = None) -> str:
     """
-    Step 2: Create FDMNES input files from the fetched database or explicit AtomsData objects.
+    Step 2: Create FDMNES input files from the fetched database, explicit AtomsData objects, or file paths.
     
     Parameters:
     -----------
     atoms_list : List[dict], optional
         List of dictionaries representing atoms to run XANES on.
         If not provided, falls back to using the 'atoms_db.pkl' fetched from 'fetch_xanes_data'.
+    file_paths : List[str], optional
+        List of file paths to structure files (e.g., POSCAR, CIF, XYZ) to compute XANES for.
     z_absorber : int, optional
         Atomic number of the absorbing atom for the XANES calculation.
     """
@@ -403,15 +405,20 @@ def create_xanes_inputs(atoms_list: List[dict] = None, z_absorber: int = None) -
         data_dir = _get_data_dir()
         ase_atoms_list = None
         
-        if atoms_list is not None:
+        if atoms_list is not None or file_paths is not None:
             ase_atoms_list = []
-            for item in atoms_list:
-                if isinstance(item, dict):
-                    # Ensure parsing from generic dict to AtomsData if LLM passes raw dict
-                    parsed_item = AtomsData(**item)
-                    ase_atoms_list.append(atomsdata_to_atoms(parsed_item))
-                else:
-                    raise TypeError("Expected dict in atoms_list.")
+            if atoms_list is not None:
+                for item in atoms_list:
+                    if isinstance(item, dict):
+                        # Ensure parsing from generic dict to AtomsData if LLM passes raw dict
+                        parsed_item = AtomsData(**item)
+                        ase_atoms_list.append(atomsdata_to_atoms(parsed_item))
+                    else:
+                        raise TypeError("Expected dict in atoms_list.")
+            if file_paths is not None:
+                from ase.io import read
+                for fp in file_paths:
+                    ase_atoms_list.append(read(fp))
                     
         create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
         return f"Created FDMNES inputs in {data_dir / 'fdmnes_batch_runs'}"
@@ -469,7 +476,7 @@ def plot_xanes_results() -> str:
 # -----------------------------------------------------------------------------
 
 @tool
-def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[dict] = None, z_absorber: int = None) -> str:
+def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[dict] = None, file_paths: List[str] = None, z_absorber: int = None) -> str:
     """
     Run the FULL XANES workflow.
     
@@ -479,31 +486,46 @@ def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[dict] = None,
         List of chemical systems to search for (e.g. ['Fe2O3', 'CoO'])
     atoms_list : List[dict], optional
         List of generic dicts identifying atoms to be processed.
+    file_paths : List[str], optional
+        List of file paths to structure files (e.g., POSCAR, CIF, XYZ) to compute XANES for.
     z_absorber : int, optional
         Atomic number of the absorbing atom.
     """
-    if chemsys is None and atoms_list is None:
-        return "Error: Must provide either 'chemsys' or 'atoms_list' to run_xanes_workflow."
+    if chemsys is None and atoms_list is None and file_paths is None:
+        return "Error: Must provide either 'chemsys', 'atoms_list', or 'file_paths' to run_xanes_workflow."
         
     try:
         data_dir = _get_data_dir()
         
-        target_name = chemsys if chemsys else [data.get('numbers', 'Unknown') if isinstance(data, dict) else "Unknown" for data in atoms_list]
+        target_names = []
+        if chemsys:
+            target_names.extend(chemsys)
+        if atoms_list:
+            target_names.extend(["Atoms data" for _ in atoms_list])
+        if file_paths:
+            target_names.extend([Path(f).name for f in file_paths])
+        target_name = target_names
+        
         print(f"Starting XANES workflow for {target_name} in {data_dir}...")
         
         # 1. Fetch Data
-        if atoms_list is None and chemsys is not None:
+        if atoms_list is None and file_paths is None and chemsys is not None:
             fetch_materials_project_data(chemsys, data_dir)
         
         # 2. Creates Inputs
         ase_atoms_list = None
-        if atoms_list is not None:
+        if atoms_list is not None or file_paths is not None:
             ase_atoms_list = []
-            for atoms in atoms_list:
-                if isinstance(atoms, dict):
-                    ase_atoms_list.append(atomsdata_to_atoms(AtomsData(**atoms)))
-                else:
-                    raise TypeError("Expected dict in atoms_list.")
+            if atoms_list is not None:
+                for atoms in atoms_list:
+                    if isinstance(atoms, dict):
+                        ase_atoms_list.append(atomsdata_to_atoms(AtomsData(**atoms)))
+                    else:
+                        raise TypeError("Expected dict in atoms_list.")
+            if file_paths is not None:
+                from ase.io import read
+                for fp in file_paths:
+                    ase_atoms_list.append(read(fp))
                     
         create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
         
