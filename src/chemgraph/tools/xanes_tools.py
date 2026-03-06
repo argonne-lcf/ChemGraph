@@ -387,21 +387,22 @@ def fetch_xanes_data(chemsys: list[str]) -> str:
         return f"Error fetching data: {e}"
 
 @tool
-def create_xanes_inputs(atoms_list: List[AtomsData] = None, z_absorber: int = None) -> str:
+def create_xanes_inputs(atoms_list: List[Union[AtomsData, dict, str]] = None, z_absorber: int = None) -> str:
     """
     Step 2: Create FDMNES input files from the fetched database or explicit AtomsData objects.
     
     Parameters:
     -----------
-    atoms_list : List[AtomsData], optional
-        List of AtomsData objects representing atoms to run XANES on.
+    atoms_list : List[Union[AtomsData, dict, str]], optional
+        List of AtomsData objects, dictionaries representing atoms, or file paths (strings) to run XANES on.
         If not provided, falls back to using the 'atoms_db.pkl' fetched from 'fetch_xanes_data'.
     z_absorber : int, optional
         Atomic number of the absorbing atom for the XANES calculation.
         
     CRITICAL INSTRUCTION FOR THE AGENT:
     To actually create the inputs, you MUST execute this tool call. Do not skip executing this tool.
-    If you are passing `atoms_list`, you MUST include the FULL JSON string for each AtomsData object, no matter how large the arrays for `numbers` and `positions` are. Do not truncate the JSON or hallucinate a completion without calling the tool.
+    To avoid output limit errors (LLM laziness), if you have a file path (like POSCAR), you should simply pass the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
+    If you must pass AtomsData directly, you MUST include the FULL JSON string for each AtomsData object.
     """
     try:
         data_dir = _get_data_dir()
@@ -409,6 +410,7 @@ def create_xanes_inputs(atoms_list: List[AtomsData] = None, z_absorber: int = No
         
         if atoms_list is not None:
             ase_atoms_list = []
+            from ase.io import read
             for item in atoms_list:
                 if isinstance(item, AtomsData):
                     ase_atoms_list.append(atomsdata_to_atoms(item))
@@ -416,8 +418,11 @@ def create_xanes_inputs(atoms_list: List[AtomsData] = None, z_absorber: int = No
                     # Fallback if given a dict
                     parsed_item = AtomsData(**item)
                     ase_atoms_list.append(atomsdata_to_atoms(parsed_item))
+                elif isinstance(item, str):
+                    # Fallback if given a file path
+                    ase_atoms_list.append(read(item))
                 else:
-                    raise TypeError("Expected AtomsData or dict in atoms_list.")
+                    raise TypeError("Expected AtomsData, dict, or str in atoms_list.")
                     
         create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
         return f"Created FDMNES inputs in {data_dir / 'fdmnes_batch_runs'}"
@@ -475,7 +480,7 @@ def plot_xanes_results() -> str:
 # -----------------------------------------------------------------------------
 
 @tool
-def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[AtomsData] = None, z_absorber: int = None) -> str:
+def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[Union[AtomsData, dict, str]] = None, z_absorber: int = None) -> str:
     """
     Run the FULL XANES workflow.
     
@@ -483,14 +488,15 @@ def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[AtomsData] = 
     -----------
     chemsys : List[str], optional
         List of chemical systems to search for (e.g. ['Fe2O3', 'CoO'])
-    atoms_list : List[AtomsData], optional
-        List of AtomsData objects identifying atoms to be processed.
+    atoms_list : List[Union[AtomsData, dict, str]], optional
+        List of AtomsData objects, dictionaries, or file paths identifying atoms to be processed.
     z_absorber : int, optional
         Atomic number of the absorbing atom.
         
     CRITICAL INSTRUCTION FOR THE AGENT:
     If the user asks to compute or run XANES, you MUST invoke this tool or the individual workflow tools. You cannot just output text saying "it will be calculated" or "it has been processed".
-    If passing `atoms_list`, you MUST painstakingly output the FULL AtomsData JSON from the previous step. Do not truncate the arrays or skip the tool call due to length.
+    To avoid output limit errors, if you have a file path (like POSCAR), prefer passing the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
+    If passing `atoms_list` as AtomsData, you MUST painstakingly output the FULL AtomsData JSON from the previous step. Do not truncate the arrays or skip the tool call due to length.
     """
     if chemsys is None and atoms_list is None:
         return "Error: Must provide either 'chemsys' or 'atoms_list' to run_xanes_workflow."
@@ -502,7 +508,11 @@ def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[AtomsData] = 
         if chemsys:
             target_names.extend(chemsys)
         if atoms_list:
-            target_names.extend(["Atoms data" for _ in atoms_list])
+            for item in atoms_list:
+                if isinstance(item, str):
+                    target_names.append(Path(item).name)
+                else:
+                    target_names.append("Atoms data")
         target_name = target_names
         
         print(f"Starting XANES workflow for {target_name} in {data_dir}...")
@@ -515,13 +525,16 @@ def run_xanes_workflow(chemsys: List[str] = None, atoms_list: List[AtomsData] = 
         ase_atoms_list = None
         if atoms_list is not None:
             ase_atoms_list = []
+            from ase.io import read
             for atoms in atoms_list:
                 if isinstance(atoms, AtomsData):
                     ase_atoms_list.append(atomsdata_to_atoms(atoms))
                 elif isinstance(atoms, dict):
                     ase_atoms_list.append(atomsdata_to_atoms(AtomsData(**atoms)))
+                elif isinstance(atoms, str):
+                    ase_atoms_list.append(read(atoms))
                 else:
-                    raise TypeError("Expected AtomsData or dict in atoms_list.")
+                    raise TypeError("Expected AtomsData, dict, or str in atoms_list.")
                     
         create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
         
