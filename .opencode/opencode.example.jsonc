@@ -1,0 +1,84 @@
+{
+  // ChemGraph OpenCode MCP Configuration
+  //
+  // Copy this file to opencode.json and customize for your environment:
+  //
+  //   cp .opencode/opencode.example.jsonc opencode.json
+  //
+  // Then set CHEMGRAPH_PYTHON to your ChemGraph Python interpreter:
+  //
+  //   export CHEMGRAPH_PYTHON=/path/to/your/venv/bin/python
+  //
+  // For example:
+  //   export CHEMGRAPH_PYTHON=env/chemgraph_env/bin/python   # local venv
+  //   export CHEMGRAPH_PYTHON=.venv/bin/python                # standard venv
+  //   export CHEMGRAPH_PYTHON=$(which python)                 # active environment
+  //
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    // ── General chemistry tools ─────────────────────────────────────────
+    // Provides: molecule_name_to_smiles, smiles_to_coordinate_file,
+    //           run_ase (energy/opt/vib/thermo/ir), extract_output_json
+    "chemgraph": {
+      "type": "local",
+      "command": [
+        "{env:CHEMGRAPH_PYTHON}",
+        "-m",
+        "chemgraph.mcp.mcp_tools"
+      ],
+      "enabled": true,
+      "environment": {
+        "CHEMGRAPH_LOG_DIR": "./chemgraph_mcp_logs"
+      }
+    }
+
+    // ── Additional MCP servers (uncomment to enable) ────────────────────
+    //
+    // MACE + Parsl (HPC ensemble calculations)
+    // Requires: parsl, mace-torch, HPC environment
+    //
+    // "chemgraph-mace-parsl": {
+    //   "type": "local",
+    //   "command": [
+    //     "{env:CHEMGRAPH_PYTHON}",
+    //     "-m",
+    //     "chemgraph.mcp.mace_mcp_parsl"
+    //   ],
+    //   "enabled": true,
+    //   "environment": {
+    //     "CHEMGRAPH_LOG_DIR": "./chemgraph_mcp_logs"
+    //   }
+    // },
+    //
+    // gRASPA + Parsl (gas adsorption simulations)
+    // Requires: parsl, gRASPA binary, HPC environment
+    //
+    // "chemgraph-graspa-parsl": {
+    //   "type": "local",
+    //   "command": [
+    //     "{env:CHEMGRAPH_PYTHON}",
+    //     "-m",
+    //     "chemgraph.mcp.graspa_mcp_parsl"
+    //   ],
+    //   "enabled": true,
+    //   "environment": {
+    //     "CHEMGRAPH_LOG_DIR": "./chemgraph_mcp_logs"
+    //   }
+    // },
+    //
+    // Data analysis (CIF splitting, JSONL aggregation, isotherm plotting)
+    //
+    // "chemgraph-data-analysis": {
+    //   "type": "local",
+    //   "command": [
+    //     "{env:CHEMGRAPH_PYTHON}",
+    //     "-m",
+    //     "chemgraph.mcp.data_analysis_mcp"
+    //   ],
+    //   "enabled": true,
+    //   "environment": {
+    //     "CHEMGRAPH_LOG_DIR": "./chemgraph_mcp_logs"
+    //   }
+    // }
+  }
+}
