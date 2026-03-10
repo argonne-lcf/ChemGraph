@@ -80,12 +80,12 @@ ChemGraph MCP tools can be used directly with [OpenCode](https://opencode.ai), g
 
 The example config (`.opencode/opencode.example.jsonc`) includes all servers. Enable the ones you need by uncommenting them in your `opencode.json`:
 
-| Server name | Module | Tools |
+| Server name | Module | Tools | Status
 |---|---|---|
-| `chemgraph` | `chemgraph.mcp.mcp_tools` | molecule_name_to_smiles, smiles_to_coordinate_file, run_ase, extract_output_json |
-| `chemgraph-mace-parsl` | `chemgraph.mcp.mace_mcp_parsl` | MACE ensemble calculations via Parsl (HPC) |
-| `chemgraph-graspa-parsl` | `chemgraph.mcp.graspa_mcp_parsl` | gRASPA gas adsorption via Parsl (HPC) |
-| `chemgraph-data-analysis` | `chemgraph.mcp.data_analysis_mcp` | CIF splitting, JSONL aggregation, isotherm plotting |
+| `chemgraph` | `chemgraph.mcp.mcp_tools` | molecule_name_to_smiles, smiles_to_coordinate_file, run_ase, extract_output_json | Stable
+| `chemgraph-mace-parsl` | `chemgraph.mcp.mace_mcp_parsl` | MACE ensemble calculations via Parsl (HPC) | Experimental
+| `chemgraph-graspa-parsl` | `chemgraph.mcp.graspa_mcp_parsl` | gRASPA gas adsorption via Parsl (HPC) | Experimental
+| `chemgraph-data-analysis` | `chemgraph.mcp.data_analysis_mcp` | CIF splitting, JSONL aggregation, isotherm plotting | Experimental
 
 ### How it works
 
