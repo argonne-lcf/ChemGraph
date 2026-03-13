@@ -9,10 +9,8 @@ from mcp.server.fastmcp import FastMCP
 import parsl
 from chemgraph.mcp.server_utils import run_mcp_server
 from chemgraph.schemas.graspa_schema import (
-    graspa_input_schema,
     graspa_input_schema_ensemble,
 )
-from chemgraph.tools.graspa_tools import run_graspa_core
 from parsl import python_app
 
 
@@ -26,6 +24,11 @@ def run_graspa_parsl_app(job: dict):
     job : dict
         Dictionary compatible with `run_graspa_core`'s expected input
     """
+    from chemgraph.schemas.graspa_schema import (
+        graspa_input_schema,
+    )
+    from chemgraph.tools.graspa_tools import run_graspa_core
+
     if isinstance(job, dict):
         params = graspa_input_schema(**job)
     elif isinstance(job, graspa_input_schema):

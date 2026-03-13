@@ -16,7 +16,6 @@ from chemgraph.state.graspa_state import (
 from chemgraph.prompt.graspa_prompt import (
     planner_prompt,
     executor_prompt,
-    batch_orchestrator_prompt,
     analyst_prompt,
 )
 
@@ -57,7 +56,6 @@ def unified_planner_router(state: PlannerState) -> Union[str, list[Send]]:
     """
     next_step = state.get("next_step")
 
-    # --- PATH A: PARALLEL EXECUTION ---
     if next_step == "executor_subgraph":
         tasks = state.get("tasks", [])
         return [
@@ -71,39 +69,10 @@ def unified_planner_router(state: PlannerState) -> Union[str, list[Send]]:
             for i, t in enumerate(tasks)
         ]
 
-    # --- PATH B: STANDARD ROUTING ---
-    elif next_step == "batch_orchestrator":
-        return "batch_orchestrator"
-
     elif next_step == "insight_analyst":
         return "insight_analyst"
 
-    # --- PATH D: TERMINATION ---
     return END
-
-
-def batch_orchestrator_agent(
-    state: PlannerState, llm: ChatOpenAI, tools: list, system_prompt: str
-):
-    """Decides to call the split tool."""
-    messages = [{"role": "system", "content": system_prompt}] + state["messages"]
-
-    llm_with_tools = llm.bind_tools(tools)
-    response = llm_with_tools.invoke(messages)
-
-    return {"messages": [response]}
-
-
-def route_batch_orchestrator(state: PlannerState):
-    """
-    If the agent called a tool, go to ToolNode.
-    Otherwise (or after tool execution), go back to Planner to decide next steps.
-    """
-    last_msg = state["messages"][-1]
-    if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-        return "batch_tools"
-
-    return "Planner"
 
 
 async def executor_model_node(
@@ -116,13 +85,25 @@ async def executor_model_node(
     The reasoning engine for a single executor.
     It sees its own 'task_prompt' and its own 'messages' history.
     """
-    messages = state["messages"]
+    messages = [{"role": "system", "content": system_prompt}] + state["messages"]
+
+    # Flatten MCP/LangChain content blocks to plain text before ChatOpenAI
+    for m in messages:
+        content = m.get("content") if isinstance(m, dict) else getattr(m, "content", None)
+        if isinstance(content, list):
+            text = "\n".join(
+                block.get("text", str(block)) if isinstance(block, dict) else str(block)
+                for block in content
+            )
+            if isinstance(m, dict):
+                m["content"] = text
+            else:
+                m.content = text
+
     llm_with_tools = llm.bind_tools(tools)
     response = await llm_with_tools.ainvoke(messages)
 
-    # print(f"EXECUTOR: {response}")
     return {"messages": [response]}
-
 
 def route_executor(state: ExecutorState):
     """Standard ReAct routing: Tool vs End."""
@@ -212,7 +193,6 @@ def construct_graspa_mcp_graph(
     llm: ChatOpenAI,
     planner_prompt: str = planner_prompt,
     executor_prompt: str = executor_prompt,
-    batch_orchestrator_prompt: str = batch_orchestrator_prompt,
     analyst_prompt: str = analyst_prompt,
     executor_tools: list = None,
     analysis_tools: list = None,
@@ -242,16 +222,6 @@ def construct_graspa_mcp_graph(
         ),
     )
 
-    # batch_orchestrator agent
-    graph_builder.add_node(
-        "batch_orchestrator",
-        partial(
-            batch_orchestrator_agent,
-            llm=llm,
-            tools=analysis_tools,
-            system_prompt=batch_orchestrator_prompt,
-        ),
-    )
     # Executor agent
     graph_builder.add_node("executor_subgraph", executor_subgraph)
 
@@ -266,7 +236,6 @@ def construct_graspa_mcp_graph(
         ),
     )
     # Tool nodes
-    graph_builder.add_node("batch_tools", ToolNode(analysis_tools))
     graph_builder.add_node("analyst_tools", ToolNode(analysis_tools))
 
     # -- Edges --
@@ -277,18 +246,11 @@ def construct_graspa_mcp_graph(
         "Planner",
         unified_planner_router,
         [
-            "batch_orchestrator",
             "insight_analyst",
             "executor_subgraph",
             END,
         ],
     )
-    graph_builder.add_conditional_edges(
-        "batch_orchestrator",
-        route_batch_orchestrator,
-        {"batch_tools": "batch_tools", "Planner": "Planner"},
-    )
-    graph_builder.add_edge("batch_tools", "batch_orchestrator")
     graph_builder.add_edge("executor_subgraph", "Planner")
     graph_builder.add_conditional_edges(
         "insight_analyst",
