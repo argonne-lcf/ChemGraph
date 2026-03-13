@@ -114,12 +114,6 @@ def _extract_text_from_pdf(file_path: str) -> str:
 # ---------------------------------------------------------------------------
 # Embedding helpers
 # ---------------------------------------------------------------------------
-import os
-import logging
-
-logger = logging.getLogger(__name__)
-
-
 def _get_embeddings(provider: str = "openai"):
     """Return an embeddings instance for the requested provider.
 
