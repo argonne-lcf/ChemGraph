@@ -64,6 +64,13 @@ ui = [
 parsl = [
     "parsl",
 ]
+rag = [
+    "faiss-cpu>=1.7.4",
+    "langchain-text-splitters",
+    "langchain-huggingface",
+    "sentence-transformers>=2.2.2",
+    "pymupdf>=1.24.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
