@@ -38,6 +38,8 @@ from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.multi_agent_mcp import construct_multi_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
+from chemgraph.graphs.rag_agent import construct_rag_agent_graph
+from chemgraph.prompt.rag_prompt import rag_agent_prompt
 
 import logging
 
@@ -261,6 +263,7 @@ class ChemGraph:
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
             "multi_agent_mcp": {"constructor": construct_multi_agent_mcp_graph},
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
+            "rag_agent": {"constructor": construct_rag_agent_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -326,6 +329,14 @@ class ChemGraph:
                 llm=llm,
                 executor_tools=self.tools,
                 analysis_tools=self.data_tools,
+            )
+        elif self.workflow_type == "rag_agent":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm=llm,
+                system_prompt=self.system_prompt
+                if self.system_prompt != single_agent_prompt
+                else rag_agent_prompt,
+                tools=self.tools,
             )
 
     def visualize(self, method: str = "ascii"):
@@ -447,7 +458,12 @@ class ChemGraph:
             }
 
             # Add prompts depending on workflow_type
-            if self.workflow_type in {"single_agent", "graspa", "python_relp"}:
+            if self.workflow_type in {
+                "single_agent",
+                "graspa",
+                "python_relp",
+                "rag_agent",
+            }:
                 output_data.update(
                     {
                         "system_prompt": self.system_prompt,
