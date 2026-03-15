@@ -45,6 +45,10 @@ test_outputs/
 
 .venv
 combine*
+
+# OpenCode (user-local config; copy from opencode.example.jsonc)
+opencode.json
+chemgraph_mcp_logs/
 vllm/
 logs/
 error_log.txt
