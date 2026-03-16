@@ -5,10 +5,12 @@ chemgraph/
 │   ├── chemgraph/             # Top-level package
 │   │   ├── agent/             # Agent-based task management
 │   │   ├── graphs/            # Workflow graph utilities
-│   │   ├── models/            # Different Pydantic models
 │   │   ├── mcp/               # MCP servers (stdio/streamable HTTP)
-│   │   ├── prompt/            # Agent prompt
-│   │   ├── state/             # Agent state
+│   │   ├── memory/            # Session memory (SQLite-backed persistence)
+│   │   ├── models/            # LLM provider integrations
+│   │   ├── prompt/            # Agent prompt templates
+│   │   ├── schemas/           # Pydantic data models
+│   │   ├── state/             # Agent state definitions
 │   │   ├── tools/             # Tools for molecular simulations
 │   │   ├── utils/             # Other utility functions
 │   ├── ui/                    # CLI and Streamlit UI package

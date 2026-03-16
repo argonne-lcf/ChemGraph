@@ -565,14 +565,18 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 
 **Core Arguments:**
 
-| Option         | Short | Description                                  | Default        |
-| -------------- | ----- | -------------------------------------------- | -------------- |
-| `--query`      | `-q`  | The computational chemistry query to execute | Required       |
-| `--model`      | `-m`  | LLM model to use                             | `gpt-4o-mini`  |
-| `--workflow`   | `-w`  | Workflow type                                | `single_agent` |
-| `--output`     | `-o`  | Output format (`state`, `last_message`)      | `state`        |
-| `--structured` | `-s`  | Use structured output format                 | `False`        |
-| `--report`     | `-r`  | Generate detailed report                     | `False`        |
+| Option              | Short | Description                                           | Default        |
+| ------------------- | ----- | ----------------------------------------------------- | -------------- |
+| `--query`           | `-q`  | The computational chemistry query to execute          | Required       |
+| `--model`           | `-m`  | LLM model to use                                     | `gpt-4o-mini`  |
+| `--workflow`        | `-w`  | Workflow type                                        | `single_agent` |
+| `--output`          | `-o`  | Output format (`state`, `last_message`)              | `state`        |
+| `--structured`      | `-s`  | Use structured output format                         | `False`        |
+| `--report`          | `-r`  | Generate detailed report                             | `False`        |
+| `--resume`          |       | Resume from a previous session ID (prefix supported) |                |
+| `--list-sessions`   |       | List recent sessions from the memory database        |                |
+| `--show-session`    |       | Show conversation for a session (prefix supported)   |                |
+| `--delete-session`  |       | Delete a session from the memory database            |                |
 
 **Model Selection:**
 
@@ -635,19 +639,25 @@ chemgraph --interactive
 
 **Interactive Features:**
 - **Persistent conversation**: Maintain context across queries
+- **Session memory**: Conversations are automatically saved to a local SQLite database (`~/.chemgraph/sessions.db`) and can be resumed later
 - **Model switching**: Change models mid-conversation
 - **Workflow switching**: Switch between different agent types
-- **Built-in commands**: Help, clear, config, etc.
+- **Built-in commands**: Help, clear, config, session management, etc.
 
 **Interactive Commands:**
 ```bash
 # In interactive mode, type:
 help                    # Show available commands
 clear                   # Clear screen
-config                  # Show current configuration
+config                  # Show current configuration and session ID
 quit                    # Exit interactive mode
 model gpt-4o           # Change model
 workflow multi_agent   # Change workflow
+
+# Session management:
+history                 # List recent sessions
+show <session_id>       # Show a session's conversation
+resume <session_id>     # Resume from a previous session
 ```
 
 #### Utility Commands
@@ -666,6 +676,34 @@ chemgraph --check-keys
 ```bash
 chemgraph --help
 ```
+
+#### Session Memory
+
+ChemGraph automatically saves every conversation to a local SQLite database at `~/.chemgraph/sessions.db`. This allows you to browse past sessions, review tool calls and results, and resume previous conversations with full context.
+
+**List Recent Sessions:**
+```bash
+chemgraph --list-sessions
+```
+
+**View a Session's Conversation:**
+```bash
+# Full session ID or prefix (first few characters)
+chemgraph --show-session a3b2
+```
+
+**Resume From a Previous Session:**
+```bash
+# Injects previous conversation context into the new query
+chemgraph -q "Now optimize the geometry at 500K" --resume a3b2
+```
+
+**Delete a Session:**
+```bash
+chemgraph --delete-session a3b2c1d4
+```
+
+Session IDs support prefix matching -- you only need to type enough characters to uniquely identify the session.
 
 #### Configuration File Support
 
@@ -800,11 +838,15 @@ chemgraph/
 │   ├── chemgraph/             # Top-level package
 │   │   ├── agent/             # Agent-based task management
 │   │   ├── graphs/            # Workflow graph utilities
-│   │   ├── models/            # Different Pydantic models
-│   │   ├── prompt/            # Agent prompt
-│   │   ├── state/             # Agent state
+│   │   ├── mcp/               # MCP servers (stdio/streamable HTTP)
+│   │   ├── memory/            # Session memory (SQLite-backed persistence)
+│   │   ├── models/            # LLM provider integrations
+│   │   ├── prompt/            # Agent prompt templates
+│   │   ├── schemas/           # Pydantic data models
+│   │   ├── state/             # Agent state definitions
 │   │   ├── tools/             # Tools for molecular simulations
 │   │   ├── utils/             # Other utility functions
+│   ├── ui/                    # CLI and Streamlit UI
 │
 ├── pyproject.toml             # Project configuration
 └── README.md                  # Project documentation
