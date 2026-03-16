@@ -6,6 +6,10 @@
 
     ChemGraph supports diverse simulation backends, including ab initio quantum chemistry methods (e.g. coupled-cluster, DFT via NWChem, ORCA), semi-empirical methods (e.g., XTB via TBLite), and machine learning potentials (e.g, MACE, UMA) through a modular integration with `ASE`.
 
+!!! info "Session Memory"
+
+    ChemGraph automatically persists every conversation to a local SQLite database. You can browse past sessions, review tool calls and results, and resume previous conversations with full context using the CLI (`--list-sessions`, `--show-session`, `--resume`) or interactive mode (`history`, `show`, `resume`).
+
 !!! tip "Docker Image"
 
     ChemGraph Docker images are published to GHCR at `ghcr.io/argonne-lcf/chemgraph`.
