@@ -35,6 +35,7 @@ from chemgraph.utils.config_utils import (
     get_argo_user_from_flat_config,
     get_base_url_for_model_from_flat_config,
 )
+from chemgraph.memory.store import SessionStore
 
 # Initialize rich console
 console = Console()
@@ -80,7 +81,6 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
                 False,
                 "OpenAI API key not found. Please set OPENAI_API_KEY environment variable.",
             )
-    
 
     # Check Anthropic models
     elif "claude" in model_lower:
@@ -142,6 +142,12 @@ Examples:
   %(prog)s --interactive
   %(prog)s --list-models
   %(prog)s --check-keys
+
+Session management:
+  %(prog)s --list-sessions
+  %(prog)s --show-session a3b2
+  %(prog)s --delete-session a3b2c1d4
+  %(prog)s -q "Optimize the geometry" --resume a3b2
         """,
     )
 
@@ -210,6 +216,34 @@ Examples:
     # Check API keys
     parser.add_argument(
         "--check-keys", action="store_true", help="Check API key availability"
+    )
+
+    # Session management
+    parser.add_argument(
+        "--list-sessions",
+        action="store_true",
+        help="List recent sessions from the memory database",
+    )
+
+    parser.add_argument(
+        "--show-session",
+        type=str,
+        metavar="ID",
+        help="Show conversation for a session (supports prefix matching)",
+    )
+
+    parser.add_argument(
+        "--delete-session",
+        type=str,
+        metavar="ID",
+        help="Delete a session from the memory database",
+    )
+
+    parser.add_argument(
+        "--resume",
+        type=str,
+        metavar="ID",
+        help="Resume from a previous session (injects context into new query)",
     )
 
     # Verbose output
@@ -354,6 +388,125 @@ def check_api_keys_status():
     console.print("• [cyan]OpenAI:[/cyan] https://platform.openai.com/api-keys")
     console.print("• [cyan]Anthropic:[/cyan] https://console.anthropic.com/")
     console.print("• [cyan]Google:[/cyan] https://aistudio.google.com/apikey")
+
+
+def list_sessions(limit: int = 20, db_path: str = None):
+    """Display recent sessions in a formatted table."""
+    store = SessionStore(db_path=db_path)
+    sessions = store.list_sessions(limit=limit)
+
+    if not sessions:
+        console.print("[dim]No sessions found.[/dim]")
+        return
+
+    console.print(Panel(f"Recent Sessions ({len(sessions)})", style="bold cyan"))
+
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Session ID", style="cyan", width=10)
+    table.add_column("Title", style="white", width=40)
+    table.add_column("Model", style="green", width=16)
+    table.add_column("Workflow", style="yellow", width=14)
+    table.add_column("Queries", style="white", justify="right", width=8)
+    table.add_column("Messages", style="white", justify="right", width=9)
+    table.add_column("Date", style="dim", width=16)
+
+    for s in sessions:
+        table.add_row(
+            s.session_id,
+            s.title or "[dim]Untitled[/dim]",
+            s.model_name,
+            s.workflow_type,
+            str(s.query_count),
+            str(s.message_count),
+            s.updated_at.strftime("%Y-%m-%d %H:%M"),
+        )
+
+    console.print(table)
+    console.print(
+        "\n[dim]Use --show-session <id> to view a session's conversation. "
+        "Prefix matching is supported (e.g. first few chars).[/dim]"
+    )
+
+
+def show_session(session_id: str, db_path: str = None, max_content: int = 500):
+    """Display a session's full conversation."""
+    store = SessionStore(db_path=db_path)
+    session = store.get_session(session_id)
+
+    if session is None:
+        console.print(
+            f"[red]Session '{session_id}' not found. "
+            f"The ID may be ambiguous or nonexistent.[/red]"
+        )
+        console.print("[dim]Use --list-sessions to see available sessions.[/dim]")
+        return
+
+    # Session metadata header
+    meta_table = Table(show_header=False, box=None, padding=(0, 2))
+    meta_table.add_column("Key", style="bold cyan")
+    meta_table.add_column("Value")
+    meta_table.add_row("Session ID", session.session_id)
+    meta_table.add_row("Title", session.title or "Untitled")
+    meta_table.add_row("Model", session.model_name)
+    meta_table.add_row("Workflow", session.workflow_type)
+    meta_table.add_row("Queries", str(session.query_count))
+    meta_table.add_row("Created", session.created_at.strftime("%Y-%m-%d %H:%M:%S"))
+    meta_table.add_row("Updated", session.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
+    if session.log_dir:
+        meta_table.add_row("Log Dir", session.log_dir)
+
+    console.print(Panel(meta_table, title="Session Info", style="bold cyan"))
+
+    if not session.messages:
+        console.print("[dim]No messages in this session.[/dim]")
+        return
+
+    # Display conversation
+    console.print(f"\n[bold]Conversation ({len(session.messages)} messages):[/bold]\n")
+
+    for msg in session.messages:
+        if msg.role == "human":
+            label = "[bold cyan]User[/bold cyan]"
+        elif msg.role == "ai":
+            label = "[bold green]Assistant[/bold green]"
+        elif msg.role == "tool":
+            tool_label = f" ({msg.tool_name})" if msg.tool_name else ""
+            label = f"[bold yellow]Tool{tool_label}[/bold yellow]"
+        else:
+            label = f"[dim]{msg.role}[/dim]"
+
+        content = msg.content
+        if max_content and len(content) > max_content:
+            content = (
+                content[:max_content]
+                + f"\n... [truncated, {len(msg.content)} chars total]"
+            )
+
+        timestamp = msg.timestamp.strftime("%H:%M:%S") if msg.timestamp else ""
+
+        console.print(f"  {label} [dim]{timestamp}[/dim]")
+        console.print(f"    {content}\n")
+
+
+def delete_session_cmd(session_id: str, db_path: str = None):
+    """Delete a session from the database."""
+    store = SessionStore(db_path=db_path)
+
+    # Show session info before deleting
+    session = store.get_session(session_id)
+    if session is None:
+        console.print(f"[red]Session '{session_id}' not found.[/red]")
+        return
+
+    console.print(
+        f"[yellow]Deleting session: {session.session_id} "
+        f"({session.title or 'Untitled'})[/yellow]"
+    )
+
+    if store.delete_session(session_id):
+        console.print("[green]Session deleted.[/green]")
+    else:
+        console.print("[red]Failed to delete session.[/red]")
 
 
 def load_config(config_file: str) -> Dict[str, Any]:
@@ -540,11 +693,19 @@ def format_response(result, verbose: bool = False):
         )
 
 
-def run_query(agent, query: str, thread_id: int, verbose: bool = False):
+def run_query(
+    agent,
+    query: str,
+    thread_id: int,
+    verbose: bool = False,
+    resume_from: str = None,
+):
     """Execute a query with the agent."""
     if verbose:
         console.print(f"[blue]Executing query:[/blue] {query}")
         console.print(f"[blue]Thread ID:[/blue] {thread_id}")
+        if resume_from:
+            console.print(f"[blue]Resuming from session:[/blue] {resume_from}")
 
     with Progress(
         SpinnerColumn(),
@@ -556,7 +717,9 @@ def run_query(agent, query: str, thread_id: int, verbose: bool = False):
 
         try:
             config = {"configurable": {"thread_id": thread_id}}
-            result = run_async_callable(lambda: agent.run(query, config=config))
+            result = run_async_callable(
+                lambda: agent.run(query, config=config, resume_from=resume_from)
+            )
 
             progress.update(task, description="[green]Query completed!")
             time.sleep(0.5)
@@ -591,9 +754,7 @@ def interactive_mode():
     )
 
     # Initialize agent
-    agent = initialize_agent(
-        model, workflow, False, "state", True, 20, verbose=True
-    )
+    agent = initialize_agent(model, workflow, False, "state", True, 20, verbose=True)
     if not agent:
         return
 
@@ -620,6 +781,11 @@ Available commands:
 • model <name> - Change model
 • workflow <type> - Change workflow type
 
+Session commands:
+• history - List recent sessions
+• show <id> - Show a session's conversation
+• resume <id> - Resume from a previous session
+
 Example queries:
 • What is the SMILES string for water?
 • Optimize the geometry of methane
@@ -637,6 +803,37 @@ Example queries:
             elif query.lower() == "config":
                 console.print(f"Model: {model}")
                 console.print(f"Workflow: {workflow}")
+                if hasattr(agent, "session_id"):
+                    console.print(f"Session ID: {agent.session_id}")
+                continue
+            elif query.lower() == "history":
+                list_sessions()
+                continue
+            elif query.lower().startswith("show "):
+                sid = query[5:].strip()
+                if sid:
+                    show_session(sid)
+                else:
+                    console.print("[red]Usage: show <session_id>[/red]")
+                continue
+            elif query.lower().startswith("resume "):
+                sid = query[7:].strip()
+                if not sid:
+                    console.print("[red]Usage: resume <session_id>[/red]")
+                    continue
+                resume_query = Prompt.ask(
+                    "[bold cyan]Enter query to continue with[/bold cyan]"
+                )
+                if resume_query.strip():
+                    result = run_query(
+                        agent,
+                        resume_query,
+                        1,
+                        verbose=False,
+                        resume_from=sid,
+                    )
+                    if result:
+                        format_response(result, verbose=False)
                 continue
             elif query.startswith("model "):
                 new_model = query[6:].strip()
@@ -700,6 +897,18 @@ def main():
         check_api_keys_status()
         return
 
+    if args.list_sessions:
+        list_sessions()
+        return
+
+    if args.show_session:
+        show_session(args.show_session)
+        return
+
+    if args.delete_session:
+        delete_session_cmd(args.delete_session)
+        return
+
     if args.interactive:
         interactive_mode()
         return
@@ -755,7 +964,9 @@ def main():
 
     # Execute query
     console.print(f"[bold blue]Query:[/bold blue] {args.query}")
-    result = run_query(agent, args.query, 1, args.verbose)
+    if args.resume:
+        console.print(f"[bold blue]Resuming from:[/bold blue] {args.resume}")
+    result = run_query(agent, args.query, 1, args.verbose, resume_from=args.resume)
 
     if result:
         format_response(result, args.verbose)
