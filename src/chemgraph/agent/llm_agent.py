@@ -1,8 +1,10 @@
 import datetime
 import os
-from typing import List
+from typing import List, Optional
 import uuid
 
+from chemgraph.memory.store import SessionStore
+from chemgraph.memory.schemas import SessionMessage
 from chemgraph.models.openai import load_openai_model
 from chemgraph.models.alcf_endpoints import load_alcf_model
 from chemgraph.models.local_model import load_ollama_model
@@ -135,13 +137,18 @@ class ChemGraph:
         support_structured_output: bool = True,
         tools: List = None,
         data_tools: List = None,
+        session_store: Optional[SessionStore] = None,
+        enable_memory: bool = True,
+        memory_db_path: Optional[str] = None,
     ):
+        # Always generate a unique identifier for this instance
+        self.uuid = str(uuid.uuid4())[:8]
+
         # Initialize log directory
         self.log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
         if not self.log_dir:
             # Create a new session log directory under cg_logs/
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            self.uuid = str(uuid.uuid4())[:8]
             # Use abspath to ensure tools getting this env var have a full path
             self.log_dir = os.path.join(
                 os.getcwd(), "cg_logs", f"session_{timestamp}_{self.uuid}"
@@ -149,8 +156,18 @@ class ChemGraph:
             os.makedirs(self.log_dir, exist_ok=True)
             # Set env var for tools to pick up
             os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
+
+        # Initialize session memory store
+        if session_store is not None:
+            self.session_store = session_store
+        elif enable_memory:
+            self.session_store = SessionStore(db_path=memory_db_path)
         else:
-            self.uuid = None
+            self.session_store = None
+
+        # Track whether session has been registered in the memory store
+        self._session_created: bool = False
+        self._session_title: Optional[str] = None
 
         try:
             # Use hardcoded optimal values for tool calling
@@ -431,7 +448,7 @@ class ChemGraph:
                 )
                 os.makedirs(log_dir, exist_ok=True)
                 if not file_name:
-                    file_name = f"state_thread_{thread_id}_{timestamp}.json"
+                    file_name = f"state_thread_{thread_id}_{self.uuid}_{timestamp}.json"
                 file_path = os.path.join(log_dir, file_name)
 
             state = self.get_state(config=config)
@@ -509,11 +526,120 @@ class ChemGraph:
             print("Error with write_state: ", str(e))
             return "Error"
 
-    async def run(self, query: str, config=None):
+    @property
+    def session_id(self) -> str:
+        """Current session ID (always available, derived from self.uuid)."""
+        return self.uuid
+
+    def _ensure_session(self, query: str) -> None:
+        """Create a session record on first run if memory is enabled."""
+        if self.session_store is None:
+            return
+        if self._session_created:
+            return
+
+        self._session_title = SessionStore.generate_title(query)
+        self.session_store.create_session(
+            session_id=self.uuid,
+            model_name=self.model_name,
+            workflow_type=self.workflow_type,
+            title=self._session_title,
+            log_dir=self.log_dir,
+        )
+        self._session_created = True
+        logger.info(f"Created session {self.uuid}: {self._session_title}")
+
+    def _save_messages_to_store(self, last_state: dict, query: str) -> None:
+        """Extract messages from workflow state and persist to session store."""
+        if self.session_store is None or not self._session_created:
+            return
+
+        try:
+            messages_to_save = []
+            state_messages = last_state.get("messages", [])
+
+            for msg in state_messages:
+                role = None
+                content = ""
+                tool_name = None
+
+                if hasattr(msg, "type"):
+                    # LangChain message objects
+                    if msg.type == "human":
+                        role = "human"
+                    elif msg.type == "ai":
+                        role = "ai"
+                    elif msg.type == "tool":
+                        role = "tool"
+                        tool_name = getattr(msg, "name", None)
+                    content = getattr(msg, "content", str(msg))
+                elif isinstance(msg, dict):
+                    role = msg.get("type") or msg.get("role")
+                    content = msg.get("content", "")
+                    tool_name = msg.get("name")
+
+                if role and content:
+                    messages_to_save.append(
+                        SessionMessage(
+                            role=role,
+                            content=content,
+                            tool_name=tool_name,
+                        )
+                    )
+
+            self.session_store.save_messages(
+                session_id=self.uuid,
+                messages=messages_to_save,
+                title=self._session_title,
+            )
+            logger.info(
+                f"Saved {len(messages_to_save)} messages to session {self.uuid}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save messages to session store: {e}")
+
+    def load_previous_context(
+        self,
+        session_id: str,
+        max_messages: Optional[int] = None,
+    ) -> str:
+        """Load context from a previous session as a summary string.
+
+        This can be injected into the conversation to give the agent
+        awareness of prior work.
+
+        Parameters
+        ----------
+        session_id : str
+            Previous session ID (or unique prefix).
+        max_messages : int, optional
+            Limit the number of messages included.
+
+        Returns
+        -------
+        str
+            Formatted context summary, or empty string if not found.
+        """
+        if self.session_store is None:
+            logger.warning("Memory is disabled; cannot load previous context.")
+            return ""
+        return self.session_store.build_context_summary(session_id)
+
+    async def run(self, query: str, config=None, resume_from: Optional[str] = None):
         """
         Async-only runner. Requires `self.workflow.astream(...)`.
         Streams values, logs new messages, writes state, and returns according to
         `self.return_option` ("last_message" or "state").
+
+        Parameters
+        ----------
+        query : str
+            The user query to execute.
+        config : dict, optional
+            LangGraph config with thread_id, etc.
+        resume_from : str, optional
+            Session ID to load context from. The previous conversation
+            summary is prepended to the query.
         """
 
         def _validate_config(cfg):
@@ -561,6 +687,20 @@ class ChemGraph:
         if not os.environ.get("CHEMGRAPH_LOG_DIR"):
             os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
 
+        # Ensure session exists in memory store
+        self._ensure_session(query)
+
+        # If resuming from a previous session, prepend context
+        if resume_from and self.session_store:
+            context = self.session_store.build_context_summary(resume_from)
+            if context:
+                query = (
+                    f"{context}\n\n"
+                    f"Now, continuing from the previous session above, "
+                    f"please help with the following:\n\n{query}"
+                )
+                logger.info(f"Injected context from session {resume_from}")
+
         inputs = {"messages": query}
 
         prev_messages = []
@@ -581,6 +721,9 @@ class ChemGraph:
 
             if last_state is None:
                 raise RuntimeError("Workflow produced no states.")
+
+            # Save messages to persistent session store
+            self._save_messages_to_store(last_state, query)
 
             return _save_state_and_select_return(last_state, config)
 
