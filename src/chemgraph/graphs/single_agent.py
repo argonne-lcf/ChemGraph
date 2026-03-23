@@ -4,8 +4,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from chemgraph.tools.ase_tools import (
     run_ase,
-    save_atomsdata_to_file,
-    file_to_atomsdata,
+    extract_output_json,    
 )
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
@@ -169,11 +168,10 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
     # Load default tools if no tool is specified.
     if tools is None:
         tools = [
-            file_to_atomsdata,
             smiles_to_coordinate_file,
             run_ase,
             molecule_name_to_smiles,
-            save_atomsdata_to_file,
+            extract_output_json,
             calculator,
         ]
     messages = [
@@ -286,11 +284,10 @@ def construct_single_agent_graph(
         checkpointer = MemorySaver()
         if tools is None:
             tools = [
-                file_to_atomsdata,
                 smiles_to_coordinate_file,
-                run_ase,
                 molecule_name_to_smiles,
-                save_atomsdata_to_file,
+                run_ase,
+                extract_output_json,
                 calculator,
             ]
         tool_node = ToolNode(tools=tools)

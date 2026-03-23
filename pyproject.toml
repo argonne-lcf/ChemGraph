@@ -30,7 +30,7 @@ dependencies = [
     "numpy==2.2.6",
     "numexpr==2.11.0",
     "pytest==8.4.1",
-    "deepdiff==8.5.0",
+
     "ase",
     "rdkit",
     "pymatgen",
@@ -78,9 +78,13 @@ rag = [
 
 [project.scripts]
 chemgraph = "ui.cli:main"
+chemgraph-eval = "chemgraph.eval.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src/"]
+
+[tool.setuptools.package-data]
+"chemgraph.eval" = ["data/*.json"]
 
 [tool.ruff]
 line-length = 88  # Match Black's default (adjust as needed)

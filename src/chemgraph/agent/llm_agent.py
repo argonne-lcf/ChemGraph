@@ -140,12 +140,15 @@ class ChemGraph:
         session_store: Optional[SessionStore] = None,
         enable_memory: bool = True,
         memory_db_path: Optional[str] = None,
+        log_dir: Optional[str] = None,
     ):
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
 
-        # Initialize log directory
-        self.log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+        # Initialize log directory.  Explicit ``log_dir`` argument takes
+        # precedence over the ``CHEMGRAPH_LOG_DIR`` environment variable,
+        # which in turn takes precedence over the auto-generated default.
+        self.log_dir = log_dir or os.environ.get("CHEMGRAPH_LOG_DIR")
         if not self.log_dir:
             # Create a new session log directory under cg_logs/
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
