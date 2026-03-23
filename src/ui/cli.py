@@ -127,36 +127,15 @@ def create_banner():
     return Panel(Align.center(banner_text), style="bold blue", padding=(1, 2))
 
 
-def create_argument_parser():
-    """Create and configure the argument parser."""
-    parser = argparse.ArgumentParser(
-        description="ChemGraph CLI - AI Agents for Computational Chemistry",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  %(prog)s -q "What is the SMILES string for water?"
-  %(prog)s -q "Optimize water molecule geometry" -m gpt-4o -w single_agent
-  %(prog)s -q "Calculate CO2 vibrational frequencies" -m claude-3-sonnet-20240229 -r
-  %(prog)s -q "Show me the structure of caffeine" -o last_message -s
-  %(prog)s --config config.toml -q "Calculate frequencies"
-  %(prog)s --interactive
-  %(prog)s --list-models
-  %(prog)s --check-keys
+def _add_run_args(parser: argparse.ArgumentParser) -> None:
+    """Add query/run-specific arguments to a parser.
 
-Session management:
-  %(prog)s --list-sessions
-  %(prog)s --show-session a3b2
-  %(prog)s --delete-session a3b2c1d4
-  %(prog)s -q "Optimize the geometry" --resume a3b2
-        """,
-    )
-
-    # Main query argument
+    Used by both the ``run`` subcommand and the legacy (no subcommand)
+    argument parser for backward compatibility.
+    """
     parser.add_argument(
         "-q", "--query", type=str, help="The computational chemistry query to execute"
     )
-
-    # Model selection
     parser.add_argument(
         "-m",
         "--model",
@@ -164,8 +143,6 @@ Session management:
         default="gpt-4o-mini",
         help="LLM model to use (default: gpt-4o-mini)",
     )
-
-    # Workflow type
     parser.add_argument(
         "-w",
         "--workflow",
@@ -174,8 +151,6 @@ Session management:
         default="single_agent",
         help="Workflow type (default: single_agent)",
     )
-
-    # Output format
     parser.add_argument(
         "-o",
         "--output",
@@ -184,78 +159,136 @@ Session management:
         default="state",
         help="Output format (default: state)",
     )
-
-    # Structured output
     parser.add_argument(
         "-s", "--structured", action="store_true", help="Use structured output format"
     )
-
-    # Generate report
     parser.add_argument(
         "-r", "--report", action="store_true", help="Generate detailed report"
     )
-
-    # Recursion limit
     parser.add_argument(
         "--recursion-limit",
         type=int,
         default=20,
         help="Recursion limit for agent workflows (default: 20)",
     )
-
-    # Interactive mode
     parser.add_argument(
         "--interactive", action="store_true", help="Start interactive mode"
     )
-
-    # List available models
     parser.add_argument(
         "--list-models", action="store_true", help="List all available models"
     )
-
-    # Check API keys
     parser.add_argument(
         "--check-keys", action="store_true", help="Check API key availability"
     )
-
-    # Session management
     parser.add_argument(
         "--list-sessions",
         action="store_true",
         help="List recent sessions from the memory database",
     )
-
     parser.add_argument(
         "--show-session",
         type=str,
         metavar="ID",
         help="Show conversation for a session (supports prefix matching)",
     )
-
     parser.add_argument(
         "--delete-session",
         type=str,
         metavar="ID",
         help="Delete a session from the memory database",
     )
-
     parser.add_argument(
         "--resume",
         type=str,
         metavar="ID",
         help="Resume from a previous session (injects context into new query)",
     )
-
-    # Verbose output
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose output"
     )
-
-    # Output file
     parser.add_argument("--output-file", type=str, help="Save output to file")
-
-    # Configuration file
     parser.add_argument("--config", type=str, help="Load configuration from TOML file")
+
+
+def create_argument_parser():
+    """Create and configure the argument parser with subcommands.
+
+    Supports three usage styles:
+
+    1. **Legacy** (no subcommand) -- backward-compatible with the
+       original CLI:  ``chemgraph -q "..." -m gpt-4o``
+    2. **Subcommand** -- explicit ``run``, ``eval``, ``session``,
+       ``models`` subcommands.
+    3. **Standalone eval** -- ``chemgraph-eval`` still works via its
+       own entry point.
+
+    When no subcommand is given the parser falls back to the legacy
+    behaviour so that existing scripts and muscle memory keep working.
+    """
+    parser = argparse.ArgumentParser(
+        prog="chemgraph",
+        description="ChemGraph CLI - AI Agents for Computational Chemistry",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Legacy style (still works)
+  %(prog)s -q "What is the SMILES string for water?"
+  %(prog)s --interactive
+  %(prog)s --list-models
+
+  # Subcommand style
+  %(prog)s run -q "Optimize water geometry" -m gpt-4o
+  %(prog)s eval --profile quick --models gpt-4o-mini --config config.toml
+  %(prog)s eval --models gpt-4o --dataset ground_truth.json
+  %(prog)s session list
+  %(prog)s session show a3b2
+  %(prog)s models
+        """,
+    )
+
+    subparsers = parser.add_subparsers(dest="command")
+
+    # ---- "run" subcommand ------------------------------------------------
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Run a single query or start interactive mode.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _add_run_args(run_parser)
+
+    # ---- "eval" subcommand -----------------------------------------------
+    eval_parser = subparsers.add_parser(
+        "eval",
+        help="Run evaluation benchmarks against ground-truth datasets.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    # Import here to avoid circular imports at module level
+    from chemgraph.eval.cli import add_eval_args
+
+    add_eval_args(eval_parser)
+
+    # ---- "session" subcommand --------------------------------------------
+    session_parser = subparsers.add_parser(
+        "session",
+        help="Manage conversation sessions.",
+    )
+    session_sub = session_parser.add_subparsers(dest="session_command")
+
+    session_sub.add_parser("list", help="List recent sessions.")
+
+    show_parser = session_sub.add_parser("show", help="Show a session's conversation.")
+    show_parser.add_argument("id", help="Session ID (prefix matching supported).")
+
+    delete_parser = session_sub.add_parser("delete", help="Delete a session.")
+    delete_parser.add_argument("id", help="Session ID to delete.")
+
+    # ---- "models" subcommand ---------------------------------------------
+    subparsers.add_parser("models", help="List all available LLM models.")
+
+    # ---- Legacy fallback args -------------------------------------------
+    # Also add run args to the top-level parser so that
+    # `chemgraph -q "..."` keeps working without a subcommand.
+    _add_run_args(parser)
 
     return parser
 
@@ -883,33 +916,30 @@ def save_output(content: str, output_file: str):
         console.print(f"[red]✗ Error saving output: {e}[/red]")
 
 
-def main():
-    """Main CLI entry point."""
-    parser = create_argument_parser()
-    args = parser.parse_args()
-
+def _handle_run(args):
+    """Handle the ``run`` subcommand (and legacy no-subcommand mode)."""
     # Handle special commands
-    if args.list_models:
+    if getattr(args, "list_models", False):
         list_models()
         return
 
-    if args.check_keys:
+    if getattr(args, "check_keys", False):
         check_api_keys_status()
         return
 
-    if args.list_sessions:
+    if getattr(args, "list_sessions", False):
         list_sessions()
         return
 
-    if args.show_session:
+    if getattr(args, "show_session", None):
         show_session(args.show_session)
         return
 
-    if args.delete_session:
+    if getattr(args, "delete_session", None):
         delete_session_cmd(args.delete_session)
         return
 
-    if args.interactive:
+    if getattr(args, "interactive", False):
         interactive_mode()
         return
 
@@ -932,12 +962,12 @@ def main():
 
     if args.model not in all_supported_models:
         console.print(
-            f"[yellow]⚠ Using custom model ID: {args.model} (not in curated list)[/yellow]"
+            f"[yellow]Using custom model ID: {args.model} (not in curated list)[/yellow]"
         )
 
     # Require query for non-interactive mode
     if not args.query:
-        console.print("[red]✗ Query is required. Use -q or --query to specify.[/red]")
+        console.print("[red]Query is required. Use -q or --query to specify.[/red]")
         console.print(
             "Use --help for more information or --interactive for interactive mode."
         )
@@ -977,7 +1007,45 @@ def main():
             output_content = str(result)
             save_output(output_content, args.output_file)
 
-    console.print("\n[dim]Thank you for using ChemGraph CLI! 🧪[/dim]")
+    console.print("\n[dim]Thank you for using ChemGraph CLI![/dim]")
+
+
+def main():
+    """Main CLI entry point.
+
+    Dispatches to the appropriate subcommand handler, or falls back
+    to the legacy behaviour when no subcommand is given.
+    """
+    parser = create_argument_parser()
+    args = parser.parse_args()
+
+    if args.command == "eval":
+        from chemgraph.eval.cli import run_eval
+
+        run_eval(args)
+
+    elif args.command == "session":
+        sc = getattr(args, "session_command", None)
+        if sc == "list":
+            list_sessions()
+        elif sc == "show":
+            show_session(args.id)
+        elif sc == "delete":
+            delete_session_cmd(args.id)
+        else:
+            console.print(
+                "Usage: chemgraph session {list,show,delete}. Use --help for details."
+            )
+
+    elif args.command == "models":
+        list_models()
+
+    elif args.command == "run":
+        _handle_run(args)
+
+    else:
+        # No subcommand given -- legacy behaviour.
+        _handle_run(args)
 
 
 if __name__ == "__main__":
