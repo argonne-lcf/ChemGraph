@@ -1,0 +1,821 @@
+[
+    {
+        "id": "1",
+        "query": "Provide the SMILES string corresponding to this molecule: sulfur dioxide",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "sulfur dioxide"
+                    }
+                }
+            ],
+            "result": {
+                "name": "sulfur dioxide",
+                "smiles": "O=S=O"
+            }
+        }
+    },
+    {
+        "id": "2",
+        "query": "Provide the SMILES string corresponding to these molecules: sulfur dioxide and Nitrogen peroxide",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "sulfur dioxide"
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Nitrogen peroxide"
+                    }
+                }
+            ],
+            "result": [
+                {
+                    "name": "sulfur dioxide",
+                    "smiles": "O=S=O"
+                },
+                {
+                    "name": "Nitrogen peroxide",
+                    "smiles": "N(=O)[O]"
+                }
+            ]
+        }
+    },
+    {
+        "id": "3",
+        "query": "Generate a 3D coordinate file from this SMILES string: O",
+        "answer": {
+            "tool_calls": [
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O"
+                    }
+                }
+            ],
+            "result": {
+                "ok": true,
+                "artifact": "coordinate_file",
+                "path": "/var/folders/5b/vkn1l5ys6pz8nyp5rbcprw800000gp/T/chemgraph_gt_08ncu4sq/entry_3/molecule.xyz",
+                "smiles": "O",
+                "natoms": 3
+            }
+        }
+    },
+    {
+        "id": "4",
+        "query": "Generate 3D coordinate files from these SMILES strings: O and O=C=O. Make sure the file name for each file is different",
+        "answer": {
+            "tool_calls": [
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O=C=O"
+                    }
+                }
+            ],
+            "result": [
+                {
+                    "ok": true,
+                    "artifact": "coordinate_file",
+                    "path": "/var/folders/5b/vkn1l5ys6pz8nyp5rbcprw800000gp/T/chemgraph_gt_08ncu4sq/entry_4/molecule.xyz",
+                    "smiles": "O",
+                    "natoms": 3
+                },
+                {
+                    "ok": true,
+                    "artifact": "coordinate_file",
+                    "path": "/var/folders/5b/vkn1l5ys6pz8nyp5rbcprw800000gp/T/chemgraph_gt_08ncu4sq/entry_4/molecule.xyz",
+                    "smiles": "O=C=O",
+                    "natoms": 3
+                }
+            ]
+        }
+    },
+    {
+        "id": "5",
+        "query": "Calculate the geometry optimization of sulfur dioxide using mace_mp.",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "sulfur dioxide"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O=S=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "status": "success",
+                "message": "Simulation completed. Results saved to /var/folders/5b/vkn1l5ys6pz8nyp5rbcprw800000gp/T/chemgraph_gt_08ncu4sq/entry_5/output.json",
+                "single_point_energy": -16.81580801935854,
+                "unit": "eV"
+            }
+        }
+    },
+    {
+        "id": "6",
+        "query": "Calculate the vibrational frequency analysis of water using mace_mp.",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "water"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "vib",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "status": "success",
+                "result": {
+                    "vibrational_frequencies": {
+                        "energies": [
+                            "5.2788380126012635i",
+                            "0.04764407649642099i",
+                            "0.005321018762346951i",
+                            "0.060557442435103026",
+                            "4.520458491655684",
+                            "5.344478380950683",
+                            "207.53984955909405",
+                            "461.69465375726855",
+                            "484.0428021965598"
+                        ],
+                        "energy_unit": "meV",
+                        "frequencies": [
+                            "42.57670028482383i",
+                            "0.38427539554973655i",
+                            "0.04291691097805294i",
+                            "0.4884287167782066",
+                            "36.45995688630136",
+                            "43.10612556423707",
+                            "1673.9217893675548",
+                            "3723.818546658169",
+                            "3904.0685213209795"
+                        ],
+                        "frequency_unit": "cm-1"
+                    }
+                },
+                "message": "Vibrational analysis completed; frequencies returned. Full results (structure, vibrations and metadata) saved to /var/folders/5b/vkn1l5ys6pz8nyp5rbcprw800000gp/T/chemgraph_gt_08ncu4sq/entry_6/output.json."
+            }
+        }
+    },
+    {
+        "id": "7",
+        "query": "Calculate the thermochemical properties of carbon dioxide at 800 K using GFN2-xTB.",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "carbon dioxide"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O=C=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "TBLite",
+                                "method": "GFN2-xTB"
+                            },
+                            "temperature": 800
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "status": "success",
+                "result": {
+                    "thermochemistry": {
+                        "enthalpy": -279.847968787183,
+                        "entropy": 0.002675532791396945,
+                        "gibbs_free_energy": -281.9883950203006,
+                        "unit": "eV"
+                    }
+                },
+                "message": "Thermochemistry computed and returned. Full results (structure, vibrations, thermochemistry and metadata) saved to /var/folders/5b/vkn1l5ys6pz8nyp5rbcprw800000gp/T/chemgraph_gt_08ncu4sq/entry_7/output.json"
+            }
+        }
+    },
+    {
+        "id": "8",
+        "query": "Calculate the dipole moment of carbon monoxide using GFN2-xTB.",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "carbon monoxide"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "[C-]#[O+]"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "dipole",
+                            "calculator": {
+                                "calculator_type": "TBLite",
+                                "method": "GFN2-xTB"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "status": "success",
+                "message": "Simulation completed. Results saved to /var/folders/5b/vkn1l5ys6pz8nyp5rbcprw800000gp/T/chemgraph_gt_08ncu4sq/entry_8/output.json",
+                "dipole_moment": [
+                    -0.1278,
+                    -0.0,
+                    -0.0
+                ]
+            }
+        }
+    },
+    {
+        "id": "9",
+        "query": "Calculate the single-point energy of nitrogen using mace_mp and return the full results from the JSON output file.",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "nitrogen"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "N#N"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "energy",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
+                        }
+                    }
+                },
+                {
+                    "extract_output_json": {
+                        "json_file": "output.json"
+                    }
+                }
+            ],
+            "result": {
+                "input_structure_file": "molecule.xyz",
+                "converged": true,
+                "final_structure": {
+                    "numbers": [
+                        7,
+                        7
+                    ],
+                    "positions": [
+                        [
+                            0.56000414,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            -0.56000414,
+                            0.0,
+                            0.0
+                        ]
+                    ],
+                    "cell": [
+                        [
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0
+                        ]
+                    ],
+                    "pbc": [
+                        false,
+                        false,
+                        false
+                    ]
+                },
+                "simulation_input": {
+                    "input_structure_file": "molecule.xyz",
+                    "output_results_file": "output.json",
+                    "driver": "energy",
+                    "optimizer": "bfgs",
+                    "calculator": {
+                        "calculator_type": "mace_mp",
+                        "model": null,
+                        "device": "cpu",
+                        "default_dtype": "float64",
+                        "dispersion": false,
+                        "damping": "bj",
+                        "dispersion_xc": "pbe",
+                        "dispersion_cutoff": 21.167088422553647
+                    },
+                    "fmax": 0.01,
+                    "steps": 1000,
+                    "temperature": null,
+                    "pressure": 101325.0
+                },
+                "single_point_energy": -16.427960200219932,
+                "energy_unit": "eV",
+                "dipole_value": [
+                    null,
+                    null,
+                    null
+                ],
+                "dipole_unit": " e * angstrom",
+                "vibrational_frequencies": {},
+                "ir_data": {},
+                "thermochemistry": {},
+                "success": true,
+                "error": "",
+                "wall_time": 0.08538007736206055
+            }
+        }
+    },
+    {
+        "id": "10",
+        "query": "Calculate the single-point energy using mace_mp for the molecule with SMILES: N#N",
+        "answer": {
+            "tool_calls": [
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "N#N"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "energy",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            }
+                        }
+                    }
+                }
+            ],
+            "result": {
+                "status": "success",
+                "message": "Simulation completed. Results saved to /var/folders/5b/vkn1l5ys6pz8nyp5rbcprw800000gp/T/chemgraph_gt_08ncu4sq/entry_10/output.json",
+                "single_point_energy": -16.427960200219932,
+                "unit": "eV"
+            }
+        }
+    },
+    {
+        "id": "11",
+        "query": "Calculate the geometry optimization using GFN2-xTB for the molecule with SMILES: [C-]#[O+] and return full the results from the JSON output file.",
+        "answer": {
+            "tool_calls": [
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "[C-]#[O+]"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "opt",
+                            "calculator": {
+                                "calculator_type": "TBLite",
+                                "method": "GFN2-xTB"
+                            }
+                        }
+                    }
+                },
+                {
+                    "extract_output_json": {
+                        "json_file": "output.json"
+                    }
+                }
+            ],
+            "result": {
+                "input_structure_file": "molecule.xyz",
+                "converged": true,
+                "final_structure": {
+                    "numbers": [
+                        6,
+                        8
+                    ],
+                    "positions": [
+                        [
+                            0.5636640099849505,
+                            1.1597701173203011e-17,
+                            7.366045646342749e-17
+                        ],
+                        [
+                            -0.5636640099849506,
+                            -1.1655577734969575e-17,
+                            -7.366045646343291e-17
+                        ]
+                    ],
+                    "cell": [
+                        [
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.0
+                        ]
+                    ],
+                    "pbc": [
+                        false,
+                        false,
+                        false
+                    ]
+                },
+                "simulation_input": {
+                    "input_structure_file": "molecule.xyz",
+                    "output_results_file": "output.json",
+                    "driver": "opt",
+                    "optimizer": "bfgs",
+                    "calculator": {
+                        "calculator_type": "TBLite",
+                        "method": "GFN2-xTB",
+                        "charge": null,
+                        "multiplicity": null,
+                        "accuracy": 1.0,
+                        "electronic_temperature": 300.0,
+                        "max_iterations": 250,
+                        "initial_guess": "sad",
+                        "mixer_damping": 0.4,
+                        "electric_field": null,
+                        "spin_polarization": null,
+                        "cache_api": true,
+                        "verbosity": 0
+                    },
+                    "fmax": 0.01,
+                    "steps": 1000,
+                    "temperature": null,
+                    "pressure": 101325.0
+                },
+                "single_point_energy": -166.58403031419732,
+                "energy_unit": "eV",
+                "dipole_value": [
+                    null,
+                    null,
+                    null
+                ],
+                "dipole_unit": " e * angstrom",
+                "vibrational_frequencies": {},
+                "ir_data": {},
+                "thermochemistry": {},
+                "success": true,
+                "error": "",
+                "wall_time": 0.028104066848754883
+            }
+        }
+    },
+    {
+        "id": "12",
+        "query": "Calculate the Gibbs free energy of reaction for Methane Combustion at 300 K using mace_mp. The balanced reaction is: Methane + 2 Oxygen -> Carbon dioxide + 2 Water",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Methane"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "C"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 300.0
+                        }
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Oxygen"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 300.0
+                        }
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Carbon dioxide"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O=C=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 300.0
+                        }
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Water"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 300.0
+                        }
+                    }
+                },
+                {
+                    "calculator": {
+                        "expression": "(1*(-22.794740964867245) + 2*(-13.693940906998133)) - (1*(-22.459430469602385) + 2*(-9.806576011384493))"
+                    }
+                }
+            ],
+            "result": "-8.110040286492143"
+        }
+    },
+    {
+        "id": "13",
+        "query": "Calculate the Gibbs free energy of reaction for Ammonia Synthesis at 400 K using GFN2-xTB. The balanced reaction is: Nitrogen gas + 3 Hydrogen gas -> 2 Ammonia",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Nitrogen gas"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "N#N"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "TBLite",
+                                "method": "GFN2-xTB"
+                            },
+                            "temperature": 400.0
+                        }
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Hydrogen gas"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "[H][H]"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "TBLite",
+                                "method": "GFN2-xTB"
+                            },
+                            "temperature": 400.0
+                        }
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Ammonia"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "N"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "TBLite",
+                                "method": "GFN2-xTB"
+                            },
+                            "temperature": 400.0
+                        }
+                    }
+                },
+                {
+                    "calculator": {
+                        "expression": "(2*(-120.23055652416782)) - (1*(-157.4020573375931) + 3*(-26.96535305958073))"
+                    }
+                }
+            ],
+            "result": "-2.1629965320003635"
+        }
+    },
+    {
+        "id": "14",
+        "query": "Calculate the Gibbs free energy of reaction for Water Gas Shift Reaction at 500 K using mace_mp. The balanced reaction is: Carbon monoxide + Water -> Carbon dioxide + Hydrogen gas",
+        "answer": {
+            "tool_calls": [
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Carbon monoxide"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "[C-]#[O+]"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500.0
+                        }
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Water"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500.0
+                        }
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Carbon dioxide"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "O=C=O"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500.0
+                        }
+                    }
+                },
+                {
+                    "molecule_name_to_smiles": {
+                        "name": "Hydrogen gas"
+                    }
+                },
+                {
+                    "smiles_to_coordinate_file": {
+                        "smiles": "[H][H]"
+                    }
+                },
+                {
+                    "run_ase": {
+                        "params": {
+                            "input_structure_file": "molecule.xyz",
+                            "driver": "thermo",
+                            "calculator": {
+                                "calculator_type": "mace_mp"
+                            },
+                            "temperature": 500.0
+                        }
+                    }
+                },
+                {
+                    "calculator": {
+                        "expression": "(1*(-23.25919829041471) + 1*(-6.8498115746834465)) - (1*(-15.110173258368594) + 1*(-14.10531608852551))"
+                    }
+                }
+            ],
+            "result": "-0.8935205182040526"
+        }
+    }
+]
