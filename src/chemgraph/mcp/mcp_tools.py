@@ -334,129 +334,152 @@ async def run_ase(params: ASEInputSchema) -> dict:
             if driver in {"vib", "thermo", "ir"}:
                 from ase.vibrations import Vibrations
                 from ase import units
+                import tempfile
+                import shutil
 
-                vib_name = _resolve_path("vib")
-                vib = Vibrations(atoms, name=vib_name)
+                ir_plot_path = None  # Will be set inside tmpdir block if driver == "ir"
+                # Use a temporary directory to isolate parallel vibration runs.
+                # ASE's Vibrations class writes cache files (vib/cache.*.json) and
+                # trajectory files (vib.*.traj) using the `name` parameter. Without
+                # isolation, parallel calls for different molecules write to the same
+                # files, causing shape-mismatch errors and corrupted thermochemistry.
+                mol_stem = (
+                    Path(input_structure_file).stem if input_structure_file else "mol"
+                )
 
-                vib.clean()
-                vib.run()
+                with tempfile.TemporaryDirectory(
+                    prefix=f"chemgraph_vib_{mol_stem}_"
+                ) as tmpdir:
+                    vib_name = os.path.join(tmpdir, "vib")
+                    vib = Vibrations(atoms, name=vib_name)
 
-                vib_data = {
-                    "energies": [],
-                    "energy_unit": "meV",
-                    "frequencies": [],
-                    "frequency_unit": "cm-1",
-                }
+                    vib.clean()
+                    vib.run()
 
-                energies = vib.get_energies()
-                linear = is_linear_molecule(atomsdata=final_structure)
+                    vib_data = {
+                        "energies": [],
+                        "energy_unit": "meV",
+                        "frequencies": [],
+                        "frequency_unit": "cm-1",
+                    }
 
-                for idx, e in enumerate(energies):
-                    is_imag = abs(e.imag) > 1e-8
-                    e_val = e.imag if is_imag else e.real
-                    energy_meV = 1e3 * e_val
-                    freq_cm1 = e_val / units.invcm
-                    suffix = "i" if is_imag else ""
-                    vib_data["energies"].append(f"{energy_meV}{suffix}")
-                    vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
+                    energies = vib.get_energies()
+                    linear = is_linear_molecule(atomsdata=final_structure)
 
-                # Remove existing frequencies.txt and .traj files
-                # Note: This glob might need adjustment if we are writing elsewhere,
-                # but vib.clean() should handle its own files.
-                # We will just remove any stray .traj files in the target dir if needed.
-                # using the resolved name pattern
-                for traj_file in glob.glob(f"{vib_name}.*.traj"):
-                    os.remove(traj_file)
+                    for idx, e in enumerate(energies):
+                        is_imag = abs(e.imag) > 1e-8
+                        e_val = e.imag if is_imag else e.real
+                        energy_meV = 1e3 * e_val
+                        freq_cm1 = e_val / units.invcm
+                        suffix = "i" if is_imag else ""
+                        vib_data["energies"].append(f"{energy_meV}{suffix}")
+                        vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
-                # Write frequencies into frequencies.txt
-                freq_file_path = _resolve_path("frequencies.csv")
-                freq_file = Path(freq_file_path)
-                if freq_file.exists():
-                    freq_file.unlink()
+                    # Write frequencies.csv to the resolved output directory
+                    freq_file_path = _resolve_path(f"frequencies_{mol_stem}.csv")
+                    freq_file = Path(freq_file_path)
+                    if freq_file.exists():
+                        freq_file.unlink()
 
-                with freq_file.open("w", encoding="utf-8") as f:
-                    for i, freq in enumerate(vib_data["frequencies"], start=0):
-                        f.write(f"vib.{i}.traj,{freq}\n")
+                    with freq_file.open("w", encoding="utf-8") as f:
+                        for i, freq in enumerate(vib_data["frequencies"], start=0):
+                            f.write(f"{mol_stem}_vib.{i}.traj,{freq}\n")
 
-                # Write normal modes .traj files
-                for i in range(len(energies)):
-                    vib.write_mode(n=None, kT=units.kB * 300, nimages=30)
+                    # Write normal modes .traj files inside tmpdir, then copy out
+                    for i in range(len(energies)):
+                        vib.write_mode(n=i, kT=units.kB * 300, nimages=30)
 
-                if driver == "ir":
-                    from ase.vibrations import Infrared
-                    import matplotlib.pyplot as plt
-
-                    ir_data["spectrum_frequencies"] = []
-                    ir_data["spectrum_frequencies_units"] = "cm-1"
-
-                    ir_data["spectrum_intensities"] = []
-                    ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
-
-                    ir_name = _resolve_path("ir")
-                    ir = Infrared(atoms, name=ir_name)
-                    ir.clean()
-                    ir.run()
-
-                    IR_SPECTRUM_START = 500  # Start of IR spectrum range
-                    IR_SPECTRUM_END = 4000  # End of IR spectrum range
-                    freq_intensity = ir.get_spectrum(
-                        start=IR_SPECTRUM_START, end=IR_SPECTRUM_END
-                    )
-                    # Generate IR spectrum plot
-                    fig, ax = plt.subplots()
-                    ax.plot(freq_intensity[0], freq_intensity[1])
-                    ax.set_xlabel("Frequency (cm⁻¹)")
-                    ax.set_ylabel("Intensity (a.u.)")
-                    ax.set_title("Infrared Spectrum")
-                    ax.grid(True)
-                    ir_plot_path = _resolve_path("ir_spectrum.png")
-                    fig.savefig(ir_plot_path, format="png", dpi=300)
-
-                    ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
-                    ir_data["Normal mode data"] = (
-                        f"Normal modes saved as individual .traj files in {os.path.abspath(ir_name)}"
-                    )
-
-                if driver == "thermo":
-                    # Approximation for a single atom system.
-                    if len(atoms) == 1:
-                        thermo_data = {
-                            "enthalpy": single_point_energy,
-                            "entropy": 0.0,
-                            "gibbs_free_energy": single_point_energy,
-                            "unit": "eV",
-                        }
-                    else:
-                        from ase.thermochemistry import IdealGasThermo
-
-                        linear = is_linear_molecule(atomsdata=final_structure)
-                        geometry = "linear" if linear else "nonlinear"
-                        symmetrynumber = get_symmetry_number(atomsdata=final_structure)
-
-                        thermo = IdealGasThermo(
-                            vib_energies=energies,
-                            potentialenergy=single_point_energy,
-                            atoms=atoms,
-                            geometry=geometry,
-                            symmetrynumber=symmetrynumber,
-                            spin=0,  # Only support spin=0
+                    # Copy .traj files to the resolved output directory with molecule prefix
+                    traj_dest_dir = _resolve_path("")
+                    if traj_dest_dir:
+                        os.makedirs(traj_dest_dir, exist_ok=True)
+                    for traj_file in glob.glob(os.path.join(tmpdir, "vib.*.traj")):
+                        dest_name = f"{mol_stem}_{Path(traj_file).name}"
+                        dest_path = (
+                            os.path.join(traj_dest_dir, dest_name)
+                            if traj_dest_dir
+                            else dest_name
                         )
-                        thermo_data = {
-                            "enthalpy": float(
-                                thermo.get_enthalpy(temperature=temperature)
-                            ),
-                            "entropy": float(
-                                thermo.get_entropy(
-                                    temperature=temperature, pressure=pressure
-                                )
-                            ),
-                            "gibbs_free_energy": float(
-                                thermo.get_gibbs_energy(
-                                    temperature=temperature, pressure=pressure
-                                )
-                            ),
-                            "unit": "eV",
-                        }
+                        shutil.copy2(traj_file, dest_path)
+
+                    if driver == "ir":
+                        from ase.vibrations import Infrared
+                        import matplotlib.pyplot as plt
+
+                        ir_data["spectrum_frequencies"] = []
+                        ir_data["spectrum_frequencies_units"] = "cm-1"
+
+                        ir_data["spectrum_intensities"] = []
+                        ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
+
+                        ir_name = os.path.join(tmpdir, "ir")
+                        ir = Infrared(atoms, name=ir_name)
+                        ir.clean()
+                        ir.run()
+
+                        IR_SPECTRUM_START = 500  # Start of IR spectrum range
+                        IR_SPECTRUM_END = 4000  # End of IR spectrum range
+                        freq_intensity = ir.get_spectrum(
+                            start=IR_SPECTRUM_START, end=IR_SPECTRUM_END
+                        )
+                        # Generate IR spectrum plot
+                        fig, ax = plt.subplots()
+                        ax.plot(freq_intensity[0], freq_intensity[1])
+                        ax.set_xlabel("Frequency (cm⁻¹)")
+                        ax.set_ylabel("Intensity (a.u.)")
+                        ax.set_title("Infrared Spectrum")
+                        ax.grid(True)
+                        ir_plot_path = _resolve_path(f"ir_spectrum_{mol_stem}.png")
+                        fig.savefig(ir_plot_path, format="png", dpi=300)
+                        plt.close(fig)
+
+                        ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
+                        ir_data["Normal mode data"] = (
+                            f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
+                        )
+
+                    if driver == "thermo":
+                        # Approximation for a single atom system.
+                        if len(atoms) == 1:
+                            thermo_data = {
+                                "enthalpy": single_point_energy,
+                                "entropy": 0.0,
+                                "gibbs_free_energy": single_point_energy,
+                                "unit": "eV",
+                            }
+                        else:
+                            from ase.thermochemistry import IdealGasThermo
+
+                            linear = is_linear_molecule(atomsdata=final_structure)
+                            geometry = "linear" if linear else "nonlinear"
+                            symmetrynumber = get_symmetry_number(
+                                atomsdata=final_structure
+                            )
+
+                            thermo = IdealGasThermo(
+                                vib_energies=energies,
+                                potentialenergy=single_point_energy,
+                                atoms=atoms,
+                                geometry=geometry,
+                                symmetrynumber=symmetrynumber,
+                                spin=0,  # Only support spin=0
+                            )
+                            thermo_data = {
+                                "enthalpy": float(
+                                    thermo.get_enthalpy(temperature=temperature)
+                                ),
+                                "entropy": float(
+                                    thermo.get_entropy(
+                                        temperature=temperature, pressure=pressure
+                                    )
+                                ),
+                                "gibbs_free_energy": float(
+                                    thermo.get_gibbs_energy(
+                                        temperature=temperature, pressure=pressure
+                                    )
+                                ),
+                                "unit": "eV",
+                            }
 
             end_time = time.time()
             wall_time = end_time - start_time
@@ -512,11 +535,11 @@ async def run_ase(params: ASEInputSchema) -> dict:
                     "status": "success",
                     "result": {
                         "vibrational_frequencies": vib_data
-                    },  # small payload for LLMs,  # small payload for LLMs
+                    },  # small payload for LLMs
                     "message": (
-                        "Infrared computer and returned"
+                        "Infrared computed and returned. "
                         f"Full results (structure, vibrations, thermochemistry and metadata) saved to {os.path.abspath(output_results_file)}. "
-                        f"IR plot Saved to {os.path.abspath(ir_plot_path)}. Normal modes saved as individual .traj files"
+                        f"IR plot saved to {os.path.abspath(ir_plot_path) if ir_plot_path else 'N/A'}. Normal modes saved as individual .traj files"
                     ),
                 }
 
