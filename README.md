@@ -837,6 +837,7 @@ chemgraph/
 ├── src/                       # Source code
 │   ├── chemgraph/             # Top-level package
 │   │   ├── agent/             # Agent-based task management
+│   │   ├── eval/              # Evaluation & benchmarking (LLM-as-judge)
 │   │   ├── graphs/            # Workflow graph utilities
 │   │   ├── mcp/               # MCP servers (stdio/streamable HTTP)
 │   │   ├── memory/            # Session memory (SQLite-backed persistence)
@@ -851,6 +852,132 @@ chemgraph/
 ├── pyproject.toml             # Project configuration
 └── README.md                  # Project documentation
 ```
+
+</details>
+
+<details>
+  <summary><strong>Evaluation & Benchmarking</strong></summary>
+
+ChemGraph includes a built-in evaluation module (`chemgraph.eval`) for benchmarking LLM tool-calling accuracy across models and workflows. It uses an **LLM-as-judge** strategy: a separate judge LLM grades the agent's tool-call sequence and final answer against ground-truth results using binary scoring (1 = correct, 0 = wrong).
+
+### Bundled Dataset
+
+A default dataset of **14 queries** across 4 categories is shipped with the package:
+
+| Category | Description | Example |
+|----------|-------------|---------|
+| **A** Single tool calls | Name-to-SMILES, SMILES-to-coordinates | "Provide the SMILES string for sulfur dioxide" |
+| **B** Multi-step from name | Name → SMILES → coordinates → ASE simulation | "Calculate the geometry optimization of sulfur dioxide using mace_mp" |
+| **C** Multi-step from SMILES | SMILES → coordinates → ASE simulation | "Calculate the single-point energy using mace_mp for SMILES: N#N" |
+| **D** Reaction Gibbs energy | Multi-species thermochemistry + stoichiometry | "Calculate the Gibbs free energy of reaction for Methane Combustion at 300 K" |
+
+### Running Evaluations
+
+**CLI (recommended):**
+
+```bash
+# Minimal invocation (uses bundled 14-query dataset)
+chemgraph-eval --models gpt-4o-mini --judge-model gpt-4o
+
+# Multiple models
+chemgraph-eval --models gpt-4o-mini gemini-2.5-flash claude-3-5-haiku-20241022 \
+    --judge-model gpt-4o
+
+# With TOML config (resolves base_url, argo_user, profiles)
+chemgraph-eval --models gpt-4o-mini --judge-model gpt-4o --config config.toml
+
+# Profile-based (reads [eval.profiles.*] from config.toml)
+chemgraph-eval --profile quick --models gpt-4o-mini --judge-model gpt-4o --config config.toml
+
+# Custom dataset, limit queries, specific workflow
+chemgraph-eval --models gpt-4o-mini \
+    --judge-model gpt-4o \
+    --dataset path/to/custom_ground_truth.json \
+    --workflows single_agent \
+    --max-queries 5 \
+    --output-dir eval_results
+```
+
+**Python API:**
+
+```python
+import asyncio
+from chemgraph.eval import ModelBenchmarkRunner, BenchmarkConfig
+
+config = BenchmarkConfig(
+    models=["gpt-4o-mini", "gemini-2.5-flash"],
+    judge_model="gpt-4o",
+    # dataset defaults to bundled 14-query dataset
+    # workflow_types defaults to ["single_agent"]
+)
+runner = ModelBenchmarkRunner(config)
+results = asyncio.run(runner.run_all())
+runner.report()  # generates JSON + Markdown + console output
+```
+
+### CLI Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--models` | LLM model names to evaluate (required) | — |
+| `--judge-model` | LLM model name for the judge (required) | — |
+| `--profile` | Eval profile name from config.toml `[eval.profiles.*]` | None |
+| `--dataset` | Path to ground-truth JSON file | Bundled dataset |
+| `--workflows` | Workflow types to test | `single_agent` |
+| `--output-dir` | Output directory for results | `eval_results` |
+| `--max-queries` | Max queries to evaluate (0 = all) | 0 |
+| `--recursion-limit` | Max LangGraph recursion steps per query | 50 |
+| `--config` | Path to TOML config file | None |
+| `--tags` | Free-form tags for run metadata | — |
+| `--no-structured-output` | Disable structured output on the agent | — |
+| `--report` | Report format: `json`, `markdown`, `console`, `all` | `all` |
+
+### TOML Profile Configuration
+
+Define reusable evaluation profiles in your `config.toml`:
+
+```toml
+[eval]
+default_profile = "quick"
+
+[eval.profiles.quick]
+judge_model = "gpt-4o-mini"
+workflow_types = ["single_agent"]
+recursion_limit = 20
+max_queries = 5
+
+[eval.profiles.standard]
+judge_model = "gpt-4o"
+workflow_types = ["single_agent", "multi_agent"]
+recursion_limit = 50
+```
+
+### Generating Custom Ground Truth
+
+To generate a new ground-truth dataset from custom molecules and reactions:
+
+```bash
+cd scripts/new_evaluation
+
+# Full execution (runs tool chains, captures actual results)
+python generate_ground_truth.py --input_file input_data.json
+
+# Skip execution (empty results, faster)
+python generate_ground_truth.py --input_file input_data.json --skip_execution
+
+# Custom output path
+python generate_ground_truth.py --input_file input_data.json -o my_gt.json
+```
+
+### Output
+
+Evaluation runs produce:
+- **JSON report** (`eval_results/benchmark_<timestamp>.json`) -- machine-readable results with per-query scores
+- **Markdown report** (`eval_results/benchmark_<timestamp>.md`) -- human-readable summary with accuracy tables
+- **Per-model detail files** (`eval_results/<model>_<workflow>_detail.json`) -- individual query results
+- **Console summary** -- printed accuracy table during the run
+
+For full documentation, see [`docs/evaluation.md`](docs/evaluation.md).
 
 </details>
 
