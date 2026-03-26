@@ -237,7 +237,7 @@ def run_fdmnes_parsl_workflow(runs_dir: Path):
     # ---------- USER VARIABLES ----------
     account     = 'xanes_fmCatal' # account to charge
     num_nodes   = 2              # max number of nodes to use
-    walltime    = '23:00:00'     # job length
+    walltime    = '02:00:00'     # job length
     fdmnes_exe  = '/home/vferreiragrizzi/parallel_fdmnes/mpirun_fdmnes'
     num_cores   = int(os.environ.get('PBS_NP', '128'))
     # ----------------------------------------------
@@ -372,7 +372,7 @@ def _get_data_dir() -> Path:
 @tool
 def fetch_xanes_data(chemsys: list[str]) -> str:
     """
-    Step 1: Fetch materials data from Materials Project for XANES workflow.
+    Fetch optimized bulk structures data from Materials Project database.
     
     Parameters:
     -----------
@@ -389,7 +389,7 @@ def fetch_xanes_data(chemsys: list[str]) -> str:
 @tool
 def create_xanes_inputs(atoms_list: list[AtomsData | dict | str] = None, z_absorber: int = None) -> str:
     """
-    Step 2: Create FDMNES input files from the fetched database or explicit AtomsData objects.
+    Create FDMNES input files for a list of AtomsData objects.
     
     Parameters:
     -----------
@@ -432,7 +432,7 @@ def create_xanes_inputs(atoms_list: list[AtomsData | dict | str] = None, z_absor
 @tool
 def run_xanes_parsl() -> str:
     """
-    Step 3: Run FDMNES calculations using Parsl.
+    Run FDMNES calculations using Parsl.
     Requires 'create_xanes_inputs' to have been run first.
     This may take a significant amount of time.
     """
@@ -450,7 +450,7 @@ def run_xanes_parsl() -> str:
 @tool
 def expand_xanes_db() -> str:
     """
-    Step 4: Expand the database with calculation results.
+    Expand the database with calculation results.
     Requires 'run_xanes_parsl' to have completed.
     """
     try:
@@ -464,8 +464,7 @@ def expand_xanes_db() -> str:
 @tool
 def plot_xanes_results() -> str:
     """
-    Step 5: Plot XANES results.
-    Generates plots for completed calculations in the run directories.
+    Plot XANES results. Generates plots for completed calculations in the run directories.
     """
     try:
         data_dir = _get_data_dir()
@@ -496,7 +495,7 @@ def run_xanes_workflow(chemsys: list[str] = None, atoms_list: list[AtomsData | d
     CRITICAL INSTRUCTION FOR THE AGENT:
     If the user asks to compute or run XANES, you MUST invoke this tool or the individual workflow tools. You cannot just output text saying "it will be calculated" or "it has been processed".
     If you have a file path (like POSCAR), prefer passing the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
-    If passing `atoms_list` as AtomsData, you MUST painstakingly output the FULL AtomsData JSON from the previous step. Do not truncate the arrays or skip the tool call due to length.
+    If passing `atoms_list` as AtomsData, you MUST output the FULL AtomsData JSON from the previous step. Do not truncate the arrays or skip the tool call due to length.
     """
     if chemsys is None and atoms_list is None:
         return "Error: Must provide either 'chemsys' or 'atoms_list' to run_xanes_workflow."

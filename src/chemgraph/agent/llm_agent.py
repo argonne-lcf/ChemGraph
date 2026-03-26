@@ -458,7 +458,6 @@ class ChemGraph:
             serialized_state = serialize_state(state)
 
             try:
-                import subprocess
                 git_commit = (
                     subprocess.check_output(
                         ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
