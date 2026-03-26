@@ -92,3 +92,21 @@ rate_limit = true
 model = "gpt-4o-mini"
 verbose = true
 enable_cache = false
+
+# ---------------------------------------------------------------------------
+# Evaluation benchmark profiles
+# ---------------------------------------------------------------------------
+# Use with: chemgraph eval --profile standard --models gpt-4o-mini --judge-model gpt-4o
+# CLI arguments override profile values.
+# When "dataset" is omitted, the bundled default dataset is used.
+
+[eval]
+default_profile = "standard"
+
+[eval.profiles.standard]
+# dataset defaults to the bundled chemgraph/eval/data/ground_truth.json
+workflow_types = ["single_agent"]
+judge_model = "gpt4o"
+recursion_limit = 50
+structured_output = false
+max_queries = 0
