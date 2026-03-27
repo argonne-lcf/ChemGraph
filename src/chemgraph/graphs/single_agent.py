@@ -4,19 +4,11 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from chemgraph.tools.ase_tools import (
     run_ase,
-    extract_output_json,    
+    extract_output_json,
 )
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_coordinate_file,
-)
-from chemgraph.tools.xanes_tools import (
-    run_xanes_workflow,
-    fetch_xanes_data,
-    create_xanes_inputs,
-    run_xanes_parsl,
-    expand_xanes_db,
-    plot_xanes_results,
 )
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator
@@ -132,12 +124,16 @@ def route_report_tools(state: State):
     # Only allow known report tool calls to reach ToolNode.
     valid_report_tools = {"generate_html"}
     requested_tools = {
-        call.get("name") for call in getattr(ai_message, "tool_calls", []) if isinstance(call, dict)
+        call.get("name")
+        for call in getattr(ai_message, "tool_calls", [])
+        if isinstance(call, dict)
     }
     if not requested_tools or not requested_tools.issubset(valid_report_tools):
         return "done"
 
-    report_generated = any(_is_successful_report_message(message) for message in messages)
+    report_generated = any(
+        _is_successful_report_message(message) for message in messages
+    )
     return "done" if report_generated else "tools"
 
 
@@ -181,12 +177,6 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
             molecule_name_to_smiles,
             extract_output_json,
             calculator,
-            run_xanes_workflow,
-            fetch_xanes_data,
-            create_xanes_inputs,
-            run_xanes_parsl,
-            expand_xanes_db,
-            plot_xanes_results,
         ]
     messages = [
         {"role": "system", "content": system_prompt},
@@ -303,12 +293,6 @@ def construct_single_agent_graph(
                 run_ase,
                 extract_output_json,
                 calculator,
-                run_xanes_workflow,
-                fetch_xanes_data,
-                create_xanes_inputs,
-                run_xanes_parsl,
-                expand_xanes_db,
-                plot_xanes_results,
             ]
         tool_node = ToolNode(tools=tools)
         graph_builder = StateGraph(State)
