@@ -1,168 +1,324 @@
-
 import os
 import pickle
-import numpy as np
-import matplotlib.pyplot as plt
-import parsl
+import subprocess
 import shutil
 from pathlib import Path
-from mp_api.client import MPRester
-from pymatgen.io.ase import AseAtomsAdaptor
+from typing import List, Optional
+
+import numpy as np
 from ase import Atoms
-from parsl import bash_app, File
-from parsl.executors import HighThroughputExecutor
-from parsl.providers import PBSProProvider
-from parsl.config import Config
-from parsl.launchers import SingleNodeLauncher
+from ase.io import read as ase_read
 from langchain_core.tools import tool
-from typing import Union, List
-from chemgraph.schemas.atomsdata import AtomsData
-from chemgraph.tools.ase_tools import atomsdata_to_atoms
 
+from chemgraph.schemas.xanes_schema import xanes_input_schema, mp_query_schema
+from chemgraph.utils.logging_config import setup_logger
 
-# API Configuration
-MP_API_KEY = 'Pgvt9Q4pctLJeK7hDpB2F3ztUIjnDeym'
+logger = setup_logger(__name__)
 
 # -----------------------------------------------------------------------------
 # Helper Functions
 # -----------------------------------------------------------------------------
 
-def write_fdmnes_input(ase_atoms: Atoms,
-                       z_absorber: int = None,
-                       input_file_dir: Path = None,
-                       radius: float = 6,
-                       magnetism: bool = False,
-                       ):
+
+def write_fdmnes_input(
+    ase_atoms: Atoms,
+    z_absorber: int = None,
+    input_file_dir: Path = None,
+    radius: float = 6.0,
+    magnetism: bool = False,
+):
+    """Write FDMNES input files (fdmfile.txt and fdmnes_in.txt) for a structure.
+
+    Parameters
+    ----------
+    ase_atoms : ase.Atoms
+        Atomic structure to compute XANES for.
+    z_absorber : int, optional
+        Atomic number of the X-ray absorbing atom.
+        Defaults to the heaviest element in the structure.
+    input_file_dir : Path, optional
+        Directory to write input files into. Defaults to cwd.
+    radius : float
+        Cluster radius in Angstrom. Default 6.0.
+    magnetism : bool
+        Enable magnetic contributions. Default False.
+    """
     if not isinstance(ase_atoms, Atoms):
-        raise TypeError('ase_atoms must be an ase.Atoms object')
+        raise TypeError("ase_atoms must be an ase.Atoms object")
 
     atomic_numbers = ase_atoms.get_atomic_numbers()
     if z_absorber is None:
-        z_absorber = atomic_numbers.max()
+        z_absorber = int(atomic_numbers.max())
 
     if input_file_dir is None:
         input_file_dir = Path.cwd()
 
-    with open(input_file_dir / 'fdmfile.txt', 'w') as f:
-        f.write('1' + '\n')
-        f.write('fdmnes_in.txt' + '\n')
+    with open(input_file_dir / "fdmfile.txt", "w") as f:
+        f.write("1\n")
+        f.write("fdmnes_in.txt\n")
 
-    with open(input_file_dir / 'fdmnes_in.txt', 'w') as f:
-        f.write('Filout' + '\n')
-        f.write(f'{input_file_dir.name}' + 2*'\n')
+    with open(input_file_dir / "fdmnes_in.txt", "w") as f:
+        f.write("Filout\n")
+        f.write(f"{input_file_dir.name}\n\n")
 
-        # Sets the energy mesh
-        f.write('Range' + '\n')
-        f.write('-55. 1.0 -10. 0.01 5. 0.1 150.' + 2*'\n')
+        # Energy mesh
+        f.write("Range\n")
+        f.write("-55. 1.0 -10. 0.01 5. 0.1 150.\n\n")
 
-        # Cluster Radius
-        f.write('Radius' + '\n')
-        f.write(f'{radius}' + 2*'\n')
+        # Cluster radius
+        f.write("Radius\n")
+        f.write(f"{radius}\n\n")
 
-        # Atomic number of the X-ray absorber
-        f.write('Z_absorber' + '\n')
-        f.write(f'{z_absorber}' + 2*'\n')
+        # Absorbing atom
+        f.write("Z_absorber\n")
+        f.write(f"{z_absorber}\n\n")
 
-        # Enables magnetic contributions
+        # Magnetic contributions
         if magnetism:
-            f.write('Magnetism' + 2*'\n')
+            f.write("Magnetism\n\n")
 
-        f.write('Green' + '\n')  # Use Green's function formalism for multiple scattering treatment
-        f.write('Density_all' + '\n')  # Output total electron density for the cluster
-        f.write('Quadrupole' + '\n')  # Include quadrupole transitions
-        f.write('Spherical' + '\n')  # Start from spherical atomic densities
-        f.write('SCF' + 2*'\n')  # Perform self-consistent field calculations on the cluster charge density
+        f.write("Green\n")
+        f.write("Density_all\n")
+        f.write("Quadrupole\n")
+        f.write("Spherical\n")
+        f.write("SCF\n\n")
 
         if all(ase_atoms.pbc):
-            f.write('Crystal' + '\n')
-
-            # Writing cell lengths and angles
-            f.write(' '.join(map(str, ase_atoms.cell.cellpar())) + '\n')
-
-            # Atomic positions in fractional coordinates per required by periodic systems
+            f.write("Crystal\n")
+            f.write(" ".join(map(str, ase_atoms.cell.cellpar())) + "\n")
             positions = np.round(ase_atoms.get_scaled_positions(), 6)
-
         else:
-            f.write('Molecule' + '\n')
-
-            # Writing cell lengths and angles
-            cell_length = abs(ase_atoms.get_positions().max()) + abs(ase_atoms.get_positions().min())
-            f.write(f'{cell_length} {cell_length} {cell_length} 90 90 90' + '\n')
-
-            # Atomic positions in Cartesian coordinates per required by molecular systems
+            f.write("Molecule\n")
+            cell_length = abs(ase_atoms.get_positions().max()) + abs(
+                ase_atoms.get_positions().min()
+            )
+            f.write(f"{cell_length} {cell_length} {cell_length} 90 90 90\n")
             positions = np.round(ase_atoms.get_positions(), 6)
 
         for i, position in enumerate(positions):
-            f.write(f'{atomic_numbers[i]} ' + ' '.join(map(str, position)) + '\n')
+            f.write(f"{atomic_numbers[i]} " + " ".join(map(str, position)) + "\n")
 
-        f.write('\n')
-        f.write('Convolution' + '\n')
-        f.write('End')
+        f.write("\n")
+        f.write("Convolution\n")
+        f.write("End")
 
 
-def get_normalized_xanes(conv_file: Path | str,
-                         pre_edge_width: float = 20.0,
-                         post_edge_width: float = 50.0,
-                         calc_E0: bool = False
-                         ) -> tuple[np.ndarray, np.ndarray]:
-    energy_xas = np.loadtxt(conv_file, skiprows=1) # (N,2) array
+def get_normalized_xanes(
+    conv_file: Path | str,
+    pre_edge_width: float = 20.0,
+    post_edge_width: float = 50.0,
+    calc_E0: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Normalize a XANES spectrum from an FDMNES convolution output file.
+
+    Parameters
+    ----------
+    conv_file : Path or str
+        Path to the FDMNES ``*_conv.txt`` output file.
+    pre_edge_width : float
+        Width of the pre-edge region in eV for baseline fitting.
+    post_edge_width : float
+        Width of the post-edge region in eV for step normalization.
+    calc_E0 : bool
+        If True, determine the edge energy E0 from the maximum of dmu/dE.
+        Otherwise E0 is assumed to be 0 (the FDMNES convention).
+
+    Returns
+    -------
+    normalized : np.ndarray
+        (N, 2) array of [energy, normalized_mu].
+    raw : np.ndarray
+        (N, 2) array of [energy, raw_mu] as read from the file.
+    """
+    energy_xas = np.loadtxt(conv_file, skiprows=1)
 
     E = energy_xas[:, 0].astype(float)
     mu = energy_xas[:, 1].astype(float)
 
-    # Finding edge energy E0 (onset of absorption) if file doesn't set 0 as reference
     if calc_E0:
         dmu_dE = np.gradient(mu, E)
         E0 = E[np.argmax(dmu_dE)]
     else:
         E0 = 0
 
-    # Finding pre- and post-edge masks
     pre_mask = E <= (E0 - pre_edge_width)
     post_mask = E >= (E0 + post_edge_width)
 
-    # Doing linear fits μ ~ m*E + b
     m_pre, b_pre = np.polyfit(E[pre_mask], mu[pre_mask], 1)
     m_post, b_post = np.polyfit(E[post_mask], mu[post_mask], 1)
 
-    # Subtract pre-edge to shift the pre_line to mu = 0
-    pre_line = m_pre*E + b_pre
+    pre_line = m_pre * E + b_pre
     mu_corr = mu - pre_line
 
-    # Computing normalized mu
-    step = (m_post*E0 + b_post) - (m_pre*E0 + b_pre)
+    step = (m_post * E0 + b_post) - (m_pre * E0 + b_pre)
     mu_norm = mu_corr / step
 
     return np.column_stack([E, mu_norm]), energy_xas
 
 
-def extract_conv(fdmnes_output_dir: Path | str) -> np.ndarray:
+def extract_conv(fdmnes_output_dir: Path | str) -> dict:
+    """Extract all convolution output files from an FDMNES run directory.
+
+    Parameters
+    ----------
+    fdmnes_output_dir : Path or str
+        Directory containing FDMNES output files.
+
+    Returns
+    -------
+    dict
+        Mapping of index to (N, 2) arrays of [energy, mu].
+    """
     if not isinstance(fdmnes_output_dir, Path):
         fdmnes_output_dir = Path(fdmnes_output_dir)
 
     energy_xas = {}
-    for i, conv_file in enumerate(fdmnes_output_dir.glob('*conv.txt')):
-        energy_xas[i] = np.loadtxt(conv_file, skiprows=1) # (N,2) array
+    for i, conv_file in enumerate(fdmnes_output_dir.glob("*conv.txt")):
+        energy_xas[i] = np.loadtxt(conv_file, skiprows=1)
 
     return energy_xas
 
+
 # -----------------------------------------------------------------------------
-# Workflow Steps
+# Core Workflow Functions
 # -----------------------------------------------------------------------------
 
-def fetch_materials_project_data(chemsys: list[str], db_path: Path):
-    """Fetch materials data from Materials Project."""
-    import pickle
-    print(f"Fetching data from MP for: {chemsys}")
+
+def run_xanes_core(params: xanes_input_schema) -> dict:
+    """Run a single XANES/FDMNES calculation for one structure.
+
+    This is the core function analogous to ``run_graspa_core``. It:
+    1. Reads the input structure file via ASE.
+    2. Creates FDMNES input files via ``write_fdmnes_input``.
+    3. Runs FDMNES via subprocess.
+    4. Parses the convolution output if available.
+
+    Parameters
+    ----------
+    params : xanes_input_schema
+        Input parameters for the FDMNES calculation.
+
+    Returns
+    -------
+    dict
+        Result dictionary with keys: status, output_dir, conv_data (if success),
+        error (if failure).
+    """
+    fdmnes_exe = os.environ.get("FDMNES_EXE")
+    if not fdmnes_exe:
+        raise ValueError(
+            "FDMNES_EXE environment variable is not set. "
+            "Set it to the path of the FDMNES executable."
+        )
+
+    input_path = Path(params.input_structure_file).resolve()
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input structure file not found: {input_path}")
+
+    atoms = ase_read(str(input_path))
+
+    # Determine output directory
+    if params.output_dir is not None:
+        run_dir = Path(params.output_dir).resolve()
+    else:
+        run_dir = input_path.parent / f"fdmnes_{input_path.stem}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write FDMNES input files
+    write_fdmnes_input(
+        ase_atoms=atoms,
+        z_absorber=params.z_absorber,
+        input_file_dir=run_dir,
+        radius=params.radius,
+        magnetism=params.magnetism,
+    )
+
+    # Save the atoms object alongside the inputs for provenance
+    formula = atoms.get_chemical_formula()
+    z_abs = params.z_absorber or int(atoms.get_atomic_numbers().max())
+    mp_id = atoms.info.get("MP-id", "local")
+    pkl_filename = f"Z{z_abs}_{mp_id}_{formula}.pkl"
+    with open(run_dir / pkl_filename, "wb") as f:
+        pickle.dump(atoms, f)
+
+    # Run FDMNES
+    logger.info("Running FDMNES in %s", run_dir)
+    with (
+        open(run_dir / "fdmnes_stdout.txt", "w") as fp_out,
+        open(run_dir / "fdmnes_stderr.txt", "w") as fp_err,
+    ):
+        proc = subprocess.run(
+            fdmnes_exe,
+            cwd=str(run_dir),
+            stdout=fp_out,
+            stderr=fp_err,
+            shell=True,
+        )
+
+    if proc.returncode != 0:
+        logger.error(
+            "FDMNES failed with return code %d in %s", proc.returncode, run_dir
+        )
+        return {
+            "status": "failure",
+            "output_dir": str(run_dir),
+            "error": f"FDMNES exited with return code {proc.returncode}",
+        }
+
+    # Parse results
+    conv_data = extract_conv(run_dir)
+    if not conv_data:
+        logger.warning("No convolution output found in %s", run_dir)
+        return {
+            "status": "failure",
+            "output_dir": str(run_dir),
+            "error": "No *conv.txt output files found after FDMNES execution.",
+        }
+
+    logger.info("FDMNES completed successfully in %s", run_dir)
+    return {
+        "status": "success",
+        "output_dir": str(run_dir),
+        "n_conv_files": len(conv_data),
+    }
+
+
+def fetch_materials_project_data(
+    params: mp_query_schema,
+    db_path: Path,
+) -> list[Atoms]:
+    """Fetch optimized structures from Materials Project.
+
+    Parameters
+    ----------
+    params : mp_query_schema
+        Query parameters including chemical formulas and API key.
+    db_path : Path
+        Directory to save the fetched structures as ``atoms_db.pkl``.
+
+    Returns
+    -------
+    list[ase.Atoms]
+        List of ASE Atoms objects fetched from Materials Project.
+    """
+    from mp_api.client import MPRester
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    api_key = params.mp_api_key or os.environ.get("MP_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "No Materials Project API key provided. "
+            "Pass it via mp_api_key or set the MP_API_KEY environment variable."
+        )
+
+    logger.info("Fetching data from Materials Project for: %s", params.chemsys)
     atoms_list = []
-    
-    # Ensure correct API key usage
-    with MPRester(MP_API_KEY) as mpr:
+
+    with MPRester(api_key) as mpr:
         doc_list = mpr.materials.summary.search(
-            fields=['material_id', 'structure'], # 'xas', 'dos', 'symmetry'
-            # has_props=['dos', 'xas'],
-            energy_above_hull=(0, 0.001),
-            formula=chemsys,
+            fields=["material_id", "structure"],
+            energy_above_hull=(0, params.energy_above_hull),
+            formula=params.chemsys,
             deprecated=False,
             num_chunks=1,
             chunk_size=1,
@@ -170,384 +326,220 @@ def fetch_materials_project_data(chemsys: list[str], db_path: Path):
 
         for doc in doc_list:
             ase_atoms = AseAtomsAdaptor.get_atoms(doc.structure)
-            ase_atoms.info.update({'MP-id' : str(doc.material_id)})
+            ase_atoms.info.update({"MP-id": str(doc.material_id)})
             atoms_list.append(ase_atoms)
 
     if not db_path.exists():
         db_path.mkdir(parents=True)
-        
-    with open(db_path / 'atoms_db.pkl', 'wb') as f:
+
+    with open(db_path / "atoms_db.pkl", "wb") as f:
         pickle.dump(atoms_list, f)
-    
-    print(f"Saved {len(atoms_list)} structures to {db_path / 'atoms_db.pkl'}")
+
+    logger.info("Saved %d structures to %s", len(atoms_list), db_path / "atoms_db.pkl")
     return atoms_list
 
-def create_fdmnes_inputs(root_dir: Path, atoms_list: List[Atoms] = None, z_absorber: int = None):
-    """Create FDMNES inputs from the database or provided atoms."""
-    import pickle
-    print("Creating FDMNES inputs...")
-    runs_dir = root_dir / 'fdmnes_batch_runs'
-    
+
+def create_fdmnes_inputs(
+    root_dir: Path,
+    atoms_list: Optional[List[Atoms]] = None,
+    z_absorber: Optional[int] = None,
+    radius: float = 6.0,
+    magnetism: bool = False,
+) -> Path:
+    """Create FDMNES input files for a batch of structures.
+
+    Parameters
+    ----------
+    root_dir : Path
+        Root directory for the batch. A ``fdmnes_batch_runs`` subdirectory
+        will be created containing per-structure run directories.
+    atoms_list : list[ase.Atoms], optional
+        Structures to process. If None, loads from ``root_dir/atoms_db.pkl``.
+    z_absorber : int, optional
+        Atomic number of the absorbing atom. Defaults to heaviest per structure.
+    radius : float
+        Cluster radius in Angstrom.
+    magnetism : bool
+        Enable magnetic contributions.
+
+    Returns
+    -------
+    Path
+        Path to the ``fdmnes_batch_runs`` directory.
+    """
+    logger.info("Creating FDMNES inputs in %s", root_dir)
+    runs_dir = root_dir / "fdmnes_batch_runs"
+
     start_idx = 0
     if runs_dir.exists():
         for subdir in runs_dir.iterdir():
             try:
-                start_idx = max(start_idx, int(subdir.name.split('_')[-1]))
+                start_idx = max(start_idx, int(subdir.name.split("_")[-1]))
             except ValueError:
                 continue
-        last_run = runs_dir / f'run_{start_idx}'
+        last_run = runs_dir / f"run_{start_idx}"
         if last_run.exists():
             shutil.rmtree(last_run)
     else:
         runs_dir.mkdir(parents=True)
 
     if atoms_list is None:
-        db_path = root_dir / 'atoms_db.pkl'
+        db_path = root_dir / "atoms_db.pkl"
         if not db_path.exists():
             raise FileNotFoundError(f"No atoms provided and {db_path} not found.")
-        with open(db_path, 'rb') as f:
+        with open(db_path, "rb") as f:
             atoms_list = pickle.load(f)
 
     for i, atoms in enumerate(atoms_list, start=start_idx):
-        curr_run_dir = runs_dir / f'run_{i}'
+        curr_run_dir = runs_dir / f"run_{i}"
         curr_run_dir.mkdir(parents=True, exist_ok=True)
 
-        current_z_absorber = z_absorber if z_absorber is not None else max(atoms.get_atomic_numbers())
-        write_fdmnes_input(ase_atoms=atoms,
-                           input_file_dir=curr_run_dir,
-                           z_absorber=current_z_absorber,
-                           radius=6,
-                           magnetism=False)
+        current_z = (
+            z_absorber
+            if z_absorber is not None
+            else int(max(atoms.get_atomic_numbers()))
+        )
+        write_fdmnes_input(
+            ase_atoms=atoms,
+            input_file_dir=curr_run_dir,
+            z_absorber=current_z,
+            radius=radius,
+            magnetism=magnetism,
+        )
 
         mp_id = atoms.info.get("MP-id", "local")
         formula = atoms.get_chemical_formula()
-        pkl_filename = f'Z{current_z_absorber}_{mp_id}_{formula}.pkl'
-        with open(curr_run_dir / pkl_filename, 'wb') as f:
+        pkl_filename = f"Z{current_z}_{mp_id}_{formula}.pkl"
+        with open(curr_run_dir / pkl_filename, "wb") as f:
             pickle.dump(atoms, f)
-            
+
     return runs_dir
 
-def run_fdmnes_parsl_workflow(runs_dir: Path):
-    """Run FDMNES calculations using Parsl."""
-    print("Running Parsl workflow...")
-    
-    # Only run if we are in an environment that likely supports it or user asked specifically
-    # Here we just implement the logic.
-    
-    # ---------- USER VARIABLES ----------
-    account     = 'xanes_fmCatal' # account to charge
-    num_nodes   = 2              # max number of nodes to use
-    walltime    = '02:00:00'     # job length
-    fdmnes_exe  = '/home/vferreiragrizzi/parallel_fdmnes/mpirun_fdmnes'
-    num_cores   = int(os.environ.get('PBS_NP', '128'))
-    # ----------------------------------------------
-    
-    def is_calc_done(run_dir: Path) -> bool:
-        conv = next(run_dir.glob('*_conv.txt'), None)
-        return conv is not None and conv.stat().st_size > 1024
 
-    run_dirs = [d for d in runs_dir.glob('run_*') if d.is_dir() and not is_calc_done(d)]
-    if not run_dirs:
-        print('All calcs are done already!!')
-        return
+def expand_database_results(root_dir: Path, runs_dir: Path) -> None:
+    """Expand the atoms database with XANES convolution results.
 
-    @bash_app
-    def run_fdmnes(run_dir, ncores, exe, stdout=None, stderr=None, outputs=None, cwd=None):
-        return f"""
-            cd "{run_dir}"
-            "{exe}" -np {ncores}
-            """
+    For each completed run directory, loads the pickled Atoms object,
+    attaches the FDMNES convolution data to ``atoms.info``, and saves
+    all expanded structures to ``root_dir/atoms_db_expanded.pkl``.
 
-    try:
-        htex = HighThroughputExecutor(
-            label='htex',
-            max_workers_per_node=1,
-            cores_per_worker=num_cores,
-            provider=PBSProProvider(
-                account=account,
-                nodes_per_block=1,
-                cpus_per_node=num_cores,
-                init_blocks=min(num_nodes, len(run_dirs)),
-                max_blocks=num_nodes,
-                walltime=walltime,
-                scheduler_options='#PBS -N FDMNES_parsl',
-                worker_init="""
-                    source ~/miniconda/etc/profile.d/conda.sh
-                    conda activate chemgraph
-                    export OMP_NUM_THREADS=1
-                """,
-                launcher=SingleNodeLauncher(),
-            ),
-        )
-        
-        # Load parsl config if not already loaded
-        try:
-            parsl.load(Config(executors=[htex], retries=2))
-        except RuntimeError:
-            # Already loaded
-            pass
-
-        futures = []
-        for curr_dir in run_dirs:
-            expected_output_file = curr_dir / f"{curr_dir.name}_conv.txt"
-
-            futures.append(
-                run_fdmnes(
-                    run_dir=str(curr_dir),
-                    ncores=num_cores,
-                    exe=fdmnes_exe,
-                    cwd=str(curr_dir),
-                    stdout=str(curr_dir / 'fdmnes_stdout.txt'),
-                    stderr=str(curr_dir / 'fdmnes_stderr.txt'),
-                    outputs=[File(str(expected_output_file))]
-                )
-            )
-
-        print(f'Submitted {len(futures)} runs to Parsl')
-        for fut in futures:
-            fut.result()
-        print('All runs finished')
-        
-    finally:
-        parsl.clear()
-
-def expand_database_results(root_dir: Path, runs_dir: Path):
-    """Expand the database with XANES results."""
-    import pickle
-    print("Expanding database...")
+    Parameters
+    ----------
+    root_dir : Path
+        Root directory where the expanded database will be saved.
+    runs_dir : Path
+        Directory containing ``run_*`` subdirectories with FDMNES outputs.
+    """
+    logger.info("Expanding database with XANES results...")
     expanded_atoms_list = []
-    for sub_dir in runs_dir.glob('run_*'):
-        atoms_pkl_files = list(sub_dir.glob('*.pkl'))
+
+    for sub_dir in sorted(runs_dir.glob("run_*")):
+        atoms_pkl_files = list(sub_dir.glob("*.pkl"))
         if not atoms_pkl_files:
             continue
-            
-        atoms_pkl_file = atoms_pkl_files[0]
-        with open(atoms_pkl_file, 'rb') as f:
+
+        with open(atoms_pkl_files[0], "rb") as f:
             ase_atoms = pickle.load(f)
 
-        ase_atoms.info.update({'FDMNES-xanes': extract_conv(fdmnes_output_dir=sub_dir)})
+        conv_data = extract_conv(fdmnes_output_dir=sub_dir)
+        ase_atoms.info.update({"FDMNES-xanes": conv_data})
         expanded_atoms_list.append(ase_atoms)
 
-    with open(root_dir / 'atoms_db_expanded.pkl', 'wb') as f:
+    with open(root_dir / "atoms_db_expanded.pkl", "wb") as f:
         pickle.dump(expanded_atoms_list, f)
 
-def _plot_xanes_results_internal(root_dir: Path, runs_dir: Path):
-    """Plot XANES results."""
-    print("Plotting results...")
-    # Naive plotting for now: plot whatever is found in the last few runs
-    # This logic matches the original script's intent of plotting specific files, 
-    # but here we generalize to plot valid results found in the run directory.
-    
-    for sub_dir in runs_dir.glob('run_*'):
-        conv_file = next(sub_dir.glob('*_conv.txt'), None)
+    logger.info(
+        "Saved %d expanded structures to %s",
+        len(expanded_atoms_list),
+        root_dir / "atoms_db_expanded.pkl",
+    )
+
+
+def plot_xanes_results(root_dir: Path, runs_dir: Path) -> None:
+    """Generate normalized XANES plots for completed FDMNES calculations.
+
+    For each run directory containing a ``*_conv.txt`` file, produces
+    a ``xanes_plot.png`` with the normalized absorption spectrum.
+
+    Parameters
+    ----------
+    root_dir : Path
+        Root data directory (unused currently, reserved for summary plots).
+    runs_dir : Path
+        Directory containing ``run_*`` subdirectories with FDMNES outputs.
+    """
+    import matplotlib.pyplot as plt
+
+    logger.info("Plotting XANES results from %s", runs_dir)
+
+    for sub_dir in sorted(runs_dir.glob("run_*")):
+        conv_file = next(sub_dir.glob("*_conv.txt"), None)
         if conv_file:
             try:
-                norm_energy, energy = get_normalized_xanes(conv_file)
+                norm_energy, _raw = get_normalized_xanes(conv_file)
                 plt.figure()
-                plt.plot(norm_energy[:,0], norm_energy[:,1], label=sub_dir.name)
-                plt.xlabel('Energy [eV]')
-                plt.ylabel('Normalized Absorption')
-                plt.title(f'XANES for {sub_dir.name}')
-                plt.savefig(sub_dir / 'xanes_plot.png')
+                plt.plot(norm_energy[:, 0], norm_energy[:, 1], label=sub_dir.name)
+                plt.xlabel("Energy [eV]")
+                plt.ylabel("Normalized Absorption")
+                plt.title(f"XANES for {sub_dir.name}")
+                plt.legend()
+                plt.savefig(sub_dir / "xanes_plot.png", dpi=150)
                 plt.close()
-                print(f"Plotted {sub_dir.name}")
+                logger.info("Plotted %s", sub_dir.name)
             except Exception as e:
-                print(f"Failed to plot {sub_dir.name}: {e}")
+                logger.error("Failed to plot %s: %s", sub_dir.name, e)
+
 
 # -----------------------------------------------------------------------------
-# Individual Workflow Tools
+# Data directory helper
 # -----------------------------------------------------------------------------
+
 
 def _get_data_dir() -> Path:
-    """Helper to determine the data directory."""
+    """Return the working data directory for XANES workflows."""
     cwd = Path.cwd()
-    if 'PBS_O_WORKDIR' in os.environ:
-         cwd = Path(os.environ['PBS_O_WORKDIR'])
-    
-    data_dir = cwd / 'xanes_data'
+    if "PBS_O_WORKDIR" in os.environ:
+        cwd = Path(os.environ["PBS_O_WORKDIR"])
+
+    data_dir = cwd / "xanes_data"
     if not data_dir.exists():
-        data_dir.mkdir()
+        data_dir.mkdir(parents=True)
     return data_dir
 
-@tool
-def fetch_xanes_data(chemsys: list[str]) -> str:
-    """
-    Fetch optimized bulk structures data from Materials Project database.
-    
-    Parameters:
-    -----------
-    chemsys : list[str]
-        List of chemical systems to search for (e.g. ['Fe2O3', 'CoO'])
-    """
-    try:
-        data_dir = _get_data_dir()
-        atoms_list = fetch_materials_project_data(chemsys, data_dir)
-        return f"Fetched {len(atoms_list)} structures for {chemsys} into {data_dir}"
-    except Exception as e:
-        return f"Error fetching data: {e}"
-
-@tool
-def create_xanes_inputs(atoms_list: list[AtomsData | dict | str] = None, z_absorber: int = None) -> str:
-    """
-    Create FDMNES input files for a list of AtomsData objects.
-    
-    Parameters:
-    -----------
-    atoms_list : List[Union[AtomsData, dict, str]], optional
-        List of AtomsData objects, dictionaries representing atoms, or file paths (strings) to run XANES on.
-        If not provided, falls back to using the 'atoms_db.pkl' fetched from 'fetch_xanes_data'.
-    z_absorber : int, optional
-        Atomic number of the absorbing atom for the XANES calculation.
-        
-    CRITICAL INSTRUCTION FOR THE AGENT:
-    To actually create the inputs, you MUST execute this tool call. Do not skip executing this tool.
-    If you have a file path (like POSCAR), you should simply pass the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
-    If you must pass AtomsData directly, you MUST include the FULL JSON string for each AtomsData object.
-    """
-    try:
-        data_dir = _get_data_dir()
-        ase_atoms_list = None
-        
-        if atoms_list is not None:
-            ase_atoms_list = []
-            from ase.io import read
-            for item in atoms_list:
-                if isinstance(item, AtomsData):
-                    ase_atoms_list.append(atomsdata_to_atoms(item))
-                elif isinstance(item, dict):
-                    # Fallback if given a dict
-                    parsed_item = AtomsData(**item)
-                    ase_atoms_list.append(atomsdata_to_atoms(parsed_item))
-                elif isinstance(item, str):
-                    # Fallback if given a file path
-                    ase_atoms_list.append(read(item))
-                else:
-                    raise TypeError("Expected AtomsData, dict, or str in atoms_list.")
-                    
-        create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
-        return f"Created FDMNES inputs in {data_dir / 'fdmnes_batch_runs'}"
-    except Exception as e:
-        return f"Error creating inputs: {e}"
-
-@tool
-def run_xanes_parsl() -> str:
-    """
-    Run FDMNES calculations using Parsl.
-    Requires 'create_xanes_inputs' to have been run first.
-    This may take a significant amount of time.
-    """
-    try:
-        data_dir = _get_data_dir()
-        runs_dir = data_dir / 'fdmnes_batch_runs'
-        if not runs_dir.exists():
-             return "Error: fdmnes_batch_runs directory not found. Did you run create_xanes_inputs?"
-        
-        run_fdmnes_parsl_workflow(runs_dir)
-        return "Parsl execution finished."
-    except Exception as e:
-        return f"Error running Parsl: {e}"
-
-@tool
-def expand_xanes_db() -> str:
-    """
-    Expand the database with calculation results.
-    Requires 'run_xanes_parsl' to have completed.
-    """
-    try:
-        data_dir = _get_data_dir()
-        runs_dir = data_dir / 'fdmnes_batch_runs'
-        expand_database_results(data_dir, runs_dir)
-        return f"Database expanded with results in {data_dir}"
-    except Exception as e:
-        return f"Error expanding database: {e}"
-
-@tool
-def plot_xanes_results() -> str:
-    """
-    Plot XANES results. Generates plots for completed calculations in the run directories.
-    """
-    try:
-        data_dir = _get_data_dir()
-        runs_dir = data_dir / 'fdmnes_batch_runs'
-        _plot_xanes_results_internal(data_dir, runs_dir)
-        return f"Plots generated in subdirectories of {runs_dir}"
-    except Exception as e:
-        return f"Error plotting results: {e}"
 
 # -----------------------------------------------------------------------------
-# Main Tool
+# LangChain @tool wrappers (for single-agent / multi-agent graphs)
 # -----------------------------------------------------------------------------
 
+
 @tool
-def run_xanes_workflow(chemsys: list[str] = None, atoms_list: list[AtomsData | dict | str] = None, z_absorber: int = None) -> str:
+def run_xanes(params: xanes_input_schema) -> str:
+    """Run a single XANES/FDMNES calculation for one structure file.
+
+    This tool reads the structure, generates FDMNES input files, runs FDMNES,
+    and returns the result status. Requires the FDMNES_EXE environment variable.
     """
-    Run the FULL XANES workflow.
-    
-    Parameters:
-    -----------
-    chemsys : List[str], optional
-        List of chemical systems to search for (e.g. ['Fe2O3', 'CoO'])
-    atoms_list : List[Union[AtomsData, dict, str]], optional
-        List of AtomsData objects, dictionaries, or file paths identifying atoms to be processed.
-    z_absorber : int, optional
-        Atomic number of the absorbing atom.
-        
-    CRITICAL INSTRUCTION FOR THE AGENT:
-    If the user asks to compute or run XANES, you MUST invoke this tool or the individual workflow tools. You cannot just output text saying "it will be calculated" or "it has been processed".
-    If you have a file path (like POSCAR), prefer passing the path string in the `atoms_list` parameter (e.g., `atoms_list=["/path/to/POSCAR"]`).
-    If passing `atoms_list` as AtomsData, you MUST output the FULL AtomsData JSON from the previous step. Do not truncate the arrays or skip the tool call due to length.
+    result = run_xanes_core(params)
+    if result["status"] == "success":
+        return (
+            f"XANES calculation completed successfully. "
+            f"Output directory: {result['output_dir']}. "
+            f"Found {result['n_conv_files']} convolution output(s)."
+        )
+    else:
+        raise RuntimeError(
+            f"FDMNES calculation failed in {result['output_dir']}: "
+            f"{result.get('error', 'unknown error')}"
+        )
+
+
+@tool
+def fetch_xanes_data(params: mp_query_schema) -> str:
+    """Fetch optimized bulk structures from Materials Project for XANES analysis.
+
+    Requires a Materials Project API key via the mp_api_key parameter
+    or the MP_API_KEY environment variable.
     """
-    if chemsys is None and atoms_list is None:
-        return "Error: Must provide either 'chemsys' or 'atoms_list' to run_xanes_workflow."
-        
-    try:
-        data_dir = _get_data_dir()
-        
-        target_names = []
-        if chemsys:
-            target_names.extend(chemsys)
-        if atoms_list:
-            for item in atoms_list:
-                if isinstance(item, str):
-                    target_names.append(Path(item).name)
-                else:
-                    target_names.append("Atoms data")
-        target_name = target_names
-        
-        print(f"Starting XANES workflow for {target_name} in {data_dir}...")
-        
-        # 1. Fetch Data
-        if atoms_list is None and chemsys is not None:
-            fetch_materials_project_data(chemsys, data_dir)
-        
-        # 2. Creates Inputs
-        ase_atoms_list = None
-        if atoms_list is not None:
-            ase_atoms_list = []
-            from ase.io import read
-            for atoms in atoms_list:
-                if isinstance(atoms, AtomsData):
-                    ase_atoms_list.append(atomsdata_to_atoms(atoms))
-                elif isinstance(atoms, dict):
-                    ase_atoms_list.append(atomsdata_to_atoms(AtomsData(**atoms)))
-                elif isinstance(atoms, str):
-                    ase_atoms_list.append(read(atoms))
-                else:
-                    raise TypeError("Expected AtomsData, dict, or str in atoms_list.")
-                    
-        create_fdmnes_inputs(data_dir, atoms_list=ase_atoms_list, z_absorber=z_absorber)
-        
-        # 3. Parsl Execution
-        runs_dir = data_dir / 'fdmnes_batch_runs'
-        run_fdmnes_parsl_workflow(runs_dir)
-        
-        # 4. Expand DB
-        expand_database_results(data_dir, runs_dir)
-        
-        # 5. Plot
-        _plot_xanes_results_internal(data_dir, runs_dir)
-        
-        return f"XANES workflow completed successfully for {target_name}. Results in {data_dir}"
-        
-    except Exception as e:
-        return f"Error executing XANES workflow: {str(e)}"
+    data_dir = _get_data_dir()
+    atoms_list = fetch_materials_project_data(params, data_dir)
+    return f"Fetched {len(atoms_list)} structures for {params.chemsys} into {data_dir}"
