@@ -64,6 +64,10 @@ ui = [
 parsl = [
     "parsl",
 ]
+xanes = [
+    "mp-api; python_version >= '3.11'",
+    "parsl"
+]
 rag = [
     "faiss-cpu>=1.7.4",
     "langchain-text-splitters",
