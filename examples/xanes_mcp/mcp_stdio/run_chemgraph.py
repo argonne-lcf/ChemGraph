@@ -94,8 +94,6 @@ async def main():
         structured_output=False,
         return_option="state",
         tools=tools,
-        argo_user="tpham",
-        base_url="https://apps.inside.anl.gov/argoapi/api/v1/resource/chat/",
     )
 
     result = await cg.run(PROMPT)
