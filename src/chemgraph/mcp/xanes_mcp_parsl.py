@@ -235,19 +235,21 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
     description="Fetch optimized structures from Materials Project.",
 )
 def fetch_mp_structures(params: mp_query_schema):
-    """Fetch structures from Materials Project and save as a pickle database."""
+    """Fetch structures from Materials Project and save as CIF files and pickle database."""
     from chemgraph.tools.xanes_tools import (
         fetch_materials_project_data,
         _get_data_dir,
     )
 
     data_dir = _get_data_dir()
-    atoms_list = fetch_materials_project_data(params, data_dir)
+    result = fetch_materials_project_data(params, data_dir)
     return {
         "status": "success",
-        "n_structures": len(atoms_list),
+        "n_structures": result["n_structures"],
         "chemsys": params.chemsys,
         "output_dir": str(data_dir),
+        "structure_files": result["structure_files"],
+        "pickle_file": result["pickle_file"],
     }
 
 
@@ -274,10 +276,13 @@ def plot_xanes(runs_dir: str):
         raise ValueError(f"'{runs_dir}' is not a valid directory.")
 
     data_dir = _get_data_dir()
-    plot_xanes_results(data_dir, runs_path)
+    result = plot_xanes_results(data_dir, runs_path)
     return {
         "status": "success",
-        "message": f"Plots generated in subdirectories of {runs_dir}",
+        "n_plots": result["n_plots"],
+        "n_failed": result["n_failed"],
+        "plot_files": result["plot_files"],
+        "failed": result["failed"],
     }
 
 
