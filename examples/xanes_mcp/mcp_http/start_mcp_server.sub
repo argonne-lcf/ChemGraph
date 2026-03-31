@@ -1,0 +1,190 @@
+#!/bin/bash -l
+# ==============================================================================
+# start_mcp_server.sub
+#
+# PBS job script to start the ChemGraph XANES MCP server on an ALCF
+# compute node via HTTP.
+#
+# Usage:
+#   # Edit the configuration section below, then submit:
+#   qsub start_mcp_server.sub
+#
+# After the job starts, set up an SSH tunnel from the login node:
+#   ssh -L 9007:COMPUTE_NODE:9007 COMPUTE_NODE
+#   Then connect to: http://localhost:9007/mcp/
+#
+# Check the compute node hostname:
+#   cat chemgraph_xanes_logs/connection_info.txt
+# ==============================================================================
+
+#PBS -l walltime=01:00:00
+#PBS -l select=1
+#PBS -l filesystems=home:flare
+#PBS -q debug
+#PBS -A your_account
+#PBS -N XANES_MCP
+#PBS -o chemgraph_xanes_server.out
+#PBS -e chemgraph_xanes_server.err
+
+# ==============================================================================
+# CONFIGURATION -- Edit these before submitting
+# ==============================================================================
+VENV_PATH="/path/to/venv"                                  # Virtual environment path
+MCP_PORT=9007                                              # Port for the MCP HTTP server
+MCP_MODULE="chemgraph.mcp.xanes_mcp"                       # XANES MCP server module
+LOG_DIR="${PBS_O_WORKDIR}/chemgraph_xanes_logs"             # Log directory
+FDMNES_EXE_PATH="/path/to/fdmnes"                          # Path to FDMNES executable
+MP_API_KEY_VALUE=""                                         # Materials Project API key
+# ==============================================================================
+
+set -eo pipefail
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+cleanup() {
+    log "Job cleanup starting..."
+    if [[ -n "${MCP_PID:-}" ]] && kill -0 "$MCP_PID" 2>/dev/null; then
+        log "Stopping MCP server (PID: $MCP_PID)"
+        kill "$MCP_PID" 2>/dev/null || true
+    fi
+    log "Cleanup complete."
+}
+
+trap cleanup EXIT INT TERM
+
+# --------------- Change to submission directory ---------------
+cd "${PBS_O_WORKDIR:-$(pwd)}"
+
+# --------------- Environment setup ---------------
+COMPUTE_NODE=$(hostname)
+log "Job ID:        ${PBS_JOBID:-N/A}"
+log "Compute node:  $COMPUTE_NODE"
+log "Work dir:      $(pwd)"
+
+# ALCF proxy settings (required for Materials Project API calls)
+export http_proxy="proxy.alcf.anl.gov:3128"
+export https_proxy="proxy.alcf.anl.gov:3128"
+export NO_PROXY=127.0.0.1,localhost,::1
+export no_proxy=127.0.0.1,localhost,::1
+
+# Load frameworks module and activate virtual environment
+module load frameworks
+log "Loaded frameworks module"
+
+source "$VENV_PATH/bin/activate" || { log "ERROR: Failed to activate venv: $VENV_PATH"; exit 1; }
+log "Activated venv: $VENV_PATH"
+
+# Resolve the python binary
+if [[ -x "$VENV_PATH/bin/python" ]]; then
+    PYTHON="$VENV_PATH/bin/python"
+elif command -v python &>/dev/null; then
+    PYTHON="$(command -v python)"
+elif command -v python3 &>/dev/null; then
+    PYTHON="$(command -v python3)"
+else
+    log "ERROR: No python or python3 found on PATH"
+    exit 1
+fi
+
+# --------------- XANES-specific environment variables ---------------
+export FDMNES_EXE="$FDMNES_EXE_PATH"
+
+if [[ -z "$FDMNES_EXE" || "$FDMNES_EXE" == "/path/to/fdmnes" ]]; then
+    log "WARNING: FDMNES_EXE is not configured. run_xanes_single will fail."
+fi
+
+if [[ -n "$MP_API_KEY_VALUE" ]]; then
+    export MP_API_KEY="$MP_API_KEY_VALUE"
+fi
+if [[ -z "${MP_API_KEY:-}" ]]; then
+    log "WARNING: MP_API_KEY is not set. fetch_mp_structures will require an explicit API key."
+fi
+
+# Set up log directory
+export CHEMGRAPH_LOG_DIR="$LOG_DIR"
+mkdir -p "$CHEMGRAPH_LOG_DIR"
+MCP_LOG_FILE="$CHEMGRAPH_LOG_DIR/xanes_mcp_${PBS_JOBID:-local}_$(date '+%Y%m%d_%H%M%S').log"
+
+log "Python:          $PYTHON"
+log "MCP module:      $MCP_MODULE"
+log "MCP port:        $MCP_PORT"
+log "FDMNES_EXE:      ${FDMNES_EXE:-NOT SET}"
+log "MP_API_KEY:      ${MP_API_KEY:+SET (hidden)}"
+log "Log file:        $MCP_LOG_FILE"
+
+# --------------- Start the MCP server ---------------
+log "Starting XANES MCP server on $COMPUTE_NODE:$MCP_PORT ..."
+
+"$PYTHON" -u -m "$MCP_MODULE" \
+    --transport streamable_http \
+    --host 0.0.0.0 \
+    --port "$MCP_PORT" \
+    > "$MCP_LOG_FILE" 2>&1 &
+
+MCP_PID=$!
+log "MCP server started with PID: $MCP_PID"
+
+# Wait for server to be ready
+log "Waiting for MCP server to become ready..."
+MAX_WAIT=120
+WAITED=0
+while [[ $WAITED -lt $MAX_WAIT ]]; do
+    if ! kill -0 "$MCP_PID" 2>/dev/null; then
+        log "ERROR: MCP server exited unexpectedly. Last log lines:"
+        tail -n 30 "$MCP_LOG_FILE"
+        exit 1
+    fi
+    if grep -q "Uvicorn running on\|Application startup complete\|Started server" "$MCP_LOG_FILE" 2>/dev/null; then
+        log "MCP server is ready!"
+        break
+    fi
+    sleep 2
+    WAITED=$((WAITED + 2))
+done
+
+if [[ $WAITED -ge $MAX_WAIT ]]; then
+    log "WARNING: Timed out waiting for ready signal (${MAX_WAIT}s). Server may still be starting."
+    tail -n 10 "$MCP_LOG_FILE"
+fi
+
+# --------------- Print connection info ---------------
+log ""
+log "============================================================"
+log "  XANES MCP server is running at:"
+log "    http://${COMPUTE_NODE}:${MCP_PORT}/mcp/"
+log ""
+log "  To connect from the login node, set up an SSH tunnel:"
+log "    ssh -L ${MCP_PORT}:${COMPUTE_NODE}:${MCP_PORT} ${COMPUTE_NODE}"
+log "    Then: http://localhost:${MCP_PORT}/mcp/"
+log "============================================================"
+log ""
+
+# Write connection info to a file for easy reference
+CONNECTION_FILE="$CHEMGRAPH_LOG_DIR/connection_info.txt"
+cat > "$CONNECTION_FILE" <<EOF
+ChemGraph XANES MCP Server Connection Info
+============================================
+Job ID:         ${PBS_JOBID:-N/A}
+Compute Node:   $COMPUTE_NODE
+Port:           $MCP_PORT
+Started:        $(date)
+
+Direct URL (from compute node):
+  http://${COMPUTE_NODE}:${MCP_PORT}/mcp/
+
+To connect from the login node, set up an SSH tunnel:
+  ssh -L ${MCP_PORT}:${COMPUTE_NODE}:${MCP_PORT} ${COMPUTE_NODE}
+  Then: http://localhost:${MCP_PORT}/mcp/
+EOF
+log "Connection info written to: $CONNECTION_FILE"
+
+# --------------- Keep job alive until walltime expires ---------------
+log "Server is running. Job will stay alive until walltime expires or Ctrl+C."
+log "Monitor with: tail -f $MCP_LOG_FILE"
+
+wait "$MCP_PID" 2>/dev/null
+EXIT_CODE=$?
+log "MCP server exited with code: $EXIT_CODE"
+exit $EXIT_CODE
