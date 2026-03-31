@@ -1,3 +1,4 @@
+import logging
 import os
 import pickle
 import subprocess
@@ -7,13 +8,12 @@ from typing import List, Optional
 
 import numpy as np
 from ase import Atoms
-from ase.io import read as ase_read
+from ase.io import read as ase_read, write as ase_write
 from langchain_core.tools import tool
 
 from chemgraph.schemas.xanes_schema import xanes_input_schema, mp_query_schema
-from chemgraph.utils.logging_config import setup_logger
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -286,7 +286,7 @@ def run_xanes_core(params: xanes_input_schema) -> dict:
 def fetch_materials_project_data(
     params: mp_query_schema,
     db_path: Path,
-) -> list[Atoms]:
+) -> dict:
     """Fetch optimized structures from Materials Project.
 
     Parameters
@@ -294,12 +294,15 @@ def fetch_materials_project_data(
     params : mp_query_schema
         Query parameters including chemical formulas and API key.
     db_path : Path
-        Directory to save the fetched structures as ``atoms_db.pkl``.
+        Directory to save the fetched structures.
 
     Returns
     -------
-    list[ase.Atoms]
-        List of ASE Atoms objects fetched from Materials Project.
+    dict
+        atoms_list : list[Atoms]    — fetched ASE Atoms objects
+        structure_files : list[str] — absolute paths to saved CIF files
+        pickle_file : str           — absolute path to atoms_db.pkl
+        n_structures : int          — number of structures fetched
     """
     from mp_api.client import MPRester
     from pymatgen.io.ase import AseAtomsAdaptor
@@ -320,8 +323,6 @@ def fetch_materials_project_data(
             energy_above_hull=(0, params.energy_above_hull),
             formula=params.chemsys,
             deprecated=False,
-            num_chunks=1,
-            chunk_size=1,
         )
 
         for doc in doc_list:
@@ -332,11 +333,33 @@ def fetch_materials_project_data(
     if not db_path.exists():
         db_path.mkdir(parents=True)
 
-    with open(db_path / "atoms_db.pkl", "wb") as f:
+    # Save pickle database
+    pkl_path = db_path / "atoms_db.pkl"
+    with open(pkl_path, "wb") as f:
         pickle.dump(atoms_list, f)
 
-    logger.info("Saved %d structures to %s", len(atoms_list), db_path / "atoms_db.pkl")
-    return atoms_list
+    # Save individual CIF files
+    structure_files = []
+    for atoms in atoms_list:
+        mp_id = atoms.info.get("MP-id", "unknown")
+        formula = atoms.get_chemical_formula()
+        cif_path = db_path / f"{mp_id}_{formula}.cif"
+        ase_write(str(cif_path), atoms)
+        structure_files.append(str(cif_path))
+
+    logger.info(
+        "Saved %d structures (%s) and pickle database to %s",
+        len(atoms_list),
+        [Path(f).name for f in structure_files],
+        db_path,
+    )
+
+    return {
+        "atoms_list": atoms_list,
+        "structure_files": structure_files,
+        "pickle_file": str(pkl_path),
+        "n_structures": len(atoms_list),
+    }
 
 
 def create_fdmnes_inputs(
@@ -455,7 +478,7 @@ def expand_database_results(root_dir: Path, runs_dir: Path) -> None:
     )
 
 
-def plot_xanes_results(root_dir: Path, runs_dir: Path) -> None:
+def plot_xanes_results(root_dir: Path, runs_dir: Path) -> dict:
     """Generate normalized XANES plots for completed FDMNES calculations.
 
     For each run directory containing a ``*_conv.txt`` file, produces
@@ -467,27 +490,48 @@ def plot_xanes_results(root_dir: Path, runs_dir: Path) -> None:
         Root data directory (unused currently, reserved for summary plots).
     runs_dir : Path
         Directory containing ``run_*`` subdirectories with FDMNES outputs.
+
+    Returns
+    -------
+    dict
+        plot_files : list[str]  — absolute paths to generated plot images
+        n_plots : int           — number of plots successfully generated
+        n_failed : int          — number of runs that failed to plot
+        failed : list[str]      — names of run directories that failed
     """
     import matplotlib.pyplot as plt
 
     logger.info("Plotting XANES results from %s", runs_dir)
+
+    plot_files = []
+    failed = []
 
     for sub_dir in sorted(runs_dir.glob("run_*")):
         conv_file = next(sub_dir.glob("*_conv.txt"), None)
         if conv_file:
             try:
                 norm_energy, _raw = get_normalized_xanes(conv_file)
+                plot_path = sub_dir / "xanes_plot.png"
                 plt.figure()
                 plt.plot(norm_energy[:, 0], norm_energy[:, 1], label=sub_dir.name)
                 plt.xlabel("Energy [eV]")
                 plt.ylabel("Normalized Absorption")
                 plt.title(f"XANES for {sub_dir.name}")
                 plt.legend()
-                plt.savefig(sub_dir / "xanes_plot.png", dpi=150)
+                plt.savefig(plot_path, dpi=150)
                 plt.close()
+                plot_files.append(str(plot_path))
                 logger.info("Plotted %s", sub_dir.name)
             except Exception as e:
                 logger.error("Failed to plot %s: %s", sub_dir.name, e)
+                failed.append(sub_dir.name)
+
+    return {
+        "plot_files": plot_files,
+        "n_plots": len(plot_files),
+        "n_failed": len(failed),
+        "failed": failed,
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -505,11 +549,6 @@ def _get_data_dir() -> Path:
     if not data_dir.exists():
         data_dir.mkdir(parents=True)
     return data_dir
-
-
-# -----------------------------------------------------------------------------
-# LangChain @tool wrappers (for single-agent / multi-agent graphs)
-# -----------------------------------------------------------------------------
 
 
 @tool
@@ -541,5 +580,37 @@ def fetch_xanes_data(params: mp_query_schema) -> str:
     or the MP_API_KEY environment variable.
     """
     data_dir = _get_data_dir()
-    atoms_list = fetch_materials_project_data(params, data_dir)
-    return f"Fetched {len(atoms_list)} structures for {params.chemsys} into {data_dir}"
+    result = fetch_materials_project_data(params, data_dir)
+    return (
+        f"Fetched {result['n_structures']} structures for {params.chemsys} "
+        f"into {data_dir}. "
+        f"Structure files: {result['structure_files']}"
+    )
+
+
+@tool
+def plot_xanes_data(runs_dir: str) -> str:
+    """Generate normalized XANES plots for completed FDMNES calculations.
+
+    Produces a xanes_plot.png in each run directory that contains
+    FDMNES convolution output files (*_conv.txt).
+
+    Parameters
+    ----------
+    runs_dir : str
+        Path to the directory containing ``run_*`` subdirectories
+        with FDMNES outputs.
+    """
+    runs_path = Path(runs_dir)
+    if not runs_path.is_dir():
+        raise ValueError(f"'{runs_dir}' is not a valid directory.")
+
+    data_dir = _get_data_dir()
+    result = plot_xanes_results(data_dir, runs_path)
+    if result["n_failed"] > 0:
+        return (
+            f"Generated {result['n_plots']} plot(s), "
+            f"{result['n_failed']} failed ({result['failed']}). "
+            f"Plot files: {result['plot_files']}"
+        )
+    return f"Generated {result['n_plots']} plot(s). Plot files: {result['plot_files']}"
