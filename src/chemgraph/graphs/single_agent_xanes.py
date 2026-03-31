@@ -8,7 +8,11 @@ from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_coordinate_file,
 )
-from chemgraph.tools.xanes_tools import run_xanes, fetch_xanes_data
+from chemgraph.tools.ase_tools import run_ase
+from chemgraph.tools.xanes_tools import (
+    run_xanes, 
+    fetch_xanes_data, 
+    plot_xanes_data,)
 from chemgraph.schemas.agent_response import ResponseFormatter
 from chemgraph.prompt.xanes_prompt import (
     xanes_single_agent_prompt,
@@ -98,8 +102,10 @@ def XANESAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
         tools = [
             molecule_name_to_smiles,
             smiles_to_coordinate_file,
+            run_ase,
             run_xanes,
             fetch_xanes_data,
+            plot_xanes_data,
         ]
     messages = [
         {"role": "system", "content": system_prompt},
@@ -184,8 +190,10 @@ def construct_single_agent_xanes_graph(
             tools = [
                 molecule_name_to_smiles,
                 smiles_to_coordinate_file,
+                run_ase,
                 run_xanes,
                 fetch_xanes_data,
+                plot_xanes_data,
             ]
         tool_node = ToolNode(tools=tools)
         graph_builder = StateGraph(State)
