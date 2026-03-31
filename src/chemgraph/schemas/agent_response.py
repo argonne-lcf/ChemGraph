@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Union, Optional
+from typing import Optional
 from chemgraph.schemas.atomsdata import AtomsData
 
 
@@ -10,7 +10,7 @@ class VibrationalFrequency(BaseModel):
     Attributes
     ----------
     frequency_cm1 : list[str]
-        List of vibrational frequencies in inverse centimeters (cm⁻¹).
+        List of vibrational frequencies in inverse centimeters (cm^-1).
         Each entry is a string representation of the frequency value.
     """
 
@@ -26,7 +26,7 @@ class IRSpectrum(BaseModel):
     Attributes
     ----------
     frequency_cm1 : list[str]
-        List of vibrational frequencies in inverse centimeters (cm⁻¹).
+        List of vibrational frequencies in inverse centimeters (cm^-1).
         Each entry is a string representation of the frequency value.
     intensity : list[str]
         List of vibrational intensities.
@@ -40,7 +40,7 @@ class IRSpectrum(BaseModel):
 
     intensity: list[str] = Field(
         ...,
-        description="List of intensities in D/Å^2 amu^-1.",
+        description="List of intensities in D/A^2 amu^-1.",
     )
 
     plot: Optional[str] = None   # base64 PNG image
@@ -53,10 +53,10 @@ class InfraredSpectrum(BaseModel):
     Attributes
     ----------
     frequency_spec_cm1 : list[str]
-        List of range of frequencies in inverse centimeters (cm⁻¹)
+        List of range of frequencies in inverse centimeters (cm^-1)
         Each entry is a string representation of the frequency value.
     intensity_spec_D2A2amu1 : list[str]
-        List of range of intensities in (D/Å)^2 amu⁻¹
+        List of range of intensities in (D/A)^2 amu^-1
         Each entry is a string representation of the intensity value.
     """
     frequency_spec_cm1: list[str] = Field(
@@ -66,7 +66,7 @@ class InfraredSpectrum(BaseModel):
     
     intensity_spec_D2A2amu1: list[str] = Field(
         ...,
-        description="Values of intensities for plotting spectrum in (D/Å)^2 amu^-1.",
+        description="Values of intensities for plotting spectrum in (D/A)^2 amu^-1.",
     )
 
 class ScalarResult(BaseModel):
@@ -93,20 +93,27 @@ class ScalarResult(BaseModel):
 
 class ResponseFormatter(BaseModel):
     """Defined structured output to the user."""
+    # Changed this to support simultaneous multi-modal answers. For example, the user 
+    # can ask for a structure and a spectrum at the same time. Previous implementation 
+    # with Union makes the agent returns either a structure or a spectrum, but not both. 
 
-    answer: Union[
-        str,
-        ScalarResult,
-        VibrationalFrequency,
-        IRSpectrum,
-        AtomsData,
-    ] = Field(
-        description=(
-            "Structured answer to the user's query. Use:\n"
-            "1. `str` for general or explanatory responses or SMILES string.\n"
-            "2. `VibrationalFrequency` for vibrational frequencies.\n"
-            "3. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
-            "4. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
-            "5. `InfraredSpectrum` for calculating infrared spectra."
-        )
+    text_answer: Optional[str] = Field(
+        default=None,
+        description="General or explanatory responses or SMILES string."
+    )
+    scalar_answer: Optional[ScalarResult] = Field(
+        default=None,
+        description="Single numerical properties (e.g. enthalpy)."
+    )
+    vibrational_answer: Optional[VibrationalFrequency] = Field(
+        default=None,
+        description="Vibrational frequencies."
+    )
+    ir_spectrum: Optional[IRSpectrum] = Field(
+        default=None,
+        description="Infrared spectra."
+    )
+    atoms_data: Optional[AtomsData] = Field(
+        default=None,
+        description="Atomic geometries (XYZ coordinate, etc.) and optimized structures."
     )
