@@ -1,3 +1,5 @@
+import re
+
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
@@ -186,6 +188,53 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
+def _extract_json_block(text: str) -> str | None:
+    """Try to extract a JSON object from *text*.
+
+    Handles markdown-fenced blocks (```json ... ```) and bare JSON objects.
+    Returns the extracted string or *None* if nothing looks like JSON.
+    """
+    # Try markdown-fenced JSON first
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if m:
+        return m.group(1)
+    # Try bare top-level JSON object
+    m = re.search(r"(\{.*\})", text, re.DOTALL)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _parse_response_formatter(raw_text: str) -> ResponseFormatter:
+    """Parse LLM output into a :class:`ResponseFormatter`.
+
+    Attempts direct validation first, then tries to extract a JSON block
+    from the text.  Falls back to an empty ``ResponseFormatter`` (all
+    fields ``None``) so the pipeline never breaks -- the raw text is
+    still available in the agent's message history.
+    """
+    # 1. Direct validation
+    try:
+        return ResponseFormatter.model_validate_json(raw_text.strip())
+    except Exception:
+        pass
+
+    # 2. Extract JSON block and retry
+    extracted = _extract_json_block(raw_text)
+    if extracted:
+        try:
+            return ResponseFormatter.model_validate_json(extracted)
+        except Exception:
+            pass
+
+    # 3. Fallback: return empty ResponseFormatter (all fields None).
+    logger.warning(
+        "ResponseAgent: could not parse structured output; "
+        "returning empty ResponseFormatter."
+    )
+    return ResponseFormatter()
+
+
 def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
     """An LLM agent responsible for formatting final message
 
@@ -207,8 +256,8 @@ def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
         {"role": "system", "content": formatter_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
-    llm_structured_output = llm.with_structured_output(ResponseFormatter)
-    response = llm_structured_output.invoke(messages).model_dump_json()
+    raw_response = llm.invoke(messages).content
+    response = _parse_response_formatter(raw_response).model_dump_json()
     return {"messages": [response]}
 
 
