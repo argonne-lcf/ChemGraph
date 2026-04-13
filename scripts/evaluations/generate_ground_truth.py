@@ -14,9 +14,11 @@ The tool calls reflect the **current** single-agent tool set:
 
 Categories of evaluation entries:
 
-    A  Single tool calls (name->SMILES, SMILES->coord)
-    B  Multi-step from molecule name (name->SMILES->coord->run_ase)
-    C  Multi-step from SMILES (SMILES->coord->run_ase)
+    A  Single tool calls (name->SMILES)
+    B  Multi-step from molecule name (name->SMILES->coord->run_ase),
+       covering all drivers: energy, opt, vib, thermo, dipole
+    C  Multi-step from SMILES (SMILES->coord->run_ase), same driver
+       coverage as B for parity
     D  Gibbs free energy of reaction calculations (multi-species,
        stoichiometry, name->SMILES->coord->thermo for each species,
        then calculator for the reaction Gibbs free energy expression)
@@ -52,6 +54,48 @@ Both ``"molecules"`` and ``"reactions"`` keys are required.
 Each reaction species entry **must** include ``"smiles"`` so
 the ground truth can encode the expected SMILES lookups.
 
+Scalable query generation via ``--config``
+-------------------------------------------
+Instead of the hardcoded entry list, a **query-config JSON file** can
+be supplied via ``--config`` to control which molecules/reactions map
+to which query types.  Each query type specifies a
+``molecule_range: [start, end)`` (0-indexed, half-open) into the
+``molecules`` array from the input file.  Multi-step queries
+additionally specify ``driver``, ``calculator``, and an optional
+``temperature``.  Reactions use ``reaction_range`` with cycled
+calculators and temperatures.
+
+See ``query_config.json`` for the full schema and a working example.
+
+Query-config schema (abbreviated)::
+
+    {
+        "molecule_queries": {
+            "molecule_name_to_smiles":    {"molecule_range": [0, 20]},
+            "name_to_ase": [
+                {"driver": "opt", "calculator": "mace_mp",
+                 "molecule_range": [0, 10]},
+                {"driver": "thermo", "calculator": "GFN2-xTB",
+                 "temperature": 800, "molecule_range": [10, 20]},
+                ...
+            ],
+            "name_to_ase_extract": [...],
+            "smiles_to_ase":       [...],
+            "smiles_to_ase_extract": [...]
+        },
+        "reaction_queries": {
+            "reaction_range": [0, 10],
+            "calculators": ["mace_mp", "GFN2-xTB"],
+            "temperatures": [300, 400, 500]
+        }
+    }
+
+Available calculators: ``"mace_mp"``, ``"GFN2-xTB"`` (alias
+``"tblite_gfn2"``).
+
+Available drivers: ``"energy"``, ``"opt"``, ``"vib"``, ``"thermo"``,
+``"dipole"``, ``"ir"``.
+
 Usage
 -----
     # With a unified input file -- runs tools and captures results
@@ -62,6 +106,12 @@ Usage
 
     # Custom output path
     python generate_ground_truth.py --input_file input_data.json -o my_gt.json
+
+    # Config-driven scalable generation
+    python generate_ground_truth.py --input_file input_data.json --config query_config.json
+
+    # Config-driven, skip execution
+    python generate_ground_truth.py --input_file input_data.json --config query_config.json --skip_execution
 """
 
 import argparse
@@ -87,11 +137,71 @@ log = logging.getLogger(__name__)
 
 # ---- calculator configs ---------------------------------------------------
 
-MACE_MP = {"calculator_type": "mace_mp"}
+MACE_MP = {"calculator_type": "mace_mp", "model": "medium-mpa-0"}
+MACE_MP_DESC = "the MACE-MP calculator with the medium-mpa-0 model"
 TBLITE_GFN2 = {
     "calculator_type": "TBLite",
     "method": "GFN2-xTB",
 }
+
+DRIVER_LABELS = {
+    "energy": "single-point energy",
+    "vib": "vibrational frequencies",
+    "thermo": "thermochemical properties (Gibbs free energy)",
+    "dipole": "dipole moment",
+    "ir": "infrared spectrum",
+}
+
+# Human-readable driver labels used for category derivation.
+# These describe the *scientific task*, not internal function names.
+DRIVER_CATEGORY_LABELS = {
+    "opt": "optimization",
+    "vib": "vibrations",
+    "thermo": "thermochemistry",
+    "dipole": "dipole",
+    "energy": "energy",
+    "ir": "ir_spectrum",
+}
+
+
+def _derive_category(cfg_key: str, driver: str | None = None) -> str:
+    """Derive a human-readable category from the config key and driver.
+
+    Categories describe the *scientific task* and *input type*, not
+    internal function names.  For example, a ``name_to_ase`` query with
+    ``driver="opt"`` becomes ``"optimization_from_name"``.
+
+    Parameters
+    ----------
+    cfg_key : str
+        The query-config key that generated this entry (e.g.
+        ``"molecule_name_to_smiles"``, ``"name_to_ase"``,
+        ``"smiles_to_ase_extract"``).
+    driver : str or None
+        The ASE driver name (e.g. ``"opt"``, ``"vib"``).  Required for
+        multi-step simulation entries; ignored for SMILES-lookup and
+        reaction entries.
+
+    Returns
+    -------
+    str
+        A category label such as ``"smiles_lookup"``,
+        ``"optimization_from_name"``, ``"energy_from_smiles"``, or
+        ``"reaction_energy"``.
+    """
+    if cfg_key == "molecule_name_to_smiles":
+        return "smiles_lookup"
+
+    # Determine input type from config key.
+    if cfg_key.startswith("name_to_ase"):
+        input_type = "from_name"
+    elif cfg_key.startswith("smiles_to_ase"):
+        input_type = "from_smiles"
+    else:
+        return cfg_key  # fallback
+
+    driver_label = DRIVER_CATEGORY_LABELS.get(driver, driver or "unknown")
+    return f"{driver_label}_{input_type}"
 
 
 # ---- tool-call dict helpers ------------------------------------------------
@@ -123,6 +233,56 @@ def _run_ase_tool_call(
 # Each builder returns {"query": str, "tool_calls": list[dict]}.
 
 
+def _build_simulation_query(
+    molecule_label: str,
+    driver: str,
+    temperature: float | None,
+    calc_description: str,
+    *,
+    label_is_smiles: bool = False,
+) -> str:
+    """Build a natural-language query string for an ASE simulation.
+
+    Parameters
+    ----------
+    molecule_label : str
+        The molecule name or SMILES string used in the query.
+    driver : str
+        ASE driver name (``"energy"``, ``"opt"``, ``"vib"``, etc.).
+    temperature : float or None
+        Temperature in Kelvin (included when not ``None``).
+    calc_description : str
+        Human-readable calculator label for the query.
+    label_is_smiles : bool
+        If ``True``, the query says "the molecule with SMILES: ...".
+    """
+    temp_str = f" at {int(temperature)} K" if temperature else ""
+    mol_ref = (
+        f"the molecule with SMILES: {molecule_label}"
+        if label_is_smiles
+        else molecule_label
+    )
+
+    if driver == "opt":
+        if label_is_smiles:
+            return (
+                f"Run geometry optimization{temp_str} using {calc_description} "
+                f"for {mol_ref} and report its energy."
+            )
+        return (
+            f"Run geometry optimization for {mol_ref}{temp_str} "
+            f"and report its energy using {calc_description}."
+        )
+
+    driver_label = DRIVER_LABELS.get(driver, driver)
+    if label_is_smiles:
+        return (
+            f"Report the {driver_label}{temp_str} using {calc_description} "
+            f"for {mol_ref}."
+        )
+    return f"Report the {driver_label} of {mol_ref}{temp_str} using {calc_description}."
+
+
 def build_name_to_smiles(molecules: list[dict], count: int = 1) -> dict:
     """Name -> SMILES for *count* molecules."""
     selected = molecules[:count]
@@ -138,54 +298,26 @@ def build_name_to_smiles(molecules: list[dict], count: int = 1) -> dict:
     return {"query": query, "tool_calls": tool_calls}
 
 
-def build_smiles_to_coord(molecules: list[dict], count: int = 1) -> dict:
-    """SMILES -> coordinate file for *count* molecules."""
-    selected = molecules[:count]
-    if count == 1:
-        query = (
-            f"Generate a 3D coordinate file from this SMILES string: "
-            f"{selected[0]['smiles']}"
-        )
-    else:
-        smiles_str = " and ".join(m["smiles"] for m in selected)
-        query = (
-            f"Generate 3D coordinate files from these SMILES strings: {smiles_str}. "
-            "Make sure the file name for each file is different"
-        )
-    tool_calls = [
-        {"smiles_to_coordinate_file": {"smiles": m["smiles"]}} for m in selected
-    ]
-    return {"query": query, "tool_calls": tool_calls}
-
-
 def build_name_to_ase(
     molecule: dict,
     driver: str,
     calculator: dict,
     temperature: float | None = None,
     calc_description: str = "",
+    *,
+    extract: bool = False,
 ) -> dict:
-    """Multi-step: name -> SMILES -> coordinate file -> run_ase."""
-    driver_labels = {
-        "energy": "single-point energy",
-        "opt": "geometry optimization",
-        "vib": "vibrational frequency analysis",
-        "thermo": "thermochemical properties",
-        "dipole": "dipole moment",
-        "ir": "infrared spectrum",
-    }
-    driver_label = driver_labels.get(driver, driver)
-
-    temp_str = f" at {int(temperature)} K" if temperature else ""
-    query = (
-        f"Calculate the {driver_label} of {molecule['name']}{temp_str} "
-        f"using {calc_description}."
+    """Multi-step: name -> SMILES -> coordinate file -> run_ase [-> extract]."""
+    query = _build_simulation_query(
+        molecule["name"], driver, temperature, calc_description
     )
     tool_calls = [
         {"molecule_name_to_smiles": {"name": molecule["name"]}},
         {"smiles_to_coordinate_file": {"smiles": molecule["smiles"]}},
         _run_ase_tool_call("molecule.xyz", driver, calculator, temperature),
     ]
+    if extract:
+        tool_calls.append({"extract_output_json": {"json_file": "output.json"}})
     return {"query": query, "tool_calls": tool_calls}
 
 
@@ -195,91 +327,23 @@ def build_smiles_to_ase(
     calculator: dict,
     temperature: float | None = None,
     calc_description: str = "",
+    *,
+    extract: bool = False,
 ) -> dict:
-    """Multi-step: SMILES -> coordinate file -> run_ase."""
-    driver_labels = {
-        "energy": "single-point energy",
-        "opt": "geometry optimization",
-        "vib": "vibrational frequency analysis",
-        "thermo": "thermochemical properties",
-        "dipole": "dipole moment",
-        "ir": "infrared spectrum",
-    }
-    driver_label = driver_labels.get(driver, driver)
-
-    temp_str = f" at {int(temperature)} K" if temperature else ""
-    query = (
-        f"Calculate the {driver_label}{temp_str} using {calc_description} "
-        f"for the molecule with SMILES: {molecule['smiles']}"
+    """Multi-step: SMILES -> coordinate file -> run_ase [-> extract]."""
+    query = _build_simulation_query(
+        molecule["smiles"],
+        driver,
+        temperature,
+        calc_description,
+        label_is_smiles=True,
     )
     tool_calls = [
         {"smiles_to_coordinate_file": {"smiles": molecule["smiles"]}},
         _run_ase_tool_call("molecule.xyz", driver, calculator, temperature),
     ]
-    return {"query": query, "tool_calls": tool_calls}
-
-
-def build_name_to_ase_extract(
-    molecule: dict,
-    driver: str,
-    calculator: dict,
-    temperature: float | None = None,
-    calc_description: str = "",
-) -> dict:
-    """Multi-step: name -> SMILES -> coord -> run_ase -> extract_output_json."""
-    driver_labels = {
-        "energy": "single-point energy",
-        "opt": "geometry optimization",
-        "vib": "vibrational frequency analysis",
-        "thermo": "thermochemical properties",
-        "dipole": "dipole moment",
-        "ir": "infrared spectrum",
-    }
-    driver_label = driver_labels.get(driver, driver)
-
-    temp_str = f" at {int(temperature)} K" if temperature else ""
-    query = (
-        f"Calculate the {driver_label} of {molecule['name']}{temp_str} "
-        f"using {calc_description} and return the full results from the JSON output file."
-    )
-    tool_calls = [
-        {"molecule_name_to_smiles": {"name": molecule["name"]}},
-        {"smiles_to_coordinate_file": {"smiles": molecule["smiles"]}},
-        _run_ase_tool_call("molecule.xyz", driver, calculator, temperature),
-        {"extract_output_json": {"json_file": "output.json"}},
-    ]
-    return {"query": query, "tool_calls": tool_calls}
-
-
-def build_smiles_to_ase_extract(
-    molecule: dict,
-    driver: str,
-    calculator: dict,
-    temperature: float | None = None,
-    calc_description: str = "",
-) -> dict:
-    """Multi-step: SMILES -> coord -> run_ase -> extract_output_json."""
-    driver_labels = {
-        "energy": "single-point energy",
-        "opt": "geometry optimization",
-        "vib": "vibrational frequency analysis",
-        "thermo": "thermochemical properties",
-        "dipole": "dipole moment",
-        "ir": "infrared spectrum",
-    }
-    driver_label = driver_labels.get(driver, driver)
-
-    temp_str = f" at {int(temperature)} K" if temperature else ""
-    query = (
-        f"Calculate the {driver_label}{temp_str} using {calc_description} "
-        f"for the molecule with SMILES: {molecule['smiles']} "
-        f"and return full the results from the JSON output file."
-    )
-    tool_calls = [
-        {"smiles_to_coordinate_file": {"smiles": molecule["smiles"]}},
-        _run_ase_tool_call("molecule.xyz", driver, calculator, temperature),
-        {"extract_output_json": {"json_file": "output.json"}},
-    ]
+    if extract:
+        tool_calls.append({"extract_output_json": {"json_file": "output.json"}})
     return {"query": query, "tool_calls": tool_calls}
 
 
@@ -339,8 +403,9 @@ def build_reaction_gibbs_free_energy(
 
     # Build query string.
     query = (
-        f"Calculate the Gibbs free energy of reaction for {rxn_name} "
+        f"Report the Gibbs free energy of reaction for {rxn_name} "
         f"at {int(temperature)} K using {calc_description}. "
+        f"Report the energy in eV. "
         f"The balanced reaction is: "
     )
     reactant_strs = [
@@ -598,6 +663,205 @@ def _substitute_energies(
     return {**tool_args, "expression": expr}
 
 
+def _result_to_structured_output(entry: dict, final_result) -> dict | None:
+    """Convert a raw tool-call result to a ``ResponseFormatter``-compatible dict.
+
+    Maps the tool-specific output format to the schema used by the
+    agent's structured output (``ResponseFormatter`` from
+    ``chemgraph.schemas.agent_response``).
+
+    Parameters
+    ----------
+    entry : dict
+        The evaluation entry containing ``"tool_calls"`` and ``"query"``.
+    final_result
+        The final result value produced by tool execution.
+
+    Returns
+    -------
+    dict or None
+        A dict matching the ``ResponseFormatter`` schema with keys
+        ``smiles``, ``scalar_answer``, ``dipole``,
+        ``vibrational_answer``, ``ir_spectrum``, and ``atoms_data``.
+        Returns ``None`` if the result cannot be mapped (e.g. error
+        results).
+    """
+    if final_result is None or final_result == "":
+        return None
+
+    # Error results cannot be mapped.
+    if isinstance(final_result, dict) and final_result.get("status") == "error":
+        return None
+
+    structured: dict = {
+        "smiles": None,
+        "scalar_answer": None,
+        "dipole": None,
+        "vibrational_answer": None,
+        "ir_spectrum": None,
+        "atoms_data": None,
+    }
+
+    tool_calls = entry["tool_calls"]
+    last_tool = next(iter(tool_calls[-1]))
+
+    if last_tool == "molecule_name_to_smiles":
+        # SMILES lookup result(s).
+        if isinstance(final_result, list):
+            structured["smiles"] = [r.get("smiles", str(r)) for r in final_result]
+        elif isinstance(final_result, dict):
+            structured["smiles"] = [final_result.get("smiles", str(final_result))]
+        elif isinstance(final_result, str):
+            structured["smiles"] = [final_result]
+
+    elif last_tool == "run_ase":
+        driver = _get_last_driver(tool_calls)
+        if not isinstance(final_result, dict):
+            return None  # cannot map non-dict result
+        elif driver in ("energy", "opt"):
+            energy = final_result.get("single_point_energy")
+            if energy is not None:
+                prop = (
+                    "single-point energy" if driver == "energy" else "optimized energy"
+                )
+                structured["scalar_answer"] = {
+                    "value": energy,
+                    "property": prop,
+                    "unit": final_result.get("unit", "eV"),
+                }
+        elif driver == "vib":
+            nested = final_result.get("result", {})
+            vib_data = nested.get("vibrational_frequencies", {})
+            freqs = vib_data.get("frequencies", [])
+            if freqs:
+                structured["vibrational_answer"] = {
+                    "frequency_cm1": [str(f) for f in freqs],
+                }
+        elif driver == "thermo":
+            nested = final_result.get("result", {})
+            thermo = nested.get("thermochemistry", {})
+            gfe = thermo.get("gibbs_free_energy")
+            if gfe is not None:
+                structured["scalar_answer"] = {
+                    "value": gfe,
+                    "property": "Gibbs free energy",
+                    "unit": thermo.get("unit", "eV"),
+                }
+        elif driver == "dipole":
+            dipole_moment = final_result.get("dipole_moment")
+            if dipole_moment is not None:
+                structured["dipole"] = {
+                    "value": dipole_moment,
+                    "unit": "e * Angstrom",
+                }
+        elif driver == "ir":
+            nested = final_result.get("result", {})
+            ir_data = nested.get("ir_data", nested.get("ir", {}))
+            freqs = ir_data.get("frequencies", [])
+            intensities = ir_data.get("intensities", [])
+            if freqs:
+                structured["ir_spectrum"] = {
+                    "frequency_cm1": [str(f) for f in freqs],
+                    "intensity": [str(i) for i in intensities],
+                }
+        else:
+            return None  # Unknown driver
+
+    elif last_tool == "calculator":
+        # Reaction energy (deltaG).
+        try:
+            value = (
+                float(final_result) if isinstance(final_result, str) else final_result
+            )
+        except (ValueError, TypeError):
+            return None
+        else:
+            structured["scalar_answer"] = {
+                "value": value,
+                "property": "Gibbs free energy of reaction",
+                "unit": "eV",
+            }
+
+    elif last_tool == "extract_output_json":
+        # Full output JSON — the driver determines which field to
+        # extract.  This mirrors the ``run_ase`` handler above because
+        # ``extract_output_json`` returns the same result structure
+        # (just read from file instead of returned inline).
+        if not isinstance(final_result, dict):
+            return None
+        driver = _get_last_driver(tool_calls)
+        if driver in ("energy", "opt"):
+            energy = final_result.get("single_point_energy")
+            if energy is not None:
+                prop = (
+                    "single-point energy" if driver == "energy" else "optimized energy"
+                )
+                structured["scalar_answer"] = {
+                    "value": energy,
+                    "property": prop,
+                    "unit": final_result.get("energy_unit", "eV"),
+                }
+        elif driver == "thermo":
+            nested = final_result.get("result", {})
+            thermo = nested.get("thermochemistry", {})
+            gfe = thermo.get("gibbs_free_energy")
+            if gfe is not None:
+                structured["scalar_answer"] = {
+                    "value": gfe,
+                    "property": "Gibbs free energy",
+                    "unit": thermo.get("unit", "eV"),
+                }
+        elif driver == "vib":
+            nested = final_result.get("result", {})
+            vib_data = nested.get("vibrational_frequencies", {})
+            freqs = vib_data.get("frequencies", [])
+            if freqs:
+                structured["vibrational_answer"] = {
+                    "frequency_cm1": [str(f) for f in freqs],
+                }
+        elif driver == "dipole":
+            dipole_moment = final_result.get("dipole_moment")
+            if dipole_moment is not None:
+                structured["dipole"] = {
+                    "value": dipole_moment,
+                    "unit": "e * Angstrom",
+                }
+        elif driver == "ir":
+            nested = final_result.get("result", {})
+            ir_data = nested.get("ir_data", nested.get("ir", {}))
+            freqs = ir_data.get("frequencies", [])
+            intensities = ir_data.get("intensities", [])
+            if freqs:
+                structured["ir_spectrum"] = {
+                    "frequency_cm1": [str(f) for f in freqs],
+                    "intensity": [str(i) for i in intensities],
+                }
+
+    else:
+        return None  # Unknown tool
+
+    return structured
+
+
+def _get_last_driver(tool_calls: list[dict]) -> str | None:
+    """Extract the ``driver`` argument from the last ``run_ase`` call.
+
+    Scans *tool_calls* in reverse to find the most recent ``run_ase``
+    entry and returns its ``driver`` value.
+
+    Returns
+    -------
+    str or None
+        The driver string (e.g. ``"energy"``, ``"opt"``, ``"vib"``),
+        or ``None`` if no ``run_ase`` call is found.
+    """
+    for tc in reversed(tool_calls):
+        if "run_ase" in tc:
+            params = tc["run_ase"].get("params", tc["run_ase"])
+            return params.get("driver")
+    return None
+
+
 def _make_serialisable(obj):
     """Recursively convert an object to JSON-serialisable types.
 
@@ -662,71 +926,158 @@ def _build_entries(
 
     entries: list[dict] = []
 
+    def _tag(entry: dict, category: str) -> dict:
+        entry["category"] = category
+        return entry
+
     # ---- Category A: single tool calls ------------------------------------
     # 1. Name -> SMILES (1 molecule)
-    entries.append(build_name_to_smiles([molecules[0]], count=1))
+    entries.append(_tag(build_name_to_smiles([molecules[0]], count=1), "smiles_lookup"))
 
     # 2. Name -> SMILES (2 molecules)
-    entries.append(build_name_to_smiles(molecules[0:2], count=2))
-
-    # 3. SMILES -> coordinate file (1 molecule)
-    entries.append(build_smiles_to_coord([molecules[2]], count=1))
-
-    # 4. SMILES -> coordinate files (2 molecules)
-    entries.append(build_smiles_to_coord(molecules[2:4], count=2))
+    entries.append(_tag(build_name_to_smiles(molecules[0:2], count=2), "smiles_lookup"))
 
     # ---- Category B: multi-step from molecule name -----------------------
-    # 5. Name -> coord -> opt (MACE)
+    # 3. Name -> coord -> opt (MACE)
     entries.append(
-        build_name_to_ase(molecules[0], "opt", MACE_MP, calc_description="mace_mp")
-    )
-
-    # 6. Name -> coord -> vib (MACE)
-    entries.append(
-        build_name_to_ase(molecules[2], "vib", MACE_MP, calc_description="mace_mp")
-    )
-
-    # 7. Name -> coord -> thermo (TBLite GFN2-xTB, 800 K)
-    entries.append(
-        build_name_to_ase(
-            molecules[3],
-            "thermo",
-            TBLITE_GFN2,
-            temperature=800,
-            calc_description="GFN2-xTB",
+        _tag(
+            build_name_to_ase(
+                molecules[0], "opt", MACE_MP, calc_description=MACE_MP_DESC
+            ),
+            "optimization_from_name",
         )
     )
 
-    # 8. Name -> coord -> dipole (TBLite GFN2-xTB)
+    # 4. Name -> coord -> vib (MACE)
     entries.append(
-        build_name_to_ase(
-            molecules[4], "dipole", TBLITE_GFN2, calc_description="GFN2-xTB"
+        _tag(
+            build_name_to_ase(
+                molecules[2], "vib", MACE_MP, calc_description=MACE_MP_DESC
+            ),
+            "vibrations_from_name",
         )
     )
 
-    # 9. Name -> coord -> energy -> extract results (MACE)
+    # 5. Name -> coord -> thermo (TBLite GFN2-xTB, 800 K)
     entries.append(
-        build_name_to_ase_extract(
-            molecules[5], "energy", MACE_MP, calc_description="mace_mp"
+        _tag(
+            build_name_to_ase(
+                molecules[3],
+                "thermo",
+                TBLITE_GFN2,
+                temperature=800,
+                calc_description="GFN2-xTB",
+            ),
+            "thermochemistry_from_name",
+        )
+    )
+
+    # 6. Name -> coord -> dipole (TBLite GFN2-xTB)
+    entries.append(
+        _tag(
+            build_name_to_ase(
+                molecules[4], "dipole", TBLITE_GFN2, calc_description="GFN2-xTB"
+            ),
+            "dipole_from_name",
+        )
+    )
+
+    # 7. Name -> coord -> energy (MACE)
+    entries.append(
+        _tag(
+            build_name_to_ase(
+                molecules[5], "energy", MACE_MP, calc_description=MACE_MP_DESC
+            ),
+            "energy_from_name",
+        )
+    )
+
+    # 8. Name -> coord -> energy -> extract results (MACE)
+    entries.append(
+        _tag(
+            build_name_to_ase(
+                molecules[5],
+                "energy",
+                MACE_MP,
+                calc_description=MACE_MP_DESC,
+                extract=True,
+            ),
+            "energy_from_name",
         )
     )
 
     # ---- Category C: multi-step from SMILES ------------------------------
-    # 10. SMILES -> coord -> energy (MACE)
+    # 9. SMILES -> coord -> opt (MACE)
     entries.append(
-        build_smiles_to_ase(molecules[5], "energy", MACE_MP, calc_description="mace_mp")
+        _tag(
+            build_smiles_to_ase(
+                molecules[0], "opt", MACE_MP, calc_description=MACE_MP_DESC
+            ),
+            "optimization_from_smiles",
+        )
     )
 
-    # 11. SMILES -> coord -> opt -> extract results (TBLite GFN2-xTB)
+    # 10. SMILES -> coord -> vib (MACE)
     entries.append(
-        build_smiles_to_ase_extract(
-            molecules[4], "opt", TBLITE_GFN2, calc_description="GFN2-xTB"
+        _tag(
+            build_smiles_to_ase(
+                molecules[2], "vib", MACE_MP, calc_description=MACE_MP_DESC
+            ),
+            "vibrations_from_smiles",
+        )
+    )
+
+    # 11. SMILES -> coord -> thermo (TBLite GFN2-xTB, 800 K)
+    entries.append(
+        _tag(
+            build_smiles_to_ase(
+                molecules[3],
+                "thermo",
+                TBLITE_GFN2,
+                temperature=800,
+                calc_description="GFN2-xTB",
+            ),
+            "thermochemistry_from_smiles",
+        )
+    )
+
+    # 12. SMILES -> coord -> dipole (TBLite GFN2-xTB)
+    entries.append(
+        _tag(
+            build_smiles_to_ase(
+                molecules[4], "dipole", TBLITE_GFN2, calc_description="GFN2-xTB"
+            ),
+            "dipole_from_smiles",
+        )
+    )
+
+    # 13. SMILES -> coord -> energy (MACE)
+    entries.append(
+        _tag(
+            build_smiles_to_ase(
+                molecules[5], "energy", MACE_MP, calc_description=MACE_MP_DESC
+            ),
+            "energy_from_smiles",
+        )
+    )
+
+    # 14. SMILES -> coord -> opt -> extract results (TBLite GFN2-xTB)
+    entries.append(
+        _tag(
+            build_smiles_to_ase(
+                molecules[4],
+                "opt",
+                TBLITE_GFN2,
+                calc_description="GFN2-xTB",
+                extract=True,
+            ),
+            "optimization_from_smiles",
         )
     )
 
     # ---- Category D: Gibbs free energy of reaction calculations ------------
     reaction_calcs = [
-        (MACE_MP, "mace_mp"),
+        (MACE_MP, MACE_MP_DESC),
         (TBLITE_GFN2, "GFN2-xTB"),
     ]
     reaction_temperatures = [300.0, 400.0, 500.0]
@@ -734,10 +1085,240 @@ def _build_entries(
         calc, calc_desc = reaction_calcs[rxn_idx % len(reaction_calcs)]
         temp = reaction_temperatures[rxn_idx % len(reaction_temperatures)]
         entries.append(
-            build_reaction_gibbs_free_energy(
-                rxn, calc, temperature=temp, calc_description=calc_desc
+            _tag(
+                build_reaction_gibbs_free_energy(
+                    rxn, calc, temperature=temp, calc_description=calc_desc
+                ),
+                "reaction_energy",
             )
         )
+
+    return entries
+
+
+# ---------------------------------------------------------------------------
+# Config-driven entry generation
+# ---------------------------------------------------------------------------
+
+CALCULATOR_REGISTRY: dict[str, dict] = {
+    "mace_mp": MACE_MP,
+    "GFN2-xTB": TBLITE_GFN2,
+    "tblite_gfn2": TBLITE_GFN2,
+}
+
+
+def _resolve_calculator(name: str) -> tuple[dict, str]:
+    """Map a human-readable calculator name to its config dict.
+
+    Parameters
+    ----------
+    name : str
+        Calculator identifier, e.g. ``"mace_mp"`` or ``"GFN2-xTB"``.
+
+    Returns
+    -------
+    tuple[dict, str]
+        ``(calculator_config, description)`` — the config dict suitable
+        for ``_run_ase_tool_call`` and a human-readable label for query
+        strings.
+
+    Raises
+    ------
+    ValueError
+        If *name* is not recognised.
+    """
+    cfg = CALCULATOR_REGISTRY.get(name)
+    if cfg is None:
+        raise ValueError(
+            f"Unknown calculator {name!r}. Available: {list(CALCULATOR_REGISTRY)}"
+        )
+    # Build a human-readable description, including the model name
+    # when one is configured.
+    desc = name
+    model = cfg.get("model")
+    if model:
+        desc = f"the {name} calculator with the {model} model"
+    return cfg, desc
+
+
+def _resolve_molecule_range(
+    molecules: list[dict],
+    molecule_range: list[int],
+    label: str = "",
+) -> list[dict]:
+    """Slice *molecules* by a ``[start, end)`` range, clamping to bounds.
+
+    Parameters
+    ----------
+    molecules : list[dict]
+        Full list of molecule dicts from the input file.
+    molecule_range : list[int]
+        Two-element list ``[start, end)`` (half-open, 0-indexed).
+    label : str
+        Human-readable label for warning messages.
+
+    Returns
+    -------
+    list[dict]
+        The selected molecules.  May be empty if the range is entirely
+        out of bounds.
+    """
+    start, end = molecule_range
+    n = len(molecules)
+    if start >= n:
+        log.warning(
+            "%s: molecule_range [%d, %d) is entirely out of bounds "
+            "(only %d molecules available). Skipping.",
+            label,
+            start,
+            end,
+            n,
+        )
+        return []
+    if end > n:
+        log.warning(
+            "%s: molecule_range [%d, %d) exceeds available molecules "
+            "(%d). Clamping to [%d, %d).",
+            label,
+            start,
+            end,
+            n,
+            start,
+            n,
+        )
+        end = n
+    return molecules[start:end]
+
+
+def _build_entries_from_config(
+    molecules: list[dict],
+    reactions: list[dict],
+    config: dict,
+) -> list[dict]:
+    """Build evaluation entries driven by a query-config dict.
+
+    The config dict has two top-level keys:
+
+    ``molecule_queries``
+        Controls which molecules are used for each query type.
+    ``reaction_queries``
+        Controls which reactions to include and how to cycle
+        calculators / temperatures.
+
+    See ``query_config.json`` for the full schema and examples.
+
+    Parameters
+    ----------
+    molecules : list[dict]
+        Molecule dicts from the input file.
+    reactions : list[dict]
+        Reaction dicts from the input file.
+    config : dict
+        The parsed query-config JSON.
+
+    Returns
+    -------
+    list[dict]
+        Raw entries with ``"query"`` and ``"tool_calls"`` keys.
+    """
+    entries: list[dict] = []
+    mol_cfg = config.get("molecule_queries", {})
+    rxn_cfg = config.get("reaction_queries", {})
+
+    # ---- Category A: single tool calls -----------------------------------
+
+    # molecule_name_to_smiles
+    nts_cfg = mol_cfg.get("molecule_name_to_smiles")
+    if nts_cfg is not None:
+        mol_range = nts_cfg.get("molecule_range", [0, 0])
+        selected = _resolve_molecule_range(
+            molecules, mol_range, "molecule_name_to_smiles"
+        )
+        for mol in selected:
+            entry = build_name_to_smiles([mol], count=1)
+            entry["category"] = _derive_category("molecule_name_to_smiles")
+            entries.append(entry)
+
+    # ---- Categories B & C: multi-step simulation queries -------------------
+    #
+    # Each config key maps to a builder function and an optional extract
+    # flag.  The loop body is identical for all four variants.
+    _multistep_specs: list[tuple[str, callable, bool]] = [
+        ("name_to_ase", build_name_to_ase, False),
+        ("name_to_ase_extract", build_name_to_ase, True),
+        ("smiles_to_ase", build_smiles_to_ase, False),
+        ("smiles_to_ase_extract", build_smiles_to_ase, True),
+    ]
+
+    for cfg_key, builder_fn, do_extract in _multistep_specs:
+        for spec in mol_cfg.get(cfg_key, []):
+            driver = spec["driver"]
+            calc_cfg, calc_desc = _resolve_calculator(spec["calculator"])
+            temperature = spec.get("temperature")
+            mol_range = spec.get("molecule_range", [0, 0])
+            selected = _resolve_molecule_range(
+                molecules,
+                mol_range,
+                f"{cfg_key}({driver}/{spec['calculator']})",
+            )
+            category = _derive_category(cfg_key, driver)
+            for mol in selected:
+                entry = builder_fn(
+                    mol,
+                    driver,
+                    calc_cfg,
+                    temperature=temperature,
+                    calc_description=calc_desc,
+                    extract=do_extract,
+                )
+                entry["category"] = category
+                entries.append(entry)
+
+    # ---- Category D: Gibbs free energy of reaction -----------------------
+
+    if rxn_cfg:
+        rxn_range = rxn_cfg.get("reaction_range", [0, len(reactions)])
+        calc_names = rxn_cfg.get("calculators", ["mace_mp", "GFN2-xTB"])
+        temps = rxn_cfg.get("temperatures", [300.0, 400.0, 500.0])
+
+        start, end = rxn_range
+        n_rxn = len(reactions)
+        if start >= n_rxn:
+            log.warning(
+                "reaction_range [%d, %d) is entirely out of bounds "
+                "(only %d reactions available). Skipping reactions.",
+                start,
+                end,
+                n_rxn,
+            )
+        else:
+            if end > n_rxn:
+                log.warning(
+                    "reaction_range [%d, %d) exceeds available reactions "
+                    "(%d). Clamping to [%d, %d).",
+                    start,
+                    end,
+                    n_rxn,
+                    start,
+                    n_rxn,
+                )
+                end = n_rxn
+
+            # Resolve calculator configs once.
+            resolved_calcs = [_resolve_calculator(c) for c in calc_names]
+
+            selected_rxns = reactions[start:end]
+            for rxn_idx, rxn in enumerate(selected_rxns):
+                calc_cfg, calc_desc = resolved_calcs[rxn_idx % len(resolved_calcs)]
+                temp = temps[rxn_idx % len(temps)]
+                entry = build_reaction_gibbs_free_energy(
+                    rxn,
+                    calc_cfg,
+                    temperature=temp,
+                    calc_description=calc_desc,
+                )
+                entry["category"] = "reaction_energy"
+                entries.append(entry)
 
     return entries
 
@@ -752,26 +1333,36 @@ def generate_ground_truth(
     reactions: list[dict],
     *,
     execute: bool = True,
+    config: dict | None = None,
 ) -> list[dict]:
     """Build the full evaluation dataset, optionally running tools.
 
     Parameters
     ----------
     molecules : list[dict]
-        List of molecule dicts.  At least 6 are required.
+        List of molecule dicts.  At least 6 are required when no
+        *config* is supplied (legacy mode).
     reactions : list[dict]
         Reaction dicts.
     execute : bool
         If ``True`` (default), each tool-call chain is executed and the
         results are captured in ``answer.result``.  If ``False``,
         ``answer.result`` is set to ``""`` (legacy behaviour).
+    config : dict or None
+        If provided, entries are built from the query-config mapping
+        instead of the hardcoded ``_build_entries`` logic.  This
+        enables scalable evaluation — see ``query_config.json`` for
+        the expected schema.
 
     Returns
     -------
     list[dict]
         Evaluation entries with ``id``, ``query``, and ``answer`` keys.
     """
-    entries = _build_entries(molecules, reactions=reactions)
+    if config is not None:
+        entries = _build_entries_from_config(molecules, reactions, config)
+    else:
+        entries = _build_entries(molecules, reactions=reactions)
 
     tools = None
     base_tmp_dir = None
@@ -847,14 +1438,22 @@ def generate_ground_truth(
         else:
             final_result = result_data
 
+        # Build structured output (ResponseFormatter-compatible dict).
+        structured_output = _result_to_structured_output(entry, final_result)
+
+        answer_dict: dict = {
+            "tool_calls": tool_calls_snapshot,
+            "result": final_result,
+        }
+        if structured_output is not None:
+            answer_dict["structured_output"] = structured_output
+
         dataset.append(
             {
                 "id": entry_id,
+                "category": entry.get("category", ""),
                 "query": entry["query"],
-                "answer": {
-                    "tool_calls": tool_calls_snapshot,
-                    "result": final_result,
-                },
+                "answer": answer_dict,
             }
         )
 
@@ -896,6 +1495,17 @@ def main():
             "fields, matching the old script behaviour."
         ),
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help=(
+            "Path to a query-config JSON file that maps molecule/reaction "
+            "index ranges to query types.  When provided, entries are "
+            "generated from the config instead of the hardcoded defaults.  "
+            "See query_config.json for the expected schema."
+        ),
+    )
     args = parser.parse_args()
 
     # ---- load input data --------------------------------------------------
@@ -912,11 +1522,19 @@ def main():
 
     execute = not args.skip_execution
 
+    # ---- load query config (optional) -------------------------------------
+    query_config: dict | None = None
+    if args.config is not None:
+        with open(args.config, "r", encoding="utf-8") as f:
+            query_config = json.load(f)
+        log.info("Loaded query config from %s", args.config)
+
     # ---- generate ---------------------------------------------------------
     dataset = generate_ground_truth(
         molecules,
         reactions=reactions,
         execute=execute,
+        config=query_config,
     )
 
     # ---- write output -----------------------------------------------------
