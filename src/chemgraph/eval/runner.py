@@ -25,6 +25,10 @@ from chemgraph.eval.reporter import (
     write_markdown_report,
     write_model_detail,
 )
+from chemgraph.eval.structured_output_judge import (
+    aggregate_structured_results,
+    judge_structured_output,
+)
 from chemgraph.utils.get_workflow_from_llm import get_workflow_from_state
 from chemgraph.utils.logging_config import setup_logger
 
@@ -70,15 +74,28 @@ class ModelBenchmarkRunner:
         self.results: Dict[str, Dict[str, dict]] = {}
         self._run_metadata: dict = {}
 
-        # Load judge model.
-        logger.info(f"Loading judge model: {config.judge_model}")
-        judge_base_url = config.get_base_url(config.judge_model)
-        judge_argo_user = config.get_argo_user()
-        self._judge_llm = load_judge_model(
-            config.judge_model,
-            base_url=judge_base_url,
-            argo_user=judge_argo_user,
-        )
+        # Load judge model only when LLM judge is requested.
+        self._judge_llm = None
+        if config.judge_type in ("llm", "both"):
+            logger.info(f"Loading judge model: {config.judge_model}")
+            judge_base_url = config.get_base_url(config.judge_model)
+            judge_argo_user = config.get_argo_user()
+            self._judge_llm = load_judge_model(
+                config.judge_model,
+                base_url=judge_base_url,
+                argo_user=judge_argo_user,
+            )
+
+        if config.judge_type in ("structured", "both"):
+            n_with_so = sum(
+                1
+                for item in self.dataset
+                if item.expected_structured_output is not None
+            )
+            logger.info(
+                f"Structured output judge enabled: {n_with_so}/{len(self.dataset)} "
+                f"queries have expected structured output"
+            )
 
     # ------------------------------------------------------------------
     # Core execution
@@ -145,6 +162,7 @@ class ModelBenchmarkRunner:
 
         raw_tool_calls: List[dict] = []
         per_query_judge_results: List[dict] = []
+        per_query_structured_results: List[dict] = []
 
         for idx, item in enumerate(self.dataset):
             query_result = await self._run_single_query(
@@ -153,20 +171,40 @@ class ModelBenchmarkRunner:
             raw_tool_calls.append(query_result["raw"])
             if query_result.get("judge") is not None:
                 per_query_judge_results.append(query_result["judge"])
-
-        judge_agg = aggregate_judge_results(per_query_judge_results)
+            if query_result.get("structured_judge") is not None:
+                per_query_structured_results.append(query_result["structured_judge"])
 
         result: Dict[str, Any] = {
             "raw_tool_calls": raw_tool_calls,
-            "judge_aggregate": judge_agg,
-            "judge_details": per_query_judge_results,
         }
 
-        logger.info(
-            f"Completed eval {model_name}/{workflow_type}: "
-            f"accuracy={judge_agg['accuracy']:.1%} "
-            f"({judge_agg['n_correct']}/{judge_agg['n_queries']})"
-        )
+        # LLM judge results.
+        if self.config.judge_type in ("llm", "both"):
+            judge_agg = aggregate_judge_results(per_query_judge_results)
+            result["judge_aggregate"] = judge_agg
+            result["judge_details"] = per_query_judge_results
+
+        # Structured output judge results.
+        if self.config.judge_type in ("structured", "both"):
+            struct_agg = aggregate_structured_results(per_query_structured_results)
+            result["structured_judge_aggregate"] = struct_agg
+            result["structured_judge_details"] = per_query_structured_results
+
+        # Log summary.
+        parts = [f"Completed eval {model_name}/{workflow_type}:"]
+        if "judge_aggregate" in result:
+            jagg = result["judge_aggregate"]
+            parts.append(
+                f"llm_judge={jagg['accuracy']:.1%} "
+                f"({jagg['n_correct']}/{jagg['n_queries']})"
+            )
+        if "structured_judge_aggregate" in result:
+            sagg = result["structured_judge_aggregate"]
+            parts.append(
+                f"struct_judge={sagg['accuracy']:.1%} "
+                f"({sagg['n_correct']}/{sagg['n_queries']})"
+            )
+        logger.info(" ".join(parts))
 
         return result
 
@@ -180,7 +218,7 @@ class ModelBenchmarkRunner:
     ) -> dict:
         """Execute and evaluate a single query.
 
-        Returns ``{"raw": ..., "judge": ...}``.
+        Returns ``{"raw": ..., "judge": ..., "structured_judge": ...}``.
         """
         try:
             config = {"configurable": {"thread_id": str(idx)}}
@@ -195,21 +233,41 @@ class ModelBenchmarkRunner:
             model_result = f"ERROR: {e}"
             llm_workflow = {"tool_calls": [], "result": model_result}
 
-        # --- LLM judge ---
-        judge_result = await judge_single_query(
-            judge_llm=self._judge_llm,
-            query=item.query,
-            expected_result=item.expected_result,
-            model_result=model_result,
-            expected_tool_calls=item.expected_tool_calls,
-            model_tool_calls=model_tool_calls,
-        )
-        judge_result["query_id"] = item.id
-        judge_result["query"] = item.query
-        if item.category:
-            judge_result["category"] = item.category
+        result: Dict[str, Any] = {"raw": llm_workflow}
 
-        return {"raw": llm_workflow, "judge": judge_result}
+        # --- LLM judge ---
+        if self.config.judge_type in ("llm", "both") and self._judge_llm is not None:
+            judge_result = await judge_single_query(
+                judge_llm=self._judge_llm,
+                query=item.query,
+                expected_result=item.expected_result,
+                model_result=model_result,
+                expected_tool_calls=item.expected_tool_calls,
+                model_tool_calls=model_tool_calls,
+            )
+            judge_result["query_id"] = item.id
+            judge_result["query"] = item.query
+            judge_result["category"] = item.category
+            result["judge"] = judge_result
+
+        # --- Structured output judge ---
+        if self.config.judge_type in ("structured", "both"):
+            if item.expected_structured_output is not None:
+                struct_result = judge_structured_output(
+                    expected=item.expected_structured_output,
+                    actual=model_result,
+                )
+                struct_result["query_id"] = item.id
+                struct_result["query"] = item.query
+                struct_result["category"] = item.category
+                result["structured_judge"] = struct_result
+            else:
+                logger.debug(
+                    f"Query {idx}: no expected_structured_output, "
+                    f"skipping structured judge"
+                )
+
+        return result
 
     async def run_all(self) -> Dict[str, Dict[str, dict]]:
         """Execute the full benchmark: all models x all workflows.
@@ -232,6 +290,7 @@ class ModelBenchmarkRunner:
             "models": self.config.models,
             "workflow_types": self.config.workflow_types,
             "judge_model": self.config.judge_model,
+            "judge_type": self.config.judge_type,
             "structured_output": self.config.structured_output,
             "tags": self.config.tags,
         }
@@ -255,6 +314,7 @@ class ModelBenchmarkRunner:
                     per_query_results=[],
                     output_dir=self.config.output_dir,
                     judge_results=result.get("judge_details"),
+                    structured_judge_results=result.get("structured_judge_details"),
                 )
 
         return self.results

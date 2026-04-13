@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,14 @@ class GroundTruthItem(BaseModel):
     expected_result: Any = Field(
         default="",
         description="Optional expected final result (string or list of step dicts).",
+    )
+    expected_structured_output: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Expected structured output in ResponseFormatter format. "
+            "When present, the deterministic structured-output judge "
+            "can compare field-by-field against the agent's output."
+        ),
     )
     category: str = Field(
         default="",
@@ -86,7 +94,7 @@ def load_dataset(path: str) -> List[GroundTruthItem]:
     items: List[GroundTruthItem] = []
 
     if isinstance(raw, list):
-        # List format: [{id, query, answer: {tool_calls, result}}, ...]
+        # List format: [{id, query, category?, answer: {tool_calls, result, structured_output?}}, ...]
         for idx, entry in enumerate(raw):
             answer = entry.get("answer", {})
             items.append(
@@ -95,6 +103,8 @@ def load_dataset(path: str) -> List[GroundTruthItem]:
                     query=entry["query"],
                     expected_tool_calls=answer.get("tool_calls", []),
                     expected_result=answer.get("result", ""),
+                    expected_structured_output=answer.get("structured_output"),
+                    category=entry.get("category", ""),
                 )
             )
     elif isinstance(raw, dict):
@@ -115,6 +125,7 @@ def load_dataset(path: str) -> List[GroundTruthItem]:
                     query=query,
                     expected_tool_calls=tool_calls,
                     expected_result=result if result else "",
+                    expected_structured_output=workflow.get("structured_output"),
                     category=name,
                 )
             )
