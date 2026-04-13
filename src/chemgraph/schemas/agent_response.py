@@ -1,5 +1,7 @@
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional
+
 from chemgraph.schemas.atomsdata import AtomsData
 
 
@@ -18,6 +20,7 @@ class VibrationalFrequency(BaseModel):
         ...,
         description="List of vibrational frequencies in cm-1.",
     )
+
 
 class IRSpectrum(BaseModel):
     """
@@ -43,7 +46,7 @@ class IRSpectrum(BaseModel):
         description="List of intensities in D/A^2 amu^-1.",
     )
 
-    plot: Optional[str] = None   # base64 PNG image
+    plot: Optional[str] = None  # base64 PNG image
 
 
 class InfraredSpectrum(BaseModel):
@@ -59,15 +62,17 @@ class InfraredSpectrum(BaseModel):
         List of range of intensities in (D/A)^2 amu^-1
         Each entry is a string representation of the intensity value.
     """
+
     frequency_spec_cm1: list[str] = Field(
         ...,
         description="Range of frequencies for plotting spectrum in cm-1.",
     )
-    
+
     intensity_spec_D2A2amu1: list[str] = Field(
         ...,
         description="Values of intensities for plotting spectrum in (D/A)^2 amu^-1.",
     )
+
 
 class ScalarResult(BaseModel):
     """
@@ -91,29 +96,53 @@ class ScalarResult(BaseModel):
     unit: str = Field(..., description="Unit of the result, e.g. 'eV'")
 
 
-class ResponseFormatter(BaseModel):
-    """Defined structured output to the user."""
-    # Changed this to support simultaneous multi-modal answers. For example, the user 
-    # can ask for a structure and a spectrum at the same time. Previous implementation 
-    # with Union makes the agent returns either a structure or a spectrum, but not both. 
+class DipoleResult(BaseModel):
+    """
+    Schema for storing a dipole moment vector from a simulation.
 
-    text_answer: Optional[str] = Field(
+    Attributes
+    ----------
+    value : List[float]
+        The dipole moment vector [dx, dy, dz].
+    unit : str
+        The unit of the dipole moment (e.g., 'e * Angstrom').
+    """
+
+    value: List[float] = Field(..., description="Dipole moment vector [dx, dy, dz].")
+    unit: str = Field(..., description="Unit of the dipole moment, e.g. 'e * Angstrom'")
+
+
+class ResponseFormatter(BaseModel):
+    """Defined structured output to the user.
+
+    Supports simultaneous multi-modal answers.  For example, the user
+    can ask for a structure and a spectrum at the same time.
+
+    The ``smiles`` field holds one or more SMILES strings returned by
+    cheminformatics tools.  Each SMILES is a separate list element.
+    """
+
+    smiles: Optional[List[str]] = Field(
         default=None,
-        description="General or explanatory responses or SMILES string."
+        description="SMILES strings for one or more molecules.",
     )
     scalar_answer: Optional[ScalarResult] = Field(
         default=None,
-        description="Single numerical properties (e.g. enthalpy)."
+        description="Single numerical properties (e.g. enthalpy).",
+    )
+    dipole: Optional[DipoleResult] = Field(
+        default=None,
+        description="Dipole moment vector.",
     )
     vibrational_answer: Optional[VibrationalFrequency] = Field(
         default=None,
-        description="Vibrational frequencies."
+        description="Vibrational frequencies.",
     )
     ir_spectrum: Optional[IRSpectrum] = Field(
         default=None,
-        description="Infrared spectra."
+        description="Infrared spectra.",
     )
     atoms_data: Optional[AtomsData] = Field(
         default=None,
-        description="Atomic geometries (XYZ coordinate, etc.) and optimized structures."
+        description="Atomic geometries (XYZ coordinate, etc.) and optimized structures.",
     )
