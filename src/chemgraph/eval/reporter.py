@@ -93,29 +93,66 @@ def generate_markdown_report(
         lines.append(f"## Workflow: `{workflow}`")
         lines.append("")
 
-        lines.append("### LLM Judge (Final Answer Accuracy)")
-        lines.append("")
-        header = "| Model | Queries | Correct | Accuracy | Parse Errors |"
-        sep = "|---|---|---|---|---|"
-        lines.append(header)
-        lines.append(sep)
+        # Check if any model has LLM judge results for this workflow.
+        has_llm_judge = any(
+            model_data.get(workflow, {}).get("judge_aggregate")
+            for model_data in results.values()
+        )
+        # Check if any model has structured judge results.
+        has_struct_judge = any(
+            model_data.get(workflow, {}).get("structured_judge_aggregate")
+            for model_data in results.values()
+        )
 
-        for model_name, model_data in results.items():
-            if workflow not in model_data:
-                continue
-            jagg = model_data[workflow].get("judge_aggregate")
-            if not jagg:
-                continue
-            row = (
-                f"| {model_name} "
-                f"| {jagg.get('n_queries', 0)} "
-                f"| {jagg.get('n_correct', 0)} "
-                f"| {_safe_pct(jagg.get('accuracy', 0))} "
-                f"| {jagg.get('n_parse_errors', 0)} |"
-            )
-            lines.append(row)
+        if has_llm_judge:
+            lines.append("### LLM Judge (Final Answer Accuracy)")
+            lines.append("")
+            header = "| Model | Queries | Correct | Accuracy | Parse Errors |"
+            sep = "|---|---|---|---|---|"
+            lines.append(header)
+            lines.append(sep)
 
-        lines.append("")
+            for model_name, model_data in results.items():
+                if workflow not in model_data:
+                    continue
+                jagg = model_data[workflow].get("judge_aggregate")
+                if not jagg:
+                    continue
+                row = (
+                    f"| {model_name} "
+                    f"| {jagg.get('n_queries', 0)} "
+                    f"| {jagg.get('n_correct', 0)} "
+                    f"| {_safe_pct(jagg.get('accuracy', 0))} "
+                    f"| {jagg.get('n_parse_errors', 0)} |"
+                )
+                lines.append(row)
+
+            lines.append("")
+
+        if has_struct_judge:
+            lines.append("### Structured Output Judge (Deterministic)")
+            lines.append("")
+            header = "| Model | Queries | Correct | Accuracy | Parse Errors |"
+            sep = "|---|---|---|---|---|"
+            lines.append(header)
+            lines.append(sep)
+
+            for model_name, model_data in results.items():
+                if workflow not in model_data:
+                    continue
+                sagg = model_data[workflow].get("structured_judge_aggregate")
+                if not sagg:
+                    continue
+                row = (
+                    f"| {model_name} "
+                    f"| {sagg.get('n_queries', 0)} "
+                    f"| {sagg.get('n_correct', 0)} "
+                    f"| {_safe_pct(sagg.get('accuracy', 0))} "
+                    f"| {sagg.get('n_parse_errors', 0)} |"
+                )
+                lines.append(row)
+
+            lines.append("")
 
     return "\n".join(lines)
 
@@ -160,6 +197,7 @@ def write_model_detail(
     per_query_results: list,
     output_dir: str,
     judge_results: Optional[list] = None,
+    structured_judge_results: Optional[list] = None,
 ) -> str:
     """Write per-model raw tool calls and evaluation details.
 
@@ -177,6 +215,8 @@ def write_model_detail(
         Output directory.
     judge_results : list, optional
         Per-query LLM judge result dicts.
+    structured_judge_results : list, optional
+        Per-query structured-output judge result dicts.
 
     Returns
     -------
@@ -191,6 +231,10 @@ def write_model_detail(
     }
     if judge_results is not None:
         detail["judge_results"] = _make_serializable(judge_results)
+    if structured_judge_results is not None:
+        detail["structured_judge_results"] = _make_serializable(
+            structured_judge_results
+        )
 
     safe_name = model_name.replace("/", "_").replace(":", "_")
     fname = f"{safe_name}_{workflow_type}_detail.json"
@@ -206,31 +250,61 @@ def write_model_detail(
 
 
 def print_summary_table(results: Dict[str, Dict[str, dict]]) -> None:
-    """Print a concise LLM-judge comparison table to stdout.
+    """Print a concise comparison table to stdout.
+
+    Displays columns for whichever judges have results (LLM judge,
+    structured judge, or both).
 
     Parameters
     ----------
     results : dict
-        ``{model_name: {workflow_type: {"judge_aggregate": {...}}}}``
+        ``{model_name: {workflow_type: {"judge_aggregate": {...}, ...}}}``
     """
     all_workflows = sorted({wf for model_data in results.values() for wf in model_data})
 
     for workflow in all_workflows:
+        # Detect which judges have results for this workflow.
+        has_llm = any(
+            model_data.get(workflow, {}).get("judge_aggregate")
+            for model_data in results.values()
+        )
+        has_struct = any(
+            model_data.get(workflow, {}).get("structured_judge_aggregate")
+            for model_data in results.values()
+        )
+
         print(f"\n{'=' * 60}")
         print(f"  Workflow: {workflow}")
         print(f"{'=' * 60}")
 
-        header = f"  {'Model':<40} {'Judge Acc':>10}"
+        # Build header dynamically.
+        cols = []
+        if has_llm:
+            cols.append(("Judge Acc", 10))
+        if has_struct:
+            cols.append(("Struct Acc", 10))
+
+        header = f"  {'Model':<40}"
+        sep = f"  {'-' * 40}"
+        for col_name, col_width in cols:
+            header += f" {col_name:>{col_width}}"
+            sep += f" {'-' * col_width}"
         print(header)
-        print(f"  {'-' * 40} {'-' * 10}")
+        print(sep)
 
         for model_name, model_data in results.items():
             if workflow not in model_data:
                 continue
-            jagg = model_data[workflow].get("judge_aggregate")
-            if jagg:
-                j = _safe_pct(jagg.get("accuracy", 0))
-                print(f"  {model_name:<40} {j:>10}")
+            row = f"  {model_name:<40}"
+            if has_llm:
+                jagg = model_data[workflow].get("judge_aggregate")
+                j = _safe_pct(jagg.get("accuracy", 0)) if jagg else "N/A"
+                row += f" {j:>10}"
+            if has_struct:
+                sagg = model_data[workflow].get("structured_judge_aggregate")
+                s = _safe_pct(sagg.get("accuracy", 0)) if sagg else "N/A"
+                row += f" {s:>10}"
+            print(row)
 
     print()
 
