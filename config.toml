@@ -108,5 +108,5 @@ default_profile = "standard"
 workflow_types = ["single_agent"]
 judge_model = "gpt4o"
 recursion_limit = 50
-structured_output = false
+structured_output = true
 max_queries = 0
