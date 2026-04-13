@@ -618,6 +618,7 @@ def initialize_agent(
                     generate_report=generate_report,
                     return_option=return_option,
                     recursion_limit=recursion_limit,
+                    structured_output=structured_output
                 )
 
             progress.update(task, description="[green]Agent initialized successfully!")
