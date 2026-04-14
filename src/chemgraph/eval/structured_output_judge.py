@@ -437,6 +437,21 @@ def judge_structured_output(
             "parse_error": parse_error,
         }
 
+    # Detect formatter-level parse failure signalled via ``_parse_error``.
+    # When the single-agent ResponseAgent exhausts its retries, it injects
+    # a ``_parse_error`` key into the serialised JSON so that the
+    # evaluation can distinguish "the formatter could not parse the LLM
+    # output" from "the agent computed the wrong answer".
+    if "_parse_error" in actual_dict:
+        fmt_error = actual_dict["_parse_error"]
+        parse_error = f"Formatter parse failure: {fmt_error}"
+        return {
+            "score": 0,
+            "field_scores": {},
+            "rationale": parse_error,
+            "parse_error": parse_error,
+        }
+
     field_scores: Dict[str, bool] = {}
     reasons: List[str] = []
 
@@ -541,7 +556,7 @@ def aggregate_structured_results(
         Aggregate metrics:
         - ``n_queries``: total queries evaluated
         - ``n_correct``: number scored as correct (1)
-        - ``accuracy``: fraction correct
+        - ``accuracy``: fraction correct (parse errors count as wrong)
         - ``n_parse_errors``: number of parse failures
         - ``n_skipped``: queries skipped (no expected structured output)
     """
@@ -558,21 +573,16 @@ def aggregate_structured_results(
     valid = [r for r in per_query_results if r.get("parse_error") is None]
     n_errors = n - len(valid)
 
-    if len(valid) == 0:
-        return {
-            "n_queries": n,
-            "n_correct": 0,
-            "accuracy": 0.0,
-            "n_parse_errors": n_errors,
-            "n_skipped": 0,
-        }
-
+    # Count correct answers (only from successfully parsed results).
     n_correct = sum(1 for r in valid if r.get("score", 0) == 1)
 
+    # Accuracy uses the total number of queries as denominator so that
+    # parse failures (including formatter parse failures) are penalised
+    # as wrong answers rather than being excluded.
     return {
         "n_queries": n,
         "n_correct": n_correct,
-        "accuracy": round(n_correct / len(valid), 4),
+        "accuracy": round(n_correct / n, 4),
         "n_parse_errors": n_errors,
         "n_skipped": 0,
     }
