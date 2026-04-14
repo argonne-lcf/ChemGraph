@@ -1,3 +1,4 @@
+import json
 import re
 
 from langgraph.graph import StateGraph, START, END
@@ -205,17 +206,26 @@ def _extract_json_block(text: str) -> str | None:
     return None
 
 
-def _parse_response_formatter(raw_text: str) -> ResponseFormatter:
+def _parse_response_formatter(
+    raw_text: str,
+) -> tuple[ResponseFormatter, str | None]:
     """Parse LLM output into a :class:`ResponseFormatter`.
 
     Attempts direct validation first, then tries to extract a JSON block
     from the text.  Falls back to an empty ``ResponseFormatter`` (all
     fields ``None``) so the pipeline never breaks -- the raw text is
     still available in the agent's message history.
+
+    Returns
+    -------
+    tuple[ResponseFormatter, str | None]
+        A tuple of ``(parsed_formatter, parse_error)``.  ``parse_error``
+        is ``None`` on success, or a descriptive string when parsing
+        failed and the empty fallback was used.
     """
     # 1. Direct validation
     try:
-        return ResponseFormatter.model_validate_json(raw_text.strip())
+        return ResponseFormatter.model_validate_json(raw_text.strip()), None
     except Exception:
         pass
 
@@ -223,41 +233,99 @@ def _parse_response_formatter(raw_text: str) -> ResponseFormatter:
     extracted = _extract_json_block(raw_text)
     if extracted:
         try:
-            return ResponseFormatter.model_validate_json(extracted)
+            return ResponseFormatter.model_validate_json(extracted), None
         except Exception:
             pass
 
     # 3. Fallback: return empty ResponseFormatter (all fields None).
-    logger.warning(
+    error_msg = (
         "ResponseAgent: could not parse structured output; "
         "returning empty ResponseFormatter."
     )
-    return ResponseFormatter()
+    logger.warning(error_msg)
+    return ResponseFormatter(), error_msg
 
 
-def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
-    """An LLM agent responsible for formatting final message
+def ResponseAgent(
+    state: State,
+    llm: ChatOpenAI,
+    formatter_prompt: str,
+    max_retries: int = 1,
+):
+    """An LLM agent responsible for formatting final message.
+
+    When the LLM response cannot be parsed into a valid
+    :class:`ResponseFormatter`, the agent retries the LLM call up to
+    ``max_retries`` times, sending the parse error back to the model so
+    it can correct its output.
+
+    If all attempts fail, an empty ``ResponseFormatter`` is returned
+    with a ``_parse_error`` key in the serialised JSON so that
+    downstream evaluation can detect the failure.
 
     Parameters
     ----------
     state : State
-        The current state containing messages and remaining steps
+        The current state containing messages and remaining steps.
     llm : ChatOpenAI
-        The language model to use for formatting
+        The language model to use for formatting.
     formatter_prompt : str
-        The prompt to guide the LLM's formatting behavior
+        The prompt to guide the LLM's formatting behaviour.
+    max_retries : int, optional
+        Maximum number of retry attempts on parse failure (default 1).
 
     Returns
     -------
     dict
-        Updated state containing the formatted response
+        Updated state containing the formatted response.
     """
     messages = [
         {"role": "system", "content": formatter_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
     raw_response = llm.invoke(messages).content
-    response = _parse_response_formatter(raw_response).model_dump_json()
+    formatter, parse_error = _parse_response_formatter(raw_response)
+
+    # Retry loop: re-invoke the LLM with the error feedback.
+    retries = 0
+    while parse_error is not None and retries < max_retries:
+        retries += 1
+        logger.warning(
+            "ResponseAgent: parse attempt %d failed (%s); retrying LLM.",
+            retries,
+            parse_error,
+        )
+        retry_messages = [
+            {"role": "system", "content": formatter_prompt},
+            {"role": "user", "content": f"{state['messages']}"},
+            {
+                "role": "assistant",
+                "content": raw_response,
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Error: {parse_error}\n\n"
+                    "Your previous response could not be parsed. "
+                    "Please output ONLY a valid JSON object matching the "
+                    "ResponseFormatter schema. Do not include any text, "
+                    "markdown fences, or explanation outside the JSON object."
+                ),
+            },
+        ]
+        raw_response = llm.invoke(retry_messages).content
+        formatter, parse_error = _parse_response_formatter(raw_response)
+
+    # Serialise to JSON, injecting ``_parse_error`` when parsing failed.
+    result = json.loads(formatter.model_dump_json())
+    if parse_error is not None:
+        logger.error(
+            "ResponseAgent: all %d retries exhausted; returning empty "
+            "ResponseFormatter with _parse_error.",
+            max_retries,
+        )
+        result["_parse_error"] = parse_error
+    response = json.dumps(result)
     return {"messages": [response]}
 
 
@@ -308,6 +376,7 @@ def construct_single_agent_graph(
     generate_report: bool = False,
     report_prompt: str = report_prompt,
     tools: list = None,
+    formatter_max_retries: int = 1,
 ):
     """Construct a geometry optimization graph.
 
@@ -325,8 +394,11 @@ def construct_single_agent_graph(
         Whether to generate a report, by default False
     report_prompt: str, optional
         The prompt to guide the LLM's report generation behavior, by default report_prompt
-    tool: list, optional
+    tools : list, optional
         The list of tools for the main agent, by default None
+    formatter_max_retries : int, optional
+        Maximum number of LLM retry attempts when the ResponseAgent
+        fails to parse the formatter output, by default 1
     Returns
     -------
     StateGraph
@@ -405,7 +477,10 @@ def construct_single_agent_graph(
             graph_builder.add_node(
                 "ResponseAgent",
                 lambda state: ResponseAgent(
-                    state, llm, formatter_prompt=formatter_prompt
+                    state,
+                    llm,
+                    formatter_prompt=formatter_prompt,
+                    max_retries=formatter_max_retries,
                 ),
             )
             graph_builder.add_conditional_edges(
