@@ -112,6 +112,10 @@ class ChemGraph:
         by default "last_message"
     recursion_limit : int, optional
         Maximum number of recursive steps in the workflow, by default 50
+    formatter_max_retries : int, optional
+        Maximum number of LLM retry attempts when the ResponseAgent
+        fails to parse the formatter output (single_agent only),
+        by default 1
 
     Raises
     ------
@@ -146,6 +150,7 @@ class ChemGraph:
         enable_memory: bool = True,
         memory_db_path: Optional[str] = None,
         log_dir: Optional[str] = None,
+        formatter_max_retries: int = 1,
     ):
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
@@ -273,6 +278,7 @@ class ChemGraph:
         self.formatter_multi_prompt = formatter_multi_prompt
         self.tools = tools
         self.data_tools = data_tools
+        self.formatter_max_retries = formatter_max_retries
 
         if model_name in supported_argo_models:
             self.support_structured_output = False
@@ -306,6 +312,7 @@ class ChemGraph:
                 self.generate_report,
                 self.report_prompt,
                 self.tools,
+                formatter_max_retries=self.formatter_max_retries,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
