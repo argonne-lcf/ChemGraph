@@ -7,9 +7,10 @@ LLM-as-judge approach.
 
 import datetime
 import inspect
+import json
 import os
 import traceback
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.eval.config import BenchmarkConfig
@@ -98,6 +99,100 @@ class ModelBenchmarkRunner:
             )
 
     # ------------------------------------------------------------------
+    # Checkpointing
+    # ------------------------------------------------------------------
+
+    def _checkpoint_dir(self) -> str:
+        """Return the checkpoint directory path, creating it if needed."""
+        d = os.path.join(self.config.output_dir, "checkpoints")
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _checkpoint_path(self, model_name: str, workflow_type: str) -> str:
+        """Return the JSONL checkpoint file path for a (model, workflow) pair."""
+        safe_name = model_name.replace("/", "_").replace(":", "_")
+        return os.path.join(
+            self._checkpoint_dir(),
+            f"{safe_name}_{workflow_type}.jsonl",
+        )
+
+    def _save_query_checkpoint(
+        self,
+        model_name: str,
+        workflow_type: str,
+        query_id: str,
+        query_idx: int,
+        query_result: dict,
+    ) -> None:
+        """Append a single query result to the checkpoint file.
+
+        Each line in the JSONL file is a self-contained JSON object with
+        the query ID, index, and full result (raw output + judge scores).
+        Append-only writes make this crash-safe: at worst the last line
+        may be truncated (one query lost, not all).
+        """
+        record = {
+            "query_id": query_id,
+            "query_idx": query_idx,
+            **query_result,
+        }
+        path = self._checkpoint_path(model_name, workflow_type)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, default=str) + "\n")
+
+    def _load_checkpoint(self, model_name: str, workflow_type: str) -> Dict[str, dict]:
+        """Load completed query results from a checkpoint file.
+
+        Returns
+        -------
+        dict
+            ``{query_id: {"raw": ..., "judge": ..., "structured_judge": ...}}``
+            for each successfully checkpointed query.  Corrupt lines
+            (e.g. from a mid-write crash) are silently skipped.
+        """
+        path = self._checkpoint_path(model_name, workflow_type)
+        completed: Dict[str, dict] = {}
+        if not os.path.exists(path):
+            return completed
+
+        with open(path, "r", encoding="utf-8") as f:
+            for line_no, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                    qid = record.get("query_id")
+                    if qid is not None:
+                        completed[str(qid)] = {
+                            "raw": record.get("raw"),
+                            "judge": record.get("judge"),
+                            "structured_judge": record.get("structured_judge"),
+                        }
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Skipping corrupt checkpoint line {line_no} in "
+                        f"{path} (possible mid-write crash)"
+                    )
+        if completed:
+            logger.info(
+                f"Loaded {len(completed)} checkpointed queries for "
+                f"{model_name}/{workflow_type}"
+            )
+        return completed
+
+    def _clear_checkpoint(self, model_name: str, workflow_type: str) -> None:
+        """Remove the checkpoint file for a (model, workflow) pair.
+
+        Called when *not* resuming, so that stale checkpoint data from a
+        previous run does not leak into the current run.
+        """
+        path = self._checkpoint_path(model_name, workflow_type)
+        if os.path.exists(path):
+            os.remove(path)
+            logger.debug(f"Cleared stale checkpoint: {path}")
+
+    # ------------------------------------------------------------------
     # Core execution
     # ------------------------------------------------------------------
 
@@ -164,15 +259,43 @@ class ModelBenchmarkRunner:
         per_query_judge_results: List[dict] = []
         per_query_structured_results: List[dict] = []
 
+        # Load checkpoint for resume, or clear stale data for a fresh run.
+        checkpoint: Dict[str, dict] = {}
+        if self.config.resume:
+            checkpoint = self._load_checkpoint(model_name, workflow_type)
+        else:
+            self._clear_checkpoint(model_name, workflow_type)
+
+        n_skipped = 0
         for idx, item in enumerate(self.dataset):
-            query_result = await self._run_single_query(
-                cg, item, idx, model_name, workflow_type
-            )
+            # Resume: reuse checkpointed result if available.
+            if item.id in checkpoint:
+                query_result = checkpoint[item.id]
+                n_skipped += 1
+                logger.debug(
+                    f"Skipping query {idx} ({item.id}): loaded from checkpoint"
+                )
+            else:
+                query_result = await self._run_single_query(
+                    cg, item, idx, model_name, workflow_type
+                )
+                # Checkpoint immediately after each query completes.
+                self._save_query_checkpoint(
+                    model_name, workflow_type, item.id, idx, query_result
+                )
+
             raw_tool_calls.append(query_result["raw"])
             if query_result.get("judge") is not None:
                 per_query_judge_results.append(query_result["judge"])
             if query_result.get("structured_judge") is not None:
                 per_query_structured_results.append(query_result["structured_judge"])
+
+        if n_skipped:
+            logger.info(
+                f"Resumed {model_name}/{workflow_type}: "
+                f"{n_skipped} queries from checkpoint, "
+                f"{len(self.dataset) - n_skipped} newly evaluated"
+            )
 
         result: Dict[str, Any] = {
             "raw_tool_calls": raw_tool_calls,
@@ -292,6 +415,7 @@ class ModelBenchmarkRunner:
             "judge_model": self.config.judge_model,
             "judge_type": self.config.judge_type,
             "structured_output": self.config.structured_output,
+            "resume": self.config.resume,
             "tags": self.config.tags,
         }
 
@@ -317,11 +441,60 @@ class ModelBenchmarkRunner:
                     structured_judge_results=result.get("structured_judge_details"),
                 )
 
+                # Write incremental ("running") aggregate report so a
+                # usable summary exists even if a later model crashes.
+                self._write_running_report()
+
         return self.results
 
     # ------------------------------------------------------------------
     # Reporting
     # ------------------------------------------------------------------
+
+    def _write_running_report(self) -> None:
+        """Write/overwrite an incremental aggregate report.
+
+        Called after each ``(model, workflow)`` pair completes inside
+        ``run_all()``.  The "running" files contain whatever results have
+        been collected so far, providing a usable summary even if the
+        process crashes before ``report()`` is called.
+
+        The running files are cleaned up by ``report()`` once the final
+        timestamped reports are successfully written.
+        """
+        if not self.results or not self._run_metadata:
+            return
+
+        json_path = os.path.join(self.config.output_dir, "benchmark_running.json")
+        md_path = os.path.join(self.config.output_dir, "benchmark_running.md")
+        try:
+            write_json_report(
+                results=self.results,
+                metadata=self._run_metadata,
+                output_path=json_path,
+            )
+            write_markdown_report(
+                results=self.results,
+                metadata=self._run_metadata,
+                output_path=md_path,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to write running report: {e}")
+
+    def _cleanup_running_report(self) -> None:
+        """Remove the incremental running report files.
+
+        Called after ``report()`` has successfully written the final
+        timestamped reports.
+        """
+        for suffix in ("json", "md"):
+            path = os.path.join(self.config.output_dir, f"benchmark_running.{suffix}")
+            if os.path.exists(path):
+                try:
+                    os.remove(path)
+                    logger.debug(f"Cleaned up running report: {path}")
+                except OSError as e:
+                    logger.warning(f"Could not remove {path}: {e}")
 
     def report(self, format: str = "all") -> None:
         """Generate and write evaluation reports.
@@ -356,6 +529,10 @@ class ModelBenchmarkRunner:
 
         if format in ("console", "all"):
             print_summary_table(self.results)
+
+        # Clean up incremental running report files now that the final
+        # timestamped reports have been written successfully.
+        self._cleanup_running_report()
 
     # ------------------------------------------------------------------
     # Helpers
