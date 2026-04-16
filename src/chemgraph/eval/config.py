@@ -50,6 +50,10 @@ class BenchmarkConfig(BaseModel):
     max_queries : int
         Maximum number of queries to evaluate from the dataset.
         0 means evaluate all queries (no limit).
+    resume : bool
+        When ``True``, load per-query checkpoint files from the output
+        directory and skip already-completed ``(model, workflow, query)``
+        combinations.  Useful for resuming after a crash.
     config_file : str, optional
         Path to a TOML configuration file (e.g. ``config.toml``).
     """
@@ -107,6 +111,14 @@ class BenchmarkConfig(BaseModel):
             "Judge strategy to use: 'llm' (LLM-as-judge only), "
             "'structured' (deterministic structured-output comparison "
             "only), or 'both' (run both judges side by side)."
+        ),
+    )
+    resume: bool = Field(
+        default=False,
+        description=(
+            "Resume from per-query checkpoint files, skipping "
+            "already-completed (model, workflow, query) combinations. "
+            "Checkpoints are always written regardless of this flag."
         ),
     )
     config_file: Optional[str] = Field(
@@ -274,6 +286,7 @@ class BenchmarkConfig(BaseModel):
             "judge_model",
             "judge_type",
             "max_queries",
+            "resume",
         ]
         for key in _direct:
             if key in prof:
