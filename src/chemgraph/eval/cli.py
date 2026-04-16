@@ -126,6 +126,14 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
         help="Optional tags for the run metadata.",
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume from per-query checkpoint files, skipping "
+            "already-completed (model, workflow, query) combinations."
+        ),
+    )
+    parser.add_argument(
         "--config",
         type=str,
         default=None,
@@ -204,6 +212,8 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             overrides["structured_output"] = False
         if args.judge_type is not None:
             overrides["judge_type"] = args.judge_type
+        if args.resume:
+            overrides["resume"] = True
 
         config = BenchmarkConfig.from_profile(
             profile_name=profile,
@@ -224,6 +234,7 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             "max_queries": args.max_queries or 0,
             "config_file": args.config,
             "judge_type": args.judge_type or "llm",
+            "resume": args.resume,
         }
         if args.judge_model is not None:
             kwargs["judge_model"] = args.judge_model
@@ -251,6 +262,8 @@ def run_eval(args: argparse.Namespace) -> None:
         print(f"  Judge Model:  {config.judge_model}")
     if config.max_queries > 0:
         print(f"  Max Queries:  {config.max_queries}")
+    if config.resume:
+        print(f"  Resume:       enabled")
     if config.config_file:
         print(f"  Config:       {config.config_file}")
     print(f"  Output:       {config.output_dir}")
