@@ -50,6 +50,10 @@ class BenchmarkConfig(BaseModel):
     max_queries : int
         Maximum number of queries to evaluate from the dataset.
         0 means evaluate all queries (no limit).
+    resume : bool
+        When ``True``, load per-query checkpoint files from the output
+        directory and skip already-completed ``(model, workflow, query)``
+        combinations.  Useful for resuming after a crash.
     config_file : str, optional
         Path to a TOML configuration file (e.g. ``config.toml``).
     """
@@ -82,9 +86,12 @@ class BenchmarkConfig(BaseModel):
         default=50,
         description="Max LangGraph recursion steps per query.",
     )
-    judge_model: str = Field(
-        ...,
-        description="LLM model name for the judge.",
+    judge_model: Optional[str] = Field(
+        default=None,
+        description=(
+            "LLM model name for the judge. Required when judge_type "
+            "is 'llm' or 'both'; ignored for 'structured'."
+        ),
     )
     tags: List[str] = Field(
         default_factory=list,
@@ -96,6 +103,22 @@ class BenchmarkConfig(BaseModel):
         description=(
             "Maximum number of queries to evaluate from the dataset. "
             "0 means evaluate all queries (no limit)."
+        ),
+    )
+    judge_type: str = Field(
+        default="llm",
+        description=(
+            "Judge strategy to use: 'llm' (LLM-as-judge only), "
+            "'structured' (deterministic structured-output comparison "
+            "only), or 'both' (run both judges side by side)."
+        ),
+    )
+    resume: bool = Field(
+        default=False,
+        description=(
+            "Resume from per-query checkpoint files, skipping "
+            "already-completed (model, workflow, query) combinations. "
+            "Checkpoints are always written regardless of this flag."
         ),
     )
     config_file: Optional[str] = Field(
@@ -135,6 +158,25 @@ class BenchmarkConfig(BaseModel):
             self._flat_config = flatten_config(raw)
             self._raw_config = raw
         return self
+
+    @model_validator(mode="after")
+    def validate_judge_model_required(self):
+        """Ensure *judge_model* is set when the LLM judge is requested."""
+        if self.judge_type in ("llm", "both") and not self.judge_model:
+            raise ValueError(
+                f"judge_model is required when judge_type is "
+                f"'{self.judge_type}'. Provide --judge-model or set "
+                f"judge_type to 'structured' to skip the LLM judge."
+            )
+        return self
+
+    @field_validator("judge_type")
+    @classmethod
+    def validate_judge_type(cls, v: str) -> str:
+        valid = {"llm", "structured", "both"}
+        if v not in valid:
+            raise ValueError(f"Unknown judge_type: {v!r}. Valid: {sorted(valid)}")
+        return v
 
     @field_validator("workflow_types")
     @classmethod
@@ -242,7 +284,9 @@ class BenchmarkConfig(BaseModel):
             "recursion_limit",
             "structured_output",
             "judge_model",
+            "judge_type",
             "max_queries",
+            "resume",
         ]
         for key in _direct:
             if key in prof:

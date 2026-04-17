@@ -48,8 +48,11 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--judge-model",
         type=str,
-        required=True,
-        help="LLM model name for the judge.",
+        default=None,
+        help=(
+            "LLM model name for the judge. Required when "
+            "--judge-type is 'llm' or 'both'."
+        ),
     )
     parser.add_argument(
         "--profile",
@@ -94,6 +97,17 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
         help="Disable structured output on the agent.",
     )
     parser.add_argument(
+        "--judge-type",
+        type=str,
+        choices=["llm", "structured", "both"],
+        default=None,
+        help=(
+            "Judge strategy: 'llm' (LLM-as-judge), 'structured' "
+            "(deterministic structured-output comparison), or 'both' "
+            "(run both judges). Default: llm."
+        ),
+    )
+    parser.add_argument(
         "--recursion-limit",
         type=int,
         default=None,
@@ -110,6 +124,14 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
         nargs="*",
         default=[],
         help="Optional tags for the run metadata.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume from per-query checkpoint files, skipping "
+            "already-completed (model, workflow, query) combinations."
+        ),
     )
     parser.add_argument(
         "--config",
@@ -188,6 +210,10 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             overrides["max_queries"] = args.max_queries
         if args.no_structured_output:
             overrides["structured_output"] = False
+        if args.judge_type is not None:
+            overrides["judge_type"] = args.judge_type
+        if args.resume:
+            overrides["resume"] = True
 
         config = BenchmarkConfig.from_profile(
             profile_name=profile,
@@ -202,13 +228,16 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             "models": args.models,
             "workflow_types": args.workflows or ["single_agent"],
             "output_dir": args.output_dir,
-            "judge_model": args.judge_model,
             "structured_output": not args.no_structured_output,
             "recursion_limit": args.recursion_limit or 50,
             "tags": args.tags or [],
             "max_queries": args.max_queries or 0,
             "config_file": args.config,
+            "judge_type": args.judge_type or "llm",
+            "resume": args.resume,
         }
+        if args.judge_model is not None:
+            kwargs["judge_model"] = args.judge_model
         if args.dataset is not None:
             kwargs["dataset"] = args.dataset
 
@@ -228,9 +257,13 @@ def run_eval(args: argparse.Namespace) -> None:
     print(f"  Models:       {config.models}")
     print(f"  Workflows:    {config.workflow_types}")
     print(f"  Dataset:      {config.dataset}")
-    print(f"  Judge Model:  {config.judge_model}")
+    print(f"  Judge Type:   {config.judge_type}")
+    if config.judge_model:
+        print(f"  Judge Model:  {config.judge_model}")
     if config.max_queries > 0:
         print(f"  Max Queries:  {config.max_queries}")
+    if config.resume:
+        print(f"  Resume:       enabled")
     if config.config_file:
         print(f"  Config:       {config.config_file}")
     print(f"  Output:       {config.output_dir}")
