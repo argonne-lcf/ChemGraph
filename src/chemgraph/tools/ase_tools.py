@@ -11,6 +11,7 @@ from chemgraph.schemas.ase_input import (
     ASEInputSchema,
     ASEOutputSchema,
 )
+from chemgraph.schemas.calculators.mace_calc import _mace_lock
 from chemgraph.tools.mcp_helper import _resolve_path
 
 
@@ -334,6 +335,15 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     ValueError
         If the calculator is not supported or if the calculation fails
     """
+    calc_type = params.calculator.calculator_type.lower()
+    if "mace" in calc_type:
+        with _mace_lock:
+            return _run_ase_impl(params)
+    return _run_ase_impl(params)
+
+
+def _run_ase_impl(params: ASEInputSchema):
+    """Core implementation of run_ase, separated to allow lock-guarded dispatch."""
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
