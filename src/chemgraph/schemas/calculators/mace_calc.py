@@ -2,10 +2,20 @@
 Reference: https://github.com/ACEsuit/mace/blob/main/mace/calculators/foundations_models.py"""
 
 import os
+import threading
 from pathlib import Path
 from typing import Optional, Union
 from pydantic import BaseModel, Field
 import torch
+
+# Process-wide lock for MACE operations.
+# MACE model deserialization (torch.load) triggers torch.fx.symbolic_trace
+# inside Contraction.__init__, which temporarily patches
+# torch.nn.Module.__call__ at the class level.  Concurrent model loading
+# or inference in another thread can then enter the patched __call__,
+# causing "NameError: module is not installed as a submodule".
+# See: https://github.com/argonne-lcf/ChemGraph/issues/110
+_mace_lock = threading.Lock()
 
 
 class MaceCalc(BaseModel):
@@ -74,6 +84,10 @@ class MaceCalc(BaseModel):
 
     def get_calculator(self):
         """Get the appropriate MACECalculator instance based on the selected calculator type.
+
+        The caller is responsible for acquiring ``_mace_lock`` before
+        calling this method when thread-safety is required (see
+        ``ase_tools.run_ase``).
 
         Returns
         -------
