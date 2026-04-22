@@ -34,7 +34,7 @@ def test_init_generates_log_dir(clean_env):
 
         assert agent.log_dir is not None
         assert agent.uuid is not None
-        assert "logs/session_" in agent.log_dir
+        assert os.path.join("cg_logs", "session_") in agent.log_dir
         assert os.environ.get("CHEMGRAPH_LOG_DIR") == agent.log_dir
 
         # Cleanup created dir
