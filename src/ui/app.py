@@ -27,7 +27,6 @@ from chemgraph import __version__ as chemgraph_version
 from chemgraph.tools.ase_tools import create_ase_atoms, create_xyz_string
 from chemgraph.models.supported_models import (
     supported_argo_models,
-    supported_argoproxy_models,
 )
 from chemgraph.utils.config_utils import (
     get_argo_user_from_nested_config,
@@ -90,25 +89,9 @@ def get_model_options(config: Dict[str, Any]) -> list:
 
 def run_async_callable(fn):
     """Run an async callable and return its result in sync context."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(fn())
-    result_container = {}
-    error_container = {}
+    from chemgraph.utils.async_utils import run_async_callable as _impl
 
-    def runner():
-        try:
-            result_container["value"] = asyncio.run(fn())
-        except Exception as exc:
-            error_container["error"] = exc
-
-    thread = threading.Thread(target=runner, daemon=True)
-    thread.start()
-    thread.join()
-    if "error" in error_container:
-        raise error_container["error"]
-    return result_container.get("value")
+    return _impl(fn)
 
 
 def _run_command(cmd: list[str], cwd: Optional[Path] = None, timeout: int = 2) -> str:
@@ -879,10 +862,7 @@ generate_report = config["general"]["report"]
 thread_id = config["general"]["thread"]
 
 # Argo OpenAI-compatible endpoint often returns plain text; disable structured output.
-if (
-    selected_model in supported_argo_models
-    or selected_model in supported_argoproxy_models
-) and structured_output:
+if selected_model in supported_argo_models and structured_output:
     structured_output = False
     st.session_state.ui_notice = (
         "Structured output is disabled for Argo models to avoid JSON parsing errors."

@@ -52,6 +52,10 @@ timeout = 30
 base_url = "https://generativelanguage.googleapis.com/v1beta"
 timeout = 30
 
+[api.alcf]
+base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
+timeout = 30
+
 [api.local]
 # For local models like Ollama
 base_url = "http://localhost:11434"
@@ -149,6 +153,70 @@ argo_user = "your_argo_username"
 
 `ARGO_USER` is only used as a fallback when `argo_user` is not provided in `config.toml`.
 
+#### ALCF Inference Endpoints
+
+ChemGraph supports [ALCF Inference Endpoints](https://docs.alcf.anl.gov/services/inference-endpoints/), which provide API access to open-source models running on dedicated ALCF hardware.
+
+1. The endpoint is configured by default in `config.toml`:
+
+```toml
+[api.alcf]
+base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
+timeout = 30
+```
+
+2. Authenticate via Globus OAuth and set the access token:
+
+```bash
+pip install globus_sdk
+wget https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/refs/heads/main/inference_auth_token.py
+python inference_auth_token.py authenticate
+export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)
+```
+
+3. Use an ALCF model (no prefix needed):
+
+```bash
+chemgraph --config config.toml -m meta-llama/Meta-Llama-3.1-70B-Instruct \
+  -q "Calculate the energy of water using MACE"
+```
+
+Access tokens are valid for ~48 hours. See the
+[ALCF docs](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models) for available models.
+
+#### Groq
+
+ChemGraph supports [Groq](https://groq.com/) for fast LLM inference. Use the `groq:` prefix to route any model through Groq.
+
+1. Set your API key:
+
+```bash
+export GROQ_API_KEY="your_groq_api_key_here"
+```
+
+2. Use any Groq model with the `groq:` prefix:
+
+```bash
+chemgraph -q "What is the SMILES for water?" -m groq:llama-3.3-70b-versatile
+chemgraph -q "Optimize methane" -m groq:openai/gpt-oss-120b
+```
+
+No curated model list is maintained -- any model available on the
+[Groq console](https://console.groq.com/docs/models) can be used by prefixing
+it with `groq:`. The prefix is stripped before sending to the Groq API.
+
+#### LLM Provider Prefixes
+
+For third-party providers that share model names with other services, ChemGraph
+uses a prefix convention to route models unambiguously:
+
+| Prefix | Provider | Auth Env Var | Example |
+|--------|----------|--------------|---------|
+| `argo:` | Argo API (Argonne internal) | `OPENAI_API_KEY` | `argo:gpt-4o` |
+| `groq:` | Groq Cloud | `GROQ_API_KEY` | `groq:llama-3.3-70b-versatile` |
+
+Direct model names (no prefix) are used for OpenAI, Anthropic, Google, ALCF, and Ollama.
+
 ### Configuration Sections
 
 | Section          | Description                                             |
@@ -221,17 +289,25 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 # OpenAI models
 chemgraph -q "Your query" -m gpt-4o
 chemgraph -q "Your query" -m gpt-4o-mini
-chemgraph -q "Your query" -m o1-preview
 
 # Anthropic models
 chemgraph -q "Your query" -m claude-3-5-sonnet-20241022
-chemgraph -q "Your query" -m claude-3-opus-20240229
 
 # Google models
-chemgraph -q "Your query" -m gemini-1.5-pro
+chemgraph -q "Your query" -m gemini-2.5-pro
 
-# Local models (OpenAI-compatible local endpoint)
-chemgraph -q "Your query" -m llama-3.1-70b-instruct
+# Argo models (Argonne internal, argo: prefix)
+chemgraph -q "Your query" -m argo:gpt-4o
+chemgraph -q "Your query" -m argo:claude-sonnet-4
+
+# ALCF models (Globus auth required, no prefix)
+chemgraph -q "Your query" -m meta-llama/Meta-Llama-3.1-70B-Instruct
+
+# Groq models (groq: prefix, any Groq model)
+chemgraph -q "Your query" -m groq:llama-3.3-70b-versatile
+
+# Local models (Ollama)
+chemgraph -q "Your query" -m llama3.2
 ```
 
 **Workflow Types:**
@@ -421,12 +497,20 @@ export ANTHROPIC_API_KEY="your_anthropic_key_here"
 
 # Google (for Gemini models)
 export GEMINI_API_KEY="your_gemini_key_here"
+
+# Groq (for groq: prefixed models)
+export GROQ_API_KEY="your_groq_key_here"
+
+# ALCF (Globus OAuth access token)
+export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)
 ```
 
 **Getting API Keys:**
 - **OpenAI**: Visit [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 - **Anthropic**: Visit [console.anthropic.com](https://console.anthropic.com/)
 - **Google**: Visit [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- **Groq**: Visit [console.groq.com/keys](https://console.groq.com/keys)
+- **ALCF**: See [ALCF Inference Endpoints docs](https://docs.alcf.anl.gov/services/inference-endpoints/#api-access)
 
 #### Performance Tips
 
