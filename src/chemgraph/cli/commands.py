@@ -7,7 +7,6 @@ starting interactive mode, managing sessions, etc.
 from __future__ import annotations
 
 import os
-import platform
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, Optional
@@ -19,7 +18,6 @@ from rich.table import Table
 
 from chemgraph.memory.store import SessionStore
 from chemgraph.models.supported_models import (
-    all_supported_models,
     supported_alcf_models,
     supported_anthropic_models,
     supported_gemini_models,
@@ -33,7 +31,6 @@ from chemgraph.cli.formatting import (
     console,
     create_banner,
     format_response,
-    list_models,
 )
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ import inspect
 import json
 import os
 import traceback
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.eval.config import BenchmarkConfig

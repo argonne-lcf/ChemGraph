@@ -5,7 +5,6 @@ Provides persistent storage for session metadata and message history,
 enabling session listing, resumption, and context injection.
 """
 
-import json
 import logging
 import os
 import sqlite3
@@ -380,10 +379,9 @@ class SessionStore:
             return ""
 
         human_msgs = [m for m in session.messages if m.role == "human"]
-        ai_msgs = [m for m in session.messages if m.role == "ai"]
 
         lines = [
-            f"=== Previous Session Context ===",
+            "=== Previous Session Context ===",
             f"Session: {session.session_id}",
             f"Title: {session.title or 'Untitled'}",
             f"Model: {session.model_name}",
