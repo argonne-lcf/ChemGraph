@@ -263,7 +263,7 @@ def run_eval(args: argparse.Namespace) -> None:
     if config.max_queries > 0:
         print(f"  Max Queries:  {config.max_queries}")
     if config.resume:
-        print(f"  Resume:       enabled")
+        print("  Resume:       enabled")
     if config.config_file:
         print(f"  Config:       {config.config_file}")
     print(f"  Output:       {config.output_dir}")
