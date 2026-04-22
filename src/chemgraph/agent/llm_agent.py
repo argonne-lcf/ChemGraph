@@ -18,7 +18,7 @@ from chemgraph.models.supported_models import (
     supported_alcf_models,
     supported_argo_models,
     supported_gemini_models,
-    supported_groq_models,
+
 )
 
 from chemgraph.prompt.single_agent_prompt import (
@@ -218,7 +218,7 @@ class ChemGraph:
                 llm = load_gemini_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
                 )
-            elif model_name in supported_groq_models:
+            elif model_name.startswith("groq:"):
                 llm = load_groq_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
                 )
@@ -707,9 +707,9 @@ class ChemGraph:
                     f"Unsupported return_option: {self.return_option}. Use 'last_message' or 'state'."
                 )
 
-        print(f"DEBUG: run called with config={config}")
+        logger.debug("run called with config=%s", config)
         config = _validate_config(config)
-        print(f"DEBUG: validated config={config}")
+        logger.debug("validated config=%s", config)
 
         # Initialize logging directory before determining inputs or running workflow
         # Check if CHEMGRAPH_LOG_DIR is already set

@@ -8,16 +8,18 @@ evaluation modules.
 
 from typing import Optional
 
+from chemgraph.models.alcf_endpoints import load_alcf_model
 from chemgraph.models.anthropic import load_anthropic_model
 from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
 from chemgraph.models.local_model import load_ollama_model
 from chemgraph.models.openai import load_openai_model
 from chemgraph.models.supported_models import (
+    supported_alcf_models,
     supported_anthropic_models,
     supported_argo_models,
     supported_gemini_models,
-    supported_groq_models,
+
     supported_ollama_models,
     supported_openai_models,
 )
@@ -66,6 +68,10 @@ def load_chat_model(
         return load_openai_model(**kwargs)
     elif model_name in supported_ollama_models:
         return load_ollama_model(model_name=model_name, temperature=temperature)
+    elif model_name in supported_alcf_models:
+        return load_alcf_model(
+            model_name=model_name, base_url=base_url, api_key=api_key
+        )
     elif model_name in supported_anthropic_models:
         return load_anthropic_model(
             model_name=model_name, api_key=api_key, temperature=temperature
@@ -74,12 +80,12 @@ def load_chat_model(
         return load_gemini_model(
             model_name=model_name, api_key=api_key, temperature=temperature
         )
-    elif model_name in supported_groq_models:
+    elif model_name.startswith("groq:"):
         return load_groq_model(
             model_name=model_name, api_key=api_key, temperature=temperature
         )
     else:
         raise ValueError(
             f"Model '{model_name}' not found in any supported model list. "
-            f"Use a model from: OpenAI, Anthropic, Gemini, Groq, Argo, or Ollama."
+            f"Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, argo:<model>, ALCF, or Ollama."
         )
