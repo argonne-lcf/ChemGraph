@@ -1,12 +1,12 @@
 name: Test PyPI Package
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, reopened, ready_for_review]
-  workflow_dispatch:  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'PyPI version to test'
+        required: true
+        default: '0.3.4'
 
 jobs:
   test-pypi-install:
@@ -28,7 +28,7 @@ jobs:
 
     - name: Install chemgraphagent from PyPI
       run: |
-        pip install --no-cache-dir --upgrade "chemgraphagent==0.3.0"
+        pip install --no-cache-dir --upgrade "chemgraphagent==${{ inputs.version }}"
 
     - name: Verify package installation
       run: |
@@ -49,4 +49,4 @@ jobs:
     - name: Check package version
       run: |
         pip show chemgraphagent
-        python -c "from importlib.metadata import version; v=version('chemgraphagent'); print('Installed:', v); assert v=='0.3.0', f'Expected 0.3.0, got {v}'"
+        python -c "from importlib.metadata import version; v=version('chemgraphagent'); print('Installed:', v); assert v=='${{ inputs.version }}', f'Expected ${{ inputs.version }}, got {v}'"
