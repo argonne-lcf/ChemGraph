@@ -1,6 +1,5 @@
 import json
 from chemgraph.utils.tool_call_eval import (
-    multi_function_checker_with_order,
     multi_function_checker_without_order,
 )
 from chemgraph.tools.cheminformatics_tools import molecule_name_to_smiles, smiles_to_atomsdata

@@ -83,7 +83,7 @@ client = MultiServerMCPClient(
 
 async def main():
     tools = await client.get_tools()
-    print(f"Connected to XANES MCP server via stdio (local subprocess)")
+    print("Connected to XANES MCP server via stdio (local subprocess)")
     print(f"Available tools: {[t.name for t in tools]}")
     print(f"Model: {MODEL_NAME}")
     print(f"Prompt: {PROMPT}\n")
