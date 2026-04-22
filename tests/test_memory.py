@@ -74,6 +74,8 @@ class TestSchemas:
 
 class TestSessionStore:
     def test_init_creates_db(self, tmp_db):
+        assert not os.path.exists(tmp_db)
+        SessionStore(db_path=tmp_db)
         assert os.path.exists(tmp_db)
 
     def test_create_session(self, store):
