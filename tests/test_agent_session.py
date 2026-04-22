@@ -11,17 +11,12 @@ Covers:
 - End-to-end session lifecycle
 """
 
-import asyncio
-import json
 import os
-import shutil
-import tempfile
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from chemgraph.agent.llm_agent import ChemGraph
-from chemgraph.memory.schemas import SessionMessage
 from chemgraph.memory.store import SessionStore
 
 
@@ -377,7 +372,6 @@ class TestWriteStateFileNaming:
         agents[0].write_state(config=config)
         agents[1].write_state(config=config)
 
-        json_files = [f for f in os.listdir(log_dir) if f.endswith(".json")]
         # Should be 2 distinct files (or at least not overwritten) thanks to uuid
         # They may have identical timestamps but different uuids
         assert agents[0].uuid != agents[1].uuid
@@ -425,7 +419,6 @@ class TestResumeFrom:
 
         # Track what inputs are passed to astream
         captured_inputs = []
-        original_astream = agent2.workflow.astream
 
         async def tracking_astream(inputs, stream_mode, config):
             captured_inputs.append(inputs)
