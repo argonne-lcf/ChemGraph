@@ -35,7 +35,7 @@ ARGO_MODEL_MAP = {
     "argo:gpt-5-nano": "gpt5nano",
     "argo:gpt-5.1": "gpt51",
     "argo:gpt-5.2": "gpt52",
-    "argo:gpt-5.4": "gpt52",
+    "argo:gpt-5.4": "gpt54",
 
     # Reasoning / o-series
     "argo:o1-preview": "gpto1preview",
