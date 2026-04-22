@@ -81,7 +81,7 @@ rag = [
 "Repository" = "https://github.com/argonne-lcf/ChemGraph"
 
 [project.scripts]
-chemgraph = "ui.cli:main"
+chemgraph = "chemgraph.cli:main"
 chemgraph-eval = "chemgraph.eval.cli:main"
 
 [tool.setuptools.packages.find]

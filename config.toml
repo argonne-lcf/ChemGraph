@@ -1,5 +1,5 @@
 [general]
-model = "gemini-2.5-flash"
+model = "argo:gpt-4o"
 workflow = "single_agent"
 output = "state"
 structured = true
@@ -9,7 +9,7 @@ recursion_limit = 20
 verbose = false
 
 [logging]
-level = "INFO"
+level = "WARNING"
 file = "./chemgraph.log"
 console = true
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -25,9 +25,13 @@ validate_keys = true
 rate_limit = true
 max_requests_per_minute = 60
 
+[eval]
+default_profile = "standard"
+
 [api.openai]
-base_url = "https://api.openai.com/v1"
+base_url = "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat/"
 timeout = 30
+argo_user = ""
 
 [api.groq]
 base_url = "https://api.groq.com/openai/v1"
@@ -39,6 +43,10 @@ timeout = 30
 
 [api.google]
 base_url = "https://generativelanguage.googleapis.com/v1beta"
+timeout = 30
+
+[api.alcf]
+base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
 timeout = 30
 
 [api.local]
@@ -93,19 +101,8 @@ model = "gpt-4o-mini"
 verbose = true
 enable_cache = false
 
-# ---------------------------------------------------------------------------
-# Evaluation benchmark profiles
-# ---------------------------------------------------------------------------
-# Use with: chemgraph eval --profile standard --models gpt-4o-mini --judge-model gpt-4o
-# CLI arguments override profile values.
-# When "dataset" is omitted, the bundled default dataset is used.
-
-[eval]
-default_profile = "standard"
-
 [eval.profiles.standard]
-# dataset defaults to the bundled chemgraph/eval/data/ground_truth.json
-workflow_types = ["single_agent"]
+workflow_types = [ "single_agent",]
 judge_model = "gpt4o"
 recursion_limit = 50
 structured_output = true

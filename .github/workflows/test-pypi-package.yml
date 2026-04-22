@@ -33,7 +33,7 @@ jobs:
     - name: Verify package installation
       run: |
         python -c "import chemgraph; print('ChemGraph imported successfully')"
-        python -c "import ui; print('UI module imported successfully')"
+        python -c "from chemgraph.cli import main; print('CLI module imported successfully')"
         # Test that CLI command is available
         chemgraph --help || echo "CLI help command executed"
 

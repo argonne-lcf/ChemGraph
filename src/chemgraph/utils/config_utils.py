@@ -6,7 +6,10 @@ import re
 from typing import Any, Dict, Optional
 
 from chemgraph.models.supported_models import (
+    ALCF_DEFAULT_BASE_URL,
+    ARGO_DEFAULT_BASE_URL,
     all_supported_models,
+    supported_alcf_models,
     supported_anthropic_models,
     supported_argo_models,
     supported_gemini_models,
@@ -67,8 +70,14 @@ def get_base_url_for_model_from_nested_config(
     """Resolve provider base URL using nested config structure."""
     api = config.get("api", {})
 
-    if model_name in supported_openai_models or model_name in supported_argo_models:
+    if model_name in supported_argo_models:
+        return normalize_openai_base_url(
+            api.get("openai", {}).get("base_url") or ARGO_DEFAULT_BASE_URL
+        )
+    if model_name in supported_openai_models:
         return normalize_openai_base_url(api.get("openai", {}).get("base_url"))
+    if model_name in supported_alcf_models:
+        return api.get("alcf", {}).get("base_url") or ALCF_DEFAULT_BASE_URL
     if model_name in supported_anthropic_models:
         return api.get("anthropic", {}).get("base_url")
     if model_name in supported_gemini_models:
@@ -82,8 +91,14 @@ def get_base_url_for_model_from_flat_config(
     model_name: str, config: Dict[str, Any]
 ) -> Optional[str]:
     """Resolve provider base URL using flattened config keys."""
-    if model_name in supported_openai_models or model_name in supported_argo_models:
+    if model_name in supported_argo_models:
+        return normalize_openai_base_url(
+            config.get("api_openai_base_url") or ARGO_DEFAULT_BASE_URL
+        )
+    if model_name in supported_openai_models:
         return normalize_openai_base_url(config.get("api_openai_base_url"))
+    if model_name in supported_alcf_models:
+        return config.get("api_alcf_base_url") or ALCF_DEFAULT_BASE_URL
     if model_name in supported_anthropic_models:
         return config.get("api_anthropic_base_url")
     if model_name in supported_gemini_models:
