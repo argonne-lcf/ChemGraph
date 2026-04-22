@@ -2,8 +2,6 @@ import os
 import shutil
 import pytest
 from unittest.mock import patch, Mock
-import datetime
-import uuid
 from chemgraph.agent.llm_agent import ChemGraph
 
 

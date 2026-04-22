@@ -3,7 +3,6 @@ Tests for ChemGraph session memory storage.
 """
 
 import os
-import tempfile
 from datetime import datetime
 
 import pytest
@@ -75,7 +74,6 @@ class TestSchemas:
 
 class TestSessionStore:
     def test_init_creates_db(self, tmp_db):
-        store = SessionStore(db_path=tmp_db)
         assert os.path.exists(tmp_db)
 
     def test_create_session(self, store):
@@ -199,7 +197,6 @@ class TestSessionStore:
                 workflow_type="single_agent",
             )
 
-        all_sessions = store.list_sessions()
         offset_sessions = store.list_sessions(offset=2)
         assert len(offset_sessions) == 3
 
