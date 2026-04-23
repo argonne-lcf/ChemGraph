@@ -1,6 +1,7 @@
+import asyncio
 import datetime
 import os
-from typing import List, Optional
+from typing import Callable, List, Optional
 import uuid
 
 from chemgraph.memory.store import SessionStore
@@ -23,6 +24,7 @@ from chemgraph.models.supported_models import (
 
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
+    get_single_agent_prompt,
     formatter_prompt as default_formatter_prompt,
     report_prompt as default_report_prompt,
 )
@@ -32,7 +34,23 @@ from chemgraph.prompt.multi_agent_prompt import (
     aggregator_prompt as default_aggregator_prompt,
     planner_prompt as default_planner_prompt,
 )
+from langgraph.types import Command
+from langgraph.errors import GraphInterrupt
+
 from chemgraph.graphs.single_agent import construct_single_agent_graph
+
+
+class HumanInputRequired(Exception):
+    """Raised when the graph needs human input but no handler is configured.
+
+    Carries the question text so that external callers (CLI, UI) can
+    present it to the user and resume the graph with
+    ``Command(resume=answer)``.
+    """
+
+    def __init__(self, question: str):
+        self.question = question
+        super().__init__(question)
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
@@ -114,6 +132,18 @@ class ChemGraph:
     max_retries : int, optional
         Maximum number of LLM retry attempts when an agent
         fails to parse its output, by default 1
+    human_input_handler : callable, optional
+        A callback ``f(question: str) -> str`` invoked when the graph
+        pauses for human input (via ``interrupt()``).  Receives the
+        question text and must return the human's answer as a string.
+        If ``None`` (default), interrupts will propagate as
+        ``GraphInterrupt`` exceptions.  The handler may also be an
+        ``async`` callable.
+    human_supervised : bool, optional
+        Whether to include the ``ask_human`` tool so the agent can
+        pause and request human input.  When ``False`` the tool is
+        excluded from the tool list and the corresponding instruction
+        is removed from the default system prompt, by default True.
 
     Raises
     ------
@@ -149,6 +179,8 @@ class ChemGraph:
         memory_db_path: Optional[str] = None,
         log_dir: Optional[str] = None,
         max_retries: int = 1,
+        human_input_handler: Optional[Callable[[str], str]] = None,
+        human_supervised: bool = True,
     ):
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
@@ -277,6 +309,14 @@ class ChemGraph:
         self.tools = tools
         self.data_tools = data_tools
         self.max_retries = max_retries
+        self.human_input_handler = human_input_handler
+        self.human_supervised = human_supervised
+
+        # When human supervision is disabled and the caller is using the
+        # default system prompt, strip the ask_human instructions so the
+        # LLM is not told to call a tool that is unavailable.
+        if not self.human_supervised and self.system_prompt == single_agent_prompt:
+            self.system_prompt = get_single_agent_prompt(human_supervised=False)
 
         if model_name in supported_argo_models:
             self.support_structured_output = False
@@ -310,6 +350,7 @@ class ChemGraph:
                 self.report_prompt,
                 self.tools,
                 max_retries=self.max_retries,
+                human_supervised=self.human_supervised,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -640,11 +681,31 @@ class ChemGraph:
             return ""
         return self.session_store.build_context_summary(session_id)
 
+    async def _call_human_input_handler(self, question: str) -> str:
+        """Invoke the human_input_handler, supporting both sync and async callables.
+
+        Raises :class:`HumanInputRequired` when no handler is configured,
+        allowing external callers (CLI, UI) to catch it, prompt the user,
+        and resume the graph.
+        """
+        handler = self.human_input_handler
+        if handler is None:
+            raise HumanInputRequired(question)
+        if asyncio.iscoroutinefunction(handler):
+            return await handler(question)
+        return handler(question)
+
     async def run(self, query: str, config=None, resume_from: Optional[str] = None):
         """
         Async-only runner. Requires `self.workflow.astream(...)`.
         Streams values, logs new messages, writes state, and returns according to
         `self.return_option` ("last_message" or "state").
+
+        When the graph pauses for human input (via ``interrupt()``), the
+        ``human_input_handler`` callback is invoked to obtain the user's
+        response, and the graph is automatically resumed.  If no handler
+        is configured, the ``GraphInterrupt`` exception propagates to the
+        caller.
 
         Parameters
         ----------
@@ -693,6 +754,86 @@ class ChemGraph:
                     f"Unsupported return_option: {self.return_option}. Use 'last_message' or 'state'."
                 )
 
+        async def _stream_until_interrupt(stream_input, cfg):
+            """Stream the workflow until completion or an interrupt.
+
+            Returns ``(last_state, interrupt_value)`` where
+            ``interrupt_value`` is ``None`` when the graph completed
+            normally.
+
+            LangGraph's ``astream(stream_mode="values")`` does **not**
+            raise ``GraphInterrupt``.  Instead the stream emits a state
+            containing an ``__interrupt__`` key and then ends.  We
+            detect this in two ways:
+
+            1. Check for the ``__interrupt__`` key in streamed states.
+            2. After the stream ends, inspect the checkpoint snapshot
+               for pending interrupt tasks.
+            """
+            prev_msgs: list = []
+            last_st = None
+            interrupt_val = None
+            try:
+                async for s in self.workflow.astream(
+                    stream_input, stream_mode="values", config=cfg
+                ):
+                    # Detect inline interrupt marker emitted by astream.
+                    if "__interrupt__" in s:
+                        int_data = s["__interrupt__"]
+                        if isinstance(int_data, (list, tuple)) and int_data:
+                            interrupt_val = int_data[0].value
+                        elif hasattr(int_data, "value"):
+                            interrupt_val = int_data.value
+                        else:
+                            interrupt_val = {
+                                "question": "The workflow needs your input."
+                            }
+
+                    if "messages" in s and s["messages"] != prev_msgs:
+                        new_message = s["messages"][-1]
+                        try:
+                            new_message.pretty_print()
+                        except Exception:
+                            pass
+                        logger.info(new_message)
+                        prev_msgs = s["messages"]
+                    last_st = s
+            except GraphInterrupt as gi:
+                # Fallback: some LangGraph versions may still raise.
+                interrupts = gi.args[0] if gi.args else []
+                if interrupts:
+                    interrupt_val = interrupts[0].value
+                else:
+                    interrupt_val = {
+                        "question": "The workflow needs your input."
+                    }
+
+            # Double-check the checkpoint for pending interrupts that
+            # the stream may not have surfaced explicitly.
+            if interrupt_val is None:
+                try:
+                    snapshot = self.workflow.get_state(cfg)
+                    if snapshot and snapshot.tasks:
+                        for t in snapshot.tasks:
+                            t_interrupts = getattr(t, "interrupts", None)
+                            if t_interrupts:
+                                interrupt_val = t_interrupts[0].value
+                                break
+                except Exception:
+                    pass
+
+            if interrupt_val is not None:
+                logger.info("Graph interrupted: %s", interrupt_val)
+                # Refresh state from checkpoint for consistency.
+                try:
+                    snapshot = self.workflow.get_state(cfg)
+                    if snapshot:
+                        last_st = snapshot.values
+                except Exception:
+                    pass
+
+            return last_st, interrupt_val
+
         logger.debug("run called with config=%s", config)
         config = _validate_config(config)
         logger.debug("validated config=%s", config)
@@ -718,21 +859,47 @@ class ChemGraph:
 
         inputs = {"messages": query}
 
-        prev_messages = []
-        last_state = None
         try:
-            async for s in self.workflow.astream(
-                inputs, stream_mode="values", config=config
-            ):
-                if "messages" in s and s["messages"] != prev_messages:
-                    new_message = s["messages"][-1]
-                    try:
-                        new_message.pretty_print()
-                    except Exception:
-                        pass
-                    logger.info(new_message)
-                    prev_messages = s["messages"]
-                last_state = s
+            last_state, interrupt_value = await _stream_until_interrupt(inputs, config)
+
+            # --- Human-in-the-loop resume loop ---
+            # When the graph pauses with an interrupt, ask the human and
+            # resume.  This loop handles chains of multiple interrupts
+            # (e.g., the agent asks a follow-up question after receiving
+            # the first answer).
+            max_interrupts = 10  # safety guard against infinite interrupt loops
+            interrupt_count = 0
+            while interrupt_value is not None:
+                interrupt_count += 1
+                if interrupt_count > max_interrupts:
+                    logger.error(
+                        "Exceeded maximum number of human interrupts (%d); "
+                        "aborting workflow.",
+                        max_interrupts,
+                    )
+                    raise RuntimeError(
+                        f"Workflow exceeded maximum of {max_interrupts} "
+                        f"human interrupts."
+                    )
+
+                # Extract the question text from the interrupt value.
+                if isinstance(interrupt_value, dict):
+                    question = interrupt_value.get(
+                        "question",
+                        interrupt_value.get("message", str(interrupt_value)),
+                    )
+                else:
+                    question = str(interrupt_value)
+
+                logger.info("Requesting human input: %s", question)
+                human_answer = await self._call_human_input_handler(question)
+                logger.info("Human responded: %s", human_answer)
+
+                # Resume the graph from the checkpoint with the human's answer.
+                resume_cmd = Command(resume=human_answer)
+                last_state, interrupt_value = await _stream_until_interrupt(
+                    resume_cmd, config
+                )
 
             if last_state is None:
                 raise RuntimeError("Workflow produced no states.")
@@ -742,6 +909,10 @@ class ChemGraph:
 
             return _save_state_and_select_return(last_state, config)
 
+        except HumanInputRequired:
+            # No human_input_handler configured — propagate so the
+            # caller (CLI / UI) can prompt the user and resume.
+            raise
         except Exception as e:
             logger.error(f"Error running workflow {self.workflow_type}: {e}")
             raise

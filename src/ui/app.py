@@ -1917,20 +1917,58 @@ if send:
                 st.session_state.last_run_query = query.strip()
                 st.session_state.last_run_error = None
                 st.session_state.last_run_result = None
-                result = run_async_callable(
-                    lambda: st.session_state.agent.run(query.strip(), config=cfg)
-                )
+
+                # Check if we are resuming from a previous interrupt.
+                pending = st.session_state.get("pending_interrupt")
+                if pending and pending.get("thread_id") == thread_id:
+                    # Resume the interrupted graph with the user's answer.
+                    from langgraph.types import Command as _Command
+
+                    resume_cfg = pending["config"]
+                    resume_cfg["recursion_limit"] = (
+                        st.session_state.agent.recursion_limit
+                    )
+                    result = run_async_callable(
+                        lambda: st.session_state.agent.workflow.ainvoke(
+                            _Command(resume=query.strip()),
+                            config=resume_cfg,
+                        )
+                    )
+                    st.session_state.pending_interrupt = None
+                else:
+                    result = run_async_callable(
+                        lambda: st.session_state.agent.run(
+                            query.strip(), config=cfg
+                        )
+                    )
+
                 st.session_state.last_run_result = result
                 st.session_state.conversation_history.append(
                     {"query": query.strip(), "result": result, "thread_id": thread_id}
                 )
                 # Clear the input after successful processing
                 st.session_state.query_input = ""
-                st.success("✅ Done!")
+                st.success("Done!")
                 st.rerun()
             except Exception as exc:
-                st.session_state.last_run_error = exc
-                st.error(f"Processing error: {exc}")
+                # Handle HumanInputRequired: store the question and
+                # prompt the user for input on the next render cycle.
+                from chemgraph.agent.llm_agent import HumanInputRequired
+
+                if isinstance(exc, HumanInputRequired):
+                    int_question = exc.question
+                    st.session_state.pending_interrupt = {
+                        "question": int_question,
+                        "config": cfg,
+                        "thread_id": thread_id,
+                    }
+                    st.warning(
+                        f"**Agent needs your input:** {int_question}\n\n"
+                        "Please type your answer below and submit."
+                    )
+                else:
+                    st.session_state.last_run_error = exc
+                    st.error(f"Processing error: {exc}")
 
 # -----------------------------------------------------------------------------
 # Footer

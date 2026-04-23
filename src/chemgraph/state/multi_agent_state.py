@@ -1,5 +1,5 @@
 import operator
-from typing import TypedDict, Annotated, Any, Literal
+from typing import TypedDict, Annotated, Any, Literal, Optional
 
 from langgraph.graph import add_messages
 
@@ -31,11 +31,15 @@ class PlannerState(TypedDict):
     ``planner_iterations`` tracks how many times the planner has
     dispatched tasks to executors, providing a guard against infinite
     Planner -> Executor -> Planner cycles.
+
+    ``clarification`` holds the question text when the planner routes
+    to ``ask_human`` to request human input before proceeding.
     """
 
     messages: Annotated[list, add_messages]
-    next_step: Literal["executor_subgraph", "FINISH"]
+    next_step: Literal["executor_subgraph", "ask_human", "FINISH"]
     tasks: list[dict[str, Any]]
     executor_results: Annotated[list, operator.add]
     executor_logs: Annotated[dict[str, list], merge_dicts]
     planner_iterations: int
+    clarification: Optional[str]

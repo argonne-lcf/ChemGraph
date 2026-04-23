@@ -272,7 +272,17 @@ def run_query(
     verbose: bool = False,
     resume_from: Optional[str] = None,
 ) -> Any:
-    """Execute a query with the agent."""
+    """Execute a query with the agent.
+
+    When the graph pauses for human input (``HumanInputRequired``), the
+    spinner is stopped, the question is shown in a Rich panel, and the
+    user is prompted for a response.  The graph is then resumed with the
+    user's answer and the spinner restarts.  This loop repeats until the
+    graph completes or a non-interrupt error occurs.
+    """
+    from langgraph.types import Command
+    from chemgraph.agent.llm_agent import HumanInputRequired
+
     if thread_id is None:
         thread_id = _next_thread_id()
 
@@ -282,6 +292,11 @@ def run_query(
         if resume_from:
             console.print(f"[blue]Resuming from session:[/blue] {resume_from}")
 
+    config = {"configurable": {"thread_id": thread_id}}
+    max_interrupts = 10  # safety guard
+    interrupt_count = 0
+
+    # --- First invocation: run the full agent.run() ---
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -289,21 +304,82 @@ def run_query(
         transient=True,
     ) as progress:
         task = progress.add_task("Processing query...", total=None)
-
         try:
-            config = {"configurable": {"thread_id": thread_id}}
             result = run_async_callable(
                 lambda: agent.run(query, config=config, resume_from=resume_from)
             )
-
             progress.update(task, description="[green]Query completed!")
-            time.sleep(0.5)
+            time.sleep(0.3)
             return result
-
+        except HumanInputRequired as hir:
+            progress.update(task, description="[yellow]Agent needs your input")
+            time.sleep(0.2)
+            question = hir.question
         except Exception as e:
             progress.update(task, description="[red]Query failed!")
             console.print(f"[red]Error processing query: {e}[/red]")
             return None
+
+    # --- Interrupt-resume loop ---
+    # The spinner's `with` block has exited, so the terminal is free
+    # for interactive user input.
+    while question is not None:
+        interrupt_count += 1
+        if interrupt_count > max_interrupts:
+            console.print(
+                "[red]Exceeded maximum number of human interrupts. Aborting.[/red]"
+            )
+            return None
+
+        console.print(
+            Panel(
+                question,
+                title="[bold yellow]Agent needs your input[/bold yellow]",
+                style="yellow",
+            )
+        )
+        human_answer = Prompt.ask("[bold cyan]Your response[/bold cyan]")
+
+        # Resume the graph under a fresh spinner.
+        resume_config = dict(config)
+        resume_config["recursion_limit"] = agent.recursion_limit
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Resuming...", total=None)
+            try:
+                result = run_async_callable(
+                    lambda: agent.workflow.ainvoke(
+                        Command(resume=human_answer), config=resume_config
+                    )
+                )
+                progress.update(task, description="[green]Query completed!")
+                time.sleep(0.3)
+
+                # ainvoke returns the final state dict; extract return
+                # value the same way ChemGraph.run() does.
+                if agent.return_option == "last_message":
+                    return result["messages"][-1] if result else None
+                elif agent.return_option == "state":
+                    from chemgraph.agent.llm_agent import serialize_state
+
+                    return serialize_state(agent.get_state(config=config))
+                return result
+            except HumanInputRequired as hir:
+                progress.update(
+                    task, description="[yellow]Agent needs more input"
+                )
+                time.sleep(0.2)
+                question = hir.question
+            except Exception as e:
+                progress.update(task, description="[red]Query failed!")
+                console.print(f"[red]Error processing query: {e}[/red]")
+                return None
+
+    return None
 
 
 # ---------------------------------------------------------------------------

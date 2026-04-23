@@ -24,7 +24,7 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import Send
+from langgraph.types import Send, interrupt
 
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.utils.parsing import extract_json_block, parse_response_formatter
@@ -186,11 +186,55 @@ def planner_agent(
 
     logger.info("PLANNER: %s", response_obj.model_dump_json())
     current_iterations = state.get("planner_iterations", 0)
-    return {
+    result = {
         "messages": [AIMessage(content=response_obj.thought_process)],
         "next_step": response_obj.next_step,
         "tasks": response_obj.tasks if response_obj.tasks else [],
         "planner_iterations": current_iterations + 1,
+    }
+    if response_obj.next_step == "ask_human" and response_obj.clarification:
+        result["clarification"] = response_obj.clarification
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Human review node (interrupt for human-in-the-loop)
+# ---------------------------------------------------------------------------
+
+
+def human_review_node(state: PlannerState):
+    """Pause the graph and ask the human for clarification.
+
+    This node calls ``interrupt()`` with the planner's clarification
+    question. Execution halts until a human provides a response via
+    ``Command(resume=...)``.  The human's answer is injected back into
+    the conversation as an ``AIMessage`` summarising what was asked and
+    what the human replied, then control returns to the Planner.
+    """
+    question = state.get("clarification", "Could you please provide more details?")
+    logger.info("HUMAN_REVIEW: interrupting with question: %s", question)
+
+    human_response = interrupt({"question": question})
+
+    # Normalise the response to a plain string.
+    if isinstance(human_response, dict):
+        answer = human_response.get(
+            "answer", human_response.get("response", str(human_response))
+        )
+    else:
+        answer = str(human_response)
+
+    logger.info("HUMAN_REVIEW: received response: %s", answer)
+    return {
+        "messages": [
+            AIMessage(
+                content=(
+                    f"Human clarification received.\n"
+                    f"Question: {question}\n"
+                    f"Answer: {answer}"
+                )
+            )
+        ],
     }
 
 
@@ -207,6 +251,7 @@ def unified_planner_router(
     """Route based on the planner's ``next_step`` decision.
 
     * ``executor_subgraph`` -- fan-out tasks via ``Send()``
+    * ``ask_human`` -- pause for human clarification via ``human_review``
     * ``FINISH`` -- go to ``ResponseAgent`` (if structured_output) or ``END``
 
     A cycle guard forces ``FINISH`` when the planner has dispatched
@@ -214,6 +259,9 @@ def unified_planner_router(
     """
     next_step = state.get("next_step")
     iterations = state.get("planner_iterations", 0)
+
+    if next_step == "ask_human":
+        return "human_review"
 
     if next_step == "executor_subgraph":
         if iterations > max_planner_iterations:
@@ -480,9 +528,10 @@ def construct_multi_agent_graph(
         ),
     )
     graph_builder.add_node("executor_subgraph", executor_subgraph)
+    graph_builder.add_node("human_review", human_review_node)
 
     # Conditional destinations list for the planner router
-    conditional_targets = ["executor_subgraph", END]
+    conditional_targets = ["executor_subgraph", "human_review", END]
 
     if structured_output:
         graph_builder.add_node(
@@ -507,6 +556,9 @@ def construct_multi_agent_graph(
 
     # Executors feed results back to the planner
     graph_builder.add_edge("executor_subgraph", "Planner")
+
+    # After human clarification, return to the planner for re-planning
+    graph_builder.add_edge("human_review", "Planner")
 
     if structured_output:
         graph_builder.add_edge("ResponseAgent", END)
