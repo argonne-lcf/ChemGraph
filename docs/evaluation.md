@@ -128,7 +128,7 @@ runner.report(format="all")       # All formats (default)
 | `--no-structured-output` | Disable structured output on the agent | — |
 | `--report` | Report format: `json`, `markdown`, `console`, `all` | `all` |
 
-**Valid workflow types**: `single_agent`, `multi_agent`, `single_agent_mcp`, `multi_agent_mcp`
+**Valid workflow types**: `single_agent`, `multi_agent`, `single_agent_mcp`
 
 ## Configuration
 

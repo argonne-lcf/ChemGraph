@@ -38,7 +38,6 @@ from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
-from chemgraph.graphs.multi_agent_mcp import construct_multi_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
 from chemgraph.graphs.rag_agent import construct_rag_agent_graph
 from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
@@ -112,10 +111,9 @@ class ChemGraph:
         by default "last_message"
     recursion_limit : int, optional
         Maximum number of recursive steps in the workflow, by default 50
-    formatter_max_retries : int, optional
-        Maximum number of LLM retry attempts when the ResponseAgent
-        fails to parse the formatter output (single_agent only),
-        by default 1
+    max_retries : int, optional
+        Maximum number of LLM retry attempts when an agent
+        fails to parse its output, by default 1
 
     Raises
     ------
@@ -150,7 +148,7 @@ class ChemGraph:
         enable_memory: bool = True,
         memory_db_path: Optional[str] = None,
         log_dir: Optional[str] = None,
-        formatter_max_retries: int = 1,
+        max_retries: int = 1,
     ):
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
@@ -278,7 +276,7 @@ class ChemGraph:
         self.formatter_multi_prompt = formatter_multi_prompt
         self.tools = tools
         self.data_tools = data_tools
-        self.formatter_max_retries = formatter_max_retries
+        self.max_retries = max_retries
 
         if model_name in supported_argo_models:
             self.support_structured_output = False
@@ -292,7 +290,6 @@ class ChemGraph:
             "graspa": {"constructor": construct_graspa_graph},
             "mock_agent": {"constructor": construct_mock_agent_graph},
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
-            "multi_agent_mcp": {"constructor": construct_multi_agent_mcp_graph},
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
             "rag_agent": {"constructor": construct_rag_agent_graph},
             "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
@@ -312,17 +309,17 @@ class ChemGraph:
                 self.generate_report,
                 self.report_prompt,
                 self.tools,
-                formatter_max_retries=self.formatter_max_retries,
+                max_retries=self.max_retries,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 planner_prompt=self.planner_prompt,
-                aggregator_prompt=self.aggregator_prompt,
                 executor_prompt=self.executor_prompt,
-                formatter_prompt=self.formatter_multi_prompt,
+                executor_tools=self.tools,
                 structured_output=self.structured_output,
-                support_structured_output=self.support_structured_output,
+                formatter_prompt=self.formatter_multi_prompt,
+                max_retries=self.max_retries,
             )
         elif self.workflow_type == "python_relp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -346,16 +343,6 @@ class ChemGraph:
                 llm=llm,
                 system_prompt=self.system_prompt,
                 tools=self.tools,
-            )
-        elif self.workflow_type == "multi_agent_mcp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm,
-                planner_prompt=self.planner_prompt,
-                aggregator_prompt=self.aggregator_prompt,
-                executor_prompt=self.executor_prompt,
-                formatter_prompt=self.formatter_multi_prompt,
-                structured_output=self.structured_output,
-                support_structured_output=self.support_structured_output,
             )
         elif self.workflow_type == "graspa_mcp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -535,7 +522,6 @@ class ChemGraph:
                     {
                         "planner_prompt": self.planner_prompt,
                         "executor_prompt": self.executor_prompt,
-                        "aggregator_prompt": self.aggregator_prompt,
                         "formatter_prompt": self.formatter_multi_prompt,
                     }
                 )
