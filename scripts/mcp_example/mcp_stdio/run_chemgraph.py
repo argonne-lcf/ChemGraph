@@ -1,23 +1,39 @@
+"""Single-agent MCP example over stdio (remote via SSH).
+
+Connects to ChemGraph's built-in MCP server running on a remote ALCF
+compute node via SSH + stdio transport.
+
+Usage
+-----
+    # 1. Secure a compute node (qsub -I ...)
+    # 2. Edit REMOTE_HOST and REMOTE_ENV below
+    # 3. Run from a login node:
+    python run_chemgraph.py
+"""
+
 import asyncio
-import os
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from chemgraph.agent.llm_agent import ChemGraph
 
-#REMOTE_HOST = "YOUR_COMPUTE_NODE"
-#REMOTE_ENV = "/path/to/venv"
+# ---------------------------------------------------------------------------
+# Configuration -- edit these to match your setup
+# ---------------------------------------------------------------------------
+REMOTE_HOST = "YOUR_COMPUTE_NODE"  # e.g. "x4703c4s5b0n0"
+REMOTE_ENV = "/path/to/venv"       # e.g. "/lus/flare/projects/.../venv"
 
-REMOTE_HOST = "x4703c4s5b0n0"
-REMOTE_ENV = "/lus/flare/projects/IQC/thang/ChemGraph/env/cg_frameworks_env"
-current_dir = os.path.dirname(os.path.abspath(__file__))
-MCP_SERVER = os.path.join(current_dir, "mcp_tools_stdio.py")
-
-REMOTE_CMD = f"module load frameworks && source {REMOTE_ENV}/bin/activate && export http_proxy='proxy.alcf.anl.gov:3128' && export https_proxy='proxy.alcf.anl.gov:3128' && python -u {MCP_SERVER}"
+# Uses ChemGraph's built-in MCP server module (no local copy needed)
+REMOTE_CMD = (
+    f"module load frameworks && source {REMOTE_ENV}/bin/activate && "
+    f"export http_proxy='proxy.alcf.anl.gov:3128' && "
+    f"export https_proxy='proxy.alcf.anl.gov:3128' && "
+    f"python -u -m chemgraph.mcp.mcp_tools"
+)
 
 prompt_single = "What is the enthalpy of CO2 using TBLite GFN2-xTB at 400K?"
 
 client = MultiServerMCPClient({
-    "Chemistry Tools MCP": {
+    "ChemGraph General Tools": {
         "command": "ssh",
         "args": [
             REMOTE_HOST,
@@ -30,6 +46,8 @@ client = MultiServerMCPClient({
 
 async def bootstrap():
     tools = await client.get_tools()
+    print(f"Loaded {len(tools)} MCP tools: {[t.name for t in tools]}")
+
     cg = ChemGraph(
         model_name="gpt-4o-mini",
         workflow_type="single_agent",
@@ -38,11 +56,6 @@ async def bootstrap():
         tools=tools,
     )
     await cg.run(prompt_single)
-
-    """ Optional to print the entire state
-    print("######## MESSAGE STATE #########")
-    print(result)
-    """
 
 
 asyncio.run(bootstrap())
