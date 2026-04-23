@@ -7,10 +7,7 @@ from typing import Any, Dict
 
 from langchain_core.tools import tool
 from chemgraph.schemas.atomsdata import AtomsData
-from chemgraph.schemas.ase_input import (
-    ASEInputSchema,
-    ASEOutputSchema,
-)
+from chemgraph.schemas.ase_input import ASEInputSchema
 from chemgraph.schemas.calculators.mace_calc import _mace_lock
 from chemgraph.tools.mcp_helper import _resolve_path
 
@@ -317,7 +314,7 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
 
 
 @tool
-def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
+def run_ase(params: ASEInputSchema) -> dict:
     """Run ASE calculations using specified input parameters.
 
     Parameters
@@ -327,7 +324,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
     Returns
     -------
-    ASEOutputSchema
+    dict
         Output containing calculation results and status
 
     Raises
@@ -399,18 +396,19 @@ def _run_ase_impl(params: ASEInputSchema):
 
         end_time = time.time()
         wall_time = end_time - start_time
-        simulation_output = ASEOutputSchema(
-            input_structure_file=input_structure_file,
-            converged=True,
-            final_structure=final_structure,
-            simulation_input=params,
-            success=True,
-            dipole_value=dipole,
-            single_point_energy=energy,
-            wall_time=wall_time,
-        )
+        simulation_output = {
+            "input_structure_file": input_structure_file,
+            "converged": True,
+            "final_structure": final_structure.model_dump(),
+            "simulation_input": params.model_dump(),
+            "success": True,
+            "dipole_value": dipole,
+            "single_point_energy": energy,
+            "energy_unit": "eV",
+            "wall_time": wall_time,
+        }
         with open(output_results_file, "w", encoding="utf-8") as wf:
-            wf.write(simulation_output.model_dump_json(indent=4))
+            json.dump(simulation_output, wf, indent=4, default=str)
 
         if driver == "energy":
             return {
@@ -611,21 +609,26 @@ def _run_ase_impl(params: ASEInputSchema):
 
         end_time = time.time()
         wall_time = end_time - start_time
+        simulation_output = {
+            "input_structure_file": input_structure_file,
+            "converged": converged,
+            "final_structure": final_structure.model_dump(),
+            "simulation_input": params.model_dump(),
+            "vibrational_frequencies": vib_data,
+            "thermochemistry": thermo_data,
+            "success": True,
+            "ir_data": ir_data,
+            "single_point_energy": single_point_energy,
+            "energy_unit": "eV",
+            "wall_time": wall_time,
+        }
+        try:
+            print(simulation_output)
+        except:
+            print("ERROR OCCURED HERE")
 
-        simulation_output = ASEOutputSchema(
-            input_structure_file=input_structure_file,
-            converged=converged,
-            final_structure=final_structure,
-            simulation_input=params,
-            vibrational_frequencies=vib_data,
-            thermochemistry=thermo_data,
-            success=True,
-            ir_data=ir_data,
-            single_point_energy=single_point_energy,
-            wall_time=wall_time,
-        )
-        with open(output_results_file, "w") as wf:
-            wf.write(simulation_output.model_dump_json(indent=4))
+        with open(output_results_file, "w", encoding="utf-8") as wf:
+            json.dump(simulation_output, wf, indent=4, default=str)
 
         # Return message based on driver. Keep the return output minimal.
         if driver == "opt":

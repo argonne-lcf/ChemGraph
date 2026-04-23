@@ -53,5 +53,5 @@ def test_constructor_is_called(monkeypatch, workflow_type):
     assert llm_passed, f"LLM not passed to {workflow_type} constructor"
 
     # Specific check for MCP tool passing
-    if workflow_type == "graspa_mcp":
+    if workflow_type in ("graspa_mcp", "multi_agent_mcp"):
         assert kwargs_called.get("executor_tools") == test_tools
