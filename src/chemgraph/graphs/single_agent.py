@@ -13,7 +13,7 @@ from chemgraph.tools.cheminformatics_tools import (
     smiles_to_coordinate_file,
 )
 from chemgraph.tools.report_tools import generate_html
-from chemgraph.tools.generic_tools import calculator
+from chemgraph.tools.generic_tools import calculator, ask_human
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
@@ -151,7 +151,13 @@ def route_after_report_tools(state: State):
     return "done" if _is_successful_report_message(messages[-1]) else "retry"
 
 
-def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
+def ChemGraphAgent(
+    state: State,
+    llm: ChatOpenAI,
+    system_prompt: str,
+    tools=None,
+    human_supervised: bool = True,
+):
     """LLM node that processes messages and decides next actions.
 
     Parameters
@@ -164,6 +170,8 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
         The system prompt to guide the LLM's behavior
     tools : list, optional
         List of tools available to the agent, by default None
+    human_supervised : bool, optional
+        Whether to include the ``ask_human`` tool, by default True
 
     Returns
     -------
@@ -180,6 +188,12 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
             extract_output_json,
             calculator,
         ]
+        if human_supervised:
+            tools.append(ask_human)
+    elif human_supervised and ask_human not in tools:
+        # Ensure ask_human is available when custom tools are provided
+        # and human supervision is enabled.
+        tools = list(tools) + [ask_human]
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{state['messages']}"},
@@ -319,6 +333,7 @@ def construct_single_agent_graph(
     report_prompt: str = report_prompt,
     tools: list = None,
     max_retries: int = 1,
+    human_supervised: bool = True,
 ):
     """Construct a geometry optimization graph.
 
@@ -341,6 +356,10 @@ def construct_single_agent_graph(
     max_retries : int, optional
         Maximum number of LLM retry attempts when the ResponseAgent
         fails to parse the formatter output, by default 1
+    human_supervised : bool, optional
+        Whether to include the ``ask_human`` tool so the agent can
+        pause and request human input, by default True
+
     Returns
     -------
     StateGraph
@@ -357,6 +376,12 @@ def construct_single_agent_graph(
                 extract_output_json,
                 calculator,
             ]
+            if human_supervised:
+                tools.append(ask_human)
+        elif human_supervised and ask_human not in tools:
+            # Ensure ask_human is available when custom tools are provided
+            # and human supervision is enabled.
+            tools = list(tools) + [ask_human]
         tool_node = ToolNode(tools=tools)
         graph_builder = StateGraph(State)
 
@@ -364,7 +389,11 @@ def construct_single_agent_graph(
             graph_builder.add_node(
                 "ChemGraphAgent",
                 lambda state: ChemGraphAgent(
-                    state, llm, system_prompt=system_prompt, tools=tools
+                    state,
+                    llm,
+                    system_prompt=system_prompt,
+                    tools=tools,
+                    human_supervised=human_supervised,
                 ),
             )
             graph_builder.add_node("tools", tool_node)
@@ -403,7 +432,6 @@ def construct_single_agent_graph(
                     {"tools": "tools", "done": END},
                 )
                 graph_builder.add_edge("tools", "ChemGraphAgent")
-                graph_builder.add_edge("ChemGraphAgent", END)
 
             graph = graph_builder.compile(checkpointer=checkpointer)
             logger.info("Graph construction completed")
@@ -412,7 +440,11 @@ def construct_single_agent_graph(
             graph_builder.add_node(
                 "ChemGraphAgent",
                 lambda state: ChemGraphAgent(
-                    state, llm, system_prompt=system_prompt, tools=tools
+                    state,
+                    llm,
+                    system_prompt=system_prompt,
+                    tools=tools,
+                    human_supervised=human_supervised,
                 ),
             )
             graph_builder.add_node("tools", tool_node)
