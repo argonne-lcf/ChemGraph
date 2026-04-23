@@ -5,7 +5,7 @@ from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.constants import Send
+from langgraph.types import Send
 
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.state.graspa_state import (

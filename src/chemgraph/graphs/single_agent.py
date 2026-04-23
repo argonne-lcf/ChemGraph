@@ -1,5 +1,4 @@
 import json
-import re
 
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
@@ -15,13 +14,13 @@ from chemgraph.tools.cheminformatics_tools import (
 )
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator
-from chemgraph.schemas.agent_response import ResponseFormatter
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
     report_prompt,
 )
 from chemgraph.utils.logging_config import setup_logger
+from chemgraph.utils.parsing import parse_response_formatter
 from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
@@ -189,63 +188,6 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
-def _extract_json_block(text: str) -> str | None:
-    """Try to extract a JSON object from *text*.
-
-    Handles markdown-fenced blocks (```json ... ```) and bare JSON objects.
-    Returns the extracted string or *None* if nothing looks like JSON.
-    """
-    # Try markdown-fenced JSON first
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if m:
-        return m.group(1)
-    # Try bare top-level JSON object
-    m = re.search(r"(\{.*\})", text, re.DOTALL)
-    if m:
-        return m.group(1)
-    return None
-
-
-def _parse_response_formatter(
-    raw_text: str,
-) -> tuple[ResponseFormatter, str | None]:
-    """Parse LLM output into a :class:`ResponseFormatter`.
-
-    Attempts direct validation first, then tries to extract a JSON block
-    from the text.  Falls back to an empty ``ResponseFormatter`` (all
-    fields ``None``) so the pipeline never breaks -- the raw text is
-    still available in the agent's message history.
-
-    Returns
-    -------
-    tuple[ResponseFormatter, str | None]
-        A tuple of ``(parsed_formatter, parse_error)``.  ``parse_error``
-        is ``None`` on success, or a descriptive string when parsing
-        failed and the empty fallback was used.
-    """
-    # 1. Direct validation
-    try:
-        return ResponseFormatter.model_validate_json(raw_text.strip()), None
-    except Exception:
-        pass
-
-    # 2. Extract JSON block and retry
-    extracted = _extract_json_block(raw_text)
-    if extracted:
-        try:
-            return ResponseFormatter.model_validate_json(extracted), None
-        except Exception:
-            pass
-
-    # 3. Fallback: return empty ResponseFormatter (all fields None).
-    error_msg = (
-        "ResponseAgent: could not parse structured output; "
-        "returning empty ResponseFormatter."
-    )
-    logger.warning(error_msg)
-    return ResponseFormatter(), error_msg
-
-
 def ResponseAgent(
     state: State,
     llm: ChatOpenAI,
@@ -284,7 +226,7 @@ def ResponseAgent(
         {"role": "user", "content": f"{state['messages']}"},
     ]
     raw_response = llm.invoke(messages).content
-    formatter, parse_error = _parse_response_formatter(raw_response)
+    formatter, parse_error = parse_response_formatter(raw_response)
 
     # Retry loop: re-invoke the LLM with the error feedback.
     retries = 0
@@ -314,7 +256,7 @@ def ResponseAgent(
             },
         ]
         raw_response = llm.invoke(retry_messages).content
-        formatter, parse_error = _parse_response_formatter(raw_response)
+        formatter, parse_error = parse_response_formatter(raw_response)
 
     # Serialise to JSON, injecting ``_parse_error`` when parsing failed.
     result = json.loads(formatter.model_dump_json())
@@ -376,7 +318,7 @@ def construct_single_agent_graph(
     generate_report: bool = False,
     report_prompt: str = report_prompt,
     tools: list = None,
-    formatter_max_retries: int = 1,
+    max_retries: int = 1,
 ):
     """Construct a geometry optimization graph.
 
@@ -396,7 +338,7 @@ def construct_single_agent_graph(
         The prompt to guide the LLM's report generation behavior, by default report_prompt
     tools : list, optional
         The list of tools for the main agent, by default None
-    formatter_max_retries : int, optional
+    max_retries : int, optional
         Maximum number of LLM retry attempts when the ResponseAgent
         fails to parse the formatter output, by default 1
     Returns
@@ -480,7 +422,7 @@ def construct_single_agent_graph(
                     state,
                     llm,
                     formatter_prompt=formatter_prompt,
-                    max_retries=formatter_max_retries,
+                    max_retries=max_retries,
                 ),
             )
             graph_builder.add_conditional_edges(

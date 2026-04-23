@@ -1,4 +1,4 @@
-from typing import Any, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
 from chemgraph.schemas.atomsdata import AtomsData
@@ -6,39 +6,68 @@ from chemgraph.schemas.atomsdata import AtomsData
 
 class WorkerTask(BaseModel):
     """
-    Represents a task assigned to a worker agent for performing tool-based computations.
+    Represents a task assigned to an executor agent for performing tool-based computations.
 
     Attributes:
         task_index (int): The index or ID of the task, typically used to track execution order.
         prompt (str): A natural language prompt that describes the task or request for which
-                      the worker is expected to generate tool calls.
+                       the executor is expected to generate tool calls.
     """
 
     task_index: int = Field(..., description="Task index")
-    prompt: str = Field(..., description="Prompt to send to worker for tool calls")
+    prompt: str = Field(..., description="Prompt to send to executor for tool calls")
 
 
 class PlannerResponse(BaseModel):
     """
-    Response model from the Task Decomposer agent containing a list of tasks.
+    Response model from the Planner agent.
+
+    The planner acts as a router: it decides whether to dispatch tasks
+    to executor subgraphs (``executor_subgraph``) or to finish
+    (``FINISH``) when all work is done.
 
     Attributes:
-        worker_tasks (list[WorkerTask]): A list of tasks that are to be assigned
-        to Worker agents for tool execution or computation.
+        thought_process (str): The planner's reasoning for the current decision.
+        next_step (str): The next node to activate — either ``"executor_subgraph"``
+            to fan-out tasks or ``"FINISH"`` to end the workflow.
+        tasks (list[WorkerTask] | None): Tasks to assign when routing to executors.
     """
 
-    worker_tasks: list[WorkerTask] = Field(
-        ..., description="List of task to assign for Worker"
+    thought_process: str = Field(
+        description="Your reasoning for the current decision."
+    )
+    next_step: Literal["executor_subgraph", "FINISH"] = Field(
+        description="The next node to activate in the workflow."
+    )
+    tasks: list[WorkerTask] = Field(
+        default=None,
+        description="List of tasks to assign to executor subgraphs.",
     )
 
     @model_validator(mode="before")
     @classmethod
-    def normalize_worker_tasks(cls, data: Any) -> Any:
-        """Accept either a bare list of tasks or an object with `worker_tasks`."""
+    def normalize_planner_payload(cls, data: Any) -> Any:
+        """Accept common planner variants and coerce into PlannerResponse shape."""
         if isinstance(data, list):
-            return {"worker_tasks": data}
-        if isinstance(data, dict) and "worker_tasks" not in data and "tasks" in data:
-            return {"worker_tasks": data["tasks"]}
+            return {
+                "thought_process": "Delegating parsed tasks to executors.",
+                "next_step": "executor_subgraph",
+                "tasks": data,
+            }
+
+        if isinstance(data, dict):
+            normalized = dict(data)
+            # Accept legacy "worker_tasks" key
+            if "tasks" not in normalized and "worker_tasks" in normalized:
+                normalized["tasks"] = normalized.pop("worker_tasks")
+            if "tasks" in normalized and "next_step" not in normalized:
+                normalized["next_step"] = "executor_subgraph"
+            if "tasks" in normalized and "thought_process" not in normalized:
+                normalized["thought_process"] = (
+                    "Delegating parsed tasks to executors."
+                )
+            return normalized
+
         return data
 
 
