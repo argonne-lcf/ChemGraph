@@ -622,10 +622,6 @@ def _run_ase_impl(params: ASEInputSchema):
             "energy_unit": "eV",
             "wall_time": wall_time,
         }
-        try:
-            print(simulation_output)
-        except:
-            print("ERROR OCCURED HERE")
 
         with open(output_results_file, "w", encoding="utf-8") as wf:
             json.dump(simulation_output, wf, indent=4, default=str)
