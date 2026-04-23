@@ -45,7 +45,6 @@ ALL_WORKFLOW_TYPES = [
     "graspa",
     "mock_agent",
     "single_agent_mcp",
-    "multi_agent_mcp",
     "graspa_mcp",
     "rag_agent",
     "single_agent_xanes",

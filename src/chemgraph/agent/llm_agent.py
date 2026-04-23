@@ -38,7 +38,6 @@ from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
-from chemgraph.graphs.multi_agent_mcp import construct_multi_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
 from chemgraph.graphs.rag_agent import construct_rag_agent_graph
 from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
@@ -291,7 +290,6 @@ class ChemGraph:
             "graspa": {"constructor": construct_graspa_graph},
             "mock_agent": {"constructor": construct_mock_agent_graph},
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
-            "multi_agent_mcp": {"constructor": construct_multi_agent_mcp_graph},
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
             "rag_agent": {"constructor": construct_rag_agent_graph},
             "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
@@ -345,16 +343,6 @@ class ChemGraph:
                 llm=llm,
                 system_prompt=self.system_prompt,
                 tools=self.tools,
-            )
-        elif self.workflow_type == "multi_agent_mcp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm=llm,
-                planner_prompt=self.planner_prompt,
-                executor_prompt=self.executor_prompt,
-                executor_tools=self.tools,
-                structured_output=self.structured_output,
-                formatter_prompt=self.formatter_multi_prompt,
-                max_retries=self.max_retries,
             )
         elif self.workflow_type == "graspa_mcp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -529,7 +517,7 @@ class ChemGraph:
                         "system_prompt": self.system_prompt,
                     }
                 )
-            elif self.workflow_type in ("multi_agent", "multi_agent_mcp"):
+            elif self.workflow_type == "multi_agent":
                 output_data.update(
                     {
                         "planner_prompt": self.planner_prompt,
