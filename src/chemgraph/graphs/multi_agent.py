@@ -21,7 +21,7 @@ from functools import partial
 from pydantic import BaseModel
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, END
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Send
@@ -137,6 +137,7 @@ def planner_agent(
     up to ``max_retries`` times with error feedback.
     """
     executor_outputs = state.get("executor_results", [])
+    failed_tasks = state.get("failed_tasks", [])
     content_block = f"Current Conversation History: {state['messages']}"
     if executor_outputs:
         results_text = "\n".join(
@@ -144,6 +145,23 @@ def planner_agent(
         )
         content_block += (
             f"\n\n### UPDATED: Results from Executor Tasks ###\n{results_text}"
+        )
+    if failed_tasks:
+        failure_lines = []
+        for ft in failed_tasks:
+            failure_lines.append(
+                f"- Task {ft.get('task_index', '?')} "
+                f"(retry #{ft.get('retry_count', 0)}): "
+                f"{ft.get('error', 'unknown error')}"
+            )
+        content_block += (
+            "\n\n### FAILED TASKS (may be retried) ###\n"
+            + "\n".join(failure_lines)
+            + "\n\nYou may retry failed tasks by including them in your "
+            "tasks list with the same task_index. Use the error information "
+            "above to adjust the prompt if needed (e.g., fix molecule names, "
+            "adjust parameters). If a task cannot succeed, set next_step "
+            "to FINISH and explain the failure in thought_process."
         )
 
     messages = [
@@ -203,6 +221,7 @@ def unified_planner_router(
     state: PlannerState,
     structured_output: bool = False,
     max_planner_iterations: int = 3,
+    max_task_retries: int = 2,
 ) -> Union[str, list[Send]]:
     """Route based on the planner's ``next_step`` decision.
 
@@ -211,6 +230,10 @@ def unified_planner_router(
 
     A cycle guard forces ``FINISH`` when the planner has dispatched
     executors ``max_planner_iterations`` times to prevent infinite loops.
+
+    For retried tasks, the ``retry_count`` from the ``WorkerTask`` is
+    checked against ``max_task_retries``.  Tasks that have exceeded the
+    retry limit are skipped and logged as permanently failed.
     """
     next_step = state.get("next_step")
     iterations = state.get("planner_iterations", 0)
@@ -226,16 +249,56 @@ def unified_planner_router(
             return END
 
         tasks = state.get("tasks", [])
-        return [
-            Send(
-                "executor_subgraph",
-                {
-                    "executor_id": f"worker_{getattr(t, 'task_index', i + 1)}",
-                    "messages": [getattr(t, "prompt", str(t))],
-                },
+
+        # Build a lookup of previous failure counts from state.
+        # This covers cases where the planner emits a task without
+        # explicitly setting retry_count — we infer it from history.
+        failed_history: dict[int, int] = {}
+        for ft in state.get("failed_tasks", []):
+            tidx = ft.get("task_index", -1)
+            prev = ft.get("retry_count", 0)
+            # Track the highest retry_count seen for each task_index
+            failed_history[tidx] = max(failed_history.get(tidx, 0), prev + 1)
+
+        sends = []
+        for i, t in enumerate(tasks):
+            task_index = getattr(t, "task_index", i + 1)
+            # Determine retry_count: use whichever is larger —
+            # the value from the task object or the inferred history.
+            task_retry = getattr(t, "retry_count", 0)
+            inferred_retry = failed_history.get(task_index, 0)
+            retry_count = max(task_retry, inferred_retry)
+
+            if retry_count >= max_task_retries:
+                logger.warning(
+                    "Task %d exceeded max retries (%d); skipping.",
+                    task_index,
+                    max_task_retries,
+                )
+                continue
+
+            sends.append(
+                Send(
+                    "executor_subgraph",
+                    {
+                        "executor_id": f"worker_{task_index}",
+                        "task_index": task_index,
+                        "retry_count": retry_count,
+                        "messages": [getattr(t, "prompt", str(t))],
+                    },
+                )
             )
-            for i, t in enumerate(tasks)
-        ]
+
+        if not sends:
+            # All tasks were skipped (max retries exceeded).
+            logger.warning(
+                "All dispatched tasks exceeded retry limits; forcing FINISH."
+            )
+            if structured_output:
+                return "ResponseAgent"
+            return END
+
+        return sends
 
     # FINISH
     if structured_output:
@@ -292,21 +355,112 @@ def route_executor(state: ExecutorState):
     return "done"
 
 
+_ERROR_MARKERS = [
+    "Error:",
+    "error:",
+    "Exception:",
+    "exception:",
+    "Traceback",
+    "failed",
+    "FAILED",
+    "could not",
+    "Could not",
+    "No PubChem compound found",
+    "ValueError",
+    "TypeError",
+    "KeyError",
+    "RuntimeError",
+]
+
+
+def _detect_executor_failure(messages: list) -> tuple[bool, str | None]:
+    """Scan executor message history for signs of failure.
+
+    Checks for:
+    1. ``ToolMessage`` objects with ``status == "error"``
+       (produced by ``ToolNode(handle_tool_errors=True)``).
+    2. Error markers in the final assistant message content.
+
+    Returns ``(is_failed, error_summary)``.
+    """
+    # Collect all tool-level errors
+    tool_errors = []
+    for m in messages:
+        if isinstance(m, ToolMessage):
+            if getattr(m, "status", None) == "error":
+                tool_errors.append(m.content)
+
+    if tool_errors:
+        return True, "; ".join(tool_errors)
+
+    # Check the final message for error markers
+    final = messages[-1] if messages else None
+    if final is not None:
+        content = getattr(final, "content", str(final))
+        if isinstance(content, str):
+            for marker in _ERROR_MARKERS:
+                if marker in content:
+                    # Only flag as failure if the executor itself reports failure,
+                    # not if it's merely describing a prior error it recovered from.
+                    # Heuristic: if the last message also contains "success" or
+                    # "result", treat it as a recovered scenario.
+                    lower = content.lower()
+                    if "success" not in lower and "result:" not in lower:
+                        return True, content[:500]
+
+    return False, None
+
+
 def format_executor_output(state: ExecutorState) -> dict:
     """Bridge: convert local ``ExecutorState`` into a ``PlannerState`` update.
 
     Writes the executor's final answer into ``executor_results`` and
     its full message history into ``executor_logs`` so the planner can
     inspect them on the next iteration.
+
+    Detects executor failures by scanning the message history for tool
+    errors and error markers.  When a failure is detected, populates
+    ``failed_tasks`` so the planner can decide whether to retry.
     """
     executor_id = state["executor_id"]
+    task_index = state.get("task_index", -1)
+    retry_count = state.get("retry_count", 0)
     final_message = state["messages"][-1].content
     full_history = state["messages"]
 
-    return {
-        "executor_results": [f"[{executor_id}] Result: {final_message}"],
+    is_failed, error_summary = _detect_executor_failure(list(state["messages"]))
+
+    result: dict = {
         "executor_logs": {executor_id: full_history},
     }
+
+    if is_failed:
+        logger.warning(
+            "Executor %s (task_index=%d, retry=%d) FAILED: %s",
+            executor_id,
+            task_index,
+            retry_count,
+            error_summary,
+        )
+        result["executor_results"] = [
+            f"[{executor_id}] FAILED (task_index={task_index}, "
+            f"retry={retry_count}): {error_summary}"
+        ]
+        result["failed_tasks"] = [
+            {
+                "task_index": task_index,
+                "executor_id": executor_id,
+                "error": error_summary,
+                "retry_count": retry_count,
+            }
+        ]
+    else:
+        result["executor_results"] = [
+            f"[{executor_id}] Result (task_index={task_index}): {final_message}"
+        ]
+        result["failed_tasks"] = []
+
+    return result
 
 
 def construct_executor_subgraph(
@@ -327,7 +481,7 @@ def construct_executor_subgraph(
             executor_model_node, llm=llm, system_prompt=system_prompt, tools=tools
         ),
     )
-    workflow.add_node("tools", ToolNode(tools))
+    workflow.add_node("tools", ToolNode(tools, handle_tool_errors=True))
     workflow.add_node("finalize", format_executor_output)
 
     workflow.set_entry_point("executor_agent")
@@ -417,6 +571,7 @@ def construct_multi_agent_graph(
     structured_output: bool = False,
     formatter_prompt: str = default_formatter_prompt,
     max_retries: int = 1,
+    max_task_retries: int = 2,
 ):
     """Construct the planner-executor graph using the Send() pattern.
 
@@ -440,6 +595,10 @@ def construct_multi_agent_graph(
     max_retries : int
         Number of LLM retry attempts when the planner or response agent
         fails to parse its output, by default 1.
+    max_task_retries : int
+        Maximum number of times a single executor task may be retried
+        after failure.  Once a task reaches this limit, the router skips
+        it and the planner must finish without it, by default 2.
 
     Returns
     -------
@@ -501,7 +660,11 @@ def construct_multi_agent_graph(
 
     graph_builder.add_conditional_edges(
         "Planner",
-        partial(unified_planner_router, structured_output=structured_output),
+        partial(
+            unified_planner_router,
+            structured_output=structured_output,
+            max_task_retries=max_task_retries,
+        ),
         conditional_targets,
     )
 

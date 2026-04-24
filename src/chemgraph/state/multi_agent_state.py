@@ -15,10 +15,18 @@ class ExecutorState(TypedDict):
     Each executor instance gets its own isolated copy of this state.
     The ``messages`` list holds the executor's ReAct conversation
     (system prompt, LLM responses, tool calls/results).
+
+    ``task_index`` identifies which planner task this executor is
+    working on, enabling the planner to correlate results with tasks.
+
+    ``retry_count`` tracks how many times this particular task has
+    been retried, so the planner and router can enforce retry limits.
     """
 
     messages: Annotated[list, add_messages]
     executor_id: str
+    task_index: int
+    retry_count: int
 
 
 class PlannerState(TypedDict):
@@ -31,6 +39,11 @@ class PlannerState(TypedDict):
     ``planner_iterations`` tracks how many times the planner has
     dispatched tasks to executors, providing a guard against infinite
     Planner -> Executor -> Planner cycles.
+
+    ``failed_tasks`` accumulates structured records of executor
+    failures across iterations, enabling the planner to make informed
+    retry decisions.  Each entry is a dict with keys: ``task_index``,
+    ``error``, ``retry_count``, and ``executor_id``.
     """
 
     messages: Annotated[list, add_messages]
@@ -39,3 +52,4 @@ class PlannerState(TypedDict):
     executor_results: Annotated[list, operator.add]
     executor_logs: Annotated[dict[str, list], merge_dicts]
     planner_iterations: int
+    failed_tasks: Annotated[list, operator.add]
