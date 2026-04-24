@@ -422,6 +422,7 @@ def _run_ase_impl(params: ASEInputSchema):
                 "status": "success",
                 "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
                 "dipole_moment": dipole,
+                "dipole_unit": "e * angstrom",
             }
 
     OPTIMIZERS = {

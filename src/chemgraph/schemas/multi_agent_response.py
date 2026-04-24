@@ -12,10 +12,17 @@ class WorkerTask(BaseModel):
         task_index (int): The index or ID of the task, typically used to track execution order.
         prompt (str): A natural language prompt that describes the task or request for which
                        the executor is expected to generate tool calls.
+        retry_count (int): How many times this task has been previously attempted.
+                           Defaults to 0 for new tasks.  When the planner re-dispatches
+                           a failed task, the router increments this value automatically.
     """
 
     task_index: int = Field(..., description="Task index")
     prompt: str = Field(..., description="Prompt to send to executor for tool calls")
+    retry_count: int = Field(
+        default=0,
+        description="Number of previous attempts for this task (0 = first attempt)",
+    )
 
 
 class PlannerResponse(BaseModel):
