@@ -1028,6 +1028,150 @@ def find_html_filename(messages: list) -> Optional[str]:
     return None  # No HTML filename found in any message
 
 
+def extract_xyz_from_report_html(html_content: str):
+    """Extract atomic numbers and positions from a ChemGraph HTML report.
+
+    The report embeds XYZ data as a base64-encoded string passed to ``atob()``.
+    This function decodes that string, parses the XYZ atom lines, and converts
+    element symbols to atomic numbers using ASE's ``chemical_symbols`` table.
+
+    Parameters
+    ----------
+    html_content : str
+        The full HTML string of a ChemGraph report.
+
+    Returns
+    -------
+    dict or None
+        ``{"atomic_numbers": [...], "positions": [...]}`` on success, else
+        ``None``.
+    """
+    import base64 as _b64
+
+    match = re.search(r'atob\(["\']([A-Za-z0-9+/=]+)["\']\)', html_content)
+    if not match:
+        return None
+
+    try:
+        xyz_text = _b64.b64decode(match.group(1)).decode("utf-8")
+    except Exception:
+        return None
+
+    lines = xyz_text.strip().splitlines()
+    if len(lines) < 3:
+        return None
+
+    try:
+        num_atoms = int(lines[0].strip())
+    except ValueError:
+        return None
+
+    # Build a reverse lookup: symbol -> atomic number
+    sym_to_num = {s: i for i, s in enumerate(chemical_symbols)}
+
+    atomic_numbers = []
+    positions = []
+    for line in lines[2 : 2 + num_atoms]:
+        parts = line.strip().split()
+        if len(parts) < 4:
+            continue
+        symbol = parts[0]
+        anum = sym_to_num.get(symbol)
+        if anum is None:
+            return None  # unknown element – bail out
+        try:
+            pos = [float(parts[1]), float(parts[2]), float(parts[3])]
+        except ValueError:
+            return None
+        atomic_numbers.append(anum)
+        positions.append(pos)
+
+    if len(atomic_numbers) != num_atoms:
+        return None
+
+    return {"atomic_numbers": atomic_numbers, "positions": positions}
+
+
+def strip_viewer_from_report_html(html_content: str) -> str:
+    """Remove the NGL 3D-viewer section from a ChemGraph HTML report.
+
+    Strips the ``<div id="viewer">`` element, the NGL ``<script src>`` tag,
+    and the inline ``<script>`` block that initialises the NGL stage / XYZ
+    parsing so that only the calculation-results and simulation-details
+    sections remain.  The resulting HTML can be safely rendered inside
+    Streamlit's ``st.components.v1.html()`` iframe.
+
+    Parameters
+    ----------
+    html_content : str
+        Full HTML string of a ChemGraph report.
+
+    Returns
+    -------
+    str
+        The HTML with viewer-related elements removed.
+    """
+    # 1. Remove the external NGL script tag
+    html_content = re.sub(
+        r'<script\s+src="[^"]*ngl[^"]*"[^>]*>\s*</script>\s*',
+        "",
+        html_content,
+        flags=re.IGNORECASE,
+    )
+
+    # 2. Remove the <div id="viewer"></div>
+    html_content = re.sub(
+        r'<div\s+id="viewer"[^>]*>\s*</div>\s*',
+        "",
+        html_content,
+    )
+
+    # 3. Remove the inline script block that creates the NGL Stage, xyzToPDB
+    #    function, and loads the molecule.  This block starts with
+    #    ``const stage = new NGL.Stage`` and ends at ``</script>``.
+    html_content = re.sub(
+        r"<script>\s*function toggleSection.*?const stage = new NGL\.Stage.*?</script>",
+        # Keep the toggleSection / toggleSubSection JS (needed for
+        # collapsible sections) but drop everything from the NGL stage
+        # onwards.  Easier to just re-inject the toggle helpers.
+        """<script>
+        function toggleSection(sectionId) {
+            const content = document.getElementById(sectionId);
+            const header = content.previousElementSibling;
+            content.classList.toggle('collapsed');
+            header.classList.toggle('collapsed');
+        }
+        function toggleSubSection(sectionId) {
+            const content = document.getElementById(sectionId);
+            const header = content.previousElementSibling;
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                header.classList.remove('collapsed');
+            } else {
+                content.style.display = 'none';
+                header.classList.add('collapsed');
+            }
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            const subSections = document.querySelectorAll('.sub-section-content');
+            subSections.forEach(section => { section.style.display = 'block'; });
+        });
+        </script>""",
+        html_content,
+        flags=re.DOTALL,
+    )
+
+    # 4. Remove the heading that says "XYZ Molecule Viewer" since the 3D
+    #    viewer is now rendered natively by Streamlit above the report.
+    html_content = re.sub(
+        r"<h1>\s*XYZ Molecule Viewer\s*</h1>\s*",
+        "",
+        html_content,
+    )
+
+    return html_content
+
+
 def extract_molecular_structure(message_content: str):
     """Return dict with keys atomic_numbers, positions if embedded in message."""
     if not message_content:
@@ -1727,12 +1871,27 @@ if st.session_state.conversation_history:
         html_filename = find_html_filename(messages)
         if html_filename:
             with st.expander("📊 Report", expanded=False):
-                # st.subheader(" Generated Report")
                 try:
                     resolved_html = resolve_output_path(html_filename)
                     with open(resolved_html, "r", encoding="utf-8") as f:
                         html_content = f.read()
-                    st.components.v1.html(html_content, height=600, scrolling=True)
+
+                    # Render the 3D molecule using py3Dmol/stmol
+                    # (NGL.js cannot load inside Streamlit's sandboxed iframe)
+                    report_structure = extract_xyz_from_report_html(html_content)
+                    if report_structure:
+                        display_molecular_structure(
+                            report_structure["atomic_numbers"],
+                            report_structure["positions"],
+                            title="Molecular Structure",
+                        )
+
+                    # Strip the NGL viewer from the HTML and render the
+                    # remaining calculation results / simulation details.
+                    cleaned_html = strip_viewer_from_report_html(html_content)
+                    st.components.v1.html(
+                        cleaned_html, height=600, scrolling=True
+                    )
                 except FileNotFoundError:
                     st.warning(f"HTML file '{html_filename}' not found")
                 except Exception as e:
