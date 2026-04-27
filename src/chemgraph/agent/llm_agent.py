@@ -40,17 +40,6 @@ from langgraph.errors import GraphInterrupt
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 
 
-class HumanInputRequired(Exception):
-    """Raised when the graph needs human input but no handler is configured.
-
-    Carries the question text so that external callers (CLI, UI) can
-    present it to the user and resume the graph with
-    ``Command(resume=answer)``.
-    """
-
-    def __init__(self, question: str):
-        self.question = question
-        super().__init__(question)
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
@@ -916,3 +905,15 @@ class ChemGraph:
         except Exception as e:
             logger.error(f"Error running workflow {self.workflow_type}: {e}")
             raise
+
+class HumanInputRequired(Exception):
+    """Raised when the graph needs human input but no handler is configured.
+
+    Carries the question text so that external callers (CLI, UI) can
+    present it to the user and resume the graph with
+    ``Command(resume=answer)``.
+    """
+
+    def __init__(self, question: str):
+        self.question = question
+        super().__init__(question)
