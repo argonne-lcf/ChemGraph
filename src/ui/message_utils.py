@@ -55,7 +55,10 @@ def extract_messages_from_result(result: Any) -> list:
     if isinstance(result, list):
         return result
     elif isinstance(result, dict) and "messages" in result:
-        messages = result["messages"]
+        # Copy the list so we never mutate the original stored in
+        # conversation_history -- without this, worker messages would be
+        # duplicated on every Streamlit rerun.
+        messages = list(result["messages"])
         # For multi-agent workflows, also extract messages from worker_channel
         if "worker_channel" in result:
             worker_channel = result["worker_channel"]

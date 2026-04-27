@@ -1,7 +1,7 @@
 """3-D molecular structure visualisation components for the Streamlit UI."""
 
 import json
-from uuid import uuid4
+import re as _re
 
 import numpy as np
 import pandas as pd
@@ -25,6 +25,17 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def _stable_key(prefix: str, title: str) -> str:
+    """Return a deterministic Streamlit widget key derived from *title*.
+
+    Using ``uuid4()`` caused widget keys to change on every rerun, which
+    reset user selections (e.g. the style selectbox) and leaked stale
+    widget state in memory.
+    """
+    slug = _re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
+    return f"{prefix}_{slug}"
 
 
 def warn_stmol_unavailable() -> None:
@@ -66,7 +77,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure") ->
                 selected_style = st.selectbox(
                     "Visualization Style",
                     style_options,
-                    key=f"style_{uuid4().hex}",
+                    key=_stable_key("style", title),
                 )
 
                 try:
@@ -211,7 +222,7 @@ def _render_structure_info(atoms, atomic_numbers, positions, xyz_string, title) 
         xyz_string,
         f"{title.lower().replace(' ', '_')}.xyz",
         mime="chemical/x-xyz",
-        key=f"xyz_download_{uuid4().hex}",
+        key=_stable_key("xyz_download", title),
     )
 
     structure_json = json.dumps(
@@ -228,5 +239,5 @@ def _render_structure_info(atoms, atomic_numbers, positions, xyz_string, title) 
         structure_json,
         f"{title.lower().replace(' ', '_')}.json",
         mime="application/json",
-        key=f"json_download_{uuid4().hex}",
+        key=_stable_key("json_download", title),
     )
