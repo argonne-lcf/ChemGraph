@@ -1,7 +1,7 @@
 """Module for quick LLM evaluations"""
 
 from deepdiff import DeepDiff
-from chemgraph.models.ase_input import ASEInputSchema
+from chemgraph.schemas.ase_input import ASEInputSchema
 
 
 def remove_ignored_fields(obj, ignored_keys=("cell", "pbc")):
