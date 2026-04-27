@@ -4,7 +4,7 @@ import base64
 from typing import Optional
 from langchain_core.tools import tool
 
-from ase.data import chemical_symbols
+from ase.data import chemical_symbols as _chemical_symbols
 
 from chemgraph.schemas.ase_input import ASEOutputSchema
 from chemgraph.tools.ase_tools import is_linear_molecule
@@ -392,7 +392,7 @@ def generate_html(
         for num, pos in zip(
             ase_output.final_structure.numbers, ase_output.final_structure.positions
         ):
-            element = chemical_symbols[num] if num < len(chemical_symbols) else f"X{num}"
+            element = _chemical_symbols[num] if num < len(_chemical_symbols) else f"X{num}"
             x, y, z = pos
             xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
 
@@ -449,7 +449,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         for num, pos in zip(
             ase_output.final_structure.numbers, ase_output.final_structure.positions
         ):
-            element = chemical_symbols[num] if num < len(chemical_symbols) else f"X{num}"
+            element = _chemical_symbols[num] if num < len(_chemical_symbols) else f"X{num}"
             x, y, z = pos
             xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
 

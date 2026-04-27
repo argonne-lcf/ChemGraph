@@ -12,11 +12,11 @@ from parsl.utils import get_all_checkpoints
 import parsl
 
 from chemgraph.mcp.server_utils import run_mcp_server
-from chemgraph.tools.parsl_tools import (
+from chemgraph.schemas.mace_parsl_schema import (
     mace_input_schema,
     mace_input_schema_ensemble,
-    run_mace_core,
 )
+from chemgraph.tools.parsl_tools import run_mace_core
 from parsl import python_app
 
 
@@ -36,7 +36,8 @@ def run_mace_parsl_app(job: dict):
     dict
         The result of `run_mace_core(job)`.
     """
-    from chemgraph.tools.parsl_tools import mace_input_schema, run_mace_core
+    from chemgraph.schemas.mace_parsl_schema import mace_input_schema
+    from chemgraph.tools.parsl_tools import run_mace_core
 
     if isinstance(job, dict):
         params = mace_input_schema(**job)
@@ -177,29 +178,10 @@ def run_mace_ensemble(params: mace_input_schema_ensemble):
     description="Load output from a JSON file.",
 )
 def extract_output_json(json_file: str) -> dict:
-    """
-    Load simulation results from a JSON file produced by run_ase.
+    """Load simulation results from a JSON file produced by run_ase."""
+    from chemgraph.tools.ase_core import extract_output_json_core
 
-    Parameters
-    ----------
-    json_file : str
-        Path to the JSON file containing ASE simulation results.
-
-    Returns
-    -------
-    Dict[str, Any]
-        Parsed results from the JSON file as a Python dictionary.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the specified file does not exist.
-    json.JSONDecodeError
-        If the file is not valid JSON.
-    """
-    with open(json_file, "r") as f:
-        data = json.load(f)
-    return data
+    return extract_output_json_core(json_file)
 
 
 # User-specific paths and settings
