@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional
 from langchain_core.tools import tool
 
+from ase.data import chemical_symbols
+
 from chemgraph.schemas.ase_input import ASEOutputSchema
 from chemgraph.tools.ase_tools import is_linear_molecule
 
@@ -340,62 +342,85 @@ def generate_html(
     str
         Path to the generated HTML file
     """
-    # Load the results JSON and construct an ASEOutputSchema
-    with open(results_json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    ase_output = ASEOutputSchema(**data)
+    # Validate results_json_path exists
+    if not os.path.isfile(results_json_path):
+        return (
+            f"Results JSON file not found: {results_json_path}. "
+            "Please provide a valid path to the JSON file produced by the run_ase tool."
+        )
+
+    # Validate xyz_path exists (if provided)
+    if xyz_path is not None and not os.path.isfile(xyz_path):
+        return (
+            f"XYZ file not found: {xyz_path}. "
+            "Please provide a valid path to an XYZ file."
+        )
+
+    # Load and parse the results JSON
+    try:
+        with open(results_json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        return (
+            f"Failed to parse JSON from {results_json_path}: {e}. "
+            "The file may be corrupted or not valid JSON."
+        )
+
+    # Validate the data against ASEOutputSchema
+    try:
+        ase_output = ASEOutputSchema(**data)
+    except Exception as e:
+        return (
+            f"Failed to validate results data from {results_json_path}: {e}. "
+            "The JSON file may not contain valid ASE output data."
+        )
 
     # Get XYZ content either from file or final_structure
     if xyz_path is not None:
         with open(xyz_path, 'r') as f:
             xyz_content = f.read()
     else:
+        if ase_output.final_structure is None:
+            return (
+                "No XYZ file provided and no final_structure found in the results JSON. "
+                "Please provide an xyz_path or ensure the simulation results include a final structure."
+            )
+
         # Convert final_structure to XYZ format
         num_atoms = len(ase_output.final_structure.numbers)
         xyz_lines = [str(num_atoms), "Optimized Structure"]
 
-        # Map atomic numbers to element symbols
-        element_map = {
-            1: "H",
-            2: "He",
-            3: "Li",
-            4: "Be",
-            5: "B",
-            6: "C",
-            7: "N",
-            8: "O",
-            9: "F",
-            10: "Ne",
-            11: "Na",
-            12: "Mg",
-            13: "Al",
-            14: "Si",
-            15: "P",
-            16: "S",
-            17: "Cl",
-            18: "Ar",
-            # Add more elements as needed
-        }
-
         for num, pos in zip(
             ase_output.final_structure.numbers, ase_output.final_structure.positions
         ):
-            element = element_map.get(num, f"X{num}")  # Use X{num} for unknown elements
+            element = chemical_symbols[num] if num < len(chemical_symbols) else f"X{num}"
             x, y, z = pos
             xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
 
         xyz_content = "\n".join(xyz_lines)
 
-    encoded_xyz = base64.b64encode(xyz_content.encode()).decode()
-    html_content = HTML_TEMPLATE.format(encoded_xyz=encoded_xyz)
+    # Validate output directory exists
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    if not os.path.isdir(output_dir):
+        return (
+            f"Output directory does not exist: {output_dir}. "
+            "Please provide a valid output path."
+        )
 
-    # Add additional information to the HTML content
-    html_content = add_additional_info_to_html(html_content, ase_output)
+    # Generate the HTML report
+    try:
+        encoded_xyz = base64.b64encode(xyz_content.encode()).decode()
+        html_content = HTML_TEMPLATE.format(encoded_xyz=encoded_xyz)
 
-    with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-    print(f"✅ HTML viewer created: {output_path}")
-    return str(os.path.abspath(output_path))
+        # Add additional information to the HTML content
+        html_content = add_additional_info_to_html(html_content, ase_output)
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        print(f"✅ HTML viewer created: {output_path}")
+        return str(os.path.abspath(output_path))
+    except Exception as e:
+        return f"Failed to generate HTML report: {e}"
 
 
 def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) -> str:
@@ -422,33 +447,10 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         num_atoms = len(ase_output.final_structure.numbers)
         xyz_lines = [str(num_atoms), "Optimized Structure"]
 
-        # Map atomic numbers to element symbols
-        element_map = {
-            1: "H",
-            2: "He",
-            3: "Li",
-            4: "Be",
-            5: "B",
-            6: "C",
-            7: "N",
-            8: "O",
-            9: "F",
-            10: "Ne",
-            11: "Na",
-            12: "Mg",
-            13: "Al",
-            14: "Si",
-            15: "P",
-            16: "S",
-            17: "Cl",
-            18: "Ar",
-            # Add more elements as needed
-        }
-
         for num, pos in zip(
             ase_output.final_structure.numbers, ase_output.final_structure.positions
         ):
-            element = element_map.get(num, f"X{num}")  # Use X{num} for unknown elements
+            element = chemical_symbols[num] if num < len(chemical_symbols) else f"X{num}"
             x, y, z = pos
             xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
 
