@@ -56,6 +56,6 @@ report_prompt = """You are an agent responsible for generating an html report ba
 
 Instructions:
 - Use generate_html tool to generate the report.
-- Make sure the input to the generate_html tool is a valid ASEOutputSchema object.
-- Include all the information from the ASEOutputSchema object when invoking the generate_html tool.
+- Pass the path to the JSON results file produced by the run_ase tool as results_json_path. Look for file paths ending in .json in previous tool outputs (e.g. "Results saved to /path/to/output.json").
+- Optionally provide output_path (where to save the HTML) and xyz_path (an XYZ file for the 3D viewer).
 """

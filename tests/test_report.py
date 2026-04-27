@@ -1,3 +1,4 @@
+import json
 import pytest
 from pathlib import Path
 import tempfile
@@ -129,6 +130,12 @@ def test_output_dir():
 def test_generate_html_with_xyz(test_output_dir, sample_ase_output_schema):
     """Test the generate_html function with an external XYZ file."""
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Write sample ASE output to a JSON file (use model_dump to get
+        # a clean serializable dict, matching what run_ase writes to disk)
+        json_path = Path(tmpdir) / "results.json"
+        with open(json_path, "w") as f:
+            json.dump(sample_ase_output_schema.model_dump(), f, default=str)
+
         # Create input XYZ file
         xyz_path = Path(tmpdir) / "molecule.xyz"
         xyz_content = create_xyz_content_from_final_structure(sample_ase_output['final_structure'])
@@ -140,8 +147,8 @@ def test_generate_html_with_xyz(test_output_dir, sample_ase_output_schema):
 
         # Generate HTML report with xyz_path
         result = generate_html.invoke({
+            "results_json_path": str(json_path),
             "output_path": str(output_path),
-            "ase_output": sample_ase_output_schema,
             "xyz_path": str(xyz_path),
         })
 
@@ -203,13 +210,19 @@ def test_generate_html_with_xyz(test_output_dir, sample_ase_output_schema):
 def test_generate_html_without_xyz(test_output_dir, sample_ase_output_schema):
     """Test the generate_html function using only the final_structure from ASE output."""
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Write sample ASE output to a JSON file (use model_dump to get
+        # a clean serializable dict, matching what run_ase writes to disk)
+        json_path = Path(tmpdir) / "results.json"
+        with open(json_path, "w") as f:
+            json.dump(sample_ase_output_schema.model_dump(), f, default=str)
+
         # Create output HTML file path
         output_path = Path(tmpdir) / "report.html"
 
         # Generate HTML report without xyz_path
         result = generate_html.invoke({
+            "results_json_path": str(json_path),
             "output_path": str(output_path),
-            "ase_output": sample_ase_output_schema,
         })
 
         # Verify the returned path matches our output path

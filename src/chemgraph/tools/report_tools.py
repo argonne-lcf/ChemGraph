@@ -1,3 +1,5 @@
+import os
+import json
 import base64
 from pathlib import Path
 from typing import Optional
@@ -316,24 +318,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 @tool
 def generate_html(
-    output_path: Path, ase_output: ASEOutputSchema, xyz_path: Optional[Path] = None
+    results_json_path: str,
+    output_path: str = "report.html",
+    xyz_path: Optional[str] = None,
 ) -> str:
-    """Generate an HTML report from ASE output, optionally using an XYZ file for visualization.
+    """Generate an HTML report from the JSON results file produced by run_ase.
 
     Parameters
     ----------
-    output_path : Path
-        Path where the HTML report will be saved
-    ase_output : ASEOutputSchema
-        The output from an ASE calculation containing energy, frequencies, etc.
-    xyz_path : Optional[Path]
-        Optional path to an XYZ file. If not provided, the final_structure from ase_output will be used.
+    results_json_path : str
+        Path to the JSON file produced by the run_ase tool containing
+        the full simulation results (energy, structure, frequencies, etc.).
+    output_path : str
+        Path where the HTML report will be saved. Defaults to "report.html".
+    xyz_path : Optional[str]
+        Optional path to an XYZ file for the 3D viewer. If not provided,
+        the final_structure from the results JSON will be used.
 
     Returns
     -------
     str
         Path to the generated HTML file
     """
+    # Load the results JSON and construct an ASEOutputSchema
+    with open(results_json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    ase_output = ASEOutputSchema(**data)
+
     # Get XYZ content either from file or final_structure
     if xyz_path is not None:
         with open(xyz_path, 'r') as f:
@@ -384,7 +395,7 @@ def generate_html(
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     print(f"✅ HTML viewer created: {output_path}")
-    return str(output_path)
+    return str(os.path.abspath(output_path))
 
 
 def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) -> str:
