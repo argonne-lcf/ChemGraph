@@ -1,5 +1,6 @@
 import ast
 from datetime import datetime, timezone, timedelta
+import html as html_mod
 import json
 import os
 import platform
@@ -263,14 +264,14 @@ def _is_local_address(hostname: str) -> bool:
 
 
 @st.cache_data(ttl=10)
-def check_local_model_endpoint(base_url: Optional[str]) -> Dict[str, str]:
+def check_local_model_endpoint(base_url: Optional[str]) -> Dict[str, Any]:
     """Quick reachability check for local OpenAI-compatible endpoints."""
     if not base_url:
-        return {"ok": "true", "message": "No base URL configured."}
+        return {"ok": True, "message": "No base URL configured."}
 
     parsed = urlparse(base_url)
     if not _is_local_address(parsed.hostname or ""):
-        return {"ok": "true", "message": "Skipping non-local endpoint probe."}
+        return {"ok": True, "message": "Skipping non-local endpoint probe."}
 
     probe = base_url.rstrip("/") + "/models"
     req = Request(probe, method="GET")
@@ -278,15 +279,15 @@ def check_local_model_endpoint(base_url: Optional[str]) -> Dict[str, str]:
     try:
         with urlopen(req, timeout=2) as response:
             code = getattr(response, "status", 200)
-            return {"ok": "true", "message": f"Reachable (HTTP {code})."}
+            return {"ok": True, "message": f"Reachable (HTTP {code})."}
     except HTTPError as e:
         # HTTP error still means service/socket is reachable.
-        return {"ok": "true", "message": f"Reachable (HTTP {e.code})."}
+        return {"ok": True, "message": f"Reachable (HTTP {e.code})."}
     except URLError as e:
         reason = getattr(e, "reason", e)
-        return {"ok": "false", "message": f"Unreachable: {reason}"}
+        return {"ok": False, "message": f"Unreachable: {reason}"}
     except Exception as e:
-        return {"ok": "false", "message": f"Unreachable: {e}"}
+        return {"ok": False, "message": f"Unreachable: {e}"}
 
 
 # Configuration management
@@ -932,7 +933,7 @@ if st.session_state.agent:
     st.sidebar.info(f"⚙️ Workflow: {selected_workflow}")
     st.sidebar.info(f"🔗 Thread ID: {thread_id}")
     st.sidebar.info(f"💬 Messages: {len(st.session_state.conversation_history)}")
-    if endpoint_status["ok"] == "true":
+    if endpoint_status["ok"]:
         st.sidebar.caption(f"LLM endpoint: {endpoint_status['message']}")
     else:
         st.sidebar.error(f"LLM endpoint issue: {endpoint_status['message']}")
@@ -946,7 +947,7 @@ if st.session_state.agent:
 else:
     st.sidebar.error("❌ Agents Not Ready")
     st.sidebar.info("Agents will initialize automatically...")
-    if endpoint_status["ok"] != "true":
+    if not endpoint_status["ok"]:
         st.sidebar.error(f"LLM endpoint issue: {endpoint_status['message']}")
 
 # Configuration page link
@@ -1648,10 +1649,10 @@ def extract_log_dir_from_messages(messages) -> Optional[str]:
     if not messages:
         return None
     patterns = [
-        r"(/[^\\s'\"`]+?\\.json)",
-        r"(/[^\\s'\"`]+?\\.xyz)",
-        r"(/[^\\s'\"`]+?\\.html)",
-        r"(/[^\\s'\"`]+?\\.csv)",
+        r"(/[^\s'\"`]+?\.json)",
+        r"(/[^\s'\"`]+?\.xyz)",
+        r"(/[^\s'\"`]+?\.html)",
+        r"(/[^\s'\"`]+?\.csv)",
     ]
 
     def _scan_value(value):
@@ -1778,7 +1779,7 @@ if st.session_state.conversation_history:
         st.markdown(
             f"""
 <div style="background:#e3f2fd;padding:15px;border-radius:15px;margin:10px 0 0 50px;border:1px solid #2196f3;color:#000000;">
-  <b style="color:#1976d2;">👤 You:</b><br><span style="color:#333333;">{entry["query"]}</span>
+  <b style="color:#1976d2;">👤 You:</b><br><span style="color:#333333;">{html_mod.escape(entry["query"])}</span>
 </div>""",
             unsafe_allow_html=True,
         )
@@ -1831,12 +1832,16 @@ if st.session_state.conversation_history:
             st.markdown(
                 f"""
 <div style="background:#f1f8e9;padding:15px;border-radius:15px;margin:10px 50px 0 0;border:1px solid #4caf50;color:#000000;">
-  <b style="color:#388e3c;">🅒🅖 ChemGraph:</b><br><span style="color:#333333;">{final_answer.replace(chr(10), "<br>")}</span>
+  <b style="color:#388e3c;">🅒🅖 ChemGraph:</b><br><span style="color:#333333;">{html_mod.escape(final_answer).replace(chr(10), "<br>")}</span>
 </div>""",
                 unsafe_allow_html=True,
             )
 
-        # Look for structure data across all messages
+        # Look for structure data across all messages.
+        # Compute html_filename early so we can skip the .xyz file
+        # fallback when an HTML report will render the same structure.
+        html_filename = find_html_filename(messages)
+
         structure = find_structure_in_messages(messages)
         if structure:
             display_molecular_structure(
@@ -1853,7 +1858,9 @@ if st.session_state.conversation_history:
                     structure_from_text["positions"],
                     title=f"Structure from Response {idx}",
                 )
-            else:
+            elif not html_filename:
+                # Fall back to .xyz file search only when there is no
+                # HTML report that already embeds the same structure.
                 if has_structure_signal(messages, entry.get("query", ""), final_answer):
                     log_dir = extract_log_dir_from_messages(messages)
                     if log_dir and os.path.isdir(log_dir):
@@ -1868,7 +1875,6 @@ if st.session_state.conversation_history:
                                 )
                             except Exception as exc:
                                 st.warning(f"Failed to load XYZ structure: {exc}")
-        html_filename = find_html_filename(messages)
         if html_filename:
             with st.expander("📊 Report", expanded=False):
                 try:
@@ -1979,26 +1985,20 @@ if st.session_state.conversation_history:
             for i, msg in enumerate(messages):
                 if hasattr(msg, "type"):
                     msg_type = msg.type
-                    content = msg.content
-                    content_preview = (
-                        (msg.content[:100] + "...")
-                        if len(msg.content) > 100
-                        else msg.content
-                    )
+                    content = normalize_message_content(msg.content)
                 elif isinstance(msg, dict):
                     msg_type = msg.get("type", "unknown")
-                    content = msg.get("content", "")
-                    content_preview = (
-                        (content[:100] + "...") if len(content) > 100 else content
-                    )
+                    content = normalize_message_content(msg.get("content", ""))
                 else:
                     msg_type = type(msg).__name__
-                    content = getattr(msg, "content", str(msg)[:100])
-                    content_preview = (
-                        (content[:100] + "...") if len(content) > 100 else content
+                    content = normalize_message_content(
+                        getattr(msg, "content", str(msg))
                     )
+                content_preview = (
+                    (content[:100] + "...") if len(content) > 100 else content
+                )
 
-                st.write(f"  **Message {i+1}:** `{msg_type}` - {content}")
+                st.write(f"  **Message {i+1}:** `{msg_type}` - {content_preview}")
 
         st.markdown("---")
 
@@ -2056,7 +2056,7 @@ if col_refresh.button("🔄 Refresh", use_container_width=True):
 # Submit query
 # -----------------------------------------------------------------------------
 if send:
-    if endpoint_status["ok"] != "true":
+    if not endpoint_status["ok"]:
         msg = (
             f"Cannot reach local model endpoint `{selected_base_url}`. "
             f"{endpoint_status['message']}"
