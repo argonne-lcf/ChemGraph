@@ -13,7 +13,7 @@ def mock_cif(tmp_path):
     return cif_file
 
 @patch("subprocess.run")
-@patch("chemgraph.tools.graspa_tools._read_graspa_sycl_output")
+@patch("chemgraph.tools.graspa_core._read_graspa_sycl_output")
 def test_run_graspa_core_execution(mock_parser, mock_subproc, mock_cif):
     params = graspa_input_schema(
         input_structure_file=str(mock_cif),

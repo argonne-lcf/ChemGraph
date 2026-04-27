@@ -1,6 +1,8 @@
 import argparse
 import logging
+import os
 import sys
+
 import uvicorn
 from mcp.server.fastmcp import FastMCP
 
@@ -49,8 +51,6 @@ def run_mcp_server(
     logger.addHandler(stderr_handler)
 
     # If CHEMGRAPH_LOG_DIR is set, also log to a file
-    import os
-
     log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
     if log_dir:
         try:
@@ -77,3 +77,47 @@ def run_mcp_server(
         logging.info("Starting %s via stdio transport...", mcp.name)
         # FastMCP.run(transport='stdio') handles the stdio loop
         mcp.run(transport="stdio")
+
+
+# ---------------------------------------------------------------------------
+# Parsl HPC configuration loader
+# ---------------------------------------------------------------------------
+
+
+def load_parsl_config(system_name: str):
+    """Dynamically import and return a Parsl config for the given HPC system.
+
+    Parameters
+    ----------
+    system_name : str
+        Target system name.  Supported: ``polaris``, ``aurora``.
+
+    Returns
+    -------
+    parsl.config.Config
+        Parsl configuration object for the requested system.
+
+    Raises
+    ------
+    ValueError
+        If the system name is not recognised.
+    """
+    system_name = system_name.lower()
+    run_dir = os.getcwd()
+
+    logging.info("Initializing Parsl for system: %s", system_name)
+
+    if system_name == "polaris":
+        from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
+
+        return get_polaris_config(run_dir=run_dir)
+
+    elif system_name == "aurora":
+        from chemgraph.hpc_configs.aurora_parsl import get_aurora_config
+
+        return get_aurora_config(run_dir=run_dir)
+
+    else:
+        raise ValueError(
+            f"Unknown system specified: '{system_name}'. Supported: polaris, aurora"
+        )

@@ -19,7 +19,7 @@ TEST_DIR = Path(__file__).parent
 def test_molecule_name_to_smiles(monkeypatch):
     class FakeCompound:
         def __init__(self, smiles):
-            self.connectivity_smiles = smiles
+            self.canonical_smiles = smiles
 
     def fake_get_compounds(name, namespace):
         assert namespace == "name"
@@ -28,10 +28,9 @@ def test_molecule_name_to_smiles(monkeypatch):
             return [FakeCompound(lookup[name])]
         return []
 
-    monkeypatch.setattr(
-        "chemgraph.tools.cheminformatics_tools.pubchempy.get_compounds",
-        fake_get_compounds,
-    )
+    import chemgraph.tools.cheminformatics_core as _core
+
+    monkeypatch.setattr(_core.pcp, "get_compounds", fake_get_compounds)
 
     # Test with a known molecule
     assert molecule_name_to_smiles.invoke("water")['smiles'] == "O"

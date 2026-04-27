@@ -1,13 +1,21 @@
-import os
+"""LangChain ``@tool`` wrappers for cheminformatics functions.
+
+Each tool delegates to the pure-Python implementation in
+:mod:`chemgraph.tools.cheminformatics_core`.
+"""
+
+from __future__ import annotations
+
 from typing import Literal
 
-import pubchempy
 from langchain_core.tools import tool
-from ase.io import write as ase_write
-from ase import Atoms
 
 from chemgraph.schemas.atomsdata import AtomsData
-from chemgraph.tools.mcp_helper import _resolve_path
+from chemgraph.tools.cheminformatics_core import (
+    molecule_name_to_smiles_core,
+    smiles_to_atomsdata_core,
+    smiles_to_coordinate_file_core,
+)
 
 
 @tool
@@ -23,13 +31,8 @@ def molecule_name_to_smiles(name: str) -> dict:
     -------
     dict
         A JSON-serializable dict with the resolved SMILES.
-
-    Raises
-    ------
-    IndexError
-        If the molecule name is not found in PubChem.
     """
-    smiles = pubchempy.get_compounds(str(name), "name")[0].connectivity_smiles
+    smiles = molecule_name_to_smiles_core(name)
     return {"name": str(name), "smiles": smiles}
 
 
@@ -48,39 +51,8 @@ def smiles_to_atomsdata(smiles: str, randomSeed: int = 2025) -> AtomsData:
     -------
     AtomsData
         AtomsData object containing the molecular structure.
-
-    Raises
-    ------
-    ValueError
-        If the SMILES string is invalid or if 3D structure generation fails.
     """
-    from rdkit import Chem
-    from rdkit.Chem import AllChem
-
-    # Generate the molecule object
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        raise ValueError("Invalid SMILES string.")
-
-    # Add hydrogens and optimize 3D structure
-    mol = Chem.AddHs(mol)
-    if AllChem.EmbedMolecule(mol, randomSeed=randomSeed) != 0:
-        raise ValueError("Failed to generate 3D coordinates.")
-    if AllChem.UFFOptimizeMolecule(mol) != 0:
-        raise ValueError("Failed to optimize 3D geometry.")
-    # Extract atomic information
-    conf = mol.GetConformer()
-    numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
-    positions = [list(conf.GetAtomPosition(i)) for i in range(mol.GetNumAtoms())]
-
-    # Create AtomsData object
-    atoms_data = AtomsData(
-        numbers=numbers,
-        positions=positions,
-        cell=[[0, 0, 0], [0, 0, 0], [0, 0, 0]],
-        pbc=[False, False, False],  # No periodic boundary conditions
-    )
-    return atoms_data
+    return smiles_to_atomsdata_core(smiles, seed=randomSeed)
 
 
 @tool
@@ -106,47 +78,8 @@ def smiles_to_coordinate_file(
     Returns
     -------
     str
-        A single-line JSON string LLMs can parse, e.g.
-        {"ok": true, "artifact": "coordinate_file", "format": "xyz", "path": "...", "smiles": "...", "natoms": 12}
-
-    Raises
-    ------
-    ValueError
-        If the SMILES string is invalid or if 3D structure generation fails.
+        A single-line JSON string LLMs can parse.
     """
-    from rdkit import Chem
-    from rdkit.Chem import AllChem
-
-    # Generate the molecule object
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        raise ValueError("Invalid SMILES string.")
-
-    # Add hydrogens and optimize 3D structure
-    mol = Chem.AddHs(mol)
-    if AllChem.EmbedMolecule(mol, randomSeed=randomSeed) != 0:
-        raise ValueError("Failed to generate 3D coordinates.")
-    if AllChem.UFFOptimizeMolecule(mol) != 0:
-        raise ValueError("Failed to optimize 3D geometry.")
-    # Extract atomic information
-    conf = mol.GetConformer()
-    numbers = [atom.GetAtomicNum() for atom in mol.GetAtoms()]
-    positions = [list(conf.GetAtomPosition(i)) for i in range(mol.GetNumAtoms())]
-
-    # Create Atoms object
-    atoms = Atoms(numbers=numbers, positions=positions)
-
-    final_output_file = _resolve_path(output_file)
-    ase_write(
-        final_output_file,
-        atoms,
+    return smiles_to_coordinate_file_core(
+        smiles, output_file=output_file, seed=randomSeed, fmt=fmt
     )
-
-    # Return dict for LLM/tool chaining
-    return {
-        "ok": True,
-        "artifact": "coordinate_file",
-        "path": os.path.abspath(final_output_file),
-        "smiles": smiles,
-        "natoms": len(numbers),
-    }

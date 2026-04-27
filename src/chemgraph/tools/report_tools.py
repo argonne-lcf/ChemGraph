@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Optional
 from langchain_core.tools import tool
 
+from ase.data import chemical_symbols as _chemical_symbols
+
 from chemgraph.schemas.ase_input import ASEOutputSchema
 from chemgraph.tools.ase_tools import is_linear_molecule
 
@@ -343,33 +345,10 @@ def generate_html(
         num_atoms = len(ase_output.final_structure.numbers)
         xyz_lines = [str(num_atoms), "Optimized Structure"]
 
-        # Map atomic numbers to element symbols
-        element_map = {
-            1: "H",
-            2: "He",
-            3: "Li",
-            4: "Be",
-            5: "B",
-            6: "C",
-            7: "N",
-            8: "O",
-            9: "F",
-            10: "Ne",
-            11: "Na",
-            12: "Mg",
-            13: "Al",
-            14: "Si",
-            15: "P",
-            16: "S",
-            17: "Cl",
-            18: "Ar",
-            # Add more elements as needed
-        }
-
         for num, pos in zip(
             ase_output.final_structure.numbers, ase_output.final_structure.positions
         ):
-            element = element_map.get(num, f"X{num}")  # Use X{num} for unknown elements
+            element = _chemical_symbols[num] if num < len(_chemical_symbols) else f"X{num}"
             x, y, z = pos
             xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
 
@@ -411,33 +390,10 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         num_atoms = len(ase_output.final_structure.numbers)
         xyz_lines = [str(num_atoms), "Optimized Structure"]
 
-        # Map atomic numbers to element symbols
-        element_map = {
-            1: "H",
-            2: "He",
-            3: "Li",
-            4: "Be",
-            5: "B",
-            6: "C",
-            7: "N",
-            8: "O",
-            9: "F",
-            10: "Ne",
-            11: "Na",
-            12: "Mg",
-            13: "Al",
-            14: "Si",
-            15: "P",
-            16: "S",
-            17: "Cl",
-            18: "Ar",
-            # Add more elements as needed
-        }
-
         for num, pos in zip(
             ase_output.final_structure.numbers, ase_output.final_structure.positions
         ):
-            element = element_map.get(num, f"X{num}")  # Use X{num} for unknown elements
+            element = _chemical_symbols[num] if num < len(_chemical_symbols) else f"X{num}"
             x, y, z = pos
             xyz_lines.append(f"{element} {x:.6f} {y:.6f} {z:.6f}")
 
