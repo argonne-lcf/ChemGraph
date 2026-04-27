@@ -513,7 +513,7 @@ def _render_query_input(config: dict, selected_model: str) -> str:
             "What is the SMILES string for caffeine?",
             f"Optimize the geometry of water molecule using {config['chemistry']['calculators']['default']}",
             "Calculate the infrared spectrum of methanol with xtb calculator",
-            "What is the reaction enthalpy of methane combustion",
+            "What is the reaction enthalpy of methane combustion using mace_mp",
         ]
         for ex in examples:
             if st.button(ex, key=f"ex_{ex}"):
@@ -577,8 +577,12 @@ def _handle_query_submission(
                 st.session_state.last_run_query = query.strip()
                 st.session_state.last_run_error = None
                 st.session_state.last_run_result = None
+                # Capture references eagerly so the lambda never touches
+                # st.session_state from the background thread (thread safety).
+                agent = st.session_state.agent
+                trimmed_query = query.strip()
                 result = run_async_callable(
-                    lambda: st.session_state.agent.run(query.strip(), config=cfg)
+                    lambda: agent.run(trimmed_query, config=cfg)
                 )
                 st.session_state.last_run_result = result
                 st.session_state.conversation_history.append(

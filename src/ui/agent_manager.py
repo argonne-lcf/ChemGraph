@@ -5,7 +5,6 @@ from typing import Optional
 import streamlit as st
 
 
-@st.cache_resource
 def initialize_agent(
     model_name: str,
     workflow_type: str,
@@ -16,7 +15,14 @@ def initialize_agent(
     base_url: Optional[str],
     argo_user: Optional[str],
 ):
-    """Create (or reuse) a cached :class:`ChemGraph` agent instance."""
+    """Create a :class:`ChemGraph` agent instance.
+
+    No ``@st.cache_resource`` -- the caller (``_auto_initialize_agent``
+    in ``main_interface.py``) already manages caching via
+    ``st.session_state.agent`` and ``st.session_state.last_config``.
+    Using the decorator caused failed initialisations (``None``) to be
+    permanently cached with no way to retry.
+    """
     try:
         from chemgraph.agent.llm_agent import ChemGraph
 

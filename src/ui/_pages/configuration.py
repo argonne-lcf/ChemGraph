@@ -1,5 +1,6 @@
 """Configuration editor page."""
 
+import copy
 import os
 from typing import Any, Dict
 
@@ -48,7 +49,8 @@ def render() -> None:
     st.title("\u2699\ufe0f Configuration")
     st.markdown(
         """
-    Edit and manage your ChemGraph configuration settings. Changes are saved to `config.toml`.
+    Edit and manage your ChemGraph configuration settings.
+    Changes only take effect when you click **Save Configuration**.
     """
     )
 
@@ -56,7 +58,11 @@ def render() -> None:
     if "config" not in st.session_state:
         st.session_state.config = load_config()
 
-    config = st.session_state.config
+    # Work on a draft copy so widgets never mutate the live config.
+    # The draft is written back to st.session_state.config only on Save.
+    if "_config_draft" not in st.session_state:
+        st.session_state._config_draft = copy.deepcopy(st.session_state.config)
+    draft = st.session_state._config_draft
 
     # ----- Tabs -----
     tab1, tab2, tab3 = st.tabs(
@@ -64,19 +70,19 @@ def render() -> None:
     )
 
     with tab1:
-        _render_general_settings(config)
+        _render_general_settings(draft)
 
     with tab2:
-        _render_api_settings(config)
+        _render_api_settings(draft)
 
     with tab3:
-        _render_raw_toml(config)
+        _render_raw_toml(draft)
 
     # ----- Action buttons -----
-    _render_action_buttons(config)
+    _render_action_buttons(draft)
 
     # ----- Summary -----
-    _render_config_summary(config)
+    _render_config_summary(draft)
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +253,14 @@ def _render_api_settings(config: dict) -> None:
         "Keys entered here are applied to this Streamlit session via environment "
         "variables and are not saved to config.toml."
     )
+    st.warning(
+        "**Shared deployments:** API keys are set as process-wide environment "
+        "variables. On multi-user Streamlit servers, keys set here may be "
+        "visible to other sessions in the same process. For shared "
+        "deployments, configure keys via server-side environment variables "
+        "instead.",
+        icon="\u26a0\ufe0f",
+    )
 
     key_col1, key_col2 = st.columns(2)
     with key_col1:
@@ -393,8 +407,13 @@ def _render_raw_toml(config: dict) -> None:
     if st.button("\U0001f4dd Update from TOML", key="update_from_toml"):
         try:
             new_config = toml.loads(edited_config)
-            st.session_state.config = new_config
-            st.success("\u2705 Configuration updated from TOML!")
+            # Update the draft, not the live config.  The user must still
+            # click "Save Configuration" to persist and apply the changes.
+            st.session_state._config_draft = new_config
+            st.success(
+                "\u2705 Draft updated from TOML.  "
+                "Click **Save Configuration** to apply."
+            )
             st.rerun()
         except Exception as e:
             st.error(f"\u274c Invalid TOML syntax: {e}")
@@ -406,7 +425,9 @@ def _render_action_buttons(config: dict) -> None:
 
     with col1:
         if st.button("\U0001f4be Save Configuration", type="primary"):
-            if save_config(config):
+            # Apply the draft to the live session config, then persist to disk.
+            st.session_state.config = copy.deepcopy(config)
+            if save_config(st.session_state.config):
                 st.success("\u2705 Configuration saved to config.toml!")
             else:
                 st.error("\u274c Failed to save configuration")
@@ -414,12 +435,14 @@ def _render_action_buttons(config: dict) -> None:
     with col2:
         if st.button("\U0001f504 Reload Configuration"):
             st.session_state.config = load_config()
+            st.session_state._config_draft = copy.deepcopy(st.session_state.config)
             st.success("\u2705 Configuration reloaded!")
             st.rerun()
 
     with col3:
         if st.button("\U0001f5d1\ufe0f Reset to Defaults"):
             st.session_state.config = get_default_config()
+            st.session_state._config_draft = copy.deepcopy(st.session_state.config)
             st.success("\u2705 Configuration reset to defaults!")
             st.rerun()
 
