@@ -22,7 +22,7 @@ import toml
 
 import chemgraph as chemgraph_pkg
 from chemgraph import __version__ as chemgraph_version
-from chemgraph.tools.ase_tools import create_ase_atoms, create_xyz_string
+from chemgraph.tools.ase_core import create_ase_atoms, create_xyz_string
 from chemgraph.models.supported_models import (
     supported_argo_models,
 )
