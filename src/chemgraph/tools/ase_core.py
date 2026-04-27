@@ -15,7 +15,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
 
@@ -250,7 +250,7 @@ def create_xyz_string(atomic_numbers, positions) -> Optional[str]:
 def run_ase_core(params: ASEInputSchema) -> dict:
     """Run an ASE simulation — the single implementation for all call methods.
 
-    This function implements energy, dipole, optimisation, vibrational,
+    This function implements energy, dipole, optimization, vibrational,
     thermochemistry, and IR calculations.  Framework-specific wrappers
     (LangChain ``@tool``, MCP ``@mcp.tool``, Parsl) delegate here.
 
@@ -328,7 +328,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     atoms.calc = calc
 
     # ------------------------------------------------------------------
-    # Driver: energy / dipole  (single-point, no optimisation)
+    # Driver: energy / dipole  (single-point, no optimization)
     # ------------------------------------------------------------------
     if driver in ("energy", "dipole"):
         energy = atoms.get_potential_energy()
@@ -369,10 +369,11 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 "status": "success",
                 "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
                 "dipole_moment": dipole,
+                "dipole_unit": "e * Angstrom",
             }
 
     # ------------------------------------------------------------------
-    # Drivers that require optimisation: opt / vib / thermo / ir
+    # Drivers that require optimization: opt / vib / thermo / ir
     # ------------------------------------------------------------------
     OPTIMIZERS = {
         "bfgs": BFGS,

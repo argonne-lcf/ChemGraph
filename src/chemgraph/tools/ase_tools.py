@@ -6,7 +6,6 @@ corresponding plain-Python implementation in ``ase_core.py``.
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any, Dict
 
@@ -18,10 +17,6 @@ from chemgraph.schemas.calculators.mace_calc import _mace_lock
 from chemgraph.tools.ase_core import (
     _resolve_path,
     atoms_to_atomsdata,
-    atomsdata_to_atoms,
-    create_ase_atoms,
-    create_xyz_string,
-    extract_ase_atoms_from_tool_result,
     extract_output_json_core,
     run_ase_core,
     is_linear_molecule as _is_linear_molecule,
