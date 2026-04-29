@@ -262,7 +262,7 @@ def _render_api_settings(config: dict) -> None:
         icon="\u26a0\ufe0f",
     )
 
-    key_col1, key_col2 = st.columns(2)
+    key_col1, key_col2, key_col3 = st.columns(3)
     with key_col1:
         openai_api_key = st.text_input(
             "OpenAI API Key",
@@ -289,12 +289,24 @@ def _render_api_settings(config: dict) -> None:
             type="password",
             key="ui_groq_api_key_input",
         )
+    with key_col3:
+        alcf_access_token = st.text_input(
+            "ALCF Access Token",
+            value=st.session_state.get("ui_alcf_access_token", ""),
+            type="password",
+            key="ui_alcf_access_token_input",
+            help=(
+                "Globus OAuth access token for ALCF inference endpoints. "
+                "See https://docs.alcf.anl.gov/services/inference-endpoints/#api-access"
+            ),
+        )
 
     key_env_map = {
         "OPENAI_API_KEY": openai_api_key,
         "ANTHROPIC_API_KEY": anthropic_api_key,
         "GEMINI_API_KEY": gemini_api_key,
         "GROQ_API_KEY": groq_api_key,
+        "ALCF_ACCESS_TOKEN": alcf_access_token,
     }
 
     action_col1, action_col2 = st.columns(2)
@@ -321,7 +333,7 @@ def _render_api_settings(config: dict) -> None:
             st.rerun()
 
     st.markdown("---")
-    api_tabs = st.tabs(["OpenAI", "Anthropic", "Google", "Local"])
+    api_tabs = st.tabs(["OpenAI", "Anthropic", "Google", "ALCF", "Local"])
 
     with api_tabs[0]:
         config["api"]["openai"]["base_url"] = st.text_input(
@@ -372,6 +384,29 @@ def _render_api_settings(config: dict) -> None:
         )
 
     with api_tabs[3]:
+        alcf_section = config["api"].setdefault("alcf", {})
+        alcf_section["base_url"] = st.text_input(
+            "Base URL",
+            value=alcf_section.get(
+                "base_url",
+                "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1",
+            ),
+            key="config_alcf_url",
+            help="ALCF inference endpoint (vLLM-compatible). Default points to the Sophia cluster.",
+        )
+        alcf_section["timeout"] = st.number_input(
+            "Timeout (seconds)",
+            min_value=1,
+            max_value=300,
+            value=alcf_section.get("timeout", 30),
+            key="config_alcf_timeout",
+        )
+        st.caption(
+            "ALCF uses Globus OAuth for authentication. Set the **ALCF Access Token** "
+            "in the API Keys section above, or export `ALCF_ACCESS_TOKEN` in your shell."
+        )
+
+    with api_tabs[4]:
         config["api"]["local"]["base_url"] = st.text_input(
             "Base URL",
             value=config["api"]["local"]["base_url"],
@@ -476,6 +511,7 @@ def _render_config_summary(config: dict) -> None:
             "ANTHROPIC_API_KEY": "Anthropic",
             "GEMINI_API_KEY": "Google",
             "GROQ_API_KEY": "Groq",
+            "ALCF_ACCESS_TOKEN": "ALCF",
         }
         for env_var, provider in api_keys.items():
             if os.getenv(env_var):

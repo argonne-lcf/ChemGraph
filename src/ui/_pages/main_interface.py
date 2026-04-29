@@ -1,6 +1,7 @@
 """Main chat interface page for ChemGraph."""
 
 import html as html_mod
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -9,6 +10,7 @@ import pandas as pd
 import streamlit as st
 from ase.io import read as ase_read
 
+from chemgraph.memory.store import SessionStore
 from chemgraph.models.supported_models import supported_argo_models
 from chemgraph.utils.config_utils import (
     get_argo_user_from_nested_config,
@@ -36,6 +38,11 @@ from ui.message_utils import (
     normalize_message_content,
     strip_viewer_from_report_html,
 )
+from ui.session_utils import (
+    conversation_entry_to_messages,
+    generate_session_id,
+    session_to_conversation_history,
+)
 from ui.state import init_session_state
 from ui.visualization import (
     STMOL_AVAILABLE,
@@ -45,6 +52,8 @@ from ui.visualization import (
 
 # Re-use the constants from the configuration page
 from ui._pages.configuration import WORKFLOW_OPTIONS, normalize_workflow_name
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +109,9 @@ def render() -> None:
 
     selected_base_url = _get_base_url_for_model(selected_model, config)
     endpoint_status = check_local_model_endpoint(selected_base_url)
+
+    # ----- Session management sidebar -----
+    _render_session_sidebar()
 
     # Reload config button
     if st.sidebar.button("\U0001f504 Reload Config"):
@@ -177,6 +189,143 @@ def _render_quick_settings(
         st.info("\U0001f4a1 To make permanent changes, use the Configuration page.")
 
     return selected_model, thread_id
+
+
+def _start_new_chat() -> None:
+    """Reset conversation state for a fresh chat session."""
+    st.session_state.conversation_history.clear()
+    st.session_state.current_session_id = None
+    st.session_state.session_created = False
+    st.session_state.query_input = ""
+    st.session_state.last_run_error = None
+    st.session_state.last_run_result = None
+    st.session_state.last_run_query = None
+
+
+def _render_session_sidebar() -> None:
+    """Render the session management panel in the sidebar."""
+    store: Optional[SessionStore] = st.session_state.get("session_store")
+    if store is None:
+        return
+
+    with st.sidebar.expander("\U0001f4c2 Sessions", expanded=False):
+        # New Chat button
+        if st.button("\u2795 New Chat", key="new_chat_btn", use_container_width=True):
+            _start_new_chat()
+            st.rerun()
+
+        # Show current session info
+        current_sid = st.session_state.get("current_session_id")
+        if current_sid:
+            st.caption(f"Active session: `{current_sid}`")
+
+        # List recent sessions
+        try:
+            sessions = store.list_sessions(limit=10)
+        except Exception:
+            sessions = []
+
+        if not sessions:
+            st.caption("No saved sessions yet.")
+            return
+
+        st.markdown("**Recent sessions:**")
+        for s in sessions:
+            # Highlight the active session
+            is_active = current_sid and s.session_id == current_sid
+            prefix = "\u25b6 " if is_active else ""
+            label = s.title or "Untitled"
+            if len(label) > 35:
+                label = label[:32] + "..."
+
+            col_load, col_del = st.columns([4, 1])
+            with col_load:
+                if st.button(
+                    f"{prefix}{label}",
+                    key=f"load_session_{s.session_id}",
+                    use_container_width=True,
+                    help=(
+                        f"Model: {s.model_name} | "
+                        f"Queries: {s.query_count} | "
+                        f"{s.updated_at.strftime('%Y-%m-%d %H:%M')}"
+                    ),
+                ):
+                    _load_session(s.session_id)
+                    st.rerun()
+            with col_del:
+                if st.button(
+                    "\U0001f5d1",
+                    key=f"del_session_{s.session_id}",
+                    help="Delete this session",
+                ):
+                    try:
+                        store.delete_session(s.session_id)
+                        # If we just deleted the active session, reset
+                        if current_sid == s.session_id:
+                            _start_new_chat()
+                    except Exception as exc:
+                        logger.warning("Failed to delete session %s: %s", s.session_id, exc)
+                    st.rerun()
+
+
+def _load_session(session_id: str) -> None:
+    """Load a stored session into the active conversation."""
+    store: Optional[SessionStore] = st.session_state.get("session_store")
+    if store is None:
+        return
+
+    session = store.get_session(session_id)
+    if session is None:
+        st.sidebar.error(f"Session '{session_id}' not found.")
+        return
+
+    # Rebuild conversation_history from stored messages
+    st.session_state.conversation_history = session_to_conversation_history(session)
+    st.session_state.current_session_id = session.session_id
+    st.session_state.session_created = True
+    st.session_state.query_input = ""
+    st.session_state.last_run_error = None
+    st.session_state.last_run_result = None
+    st.session_state.last_run_query = None
+
+
+def _save_exchange_to_store(query: str, result: Any) -> None:
+    """Persist a single query/result exchange to the SessionStore.
+
+    Creates the session DB row on the first call, then appends messages.
+    """
+    store: Optional[SessionStore] = st.session_state.get("session_store")
+    if store is None:
+        return
+
+    config = st.session_state.config
+    model = config["general"]["model"]
+    workflow = normalize_workflow_name(config["general"]["workflow"])
+
+    try:
+        # Create the session row on the first exchange
+        if not st.session_state.session_created:
+            sid = generate_session_id()
+            st.session_state.current_session_id = sid
+            title = SessionStore.generate_title(query)
+            store.create_session(
+                session_id=sid,
+                model_name=model,
+                workflow_type=workflow,
+                title=title,
+            )
+            st.session_state.session_created = True
+
+        # Build SessionMessage objects for this exchange
+        entry = {"query": query, "result": result}
+        messages = conversation_entry_to_messages(entry)
+        if messages:
+            store.save_messages(
+                st.session_state.current_session_id, messages
+            )
+    except Exception as exc:
+        # Best-effort persistence -- don't break the UI.
+        logger.warning("Failed to save exchange to session store: %s", exc)
 
 
 def _render_agent_status(
@@ -539,8 +688,7 @@ def _render_query_input(config: dict, selected_model: str) -> str:
         "\U0001f680 Send", type="primary", use_container_width=True
     )
     if col_clear.button("\U0001f5d1\ufe0f Clear Chat", use_container_width=True):
-        st.session_state.conversation_history.clear()
-        st.session_state.query_input = ""
+        _start_new_chat()
         st.rerun()
     if col_refresh.button("\U0001f504 Refresh", use_container_width=True):
         st.rerun()
@@ -592,6 +740,9 @@ def _handle_query_submission(
                         "thread_id": thread_id,
                     }
                 )
+                # Persist the exchange to the session store
+                _save_exchange_to_store(query.strip(), result)
+
                 st.session_state.query_input = ""
                 st.success("\u2705 Done!")
                 st.rerun()
