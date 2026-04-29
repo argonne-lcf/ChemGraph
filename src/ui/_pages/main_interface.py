@@ -51,7 +51,7 @@ from ui.visualization import (
 )
 
 # Re-use the constants from the configuration page
-from ui._pages.configuration import WORKFLOW_OPTIONS, normalize_workflow_name
+from ui._pages.configuration import normalize_workflow_name
 
 logger = logging.getLogger(__name__)
 

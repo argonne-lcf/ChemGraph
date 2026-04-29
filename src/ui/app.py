@@ -16,12 +16,12 @@ _SRC_DIR = str(Path(__file__).resolve().parent.parent)
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
-import streamlit as st
+import streamlit as st  # noqa: E402
 
-from chemgraph import __version__ as chemgraph_version
+from chemgraph import __version__ as chemgraph_version  # noqa: E402
 
-from ui.system_info import render_sidebar_host_and_build_info
-from ui.visualization import warn_stmol_unavailable
+from ui.system_info import render_sidebar_host_and_build_info  # noqa: E402
+from ui.visualization import warn_stmol_unavailable  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Page configuration -- MUST be the first Streamlit call
