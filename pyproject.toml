@@ -64,6 +64,9 @@ ui = [
 parsl = [
     "parsl",
 ]
+ensemble_launcher = [
+    "ensemble-launcher",
+]
 xanes = [
     "mp-api; python_version >= '3.11'",
     "parsl"

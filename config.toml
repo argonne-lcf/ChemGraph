@@ -85,6 +85,21 @@ enable_function_calling = true
 enable_parallel = false
 num_workers = 2
 
+[execution]
+backend = "local"              # "local", "parsl", or "ensemble_launcher"
+system = "local"               # HPC system: "local", "polaris", "aurora"
+
+[execution.local]
+max_workers = 4
+
+[execution.parsl]
+worker_init = "export TMPDIR=/tmp"
+
+[execution.ensemble_launcher]
+comm_name = "async_zmq"
+task_executor_name = "async_processpool"
+nlevels = 0
+
 [environments.development]
 model = "gpt-4o-mini"
 verbose = true
