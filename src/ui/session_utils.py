@@ -12,7 +12,6 @@ import uuid
 from typing import Any, Optional
 
 from chemgraph.memory.schemas import Session, SessionMessage
-from chemgraph.memory.store import SessionStore
 
 from ui.message_utils import normalize_message_content
 
