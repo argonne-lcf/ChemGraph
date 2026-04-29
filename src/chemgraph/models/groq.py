@@ -3,7 +3,6 @@
 import os
 from getpass import getpass
 from langchain_groq import ChatGroq
-from chemgraph.models.supported_models import supported_groq_models
 from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
@@ -56,17 +55,16 @@ def load_groq_model(
     5. Handle any authentication errors by prompting for a new key
     """
 
+    # Strip the "groq:" routing prefix before sending to the API.
+    if model_name.startswith("groq:"):
+        model_name = model_name.removeprefix("groq:")
+
     if api_key is None:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             logger.info("GROQ API key not found in environment variables.")
             api_key = getpass("Please enter your GROQ API key: ")
             os.environ["GROQ_API_KEY"] = api_key
-
-    if model_name not in supported_groq_models:
-        raise ValueError(
-            f"Unsupported model '{model_name}'. Supported models are: {supported_groq_models}."
-        )
 
     try:
         logger.info(f"Loading GROQ model: {model_name}")

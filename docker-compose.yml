@@ -50,3 +50,15 @@ services:
       - |
         git config --global --add safe.directory /app
         exec python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
+
+  cli:
+    <<: *chemgraph-common
+    profiles: ["cli"]
+    stdin_open: true
+    tty: true
+    command:
+      - /bin/bash
+      - -lc
+      - |
+        git config --global --add safe.directory /app
+        exec chemgraph --interactive

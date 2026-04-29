@@ -7,10 +7,8 @@ from typing import Any, Dict
 
 from langchain_core.tools import tool
 from chemgraph.schemas.atomsdata import AtomsData
-from chemgraph.schemas.ase_input import (
-    ASEInputSchema,
-    ASEOutputSchema,
-)
+from chemgraph.schemas.ase_input import ASEInputSchema
+from chemgraph.schemas.calculators.mace_calc import _mace_lock
 from chemgraph.tools.mcp_helper import _resolve_path
 
 
@@ -316,7 +314,7 @@ def load_calculator(calculator: dict) -> tuple[object, dict, dict]:
 
 
 @tool
-def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
+def run_ase(params: ASEInputSchema) -> dict:
     """Run ASE calculations using specified input parameters.
 
     Parameters
@@ -326,7 +324,7 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
 
     Returns
     -------
-    ASEOutputSchema
+    dict
         Output containing calculation results and status
 
     Raises
@@ -334,6 +332,15 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     ValueError
         If the calculator is not supported or if the calculation fails
     """
+    calc_type = params.calculator.calculator_type.lower()
+    if "mace" in calc_type:
+        with _mace_lock:
+            return _run_ase_impl(params)
+    return _run_ase_impl(params)
+
+
+def _run_ase_impl(params: ASEInputSchema):
+    """Core implementation of run_ase, separated to allow lock-guarded dispatch."""
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
@@ -345,7 +352,6 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
     # Calculate wall time.
     start_time = time.time()
 
-    input_structure_file = params.input_structure_file
     input_structure_file = params.input_structure_file
     output_results_file = _resolve_path(params.output_results_file)
     optimizer = params.optimizer
@@ -384,30 +390,40 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         if driver == "dipole":
             # Catch exception if calculator doesn't have get_dipole_moment()
             try:
-                dipole = list(atoms.get_dipole_moment())
+                dipole = [round(x, 4) for x in atoms.get_dipole_moment()]
             except Exception:
                 pass
 
         end_time = time.time()
         wall_time = end_time - start_time
-        simulation_output = ASEOutputSchema(
-            input_structure_file=input_structure_file,
-            converged=True,
-            final_structure=final_structure,
-            simulation_input=params,
-            success=True,
-            dipole_value=dipole,
-            single_point_energy=energy,
-            wall_time=wall_time,
-        )
-        with open(output_results_file, "w", encoding="utf-8") as wf:
-            wf.write(simulation_output.model_dump_json(indent=4))
-        return {
-            "status": "success",
-            "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
+        simulation_output = {
+            "input_structure_file": input_structure_file,
+            "converged": True,
+            "final_structure": final_structure.model_dump(),
+            "simulation_input": params.model_dump(),
+            "success": True,
+            "dipole_value": dipole,
             "single_point_energy": energy,
-            "unit": "eV",
+            "energy_unit": "eV",
+            "wall_time": wall_time,
         }
+        with open(output_results_file, "w", encoding="utf-8") as wf:
+            json.dump(simulation_output, wf, indent=4, default=str)
+
+        if driver == "energy":
+            return {
+                "status": "success",
+                "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
+                "single_point_energy": energy,
+                "unit": "eV",
+            }
+        elif driver == "dipole":
+            return {
+                "status": "success",
+                "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
+                "dipole_moment": dipole,
+                "dipole_unit": "e * angstrom",
+            }
 
     OPTIMIZERS = {
         "bfgs": BFGS,
@@ -442,157 +458,174 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
         if driver in {"vib", "thermo", "ir"}:
             from ase.vibrations import Vibrations
             from ase import units
-
-            vib_name = _resolve_path("vib")
-            vib = Vibrations(atoms, name=vib_name)
-
-            vib.clean()
-
-            vib.clean()
-            vib.run()
-
-            vib_data = {
-                "energies": [],
-                "energy_unit": "meV",
-                "frequencies": [],
-                "frequency_unit": "cm-1",
-            }
-
-            energies = vib.get_energies()
-            linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-
-            for idx, e in enumerate(energies):
-                is_imag = abs(e.imag) > 1e-8
-                e_val = e.imag if is_imag else e.real
-                energy_meV = 1e3 * e_val
-                freq_cm1 = e_val / units.invcm
-                suffix = "i" if is_imag else ""
-                vib_data["energies"].append(f"{energy_meV}{suffix}")
-                vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
-
-            # Remove existing frequencies.txt and .traj files
+            import tempfile
+            import shutil
             import glob
 
-            # Remove any existing .traj files that match the new pattern
-            for traj_file in glob.glob(f"{vib_name}.*.traj"):
-                os.remove(traj_file)
+            ir_plot_path = None  # Will be set inside tmpdir block if driver == "ir"
+            # Use a temporary directory to isolate parallel vibration runs.
+            # ASE's Vibrations class writes cache files (vib/cache.*.json) and
+            # trajectory files (vib.*.traj) using the `name` parameter. Without
+            # isolation, parallel calls for different molecules write to the same
+            # files, causing shape-mismatch errors and corrupted thermochemistry.
+            mol_stem = (
+                Path(input_structure_file).stem if input_structure_file else "mol"
+            )
 
-            # Write frequencies into frequencies.txt
-            freq_file_path = _resolve_path("frequencies.csv")
-            freq_file = Path(freq_file_path)
-            if freq_file.exists():
-                freq_file.unlink()
+            with tempfile.TemporaryDirectory(
+                prefix=f"chemgraph_vib_{mol_stem}_"
+            ) as tmpdir:
+                vib_name = os.path.join(tmpdir, "vib")
+                vib = Vibrations(atoms, name=vib_name)
 
-            with freq_file.open("w") as f:
-                for i, freq in enumerate(vib_data["frequencies"], start=0):
-                    f.write(f"vib.{i}.traj,{freq}\n")
+                vib.clean()
+                vib.run()
 
-            # Write normal modes .traj files
-            for i in range(len(energies)):
-                vib.write_mode(n=None, kT=units.kB * 300, nimages=30)
+                vib_data = {
+                    "energies": [],
+                    "energy_unit": "meV",
+                    "frequencies": [],
+                    "frequency_unit": "cm-1",
+                }
 
-            if driver == "ir":
-                from ase.vibrations import Infrared
-                import matplotlib.pyplot as plt
+                energies = vib.get_energies()
+                linear = is_linear_molecule.invoke({"atomsdata": final_structure})
 
-                ir_data["spectrum_frequencies"] = []
-                ir_data["spectrum_frequencies_units"] = "cm-1"
+                for idx, e in enumerate(energies):
+                    is_imag = abs(e.imag) > 1e-8
+                    e_val = e.imag if is_imag else e.real
+                    energy_meV = 1e3 * e_val
+                    freq_cm1 = e_val / units.invcm
+                    suffix = "i" if is_imag else ""
+                    vib_data["energies"].append(f"{energy_meV}{suffix}")
+                    vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
-                ir_data["spectrum_intensities"] = []
-                ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
+                # Write frequencies.csv to the resolved output directory
+                freq_file_path = _resolve_path(f"frequencies_{mol_stem}.csv")
+                freq_file = Path(freq_file_path)
+                if freq_file.exists():
+                    freq_file.unlink()
 
-                ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
+                with freq_file.open("w") as f:
+                    for i, freq in enumerate(vib_data["frequencies"], start=0):
+                        f.write(f"{mol_stem}_vib.{i}.traj,{freq}\n")
 
-                ir_name = _resolve_path("ir")
-                ir = Infrared(atoms, name=ir_name)
-                ir.clean()
-                ir.run()
+                # Write normal modes .traj files inside tmpdir, then copy out
+                for i in range(len(energies)):
+                    vib.write_mode(n=i, kT=units.kB * 300, nimages=30)
 
-                IR_SPECTRUM_START = 500  # Start of IR spectrum range
-                IR_SPECTRUM_END = 4000  # End of IR spectrum range
-                freq_intensity = ir.get_spectrum(
-                    start=IR_SPECTRUM_START, end=IR_SPECTRUM_END
-                )
-                """
-                for f, inten in zip(freq_intensity[0], freq_intensity[1]):
-                    ir_data["spectrum_frequencies"].append(f"{f}")
-                    ir_data["spectrum_intensities"].append(f"{inten}")
-                """
-                # Generate IR spectrum plot
-                fig, ax = plt.subplots()
-                ax.plot(freq_intensity[0], freq_intensity[1])
-                ax.set_xlabel("Frequency (cm⁻¹)")
-                ax.set_ylabel("Intensity (a.u.)")
-                ax.set_title("Infrared Spectrum")
-                ax.grid(True)
-                ax.set_title("Infrared Spectrum")
-                ax.grid(True)
-                ir_plot_path = _resolve_path("ir_spectrum.png")
-                fig.savefig(ir_plot_path, format="png", dpi=300)
+                # Copy .traj files to the resolved output directory with molecule prefix
+                traj_dest_dir = _resolve_path("")
+                if traj_dest_dir:
+                    os.makedirs(traj_dest_dir, exist_ok=True)
+                for traj_file in glob.glob(os.path.join(tmpdir, "vib.*.traj")):
+                    dest_name = f"{mol_stem}_{Path(traj_file).name}"
+                    dest_path = (
+                        os.path.join(traj_dest_dir, dest_name)
+                        if traj_dest_dir
+                        else dest_name
+                    )
+                    shutil.copy2(traj_file, dest_path)
 
-                ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
-                ir_data["Normal mode data"] = (
-                    f"Normal modes saved as individual .traj files in {os.path.abspath(ir_name)}"
-                )
+                if driver == "ir":
+                    from ase.vibrations import Infrared
+                    import matplotlib.pyplot as plt
 
-            if driver == "thermo":
-                # Approximation for a single atom system.
-                if len(atoms) == 1:
-                    thermo_data = {
-                        "enthalpy": single_point_energy,
-                        "entropy": 0.0,
-                        "gibbs_free_energy": single_point_energy,
-                        "unit": "eV",
-                    }
-                else:
-                    from ase.thermochemistry import IdealGasThermo
+                    ir_data["spectrum_frequencies"] = []
+                    ir_data["spectrum_frequencies_units"] = "cm-1"
 
-                    linear = is_linear_molecule.invoke({"atomsdata": final_structure})
-                    geometry = "linear" if linear else "nonlinear"
-                    symmetrynumber = get_symmetry_number.invoke(
-                        {"atomsdata": final_structure}
+                    ir_data["spectrum_intensities"] = []
+                    ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
+
+                    ir_name = os.path.join(tmpdir, "ir")
+                    ir = Infrared(atoms, name=ir_name)
+                    ir.clean()
+                    ir.run()
+
+                    IR_SPECTRUM_START = 500  # Start of IR spectrum range
+                    IR_SPECTRUM_END = 4000  # End of IR spectrum range
+                    freq_intensity = ir.get_spectrum(
+                        start=IR_SPECTRUM_START, end=IR_SPECTRUM_END
+                    )
+                    # Generate IR spectrum plot
+                    fig, ax = plt.subplots()
+                    ax.plot(freq_intensity[0], freq_intensity[1])
+                    ax.set_xlabel("Frequency (cm⁻¹)")
+                    ax.set_ylabel("Intensity (a.u.)")
+                    ax.set_title("Infrared Spectrum")
+                    ax.grid(True)
+                    ir_plot_path = _resolve_path(f"ir_spectrum_{mol_stem}.png")
+                    fig.savefig(ir_plot_path, format="png", dpi=300)
+                    plt.close(fig)
+
+                    ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
+                    ir_data["Normal mode data"] = (
+                        f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
                     )
 
-                    thermo = IdealGasThermo(
-                        vib_energies=energies,
-                        potentialenergy=single_point_energy,
-                        atoms=atoms,
-                        geometry=geometry,
-                        symmetrynumber=symmetrynumber,
-                        spin=0,  # Only support spin=0
-                    )
-                    thermo_data = {
-                        "enthalpy": float(thermo.get_enthalpy(temperature=temperature)),
-                        "entropy": float(
-                            thermo.get_entropy(
-                                temperature=temperature, pressure=pressure
-                            )
-                        ),
-                        "gibbs_free_energy": float(
-                            thermo.get_gibbs_energy(
-                                temperature=temperature, pressure=pressure
-                            )
-                        ),
-                        "unit": "eV",
-                    }
+                if driver == "thermo":
+                    # Approximation for a single atom system.
+                    if len(atoms) == 1:
+                        thermo_data = {
+                            "enthalpy": single_point_energy,
+                            "entropy": 0.0,
+                            "gibbs_free_energy": single_point_energy,
+                            "unit": "eV",
+                        }
+                    else:
+                        from ase.thermochemistry import IdealGasThermo
+
+                        linear = is_linear_molecule.invoke(
+                            {"atomsdata": final_structure}
+                        )
+                        geometry = "linear" if linear else "nonlinear"
+                        symmetrynumber = get_symmetry_number.invoke(
+                            {"atomsdata": final_structure}
+                        )
+
+                        thermo = IdealGasThermo(
+                            vib_energies=energies,
+                            potentialenergy=single_point_energy,
+                            atoms=atoms,
+                            geometry=geometry,
+                            symmetrynumber=symmetrynumber,
+                            spin=0,  # Only support spin=0
+                        )
+                        thermo_data = {
+                            "enthalpy": float(
+                                thermo.get_enthalpy(temperature=temperature)
+                            ),
+                            "entropy": float(
+                                thermo.get_entropy(
+                                    temperature=temperature, pressure=pressure
+                                )
+                            ),
+                            "gibbs_free_energy": float(
+                                thermo.get_gibbs_energy(
+                                    temperature=temperature, pressure=pressure
+                                )
+                            ),
+                            "unit": "eV",
+                        }
 
         end_time = time.time()
         wall_time = end_time - start_time
+        simulation_output = {
+            "input_structure_file": input_structure_file,
+            "converged": converged,
+            "final_structure": final_structure.model_dump(),
+            "simulation_input": params.model_dump(),
+            "vibrational_frequencies": vib_data,
+            "thermochemistry": thermo_data,
+            "success": True,
+            "ir_data": ir_data,
+            "single_point_energy": single_point_energy,
+            "energy_unit": "eV",
+            "wall_time": wall_time,
+        }
 
-        simulation_output = ASEOutputSchema(
-            input_structure_file=input_structure_file,
-            converged=converged,
-            final_structure=final_structure,
-            simulation_input=params,
-            vibrational_frequencies=vib_data,
-            thermochemistry=thermo_data,
-            success=True,
-            ir_data=ir_data,
-            single_point_energy=single_point_energy,
-            wall_time=wall_time,
-        )
-        with open(output_results_file, "w") as wf:
-            wf.write(simulation_output.model_dump_json(indent=4))
+        with open(output_results_file, "w", encoding="utf-8") as wf:
+            json.dump(simulation_output, wf, indent=4, default=str)
 
         # Return message based on driver. Keep the return output minimal.
         if driver == "opt":
@@ -627,11 +660,11 @@ def run_ase(params: ASEInputSchema) -> ASEOutputSchema:
                 "status": "success",
                 "result": {
                     "vibrational_frequencies": vib_data
-                },  # small payload for LLMs,  # small payload for LLMs
+                },  # small payload for LLMs
                 "message": (
-                    "Infrared computer and returned"
+                    "Infrared computed and returned. "
                     f"Full results (structure, vibrations, thermochemistry and metadata) saved to {os.path.abspath(output_results_file)}. "
-                    f"IR plot Saved to {os.path.abspath(ir_plot_path)}. Normal modes saved as individual .traj files"
+                    f"IR plot saved to {os.path.abspath(ir_plot_path) if ir_plot_path else 'N/A'}. Normal modes saved as individual .traj files"
                 ),
             }
 

@@ -1,0 +1,220 @@
+{
+    "molecules": [
+    {
+        "name": "sulfur dioxide",
+        "number_of_atoms": 3,
+        "smiles": "O=S=O"
+    },
+    {
+        "name": "Nitrogen Dioxide",
+        "number_of_atoms": 3,
+        "smiles": "N(=O)[O]"
+    },
+    {
+        "name": "water",
+        "number_of_atoms": 3,
+        "smiles": "O"
+    },
+    {
+        "name": "carbon dioxide",
+        "number_of_atoms": 3,
+        "smiles": "O=C=O"
+    },
+    {
+        "name": "carbon monoxide",
+        "number_of_atoms": 2,
+        "smiles": "[C-]#[O+]"
+    },
+    {
+        "name": "nitrogen",
+        "number_of_atoms": 2,
+        "smiles": "N#N"
+    },
+    {
+        "name": "methane",
+        "number_of_atoms": 5,
+        "smiles": "C"
+    },
+    {
+        "name": "hydrogen gas",
+        "number_of_atoms": 2,
+        "smiles": "[H][H]"
+    },
+    {
+        "name": "oxygen",
+        "number_of_atoms": 2,
+        "smiles": "O=O"
+    },
+    {
+        "name": "ammonia",
+        "number_of_atoms": 4,
+        "smiles": "N"
+    },
+    {
+        "name": "ethene",
+        "number_of_atoms": 6,
+        "smiles": "C=C"
+    },
+    {
+        "name": "ethane",
+        "number_of_atoms": 8,
+        "smiles": "CC"
+    },
+    {
+        "name": "ethanol",
+        "number_of_atoms": 9,
+        "smiles": "CCO"
+    },
+    {
+        "name": "hydrogen peroxide",
+        "number_of_atoms": 4,
+        "smiles": "OO"
+    },
+    {
+        "name": "carbonic acid",
+        "number_of_atoms": 6,
+        "smiles": "OC(=O)O"
+    },
+    {
+        "name": "propane",
+        "number_of_atoms": 11,
+        "smiles": "CCC"
+    },
+    {
+        "name": "formic acid",
+        "number_of_atoms": 5,
+        "smiles": "O=CO"
+    },
+    {
+        "name": "sulfur trioxide",
+        "number_of_atoms": 4,
+        "smiles": "O=S(=O)=O"
+    },
+    {
+        "name": "acetic acid",
+        "number_of_atoms": 8,
+        "smiles": "CC(=O)O"
+    },
+    {
+        "name": "acetamide",
+        "number_of_atoms": 9,
+        "smiles": "CC(=O)N"
+    }
+    ],
+    "reactions": [
+    {
+        "reaction_index": 1,
+        "reaction_name": "Methane Combustion",
+        "reactants": [
+            {"name": "Methane", "smiles": "C", "coefficient": 1},
+            {"name": "Oxygen", "smiles": "O=O", "coefficient": 2}
+        ],
+        "products": [
+            {"name": "Carbon dioxide", "smiles": "O=C=O", "coefficient": 1},
+            {"name": "Water", "smiles": "O", "coefficient": 2}
+        ]
+    },
+    {
+        "reaction_index": 2,
+        "reaction_name": "Ammonia Synthesis",
+        "reactants": [
+            {"name": "Nitrogen gas", "smiles": "N#N", "coefficient": 1},
+            {"name": "Hydrogen gas", "smiles": "[H][H]", "coefficient": 3}
+        ],
+        "products": [
+            {"name": "Ammonia", "smiles": "N", "coefficient": 2}
+        ]
+    },
+    {
+        "reaction_index": 3,
+        "reaction_name": "Water Gas Shift Reaction",
+        "reactants": [
+            {"name": "Carbon monoxide", "smiles": "[C-]#[O+]", "coefficient": 1},
+            {"name": "Water", "smiles": "O", "coefficient": 1}
+        ],
+        "products": [
+            {"name": "Carbon dioxide", "smiles": "O=C=O", "coefficient": 1},
+            {"name": "Hydrogen gas", "smiles": "[H][H]", "coefficient": 1}
+        ]
+    },
+    {
+        "reaction_index": 4,
+        "reaction_name": "Ethene Hydrogenation",
+        "reactants": [
+            {"name": "Ethene", "smiles": "C=C", "coefficient": 1},
+            {"name": "Hydrogen gas", "smiles": "[H][H]", "coefficient": 1}
+        ],
+        "products": [
+            {"name": "Ethane", "smiles": "CC", "coefficient": 1}
+        ]
+    },
+    {
+        "reaction_index": 5,
+        "reaction_name": "Ethanol Combustion",
+        "reactants": [
+            {"name": "Ethanol", "smiles": "CCO", "coefficient": 1},
+            {"name": "Oxygen", "smiles": "O=O", "coefficient": 3}
+        ],
+        "products": [
+            {"name": "Carbon dioxide", "smiles": "O=C=O", "coefficient": 2},
+            {"name": "Water", "smiles": "O", "coefficient": 3}
+        ]
+    },
+    {
+        "reaction_index": 6,
+        "reaction_name": "Hydration of Alkene",
+        "reactants": [
+            {"name": "Ethene", "smiles": "C=C", "coefficient": 1},
+            {"name": "Water", "smiles": "O", "coefficient": 1}
+        ],
+        "products": [
+            {"name": "Ethanol", "smiles": "CCO", "coefficient": 1}
+        ]
+    },
+    {
+        "reaction_index": 7,
+        "reaction_name": "Hydrogen Peroxide Decomposition",
+        "reactants": [
+            {"name": "Hydrogen peroxide", "smiles": "OO", "coefficient": 2}
+        ],
+        "products": [
+            {"name": "Water", "smiles": "O", "coefficient": 2},
+            {"name": "Oxygen", "smiles": "O=O", "coefficient": 1}
+        ]
+    },
+    {
+        "reaction_index": 8,
+        "reaction_name": "Carbonic Acid Formation",
+        "reactants": [
+            {"name": "Carbon dioxide", "smiles": "O=C=O", "coefficient": 1},
+            {"name": "Water", "smiles": "O", "coefficient": 1}
+        ],
+        "products": [
+            {"name": "Carbonic acid", "smiles": "OC(=O)O", "coefficient": 1}
+        ]
+    },
+    {
+        "reaction_index": 9,
+        "reaction_name": "Propane Combustion",
+        "reactants": [
+            {"name": "Propane", "smiles": "CCC", "coefficient": 1},
+            {"name": "Oxygen", "smiles": "O=O", "coefficient": 5}
+        ],
+        "products": [
+            {"name": "Carbon dioxide", "smiles": "O=C=O", "coefficient": 3},
+            {"name": "Water", "smiles": "O", "coefficient": 4}
+        ]
+    },
+    {
+        "reaction_index": 10,
+        "reaction_name": "Formic Acid Decomposition",
+        "reactants": [
+            {"name": "Formic acid", "smiles": "O=CO", "coefficient": 1}
+        ],
+        "products": [
+            {"name": "Carbon dioxide", "smiles": "O=C=O", "coefficient": 1},
+            {"name": "Hydrogen gas", "smiles": "[H][H]", "coefficient": 1}
+        ]
+    }
+]
+}

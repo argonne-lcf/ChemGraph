@@ -30,7 +30,7 @@ dependencies = [
     "numpy==2.2.6",
     "numexpr==2.11.0",
     "pytest==8.4.1",
-    "deepdiff==8.5.0",
+
     "ase",
     "rdkit",
     "pymatgen",
@@ -64,16 +64,31 @@ ui = [
 parsl = [
     "parsl",
 ]
+xanes = [
+    "mp-api; python_version >= '3.11'",
+    "parsl"
+]
+rag = [
+    "faiss-cpu>=1.7.4",
+    "langchain-text-splitters",
+    "langchain-huggingface",
+    "sentence-transformers>=2.2.2",
+    "pymupdf>=1.24.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
 "Repository" = "https://github.com/argonne-lcf/ChemGraph"
 
 [project.scripts]
-chemgraph = "ui.cli:main"
+chemgraph = "chemgraph.cli:main"
+chemgraph-eval = "chemgraph.eval.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src/"]
+
+[tool.setuptools.package-data]
+"chemgraph.eval" = ["data/*.json"]
 
 [tool.ruff]
 line-length = 88  # Match Black's default (adjust as needed)

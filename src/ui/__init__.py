@@ -1,8 +1,7 @@
-"""
-ChemGraph UI Package
+"""ChemGraph UI Package.
 
-This package contains the user interface components for ChemGraph including
-the Streamlit web app and command-line interface.
+This package contains the Streamlit web application for ChemGraph.
+The CLI has been moved to ``chemgraph.cli``.
 """
 
 try:

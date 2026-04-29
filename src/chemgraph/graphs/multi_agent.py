@@ -1,35 +1,49 @@
-import json
-from typing import Any
-from pydantic import BaseModel
+"""Multi-agent workflow using the LangGraph Send() (map-reduce) pattern.
 
+Architecture
+------------
+Main graph (``PlannerState``)::
+
+    Planner --condition--> Send(executor_subgraph, task1..N) --> Planner
+                       |-> ResponseAgent --> END   (when structured_output)
+                       |-> END                     (when FINISH, no formatting)
+
+Executor subgraph (``ExecutorState``)::
+
+    executor_agent --> ToolNode --> executor_agent  (ReAct loop)
+                   |-> finalize --> END             (no more tool calls)
+"""
+
+import json
+from typing import Any, Union
+from functools import partial
+
+from pydantic import BaseModel
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, END
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from chemgraph.tools.ase_tools import run_ase, extract_output_json
-from chemgraph.tools.cheminformatics_tools import (
-    molecule_name_to_smiles,
-    smiles_to_coordinate_file,
-)
-from chemgraph.prompt.multi_agent_prompt import (
-    planner_prompt,
-    executor_prompt,
-    aggregator_prompt,
-    formatter_multi_prompt,
-    planner_prompt_json,
-)
-from chemgraph.schemas.multi_agent_response import (
-    PlannerResponse,
-    ResponseFormatter,
-)
+from langgraph.types import Send
+
 from chemgraph.utils.logging_config import setup_logger
-from chemgraph.state.multi_agent_state import ManagerWorkerState
+from chemgraph.utils.parsing import extract_json_block, parse_response_formatter
+from chemgraph.state.multi_agent_state import ExecutorState, PlannerState
+from chemgraph.schemas.multi_agent_response import PlannerResponse
+from chemgraph.prompt.multi_agent_prompt import (
+    planner_prompt as default_planner_prompt,
+    executor_prompt as default_executor_prompt,
+    formatter_multi_prompt as default_formatter_prompt,
+)
 
 logger = setup_logger(__name__)
 
 
-### Help Functions
+# ---------------------------------------------------------------------------
+# Serialization helpers
+# ---------------------------------------------------------------------------
+
+
 def _to_jsonable(obj: Any) -> Any:
     """Recursively convert Pydantic models to plain dicts."""
     if isinstance(obj, BaseModel):
@@ -43,7 +57,18 @@ def _to_jsonable(obj: Any) -> Any:
 
 
 def sanitize_tool_calls(messages: list[BaseMessage]) -> list[BaseMessage]:
-    """Ensure tool_call['args'] contains only JSON-serializable data."""
+    """Ensure tool_call['args'] contains only JSON-serializable data.
+
+    After LangChain's ToolNode validates tool-call arguments against
+    Pydantic schemas (e.g. ``ASEInputSchema``), nested calculator dicts
+    may be replaced by live Pydantic objects (e.g. ``MaceCalc``).  When
+    these messages are later re-sent to the LLM, LangChain serialises
+    ``tool_call['args']`` with ``json.dumps`` — which raises
+    ``TypeError`` for Pydantic instances.
+
+    This function walks every ``AIMessage.tool_calls`` entry and
+    recursively converts Pydantic models back to plain dicts.
+    """
     for m in messages:
         if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
             new_tool_calls = []
@@ -55,467 +80,600 @@ def sanitize_tool_calls(messages: list[BaseMessage]) -> list[BaseMessage]:
     return messages
 
 
-def _parse_planner_response(raw_content: Any) -> PlannerResponse:
-    """Parse and validate planner output from either string or JSON-like data."""
-    payload = raw_content
-    if isinstance(raw_content, str):
-        payload = json.loads(raw_content)
-    return PlannerResponse.model_validate(payload)
+# ---------------------------------------------------------------------------
+# Planner helpers
+# ---------------------------------------------------------------------------
 
 
-def _is_connection_error(exc: Exception) -> bool:
-    """Heuristic for upstream transport/connectivity failures from model providers."""
-    text = str(exc).lower()
-    signals = (
-        "connection error",
-        "failed to connect",
-        "connection refused",
-        "timeout",
-        "timed out",
-        "max retries exceeded",
-        "name resolution",
-        "network is unreachable",
-    )
-    return any(signal in text for signal in signals)
+def _parse_planner_response(
+    raw_text: str,
+) -> tuple[PlannerResponse | None, str | None]:
+    """Parse raw LLM text into a :class:`PlannerResponse`.
 
-
-def route_tools(state: ManagerWorkerState):
-    """Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
-
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing worker channels and messages
-
-    Returns
-    -------
-    str
-        Either 'tools' or 'done' based on the presence of tool calls
-
-    Raises
-    ------
-    ValueError
-        If no messages are found for the current worker
+    Returns ``(parsed_response, None)`` on success,
+    or ``(None, error_msg)`` on failure.
     """
-    worker_id = state["current_worker"]
-    messages = state.get("worker_messages", [])
+    # 1. Direct validation
+    try:
+        return PlannerResponse.model_validate_json(raw_text.strip()), None
+    except Exception:
+        pass
 
-    if not messages:
-        raise ValueError(
-            f"No messages found for worker {worker_id} in worker_messages."
+    # 2. Extract JSON block (handles ```json ... ``` or bare {})
+    extracted = extract_json_block(raw_text)
+    if extracted:
+        try:
+            return PlannerResponse.model_validate_json(extracted), None
+        except Exception:
+            pass
+        try:
+            return PlannerResponse.model_validate(json.loads(extracted)), None
+        except Exception:
+            pass
+
+    # 3. All attempts failed
+    return None, f"Could not parse planner response from: {raw_text[:200]}"
+
+
+# ---------------------------------------------------------------------------
+# Planner node
+# ---------------------------------------------------------------------------
+
+
+def planner_agent(
+    state: PlannerState,
+    llm: ChatOpenAI,
+    system_prompt: str,
+    max_retries: int = 1,
+):
+    """Planner that decomposes tasks and routes the workflow.
+
+    On the first invocation it sees only the user query in ``messages``.
+    On subsequent invocations it also sees ``executor_results`` from
+    completed executor subgraphs and can decide to re-plan or finish.
+
+    The LLM is prompted to return a JSON object matching the
+    ``PlannerResponse`` schema.  If parsing fails, the LLM is retried
+    up to ``max_retries`` times with error feedback.
+    """
+    executor_outputs = state.get("executor_results", [])
+    failed_tasks = state.get("failed_tasks", [])
+    content_block = f"Current Conversation History: {state['messages']}"
+    if executor_outputs:
+        results_text = "\n".join(
+            m.content if hasattr(m, "content") else str(m) for m in executor_outputs
+        )
+        content_block += (
+            f"\n\n### UPDATED: Results from Executor Tasks ###\n{results_text}"
+        )
+    if failed_tasks:
+        failure_lines = []
+        for ft in failed_tasks:
+            failure_lines.append(
+                f"- Task {ft.get('task_index', '?')} "
+                f"(retry #{ft.get('retry_count', 0)}): "
+                f"{ft.get('error', 'unknown error')}"
+            )
+        content_block += (
+            "\n\n### FAILED TASKS (may be retried) ###\n"
+            + "\n".join(failure_lines)
+            + "\n\nYou may retry failed tasks by including them in your "
+            "tasks list with the same task_index. Use the error information "
+            "above to adjust the prompt if needed (e.g., fix molecule names, "
+            "adjust parameters). If a task cannot succeed, set next_step "
+            "to FINISH and explain the failure in thought_process."
         )
 
-    ai_message = messages[-1]
-    if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": content_block},
+    ]
+
+    raw_response = llm.invoke(messages).content
+    response_obj, parse_error = _parse_planner_response(raw_response)
+
+    retries = 0
+    while response_obj is None and retries < max_retries:
+        retries += 1
+        logger.warning(
+            "Planner: parse attempt %d failed (%s); retrying.",
+            retries,
+            parse_error,
+        )
+        retry_messages = messages + [
+            {"role": "assistant", "content": raw_response},
+            {
+                "role": "user",
+                "content": (
+                    f"Error: {parse_error}\n\n"
+                    "Your previous response could not be parsed. "
+                    "Please output ONLY a valid JSON object matching the "
+                    "required format. No markdown fences, no text outside "
+                    "the JSON."
+                ),
+            },
+        ]
+        raw_response = llm.invoke(retry_messages).content
+        response_obj, parse_error = _parse_planner_response(raw_response)
+
+    if response_obj is None:
+        raise ValueError(
+            f"Planner failed to produce valid JSON after "
+            f"{max_retries} retries: {parse_error}"
+        )
+
+    logger.info("PLANNER: %s", response_obj.model_dump_json())
+    current_iterations = state.get("planner_iterations", 0)
+    return {
+        "messages": [AIMessage(content=response_obj.thought_process)],
+        "next_step": response_obj.next_step,
+        "tasks": response_obj.tasks if response_obj.tasks else [],
+        "planner_iterations": current_iterations + 1,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Planner router (conditional edge)
+# ---------------------------------------------------------------------------
+
+
+def unified_planner_router(
+    state: PlannerState,
+    structured_output: bool = False,
+    max_planner_iterations: int = 3,
+    max_task_retries: int = 2,
+) -> Union[str, list[Send]]:
+    """Route based on the planner's ``next_step`` decision.
+
+    * ``executor_subgraph`` -- fan-out tasks via ``Send()``
+    * ``FINISH`` -- go to ``ResponseAgent`` (if structured_output) or ``END``
+
+    A cycle guard forces ``FINISH`` when the planner has dispatched
+    executors ``max_planner_iterations`` times to prevent infinite loops.
+
+    For retried tasks, the ``retry_count`` from the ``WorkerTask`` is
+    checked against ``max_task_retries``.  Tasks that have exceeded the
+    retry limit are skipped and logged as permanently failed.
+    """
+    next_step = state.get("next_step")
+    iterations = state.get("planner_iterations", 0)
+
+    if next_step == "executor_subgraph":
+        if iterations > max_planner_iterations:
+            logger.warning(
+                "Planner exceeded max iterations (%d); forcing FINISH.",
+                max_planner_iterations,
+            )
+            if structured_output:
+                return "ResponseAgent"
+            return END
+
+        tasks = state.get("tasks", [])
+
+        # Build a lookup of previous failure counts from state.
+        # This covers cases where the planner emits a task without
+        # explicitly setting retry_count — we infer it from history.
+        failed_history: dict[int, int] = {}
+        for ft in state.get("failed_tasks", []):
+            tidx = ft.get("task_index", -1)
+            prev = ft.get("retry_count", 0)
+            # Track the highest retry_count seen for each task_index
+            failed_history[tidx] = max(failed_history.get(tidx, 0), prev + 1)
+
+        sends = []
+        for i, t in enumerate(tasks):
+            task_index = getattr(t, "task_index", i + 1)
+            # Determine retry_count: use whichever is larger —
+            # the value from the task object or the inferred history.
+            task_retry = getattr(t, "retry_count", 0)
+            inferred_retry = failed_history.get(task_index, 0)
+            retry_count = max(task_retry, inferred_retry)
+
+            if retry_count >= max_task_retries:
+                logger.warning(
+                    "Task %d exceeded max retries (%d); skipping.",
+                    task_index,
+                    max_task_retries,
+                )
+                continue
+
+            sends.append(
+                Send(
+                    "executor_subgraph",
+                    {
+                        "executor_id": f"worker_{task_index}",
+                        "task_index": task_index,
+                        "retry_count": retry_count,
+                        "messages": [getattr(t, "prompt", str(t))],
+                    },
+                )
+            )
+
+        if not sends:
+            # All tasks were skipped (max retries exceeded).
+            logger.warning(
+                "All dispatched tasks exceeded retry limits; forcing FINISH."
+            )
+            if structured_output:
+                return "ResponseAgent"
+            return END
+
+        return sends
+
+    # FINISH
+    if structured_output:
+        return "ResponseAgent"
+    return END
+
+
+# ---------------------------------------------------------------------------
+# Executor subgraph nodes
+# ---------------------------------------------------------------------------
+
+
+async def executor_model_node(
+    state: ExecutorState,
+    llm: ChatOpenAI,
+    system_prompt: str,
+    tools: list,
+):
+    """ReAct reasoning step inside an executor subgraph.
+
+    Reads its own ``messages`` history, calls the LLM with bound tools,
+    and returns the response.
+    """
+    sanitized = sanitize_tool_calls(list(state["messages"]))
+    messages = [{"role": "system", "content": system_prompt}] + sanitized
+
+    # Flatten MCP/LangChain content blocks to plain text for ChatOpenAI
+    for m in messages:
+        content = (
+            m.get("content") if isinstance(m, dict) else getattr(m, "content", None)
+        )
+        if isinstance(content, list):
+            text = "\n".join(
+                block.get("text", str(block)) if isinstance(block, dict) else str(block)
+                for block in content
+            )
+            if isinstance(m, dict):
+                m["content"] = text
+            else:
+                m.content = text
+
+    llm_with_tools = llm.bind_tools(tools)
+    response = await llm_with_tools.ainvoke(messages)
+
+    logger.debug("Executor response: %s", response)
+    return {"messages": [response]}
+
+
+def route_executor(state: ExecutorState):
+    """Standard ReAct routing: tool calls -> ``tools``, else -> ``done``."""
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
     return "done"
 
 
-def PlannerAgent(
-    state: ManagerWorkerState,
-    llm: ChatOpenAI,
-    system_prompt: str,
-    support_structured_output: bool,
-):
-    """An LLM agent that decomposes tasks into subtasks for workers.
+_ERROR_MARKERS = [
+    "Error:",
+    "error:",
+    "Exception:",
+    "exception:",
+    "Traceback",
+    "failed",
+    "FAILED",
+    "could not",
+    "Could not",
+    "No PubChem compound found",
+    "ValueError",
+    "TypeError",
+    "KeyError",
+    "RuntimeError",
+]
 
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing the task to be decomposed
-    llm : ChatOpenAI
-        The language model to use for task decomposition
-    system_prompt : str
-        The system prompt to guide the task decomposition
 
-    Returns
-    -------
-    dict
-        Updated state containing the decomposed tasks
+def _detect_executor_failure(messages: list) -> tuple[bool, str | None]:
+    """Scan executor message history for signs of failure.
+
+    Checks for:
+    1. ``ToolMessage`` objects with ``status == "error"``
+       (produced by ``ToolNode(handle_tool_errors=True)``).
+    2. Error markers in the final assistant message content.
+
+    Returns ``(is_failed, error_summary)``.
     """
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"{state['messages']}"},
-    ]
-    if support_structured_output is True:
-        structured_llm = llm.with_structured_output(PlannerResponse)
-        try:
-            response = structured_llm.invoke(messages)
-            return {"messages": [response.model_dump_json()]}
-        except Exception as e:
-            if _is_connection_error(e):
-                logger.error("Planner request failed due to model connection error: %s", e)
-                raise
-            logger.warning(
-                "Planner structured output failed; falling back to JSON parsing: %s",
-                e,
-            )
+    # Collect all tool-level errors
+    tool_errors = []
+    for m in messages:
+        if isinstance(m, ToolMessage):
+            if getattr(m, "status", None) == "error":
+                tool_errors.append(m.content)
 
-    raw_response = llm.invoke(messages).content
-    try:
-        parsed = _parse_planner_response(raw_response)
-        return {"messages": [parsed.model_dump_json()]}
+    if tool_errors:
+        return True, "; ".join(tool_errors)
 
-    except Exception as e:
-        retry_message = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"{state.get('messages', '')}"},
+    # Check the final message for error markers
+    final = messages[-1] if messages else None
+    if final is not None:
+        content = getattr(final, "content", str(final))
+        if isinstance(content, str):
+            for marker in _ERROR_MARKERS:
+                if marker in content:
+                    # Only flag as failure if the executor itself reports failure,
+                    # not if it's merely describing a prior error it recovered from.
+                    # Heuristic: if the last message also contains "success" or
+                    # "result", treat it as a recovered scenario.
+                    lower = content.lower()
+                    if "success" not in lower and "result:" not in lower:
+                        return True, content[:500]
+
+    return False, None
+
+
+def format_executor_output(state: ExecutorState) -> dict:
+    """Bridge: convert local ``ExecutorState`` into a ``PlannerState`` update.
+
+    Writes the executor's final answer into ``executor_results`` and
+    its full message history into ``executor_logs`` so the planner can
+    inspect them on the next iteration.
+
+    Detects executor failures by scanning the message history for tool
+    errors and error markers.  When a failure is detected, populates
+    ``failed_tasks`` so the planner can decide whether to retry.
+    """
+    executor_id = state["executor_id"]
+    task_index = state.get("task_index", -1)
+    retry_count = state.get("retry_count", 0)
+    final_message = state["messages"][-1].content
+    full_history = state["messages"]
+
+    is_failed, error_summary = _detect_executor_failure(list(state["messages"]))
+
+    result: dict = {
+        "executor_logs": {executor_id: full_history},
+    }
+
+    if is_failed:
+        logger.warning(
+            "Executor %s (task_index=%d, retry=%d) FAILED: %s",
+            executor_id,
+            task_index,
+            retry_count,
+            error_summary,
+        )
+        result["executor_results"] = [
+            f"[{executor_id}] FAILED (task_index={task_index}, "
+            f"retry={retry_count}): {error_summary}"
+        ]
+        result["failed_tasks"] = [
             {
-                "role": "assistant",
-                "content": (
-                    f"Error: {str(e)}. Please output a valid JSON object with a 'worker_tasks' key, "
-                    "where 'worker_tasks' is a list of tasks in the format:\n"
-                    '{"worker_tasks": [\n'
-                    '  {"task_index": 1, "prompt": "Calculate ..."},\n'
-                    '  {"task_index": 2, "prompt": "Calculate ..."}\n'
-                    ']}'
-                ),
-            },
+                "task_index": task_index,
+                "executor_id": executor_id,
+                "error": error_summary,
+                "retry_count": retry_count,
+            }
         ]
-        retry_response = llm.invoke(retry_message).content
-        try:
-            parsed_retry = _parse_planner_response(retry_response)
-            return {"messages": [parsed_retry.model_dump_json()]}
-        except Exception as retry_error:
-            logger.error("Planner retry output could not be parsed: %s", retry_error)
-            raise
-
-
-def WorkerAgent(
-    state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str, tools=None
-):
-    """An LLM agent that executes assigned tasks using available tools.
-
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing worker channels and task information
-    llm : ChatOpenAI
-        The language model to use for task execution
-    system_prompt : str
-        The system prompt to guide the worker's behavior
-    tools : list, optional
-        List of tools available to the worker, by default None
-
-    Returns
-    -------
-    ManagerWorkerState
-        Updated state containing the worker's response and results
-    """
-    if tools is None:
-        tools = [
-            run_ase,
-            molecule_name_to_smiles,
-            smiles_to_coordinate_file,
-            extract_output_json,
+    else:
+        result["executor_results"] = [
+            f"[{executor_id}] Result (task_index={task_index}): {final_message}"
         ]
+        result["failed_tasks"] = []
 
-    worker_id = state["current_worker"]
-    history = state.get("worker_messages", [])
-
-    history = sanitize_tool_calls(history)
-
-    messages = [{"role": "system", "content": system_prompt}] + history
-    llm_with_tools = llm.bind_tools(tools=tools)
-    response = llm_with_tools.invoke(messages)
-
-    # Append new LLM response directly back into the worker's channel
-    state["worker_messages"].append(response)
-    state["worker_channel"][worker_id] = state["worker_messages"]
-
-    # If no tool call, save it as worker_result
-    if not getattr(response, "tool_calls", None):
-        state["worker_result"] = [response]
-
-    return state
+    return result
 
 
-def AggregatorAgent(state: ManagerWorkerState, llm: ChatOpenAI, system_prompt: str):
-    """An LLM agent that aggregates results from all workers.
-
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing worker results
-    llm : ChatOpenAI
-        The language model to use for result aggregation
-    system_prompt : str
-        The system prompt to guide the aggregation process
-
-    Returns
-    -------
-    dict
-        Updated state containing the aggregated results
-    """
-    if "worker_result" in state:
-        outputs = [m.content for m in state["worker_result"]]
-        worker_summary_msg = {
-            "role": "assistant",
-            "content": "Worker Outputs:\n" + "\n".join(outputs),
-        }
-        state["messages"].append(worker_summary_msg)
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"{state['messages']}"},
-    ]
-    response = llm.invoke(messages)
-    return {"messages": [response]}
-
-
-def ResponseAgent(
-    state: ManagerWorkerState,
+def construct_executor_subgraph(
     llm: ChatOpenAI,
-    formatter_prompt: str = formatter_multi_prompt,
+    tools: list,
+    system_prompt: str,
 ):
-    """An LLM agent responsible for formatting the final response.
+    """Build the reusable executor subgraph (Agent -> Tools -> Agent loop).
 
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing the aggregated results
-    llm : ChatOpenAI
-        The language model to use for response formatting
-    formatter_prompt : str, optional
-        The prompt to guide the formatting process,
-        by default formatter_prompt
+    The subgraph is compiled and used as a node in the main graph.
+    Each ``Send()`` invocation creates an independent copy with its own
+    ``ExecutorState``.
+    """
+    workflow = StateGraph(ExecutorState)
+    workflow.add_node(
+        "executor_agent",
+        partial(
+            executor_model_node, llm=llm, system_prompt=system_prompt, tools=tools
+        ),
+    )
+    workflow.add_node("tools", ToolNode(tools, handle_tool_errors=True))
+    workflow.add_node("finalize", format_executor_output)
 
-    Returns
-    -------
-    dict
-        Updated state containing the formatted response
+    workflow.set_entry_point("executor_agent")
+    workflow.add_conditional_edges(
+        "executor_agent",
+        route_executor,
+        {"tools": "tools", "done": "finalize"},
+    )
+    workflow.add_edge("tools", "executor_agent")
+    workflow.add_edge("finalize", END)
+
+    return workflow.compile()
+
+
+# ---------------------------------------------------------------------------
+# Response agent (prompt-based, same approach as single_agent.py)
+# ---------------------------------------------------------------------------
+
+
+def response_agent(
+    state: PlannerState,
+    llm: ChatOpenAI,
+    formatter_prompt: str,
+    max_retries: int = 1,
+):
+    """Format the final answer using a prompt (no ``with_structured_output``).
+
+    Mirrors the ``ResponseAgent`` from ``single_agent.py``: invokes the
+    LLM with a formatter prompt and manually parses the response into a
+    ``ResponseFormatter`` with retry logic on parse failure.
     """
     messages = [
         {"role": "system", "content": formatter_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
-    llm_structured_output = llm.with_structured_output(ResponseFormatter)
-    response = llm_structured_output.invoke(messages).model_dump_json()
+    raw_response = llm.invoke(messages).content
+    formatter, parse_error = parse_response_formatter(raw_response)
+
+    retries = 0
+    while parse_error is not None and retries < max_retries:
+        retries += 1
+        logger.warning(
+            "ResponseAgent: parse attempt %d failed (%s); retrying LLM.",
+            retries,
+            parse_error,
+        )
+        retry_messages = [
+            {"role": "system", "content": formatter_prompt},
+            {"role": "user", "content": f"{state['messages']}"},
+            {"role": "assistant", "content": raw_response},
+            {
+                "role": "user",
+                "content": (
+                    f"Error: {parse_error}\n\n"
+                    "Your previous response could not be parsed. "
+                    "Please output ONLY a valid JSON object matching the "
+                    "ResponseFormatter schema. Do not include any text, "
+                    "markdown fences, or explanation outside the JSON object."
+                ),
+            },
+        ]
+        raw_response = llm.invoke(retry_messages).content
+        formatter, parse_error = parse_response_formatter(raw_response)
+
+    result = json.loads(formatter.model_dump_json())
+    if parse_error is not None:
+        logger.error(
+            "ResponseAgent: all %d retries exhausted; returning empty "
+            "ResponseFormatter with _parse_error.",
+            max_retries,
+        )
+        result["_parse_error"] = parse_error
+    response = json.dumps(result)
     return {"messages": [response]}
 
 
-def extract_tasks(state: ManagerWorkerState):
-    """Extract task list from the task decomposer's response.
-
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing the task decomposer's response
-
-    Returns
-    -------
-    ManagerWorkerState
-        Updated state with extracted task list and initialized task index
-    """
-    state["task_list"] = state["messages"][-1].content
-    state["current_task_index"] = 0
-    return state
-
-
-def loop_control(state: ManagerWorkerState):
-    """Prepare the next task for the current worker.
-
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing task list and worker information
-
-    Returns
-    -------
-    ManagerWorkerState
-        Updated state with prepared task for the current worker
-    """
-    task_idx = state["current_task_index"]
-    task_list = json.loads(state["task_list"])
-
-    # If finished all tasks, do nothing. worker_iterator will handle it
-    if task_idx >= len(task_list["worker_tasks"]):
-        return state
-
-    task_prompt = task_list["worker_tasks"][task_idx]["prompt"]
-    worker_id = task_list["worker_tasks"][task_idx].get(
-        "worker_id", f"worker_{task_idx}"
-    )
-
-    state["current_worker"] = worker_id
-
-    if "worker_channel" not in state:
-        state["worker_channel"] = {}
-
-    if worker_id not in state["worker_channel"]:
-        state["worker_channel"][worker_id] = []
-
-    state["worker_channel"][worker_id].append({"role": "user", "content": task_prompt})
-    state["worker_messages"] = state["worker_channel"][worker_id]
-
-    print(f"[Worker {worker_id}] Now processing task: '{task_prompt}'")
-    return state
-
-
-def worker_iterator(state: ManagerWorkerState):
-    """Determine the next step in the workflow based on task completion.
-
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing task list and progress
-
-    Returns
-    -------
-    str
-        Either 'aggregate' if all tasks are done, or 'worker' to continue with tasks
-    """
-    task_idx = state["current_task_index"]
-    task_list = json.loads(state["task_list"])
-
-    if task_idx >= len(task_list["worker_tasks"]):
-        return "aggregate"
-    else:
-        return "worker"
-
-
-def increment_index(state: ManagerWorkerState):
-    """Increment the current task index.
-
-    Parameters
-    ----------
-    state : ManagerWorkerState
-        The current state containing task progress
-
-    Returns
-    -------
-    ManagerWorkerState
-        Updated state with incremented task index
-    """
-    state["current_task_index"] += 1
-    return state
+# ---------------------------------------------------------------------------
+# Main graph constructor
+# ---------------------------------------------------------------------------
 
 
 def construct_multi_agent_graph(
     llm: ChatOpenAI,
-    planner_prompt: str = planner_prompt,
-    executor_prompt: str = executor_prompt,
-    aggregator_prompt: str = aggregator_prompt,
-    formatter_prompt: str = formatter_multi_prompt,
+    planner_prompt: str = default_planner_prompt,
+    executor_prompt: str = default_executor_prompt,
+    executor_tools: list = None,
     structured_output: bool = False,
-    tools: list = None,
-    support_structured_output: bool = True,
+    formatter_prompt: str = default_formatter_prompt,
+    max_retries: int = 1,
+    max_task_retries: int = 2,
 ):
-    """Construct a graph for manager-worker workflow.
-
-    This function creates a state graph that implements a manager-worker pattern
-    for computational chemistry tasks, where tasks are decomposed and executed
-    by specialized workers.
+    """Construct the planner-executor graph using the Send() pattern.
 
     Parameters
     ----------
     llm : ChatOpenAI
-        The language model to use in the workflow
-    planner_prompt : str, optional
-        The prompt to guide task decomposition,
-        by default planner_prompt
-    executor_prompt : str, optional
-        The prompt to guide worker behavior,
-        by default executor_prompt
-    aggregator_prompt : str, optional
-        The prompt to guide result aggregation,
-        by default aggregator_prompt
-    structured_output : bool, optional
-        Whether to use structured output format,
-        by default False
-    tools: list, optional
-        The tools provided for the agent,
-        by default None
+        The language model shared by all agents.
+    planner_prompt : str
+        System prompt for the planner agent.
+    executor_prompt : str
+        System prompt for each executor subgraph.
+    executor_tools : list
+        Tools available to executor agents (LangChain tools or MCP tools).
+    structured_output : bool
+        If ``True``, route to ``ResponseAgent`` for structured formatting
+        before ending.  If ``False``, the workflow ends directly after the
+        planner decides ``FINISH``.
+    formatter_prompt : str
+        System prompt for the ``ResponseAgent`` (used only when
+        ``structured_output=True``).
+    max_retries : int
+        Number of LLM retry attempts when the planner or response agent
+        fails to parse its output, by default 1.
+    max_task_retries : int
+        Maximum number of times a single executor task may be retried
+        after failure.  Once a task reaches this limit, the router skips
+        it and the planner must finish without it, by default 2.
 
     Returns
     -------
-    StateGraph
-        A compiled state graph implementing the manager-worker workflow
-
-    Raises
-    ------
-    Exception
-        If there is an error during graph construction
+    CompiledGraph
+        A compiled LangGraph state graph.
     """
-    try:
-        logger.info("Constructing multi-agent graph")
-        checkpointer = MemorySaver()
+    if executor_tools is None:
+        from chemgraph.tools.ase_tools import run_ase, extract_output_json
+        from chemgraph.tools.cheminformatics_tools import (
+            molecule_name_to_smiles,
+            smiles_to_coordinate_file,
+        )
+        from chemgraph.tools.generic_tools import calculator
 
-        graph_builder = StateGraph(ManagerWorkerState)
-        if support_structured_output is True:
-            graph_builder.add_node(
-                "PlannerAgent",
-                lambda state: PlannerAgent(
-                    state,
-                    llm,
-                    system_prompt=planner_prompt,
-                    support_structured_output=support_structured_output,
-                ),
-            )
-        else:
-            graph_builder.add_node(
-                "PlannerAgent",
-                lambda state: PlannerAgent(
-                    state,
-                    llm,
-                    system_prompt=planner_prompt_json,
-                    support_structured_output=support_structured_output,
-                ),
-            )
+        executor_tools = [
+            molecule_name_to_smiles,
+            smiles_to_coordinate_file,
+            run_ase,
+            extract_output_json,
+            calculator,
+        ]
 
-        graph_builder.add_node("extract_tasks", extract_tasks)
-        graph_builder.add_node("loop_control", loop_control)
+    checkpointer = MemorySaver()
 
+    # Build the executor subgraph
+    executor_subgraph = construct_executor_subgraph(
+        llm, executor_tools, executor_prompt
+    )
+
+    # Build the main graph
+    graph_builder = StateGraph(PlannerState)
+
+    # -- Nodes --
+    graph_builder.add_node(
+        "Planner",
+        lambda state: planner_agent(
+            state, llm, planner_prompt, max_retries=max_retries
+        ),
+    )
+    graph_builder.add_node("executor_subgraph", executor_subgraph)
+
+    # Conditional destinations list for the planner router
+    conditional_targets = ["executor_subgraph", END]
+
+    if structured_output:
         graph_builder.add_node(
-            "WorkerAgent",
-            lambda state: WorkerAgent(state, llm, system_prompt=executor_prompt),
+            "ResponseAgent",
+            lambda state: response_agent(
+                state,
+                llm,
+                formatter_prompt=formatter_prompt,
+                max_retries=max_retries,
+            ),
         )
-        if tools is None:
-            tools = [
-                run_ase,
-                molecule_name_to_smiles,
-                smiles_to_coordinate_file,
-                extract_output_json,
-            ]
-        tools_node = ToolNode(tools=tools, messages_key="worker_messages")
-        graph_builder.add_node("tools", tools_node)
-        graph_builder.add_node("increment", increment_index)
-        graph_builder.add_node(
-            "AggregatorAgent",
-            lambda state: AggregatorAgent(state, llm, system_prompt=aggregator_prompt),
-        )
-        graph_builder.add_conditional_edges(
-            "loop_control",
-            worker_iterator,
-            {"worker": "WorkerAgent", "aggregate": "AggregatorAgent"},
-        )
-        graph_builder.set_entry_point("PlannerAgent")
-        graph_builder.add_edge("PlannerAgent", "extract_tasks")
-        graph_builder.add_edge("extract_tasks", "loop_control")
-        graph_builder.add_edge("tools", "WorkerAgent")
-        graph_builder.add_conditional_edges(
-            "WorkerAgent",
-            route_tools,
-            {"tools": "tools", "done": "increment"},
-        )
+        conditional_targets.append("ResponseAgent")
 
-        graph_builder.add_edge("increment", "loop_control")
+    # -- Edges --
+    graph_builder.set_entry_point("Planner")
 
-        if not structured_output:
-            graph_builder.add_edge("AggregatorAgent", END)
-        else:
-            graph_builder.add_node(
-                "ResponseAgent",
-                lambda state: ResponseAgent(
-                    state, llm, formatter_prompt=formatter_prompt
-                ),
-            )
-            graph_builder.add_edge("AggregatorAgent", "ResponseAgent")
-            graph_builder.add_edge("ResponseAgent", END)
+    graph_builder.add_conditional_edges(
+        "Planner",
+        partial(
+            unified_planner_router,
+            structured_output=structured_output,
+            max_task_retries=max_task_retries,
+        ),
+        conditional_targets,
+    )
 
-        graph = graph_builder.compile(checkpointer=checkpointer)
-        logger.info("Graph construction completed")
-        return graph
+    # Executors feed results back to the planner
+    graph_builder.add_edge("executor_subgraph", "Planner")
 
-    except Exception as e:
-        logger.error(f"Error constructing graph: {str(e)}")
-        raise
+    if structured_output:
+        graph_builder.add_edge("ResponseAgent", END)
+
+    graph = graph_builder.compile(checkpointer=checkpointer)
+    logger.info("Multi-agent graph (Send pattern) constructed successfully")
+    return graph

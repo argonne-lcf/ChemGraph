@@ -18,19 +18,19 @@ def load_anthropic_model(
     Parameters
     ----------
     model_name : str
-        The name of the OpenAI chat model to load. See supported_anthropic_models for list
+        The name of the Anthropic chat model to load. See supported_anthropic_models for list
         of supported models.
     temperature : float
         Controls the randomness of the generated text. A higher temperature results
         in more random outputs, while a lower temperature results in more deterministic outputs.
     api_key : str, optional
-        The OpenAI API key. If not provided, the function will attempt to retrieve it
-        from the environment variable `OPENAI_API_KEY`.
+        The Anthropic API key. If not provided, the function will attempt to retrieve it
+        from the environment variable `ANTHROPIC_API_KEY`.
 
     Returns
     -------
-    ChatOpenAI
-        An instance of LangChain's ChatOpenAI model.
+    ChatAnthropic
+        An instance of LangChain's ChatAnthropic model.
 
     Raises
     ------
@@ -65,16 +65,16 @@ def load_anthropic_model(
         )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")
-        logger.info("OpenAI model loaded successfully")
+        logger.info("Anthropic model loaded successfully")
         return llm
     except Exception as e:
         # Can remove this since authentication happens only during invocation
         if "AuthenticationError" in str(e) or "invalid_api_key" in str(e):
-            logger.warning("Invalid OpenAI API key.")
-            api_key = getpass("Please enter a valid OpenAI API key: ")
-            os.environ["OPENAI_API_KEY"] = api_key
+            logger.warning("Invalid Anthropic API key.")
+            api_key = getpass("Please enter a valid Anthropic API key: ")
+            os.environ["ANTHROPIC_API_KEY"] = api_key
             # Retry with new API key
             return load_anthropic_model(model_name, temperature, api_key, prompt)
         else:
-            logger.error(f"Error loading OpenAI model: {str(e)}")
+            logger.error(f"Error loading Anthropic model: {str(e)}")
             raise

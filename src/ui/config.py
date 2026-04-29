@@ -81,6 +81,10 @@ def get_default_config() -> Dict[str, Any]:
                 "base_url": "https://generativelanguage.googleapis.com/v1beta",
                 "timeout": 30,
             },
+            "alcf": {
+                "base_url": "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1",
+                "timeout": 30,
+            },
             "local": {"base_url": "http://localhost:11434", "timeout": 60},
         },
         "chemistry": {

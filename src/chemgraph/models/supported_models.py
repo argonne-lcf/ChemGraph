@@ -15,21 +15,46 @@ supported_openai_models = [
 ]
 # Ollama models that are supported
 supported_ollama_models = ["llama3.2", "llama3.1"]
-# ALCF models that are supported (these would be models available through ALCF's infrastructure)
+# Default ALCF inference API base URL (Sophia cluster, vLLM).
+ALCF_DEFAULT_BASE_URL = (
+    "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
+)
+
+# ALCF models available through the ALCF inference endpoints.
+# See https://docs.alcf.anl.gov/services/inference-endpoints/#available-models
 supported_alcf_models = [
-    "AuroraGPT-IT-v4-0125_2",
+    # Meta Llama Family
+    "meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "meta-llama/Meta-Llama-3.1-70B-Instruct",
     "meta-llama/Meta-Llama-3.1-405B-Instruct",
     "meta-llama/Llama-3.3-70B-Instruct",
-    "meta-llama/Meta-Llama-3.1-70B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/QwQ-32B-Preview",
-    "Qwen/QwQ-32B",
-    "Qwen/Qwen3-32B",
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+    # Mistral Family
+    "mistralai/Mistral-Large-Instruct-2407",
+    "mistralai/Mixtral-8x22B-Instruct-v0.1",
+    "mistralai/Devstral-2-123B-Instruct-2512",
+    # OpenAI Family
     "openai/gpt-oss-20b",
     "openai/gpt-oss-120b",
+    # Aurora GPT Family
+    "argonne/AuroraGPT-IT-v4-0125",
+    "argonne/AuroraGPT-Tulu3-SFT-0125",
+    "argonne/AuroraGPT-DPO-UFB-0225",
+    "argonne/AuroraGPT-KTO-UFB-0325",
+    # Google Family
+    "google/gemma-3-27b-it",
+    "google/gemma-4-26B-A4B-it",
+    "google/gemma-4-31B-it",
+    "google/gemma-4-E4B-it",
+    # Other Models
+    "allenai/Llama-3.1-Tulu-3-405B",
+    "arcee-ai/Trinity-Large-Thinking-W4A16",
+    "nvidia/nemotron-3-super-120b",
+    "mgoin/Nemotron-4-340B-Instruct-hf",
+    "AstroMLab/AstroSage-70B-20251009",
+    # Vision Language Models
+    "meta-llama/Llama-3.2-90B-Vision-Instruct",
 ]
 # Anthropic models
 supported_anthropic_models = [
@@ -51,29 +76,20 @@ supported_gemini_models = [
     "gemini-2.5-flash",
 ]
 
-# GROQ models
-supported_groq_models = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3-32b",
-    "deepseek-r1-distill-llama-70b",
-    "gemma2-9b-it",
-    "groq/compound",
-    "groq/compound-mini",
-    "llama-3.1-8b-instant",
-    "llama-3.3-70b-versatile",
-    "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "meta-llama/llama-4-scout-17b-16e-instruct",
-    "meta-llama/llama-guard-4-12b",
-    "meta-llama/llama-prompt-guard-2-22m",
-    "meta-llama/llama-prompt-guard-2-86m",
-    "moonshotai/kimi-k2-instruct-0905",
-    "whisper-large-v3",
-    "whisper-large-v3-turbo",
-]
+# GROQ models -- use the "groq:" prefix (e.g. "groq:llama-3.3-70b-versatile").
+# The prefix is stripped before sending to the Groq API.
+# No curated list is maintained; any model available on Groq can be used.
+# See https://console.groq.com/docs/models for current models.
+supported_groq_models: list[str] = []
 
-# ArgoProxy models https://argo-proxy.readthedocs.io/en/latest/usage/models/
-supported_argoproxy_models = [
+# Default Argo API base URL (used when no --base-url is provided).
+ARGO_DEFAULT_BASE_URL = "https://apps.inside.anl.gov/argoapi/v1"
+
+# Argo models -- all use the "argo:" prefix.
+# Which endpoint they hit depends on --base-url / config.
+# Default: ARGO_DEFAULT_BASE_URL (Argo API).
+supported_argo_models = [
+    # GPT family
     "argo:gpt-3.5-turbo",
     "argo:gpt-3.5-turbo-16k",
     "argo:gpt-4",
@@ -81,51 +97,36 @@ supported_argoproxy_models = [
     "argo:gpt-4-turbo",
     "argo:gpt-4o",
     "argo:gpt-4o-latest",
-    "argo:gpt-o1-preview",
-    "argo:o1-preview",
-    "argo:gpt-o1-mini",
-    "argo:o1-mini",
-    "argo:gpt-o3-mini",
-    "argo:o3-mini",
-    "argo:gpt-o1",
-    "argo:o1",
-    "argo:gpt-o3",
-    "argo:o3",
-    "argo:gpt-o4-mini",
-    "argo:o4-mini",
+    "argo:gpt-4o-mini",
     "argo:gpt-4.1",
     "argo:gpt-4.1-mini",
     "argo:gpt-4.1-nano",
-    "argo:gpt-4o-mini",
-]
-
-# Argo models https://anl.app.box.com/notes/1444961193376?s=ubtrsefonqeo9xppdzcurezy8rzsbs96
-supported_argo_models = [
-    "gpt4o",
-    "gpt4olatest",
-    "gpto3mini",
-    "gpto1",
-    "gpto3",
-    "gpto4mini",
-    "gpt41",
-    "gpt41mini",
-    "gpt41nano",
-    "gpt5",
-    "gpt5mini",
-    "gpt5nano",
-    "gpt51",
-    "gpt52",
-    "gemini25pro",
-    "gemini25flash",
-    "claudeopus46",
-    "claudeopus45",
-    "claudeopus41",
-    "claudeopus4",
-    "claudehaiku45",
-    "claudesonnet45",
-    "claudesonnet4",
-    "claudesonnet35v2",
-    "claudehaiku35",
+    "argo:gpt-5",
+    "argo:gpt-5-mini",
+    "argo:gpt-5-nano",
+    "argo:gpt-5.1",
+    "argo:gpt-5.2",
+    "argo:gpt-5.4",
+    # Reasoning / o-series
+    "argo:o1-preview",
+    "argo:o1-mini",
+    "argo:o1",
+    "argo:o3-mini",
+    "argo:o3",
+    "argo:o4-mini",
+    # Gemini via Argo
+    "argo:gemini-2.5-pro",
+    "argo:gemini-2.5-flash",
+    # Claude via Argo
+    "argo:claude-opus-4.6",
+    "argo:claude-opus-4.5",
+    "argo:claude-opus-4.1",
+    "argo:claude-opus-4",
+    "argo:claude-haiku-4.5",
+    "argo:claude-sonnet-4.5",
+    "argo:claude-sonnet-4",
+    "argo:claude-sonnet-3.5-v2",
+    "argo:claude-haiku-3.5",
 ]
 
 all_supported_models = (
@@ -134,7 +135,6 @@ all_supported_models = (
     + supported_alcf_models
     + supported_anthropic_models
     + supported_argo_models
-    + supported_argoproxy_models
     + supported_gemini_models
     + supported_groq_models
 )

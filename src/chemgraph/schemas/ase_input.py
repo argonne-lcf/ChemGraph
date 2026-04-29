@@ -120,7 +120,7 @@ class ASEInputSchema(BaseModel):
     )
     steps: int = Field(
         default=1000,
-        description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
+        description="Maximum number of optimization steps. Internally 'vib', 'thermo' and 'ir' run geometry optimization before performing their respective calculations.",
     )
     temperature: Optional[float] = Field(
         default=None,

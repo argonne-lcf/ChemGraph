@@ -57,6 +57,7 @@ Required keys depend on provider/model:
 - `ANTHROPIC_API_KEY`
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
+- `ALCF_ACCESS_TOKEN` (ALCF inference endpoints, via Globus OAuth)
 - Optional: `ARGO_USER` (Argo setups)
 
 Best practice for `docker run` is host variable pass-through:
@@ -385,6 +386,10 @@ timeout = 30
 base_url = "https://generativelanguage.googleapis.com/v1beta"
 timeout = 30
 
+[api.alcf]
+base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
+timeout = 30
+
 [api.local]
 # For local models like Ollama
 base_url = "http://localhost:11434"
@@ -512,6 +517,88 @@ Notes:
 - Argo endpoints are available on Argonne internal network (or VPN on an Argonne-managed machine).
 - For current Argo endpoint guidance and policy updates, refer to your internal Argo documentation.
 
+#### Using ALCF Inference Endpoints
+
+ChemGraph supports [ALCF Inference Endpoints](https://docs.alcf.anl.gov/services/inference-endpoints/), which provide API access to open-source models running on dedicated ALCF hardware (Sophia cluster with vLLM).
+
+1. Configure the endpoint in `config.toml` (already set by default):
+
+```toml
+[api.alcf]
+base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
+timeout = 30
+```
+
+2. Authenticate via Globus OAuth:
+
+```bash
+pip install globus_sdk
+wget https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/refs/heads/main/inference_auth_token.py
+python inference_auth_token.py authenticate
+```
+
+3. Set the access token (valid for ~48 hours):
+
+```bash
+export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)
+```
+
+4. Run with an ALCF model (use the model name directly, no prefix needed):
+
+```bash
+chemgraph --config config.toml -m meta-llama/Meta-Llama-3.1-70B-Instruct \
+  -q "Calculate the energy of water using MACE"
+```
+
+See the [ALCF docs](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models) for the full list of available models.
+
+Notes:
+- Access tokens expire after 48 hours. Re-run `get_access_token` to refresh.
+- An internal policy requires Globus re-authentication every 30 days.
+- ALCF models are available to users with an active ALCF account.
+
+#### Using Groq
+
+ChemGraph supports [Groq](https://groq.com/) for fast LLM inference. Use the `groq:` prefix to route any model through Groq:
+
+1. Set your Groq API key:
+
+```bash
+export GROQ_API_KEY="your_groq_api_key_here"
+```
+
+2. Run with a Groq model (prefix the model name with `groq:`):
+
+```bash
+chemgraph -q "What is the SMILES for water?" -m groq:llama-3.3-70b-versatile
+chemgraph -q "Optimize methane" -m groq:openai/gpt-oss-120b
+```
+
+No curated model list is maintained -- any model available on Groq can be used by prefixing it with `groq:`. See the [Groq docs](https://console.groq.com/docs/models) for current models.
+
+#### LLM Provider Prefixes
+
+For third-party providers that share model names with other services, ChemGraph uses a prefix convention to route models unambiguously:
+
+| Prefix | Provider | Auth Env Var | Example |
+|--------|----------|--------------|---------|
+| `argo:` | Argo API (Argonne internal) | `OPENAI_API_KEY` | `argo:gpt-4o`, `argo:claude-sonnet-4` |
+| `groq:` | Groq Cloud | `GROQ_API_KEY` | `groq:llama-3.3-70b-versatile` |
+
+Direct model names (no prefix) are used for:
+
+| Provider | Auth Env Var | Example |
+|----------|--------------|---------|
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4o-mini` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022` |
+| Google | `GEMINI_API_KEY` | `gemini-2.5-pro` |
+| ALCF | `ALCF_ACCESS_TOKEN` | `meta-llama/Meta-Llama-3.1-70B-Instruct` |
+| Ollama (local) | Not required | `llama3.2` |
+
+For Argo, model names are mapped to Argo-specific wire names when using the default Argo endpoint. See `supported_argo_models` in `src/chemgraph/models/supported_models.py` for the full list.
+
+For Groq, the `groq:` prefix is stripped before sending to the Groq API. Any model available on the [Groq console](https://console.groq.com/docs/models) can be used.
+
 ### Configuration Sections
 
 | Section       | Description                                             |
@@ -565,14 +652,18 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 
 **Core Arguments:**
 
-| Option         | Short | Description                                  | Default        |
-| -------------- | ----- | -------------------------------------------- | -------------- |
-| `--query`      | `-q`  | The computational chemistry query to execute | Required       |
-| `--model`      | `-m`  | LLM model to use                             | `gpt-4o-mini`  |
-| `--workflow`   | `-w`  | Workflow type                                | `single_agent` |
-| `--output`     | `-o`  | Output format (`state`, `last_message`)      | `state`        |
-| `--structured` | `-s`  | Use structured output format                 | `False`        |
-| `--report`     | `-r`  | Generate detailed report                     | `False`        |
+| Option              | Short | Description                                           | Default        |
+| ------------------- | ----- | ----------------------------------------------------- | -------------- |
+| `--query`           | `-q`  | The computational chemistry query to execute          | Required       |
+| `--model`           | `-m`  | LLM model to use                                     | `gpt-4o-mini`  |
+| `--workflow`        | `-w`  | Workflow type                                        | `single_agent` |
+| `--output`          | `-o`  | Output format (`state`, `last_message`)              | `state`        |
+| `--structured`      | `-s`  | Use structured output format                         | `False`        |
+| `--report`          | `-r`  | Generate detailed report                             | `False`        |
+| `--resume`          |       | Resume from a previous session ID (prefix supported) |                |
+| `--list-sessions`   |       | List recent sessions from the memory database        |                |
+| `--show-session`    |       | Show conversation for a session (prefix supported)   |                |
+| `--delete-session`  |       | Delete a session from the memory database            |                |
 
 **Model Selection:**
 
@@ -580,17 +671,25 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 # OpenAI models
 chemgraph -q "Your query" -m gpt-4o
 chemgraph -q "Your query" -m gpt-4o-mini
-chemgraph -q "Your query" -m o1-preview
 
 # Anthropic models
 chemgraph -q "Your query" -m claude-3-5-sonnet-20241022
-chemgraph -q "Your query" -m claude-3-opus-20240229
 
 # Google models
-chemgraph -q "Your query" -m gemini-1.5-pro
+chemgraph -q "Your query" -m gemini-2.5-pro
 
-# Local/OpenAI-compatible endpoints
-chemgraph -q "Your query" -m llama-3.1-70b-instruct
+# Argo models (Argonne internal, argo: prefix)
+chemgraph -q "Your query" -m argo:gpt-4o
+chemgraph -q "Your query" -m argo:claude-sonnet-4
+
+# ALCF models (Globus auth required, no prefix)
+chemgraph -q "Your query" -m meta-llama/Meta-Llama-3.1-70B-Instruct
+
+# Groq models (groq: prefix, any Groq model)
+chemgraph -q "Your query" -m groq:llama-3.3-70b-versatile
+
+# Local models (Ollama)
+chemgraph -q "Your query" -m llama3.2
 ```
 
 **Workflow Types:**
@@ -635,19 +734,25 @@ chemgraph --interactive
 
 **Interactive Features:**
 - **Persistent conversation**: Maintain context across queries
+- **Session memory**: Conversations are automatically saved to a local SQLite database (`~/.chemgraph/sessions.db`) and can be resumed later
 - **Model switching**: Change models mid-conversation
 - **Workflow switching**: Switch between different agent types
-- **Built-in commands**: Help, clear, config, etc.
+- **Built-in commands**: Help, clear, config, session management, etc.
 
 **Interactive Commands:**
 ```bash
 # In interactive mode, type:
 help                    # Show available commands
 clear                   # Clear screen
-config                  # Show current configuration
+config                  # Show current configuration and session ID
 quit                    # Exit interactive mode
 model gpt-4o           # Change model
 workflow multi_agent   # Change workflow
+
+# Session management:
+history                 # List recent sessions
+show <session_id>       # Show a session's conversation
+resume <session_id>     # Resume from a previous session
 ```
 
 #### Utility Commands
@@ -666,6 +771,34 @@ chemgraph --check-keys
 ```bash
 chemgraph --help
 ```
+
+#### Session Memory
+
+ChemGraph automatically saves every conversation to a local SQLite database at `~/.chemgraph/sessions.db`. This allows you to browse past sessions, review tool calls and results, and resume previous conversations with full context.
+
+**List Recent Sessions:**
+```bash
+chemgraph --list-sessions
+```
+
+**View a Session's Conversation:**
+```bash
+# Full session ID or prefix (first few characters)
+chemgraph --show-session a3b2
+```
+
+**Resume From a Previous Session:**
+```bash
+# Injects previous conversation context into the new query
+chemgraph -q "Now optimize the geometry at 500K" --resume a3b2
+```
+
+**Delete a Session:**
+```bash
+chemgraph --delete-session a3b2c1d4
+```
+
+Session IDs support prefix matching -- you only need to type enough characters to uniquely identify the session.
 
 #### Configuration File Support
 
@@ -741,12 +874,20 @@ export ANTHROPIC_API_KEY="your_anthropic_key_here"
 
 # Google (for Gemini models)
 export GEMINI_API_KEY="your_gemini_key_here"
+
+# Groq (for groq: prefixed models)
+export GROQ_API_KEY="your_groq_key_here"
+
+# ALCF (Globus OAuth access token)
+export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)
 ```
 
 **Getting API Keys:**
 - **OpenAI**: Visit [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 - **Anthropic**: Visit [console.anthropic.com](https://console.anthropic.com/)
 - **Google**: Visit [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- **Groq**: Visit [console.groq.com/keys](https://console.groq.com/keys)
+- **ALCF**: See [ALCF Inference Endpoints docs](https://docs.alcf.anl.gov/services/inference-endpoints/#api-access)
 
 #### Performance Tips
 
@@ -799,16 +940,147 @@ chemgraph/
 ├── src/                       # Source code
 │   ├── chemgraph/             # Top-level package
 │   │   ├── agent/             # Agent-based task management
+│   │   ├── eval/              # Evaluation & benchmarking (LLM-as-judge)
 │   │   ├── graphs/            # Workflow graph utilities
-│   │   ├── models/            # Different Pydantic models
-│   │   ├── prompt/            # Agent prompt
-│   │   ├── state/             # Agent state
+│   │   ├── mcp/               # MCP servers (stdio/streamable HTTP)
+│   │   ├── memory/            # Session memory (SQLite-backed persistence)
+│   │   ├── models/            # LLM provider integrations
+│   │   ├── prompt/            # Agent prompt templates
+│   │   ├── schemas/           # Pydantic data models
+│   │   ├── state/             # Agent state definitions
 │   │   ├── tools/             # Tools for molecular simulations
 │   │   ├── utils/             # Other utility functions
+│   ├── ui/                    # CLI and Streamlit UI
 │
 ├── pyproject.toml             # Project configuration
 └── README.md                  # Project documentation
 ```
+
+</details>
+
+<details>
+  <summary><strong>Evaluation & Benchmarking</strong></summary>
+
+ChemGraph includes a built-in evaluation module (`chemgraph.eval`) for benchmarking LLM tool-calling accuracy across models and workflows. It uses an **LLM-as-judge** strategy: a separate judge LLM grades the agent's tool-call sequence and final answer against ground-truth results using binary scoring (1 = correct, 0 = wrong).
+
+### Bundled Dataset
+
+A default dataset of **14 queries** across 4 categories is shipped with the package:
+
+| Category | Description | Example |
+|----------|-------------|---------|
+| **A** Single tool calls | Name-to-SMILES, SMILES-to-coordinates | "Provide the SMILES string for sulfur dioxide" |
+| **B** Multi-step from name | Name → SMILES → coordinates → ASE simulation | "Calculate the geometry optimization of sulfur dioxide using mace_mp" |
+| **C** Multi-step from SMILES | SMILES → coordinates → ASE simulation | "Calculate the single-point energy using mace_mp for SMILES: N#N" |
+| **D** Reaction Gibbs energy | Multi-species thermochemistry + stoichiometry | "Calculate the Gibbs free energy of reaction for Methane Combustion at 300 K" |
+
+### Running Evaluations
+
+**CLI (recommended):**
+
+```bash
+# Minimal invocation (uses bundled 14-query dataset)
+chemgraph-eval --models gpt-4o-mini --judge-model gpt-4o
+
+# Multiple models
+chemgraph-eval --models gpt-4o-mini gemini-2.5-flash claude-3-5-haiku-20241022 \
+    --judge-model gpt-4o
+
+# With TOML config (resolves base_url, argo_user, profiles)
+chemgraph-eval --models gpt-4o-mini --judge-model gpt-4o --config config.toml
+
+# Profile-based (reads [eval.profiles.*] from config.toml)
+chemgraph-eval --profile quick --models gpt-4o-mini --judge-model gpt-4o --config config.toml
+
+# Custom dataset, limit queries, specific workflow
+chemgraph-eval --models gpt-4o-mini \
+    --judge-model gpt-4o \
+    --dataset path/to/custom_ground_truth.json \
+    --workflows single_agent \
+    --max-queries 5 \
+    --output-dir eval_results
+```
+
+**Python API:**
+
+```python
+import asyncio
+from chemgraph.eval import ModelBenchmarkRunner, BenchmarkConfig
+
+config = BenchmarkConfig(
+    models=["gpt-4o-mini", "gemini-2.5-flash"],
+    judge_model="gpt-4o",
+    # dataset defaults to bundled 14-query dataset
+    # workflow_types defaults to ["single_agent"]
+)
+runner = ModelBenchmarkRunner(config)
+results = asyncio.run(runner.run_all())
+runner.report()  # generates JSON + Markdown + console output
+```
+
+### CLI Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--models` | LLM model names to evaluate (required) | — |
+| `--judge-model` | LLM model name for the judge (required) | — |
+| `--profile` | Eval profile name from config.toml `[eval.profiles.*]` | None |
+| `--dataset` | Path to ground-truth JSON file | Bundled dataset |
+| `--workflows` | Workflow types to test | `single_agent` |
+| `--output-dir` | Output directory for results | `eval_results` |
+| `--max-queries` | Max queries to evaluate (0 = all) | 0 |
+| `--recursion-limit` | Max LangGraph recursion steps per query | 50 |
+| `--config` | Path to TOML config file | None |
+| `--tags` | Free-form tags for run metadata | — |
+| `--no-structured-output` | Disable structured output on the agent | — |
+| `--report` | Report format: `json`, `markdown`, `console`, `all` | `all` |
+
+### TOML Profile Configuration
+
+Define reusable evaluation profiles in your `config.toml`:
+
+```toml
+[eval]
+default_profile = "quick"
+
+[eval.profiles.quick]
+judge_model = "gpt-4o-mini"
+workflow_types = ["single_agent"]
+recursion_limit = 20
+max_queries = 5
+
+[eval.profiles.standard]
+judge_model = "gpt-4o"
+workflow_types = ["single_agent", "multi_agent"]
+recursion_limit = 50
+```
+
+### Generating Custom Ground Truth
+
+To generate a new ground-truth dataset from custom molecules and reactions:
+
+```bash
+cd scripts/new_evaluation
+
+# Full execution (runs tool chains, captures actual results)
+python generate_ground_truth.py --input_file input_data.json
+
+# Skip execution (empty results, faster)
+python generate_ground_truth.py --input_file input_data.json --skip_execution
+
+# Custom output path
+python generate_ground_truth.py --input_file input_data.json -o my_gt.json
+```
+
+### Output
+
+Evaluation runs produce:
+- **JSON report** (`eval_results/benchmark_<timestamp>.json`) -- machine-readable results with per-query scores
+- **Markdown report** (`eval_results/benchmark_<timestamp>.md`) -- human-readable summary with accuracy tables
+- **Per-model detail files** (`eval_results/<model>_<workflow>_detail.json`) -- individual query results
+- **Console summary** -- printed accuracy table during the run
+
+For full documentation, see [`docs/evaluation.md`](docs/evaluation.md).
 
 </details>
 

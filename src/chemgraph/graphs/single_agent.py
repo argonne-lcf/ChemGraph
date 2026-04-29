@@ -1,11 +1,12 @@
+import json
+
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from chemgraph.tools.ase_tools import (
     run_ase,
-    save_atomsdata_to_file,
-    file_to_atomsdata,
+    extract_output_json,
 )
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
@@ -13,13 +14,13 @@ from chemgraph.tools.cheminformatics_tools import (
 )
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator
-from chemgraph.schemas.agent_response import ResponseFormatter
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
     report_prompt,
 )
 from chemgraph.utils.logging_config import setup_logger
+from chemgraph.utils.parsing import parse_response_formatter
 from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
@@ -125,12 +126,16 @@ def route_report_tools(state: State):
     # Only allow known report tool calls to reach ToolNode.
     valid_report_tools = {"generate_html"}
     requested_tools = {
-        call.get("name") for call in getattr(ai_message, "tool_calls", []) if isinstance(call, dict)
+        call.get("name")
+        for call in getattr(ai_message, "tool_calls", [])
+        if isinstance(call, dict)
     }
     if not requested_tools or not requested_tools.issubset(valid_report_tools):
         return "done"
 
-    report_generated = any(_is_successful_report_message(message) for message in messages)
+    report_generated = any(
+        _is_successful_report_message(message) for message in messages
+    )
     return "done" if report_generated else "tools"
 
 
@@ -169,11 +174,10 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
     # Load default tools if no tool is specified.
     if tools is None:
         tools = [
-            file_to_atomsdata,
             smiles_to_coordinate_file,
             run_ase,
             molecule_name_to_smiles,
-            save_atomsdata_to_file,
+            extract_output_json,
             calculator,
         ]
     messages = [
@@ -184,29 +188,86 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
-def ResponseAgent(state: State, llm: ChatOpenAI, formatter_prompt: str):
-    """An LLM agent responsible for formatting final message
+def ResponseAgent(
+    state: State,
+    llm: ChatOpenAI,
+    formatter_prompt: str,
+    max_retries: int = 1,
+):
+    """An LLM agent responsible for formatting final message.
+
+    When the LLM response cannot be parsed into a valid
+    :class:`ResponseFormatter`, the agent retries the LLM call up to
+    ``max_retries`` times, sending the parse error back to the model so
+    it can correct its output.
+
+    If all attempts fail, an empty ``ResponseFormatter`` is returned
+    with a ``_parse_error`` key in the serialised JSON so that
+    downstream evaluation can detect the failure.
 
     Parameters
     ----------
     state : State
-        The current state containing messages and remaining steps
+        The current state containing messages and remaining steps.
     llm : ChatOpenAI
-        The language model to use for formatting
+        The language model to use for formatting.
     formatter_prompt : str
-        The prompt to guide the LLM's formatting behavior
+        The prompt to guide the LLM's formatting behaviour.
+    max_retries : int, optional
+        Maximum number of retry attempts on parse failure (default 1).
 
     Returns
     -------
     dict
-        Updated state containing the formatted response
+        Updated state containing the formatted response.
     """
     messages = [
         {"role": "system", "content": formatter_prompt},
         {"role": "user", "content": f"{state['messages']}"},
     ]
-    llm_structured_output = llm.with_structured_output(ResponseFormatter)
-    response = llm_structured_output.invoke(messages).model_dump_json()
+    raw_response = llm.invoke(messages).content
+    formatter, parse_error = parse_response_formatter(raw_response)
+
+    # Retry loop: re-invoke the LLM with the error feedback.
+    retries = 0
+    while parse_error is not None and retries < max_retries:
+        retries += 1
+        logger.warning(
+            "ResponseAgent: parse attempt %d failed (%s); retrying LLM.",
+            retries,
+            parse_error,
+        )
+        retry_messages = [
+            {"role": "system", "content": formatter_prompt},
+            {"role": "user", "content": f"{state['messages']}"},
+            {
+                "role": "assistant",
+                "content": raw_response,
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Error: {parse_error}\n\n"
+                    "Your previous response could not be parsed. "
+                    "Please output ONLY a valid JSON object matching the "
+                    "ResponseFormatter schema. Do not include any text, "
+                    "markdown fences, or explanation outside the JSON object."
+                ),
+            },
+        ]
+        raw_response = llm.invoke(retry_messages).content
+        formatter, parse_error = parse_response_formatter(raw_response)
+
+    # Serialise to JSON, injecting ``_parse_error`` when parsing failed.
+    result = json.loads(formatter.model_dump_json())
+    if parse_error is not None:
+        logger.error(
+            "ResponseAgent: all %d retries exhausted; returning empty "
+            "ResponseFormatter with _parse_error.",
+            max_retries,
+        )
+        result["_parse_error"] = parse_error
+    response = json.dumps(result)
     return {"messages": [response]}
 
 
@@ -257,6 +318,7 @@ def construct_single_agent_graph(
     generate_report: bool = False,
     report_prompt: str = report_prompt,
     tools: list = None,
+    max_retries: int = 1,
 ):
     """Construct a geometry optimization graph.
 
@@ -274,8 +336,11 @@ def construct_single_agent_graph(
         Whether to generate a report, by default False
     report_prompt: str, optional
         The prompt to guide the LLM's report generation behavior, by default report_prompt
-    tool: list, optional
+    tools : list, optional
         The list of tools for the main agent, by default None
+    max_retries : int, optional
+        Maximum number of LLM retry attempts when the ResponseAgent
+        fails to parse the formatter output, by default 1
     Returns
     -------
     StateGraph
@@ -286,11 +351,10 @@ def construct_single_agent_graph(
         checkpointer = MemorySaver()
         if tools is None:
             tools = [
-                file_to_atomsdata,
                 smiles_to_coordinate_file,
-                run_ase,
                 molecule_name_to_smiles,
-                save_atomsdata_to_file,
+                run_ase,
+                extract_output_json,
                 calculator,
             ]
         tool_node = ToolNode(tools=tools)
@@ -355,7 +419,10 @@ def construct_single_agent_graph(
             graph_builder.add_node(
                 "ResponseAgent",
                 lambda state: ResponseAgent(
-                    state, llm, formatter_prompt=formatter_prompt
+                    state,
+                    llm,
+                    formatter_prompt=formatter_prompt,
+                    max_retries=max_retries,
                 ),
             )
             graph_builder.add_conditional_edges(
