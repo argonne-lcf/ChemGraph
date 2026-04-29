@@ -67,6 +67,9 @@ parsl = [
 ensemble_launcher = [
     "ensemble-launcher",
 ]
+globus_compute = [
+    "globus-compute-sdk",
+]
 xanes = [
     "mp-api; python_version >= '3.11'",
     "parsl"

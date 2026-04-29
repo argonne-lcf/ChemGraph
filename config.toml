@@ -86,7 +86,7 @@ enable_parallel = false
 num_workers = 2
 
 [execution]
-backend = "local"              # "local", "parsl", or "ensemble_launcher"
+backend = "local"              # "local", "parsl", "ensemble_launcher", or "globus_compute"
 system = "local"               # HPC system: "local", "polaris", "aurora"
 
 [execution.local]
@@ -99,6 +99,10 @@ worker_init = "export TMPDIR=/tmp"
 comm_name = "async_zmq"
 task_executor_name = "async_processpool"
 nlevels = 0
+
+[execution.globus_compute]
+endpoint_id = ""               # UUID from: globus-compute-endpoint start <name>
+# amqp_port = 443              # Uncomment if outbound port 5671 is blocked
 
 [environments.development]
 model = "gpt-4o-mini"

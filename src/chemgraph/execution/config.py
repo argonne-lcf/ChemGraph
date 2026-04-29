@@ -7,7 +7,7 @@ Environment variables
 ---------------------
 ``CHEMGRAPH_EXECUTION_BACKEND``
     Override the backend name (``"parsl"``, ``"ensemble_launcher"``,
-    ``"local"``).
+    ``"globus_compute"``, ``"local"``).
 ``COMPUTE_SYSTEM``
     Override the target HPC system (``"polaris"``, ``"aurora"``,
     ``"local"``).
@@ -25,7 +25,7 @@ from chemgraph.execution.base import ExecutionBackend
 logger = logging.getLogger(__name__)
 
 # Supported backend names (keep in sync with the ``elif`` chain below)
-SUPPORTED_BACKENDS = ("parsl", "ensemble_launcher", "local")
+SUPPORTED_BACKENDS = ("parsl", "ensemble_launcher", "globus_compute", "local")
 
 
 def _load_execution_config(config_path: Optional[str] = None) -> dict[str, Any]:
@@ -117,9 +117,7 @@ def get_backend(
 
     # -- resolve system -------------------------------------------------------
     resolved_system = (
-        system
-        or os.getenv("COMPUTE_SYSTEM")
-        or cfg.get("system", "local")
+        system or os.getenv("COMPUTE_SYSTEM") or cfg.get("system", "local")
     )
 
     # -- merge backend-specific config ----------------------------------------
@@ -144,6 +142,13 @@ def get_backend(
         )
 
         backend = EnsembleLauncherBackend()
+
+    elif resolved_backend == "globus_compute":
+        from chemgraph.execution.globus_compute_backend import (
+            GlobusComputeBackend,
+        )
+
+        backend = GlobusComputeBackend()
 
     elif resolved_backend == "local":
         from chemgraph.execution.local_backend import LocalBackend

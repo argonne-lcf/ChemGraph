@@ -3,6 +3,7 @@
 Tests cover:
 - TaskSpec validation
 - LocalBackend: python and shell tasks
+- GlobusComputeBackend: python and shell tasks (mocked SDK)
 - Backend factory (get_backend)
 - Shared utilities: resolve_structure_files, gather_futures, write_results_jsonl
 """
@@ -10,10 +11,11 @@ Tests cover:
 import asyncio
 import json
 import os
+import sys
 import tempfile
 from concurrent.futures import Future
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -197,6 +199,294 @@ class TestLocalBackend:
             backend.shutdown()
 
 
+# ── GlobusComputeBackend tests ──────────────────────────────────────────
+
+
+def _make_mock_gc_modules():
+    """Create mock globus_compute_sdk module and its classes."""
+    mock_sdk = MagicMock()
+
+    # Mock Executor: instances track submit calls and return Futures
+    mock_executor_instance = MagicMock()
+    mock_future = Future()
+    mock_future.set_result(42)
+    mock_executor_instance.submit.return_value = mock_future
+    mock_sdk.Executor.return_value = mock_executor_instance
+
+    # Mock ShellFunction
+    mock_shell_fn_instance = MagicMock()
+    mock_sdk.ShellFunction.return_value = mock_shell_fn_instance
+
+    return mock_sdk, mock_executor_instance
+
+
+class TestGlobusComputeBackend:
+    def _patch_and_import(self, mock_sdk):
+        """Patch globus_compute_sdk into sys.modules and import the backend."""
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            # Force re-import to pick up the mock
+            import importlib
+
+            import chemgraph.execution.globus_compute_backend as gc_mod
+
+            importlib.reload(gc_mod)
+            return gc_mod.GlobusComputeBackend
+
+    def test_initialize_success(self):
+        mock_sdk, mock_executor = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(system="polaris", endpoint_id="test-uuid-1234")
+
+            assert backend._initialized is True
+            mock_sdk.Executor.assert_called_once_with(endpoint_id="test-uuid-1234")
+
+    def test_initialize_with_amqp_port(self):
+        mock_sdk, mock_executor = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(
+                system="polaris",
+                endpoint_id="test-uuid",
+                amqp_port=443,
+            )
+
+            mock_sdk.Executor.assert_called_once_with(
+                endpoint_id="test-uuid", amqp_port=443
+            )
+
+    def test_initialize_missing_endpoint_id(self):
+        mock_sdk, _ = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            with pytest.raises(ValueError, match="endpoint_id"):
+                backend.initialize(system="polaris")
+
+    def test_initialize_empty_endpoint_id(self):
+        mock_sdk, _ = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            with pytest.raises(ValueError, match="endpoint_id"):
+                backend.initialize(system="polaris", endpoint_id="")
+
+    def test_initialize_import_error(self):
+        """Verify helpful error when globus-compute-sdk is not installed."""
+        with patch.dict(sys.modules, {"globus_compute_sdk": None}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            with pytest.raises(ImportError, match="globus-compute-sdk"):
+                backend.initialize(endpoint_id="test-uuid")
+
+    def test_submit_python_task(self):
+        mock_sdk, mock_executor = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(endpoint_id="test-uuid")
+
+            task = TaskSpec(
+                task_id="py1",
+                task_type="python",
+                callable=_square,
+                args=(7,),
+            )
+            fut = backend.submit(task)
+
+            assert isinstance(fut, Future)
+            mock_executor.submit.assert_called_once_with(_square, 7)
+
+    def test_submit_python_task_with_kwargs(self):
+        mock_sdk, mock_executor = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(endpoint_id="test-uuid")
+
+            task = TaskSpec(
+                task_id="py2",
+                task_type="python",
+                callable=_add,
+                args=(3,),
+                kwargs={"b": 5},
+            )
+            backend.submit(task)
+
+            mock_executor.submit.assert_called_once_with(_add, 3, b=5)
+
+    def test_submit_shell_task(self):
+        mock_sdk, mock_executor = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(endpoint_id="test-uuid")
+
+            task = TaskSpec(
+                task_id="sh1",
+                task_type="shell",
+                command="echo hello",
+            )
+            backend.submit(task)
+
+            # ShellFunction should be constructed with the command
+            mock_sdk.ShellFunction.assert_called_once_with("echo hello")
+            # And then submitted via the executor
+            shell_fn_instance = mock_sdk.ShellFunction.return_value
+            mock_executor.submit.assert_called_once_with(shell_fn_instance)
+
+    def test_submit_not_initialized(self):
+        from chemgraph.execution.globus_compute_backend import (
+            GlobusComputeBackend,
+        )
+
+        backend = GlobusComputeBackend()
+        task = TaskSpec(task_id="x", callable=_square, args=(1,))
+        with pytest.raises(RuntimeError, match="not initialized"):
+            backend.submit(task)
+
+    def test_submit_python_missing_callable(self):
+        mock_sdk, _ = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(endpoint_id="test-uuid")
+
+            task = TaskSpec(task_id="no_fn", task_type="python")
+            with pytest.raises(ValueError, match="requires a callable"):
+                backend.submit(task)
+
+    def test_submit_shell_missing_command(self):
+        mock_sdk, _ = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(endpoint_id="test-uuid")
+
+            task = TaskSpec(task_id="no_cmd", task_type="shell")
+            with pytest.raises(ValueError, match="requires a command"):
+                backend.submit(task)
+
+    def test_shutdown(self):
+        mock_sdk, mock_executor = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(endpoint_id="test-uuid")
+            assert backend._initialized is True
+
+            backend.shutdown()
+
+            assert backend._initialized is False
+            assert backend._executor is None
+            mock_executor.shutdown.assert_called_once()
+
+    def test_shutdown_idempotent(self):
+        """Calling shutdown() when not initialized should not raise."""
+        from chemgraph.execution.globus_compute_backend import (
+            GlobusComputeBackend,
+        )
+
+        backend = GlobusComputeBackend()
+        backend.shutdown()  # should be a no-op
+        assert backend._initialized is False
+
+    def test_context_manager(self):
+        mock_sdk, mock_executor = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            with GlobusComputeBackend() as backend:
+                backend.initialize(endpoint_id="test-uuid")
+                task = TaskSpec(
+                    task_id="ctx",
+                    task_type="python",
+                    callable=_square,
+                    args=(3,),
+                )
+                backend.submit(task)
+
+            # After exiting context, shutdown should have been called
+            mock_executor.shutdown.assert_called_once()
+
+
+class TestGetBackendGlobusCompute:
+    def test_factory_creates_globus_compute_backend(self):
+        mock_sdk, _ = _make_mock_gc_modules()
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.config import get_backend
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = get_backend(
+                backend_name="globus_compute",
+                endpoint_id="factory-test-uuid",
+            )
+            try:
+                assert isinstance(backend, GlobusComputeBackend)
+                assert backend._initialized is True
+            finally:
+                backend.shutdown()
+
+    def test_factory_via_env_var(self):
+        mock_sdk, _ = _make_mock_gc_modules()
+        with (
+            patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}),
+            patch.dict(
+                os.environ,
+                {"CHEMGRAPH_EXECUTION_BACKEND": "globus_compute"},
+            ),
+        ):
+            from chemgraph.execution.config import get_backend
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = get_backend(endpoint_id="env-test-uuid")
+            try:
+                assert isinstance(backend, GlobusComputeBackend)
+            finally:
+                backend.shutdown()
+
+
 # ── Factory tests ───────────────────────────────────────────────────────
 
 
@@ -235,9 +525,7 @@ class TestResolveStructureFiles:
         for name in ["a.cif", "b.cif", "c.txt"]:
             (tmp_path / name).write_text("dummy")
 
-        files, out_dir = resolve_structure_files(
-            str(tmp_path), extensions={".cif"}
-        )
+        files, out_dir = resolve_structure_files(str(tmp_path), extensions={".cif"})
         assert len(files) == 2
         assert out_dir == tmp_path
         assert all(f.suffix == ".cif" for f in files)

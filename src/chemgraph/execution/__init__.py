@@ -2,7 +2,7 @@
 
 This package provides a backend-agnostic interface for submitting
 computational tasks to different workflow managers (Parsl,
-EnsembleLauncher, local process pool).
+EnsembleLauncher, Globus Compute, local process pool).
 
 Quick start
 -----------
