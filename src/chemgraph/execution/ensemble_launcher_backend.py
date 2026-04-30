@@ -55,7 +55,7 @@ class EnsembleLauncherBackend(ExecutionBackend):
     """
 
     def __init__(self) -> None:
-        self._initialized = False
+        super().__init__()
         self._el = None
         self._client = None
         self._checkpoint_dir: str | None = None
@@ -167,23 +167,33 @@ class EnsembleLauncherBackend(ExecutionBackend):
             )
 
     def shutdown(self) -> None:
+        client_ok = True
         if self._client is not None:
             try:
                 self._client.teardown()
+                self._client = None
             except Exception:
+                client_ok = False
                 logger.warning(
                     "Error tearing down EnsembleLauncher client.", exc_info=True
                 )
-            self._client = None
 
+        el_ok = True
         if self._el is not None:
             try:
                 self._el.stop()
+                self._el = None
             except Exception:
+                el_ok = False
                 logger.warning(
                     "Error stopping EnsembleLauncher orchestrator.", exc_info=True
                 )
-            self._el = None
 
-        self._initialized = False
-        logger.info("EnsembleLauncherBackend shut down.")
+        if client_ok and el_ok:
+            self._initialized = False
+            logger.info("EnsembleLauncherBackend shut down.")
+        else:
+            logger.warning(
+                "EnsembleLauncherBackend partially shut down. "
+                "Call shutdown() again to retry failed teardown."
+            )

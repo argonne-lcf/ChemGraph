@@ -110,6 +110,7 @@ skip-magic-trailing-comma = false  # Ensure Black-style formatting
 markers = [
     "llm: marks tests as requiring LLM API access (run with --run-llm)",
     "asyncio: marks async tests",
+    "globus_compute: marks tests requiring a live Globus Compute endpoint (run with --run-globus-compute)",
 ]
 filterwarnings = [
     "ignore:Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*:UserWarning",

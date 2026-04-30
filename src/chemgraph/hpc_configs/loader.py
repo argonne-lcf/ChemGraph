@@ -19,12 +19,13 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
     Parameters
     ----------
     system_name : str
-        Target system name.  Supported: ``"polaris"``, ``"aurora"``.
+        Target system name.  Supported: ``"local"``, ``"polaris"``,
+        ``"aurora"``.
     run_dir : str, optional
         Parsl run directory.  Defaults to the current working directory.
     **kwargs
         Extra keyword arguments forwarded to the system-specific
-        config factory (e.g. ``worker_init``).
+        config factory (e.g. ``worker_init``, ``max_workers``).
 
     Returns
     -------
@@ -42,7 +43,12 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
 
     logger.info("Loading Parsl config for system: %s", system_name)
 
-    if system_name == "polaris":
+    if system_name == "local":
+        from chemgraph.hpc_configs.local_parsl import get_local_config
+
+        return get_local_config(run_dir=run_dir, **kwargs)
+
+    elif system_name == "polaris":
         from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
 
         return get_polaris_config(run_dir=run_dir, **kwargs)
@@ -55,5 +61,5 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
     else:
         raise ValueError(
             f"Unknown HPC system: '{system_name}'. "
-            f"Supported systems: polaris, aurora"
+            f"Supported systems: local, polaris, aurora"
         )

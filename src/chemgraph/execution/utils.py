@@ -110,7 +110,9 @@ async def gather_futures(
                 return post_fn(meta, result)
             # Default: merge metadata with result (if result is a dict)
             if isinstance(result, dict):
-                return {**meta, **result}
+                merged = {**meta, **result}
+                merged.setdefault("status", "success")
+                return merged
             return {**meta, "result": result, "status": "success"}
         except Exception as e:
             return {

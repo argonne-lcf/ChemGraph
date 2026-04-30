@@ -99,7 +99,8 @@ class ExecutionBackend(ABC):
     The class also supports the context-manager protocol (``with`` statement).
     """
 
-    _initialized: bool = False
+    def __init__(self) -> None:
+        self._initialized: bool = False
 
     @abstractmethod
     def initialize(self, system: str = "local", **kwargs: Any) -> None:

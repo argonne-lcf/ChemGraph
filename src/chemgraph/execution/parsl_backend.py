@@ -32,7 +32,7 @@ class ParslBackend(ExecutionBackend):
     """
 
     def __init__(self) -> None:
-        self._initialized = False
+        super().__init__()
         self._python_app = None
         self._bash_app = None
 
