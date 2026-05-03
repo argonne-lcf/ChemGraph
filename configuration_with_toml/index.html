@@ -9,7 +9,7 @@
       
       
       
-        <link rel="prev" href="../mcp_servers/">
+        <link rel="prev" href="../evaluation/">
       
       
         <link rel="next" href="../project_structure/">
@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -316,6 +316,25 @@
     
   
   MCP Servers
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../evaluation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Evaluation & Benchmarking
 
       </a>
     </li>
@@ -660,6 +679,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation & Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -757,6 +803,39 @@
     <span class="md-ellipsis">
       
         Argo/OpenAI-Compatible Endpoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#alcf-inference-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ALCF Inference Endpoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Groq
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#llm-provider-prefixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLM Provider Prefixes
       
     </span>
   </a>
@@ -868,6 +947,17 @@
     <span class="md-ellipsis">
       
         Utility Commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Memory
       
     </span>
   </a>
@@ -1222,6 +1312,39 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#alcf-inference-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ALCF Inference Endpoints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#groq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Groq
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#llm-provider-prefixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LLM Provider Prefixes
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1327,6 +1450,17 @@
     <span class="md-ellipsis">
       
         Utility Commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#session-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Memory
       
     </span>
   </a>
@@ -1489,76 +1623,80 @@
 </span><span id="__span-0-44"><a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a><span class="n">base_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://generativelanguage.googleapis.com/v1beta&quot;</span>
 </span><span id="__span-0-45"><a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a><span class="n">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">30</span>
 </span><span id="__span-0-46"><a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>
-</span><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a><span class="k">[api.local]</span>
-</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a><span class="c1"># For local models like Ollama</span>
-</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a><span class="n">base_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http://localhost:11434&quot;</span>
-</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a><span class="n">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">60</span>
-</span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>
-</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a><span class="k">[chemistry]</span>
-</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a><span class="c1"># Default calculation settings</span>
-</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a><span class="k">[chemistry.optimization]</span>
-</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a><span class="c1"># Optimization method: BFGS, L-BFGS-B, CG, etc.</span>
-</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a><span class="n">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;BFGS&quot;</span>
-</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a><span class="c1"># Force tolerance for convergence</span>
-</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a><span class="n">fmax</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.05</span>
-</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a><span class="c1"># Maximum optimization steps</span>
-</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a><span class="n">steps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">200</span>
-</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a>
-</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a><span class="k">[chemistry.frequencies]</span>
-</span><span id="__span-0-63"><a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># Displacement for finite difference</span>
-</span><span id="__span-0-64"><a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a><span class="n">displacement</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.01</span>
-</span><span id="__span-0-65"><a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a><span class="c1"># Number of processes for parallel calculation</span>
-</span><span id="__span-0-66"><a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a><span class="n">nprocs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
-</span><span id="__span-0-67"><a id="__codelineno-0-67" name="__codelineno-0-67" href="#__codelineno-0-67"></a>
-</span><span id="__span-0-68"><a id="__codelineno-0-68" name="__codelineno-0-68" href="#__codelineno-0-68"></a><span class="k">[chemistry.calculators]</span>
-</span><span id="__span-0-69"><a id="__codelineno-0-69" name="__codelineno-0-69" href="#__codelineno-0-69"></a><span class="c1"># Default calculator for different tasks</span>
-</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70" href="#__codelineno-0-70"></a><span class="n">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;mace_mp&quot;</span>
-</span><span id="__span-0-71"><a id="__codelineno-0-71" name="__codelineno-0-71" href="#__codelineno-0-71"></a><span class="c1"># Available calculators: mace_mp, emt, nwchem, orca, psi4, tblite</span>
-</span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72" href="#__codelineno-0-72"></a><span class="n">fallback</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;emt&quot;</span>
-</span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73" href="#__codelineno-0-73"></a>
-</span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74" href="#__codelineno-0-74"></a><span class="k">[output]</span>
-</span><span id="__span-0-75"><a id="__codelineno-0-75" name="__codelineno-0-75" href="#__codelineno-0-75"></a><span class="c1"># Output file settings</span>
-</span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76" href="#__codelineno-0-76"></a><span class="k">[output.files]</span>
-</span><span id="__span-0-77"><a id="__codelineno-0-77" name="__codelineno-0-77" href="#__codelineno-0-77"></a><span class="c1"># Default output directory</span>
-</span><span id="__span-0-78"><a id="__codelineno-0-78" name="__codelineno-0-78" href="#__codelineno-0-78"></a><span class="n">directory</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;./chemgraph_output&quot;</span>
-</span><span id="__span-0-79"><a id="__codelineno-0-79" name="__codelineno-0-79" href="#__codelineno-0-79"></a><span class="c1"># File naming pattern</span>
-</span><span id="__span-0-80"><a id="__codelineno-0-80" name="__codelineno-0-80" href="#__codelineno-0-80"></a><span class="n">pattern</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{timestamp}_{query_hash}&quot;</span>
-</span><span id="__span-0-81"><a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a><span class="c1"># Supported formats: xyz, json, html, png</span>
-</span><span id="__span-0-82"><a id="__codelineno-0-82" name="__codelineno-0-82" href="#__codelineno-0-82"></a><span class="n">formats</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;xyz&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;json&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;html&quot;</span><span class="p">]</span>
-</span><span id="__span-0-83"><a id="__codelineno-0-83" name="__codelineno-0-83" href="#__codelineno-0-83"></a>
-</span><span id="__span-0-84"><a id="__codelineno-0-84" name="__codelineno-0-84" href="#__codelineno-0-84"></a><span class="k">[output.visualization]</span>
-</span><span id="__span-0-85"><a id="__codelineno-0-85" name="__codelineno-0-85" href="#__codelineno-0-85"></a><span class="c1"># 3D visualization settings</span>
-</span><span id="__span-0-86"><a id="__codelineno-0-86" name="__codelineno-0-86" href="#__codelineno-0-86"></a><span class="n">enable_3d</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-</span><span id="__span-0-87"><a id="__codelineno-0-87" name="__codelineno-0-87" href="#__codelineno-0-87"></a><span class="c1"># Molecular viewer: py3dmol, ase_gui</span>
-</span><span id="__span-0-88"><a id="__codelineno-0-88" name="__codelineno-0-88" href="#__codelineno-0-88"></a><span class="n">viewer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;py3dmol&quot;</span>
-</span><span id="__span-0-89"><a id="__codelineno-0-89" name="__codelineno-0-89" href="#__codelineno-0-89"></a><span class="c1"># Image resolution for saved figures</span>
-</span><span id="__span-0-90"><a id="__codelineno-0-90" name="__codelineno-0-90" href="#__codelineno-0-90"></a><span class="n">dpi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">300</span>
-</span><span id="__span-0-91"><a id="__codelineno-0-91" name="__codelineno-0-91" href="#__codelineno-0-91"></a>
-</span><span id="__span-0-92"><a id="__codelineno-0-92" name="__codelineno-0-92" href="#__codelineno-0-92"></a><span class="k">[logging]</span>
-</span><span id="__span-0-93"><a id="__codelineno-0-93" name="__codelineno-0-93" href="#__codelineno-0-93"></a><span class="c1"># Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL</span>
-</span><span id="__span-0-94"><a id="__codelineno-0-94" name="__codelineno-0-94" href="#__codelineno-0-94"></a><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;INFO&quot;</span>
-</span><span id="__span-0-95"><a id="__codelineno-0-95" name="__codelineno-0-95" href="#__codelineno-0-95"></a><span class="c1"># Log file location</span>
-</span><span id="__span-0-96"><a id="__codelineno-0-96" name="__codelineno-0-96" href="#__codelineno-0-96"></a><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;./chemgraph.log&quot;</span>
-</span><span id="__span-0-97"><a id="__codelineno-0-97" name="__codelineno-0-97" href="#__codelineno-0-97"></a><span class="c1"># Enable console logging</span>
-</span><span id="__span-0-98"><a id="__codelineno-0-98" name="__codelineno-0-98" href="#__codelineno-0-98"></a><span class="n">console</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-</span><span id="__span-0-99"><a id="__codelineno-0-99" name="__codelineno-0-99" href="#__codelineno-0-99"></a>
-</span><span id="__span-0-100"><a id="__codelineno-0-100" name="__codelineno-0-100" href="#__codelineno-0-100"></a><span class="k">[features]</span>
-</span><span id="__span-0-101"><a id="__codelineno-0-101" name="__codelineno-0-101" href="#__codelineno-0-101"></a><span class="c1"># Enable experimental features</span>
-</span><span id="__span-0-102"><a id="__codelineno-0-102" name="__codelineno-0-102" href="#__codelineno-0-102"></a><span class="n">enable_experimental</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
-</span><span id="__span-0-103"><a id="__codelineno-0-103" name="__codelineno-0-103" href="#__codelineno-0-103"></a><span class="c1"># Enable caching of results</span>
-</span><span id="__span-0-104"><a id="__codelineno-0-104" name="__codelineno-0-104" href="#__codelineno-0-104"></a><span class="n">enable_cache</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-</span><span id="__span-0-105"><a id="__codelineno-0-105" name="__codelineno-0-105" href="#__codelineno-0-105"></a><span class="c1"># Cache directory</span>
-</span><span id="__span-0-106"><a id="__codelineno-0-106" name="__codelineno-0-106" href="#__codelineno-0-106"></a><span class="n">cache_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;./cache&quot;</span>
-</span><span id="__span-0-107"><a id="__codelineno-0-107" name="__codelineno-0-107" href="#__codelineno-0-107"></a><span class="c1"># Cache expiration time in hours</span>
-</span><span id="__span-0-108"><a id="__codelineno-0-108" name="__codelineno-0-108" href="#__codelineno-0-108"></a><span class="n">cache_expiry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">24</span>
-</span><span id="__span-0-109"><a id="__codelineno-0-109" name="__codelineno-0-109" href="#__codelineno-0-109"></a>
-</span><span id="__span-0-110"><a id="__codelineno-0-110" name="__codelineno-0-110" href="#__codelineno-0-110"></a><span class="k">[security]</span>
-</span><span id="__span-0-111"><a id="__codelineno-0-111" name="__codelineno-0-111" href="#__codelineno-0-111"></a><span class="c1"># Enable API key validation</span>
-</span><span id="__span-0-112"><a id="__codelineno-0-112" name="__codelineno-0-112" href="#__codelineno-0-112"></a><span class="n">validate_keys</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-</span><span id="__span-0-113"><a id="__codelineno-0-113" name="__codelineno-0-113" href="#__codelineno-0-113"></a><span class="c1"># Enable request rate limiting</span>
-</span><span id="__span-0-114"><a id="__codelineno-0-114" name="__codelineno-0-114" href="#__codelineno-0-114"></a><span class="n">rate_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-</span><span id="__span-0-115"><a id="__codelineno-0-115" name="__codelineno-0-115" href="#__codelineno-0-115"></a><span class="c1"># Max requests per minute</span>
-</span><span id="__span-0-116"><a id="__codelineno-0-116" name="__codelineno-0-116" href="#__codelineno-0-116"></a><span class="n">max_requests_per_minute</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">60</span>
+</span><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a><span class="k">[api.alcf]</span>
+</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a><span class="n">base_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1&quot;</span>
+</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a><span class="n">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">30</span>
+</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>
+</span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a><span class="k">[api.local]</span>
+</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a><span class="c1"># For local models like Ollama</span>
+</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a><span class="n">base_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http://localhost:11434&quot;</span>
+</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a><span class="n">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">60</span>
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>
+</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a><span class="k">[chemistry]</span>
+</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a><span class="c1"># Default calculation settings</span>
+</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a><span class="k">[chemistry.optimization]</span>
+</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59" href="#__codelineno-0-59"></a><span class="c1"># Optimization method: BFGS, L-BFGS-B, CG, etc.</span>
+</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60" href="#__codelineno-0-60"></a><span class="n">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;BFGS&quot;</span>
+</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61" href="#__codelineno-0-61"></a><span class="c1"># Force tolerance for convergence</span>
+</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62" href="#__codelineno-0-62"></a><span class="n">fmax</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.05</span>
+</span><span id="__span-0-63"><a id="__codelineno-0-63" name="__codelineno-0-63" href="#__codelineno-0-63"></a><span class="c1"># Maximum optimization steps</span>
+</span><span id="__span-0-64"><a id="__codelineno-0-64" name="__codelineno-0-64" href="#__codelineno-0-64"></a><span class="n">steps</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">200</span>
+</span><span id="__span-0-65"><a id="__codelineno-0-65" name="__codelineno-0-65" href="#__codelineno-0-65"></a>
+</span><span id="__span-0-66"><a id="__codelineno-0-66" name="__codelineno-0-66" href="#__codelineno-0-66"></a><span class="k">[chemistry.frequencies]</span>
+</span><span id="__span-0-67"><a id="__codelineno-0-67" name="__codelineno-0-67" href="#__codelineno-0-67"></a><span class="c1"># Displacement for finite difference</span>
+</span><span id="__span-0-68"><a id="__codelineno-0-68" name="__codelineno-0-68" href="#__codelineno-0-68"></a><span class="n">displacement</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0.01</span>
+</span><span id="__span-0-69"><a id="__codelineno-0-69" name="__codelineno-0-69" href="#__codelineno-0-69"></a><span class="c1"># Number of processes for parallel calculation</span>
+</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70" href="#__codelineno-0-70"></a><span class="n">nprocs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
+</span><span id="__span-0-71"><a id="__codelineno-0-71" name="__codelineno-0-71" href="#__codelineno-0-71"></a>
+</span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72" href="#__codelineno-0-72"></a><span class="k">[chemistry.calculators]</span>
+</span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73" href="#__codelineno-0-73"></a><span class="c1"># Default calculator for different tasks</span>
+</span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74" href="#__codelineno-0-74"></a><span class="n">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;mace_mp&quot;</span>
+</span><span id="__span-0-75"><a id="__codelineno-0-75" name="__codelineno-0-75" href="#__codelineno-0-75"></a><span class="c1"># Available calculators: mace_mp, emt, nwchem, orca, psi4, tblite</span>
+</span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76" href="#__codelineno-0-76"></a><span class="n">fallback</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;emt&quot;</span>
+</span><span id="__span-0-77"><a id="__codelineno-0-77" name="__codelineno-0-77" href="#__codelineno-0-77"></a>
+</span><span id="__span-0-78"><a id="__codelineno-0-78" name="__codelineno-0-78" href="#__codelineno-0-78"></a><span class="k">[output]</span>
+</span><span id="__span-0-79"><a id="__codelineno-0-79" name="__codelineno-0-79" href="#__codelineno-0-79"></a><span class="c1"># Output file settings</span>
+</span><span id="__span-0-80"><a id="__codelineno-0-80" name="__codelineno-0-80" href="#__codelineno-0-80"></a><span class="k">[output.files]</span>
+</span><span id="__span-0-81"><a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a><span class="c1"># Default output directory</span>
+</span><span id="__span-0-82"><a id="__codelineno-0-82" name="__codelineno-0-82" href="#__codelineno-0-82"></a><span class="n">directory</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;./chemgraph_output&quot;</span>
+</span><span id="__span-0-83"><a id="__codelineno-0-83" name="__codelineno-0-83" href="#__codelineno-0-83"></a><span class="c1"># File naming pattern</span>
+</span><span id="__span-0-84"><a id="__codelineno-0-84" name="__codelineno-0-84" href="#__codelineno-0-84"></a><span class="n">pattern</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;{timestamp}_{query_hash}&quot;</span>
+</span><span id="__span-0-85"><a id="__codelineno-0-85" name="__codelineno-0-85" href="#__codelineno-0-85"></a><span class="c1"># Supported formats: xyz, json, html, png</span>
+</span><span id="__span-0-86"><a id="__codelineno-0-86" name="__codelineno-0-86" href="#__codelineno-0-86"></a><span class="n">formats</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;xyz&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;json&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;html&quot;</span><span class="p">]</span>
+</span><span id="__span-0-87"><a id="__codelineno-0-87" name="__codelineno-0-87" href="#__codelineno-0-87"></a>
+</span><span id="__span-0-88"><a id="__codelineno-0-88" name="__codelineno-0-88" href="#__codelineno-0-88"></a><span class="k">[output.visualization]</span>
+</span><span id="__span-0-89"><a id="__codelineno-0-89" name="__codelineno-0-89" href="#__codelineno-0-89"></a><span class="c1"># 3D visualization settings</span>
+</span><span id="__span-0-90"><a id="__codelineno-0-90" name="__codelineno-0-90" href="#__codelineno-0-90"></a><span class="n">enable_3d</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-0-91"><a id="__codelineno-0-91" name="__codelineno-0-91" href="#__codelineno-0-91"></a><span class="c1"># Molecular viewer: py3dmol, ase_gui</span>
+</span><span id="__span-0-92"><a id="__codelineno-0-92" name="__codelineno-0-92" href="#__codelineno-0-92"></a><span class="n">viewer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;py3dmol&quot;</span>
+</span><span id="__span-0-93"><a id="__codelineno-0-93" name="__codelineno-0-93" href="#__codelineno-0-93"></a><span class="c1"># Image resolution for saved figures</span>
+</span><span id="__span-0-94"><a id="__codelineno-0-94" name="__codelineno-0-94" href="#__codelineno-0-94"></a><span class="n">dpi</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">300</span>
+</span><span id="__span-0-95"><a id="__codelineno-0-95" name="__codelineno-0-95" href="#__codelineno-0-95"></a>
+</span><span id="__span-0-96"><a id="__codelineno-0-96" name="__codelineno-0-96" href="#__codelineno-0-96"></a><span class="k">[logging]</span>
+</span><span id="__span-0-97"><a id="__codelineno-0-97" name="__codelineno-0-97" href="#__codelineno-0-97"></a><span class="c1"># Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL</span>
+</span><span id="__span-0-98"><a id="__codelineno-0-98" name="__codelineno-0-98" href="#__codelineno-0-98"></a><span class="n">level</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;INFO&quot;</span>
+</span><span id="__span-0-99"><a id="__codelineno-0-99" name="__codelineno-0-99" href="#__codelineno-0-99"></a><span class="c1"># Log file location</span>
+</span><span id="__span-0-100"><a id="__codelineno-0-100" name="__codelineno-0-100" href="#__codelineno-0-100"></a><span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;./chemgraph.log&quot;</span>
+</span><span id="__span-0-101"><a id="__codelineno-0-101" name="__codelineno-0-101" href="#__codelineno-0-101"></a><span class="c1"># Enable console logging</span>
+</span><span id="__span-0-102"><a id="__codelineno-0-102" name="__codelineno-0-102" href="#__codelineno-0-102"></a><span class="n">console</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-0-103"><a id="__codelineno-0-103" name="__codelineno-0-103" href="#__codelineno-0-103"></a>
+</span><span id="__span-0-104"><a id="__codelineno-0-104" name="__codelineno-0-104" href="#__codelineno-0-104"></a><span class="k">[features]</span>
+</span><span id="__span-0-105"><a id="__codelineno-0-105" name="__codelineno-0-105" href="#__codelineno-0-105"></a><span class="c1"># Enable experimental features</span>
+</span><span id="__span-0-106"><a id="__codelineno-0-106" name="__codelineno-0-106" href="#__codelineno-0-106"></a><span class="n">enable_experimental</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+</span><span id="__span-0-107"><a id="__codelineno-0-107" name="__codelineno-0-107" href="#__codelineno-0-107"></a><span class="c1"># Enable caching of results</span>
+</span><span id="__span-0-108"><a id="__codelineno-0-108" name="__codelineno-0-108" href="#__codelineno-0-108"></a><span class="n">enable_cache</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-0-109"><a id="__codelineno-0-109" name="__codelineno-0-109" href="#__codelineno-0-109"></a><span class="c1"># Cache directory</span>
+</span><span id="__span-0-110"><a id="__codelineno-0-110" name="__codelineno-0-110" href="#__codelineno-0-110"></a><span class="n">cache_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;./cache&quot;</span>
+</span><span id="__span-0-111"><a id="__codelineno-0-111" name="__codelineno-0-111" href="#__codelineno-0-111"></a><span class="c1"># Cache expiration time in hours</span>
+</span><span id="__span-0-112"><a id="__codelineno-0-112" name="__codelineno-0-112" href="#__codelineno-0-112"></a><span class="n">cache_expiry</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">24</span>
+</span><span id="__span-0-113"><a id="__codelineno-0-113" name="__codelineno-0-113" href="#__codelineno-0-113"></a>
+</span><span id="__span-0-114"><a id="__codelineno-0-114" name="__codelineno-0-114" href="#__codelineno-0-114"></a><span class="k">[security]</span>
+</span><span id="__span-0-115"><a id="__codelineno-0-115" name="__codelineno-0-115" href="#__codelineno-0-115"></a><span class="c1"># Enable API key validation</span>
+</span><span id="__span-0-116"><a id="__codelineno-0-116" name="__codelineno-0-116" href="#__codelineno-0-116"></a><span class="n">validate_keys</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-0-117"><a id="__codelineno-0-117" name="__codelineno-0-117" href="#__codelineno-0-117"></a><span class="c1"># Enable request rate limiting</span>
+</span><span id="__span-0-118"><a id="__codelineno-0-118" name="__codelineno-0-118" href="#__codelineno-0-118"></a><span class="n">rate_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-0-119"><a id="__codelineno-0-119" name="__codelineno-0-119" href="#__codelineno-0-119"></a><span class="c1"># Max requests per minute</span>
+</span><span id="__span-0-120"><a id="__codelineno-0-120" name="__codelineno-0-120" href="#__codelineno-0-120"></a><span class="n">max_requests_per_minute</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">60</span>
 </span></code></pre></div>
 <h3 id="using-configuration-files">Using Configuration Files</h3>
 <h4 id="with-the-command-line-interface">With the Command Line Interface</h4>
@@ -1576,6 +1714,75 @@ Optional <code>api.openai.argo_user</code> can also be configured.</p>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">argo_user</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;your_argo_username&quot;</span>
 </span></code></pre></div>
 <p><code>ARGO_USER</code> is only used as a fallback when <code>argo_user</code> is not provided in <code>config.toml</code>.</p>
+<h4 id="alcf-inference-endpoints">ALCF Inference Endpoints</h4>
+<p>ChemGraph supports <a href="https://docs.alcf.anl.gov/services/inference-endpoints/">ALCF Inference Endpoints</a>, which provide API access to open-source models running on dedicated ALCF hardware.</p>
+<ol>
+<li>The endpoint is configured by default in <code>config.toml</code>:</li>
+</ol>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[api.alcf]</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">base_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1&quot;</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">timeout</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">30</span>
+</span></code></pre></div>
+<ol>
+<li>Authenticate via Globus OAuth and set the access token:</li>
+</ol>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>pip<span class="w"> </span>install<span class="w"> </span>globus_sdk
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>wget<span class="w"> </span>https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/refs/heads/main/inference_auth_token.py
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>python<span class="w"> </span>inference_auth_token.py<span class="w"> </span>authenticate
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ALCF_ACCESS_TOKEN</span><span class="o">=</span><span class="k">$(</span>python<span class="w"> </span>inference_auth_token.py<span class="w"> </span>get_access_token<span class="k">)</span>
+</span></code></pre></div>
+<ol>
+<li>Use an ALCF model (no prefix needed):</li>
+</ol>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-m<span class="w"> </span>meta-llama/Meta-Llama-3.1-70B-Instruct<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">&quot;Calculate the energy of water using MACE&quot;</span>
+</span></code></pre></div>
+<p>Access tokens are valid for ~48 hours. See the
+<a href="https://docs.alcf.anl.gov/services/inference-endpoints/#available-models">ALCF docs</a> for available models.</p>
+<h4 id="groq">Groq</h4>
+<p>ChemGraph supports <a href="https://groq.com/">Groq</a> for fast LLM inference. Use the <code>groq:</code> prefix to route any model through Groq.</p>
+<ol>
+<li>Set your API key:</li>
+</ol>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_groq_api_key_here&quot;</span>
+</span></code></pre></div>
+<ol>
+<li>Use any Groq model with the <code>groq:</code> prefix:</li>
+</ol>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;What is the SMILES for water?&quot;</span><span class="w"> </span>-m<span class="w"> </span>groq:llama-3.3-70b-versatile
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Optimize methane&quot;</span><span class="w"> </span>-m<span class="w"> </span>groq:openai/gpt-oss-120b
+</span></code></pre></div>
+<p>No curated model list is maintained -- any model available on the
+<a href="https://console.groq.com/docs/models">Groq console</a> can be used by prefixing
+it with <code>groq:</code>. The prefix is stripped before sending to the Groq API.</p>
+<h4 id="llm-provider-prefixes">LLM Provider Prefixes</h4>
+<p>For third-party providers that share model names with other services, ChemGraph
+uses a prefix convention to route models unambiguously:</p>
+<table>
+<thead>
+<tr>
+<th>Prefix</th>
+<th>Provider</th>
+<th>Auth Env Var</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argo:</code></td>
+<td>Argo API (Argonne internal)</td>
+<td><code>OPENAI_API_KEY</code></td>
+<td><code>argo:gpt-4o</code></td>
+</tr>
+<tr>
+<td><code>groq:</code></td>
+<td>Groq Cloud</td>
+<td><code>GROQ_API_KEY</code></td>
+<td><code>groq:llama-3.3-70b-versatile</code></td>
+</tr>
+</tbody>
+</table>
+<p>Direct model names (no prefix) are used for OpenAI, Anthropic, Google, ALCF, and Ollama.</p>
 <h3 id="configuration-sections">Configuration Sections</h3>
 <table>
 <thead>
@@ -1623,24 +1830,24 @@ Optional <code>api.openai.argo_user</code> can also be configured.</p>
 <p>ChemGraph includes a powerful command-line interface (CLI) that provides all the functionality of the web interface through the terminal. The CLI features rich formatting, interactive mode, and comprehensive configuration options.</p>
 <h4 id="installation-setup">Installation &amp; Setup</h4>
 <p>The CLI is included by default when you install ChemGraph:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
 </span></code></pre></div>
 <h4 id="basic-usage">Basic Usage</h4>
 <h5 id="quick-start">Quick Start</h5>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Basic query</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;What is the SMILES string for water?&quot;</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># With model selection</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Optimize methane geometry&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># With report generation</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Calculate CO2 vibrational frequencies&quot;</span><span class="w"> </span>-r
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1"># Using configuration file</span>
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query here&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Basic query</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;What is the SMILES string for water?&quot;</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># With model selection</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Optimize methane geometry&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># With report generation</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Calculate CO2 vibrational frequencies&quot;</span><span class="w"> </span>-r
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="c1"># Using configuration file</span>
+</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query here&quot;</span>
 </span></code></pre></div>
 <h5 id="command-syntax">Command Syntax</h5>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;YOUR_QUERY&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>chemgraph<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;YOUR_QUERY&quot;</span>
 </span></code></pre></div>
 <h4 id="command-line-options">Command Line Options</h4>
 <p><strong>Core Arguments:</strong></p>
@@ -1690,142 +1897,205 @@ Optional <code>api.openai.argo_user</code> can also be configured.</p>
 <td>Generate detailed report</td>
 <td><code>False</code></td>
 </tr>
+<tr>
+<td><code>--resume</code></td>
+<td></td>
+<td>Resume from a previous session ID (prefix supported)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--list-sessions</code></td>
+<td></td>
+<td>List recent sessions from the memory database</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--show-session</code></td>
+<td></td>
+<td>Show conversation for a session (prefix supported)</td>
+<td></td>
+</tr>
+<tr>
+<td><code>--delete-session</code></td>
+<td></td>
+<td>Delete a session from the memory database</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <p><strong>Model Selection:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># OpenAI models</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o-mini
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>o1-preview
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># Anthropic models</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>claude-3-5-sonnet-20241022
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>claude-3-opus-20240229
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="c1"># Google models</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>gemini-1.5-pro
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>
-</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="c1"># Local models (OpenAI-compatible local endpoint)</span>
-</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>llama-3.1-70b-instruct
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># OpenAI models</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o-mini
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="c1"># Anthropic models</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>claude-3-5-sonnet-20241022
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="c1"># Google models</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>gemini-2.5-pro
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a><span class="c1"># Argo models (Argonne internal, argo: prefix)</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>argo:gpt-4o
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>argo:claude-sonnet-4
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="c1"># ALCF models (Globus auth required, no prefix)</span>
+</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>meta-llama/Meta-Llama-3.1-70B-Instruct
+</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>
+</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="c1"># Groq models (groq: prefix, any Groq model)</span>
+</span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>groq:llama-3.3-70b-versatile
+</span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a>
+</span><span id="__span-11-21"><a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a><span class="c1"># Local models (Ollama)</span>
+</span><span id="__span-11-22"><a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-m<span class="w"> </span>llama3.2
 </span></code></pre></div>
 <p><strong>Workflow Types:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Single agent (default) - best for most tasks</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Optimize water molecule&quot;</span><span class="w"> </span>-w<span class="w"> </span>single_agent
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Multi-agent - complex tasks with planning</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Complex analysis&quot;</span><span class="w"> </span>-w<span class="w"> </span>multi_agent
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Python REPL - interactive coding</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Write analysis code&quot;</span><span class="w"> </span>-w<span class="w"> </span>python_repl
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="c1"># gRASPA - molecular simulation</span>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Run adsorption simulation&quot;</span><span class="w"> </span>-w<span class="w"> </span>graspa
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Single agent (default) - best for most tasks</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Optimize water molecule&quot;</span><span class="w"> </span>-w<span class="w"> </span>single_agent
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Multi-agent - complex tasks with planning</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Complex analysis&quot;</span><span class="w"> </span>-w<span class="w"> </span>multi_agent
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1"># Python REPL - interactive coding</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Write analysis code&quot;</span><span class="w"> </span>-w<span class="w"> </span>python_repl
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>
+</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="c1"># gRASPA - molecular simulation</span>
+</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Run adsorption simulation&quot;</span><span class="w"> </span>-w<span class="w"> </span>graspa
 </span></code></pre></div>
 <p><strong>Output Formats:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Full state output (default)</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-o<span class="w"> </span>state
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Last message only</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-o<span class="w"> </span>last_message
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># Structured output</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-s
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="c1"># Generate detailed report</span>
-</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-r
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Full state output (default)</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-o<span class="w"> </span>state
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># Last message only</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-o<span class="w"> </span>last_message
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="c1"># Structured output</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-s
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a><span class="c1"># Generate detailed report</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-r
 </span></code></pre></div>
 <h4 id="interactive-mode">Interactive Mode</h4>
 <p>Start an interactive session for continuous conversations:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>chemgraph<span class="w"> </span>--interactive
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>chemgraph<span class="w"> </span>--interactive
 </span></code></pre></div>
 <p><strong>Interactive Features:</strong>
 - <strong>Persistent conversation</strong>: Maintain context across queries
+- <strong>Session memory</strong>: Conversations are automatically saved to a local SQLite database (<code>~/.chemgraph/sessions.db</code>) and can be resumed later
 - <strong>Model switching</strong>: Change models mid-conversation
 - <strong>Workflow switching</strong>: Switch between different agent types
-- <strong>Built-in commands</strong>: Help, clear, config, etc.</p>
+- <strong>Built-in commands</strong>: Help, clear, config, session management, etc.</p>
 <p><strong>Interactive Commands:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># In interactive mode, type:</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nb">help</span><span class="w">                    </span><span class="c1"># Show available commands</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>clear<span class="w">                   </span><span class="c1"># Clear screen</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>config<span class="w">                  </span><span class="c1"># Show current configuration</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>quit<span class="w">                    </span><span class="c1"># Exit interactive mode</span>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>model<span class="w"> </span>gpt-4o<span class="w">           </span><span class="c1"># Change model</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>workflow<span class="w"> </span>multi_agent<span class="w">   </span><span class="c1"># Change workflow</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># In interactive mode, type:</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="nb">help</span><span class="w">                    </span><span class="c1"># Show available commands</span>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>clear<span class="w">                   </span><span class="c1"># Clear screen</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>config<span class="w">                  </span><span class="c1"># Show current configuration and session ID</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>quit<span class="w">                    </span><span class="c1"># Exit interactive mode</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>model<span class="w"> </span>gpt-4o<span class="w">           </span><span class="c1"># Change model</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>workflow<span class="w"> </span>multi_agent<span class="w">   </span><span class="c1"># Change workflow</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="c1"># Session management:</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="nb">history</span><span class="w">                 </span><span class="c1"># List recent sessions</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>show<span class="w"> </span>&lt;session_id&gt;<span class="w">       </span><span class="c1"># Show a session&#39;s conversation</span>
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>resume<span class="w"> </span>&lt;session_id&gt;<span class="w">     </span><span class="c1"># Resume from a previous session</span>
 </span></code></pre></div></p>
 <h4 id="utility-commands">Utility Commands</h4>
 <p><strong>List Available Models:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>chemgraph<span class="w"> </span>--list-models
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>chemgraph<span class="w"> </span>--list-models
 </span></code></pre></div></p>
 <p><strong>Check API Keys:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>chemgraph<span class="w"> </span>--check-keys
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>chemgraph<span class="w"> </span>--check-keys
 </span></code></pre></div></p>
 <p><strong>Get Help:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>chemgraph<span class="w"> </span>--help
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>chemgraph<span class="w"> </span>--help
 </span></code></pre></div></p>
+<h4 id="session-memory">Session Memory</h4>
+<p>ChemGraph automatically saves every conversation to a local SQLite database at <code>~/.chemgraph/sessions.db</code>. This allows you to browse past sessions, review tool calls and results, and resume previous conversations with full context.</p>
+<p><strong>List Recent Sessions:</strong>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>chemgraph<span class="w"> </span>--list-sessions
+</span></code></pre></div></p>
+<p><strong>View a Session's Conversation:</strong>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Full session ID or prefix (first few characters)</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>chemgraph<span class="w"> </span>--show-session<span class="w"> </span>a3b2
+</span></code></pre></div></p>
+<p><strong>Resume From a Previous Session:</strong>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1"># Injects previous conversation context into the new query</span>
+</span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Now optimize the geometry at 500K&quot;</span><span class="w"> </span>--resume<span class="w"> </span>a3b2
+</span></code></pre></div></p>
+<p><strong>Delete a Session:</strong>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>chemgraph<span class="w"> </span>--delete-session<span class="w"> </span>a3b2c1d4
+</span></code></pre></div></p>
+<p>Session IDs support prefix matching -- you only need to type enough characters to uniquely identify the session.</p>
 <h4 id="configuration-file-support">Configuration File Support</h4>
 <p>Use TOML configuration files for consistent settings:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span>
 </span></code></pre></div>
 <h4 id="environment-variables">Environment Variables</h4>
 <p>Provider keys and optional endpoint settings are read from environment variables
 and <code>config.toml</code> (for example, <code>api.openai.base_url</code> and <code>api.openai.argo_user</code>).</p>
 <h4 id="advanced-options">Advanced Options</h4>
 <p><strong>Timeout and Error Handling:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Set recursion limit</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Complex query&quot;</span><span class="w"> </span>--recursion-limit<span class="w"> </span><span class="m">30</span>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1"># Verbose output for debugging</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-v
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="c1"># Save output to file</span>
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>--output-file<span class="w"> </span>results.txt
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># Set recursion limit</span>
+</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Complex query&quot;</span><span class="w"> </span>--recursion-limit<span class="w"> </span><span class="m">30</span>
+</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a>
+</span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="c1"># Verbose output for debugging</span>
+</span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-v
+</span><span id="__span-24-6"><a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a>
+</span><span id="__span-24-7"><a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="c1"># Save output to file</span>
+</span><span id="__span-24-8"><a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>--output-file<span class="w"> </span>results.txt
 </span></code></pre></div></p>
 <h4 id="example-workflows">Example Workflows</h4>
 <p><strong>Basic Molecular Analysis:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Get molecular structure</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;What is the SMILES string for caffeine?&quot;</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Optimize geometry</span>
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Optimize the geometry of caffeine using DFT&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o<span class="w"> </span>-r
-</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
-</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Calculate properties</span>
-</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Calculate the vibrational frequencies of optimized caffeine&quot;</span><span class="w"> </span>-r
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="c1"># Get molecular structure</span>
+</span><span id="__span-25-2"><a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;What is the SMILES string for caffeine?&quot;</span>
+</span><span id="__span-25-3"><a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>
+</span><span id="__span-25-4"><a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a><span class="c1"># Optimize geometry</span>
+</span><span id="__span-25-5"><a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Optimize the geometry of caffeine using DFT&quot;</span><span class="w"> </span>-m<span class="w"> </span>gpt-4o<span class="w"> </span>-r
+</span><span id="__span-25-6"><a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a>
+</span><span id="__span-25-7"><a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a><span class="c1"># Calculate properties</span>
+</span><span id="__span-25-8"><a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Calculate the vibrational frequencies of optimized caffeine&quot;</span><span class="w"> </span>-r
 </span></code></pre></div></p>
 <p><strong>Interactive Research Session:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># Start interactive mode</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>chemgraph<span class="w"> </span>--interactive
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
-</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="c1"># Select model and workflow</span>
-</span><span id="__span-17-5"><a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>&gt;<span class="w"> </span>model<span class="w"> </span>gpt-4o
-</span><span id="__span-17-6"><a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>&gt;<span class="w"> </span>workflow<span class="w"> </span>single_agent
-</span><span id="__span-17-7"><a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>
-</span><span id="__span-17-8"><a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="c1"># Conduct analysis</span>
-</span><span id="__span-17-9"><a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>&gt;<span class="w"> </span>What<span class="w"> </span>is<span class="w"> </span>the<span class="w"> </span>structure<span class="w"> </span>of<span class="w"> </span>aspirin?
-</span><span id="__span-17-10"><a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>&gt;<span class="w"> </span>Optimize<span class="w"> </span>its<span class="w"> </span>geometry<span class="w"> </span>using<span class="w"> </span>DFT
-</span><span id="__span-17-11"><a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a>&gt;<span class="w"> </span>Calculate<span class="w"> </span>its<span class="w"> </span>electronic<span class="w"> </span>properties
-</span><span id="__span-17-12"><a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>&gt;<span class="w"> </span>Compare<span class="w"> </span>with<span class="w"> </span>ibuprofen
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="c1"># Start interactive mode</span>
+</span><span id="__span-26-2"><a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>chemgraph<span class="w"> </span>--interactive
+</span><span id="__span-26-3"><a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>
+</span><span id="__span-26-4"><a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="c1"># Select model and workflow</span>
+</span><span id="__span-26-5"><a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>&gt;<span class="w"> </span>model<span class="w"> </span>gpt-4o
+</span><span id="__span-26-6"><a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a>&gt;<span class="w"> </span>workflow<span class="w"> </span>single_agent
+</span><span id="__span-26-7"><a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>
+</span><span id="__span-26-8"><a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a><span class="c1"># Conduct analysis</span>
+</span><span id="__span-26-9"><a id="__codelineno-26-9" name="__codelineno-26-9" href="#__codelineno-26-9"></a>&gt;<span class="w"> </span>What<span class="w"> </span>is<span class="w"> </span>the<span class="w"> </span>structure<span class="w"> </span>of<span class="w"> </span>aspirin?
+</span><span id="__span-26-10"><a id="__codelineno-26-10" name="__codelineno-26-10" href="#__codelineno-26-10"></a>&gt;<span class="w"> </span>Optimize<span class="w"> </span>its<span class="w"> </span>geometry<span class="w"> </span>using<span class="w"> </span>DFT
+</span><span id="__span-26-11"><a id="__codelineno-26-11" name="__codelineno-26-11" href="#__codelineno-26-11"></a>&gt;<span class="w"> </span>Calculate<span class="w"> </span>its<span class="w"> </span>electronic<span class="w"> </span>properties
+</span><span id="__span-26-12"><a id="__codelineno-26-12" name="__codelineno-26-12" href="#__codelineno-26-12"></a>&gt;<span class="w"> </span>Compare<span class="w"> </span>with<span class="w"> </span>ibuprofen
 </span></code></pre></div></p>
 <p><strong>Batch Processing:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Process multiple queries</span>
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Analyze water molecule&quot;</span><span class="w"> </span>--output-file<span class="w"> </span>water_analysis.txt
-</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Analyze methane molecule&quot;</span><span class="w"> </span>--output-file<span class="w"> </span>methane_analysis.txt
-</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Analyze ammonia molecule&quot;</span><span class="w"> </span>--output-file<span class="w"> </span>ammonia_analysis.txt
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="c1"># Process multiple queries</span>
+</span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Analyze water molecule&quot;</span><span class="w"> </span>--output-file<span class="w"> </span>water_analysis.txt
+</span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Analyze methane molecule&quot;</span><span class="w"> </span>--output-file<span class="w"> </span>methane_analysis.txt
+</span><span id="__span-27-4"><a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Analyze ammonia molecule&quot;</span><span class="w"> </span>--output-file<span class="w"> </span>ammonia_analysis.txt
 </span></code></pre></div></p>
 <h4 id="api-key-setup">API Key Setup</h4>
 <p><strong>Required API Keys:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># OpenAI (for GPT models)</span>
-</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_openai_key_here&quot;</span>
-</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>
-</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="c1"># Anthropic (for Claude models)</span>
-</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_anthropic_key_here&quot;</span>
-</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>
-</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="c1"># Google (for Gemini models)</span>
-</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_gemini_key_here&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="c1"># OpenAI (for GPT models)</span>
+</span><span id="__span-28-2"><a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_openai_key_here&quot;</span>
+</span><span id="__span-28-3"><a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>
+</span><span id="__span-28-4"><a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a><span class="c1"># Anthropic (for Claude models)</span>
+</span><span id="__span-28-5"><a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_anthropic_key_here&quot;</span>
+</span><span id="__span-28-6"><a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>
+</span><span id="__span-28-7"><a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a><span class="c1"># Google (for Gemini models)</span>
+</span><span id="__span-28-8"><a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_gemini_key_here&quot;</span>
+</span><span id="__span-28-9"><a id="__codelineno-28-9" name="__codelineno-28-9" href="#__codelineno-28-9"></a>
+</span><span id="__span-28-10"><a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a><span class="c1"># Groq (for groq: prefixed models)</span>
+</span><span id="__span-28-11"><a id="__codelineno-28-11" name="__codelineno-28-11" href="#__codelineno-28-11"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_groq_key_here&quot;</span>
+</span><span id="__span-28-12"><a id="__codelineno-28-12" name="__codelineno-28-12" href="#__codelineno-28-12"></a>
+</span><span id="__span-28-13"><a id="__codelineno-28-13" name="__codelineno-28-13" href="#__codelineno-28-13"></a><span class="c1"># ALCF (Globus OAuth access token)</span>
+</span><span id="__span-28-14"><a id="__codelineno-28-14" name="__codelineno-28-14" href="#__codelineno-28-14"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ALCF_ACCESS_TOKEN</span><span class="o">=</span><span class="k">$(</span>python<span class="w"> </span>inference_auth_token.py<span class="w"> </span>get_access_token<span class="k">)</span>
 </span></code></pre></div></p>
 <p><strong>Getting API Keys:</strong>
 - <strong>OpenAI</strong>: Visit <a href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a>
 - <strong>Anthropic</strong>: Visit <a href="https://console.anthropic.com/">console.anthropic.com</a>
-- <strong>Google</strong>: Visit <a href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a></p>
+- <strong>Google</strong>: Visit <a href="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a>
+- <strong>Groq</strong>: Visit <a href="https://console.groq.com/keys">console.groq.com/keys</a>
+- <strong>ALCF</strong>: See <a href="https://docs.alcf.anl.gov/services/inference-endpoints/#api-access">ALCF Inference Endpoints docs</a></p>
 <h4 id="performance-tips">Performance Tips</h4>
 <ul>
 <li>Use <code>gpt-4o-mini</code> for faster, cost-effective queries</li>
@@ -1836,17 +2106,17 @@ and <code>config.toml</code> (for example, <code>api.openai.base_url</code> and 
 </ul>
 <h4 id="troubleshooting">Troubleshooting</h4>
 <p><strong>Common Issues:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Check API key status</span>
-</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>chemgraph<span class="w"> </span>--check-keys
-</span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>
-</span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="c1"># Verify model availability</span>
-</span><span id="__span-20-5"><a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a>chemgraph<span class="w"> </span>--list-models
-</span><span id="__span-20-6"><a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a>
-</span><span id="__span-20-7"><a id="__codelineno-20-7" name="__codelineno-20-7" href="#__codelineno-20-7"></a><span class="c1"># Test with verbose output</span>
-</span><span id="__span-20-8"><a id="__codelineno-20-8" name="__codelineno-20-8" href="#__codelineno-20-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;test query&quot;</span><span class="w"> </span>-v
-</span><span id="__span-20-9"><a id="__codelineno-20-9" name="__codelineno-20-9" href="#__codelineno-20-9"></a>
-</span><span id="__span-20-10"><a id="__codelineno-20-10" name="__codelineno-20-10" href="#__codelineno-20-10"></a><span class="c1"># Check configuration</span>
-</span><span id="__span-20-11"><a id="__codelineno-20-11" name="__codelineno-20-11" href="#__codelineno-20-11"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;test&quot;</span><span class="w"> </span>--verbose
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="c1"># Check API key status</span>
+</span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>chemgraph<span class="w"> </span>--check-keys
+</span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a>
+</span><span id="__span-29-4"><a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a><span class="c1"># Verify model availability</span>
+</span><span id="__span-29-5"><a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a>chemgraph<span class="w"> </span>--list-models
+</span><span id="__span-29-6"><a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a>
+</span><span id="__span-29-7"><a id="__codelineno-29-7" name="__codelineno-29-7" href="#__codelineno-29-7"></a><span class="c1"># Test with verbose output</span>
+</span><span id="__span-29-8"><a id="__codelineno-29-8" name="__codelineno-29-8" href="#__codelineno-29-8"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;test query&quot;</span><span class="w"> </span>-v
+</span><span id="__span-29-9"><a id="__codelineno-29-9" name="__codelineno-29-9" href="#__codelineno-29-9"></a>
+</span><span id="__span-29-10"><a id="__codelineno-29-10" name="__codelineno-29-10" href="#__codelineno-29-10"></a><span class="c1"># Check configuration</span>
+</span><span id="__span-29-11"><a id="__codelineno-29-11" name="__codelineno-29-11" href="#__codelineno-29-11"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;test&quot;</span><span class="w"> </span>--verbose
 </span></code></pre></div></p>
 <p><strong>Error Messages:</strong>
 - <strong>"Invalid model"</strong>: Use <code>--list-models</code> to see available options
@@ -1890,7 +2160,7 @@ and <code>config.toml</code> (for example, <code>api.openai.base_url</code> and 
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../mcp_servers/" class="md-footer__link md-footer__link--prev" aria-label="Previous: MCP Servers">
+          <a href="../evaluation/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Evaluation &amp; Benchmarking">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1900,7 +2170,7 @@ and <code>config.toml</code> (for example, <code>api.openai.base_url</code> and 
                 Previous
               </span>
               <div class="md-ellipsis">
-                MCP Servers
+                Evaluation & Benchmarking
               </div>
             </div>
           </a>

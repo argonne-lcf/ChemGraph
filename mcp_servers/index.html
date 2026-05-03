@@ -12,14 +12,14 @@
         <link rel="prev" href="../streamlit_web_interface/">
       
       
-        <link rel="next" href="../configuration_with_toml/">
+        <link rel="next" href="../evaluation/">
       
       
         
       
       
       <link rel="icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -318,6 +318,25 @@
     
   
   MCP Servers
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../evaluation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Evaluation & Benchmarking
 
       </a>
     </li>
@@ -764,6 +783,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#using-with-opencode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using with OpenCode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Using with OpenCode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#available-mcp-servers-for-opencode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available MCP servers for OpenCode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#notes-for-parsl-based-servers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -778,6 +847,33 @@
   
 </nav>
       
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation & Benchmarking
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1095,6 +1191,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#using-with-opencode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using with OpenCode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Using with OpenCode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#available-mcp-servers-for-opencode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available MCP servers for OpenCode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#notes-for-parsl-based-servers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1157,6 +1303,48 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>mcp<span class="w"> </span>up
 </span></code></pre></div>
 <p>Endpoint: <code>http://localhost:9003</code></p>
+<h2 id="using-with-opencode">Using with OpenCode</h2>
+<p>ChemGraph MCP tools can be used directly with <a href="https://opencode.ai">OpenCode</a>, giving you an AI coding agent with access to molecular simulation capabilities.</p>
+<h3 id="quick-start">Quick start</h3>
+<ol>
+<li>
+<p>Copy the example configuration:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>cp<span class="w"> </span>.opencode/opencode.example.jsonc<span class="w"> </span>opencode.json
+</span></code></pre></div>
+</li>
+<li>
+<p>Set <code>CHEMGRAPH_PYTHON</code> to your ChemGraph Python interpreter:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Option A: a project-local venv</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_PYTHON</span><span class="o">=</span>env/chemgraph_env/bin/python
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Option B: a standard venv</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_PYTHON</span><span class="o">=</span>.venv/bin/python
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Option C: whatever environment is currently active</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_PYTHON</span><span class="o">=</span><span class="k">$(</span>which<span class="w"> </span>python<span class="k">)</span>
+</span></code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>Add the export to your shell profile (<code>~/.bashrc</code>, <code>~/.zshrc</code>) so you don't have to set it every time.</p>
+</div>
+</li>
+<li>
+<p>Launch OpenCode:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>opencode
+</span></code></pre></div>
+<p>The <code>chemgraph</code> MCP tools (molecule lookup, structure generation, ASE simulations) will be available automatically.</p>
+</li>
+</ol>
+<h3 id="available-mcp-servers-for-opencode">Available MCP servers for OpenCode</h3>
+<p>The example config (<code>.opencode/opencode.example.jsonc</code>) includes all servers. Enable the ones you need by uncommenting them in your <code>opencode.json</code>:</p>
+<p>| Server name | Module | Tools | Status
+|---|---|---|
+| <code>chemgraph</code> | <code>chemgraph.mcp.mcp_tools</code> | molecule_name_to_smiles, smiles_to_coordinate_file, run_ase, extract_output_json | Stable
+| <code>chemgraph-mace-parsl</code> | <code>chemgraph.mcp.mace_mcp_parsl</code> | MACE ensemble calculations via Parsl (HPC) | Experimental
+| <code>chemgraph-graspa-parsl</code> | <code>chemgraph.mcp.graspa_mcp_parsl</code> | gRASPA gas adsorption via Parsl (HPC) | Experimental
+| <code>chemgraph-data-analysis</code> | <code>chemgraph.mcp.data_analysis_mcp</code> | CIF splitting, JSONL aggregation, isotherm plotting | Experimental</p>
+<h3 id="how-it-works">How it works</h3>
+<p>OpenCode spawns the MCP server as a local child process using stdio transport. The <code>{env:CHEMGRAPH_PYTHON}</code> variable in the config is resolved at startup, so different users (or the same user on different machines) can each point to their own ChemGraph installation without modifying the committed config.</p>
 <h2 id="notes-for-parsl-based-servers">Notes for Parsl-based servers</h2>
 <p><code>mace_mcp_parsl.py</code> and <code>graspa_mcp_parsl.py</code> rely on Parsl and HPC-specific configuration. Ensure your environment is prepared for the target system before running production jobs.</p>
 
@@ -1205,13 +1393,13 @@
         
         
           
-          <a href="../configuration_with_toml/" class="md-footer__link md-footer__link--next" aria-label="Next: Configuration with TOML">
+          <a href="../evaluation/" class="md-footer__link md-footer__link--next" aria-label="Next: Evaluation &amp; Benchmarking">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Configuration with TOML
+                Evaluation & Benchmarking
               </div>
             </div>
             <div class="md-footer__button md-icon">
