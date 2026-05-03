@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="logo/chemgraph-color-dark__rgb-vector.pdf" alt="ChemGraph logo" width="240">
+  <img src="logo/chemgraph-color-dark__rgb-vector.png" alt="ChemGraph logo" width="240">
 </p>
 
 ![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)
@@ -578,20 +578,20 @@ No curated model list is maintained -- any model available on Groq can be used b
 
 For third-party providers that share model names with other services, ChemGraph uses a prefix convention to route models unambiguously:
 
-| Prefix | Provider | Auth Env Var | Example |
-|--------|----------|--------------|---------|
+| Prefix  | Provider                    | Auth Env Var     | Example                               |
+| ------- | --------------------------- | ---------------- | ------------------------------------- |
 | `argo:` | Argo API (Argonne internal) | `OPENAI_API_KEY` | `argo:gpt-4o`, `argo:claude-sonnet-4` |
-| `groq:` | Groq Cloud | `GROQ_API_KEY` | `groq:llama-3.3-70b-versatile` |
+| `groq:` | Groq Cloud                  | `GROQ_API_KEY`   | `groq:llama-3.3-70b-versatile`        |
 
 Direct model names (no prefix) are used for:
 
-| Provider | Auth Env Var | Example |
-|----------|--------------|---------|
-| OpenAI | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4o-mini` |
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022` |
-| Google | `GEMINI_API_KEY` | `gemini-2.5-pro` |
-| ALCF | `ALCF_ACCESS_TOKEN` | `meta-llama/Meta-Llama-3.1-70B-Instruct` |
-| Ollama (local) | Not required | `llama3.2` |
+| Provider       | Auth Env Var        | Example                                  |
+| -------------- | ------------------- | ---------------------------------------- |
+| OpenAI         | `OPENAI_API_KEY`    | `gpt-4o`, `gpt-4o-mini`                  |
+| Anthropic      | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022`             |
+| Google         | `GEMINI_API_KEY`    | `gemini-2.5-pro`                         |
+| ALCF           | `ALCF_ACCESS_TOKEN` | `meta-llama/Meta-Llama-3.1-70B-Instruct` |
+| Ollama (local) | Not required        | `llama3.2`                               |
 
 For Argo, model names are mapped to Argo-specific wire names when using the default Argo endpoint. See `supported_argo_models` in `src/chemgraph/models/supported_models.py` for the full list.
 
@@ -650,18 +650,18 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 
 **Core Arguments:**
 
-| Option              | Short | Description                                           | Default        |
-| ------------------- | ----- | ----------------------------------------------------- | -------------- |
-| `--query`           | `-q`  | The computational chemistry query to execute          | Required       |
-| `--model`           | `-m`  | LLM model to use                                     | `gpt-4o-mini`  |
-| `--workflow`        | `-w`  | Workflow type                                        | `single_agent` |
-| `--output`          | `-o`  | Output format (`state`, `last_message`)              | `state`        |
-| `--structured`      | `-s`  | Use structured output format                         | `False`        |
-| `--report`          | `-r`  | Generate detailed report                             | `False`        |
-| `--resume`          |       | Resume from a previous session ID (prefix supported) |                |
-| `--list-sessions`   |       | List recent sessions from the memory database        |                |
-| `--show-session`    |       | Show conversation for a session (prefix supported)   |                |
-| `--delete-session`  |       | Delete a session from the memory database            |                |
+| Option             | Short | Description                                          | Default        |
+| ------------------ | ----- | ---------------------------------------------------- | -------------- |
+| `--query`          | `-q`  | The computational chemistry query to execute         | Required       |
+| `--model`          | `-m`  | LLM model to use                                     | `gpt-4o-mini`  |
+| `--workflow`       | `-w`  | Workflow type                                        | `single_agent` |
+| `--output`         | `-o`  | Output format (`state`, `last_message`)              | `state`        |
+| `--structured`     | `-s`  | Use structured output format                         | `False`        |
+| `--report`         | `-r`  | Generate detailed report                             | `False`        |
+| `--resume`         |       | Resume from a previous session ID (prefix supported) |                |
+| `--list-sessions`  |       | List recent sessions from the memory database        |                |
+| `--show-session`   |       | Show conversation for a session (prefix supported)   |                |
+| `--delete-session` |       | Delete a session from the memory database            |                |
 
 **Model Selection:**
 
@@ -965,12 +965,12 @@ ChemGraph includes a built-in evaluation module (`chemgraph.eval`) for benchmark
 
 A default dataset of **14 queries** across 4 categories is shipped with the package:
 
-| Category | Description | Example |
-|----------|-------------|---------|
-| **A** Single tool calls | Name-to-SMILES, SMILES-to-coordinates | "Provide the SMILES string for sulfur dioxide" |
-| **B** Multi-step from name | Name → SMILES → coordinates → ASE simulation | "Calculate the geometry optimization of sulfur dioxide using mace_mp" |
-| **C** Multi-step from SMILES | SMILES → coordinates → ASE simulation | "Calculate the single-point energy using mace_mp for SMILES: N#N" |
-| **D** Reaction Gibbs energy | Multi-species thermochemistry + stoichiometry | "Calculate the Gibbs free energy of reaction for Methane Combustion at 300 K" |
+| Category                     | Description                                   | Example                                                                       |
+| ---------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
+| **A** Single tool calls      | Name-to-SMILES, SMILES-to-coordinates         | "Provide the SMILES string for sulfur dioxide"                                |
+| **B** Multi-step from name   | Name → SMILES → coordinates → ASE simulation  | "Calculate the geometry optimization of sulfur dioxide using mace_mp"         |
+| **C** Multi-step from SMILES | SMILES → coordinates → ASE simulation         | "Calculate the single-point energy using mace_mp for SMILES: N#N"             |
+| **D** Reaction Gibbs energy  | Multi-species thermochemistry + stoichiometry | "Calculate the Gibbs free energy of reaction for Methane Combustion at 300 K" |
 
 ### Running Evaluations
 
@@ -1018,20 +1018,20 @@ runner.report()  # generates JSON + Markdown + console output
 
 ### CLI Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--models` | LLM model names to evaluate (required) | — |
-| `--judge-model` | LLM model name for the judge (required) | — |
-| `--profile` | Eval profile name from config.toml `[eval.profiles.*]` | None |
-| `--dataset` | Path to ground-truth JSON file | Bundled dataset |
-| `--workflows` | Workflow types to test | `single_agent` |
-| `--output-dir` | Output directory for results | `eval_results` |
-| `--max-queries` | Max queries to evaluate (0 = all) | 0 |
-| `--recursion-limit` | Max LangGraph recursion steps per query | 50 |
-| `--config` | Path to TOML config file | None |
-| `--tags` | Free-form tags for run metadata | — |
-| `--no-structured-output` | Disable structured output on the agent | — |
-| `--report` | Report format: `json`, `markdown`, `console`, `all` | `all` |
+| Option                   | Description                                            | Default         |
+| ------------------------ | ------------------------------------------------------ | --------------- |
+| `--models`               | LLM model names to evaluate (required)                 | —               |
+| `--judge-model`          | LLM model name for the judge (required)                | —               |
+| `--profile`              | Eval profile name from config.toml `[eval.profiles.*]` | None            |
+| `--dataset`              | Path to ground-truth JSON file                         | Bundled dataset |
+| `--workflows`            | Workflow types to test                                 | `single_agent`  |
+| `--output-dir`           | Output directory for results                           | `eval_results`  |
+| `--max-queries`          | Max queries to evaluate (0 = all)                      | 0               |
+| `--recursion-limit`      | Max LangGraph recursion steps per query                | 50              |
+| `--config`               | Path to TOML config file                               | None            |
+| `--tags`                 | Free-form tags for run metadata                        | —               |
+| `--no-structured-output` | Disable structured output on the agent                 | —               |
+| `--report`               | Report format: `json`, `markdown`, `console`, `all`    | `all`           |
 
 ### TOML Profile Configuration
 
@@ -1237,7 +1237,7 @@ pre-commit install
 <details>
   <summary><strong>Citation</strong></summary>
     
-  If you use ChemGraph in your research, please cite our work:
+  If you use ChemGraph in your research, please cite [our paper](https://doi.org/10.1038/s42004-025-01776-9):
     
   ```bibtex
     @article{pham_chemgraph_2026,
@@ -1251,6 +1251,20 @@ pre-commit install
     year={2026},
     publisher={Nature Publishing Group UK London}
     }
+  ```
+  If you use the HPC integration features,  please also cite [our preprint](https://arxiv.org/abs/2604.07681):
+  
+  ```bibtex
+    @misc{pham2026multiagent,
+    title         = {Multi-Agent Orchestration for High-Throughput Materials Screening on a Leadership-Class System},
+    author        = {Pham, Thang Duc and Tummalapalli, Harikrishna and Bhuiyan, Fakhrul Hasan and V{\'a}zquez Mayagoitia, {\'A}lvaro and Simpson, Christine and Balin, Riccardo and Vishwanath, Venkatram and Ke{\c{c}}eli, Murat},
+    year          = {2026},
+    eprint        = {2604.07681},
+    archivePrefix = {arXiv},
+    primaryClass  = {cs.AI},
+    doi           = {10.48550/arXiv.2604.07681},
+    url           = {https://arxiv.org/abs/2604.07681}
+}
   ```
  </details>
 <details>
