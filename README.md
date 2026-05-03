@@ -1,7 +1,5 @@
-# ChemGraph
-
 <p align="left">
-  <img src="logo/chemgraph_logo2.png" alt="ChemGraph logo" width="240">
+  <img src="logo/chemgraph-color-dark__rgb-vector.pdf" alt="ChemGraph logo" width="240">
 </p>
 
 ![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)
@@ -9,7 +7,7 @@
 ![Test PyPI Package](https://github.com/argonne-lcf/ChemGraph/actions/workflows/test-pypi-package.yml/badge.svg)
 [![GHCR](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/argonne-lcf/ChemGraph/pkgs/container/chemgraph)
 
-<details>
+<details open>
   <summary><strong>Overview</strong></summary>
 
 **ChemGraph** is an agentic framework that can automate molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, from structure generation to thermochemistry calculations, with a natural language interface. 
@@ -17,7 +15,7 @@ ChemGraph supports diverse simulation backends, including ab initio quantum chem
 
 </details>
 
-<details>
+<details open>
   <summary><strong>Installation Instructions</strong></summary>
 
 Ensure you have **Python 3.10 or higher** installed on your system. 
@@ -198,7 +196,7 @@ If you need to install from source for the latest version:
 > Your environment (local or CI) must also be authenticated with Hugging Face, typically by logging in via `huggingface-cli login` or ensuring `HF_TOKEN` is set and recognized.
 </details>
 
-<details>
+<details open>
   <summary><strong>Example Usage</strong></summary>
 
 1. Before exploring example usage in the `notebooks/` directory, ensure you have specified the necessary API tokens in your environment. For example, you can set the OpenAI API token and Anthropic API token using the following commands:
