@@ -19,6 +19,7 @@ from chemgraph.utils.config_utils import (
 )
 
 from ui.agent_manager import initialize_agent, run_async_callable
+from ui.branding import LOGO_IMAGES, first_existing_asset
 from ui.config import load_config
 from ui.endpoint import check_local_model_endpoint
 from ui.file_utils import (
@@ -94,7 +95,12 @@ def render() -> None:
         )
 
     # ----- Header -----
-    st.title("\U0001f9ea ChemGraph")
+    logo_image = first_existing_asset(LOGO_IMAGES)
+    if logo_image:
+        st.image(logo_image, width=320)
+    else:
+        st.title("\U0001f9ea ChemGraph")
+
     st.markdown(
         """
     ChemGraph enables you to perform various **computational chemistry** tasks with
