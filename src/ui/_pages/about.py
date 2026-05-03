@@ -2,10 +2,17 @@
 
 import streamlit as st
 
+from ui.branding import LOGO_IMAGES, first_existing_asset
+
 
 def render() -> None:
     """Render the About ChemGraph page."""
-    st.title("\U0001f4d6 About ChemGraph")
+    logo_image = first_existing_asset(LOGO_IMAGES)
+    if logo_image:
+        st.image(logo_image, width=320)
+        st.header("About ChemGraph")
+    else:
+        st.title("\U0001f4d6 About ChemGraph")
 
     st.markdown(
         """
