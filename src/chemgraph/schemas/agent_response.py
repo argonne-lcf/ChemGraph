@@ -1,5 +1,7 @@
+from typing import List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Union, Optional
+
 from chemgraph.schemas.atomsdata import AtomsData
 
 
@@ -10,7 +12,7 @@ class VibrationalFrequency(BaseModel):
     Attributes
     ----------
     frequency_cm1 : list[str]
-        List of vibrational frequencies in inverse centimeters (cm⁻¹).
+        List of vibrational frequencies in inverse centimeters (cm^-1).
         Each entry is a string representation of the frequency value.
     """
 
@@ -19,6 +21,7 @@ class VibrationalFrequency(BaseModel):
         description="List of vibrational frequencies in cm-1.",
     )
 
+
 class IRSpectrum(BaseModel):
     """
     Schema for storing vibrational frequency  and intensities from a simulation.
@@ -26,7 +29,7 @@ class IRSpectrum(BaseModel):
     Attributes
     ----------
     frequency_cm1 : list[str]
-        List of vibrational frequencies in inverse centimeters (cm⁻¹).
+        List of vibrational frequencies in inverse centimeters (cm^-1).
         Each entry is a string representation of the frequency value.
     intensity : list[str]
         List of vibrational intensities.
@@ -40,10 +43,10 @@ class IRSpectrum(BaseModel):
 
     intensity: list[str] = Field(
         ...,
-        description="List of intensities in D/Å^2 amu^-1.",
+        description="List of intensities in D/A^2 amu^-1.",
     )
 
-    plot: Optional[str] = None   # base64 PNG image
+    plot: Optional[str] = None  # base64 PNG image
 
 
 class InfraredSpectrum(BaseModel):
@@ -53,21 +56,23 @@ class InfraredSpectrum(BaseModel):
     Attributes
     ----------
     frequency_spec_cm1 : list[str]
-        List of range of frequencies in inverse centimeters (cm⁻¹)
+        List of range of frequencies in inverse centimeters (cm^-1)
         Each entry is a string representation of the frequency value.
     intensity_spec_D2A2amu1 : list[str]
-        List of range of intensities in (D/Å)^2 amu⁻¹
+        List of range of intensities in (D/A)^2 amu^-1
         Each entry is a string representation of the intensity value.
     """
+
     frequency_spec_cm1: list[str] = Field(
         ...,
         description="Range of frequencies for plotting spectrum in cm-1.",
     )
-    
+
     intensity_spec_D2A2amu1: list[str] = Field(
         ...,
-        description="Values of intensities for plotting spectrum in (D/Å)^2 amu^-1.",
+        description="Values of intensities for plotting spectrum in (D/A)^2 amu^-1.",
     )
+
 
 class ScalarResult(BaseModel):
     """
@@ -91,22 +96,53 @@ class ScalarResult(BaseModel):
     unit: str = Field(..., description="Unit of the result, e.g. 'eV'")
 
 
-class ResponseFormatter(BaseModel):
-    """Defined structured output to the user."""
+class DipoleResult(BaseModel):
+    """
+    Schema for storing a dipole moment vector from a simulation.
 
-    answer: Union[
-        str,
-        ScalarResult,
-        VibrationalFrequency,
-        IRSpectrum,
-        AtomsData,
-    ] = Field(
-        description=(
-            "Structured answer to the user's query. Use:\n"
-            "1. `str` for general or explanatory responses or SMILES string.\n"
-            "2. `VibrationalFrequency` for vibrational frequencies.\n"
-            "3. `ScalarResult` for single numerical properties (e.g. enthalpy).\n"
-            "4. `AtomsData` for atomic geometries (XYZ coordinate, etc.) and optimized structures."
-            "5. `InfraredSpectrum` for calculating infrared spectra."
-        )
+    Attributes
+    ----------
+    value : List[float]
+        The dipole moment vector [dx, dy, dz].
+    unit : str
+        The unit of the dipole moment (e.g., 'e * Angstrom').
+    """
+
+    value: List[float] = Field(..., description="Dipole moment vector [dx, dy, dz].")
+    unit: str = Field(..., description="Unit of the dipole moment, e.g. 'e * Angstrom'")
+
+
+class ResponseFormatter(BaseModel):
+    """Defined structured output to the user.
+
+    Supports simultaneous multi-modal answers.  For example, the user
+    can ask for a structure and a spectrum at the same time.
+
+    The ``smiles`` field holds one or more SMILES strings returned by
+    cheminformatics tools.  Each SMILES is a separate list element.
+    """
+
+    smiles: Optional[List[str]] = Field(
+        default=None,
+        description="SMILES strings for one or more molecules.",
+    )
+    scalar_answer: Optional[ScalarResult] = Field(
+        default=None,
+        description="Single numerical properties (e.g. enthalpy).",
+    )
+    dipole: Optional[DipoleResult] = Field(
+        default=None,
+        description="Dipole moment vector.",
+    )
+    vibrational_answer: Optional[VibrationalFrequency] = Field(
+        default=None,
+        description="Vibrational frequencies.",
+    )
+    ir_spectrum: Optional[IRSpectrum] = Field(
+        default=None,
+        description="Infrared spectra.",
+    )
+    atoms_data: Optional[AtomsData] = Field(
+        default=None,
+        description="Atomic geometries (XYZ coordinate, etc.) and optimized structures.",
     )

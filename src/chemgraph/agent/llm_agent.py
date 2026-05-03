@@ -1,8 +1,10 @@
 import datetime
 import os
-from typing import List
+from typing import List, Optional
 import uuid
 
+from chemgraph.memory.store import SessionStore
+from chemgraph.memory.schemas import SessionMessage
 from chemgraph.models.openai import load_openai_model
 from chemgraph.models.alcf_endpoints import load_alcf_model
 from chemgraph.models.local_model import load_ollama_model
@@ -16,7 +18,7 @@ from chemgraph.models.supported_models import (
     supported_alcf_models,
     supported_argo_models,
     supported_gemini_models,
-    supported_groq_models,
+
 )
 
 from chemgraph.prompt.single_agent_prompt import (
@@ -36,8 +38,14 @@ from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
-from chemgraph.graphs.multi_agent_mcp import construct_multi_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
+from chemgraph.graphs.rag_agent import construct_rag_agent_graph
+from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
+from chemgraph.prompt.rag_prompt import rag_agent_prompt
+from chemgraph.prompt.xanes_prompt import (
+    xanes_single_agent_prompt as default_xanes_single_agent_prompt,
+    xanes_formatter_prompt as default_xanes_formatter_prompt,
+)
 
 import logging
 
@@ -103,6 +111,9 @@ class ChemGraph:
         by default "last_message"
     recursion_limit : int, optional
         Maximum number of recursive steps in the workflow, by default 50
+    max_retries : int, optional
+        Maximum number of LLM retry attempts when an agent
+        fails to parse its output, by default 1
 
     Raises
     ------
@@ -133,13 +144,22 @@ class ChemGraph:
         support_structured_output: bool = True,
         tools: List = None,
         data_tools: List = None,
+        session_store: Optional[SessionStore] = None,
+        enable_memory: bool = True,
+        memory_db_path: Optional[str] = None,
+        log_dir: Optional[str] = None,
+        max_retries: int = 1,
     ):
-        # Initialize log directory
-        self.log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+        # Always generate a unique identifier for this instance
+        self.uuid = str(uuid.uuid4())[:8]
+
+        # Initialize log directory.  Explicit ``log_dir`` argument takes
+        # precedence over the ``CHEMGRAPH_LOG_DIR`` environment variable,
+        # which in turn takes precedence over the auto-generated default.
+        self.log_dir = log_dir or os.environ.get("CHEMGRAPH_LOG_DIR")
         if not self.log_dir:
             # Create a new session log directory under cg_logs/
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            self.uuid = str(uuid.uuid4())[:8]
             # Use abspath to ensure tools getting this env var have a full path
             self.log_dir = os.path.join(
                 os.getcwd(), "cg_logs", f"session_{timestamp}_{self.uuid}"
@@ -147,8 +167,18 @@ class ChemGraph:
             os.makedirs(self.log_dir, exist_ok=True)
             # Set env var for tools to pick up
             os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
+
+        # Initialize session memory store
+        if session_store is not None:
+            self.session_store = session_store
+        elif enable_memory:
+            self.session_store = SessionStore(db_path=memory_db_path)
         else:
-            self.uuid = None
+            self.session_store = None
+
+        # Track whether session has been registered in the memory store
+        self._session_created: bool = False
+        self._session_title: Optional[str] = None
 
         try:
             # Use hardcoded optimal values for tool calling
@@ -186,7 +216,7 @@ class ChemGraph:
                 llm = load_gemini_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
                 )
-            elif model_name in supported_groq_models:
+            elif model_name.startswith("groq:"):
                 llm = load_groq_model(
                     model_name=model_name, api_key=api_key, temperature=temperature
                 )
@@ -246,6 +276,7 @@ class ChemGraph:
         self.formatter_multi_prompt = formatter_multi_prompt
         self.tools = tools
         self.data_tools = data_tools
+        self.max_retries = max_retries
 
         if model_name in supported_argo_models:
             self.support_structured_output = False
@@ -259,8 +290,9 @@ class ChemGraph:
             "graspa": {"constructor": construct_graspa_graph},
             "mock_agent": {"constructor": construct_mock_agent_graph},
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
-            "multi_agent_mcp": {"constructor": construct_multi_agent_mcp_graph},
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
+            "rag_agent": {"constructor": construct_rag_agent_graph},
+            "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -277,16 +309,17 @@ class ChemGraph:
                 self.generate_report,
                 self.report_prompt,
                 self.tools,
+                max_retries=self.max_retries,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 planner_prompt=self.planner_prompt,
-                aggregator_prompt=self.aggregator_prompt,
                 executor_prompt=self.executor_prompt,
-                formatter_prompt=self.formatter_multi_prompt,
+                executor_tools=self.tools,
                 structured_output=self.structured_output,
-                support_structured_output=self.support_structured_output,
+                formatter_prompt=self.formatter_multi_prompt,
+                max_retries=self.max_retries,
             )
         elif self.workflow_type == "python_relp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -311,21 +344,31 @@ class ChemGraph:
                 system_prompt=self.system_prompt,
                 tools=self.tools,
             )
-        elif self.workflow_type == "multi_agent_mcp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm,
-                planner_prompt=self.planner_prompt,
-                aggregator_prompt=self.aggregator_prompt,
-                executor_prompt=self.executor_prompt,
-                formatter_prompt=self.formatter_multi_prompt,
-                structured_output=self.structured_output,
-                support_structured_output=self.support_structured_output,
-            )
         elif self.workflow_type == "graspa_mcp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 executor_tools=self.tools,
                 analysis_tools=self.data_tools,
+            )
+        elif self.workflow_type == "rag_agent":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm=llm,
+                system_prompt=self.system_prompt
+                if self.system_prompt != single_agent_prompt
+                else rag_agent_prompt,
+                tools=self.tools,
+            )
+        elif self.workflow_type == "single_agent_xanes":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm,
+                system_prompt=self.system_prompt
+                if self.system_prompt != single_agent_prompt
+                else default_xanes_single_agent_prompt,
+                structured_output=self.structured_output,
+                formatter_prompt=self.formatter_prompt
+                if self.formatter_prompt != default_formatter_prompt
+                else default_xanes_formatter_prompt,
+                tools=self.tools,
             )
 
     def visualize(self, method: str = "ascii"):
@@ -420,7 +463,7 @@ class ChemGraph:
                 )
                 os.makedirs(log_dir, exist_ok=True)
                 if not file_name:
-                    file_name = f"state_thread_{thread_id}_{timestamp}.json"
+                    file_name = f"state_thread_{thread_id}_{self.uuid}_{timestamp}.json"
                 file_path = os.path.join(log_dir, file_name)
 
             state = self.get_state(config=config)
@@ -447,7 +490,13 @@ class ChemGraph:
             }
 
             # Add prompts depending on workflow_type
-            if self.workflow_type in {"single_agent", "graspa", "python_relp"}:
+            if self.workflow_type in {
+                "single_agent",
+                "single_agent_xanes",
+                "graspa",
+                "python_relp",
+                "rag_agent",
+            }:
                 output_data.update(
                     {
                         "system_prompt": self.system_prompt,
@@ -473,7 +522,6 @@ class ChemGraph:
                     {
                         "planner_prompt": self.planner_prompt,
                         "executor_prompt": self.executor_prompt,
-                        "aggregator_prompt": self.aggregator_prompt,
                         "formatter_prompt": self.formatter_multi_prompt,
                     }
                 )
@@ -493,11 +541,120 @@ class ChemGraph:
             print("Error with write_state: ", str(e))
             return "Error"
 
-    async def run(self, query: str, config=None):
+    @property
+    def session_id(self) -> str:
+        """Current session ID (always available, derived from self.uuid)."""
+        return self.uuid
+
+    def _ensure_session(self, query: str) -> None:
+        """Create a session record on first run if memory is enabled."""
+        if self.session_store is None:
+            return
+        if self._session_created:
+            return
+
+        self._session_title = SessionStore.generate_title(query)
+        self.session_store.create_session(
+            session_id=self.uuid,
+            model_name=self.model_name,
+            workflow_type=self.workflow_type,
+            title=self._session_title,
+            log_dir=self.log_dir,
+        )
+        self._session_created = True
+        logger.info(f"Created session {self.uuid}: {self._session_title}")
+
+    def _save_messages_to_store(self, last_state: dict, query: str) -> None:
+        """Extract messages from workflow state and persist to session store."""
+        if self.session_store is None or not self._session_created:
+            return
+
+        try:
+            messages_to_save = []
+            state_messages = last_state.get("messages", [])
+
+            for msg in state_messages:
+                role = None
+                content = ""
+                tool_name = None
+
+                if hasattr(msg, "type"):
+                    # LangChain message objects
+                    if msg.type == "human":
+                        role = "human"
+                    elif msg.type == "ai":
+                        role = "ai"
+                    elif msg.type == "tool":
+                        role = "tool"
+                        tool_name = getattr(msg, "name", None)
+                    content = getattr(msg, "content", str(msg))
+                elif isinstance(msg, dict):
+                    role = msg.get("type") or msg.get("role")
+                    content = msg.get("content", "")
+                    tool_name = msg.get("name")
+
+                if role and content:
+                    messages_to_save.append(
+                        SessionMessage(
+                            role=role,
+                            content=content,
+                            tool_name=tool_name,
+                        )
+                    )
+
+            self.session_store.save_messages(
+                session_id=self.uuid,
+                messages=messages_to_save,
+                title=self._session_title,
+            )
+            logger.info(
+                f"Saved {len(messages_to_save)} messages to session {self.uuid}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save messages to session store: {e}")
+
+    def load_previous_context(
+        self,
+        session_id: str,
+        max_messages: Optional[int] = None,
+    ) -> str:
+        """Load context from a previous session as a summary string.
+
+        This can be injected into the conversation to give the agent
+        awareness of prior work.
+
+        Parameters
+        ----------
+        session_id : str
+            Previous session ID (or unique prefix).
+        max_messages : int, optional
+            Limit the number of messages included.
+
+        Returns
+        -------
+        str
+            Formatted context summary, or empty string if not found.
+        """
+        if self.session_store is None:
+            logger.warning("Memory is disabled; cannot load previous context.")
+            return ""
+        return self.session_store.build_context_summary(session_id)
+
+    async def run(self, query: str, config=None, resume_from: Optional[str] = None):
         """
         Async-only runner. Requires `self.workflow.astream(...)`.
         Streams values, logs new messages, writes state, and returns according to
         `self.return_option` ("last_message" or "state").
+
+        Parameters
+        ----------
+        query : str
+            The user query to execute.
+        config : dict, optional
+            LangGraph config with thread_id, etc.
+        resume_from : str, optional
+            Session ID to load context from. The previous conversation
+            summary is prepended to the query.
         """
 
         def _validate_config(cfg):
@@ -536,14 +693,28 @@ class ChemGraph:
                     f"Unsupported return_option: {self.return_option}. Use 'last_message' or 'state'."
                 )
 
-        print(f"DEBUG: run called with config={config}")
+        logger.debug("run called with config=%s", config)
         config = _validate_config(config)
-        print(f"DEBUG: validated config={config}")
+        logger.debug("validated config=%s", config)
 
         # Initialize logging directory before determining inputs or running workflow
         # Check if CHEMGRAPH_LOG_DIR is already set
         if not os.environ.get("CHEMGRAPH_LOG_DIR"):
             os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
+
+        # Ensure session exists in memory store
+        self._ensure_session(query)
+
+        # If resuming from a previous session, prepend context
+        if resume_from and self.session_store:
+            context = self.session_store.build_context_summary(resume_from)
+            if context:
+                query = (
+                    f"{context}\n\n"
+                    f"Now, continuing from the previous session above, "
+                    f"please help with the following:\n\n{query}"
+                )
+                logger.info(f"Injected context from session {resume_from}")
 
         inputs = {"messages": query}
 
@@ -565,6 +736,9 @@ class ChemGraph:
 
             if last_state is None:
                 raise RuntimeError("Workflow produced no states.")
+
+            # Save messages to persistent session store
+            self._save_messages_to_store(last_state, query)
 
             return _save_state_and_select_return(last_state, config)
 

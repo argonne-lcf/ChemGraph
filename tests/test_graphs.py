@@ -3,7 +3,7 @@ from chemgraph.agent.llm_agent import ChemGraph
 
 WORKFLOWS = [
     "single_agent", "multi_agent", "python_relp", "graspa",
-    "mock_agent", "single_agent_mcp", "multi_agent_mcp", "graspa_mcp",
+    "mock_agent", "single_agent_mcp", "graspa_mcp",
 ]
 
 @pytest.mark.parametrize("workflow_type", WORKFLOWS)
@@ -22,7 +22,6 @@ def test_constructor_is_called(monkeypatch, workflow_type):
         "graspa": "construct_graspa_graph",
         "mock_agent": "construct_mock_agent_graph",
         "single_agent_mcp": "construct_single_agent_mcp_graph",
-        "multi_agent_mcp": "construct_multi_agent_mcp_graph",
         "graspa_mcp": "construct_graspa_mcp_graph",
     }
     

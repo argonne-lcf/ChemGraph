@@ -52,6 +52,10 @@ timeout = 30
 base_url = "https://generativelanguage.googleapis.com/v1beta"
 timeout = 30
 
+[api.alcf]
+base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
+timeout = 30
+
 [api.local]
 # For local models like Ollama
 base_url = "http://localhost:11434"
@@ -149,6 +153,70 @@ argo_user = "your_argo_username"
 
 `ARGO_USER` is only used as a fallback when `argo_user` is not provided in `config.toml`.
 
+#### ALCF Inference Endpoints
+
+ChemGraph supports [ALCF Inference Endpoints](https://docs.alcf.anl.gov/services/inference-endpoints/), which provide API access to open-source models running on dedicated ALCF hardware.
+
+1. The endpoint is configured by default in `config.toml`:
+
+```toml
+[api.alcf]
+base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
+timeout = 30
+```
+
+2. Authenticate via Globus OAuth and set the access token:
+
+```bash
+pip install globus_sdk
+wget https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/refs/heads/main/inference_auth_token.py
+python inference_auth_token.py authenticate
+export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)
+```
+
+3. Use an ALCF model (no prefix needed):
+
+```bash
+chemgraph --config config.toml -m meta-llama/Meta-Llama-3.1-70B-Instruct \
+  -q "Calculate the energy of water using MACE"
+```
+
+Access tokens are valid for ~48 hours. See the
+[ALCF docs](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models) for available models.
+
+#### Groq
+
+ChemGraph supports [Groq](https://groq.com/) for fast LLM inference. Use the `groq:` prefix to route any model through Groq.
+
+1. Set your API key:
+
+```bash
+export GROQ_API_KEY="your_groq_api_key_here"
+```
+
+2. Use any Groq model with the `groq:` prefix:
+
+```bash
+chemgraph -q "What is the SMILES for water?" -m groq:llama-3.3-70b-versatile
+chemgraph -q "Optimize methane" -m groq:openai/gpt-oss-120b
+```
+
+No curated model list is maintained -- any model available on the
+[Groq console](https://console.groq.com/docs/models) can be used by prefixing
+it with `groq:`. The prefix is stripped before sending to the Groq API.
+
+#### LLM Provider Prefixes
+
+For third-party providers that share model names with other services, ChemGraph
+uses a prefix convention to route models unambiguously:
+
+| Prefix | Provider | Auth Env Var | Example |
+|--------|----------|--------------|---------|
+| `argo:` | Argo API (Argonne internal) | `OPENAI_API_KEY` | `argo:gpt-4o` |
+| `groq:` | Groq Cloud | `GROQ_API_KEY` | `groq:llama-3.3-70b-versatile` |
+
+Direct model names (no prefix) are used for OpenAI, Anthropic, Google, ALCF, and Ollama.
+
 ### Configuration Sections
 
 | Section          | Description                                             |
@@ -202,14 +270,18 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 
 **Core Arguments:**
 
-| Option         | Short | Description                                  | Default        |
-| -------------- | ----- | -------------------------------------------- | -------------- |
-| `--query`      | `-q`  | The computational chemistry query to execute | Required       |
-| `--model`      | `-m`  | LLM model to use                             | `gpt-4o-mini`  |
-| `--workflow`   | `-w`  | Workflow type                                | `single_agent` |
-| `--output`     | `-o`  | Output format (`state`, `last_message`)      | `state`        |
-| `--structured` | `-s`  | Use structured output format                 | `False`        |
-| `--report`     | `-r`  | Generate detailed report                     | `False`        |
+| Option              | Short | Description                                           | Default        |
+| ------------------- | ----- | ----------------------------------------------------- | -------------- |
+| `--query`           | `-q`  | The computational chemistry query to execute          | Required       |
+| `--model`           | `-m`  | LLM model to use                                     | `gpt-4o-mini`  |
+| `--workflow`        | `-w`  | Workflow type                                        | `single_agent` |
+| `--output`          | `-o`  | Output format (`state`, `last_message`)              | `state`        |
+| `--structured`      | `-s`  | Use structured output format                         | `False`        |
+| `--report`          | `-r`  | Generate detailed report                             | `False`        |
+| `--resume`          |       | Resume from a previous session ID (prefix supported) |                |
+| `--list-sessions`   |       | List recent sessions from the memory database        |                |
+| `--show-session`    |       | Show conversation for a session (prefix supported)   |                |
+| `--delete-session`  |       | Delete a session from the memory database            |                |
 
 **Model Selection:**
 
@@ -217,17 +289,25 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 # OpenAI models
 chemgraph -q "Your query" -m gpt-4o
 chemgraph -q "Your query" -m gpt-4o-mini
-chemgraph -q "Your query" -m o1-preview
 
 # Anthropic models
 chemgraph -q "Your query" -m claude-3-5-sonnet-20241022
-chemgraph -q "Your query" -m claude-3-opus-20240229
 
 # Google models
-chemgraph -q "Your query" -m gemini-1.5-pro
+chemgraph -q "Your query" -m gemini-2.5-pro
 
-# Local models (OpenAI-compatible local endpoint)
-chemgraph -q "Your query" -m llama-3.1-70b-instruct
+# Argo models (Argonne internal, argo: prefix)
+chemgraph -q "Your query" -m argo:gpt-4o
+chemgraph -q "Your query" -m argo:claude-sonnet-4
+
+# ALCF models (Globus auth required, no prefix)
+chemgraph -q "Your query" -m meta-llama/Meta-Llama-3.1-70B-Instruct
+
+# Groq models (groq: prefix, any Groq model)
+chemgraph -q "Your query" -m groq:llama-3.3-70b-versatile
+
+# Local models (Ollama)
+chemgraph -q "Your query" -m llama3.2
 ```
 
 **Workflow Types:**
@@ -272,19 +352,25 @@ chemgraph --interactive
 
 **Interactive Features:**
 - **Persistent conversation**: Maintain context across queries
+- **Session memory**: Conversations are automatically saved to a local SQLite database (`~/.chemgraph/sessions.db`) and can be resumed later
 - **Model switching**: Change models mid-conversation
 - **Workflow switching**: Switch between different agent types
-- **Built-in commands**: Help, clear, config, etc.
+- **Built-in commands**: Help, clear, config, session management, etc.
 
 **Interactive Commands:**
 ```bash
 # In interactive mode, type:
 help                    # Show available commands
 clear                   # Clear screen
-config                  # Show current configuration
+config                  # Show current configuration and session ID
 quit                    # Exit interactive mode
 model gpt-4o           # Change model
 workflow multi_agent   # Change workflow
+
+# Session management:
+history                 # List recent sessions
+show <session_id>       # Show a session's conversation
+resume <session_id>     # Resume from a previous session
 ```
 
 #### Utility Commands
@@ -303,6 +389,34 @@ chemgraph --check-keys
 ```bash
 chemgraph --help
 ```
+
+#### Session Memory
+
+ChemGraph automatically saves every conversation to a local SQLite database at `~/.chemgraph/sessions.db`. This allows you to browse past sessions, review tool calls and results, and resume previous conversations with full context.
+
+**List Recent Sessions:**
+```bash
+chemgraph --list-sessions
+```
+
+**View a Session's Conversation:**
+```bash
+# Full session ID or prefix (first few characters)
+chemgraph --show-session a3b2
+```
+
+**Resume From a Previous Session:**
+```bash
+# Injects previous conversation context into the new query
+chemgraph -q "Now optimize the geometry at 500K" --resume a3b2
+```
+
+**Delete a Session:**
+```bash
+chemgraph --delete-session a3b2c1d4
+```
+
+Session IDs support prefix matching -- you only need to type enough characters to uniquely identify the session.
 
 #### Configuration File Support
 
@@ -383,12 +497,20 @@ export ANTHROPIC_API_KEY="your_anthropic_key_here"
 
 # Google (for Gemini models)
 export GEMINI_API_KEY="your_gemini_key_here"
+
+# Groq (for groq: prefixed models)
+export GROQ_API_KEY="your_groq_key_here"
+
+# ALCF (Globus OAuth access token)
+export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)
 ```
 
 **Getting API Keys:**
 - **OpenAI**: Visit [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
 - **Anthropic**: Visit [console.anthropic.com](https://console.anthropic.com/)
 - **Google**: Visit [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- **Groq**: Visit [console.groq.com/keys](https://console.groq.com/keys)
+- **ALCF**: See [ALCF Inference Endpoints docs](https://docs.alcf.anl.gov/services/inference-endpoints/#api-access)
 
 #### Performance Tips
 

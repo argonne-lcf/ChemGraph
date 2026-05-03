@@ -4,7 +4,7 @@
 #PBS -l filesystems=home:flare
 #PBS -q debug
 #PBS -A your_account
-#PBE -N ChemGraph
+#PBS -N ChemGraph_MCP
 
 cd $PBS_O_WORKDIR
 
@@ -14,4 +14,5 @@ export https_proxy="proxy.alcf.anl.gov:3128"
 module load frameworks
 source /path/to/venv/bin/activate
 
-python start_mcp_server.py
+# Uses ChemGraph's built-in MCP server module
+python -m chemgraph.mcp.mcp_tools --transport streamable_http --port 9003
