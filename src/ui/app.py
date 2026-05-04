@@ -20,6 +20,7 @@ import streamlit as st  # noqa: E402
 
 from chemgraph import __version__ as chemgraph_version  # noqa: E402
 
+from ui.branding import ICON_IMAGES, LOGO_IMAGES, first_existing_asset  # noqa: E402
 from ui.system_info import render_sidebar_host_and_build_info  # noqa: E402
 from ui.visualization import warn_stmol_unavailable  # noqa: E402
 
@@ -34,7 +35,7 @@ app_version = (
 
 st.set_page_config(
     page_title="ChemGraph",
-    page_icon="\U0001f9ea",
+    page_icon=first_existing_asset(ICON_IMAGES) or "\U0001f9ea",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -45,7 +46,13 @@ warn_stmol_unavailable()
 # ---------------------------------------------------------------------------
 # Sidebar navigation
 # ---------------------------------------------------------------------------
-st.sidebar.title("\U0001f9ea ChemGraph")
+logo_image = first_existing_asset(LOGO_IMAGES)
+icon_image = first_existing_asset(ICON_IMAGES)
+if logo_image:
+    st.logo(logo_image, icon_image=icon_image)
+else:
+    st.sidebar.title("\U0001f9ea ChemGraph")
+
 page = st.sidebar.radio(
     "Navigate",
     ["\U0001f3e0 Main Interface", "\u2699\ufe0f Configuration", "\U0001f4d6 About ChemGraph"],
