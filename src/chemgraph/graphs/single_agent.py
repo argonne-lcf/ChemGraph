@@ -156,7 +156,7 @@ def ChemGraphAgent(
     llm: ChatOpenAI,
     system_prompt: str,
     tools=None,
-    human_supervised: bool = True,
+    human_supervised: bool = False,
 ):
     """LLM node that processes messages and decides next actions.
 
@@ -171,7 +171,7 @@ def ChemGraphAgent(
     tools : list, optional
         List of tools available to the agent, by default None
     human_supervised : bool, optional
-        Whether to include the ``ask_human`` tool, by default True
+        Whether to include the ``ask_human`` tool, by default False
 
     Returns
     -------
@@ -333,7 +333,7 @@ def construct_single_agent_graph(
     report_prompt: str = report_prompt,
     tools: list = None,
     max_retries: int = 1,
-    human_supervised: bool = True,
+    human_supervised: bool = False,
 ):
     """Construct a geometry optimization graph.
 
@@ -358,7 +358,7 @@ def construct_single_agent_graph(
         fails to parse the formatter output, by default 1
     human_supervised : bool, optional
         Whether to include the ``ask_human`` tool so the agent can
-        pause and request human input, by default True
+        pause and request human input, by default False
 
     Returns
     -------

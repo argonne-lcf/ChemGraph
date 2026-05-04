@@ -132,7 +132,7 @@ class ChemGraph:
         Whether to include the ``ask_human`` tool so the agent can
         pause and request human input.  When ``False`` the tool is
         excluded from the tool list and the corresponding instruction
-        is removed from the default system prompt, by default True.
+        is removed from the default system prompt, by default False.
 
     Raises
     ------
@@ -169,7 +169,7 @@ class ChemGraph:
         log_dir: Optional[str] = None,
         max_retries: int = 1,
         human_input_handler: Optional[Callable[[str], str]] = None,
-        human_supervised: bool = True,
+        human_supervised: bool = False,
     ):
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
