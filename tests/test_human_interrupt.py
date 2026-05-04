@@ -249,7 +249,7 @@ def test_ask_human_tool_handles_dict_response(monkeypatch):
 
 
 def test_single_agent_graph_includes_ask_human(monkeypatch):
-    """construct_single_agent_graph should include ask_human in default tools."""
+    """construct_single_agent_graph should include ask_human when human_supervised=True."""
     from chemgraph.graphs.single_agent import construct_single_agent_graph
     from chemgraph.tools.generic_tools import ask_human
 
@@ -261,7 +261,7 @@ def test_single_agent_graph_includes_ask_human(monkeypatch):
         def invoke(self, messages):
             return AIMessage(content="done")
 
-    graph = construct_single_agent_graph(llm=FakeLLM())
+    graph = construct_single_agent_graph(llm=FakeLLM(), human_supervised=True)
     # The graph should compile without errors; verify it has nodes.
     node_names = list(graph.get_graph().nodes.keys())
     assert "ChemGraphAgent" in node_names

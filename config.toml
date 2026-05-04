@@ -6,6 +6,7 @@ structured = true
 report = true
 thread = 1
 recursion_limit = 20
+human_supervised = false
 verbose = false
 
 [logging]

@@ -155,6 +155,7 @@ def initialize_agent(
     base_url: Optional[str] = None,
     argo_user: Optional[str] = None,
     verbose: bool = False,
+    human_supervised: bool = False,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -171,6 +172,7 @@ def initialize_agent(
         console.print(f"  Structured Output: {structured_output}")
         console.print(f"  Return Option: {return_option}")
         console.print(f"  Generate Report: {generate_report}")
+        console.print(f"  Human Supervised: {human_supervised}")
         console.print(f"  Recursion Limit: {recursion_limit}")
         if base_url:
             console.print(f"  Base URL: {base_url}")
@@ -215,6 +217,7 @@ def initialize_agent(
                 return_option=return_option,
                 recursion_limit=recursion_limit,
                 structured_output=structured_output,
+                human_supervised=human_supervised,
             )
 
         try:
@@ -340,44 +343,48 @@ def run_query(
         )
         human_answer = Prompt.ask("[bold cyan]Your response[/bold cyan]")
 
-        # Resume the graph under a fresh spinner.
+        # Resume the graph, streaming messages so tool-call parameters
+        # are printed just like the initial invocation.
         resume_config = dict(config)
         resume_config["recursion_limit"] = agent.recursion_limit
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            task = progress.add_task("Resuming...", total=None)
-            try:
-                result = run_async_callable(
-                    lambda: agent.workflow.ainvoke(
-                        Command(resume=human_answer), config=resume_config
-                    )
-                )
-                progress.update(task, description="[green]Query completed!")
-                time.sleep(0.3)
 
-                # ainvoke returns the final state dict; extract return
-                # value the same way ChemGraph.run() does.
-                if agent.return_option == "last_message":
-                    return result["messages"][-1] if result else None
-                elif agent.return_option == "state":
-                    from chemgraph.agent.llm_agent import serialize_state
+        async def _resume_stream():
+            prev_msgs: list = []
+            last_st = None
+            async for s in agent.workflow.astream(
+                Command(resume=human_answer),
+                stream_mode="values",
+                config=resume_config,
+            ):
+                if "messages" in s and s["messages"] != prev_msgs:
+                    new_message = s["messages"][-1]
+                    try:
+                        new_message.pretty_print()
+                    except Exception:
+                        pass
+                    prev_msgs = s["messages"]
+                last_st = s
+            return last_st
 
-                    return serialize_state(agent.get_state(config=config))
-                return result
-            except HumanInputRequired as hir:
-                progress.update(
-                    task, description="[yellow]Agent needs more input"
-                )
-                time.sleep(0.2)
-                question = hir.question
-            except Exception as e:
-                progress.update(task, description="[red]Query failed!")
-                console.print(f"[red]Error processing query: {e}[/red]")
+        try:
+            result = run_async_callable(_resume_stream)
+
+            if result is None:
+                console.print("[red]Resume produced no output.[/red]")
                 return None
+
+            if agent.return_option == "last_message":
+                return result["messages"][-1] if result else None
+            elif agent.return_option == "state":
+                from chemgraph.agent.llm_agent import serialize_state
+
+                return serialize_state(agent.get_state(config=config))
+            return result
+        except HumanInputRequired as hir:
+            question = hir.question
+        except Exception as e:
+            console.print(f"[red]Error processing query: {e}[/red]")
+            return None
 
     return None
 
@@ -536,6 +543,7 @@ def interactive_mode(
     structured: bool = False,
     return_option: str = "state",
     generate_report: bool = True,
+    human_supervised: bool = False,
     recursion_limit: int = 20,
     base_url: Optional[str] = None,
     argo_user: Optional[str] = None,
@@ -577,6 +585,7 @@ def interactive_mode(
         base_url=base_url,
         argo_user=argo_user,
         verbose=verbose,
+        human_supervised=human_supervised,
     )
     if not agent:
         return
@@ -669,6 +678,7 @@ Example queries:
                     recursion_limit,
                     base_url=base_url,
                     argo_user=argo_user,
+                    human_supervised=human_supervised,
                 )
                 if agent:
                     console.print(f"[green]Model changed to: {model}[/green]")
@@ -686,6 +696,7 @@ Example queries:
                         recursion_limit,
                         base_url=base_url,
                         argo_user=argo_user,
+                        human_supervised=human_supervised,
                     )
                     if agent:
                         console.print(
