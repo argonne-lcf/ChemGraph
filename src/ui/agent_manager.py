@@ -11,6 +11,7 @@ def initialize_agent(
     structured_output: bool,
     return_option: str,
     generate_report: bool,
+    human_supervised: bool,
     recursion_limit: int,
     base_url: Optional[str],
     argo_user: Optional[str],
@@ -35,6 +36,7 @@ def initialize_agent(
             generate_report=generate_report,
             return_option=return_option,
             recursion_limit=recursion_limit,
+            human_supervised=human_supervised,
         )
     except Exception as exc:
         st.error(f"Failed to initialize agent: {exc}")

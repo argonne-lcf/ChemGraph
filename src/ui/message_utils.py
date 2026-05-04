@@ -150,8 +150,8 @@ def extract_molecular_structure(message_content: str) -> Optional[dict]:
 
 
 def find_structure_in_messages(messages: list) -> Optional[dict]:
-    """Look through all messages to find structure data."""
-    for message in messages:
+    """Look through messages in reverse to find the latest structure data."""
+    for message in reversed(messages):
         if hasattr(message, "content") or isinstance(message, dict):
             raw_content = (
                 getattr(message, "content", "")

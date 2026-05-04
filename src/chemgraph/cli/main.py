@@ -93,6 +93,11 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         "-r", "--report", action="store_true", help="Generate detailed report"
     )
     parser.add_argument(
+        "--human-supervised",
+        action="store_true",
+        help="Enable the ask_human tool for human-in-the-loop interaction",
+    )
+    parser.add_argument(
         "--recursion-limit",
         type=int,
         default=20,
@@ -244,6 +249,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 "report": False,
                 "thread": 1,
                 "recursion_limit": 20,
+                "human_supervised": False,
                 "verbose": False,
             },
             "api": {},
@@ -341,6 +347,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             structured=args.structured,
             return_option=args.output,
             generate_report=args.report,
+            human_supervised=args.human_supervised,
             recursion_limit=args.recursion_limit,
             base_url=base_url,
             argo_user=argo_user,
@@ -375,6 +382,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         base_url=base_url,
         argo_user=argo_user,
         verbose=(args.verbose > 0),
+        human_supervised=args.human_supervised,
     )
 
     if not agent:

@@ -1,32 +1,40 @@
+import importlib.util
 import json
 from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import Union, Optional, Any, List, Type
 from chemgraph.schemas.atomsdata import AtomsData
 
-try:
-    from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
-except ImportError:
-    TBLiteCalc = None
 from chemgraph.schemas.calculators.emt_calc import EMTCalc
 from chemgraph.schemas.calculators.nwchem_calc import NWChemCalc
 from chemgraph.schemas.calculators.orca_calc import OrcaCalc
+from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
+from chemgraph.schemas.calculators.mace_calc import MaceCalc
+from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
+from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
 
-try:
-    from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
-except ImportError:
-    AIMNET2Calc = None
+# Gate optional calculators on whether their engine package is installed.
+# Schema classes are always importable (internal to ChemGraph), so we must
+# probe the underlying engine with importlib.util.find_spec().
+# find_spec() can raise ModuleNotFoundError for sub-packages when the parent
+# package is missing, so we guard with try/except.
 
+def _engine_available(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, ModuleNotFoundError):
+        return False
 
-# Attempt to import optional calculators
-try:
-    from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
-except ImportError:
+if not _engine_available("fairchem.core"):
     FAIRChemCalc = None
 
-try:
-    from chemgraph.schemas.calculators.mace_calc import MaceCalc
-except ImportError:
+if not _engine_available("mace"):
     MaceCalc = None
+
+if not _engine_available("tblite"):
+    TBLiteCalc = None
+
+if not _engine_available("aimnet2calc"):
+    AIMNET2Calc = None
 
 
 # Define all possible calculator classes

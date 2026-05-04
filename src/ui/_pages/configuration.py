@@ -152,6 +152,12 @@ def _render_general_settings(config: dict) -> None:
             value=config["general"]["report"],
             key="config_report",
         )
+        config["general"]["human_supervised"] = st.checkbox(
+            "Human Supervised",
+            value=config["general"].get("human_supervised", False),
+            key="config_human_supervised",
+            help="Enable the ask_human tool so the agent can pause and request human input.",
+        )
         config["general"]["verbose"] = st.checkbox(
             "Verbose Output",
             value=config["general"]["verbose"],
