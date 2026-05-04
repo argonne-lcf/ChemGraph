@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 from ase.data import chemical_symbols
 
-from chemgraph.tools.ase_tools import create_ase_atoms, create_xyz_string
+from chemgraph.tools.ase_core import create_ase_atoms, create_xyz_string
 
 # ---------------------------------------------------------------------------
 # Optional stmol / py3Dmol availability
