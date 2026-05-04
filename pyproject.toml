@@ -67,6 +67,12 @@ ui = [
 parsl = [
     "parsl",
 ]
+ensemble_launcher = [
+    "ensemble-launcher",
+]
+globus_compute = [
+    "globus-compute-sdk",
+]
 xanes = [
     "mp-api; python_version >= '3.11'",
     "parsl"
@@ -108,6 +114,7 @@ skip-magic-trailing-comma = false  # Ensure Black-style formatting
 testpaths = ["tests"]
 markers = [
     "llm: marks tests as requiring LLM API access (run with --run-llm)",
+    "globus_compute: marks tests requiring a live Globus Compute endpoint (run with --run-globus-compute)",
     "asyncio: marks async tests",
 ]
 filterwarnings = [
