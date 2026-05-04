@@ -34,9 +34,9 @@ def get_aurora_config(
             node_list = f.readlines()
             num_nodes = len(node_list)
     else:
-        # Fallback for testing/local runs without PBS
-        raise ValueError("Warning: PBS_NODEFILE not found. Defaulting to 1 node.")
-        num_nodes = 1
+        raise ValueError(
+            "PBS_NODEFILE not found. Cannot determine node count for Aurora."
+        )
 
     config = Config(
         executors=[
