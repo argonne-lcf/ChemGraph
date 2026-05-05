@@ -30,6 +30,7 @@ dependencies = [
     "numpy==2.2.6",
     "numexpr==2.11.0",
     "pytest==8.4.1",
+    "deepdiff==8.5.0",
 
     "ase",
     "rdkit",
@@ -102,6 +103,7 @@ indent-style = "space"  # Use spaces for indentation
 skip-magic-trailing-comma = false  # Ensure Black-style formatting
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "llm: marks tests as requiring LLM API access (run with --run-llm)",
     "asyncio: marks async tests",
