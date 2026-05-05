@@ -583,13 +583,21 @@ def _run_ase_impl(params: ASEInputSchema):
                             {"atomsdata": final_structure}
                         )
 
+                        # IdealGasThermo expects total spin S; calculators expose
+                        # multiplicity (2S+1) via get_multiplicity() when supported.
+                        multiplicity = (
+                            getattr(calc_model, "get_multiplicity", lambda: None)()
+                            or 1
+                        )
+                        spin_S = (multiplicity - 1) / 2.0
+
                         thermo = IdealGasThermo(
                             vib_energies=energies,
                             potentialenergy=single_point_energy,
                             atoms=atoms,
                             geometry=geometry,
                             symmetrynumber=symmetrynumber,
-                            spin=0,  # Only support spin=0
+                            spin=spin_S,
                         )
                         thermo_data = {
                             "enthalpy": float(

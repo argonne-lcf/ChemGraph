@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from typing import Optional, Dict, Any
+from typing import Any, Optional, Dict
 import torch
 import logging
 
@@ -22,8 +22,11 @@ class FAIRChemCalc(BaseModel):
         Must match available tasks in the model.
     seed : int, optional
         Seed for model reproducibility. Default is 42.
-    spin : int, optional
-        Spin multiplicity. Default is 1.
+    multiplicity : int, optional
+        Spin multiplicity (2S+1) of the system. Default is 1 (singlet).
+        UMA/OMOL reads this from ``atoms.info["spin"]``; the schema field is named
+        ``multiplicity`` for consistency with other calculators (TBLite, ORCA).
+        The deprecated alias ``spin=`` is still accepted as input.
     charge : int, optional
         System charge. Default is 0.
     model_name: str
@@ -41,7 +44,14 @@ class FAIRChemCalc(BaseModel):
         description="Prediction task. Options are 'omol', 'omat', 'oc20', 'odac', or 'omc",
     )
     seed: int = Field(default=42, description="Random seed for inference reproducibility.")
-    spin: Optional[int] = Field(default=1, description="Total spin multiplicity of the system.")
+    multiplicity: Optional[int] = Field(
+        default=1,
+        description=(
+            "Spin multiplicity (2S+1) of the system. Default 1 (singlet). "
+            "Passed to UMA via atoms.info['spin']."
+        ),
+        ge=1,
+    )
     charge: Optional[int] = Field(default=0, description="Total system charge.")
     model_name: str = Field(
         default="uma-s-1p1", description="Model names. Options are 'uma-s-1p1' and 'uma-m-1'"
@@ -53,6 +63,16 @@ class FAIRChemCalc(BaseModel):
     inference_settings: str = Field(
         default="default", description="Settings for inference. Can be 'default' or 'turbo'"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_spin_alias(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "spin" in data and "multiplicity" not in data:
+            logging.warning(
+                "FAIRChemCalc: field 'spin' is deprecated; use 'multiplicity' instead."
+            )
+            data["multiplicity"] = data.pop("spin")
+        return data
 
     def get_calculator(self) -> Any:
         """Return a configured FAIRChemCalculator.
@@ -83,8 +103,16 @@ class FAIRChemCalc(BaseModel):
         )
 
     def get_atoms_properties(self) -> Dict[str, Optional[int]]:
-        """Return atom-level info keys to inject into atoms.info."""
+        """Return atom-level info keys to inject into atoms.info.
+
+        UMA/OMOL reads spin multiplicity from ``atoms.info["spin"]``; we keep
+        that key name here even though our schema field is ``multiplicity``.
+        """
         return {
-            "spin": self.spin,
+            "spin": self.multiplicity,
             "charge": self.charge,
         }
+
+    def get_multiplicity(self) -> Optional[int]:
+        """Return spin multiplicity (2S+1) for thermochemistry."""
+        return self.multiplicity

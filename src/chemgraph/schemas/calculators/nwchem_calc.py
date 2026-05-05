@@ -33,6 +33,14 @@ class NWChemCalc(BaseModel):
     command : str, optional
         Command to execute NWChem (e.g., 'nwchem PREFIX.nwi > PREFIX.nwo'),
         by default None
+    charge : int, optional
+        Total charge of the system, by default None
+    multiplicity : int, optional
+        Spin multiplicity (2S+1) of the system, by default None.
+        For molecular theories ('dft', 'scf', 'mp2', 'ccsd', 'tce', 'tddft') this is
+        injected into the theory block as ``mult``. For 'scf', NWChem expects
+        ``nopen`` (number of unpaired electrons); set ``scf={'nopen': N}`` manually
+        if you need finer control.
     """
 
     calculator_type: str = Field(
@@ -61,6 +69,18 @@ class NWChemCalc(BaseModel):
         default=None,
         description="Command to execute NWChem (e.g., 'nwchem PREFIX.nwi > PREFIX.nwo').",
     )
+    charge: Optional[int] = Field(
+        default=None, description="Total charge of the system."
+    )
+    multiplicity: Optional[int] = Field(
+        default=None,
+        description=(
+            "Spin multiplicity (2S+1). Injected into the theory block as 'mult' "
+            "for dft/mp2/ccsd/tce/tddft; for 'scf' theory NWChem expects 'nopen' "
+            "(unpaired electrons) which is not auto-set here."
+        ),
+        ge=1,
+    )
 
     def get_calculator(self):
         """Get an ASE-compatible NWChem calculator instance.
@@ -80,7 +100,7 @@ class NWChemCalc(BaseModel):
                 "Invalid calculator_type. The only valid option is 'nwchem'."
             )
 
-        return NWChem(
+        kwargs = dict(
             theory=self.theory,
             xc=self.xc,
             basis=self.basis,
@@ -88,3 +108,18 @@ class NWChemCalc(BaseModel):
             directory=self.directory,
             command=self.command,
         )
+
+        # NWChem accepts charge/multiplicity inside the theory-specific block.
+        block: Dict[str, Union[int, str]] = {}
+        if self.charge is not None:
+            block["charge"] = self.charge
+        if self.multiplicity is not None and self.theory != "scf":
+            block["mult"] = self.multiplicity
+        if block and self.theory in {"dft", "mp2", "ccsd", "tce", "tddft"}:
+            kwargs[self.theory] = block
+
+        return NWChem(**kwargs)
+
+    def get_multiplicity(self) -> Optional[int]:
+        """Return spin multiplicity (2S+1) for thermochemistry."""
+        return self.multiplicity

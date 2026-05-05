@@ -456,13 +456,19 @@ async def run_ase(params: ASEInputSchema) -> dict:
                                 atomsdata=final_structure
                             )
 
+                            multiplicity = (
+                                getattr(calc_model, "get_multiplicity", lambda: None)()
+                                or 1
+                            )
+                            spin_S = (multiplicity - 1) / 2.0
+
                             thermo = IdealGasThermo(
                                 vib_energies=energies,
                                 potentialenergy=single_point_energy,
                                 atoms=atoms,
                                 geometry=geometry,
                                 symmetrynumber=symmetrynumber,
-                                spin=0,  # Only support spin=0
+                                spin=spin_S,
                             )
                             thermo_data = {
                                 "enthalpy": float(
