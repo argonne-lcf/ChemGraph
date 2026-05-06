@@ -34,6 +34,8 @@ stringData:
   anthropic-api-key: "sk-ant-..."
   gemini-api-key: "..."
   groq-api-key: "..."
+  argo-user: "..."
+  alcf-access-token: "..."
 ```
 
 **Important:** Never commit `secrets.yaml` to version control! Add it to `.gitignore`.

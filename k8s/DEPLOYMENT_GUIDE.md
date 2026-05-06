@@ -70,6 +70,8 @@ stringData:
   anthropic-api-key: "sk-ant-..."
   gemini-api-key: "..."
   groq-api-key: "..."
+  argo-user: "..."
+  alcf-access-token: "..."
 ```
 
 **Important:** Do NOT commit this file! It's already in `.gitignore`.

@@ -50,6 +50,18 @@ spec:
               name: chemgraph-secrets
               key: groq-api-key
               optional: true
+        - name: ARGO_USER
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: argo-user
+              optional: true
+        - name: ALCF_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: alcf-access-token
+              optional: true
         - name: CHEMGRAPH_LOG_DIR
           value: /app/cg_logs
         - name: PYTHONPATH
