@@ -102,4 +102,4 @@ jobs:
       - name: Inspect manifest
         env:
           IMAGE: ${{ steps.prep.outputs.image }}
-        run: docker buildx imagetools inspect "${IMAGE}:$(echo "$GITHUB_REF_NAME" | tr '_' '-')"
+        run: docker buildx imagetools inspect "${IMAGE}:${GITHUB_REF_NAME}"
