@@ -22,9 +22,6 @@ jobs:
           - arch: amd64
             platform: linux/amd64
             dockerfile: Dockerfile
-          - arch: arm64
-            platform: linux/arm64
-            dockerfile: Dockerfile.arm
 
     steps:
       - name: Checkout code
@@ -90,7 +87,7 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
 
-      - name: Create and push multi-arch manifests
+      - name: Create and push manifests
         env:
           IMAGE: ${{ steps.prep.outputs.image }}
           TAGS: ${{ steps.meta.outputs.tags }}
@@ -99,11 +96,10 @@ jobs:
             [ -z "$tag" ] && continue
             docker buildx imagetools create \
               -t "$tag" \
-              "${IMAGE}:build-${GITHUB_SHA}-amd64" \
-              "${IMAGE}:build-${GITHUB_SHA}-arm64"
+              "${IMAGE}:build-${GITHUB_SHA}-amd64"
           done <<< "$TAGS"
 
-      - name: Inspect latest manifest
+      - name: Inspect manifest
         env:
           IMAGE: ${{ steps.prep.outputs.image }}
-        run: docker buildx imagetools inspect "${IMAGE}:latest"
+        run: docker buildx imagetools inspect "${IMAGE}:$(echo "$GITHUB_REF_NAME" | tr '_' '-')"
