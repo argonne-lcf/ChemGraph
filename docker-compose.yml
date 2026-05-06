@@ -11,6 +11,8 @@ x-chemgraph-common: &chemgraph-common
     ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     GROQ_API_KEY: ${GROQ_API_KEY:-}
+    ARGO_USER: ${ARGO_USER:-}
+    ALCF_ACCESS_TOKEN: ${ALCF_ACCESS_TOKEN:-}
     CHEMGRAPH_LOG_DIR: /app/cg_logs
     PYTHONPATH: /app/src
 
