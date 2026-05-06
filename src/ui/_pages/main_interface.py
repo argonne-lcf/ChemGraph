@@ -21,7 +21,7 @@ from chemgraph.utils.config_utils import (
     get_model_options_for_nested_config,
 )
 
-from ui.agent_manager import initialize_agent, run_async_callable
+from ui.agent_manager import initialize_agent
 from ui.branding import LOGO_IMAGES, first_existing_asset
 from ui.config import load_config
 from ui.endpoint import check_local_model_endpoint
