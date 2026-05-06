@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: streamlit
-        image: ghcr.io/argonne-lcf/chemgraph:latest
+        image: ghcr.io/argonne-lcf/chemgraph:feature-k8s
         imagePullPolicy: Always
         ports:
         - containerPort: 8501
