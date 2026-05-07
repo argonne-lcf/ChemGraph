@@ -623,6 +623,19 @@ class ChemGraph:
                     content = msg.get("content", "")
                     tool_name = msg.get("name")
 
+                # MCP tool messages may return content as a list of
+                # content blocks (e.g. [{'type': 'text', 'text': '...'}])
+                # instead of a plain string. Normalize to str.
+                if isinstance(content, list):
+                    content = "\n".join(
+                        block.get("text", str(block))
+                        if isinstance(block, dict)
+                        else str(block)
+                        for block in content
+                    )
+                elif not isinstance(content, str):
+                    content = str(content)
+
                 if role and content:
                     messages_to_save.append(
                         SessionMessage(

@@ -156,6 +156,7 @@ def initialize_agent(
     argo_user: Optional[str] = None,
     verbose: bool = False,
     human_supervised: bool = False,
+    tools: Optional[list] = None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -178,6 +179,8 @@ def initialize_agent(
             console.print(f"  Base URL: {base_url}")
         if argo_user:
             console.print(f"  Argo User: {argo_user}")
+        if tools:
+            console.print(f"  MCP Tools: {len(tools)} loaded")
 
     # Check API keys before attempting initialization
     api_key_available, error_msg = check_api_keys(model_name)
@@ -218,6 +221,7 @@ def initialize_agent(
                 recursion_limit=recursion_limit,
                 structured_output=structured_output,
                 human_supervised=human_supervised,
+                tools=tools,
             )
 
         try:
@@ -548,6 +552,7 @@ def interactive_mode(
     base_url: Optional[str] = None,
     argo_user: Optional[str] = None,
     verbose: bool = False,
+    tools: Optional[list] = None,
 ) -> None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -586,6 +591,7 @@ def interactive_mode(
         argo_user=argo_user,
         verbose=verbose,
         human_supervised=human_supervised,
+        tools=tools,
     )
     if not agent:
         return
@@ -679,6 +685,7 @@ Example queries:
                     base_url=base_url,
                     argo_user=argo_user,
                     human_supervised=human_supervised,
+                    tools=tools,
                 )
                 if agent:
                     console.print(f"[green]Model changed to: {model}[/green]")
@@ -697,6 +704,7 @@ Example queries:
                         base_url=base_url,
                         argo_user=argo_user,
                         human_supervised=human_supervised,
+                        tools=tools,
                     )
                     if agent:
                         console.print(
