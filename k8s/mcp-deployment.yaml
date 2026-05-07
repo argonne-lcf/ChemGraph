@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chemgraph-mcp
+  labels:
+    app: chemgraph
+    component: mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chemgraph
+      component: mcp
+  template:
+    metadata:
+      labels:
+        app: chemgraph
+        component: mcp
+    spec:
+      containers:
+      - name: mcp
+        image: ghcr.io/argonne-lcf/chemgraph:feature_k8s
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9003
+          name: http
+          protocol: TCP
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: openai-api-key
+              optional: true
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: anthropic-api-key
+              optional: true
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: gemini-api-key
+              optional: true
+        - name: GROQ_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: groq-api-key
+              optional: true
+        - name: ARGO_USER
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: argo-user
+              optional: true
+        - name: ALCF_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: alcf-access-token
+              optional: true
+        - name: CHEMGRAPH_LOG_DIR
+          value: /app/cg_logs
+        - name: PYTHONPATH
+          value: /app/src
+        - name: HTTP_PROXY
+          value: http://proxy.alcf.anl.gov:3128
+        - name: HTTPS_PROXY
+          value: http://proxy.alcf.anl.gov:3128
+        - name: http_proxy
+          value: http://proxy.alcf.anl.gov:3128
+        - name: https_proxy
+          value: http://proxy.alcf.anl.gov:3128
+        command:
+        - python
+        - -m
+        - chemgraph.mcp.mcp_tools
+        - --transport
+        - streamable_http
+        - --host
+        - 0.0.0.0
+        - --port
+        - "9003"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          tcpSocket:
+            port: 9003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 9003
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
