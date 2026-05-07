@@ -26,6 +26,11 @@ validate_keys = true
 rate_limit = true
 max_requests_per_minute = 60
 
+[mcp]
+# url = "http://localhost:9003/mcp/"        # For streamable_http transport
+# command = ""                               # For stdio transport (full shell command)
+# server_name = "ChemGraph General Tools"    # Display name for the MCP connection
+
 [eval]
 default_profile = "standard"
 
