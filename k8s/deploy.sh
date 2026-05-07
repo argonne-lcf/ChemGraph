@@ -1,5 +1,6 @@
 #!/bin/bash
-# ChemGraph Streamlit Kubernetes Deployment Script
+# ChemGraph Kubernetes Deployment Script
+# Deploys both Streamlit UI and MCP server
 
 set -e
 
@@ -28,27 +29,50 @@ if ! command -v kubectl &> /dev/null; then
     exit 1
 fi
 
-# Check kubectl connection
-if ! kubectl cluster-info &> /dev/null; then
-    print_error "Cannot connect to Kubernetes cluster. Please check your kubeconfig."
+# Default namespace (set early so the connection check can use it)
+NAMESPACE="${NAMESPACE:-chemgraph}"
+
+# Check kubectl connection using the target namespace
+# (cluster-info requires kube-system access which RBAC-limited users may not have)
+if ! kubectl get namespace "$NAMESPACE" &> /dev/null; then
+    print_error "Cannot access namespace '$NAMESPACE'. Check your kubeconfig and permissions."
     exit 1
 fi
 
-print_info "Connected to Kubernetes cluster:"
-kubectl cluster-info | head -1
+print_info "Connected to Kubernetes cluster (namespace: $NAMESPACE)"
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Default namespace
-NAMESPACE="${NAMESPACE:-default}"
-
 # Parse command line arguments
 ACTION="${1:-deploy}"
+TARGET="${2:-}"
+
+# Helper: wait for LoadBalancer IP and print access URL
+wait_for_lb() {
+    local svc_name="$1"
+    local port="$2"
+    local label="$3"
+
+    print_info "Waiting for $label LoadBalancer IP..."
+    local external_ip=""
+    for i in {1..30}; do
+        external_ip=$(kubectl get svc "$svc_name" -n "$NAMESPACE" \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        if [ -n "$external_ip" ]; then
+            print_info "$label is available at: http://$external_ip:$port"
+            return
+        fi
+        sleep 5
+    done
+    print_warn "$label LoadBalancer IP not assigned yet."
+    print_info "  Check: kubectl get svc $svc_name -n $NAMESPACE"
+    print_info "  Or use: $0 port-forward ${svc_name#chemgraph-}"
+}
 
 case "$ACTION" in
     deploy)
-        print_info "Deploying ChemGraph Streamlit to namespace: $NAMESPACE"
+        print_info "Deploying ChemGraph (Streamlit + MCP) to namespace: $NAMESPACE"
 
         # Check if secrets file exists
         if [ ! -f "$SCRIPT_DIR/secrets.yaml" ]; then
@@ -59,40 +83,36 @@ case "$ACTION" in
             read -r
         fi
 
-        # Apply secrets
+        # Apply secrets (shared by both services)
         print_info "Creating secrets..."
         kubectl apply -f "$SCRIPT_DIR/secrets.yaml" -n "$NAMESPACE"
 
-        # Apply deployment
-        print_info "Creating deployment..."
+        # Deploy Streamlit
+        print_info "Creating Streamlit deployment..."
         kubectl apply -f "$SCRIPT_DIR/deployment.yaml" -n "$NAMESPACE"
-
-        # Apply service
-        print_info "Creating service..."
         kubectl apply -f "$SCRIPT_DIR/service.yaml" -n "$NAMESPACE"
 
-        print_info "Waiting for deployment to be ready..."
+        # Deploy MCP
+        print_info "Creating MCP deployment..."
+        kubectl apply -f "$SCRIPT_DIR/mcp-deployment.yaml" -n "$NAMESPACE"
+        kubectl apply -f "$SCRIPT_DIR/mcp-service.yaml" -n "$NAMESPACE"
+
+        # Wait for both rollouts
+        print_info "Waiting for deployments to be ready..."
         kubectl rollout status deployment/chemgraph-streamlit -n "$NAMESPACE" --timeout=5m
+        kubectl rollout status deployment/chemgraph-mcp -n "$NAMESPACE" --timeout=5m
 
         print_info "Deployment successful!"
-        print_info "Getting service information..."
-        kubectl get svc chemgraph-streamlit -n "$NAMESPACE"
+        echo ""
 
-        # Get external IP
-        print_info "Waiting for LoadBalancer IP (this may take a few minutes)..."
-        for i in {1..30}; do
-            EXTERNAL_IP=$(kubectl get svc chemgraph-streamlit -n "$NAMESPACE" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-            if [ -n "$EXTERNAL_IP" ]; then
-                print_info "ChemGraph Streamlit is available at: http://$EXTERNAL_IP:8501"
-                break
-            fi
-            sleep 5
-        done
+        # Show service info
+        print_info "Service information:"
+        kubectl get svc -l app=chemgraph -n "$NAMESPACE"
+        echo ""
 
-        if [ -z "$EXTERNAL_IP" ]; then
-            print_warn "LoadBalancer IP not assigned yet. Run 'kubectl get svc chemgraph-streamlit -n $NAMESPACE' to check."
-            print_info "Alternatively, use port-forward: kubectl port-forward svc/chemgraph-streamlit 8501:8501 -n $NAMESPACE"
-        fi
+        # Wait for LoadBalancer IPs
+        wait_for_lb "chemgraph-streamlit" 8501 "Streamlit"
+        wait_for_lb "chemgraph-mcp" 9003 "MCP server"
         ;;
 
     status)
@@ -101,24 +121,38 @@ case "$ACTION" in
         print_info "Pods:"
         kubectl get pods -l app=chemgraph -n "$NAMESPACE"
         echo ""
-        print_info "Service:"
-        kubectl get svc chemgraph-streamlit -n "$NAMESPACE"
+        print_info "Services:"
+        kubectl get svc -l app=chemgraph -n "$NAMESPACE"
         echo ""
-        print_info "Deployment:"
-        kubectl get deployment chemgraph-streamlit -n "$NAMESPACE"
+        print_info "Deployments:"
+        kubectl get deployment -l app=chemgraph -n "$NAMESPACE"
         ;;
 
     logs)
-        print_info "Fetching logs from namespace: $NAMESPACE"
-        kubectl logs -l app=chemgraph,component=streamlit -n "$NAMESPACE" --tail=100 -f
+        case "$TARGET" in
+            streamlit)
+                print_info "Fetching Streamlit logs..."
+                kubectl logs -l app=chemgraph,component=streamlit -n "$NAMESPACE" --tail=100 -f
+                ;;
+            mcp)
+                print_info "Fetching MCP server logs..."
+                kubectl logs -l app=chemgraph,component=mcp -n "$NAMESPACE" --tail=100 -f
+                ;;
+            *)
+                print_info "Fetching logs from all ChemGraph pods..."
+                kubectl logs -l app=chemgraph -n "$NAMESPACE" --tail=100 -f --prefix
+                ;;
+        esac
         ;;
 
     delete)
-        print_warn "This will delete the ChemGraph deployment from namespace: $NAMESPACE"
+        print_warn "This will delete all ChemGraph deployments from namespace: $NAMESPACE"
         read -p "Are you sure? (y/N) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             print_info "Deleting resources..."
+            kubectl delete -f "$SCRIPT_DIR/mcp-deployment.yaml" -n "$NAMESPACE" || true
+            kubectl delete -f "$SCRIPT_DIR/mcp-service.yaml" -n "$NAMESPACE" || true
             kubectl delete -f "$SCRIPT_DIR/deployment.yaml" -n "$NAMESPACE" || true
             kubectl delete -f "$SCRIPT_DIR/service.yaml" -n "$NAMESPACE" || true
             print_info "Keeping secrets (delete manually if needed)"
@@ -129,19 +163,38 @@ case "$ACTION" in
         ;;
 
     port-forward)
-        print_info "Setting up port forwarding to localhost:8501"
-        kubectl port-forward svc/chemgraph-streamlit 8501:8501 -n "$NAMESPACE"
+        case "$TARGET" in
+            streamlit)
+                print_info "Port forwarding Streamlit to localhost:8501"
+                kubectl port-forward svc/chemgraph-streamlit 8501:8501 -n "$NAMESPACE"
+                ;;
+            mcp)
+                print_info "Port forwarding MCP server to localhost:9003"
+                kubectl port-forward svc/chemgraph-mcp 9003:9003 -n "$NAMESPACE"
+                ;;
+            *)
+                print_info "Port forwarding both services (Ctrl+C to stop)..."
+                print_info "  Streamlit: http://localhost:8501"
+                print_info "  MCP:       http://localhost:9003/mcp/"
+                kubectl port-forward svc/chemgraph-streamlit 8501:8501 -n "$NAMESPACE" &
+                PF_PID_STREAMLIT=$!
+                kubectl port-forward svc/chemgraph-mcp 9003:9003 -n "$NAMESPACE" &
+                PF_PID_MCP=$!
+                trap "kill $PF_PID_STREAMLIT $PF_PID_MCP 2>/dev/null; exit" INT TERM
+                wait
+                ;;
+        esac
         ;;
 
     *)
-        echo "Usage: $0 {deploy|status|logs|delete|port-forward}"
+        echo "Usage: $0 {deploy|status|logs|delete|port-forward} [target]"
         echo ""
         echo "Commands:"
-        echo "  deploy        - Deploy ChemGraph Streamlit to Kubernetes"
-        echo "  status        - Check deployment status"
-        echo "  logs          - View application logs"
-        echo "  delete        - Remove ChemGraph deployment"
-        echo "  port-forward  - Forward port 8501 to localhost"
+        echo "  deploy                  - Deploy Streamlit and MCP server to Kubernetes"
+        echo "  status                  - Check deployment status"
+        echo "  logs [streamlit|mcp]    - View logs (default: all pods)"
+        echo "  delete                  - Remove all ChemGraph deployments"
+        echo "  port-forward [streamlit|mcp] - Forward ports to localhost (default: both)"
         echo ""
         echo "Environment variables:"
         echo "  NAMESPACE     - Kubernetes namespace (default: default)"
