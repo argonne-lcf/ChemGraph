@@ -44,6 +44,10 @@ print_info "Connected to Kubernetes cluster (namespace: $NAMESPACE)"
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+# Image tag override (defaults to whatever is in the YAML manifests)
+IMAGE_TAG="${IMAGE_TAG:-}"
+IMAGE_REPO="ghcr.io/argonne-lcf/chemgraph"
+
 # Parse command line arguments
 ACTION="${1:-deploy}"
 TARGET="${2:-}"
@@ -96,6 +100,13 @@ case "$ACTION" in
         print_info "Creating MCP deployment..."
         kubectl apply -f "$SCRIPT_DIR/mcp-deployment.yaml" -n "$NAMESPACE"
         kubectl apply -f "$SCRIPT_DIR/mcp-service.yaml" -n "$NAMESPACE"
+
+        # Override image tag if IMAGE_TAG is set
+        if [ -n "$IMAGE_TAG" ]; then
+            print_info "Overriding image tag to: $IMAGE_REPO:$IMAGE_TAG"
+            kubectl set image deployment/chemgraph-streamlit streamlit="$IMAGE_REPO:$IMAGE_TAG" -n "$NAMESPACE"
+            kubectl set image deployment/chemgraph-mcp mcp="$IMAGE_REPO:$IMAGE_TAG" -n "$NAMESPACE"
+        fi
 
         # Wait for both rollouts
         print_info "Waiting for deployments to be ready..."
@@ -197,7 +208,8 @@ case "$ACTION" in
         echo "  port-forward [streamlit|mcp] - Forward ports to localhost (default: both)"
         echo ""
         echo "Environment variables:"
-        echo "  NAMESPACE     - Kubernetes namespace (default: default)"
+        echo "  NAMESPACE     - Kubernetes namespace (default: chemgraph)"
+        echo "  IMAGE_TAG     - Override image tag (e.g. dev, sha-abc123, v1.0.0)"
         exit 1
         ;;
 esac

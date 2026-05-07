@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: mcp
-        image: ghcr.io/argonne-lcf/chemgraph:feature_k8s
+        image: ghcr.io/argonne-lcf/chemgraph:dev
         imagePullPolicy: Always
         ports:
         - containerPort: 9003

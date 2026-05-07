@@ -6,6 +6,7 @@ on:
       - "v*"
     branches:
       - feature_k8s
+      - dev
   workflow_dispatch:
 
 permissions:
