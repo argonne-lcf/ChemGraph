@@ -36,14 +36,13 @@ mcp = FastMCP(
     name="ChemGraph General Tools",
     instructions="""
         You provide chemistry tools for converting molecule names to SMILES,
-        building 3D coordinates, running ASE simulations, and reading results.
+        building 3D coordinates, running ASE simulations (geometry optimization, thermochemistry, vibrational calculations), and reading results.
         Each tool has its own description; follow those to decide when to use them.\n\n
         General guidance:\n
         • Keep outputs compact; large results are written to files.\n
         • Do not invent data. If a tool raises an error, report it as-is.\n
         • Use absolute file paths when returning artifacts.\n
-        • Energies are in eV, vibrational frequencies in cm⁻¹,
-          wall times in seconds.
+        • Energies are in eV, vibrational frequencies in cm⁻¹, wall times in seconds.
         • PySCF tools report electronic energies in Hartree and eV.
     """,
 )
