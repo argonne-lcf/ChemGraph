@@ -162,12 +162,37 @@ def check_api_keys_status() -> None:
 # Response formatting
 # ---------------------------------------------------------------------------
 
-def _is_atomic_json(content: str) -> bool:
+def _content_to_text(content: Any) -> str:
+    """Extract displayable text from common LangChain/MCP content shapes."""
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            else:
+                text = getattr(block, "text", None)
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts)
+
+    return ""
+
+
+def _is_atomic_json(content: Any) -> bool:
     """Return True if *content* is a JSON string with atomic-structure keys.
 
     This replaces the old fragile substring check (Bug 10) with a
     proper parse attempt.
     """
+    content = _content_to_text(content)
+    if not content:
+        return False
+
     try:
         data = json.loads(content.strip())
     except (json.JSONDecodeError, ValueError):
@@ -197,14 +222,14 @@ def format_response(result: Any, verbose: bool = False) -> None:
     final_answer = ""
     for message in reversed(messages):
         if hasattr(message, "content") and hasattr(message, "type"):
-            if message.type == "ai" and message.content.strip():
-                content = message.content.strip()
+            content = _content_to_text(message.content).strip()
+            if message.type == "ai" and content:
                 if not _is_atomic_json(content):
                     final_answer = content
                     break
         elif isinstance(message, dict):
-            if message.get("type") == "ai" and message.get("content", "").strip():
-                content = message["content"].strip()
+            content = _content_to_text(message.get("content", "")).strip()
+            if message.get("type") == "ai" and content:
                 if not _is_atomic_json(content):
                     final_answer = content
                     break
@@ -223,9 +248,9 @@ def format_response(result: Any, verbose: bool = False) -> None:
     for message in messages:
         content = ""
         if hasattr(message, "content"):
-            content = message.content
+            content = _content_to_text(message.content)
         elif isinstance(message, dict):
-            content = message.get("content", "")
+            content = _content_to_text(message.get("content", ""))
 
         if content and _is_atomic_json(content):
             console.print(

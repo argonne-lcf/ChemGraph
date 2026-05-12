@@ -16,19 +16,35 @@ from chemgraph.tools.cheminformatics_core import (
     smiles_to_coordinate_file_core,
 )
 from chemgraph.schemas.ase_input import ASEInputSchema
+from chemgraph.schemas.pyscf_schema import (
+    PySCFMolecularInput,
+    PySCFPeriodicInput,
+    PySCFPropertyInput,
+    PySCFRecipeInput,
+)
+from chemgraph.tools.pyscf_tools import (
+    extract_pyscf_output_core,
+    get_pyscf_capability_manifest_core,
+    run_pyscf_molecular_core,
+    run_pyscf_periodic_core,
+    run_pyscf_property_core,
+    run_pyscf_recipe_core,
+)
 
 
 mcp = FastMCP(
     name="ChemGraph General Tools",
     instructions="""
         You provide chemistry tools for converting molecule names to SMILES,
-        building 3D coordinates, running ASE simulations (geometry optimization, thermochemistry, vibrational calculations), and reading results. "
-        Each tool has its own description — follow those to decide when to use them.\n\n
+        building 3D coordinates, running ASE simulations, and reading results.
+        Each tool has its own description; follow those to decide when to use them.\n\n
         General guidance:\n
         • Keep outputs compact; large results are written to files.\n
         • Do not invent data. If a tool raises an error, report it as-is.\n
         • Use absolute file paths when returning artifacts.\n
-        • Energies are in eV, vibrational frequencies in cm⁻¹, wall times in seconds.
+        • Energies are in eV, vibrational frequencies in cm⁻¹,
+          wall times in seconds.
+        • PySCF tools report electronic energies in Hartree and eV.
     """,
 )
 
@@ -95,6 +111,76 @@ async def run_ase(params: ASEInputSchema) -> dict:
     f = io.StringIO()
     with redirect_stdout(f):
         return run_ase_core(params)
+
+
+@mcp.tool(
+    name="get_pyscf_capability_manifest",
+    description=(
+        "Return ChemGraph's PySCF capability manifest: exposed PySCF MCP "
+        "tools, supported options, and current limitations."
+    ),
+)
+def get_pyscf_capability_manifest() -> dict:
+    """Return the supported PySCF MCP surface and limitations."""
+    return get_pyscf_capability_manifest_core()
+
+
+@mcp.tool(
+    name="run_pyscf_molecular",
+    description=(
+        "Run a molecular PySCF calculation. Supports HF/DFT references, optional "
+        "MP2/CCSD/CCSD(T), and selected properties such as dipole, population, "
+        "MO energies, and gradients."
+    ),
+)
+def run_pyscf_molecular(params: PySCFMolecularInput) -> dict:
+    """Run the main molecular PySCF workflow."""
+    return run_pyscf_molecular_core(params)
+
+
+@mcp.tool(
+    name="run_pyscf_periodic",
+    description=(
+        "Run a minimal periodic PySCF calculation for a cell using HF/DFT references "
+        "and optional k-point meshes."
+    ),
+)
+def run_pyscf_periodic(params: PySCFPeriodicInput) -> dict:
+    """Run the minimal periodic PySCF workflow."""
+    return run_pyscf_periodic_core(params)
+
+
+@mcp.tool(
+    name="run_pyscf_property",
+    description=(
+        "Extract properties already stored in a JSON artifact from a previous "
+        "PySCF run."
+    ),
+)
+def run_pyscf_property(params: PySCFPropertyInput) -> dict:
+    """Extract stored PySCF properties from a prior result JSON."""
+    return run_pyscf_property_core(params)
+
+
+@mcp.tool(
+    name="run_pyscf_recipe",
+    description=(
+        "Run a whitelisted advanced PySCF recipe. Current recipe: "
+        "casscf_single_point."
+    ),
+)
+def run_pyscf_recipe(params: PySCFRecipeInput) -> dict:
+    """Run a whitelisted PySCF recipe."""
+    return run_pyscf_recipe_core(params)
+
+
+@mcp.tool(
+    name="extract_pyscf_output",
+    description="Load a JSON artifact produced by a ChemGraph PySCF MCP tool.",
+)
+def extract_pyscf_output(json_file: str) -> dict:
+    """Load a saved PySCF JSON result."""
+    return extract_pyscf_output_core(json_file)
 
 
 if __name__ == "__main__":

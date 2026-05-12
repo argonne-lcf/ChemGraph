@@ -64,6 +64,9 @@ ui = [
 parsl = [
     "parsl",
 ]
+pyscf = [
+    "pyscf",
+]
 xanes = [
     "mp-api; python_version >= '3.11'",
     "parsl"
