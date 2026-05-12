@@ -257,7 +257,9 @@ def _run_properties(mol, mf, properties: Iterable[str]) -> dict:
 
 def _schema_literal_values(model_cls: type, field_name: str) -> list[str]:
     """Return string values from a Pydantic field annotated as a Literal."""
-    return [str(value) for value in get_args(model_cls.model_fields[field_name].annotation)]
+    return [
+        str(value) for value in get_args(model_cls.model_fields[field_name].annotation)
+    ]
 
 
 def get_pyscf_capability_manifest_core() -> dict:

@@ -27,6 +27,7 @@ console = Console()
 # Banner
 # ---------------------------------------------------------------------------
 
+
 def create_banner() -> Panel:
     """Create a welcome banner for ChemGraph CLI."""
     banner_text = """
@@ -44,6 +45,7 @@ def create_banner() -> Panel:
 # ---------------------------------------------------------------------------
 # Model listing
 # ---------------------------------------------------------------------------
+
 
 def list_models() -> None:
     """Display available models in a formatted table."""
@@ -88,6 +90,7 @@ def list_models() -> None:
 # ---------------------------------------------------------------------------
 # API-key status
 # ---------------------------------------------------------------------------
+
 
 def check_api_keys_status() -> None:
     """Display API key availability status."""
@@ -161,6 +164,7 @@ def check_api_keys_status() -> None:
 # ---------------------------------------------------------------------------
 # Response formatting
 # ---------------------------------------------------------------------------
+
 
 def _content_to_text(content: Any) -> str:
     """Extract displayable text from common LangChain/MCP content shapes."""
@@ -264,7 +268,5 @@ def format_response(result: Any, verbose: bool = False) -> None:
     # Verbose output
     if verbose:
         console.print(
-            Panel(
-                f"Messages: {len(messages)}", title="Debug Information", style="dim"
-            )
+            Panel(f"Messages: {len(messages)}", title="Debug Information", style="dim")
         )

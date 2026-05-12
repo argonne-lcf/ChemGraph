@@ -74,9 +74,7 @@ class PySCFMolecularInput(BaseModel):
     charge: int = Field(default=0, description="Total molecular charge.")
     spin: int = Field(
         default=0,
-        description=(
-            "PySCF spin value, N_alpha - N_beta. This is not multiplicity."
-        ),
+        description=("PySCF spin value, N_alpha - N_beta. This is not multiplicity."),
     )
     basis: str = Field(default="sto-3g", description="AO basis set.")
     unit: Literal["Angstrom", "Bohr"] = Field(

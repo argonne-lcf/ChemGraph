@@ -164,8 +164,7 @@ def run_pyscf_property(params: PySCFPropertyInput) -> dict:
 @mcp.tool(
     name="run_pyscf_recipe",
     description=(
-        "Run a whitelisted advanced PySCF recipe. Current recipe: "
-        "casscf_single_point."
+        "Run a whitelisted advanced PySCF recipe. Current recipe: casscf_single_point."
     ),
 )
 def run_pyscf_recipe(params: PySCFRecipeInput) -> dict:
