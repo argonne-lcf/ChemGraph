@@ -14,8 +14,12 @@ import pytest
 try:
     from fastmcp import Client
     from chemgraph.mcp.mcp_tools import mcp
-    from chemgraph.schemas.pyscf_schema import PySCFPropertyInput
-    from chemgraph.tools.pyscf_tools import run_pyscf_property_core
+    from chemgraph.schemas.pyscf_schema import PySCFMolecularInput, PySCFPropertyInput
+    from chemgraph.tools import pyscf_tools
+    from chemgraph.tools.pyscf_tools import (
+        _apply_pyscf_device,
+        run_pyscf_property_core,
+    )
 except ModuleNotFoundError:
     pytest.skip("MCP test dependencies are not installed", allow_module_level=True)
 
@@ -108,6 +112,31 @@ def test_run_pyscf_property_raises_for_missing_requested_property(tmp_path):
         )
 
 
+def test_pyscf_molecular_schema_defaults_to_cpu_device():
+    params = PySCFMolecularInput(structure={"atom": "H 0 0 0; H 0 0 0.74"})
+
+    assert params.device == "cpu"
+
+
+def test_pyscf_cuda_requires_gpu4pyscf_when_missing(monkeypatch):
+    original_find_spec = pyscf_tools.importlib.util.find_spec
+
+    def fake_find_spec(name):
+        if name == "gpu4pyscf":
+            return None
+        return original_find_spec(name)
+
+    monkeypatch.setattr(pyscf_tools.importlib.util, "find_spec", fake_find_spec)
+
+    with pytest.raises(ImportError, match="gpu4pyscf"):
+        _apply_pyscf_device(object(), "cuda", "test object")
+
+
+def test_pyscf_xpu_raises_not_implemented():
+    with pytest.raises(NotImplementedError, match="XPU"):
+        _apply_pyscf_device(object(), "xpu", "test object")
+
+
 @pytest.mark.skipif(not _pyscf_installed(), reason="PySCF is not installed")
 @pytest.mark.asyncio
 async def test_run_pyscf_molecular_h2_hf_sto3g(tmp_path):
@@ -133,6 +162,7 @@ async def test_run_pyscf_molecular_h2_hf_sto3g(tmp_path):
 
     payload = json.loads(res.content[0].text)
     assert payload["status"] == "success"
+    assert payload["input"]["device"] == "cpu"
     assert payload["scf"]["reference"] == "RHF"
     assert payload["scf"]["converged"] is True
     assert payload["scf"]["total_energy"]["hartree"] < 0

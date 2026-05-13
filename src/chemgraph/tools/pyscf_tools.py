@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, Optional, get_args
 import numpy as np
 
 from chemgraph.schemas.pyscf_schema import (
+    PySCFDevice,
     PySCFMolecularInput,
     PySCFPostHF,
     PySCFPeriodicInput,
@@ -53,12 +54,44 @@ def _require_pyscf():
     return pyscf
 
 
+def _apply_pyscf_device(obj: Any, device: str, label: str):
+    """Apply the requested PySCF execution device to a PySCF object."""
+    if device == "cpu":
+        return obj
+
+    if device == "cuda":
+        if importlib.util.find_spec("gpu4pyscf") is None:
+            raise ImportError(
+                "PySCF CUDA execution requires gpu4pyscf, but gpu4pyscf is "
+                "not installed. Install a gpu4pyscf package compatible with "
+                "your CUDA stack, then retry with device='cuda'."
+            )
+
+        to_gpu = getattr(obj, "to_gpu", None)
+        if not callable(to_gpu):
+            raise NotImplementedError(
+                f"PySCF CUDA execution is not available for {label}; the "
+                "object does not expose a callable .to_gpu() method."
+            )
+        return to_gpu()
+
+    if device == "xpu":
+        raise NotImplementedError(
+            "PySCF XPU execution is not implemented in ChemGraph yet. "
+            "Use device='cpu' or a supported CUDA/gpu4pyscf setup."
+        )
+
+    raise ValueError(f"Unsupported PySCF device: {device}")
+
+
 def _to_builtin(value: Any) -> Any:
     """Convert numpy/PySCF-ish values to JSON-serializable Python objects."""
     if isinstance(value, dict):
         return {str(k): _to_builtin(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [_to_builtin(v) for v in value]
+    if type(value).__module__.startswith("cupy") and hasattr(value, "get"):
+        return _to_builtin(value.get())
     if isinstance(value, np.ndarray):
         return value.tolist()
     if isinstance(value, np.generic):
@@ -271,16 +304,19 @@ def get_pyscf_capability_manifest_core() -> dict:
         "tools": {
             "run_pyscf_molecular": {
                 "status": "implemented",
+                "devices": list(get_args(PySCFDevice)),
                 "references": list(get_args(PySCFReference)),
                 "post_hf": list(get_args(PySCFPostHF)),
                 "properties": list(get_args(PySCFProperty)),
             },
             "run_pyscf_periodic": {
                 "status": "minimal",
+                "devices": list(get_args(PySCFDevice)),
                 "references": _schema_literal_values(PySCFPeriodicInput, "reference"),
             },
             "run_pyscf_recipe": {
                 "status": "minimal",
+                "devices": list(get_args(PySCFDevice)),
                 "recipes": _schema_literal_values(PySCFRecipeInput, "recipe"),
             },
             "run_pyscf_property": {
@@ -302,6 +338,11 @@ def get_pyscf_capability_manifest_core() -> dict:
                 "Periodic support is intentionally minimal and should be "
                 "expanded with reference tests before production use."
             ),
+            (
+                "PySCF device='cuda' requires gpu4pyscf and uses PySCF's "
+                ".to_gpu() path. device='xpu' is accepted by schema but raises "
+                "until a real PySCF XPU backend is wired."
+            ),
         ],
     }
 
@@ -317,6 +358,8 @@ def run_pyscf_molecular_core(params: PySCFMolecularInput) -> dict:
     pyscf = _require_pyscf()
     mol = _build_molecule(params)
     mf = _build_scf_method(mol, params)
+    mf = _apply_pyscf_device(mf, params.device, "molecular SCF")
+    mol = getattr(mf, "mol", mol)
     energy = mf.kernel()
 
     post_hf_results = _run_post_hf(mf, params.post_hf)
@@ -413,6 +456,7 @@ def run_pyscf_periodic_core(params: PySCFPeriodicInput) -> dict:
 
     mf.max_cycle = params.max_cycle
     mf.conv_tol = params.conv_tol
+    mf = _apply_pyscf_device(mf, params.device, "periodic SCF")
     energy = mf.kernel()
 
     result = {
@@ -496,6 +540,8 @@ def run_pyscf_recipe_core(params: PySCFRecipeInput) -> dict:
 
     mol = _build_molecule(params)
     mf = _build_scf_method(mol, params)
+    mf = _apply_pyscf_device(mf, params.device, "recipe SCF")
+    mol = getattr(mf, "mol", mol)
     scf_energy = mf.kernel()
 
     cas = mcscf.CASSCF(
@@ -503,6 +549,7 @@ def run_pyscf_recipe_core(params: PySCFRecipeInput) -> dict:
         params.active_space.ncas,
         params.active_space.nelecas,
     )
+    cas = _apply_pyscf_device(cas, params.device, params.recipe)
     cas_energy = cas.kernel()[0]
 
     result = {

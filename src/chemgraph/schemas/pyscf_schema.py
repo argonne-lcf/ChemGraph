@@ -58,6 +58,7 @@ class ActiveSpaceInput(BaseModel):
 
 PySCFReference = Literal["RHF", "UHF", "ROHF", "RKS", "UKS"]
 PySCFPostHF = Literal["MP2", "CCSD", "CCSD(T)"]
+PySCFDevice = Literal["cpu", "cuda", "xpu"]
 PySCFProperty = Literal[
     "dipole",
     "population",
@@ -115,6 +116,14 @@ class PySCFMolecularInput(BaseModel):
     max_cycle: int = Field(default=50, description="Maximum SCF cycles.")
     conv_tol: float = Field(default=1e-9, description="SCF convergence tolerance.")
     max_memory: int = Field(default=4000, description="PySCF max memory in MB.")
+    device: PySCFDevice = Field(
+        default="cpu",
+        description=(
+            "Execution device. 'cpu' uses standard PySCF. 'cuda' uses PySCF's "
+            "gpu4pyscf .to_gpu() path when gpu4pyscf is installed. 'xpu' is "
+            "reserved for future PySCF XPU support and currently raises."
+        ),
+    )
     verbose: int = Field(default=0, description="PySCF verbosity level.")
 
 
@@ -142,6 +151,14 @@ class PySCFPeriodicInput(BaseModel):
     max_cycle: int = Field(default=50)
     conv_tol: float = Field(default=1e-9)
     max_memory: int = Field(default=4000)
+    device: PySCFDevice = Field(
+        default="cpu",
+        description=(
+            "Execution device. 'cpu' uses standard PySCF. 'cuda' uses PySCF's "
+            "gpu4pyscf .to_gpu() path when gpu4pyscf is installed. 'xpu' is "
+            "reserved for future PySCF XPU support and currently raises."
+        ),
+    )
     verbose: int = Field(default=0)
 
 
@@ -180,4 +197,12 @@ class PySCFRecipeInput(BaseModel):
     max_cycle: int = Field(default=50)
     conv_tol: float = Field(default=1e-9)
     max_memory: int = Field(default=4000)
+    device: PySCFDevice = Field(
+        default="cpu",
+        description=(
+            "Execution device. 'cpu' uses standard PySCF. 'cuda' uses PySCF's "
+            "gpu4pyscf .to_gpu() path when gpu4pyscf is installed. 'xpu' is "
+            "reserved for future PySCF XPU support and currently raises."
+        ),
+    )
     verbose: int = Field(default=0)
