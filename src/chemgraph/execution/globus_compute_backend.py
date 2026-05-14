@@ -51,6 +51,11 @@ class GlobusComputeBackend(ExecutionBackend):
     def __init__(self) -> None:
         super().__init__()
         self._executor = None
+        self._endpoint_id: str | None = None
+
+    @property
+    def is_async_remote(self) -> bool:
+        return True
 
     # ── lifecycle ────────────────────────────────────────────────────────
 
@@ -77,6 +82,7 @@ class GlobusComputeBackend(ExecutionBackend):
         if amqp_port is not None:
             executor_kwargs["amqp_port"] = int(amqp_port)
 
+        self._endpoint_id = endpoint_id
         self._executor = Executor(**executor_kwargs)
         self._initialized = True
         logger.info(
@@ -117,6 +123,30 @@ class GlobusComputeBackend(ExecutionBackend):
             raise ValueError(
                 f"Task '{task.task_id}': unsupported task_type '{task.task_type}'."
             )
+
+    # ── health check ────────────────────────────────────────────────────
+
+    def check_endpoint_status(self) -> dict:
+        """Check the status of the configured Globus Compute endpoint.
+
+        Returns a dict with ``endpoint_id`` and ``status`` fields.
+        Useful as a pre-flight check before submitting tasks.
+        """
+        try:
+            from globus_compute_sdk import Client
+
+            client = Client()
+            status = client.get_endpoint_status(self._endpoint_id)
+            return {
+                "endpoint_id": self._endpoint_id,
+                "status": status,
+            }
+        except Exception as e:
+            return {
+                "endpoint_id": self._endpoint_id,
+                "status": "error",
+                "error": str(e),
+            }
 
     # ── teardown ────────────────────────────────────────────────────────
 

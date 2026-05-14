@@ -12,11 +12,13 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from chemgraph.execution import TaskSpec, get_backend
+from chemgraph.execution.job_tracker import JobTracker
 from chemgraph.execution.utils import (
-    gather_futures,
     resolve_structure_files,
+    submit_or_gather,
     write_results_jsonl,
 )
+from chemgraph.mcp.job_tools import register_job_tools
 from chemgraph.mcp.server_utils import run_mcp_server
 from chemgraph.schemas.xanes_schema import (
     mp_query_schema,
@@ -28,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 # ── Initialise execution backend ────────────────────────────────────────
 backend = get_backend()
+tracker = JobTracker()
 
 # ── MCP server ──────────────────────────────────────────────────────────
 mcp = FastMCP(
@@ -40,6 +43,10 @@ mcp = FastMCP(
            using the configured execution backend.
         3. fetch_mp_structures: fetch optimized structures from Materials Project.
         4. plot_xanes: generate normalized XANES plots for completed calculations.
+        5. check_job_status: check progress of a submitted HPC job batch.
+        6. get_job_results: retrieve results from a completed job batch.
+        7. list_jobs: list all tracked job batches.
+        8. cancel_job: cancel pending tasks in a job batch.
 
         Guidelines:
         - Use each tool only when its input schema matches the user request.
@@ -47,8 +54,11 @@ mcp = FastMCP(
         - Keep responses compact -- full results are in the output directories.
         - When returning paths, use absolute paths.
         - Energies are in eV.
+        - When a tool returns status='submitted' with a batch_id, use
+          check_job_status to poll for progress before calling get_job_results.
     """,
 )
+register_job_tools(mcp, tracker, backend)
 
 
 @mcp.tool(
@@ -155,16 +165,24 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
         }
         pending_tasks.append((task_meta, fut))
 
-    results = await gather_futures(pending_tasks, post_fn=_xanes_post_fn)
-
-    summary_log_path = output_dir / "xanes_results.jsonl"
-    success_count, total_count = write_results_jsonl(results, summary_log_path)
-
-    return (
-        f"Ensemble execution completed. Ran {total_count} tasks "
-        f"({success_count} successful). "
-        f"Detailed results appended to '{summary_log_path}'."
+    result = await submit_or_gather(
+        backend, pending_tasks, tracker, "run_xanes_ensemble",
+        post_fn=_xanes_post_fn,
     )
+
+    if result["status"] == "completed":
+        summary_log_path = output_dir / "xanes_results.jsonl"
+        success_count, total_count = write_results_jsonl(
+            result["results"], summary_log_path,
+        )
+        return (
+            f"Ensemble execution completed. Ran {total_count} tasks "
+            f"({success_count} successful). "
+            f"Detailed results appended to '{summary_log_path}'."
+        )
+
+    # Async remote: return submission confirmation
+    return result
 
 
 @mcp.tool(

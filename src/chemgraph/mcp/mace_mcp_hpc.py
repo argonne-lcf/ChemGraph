@@ -20,11 +20,13 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from chemgraph.execution import TaskSpec, get_backend
+from chemgraph.execution.job_tracker import JobTracker
 from chemgraph.execution.utils import (
-    gather_futures,
     make_per_structure_output,
     resolve_structure_files,
+    submit_or_gather,
 )
+from chemgraph.mcp.job_tools import register_job_tools
 from chemgraph.mcp.server_utils import run_mcp_server
 from chemgraph.tools.parsl_tools import (
     mace_input_schema,
@@ -35,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 # ── Initialise execution backend ────────────────────────────────────────
 backend = get_backend()
+tracker = JobTracker()
 
 # ── MCP server ──────────────────────────────────────────────────────────
 mcp = FastMCP(
@@ -47,6 +50,10 @@ mcp = FastMCP(
         2. run_mace_ensemble: run MACE calculations over all structures in a
            directory using the configured execution backend.
         3. extract_output_json: load simulation results from a JSON file.
+        4. check_job_status: check progress of a submitted HPC job batch.
+        5. get_job_results: retrieve results from a completed job batch.
+        6. list_jobs: list all tracked job batches.
+        7. cancel_job: cancel pending tasks in a job batch.
 
         Guidelines:
         - Use each tool only when its input schema matches the user request.
@@ -55,8 +62,11 @@ mcp = FastMCP(
           defined in the schemas.
         - When returning paths, use absolute paths.
         - Energies are in eV and wall times are in seconds.
+        - When a tool returns status='submitted' with a batch_id, use
+          check_job_status to poll for progress before calling get_job_results.
     """,
 )
+register_job_tools(mcp, tracker, backend)
 
 
 def _run_mace_single(job: dict) -> dict:
@@ -138,6 +148,13 @@ async def run_mace_single(params: mace_input_schema):
         kwargs={"job": job},
     )
     fut = backend.submit(task)
+
+    if backend.is_async_remote:
+        task_meta = {"task_id": "mace_single"}
+        return await submit_or_gather(
+            backend, [(task_meta, fut)], tracker, "run_mace_single"
+        )
+
     return await asyncio.wrap_future(fut)
 
 
@@ -221,13 +238,21 @@ async def run_mace_ensemble(params: mace_input_schema_ensemble):
         }
         pending_tasks.append((task_meta, fut))
 
-    results = await gather_futures(pending_tasks, post_fn=_mace_post_fn)
+    result = await submit_or_gather(
+        backend, pending_tasks, tracker, "run_mace_ensemble",
+        post_fn=_mace_post_fn,
+    )
 
-    return {
-        "status": "success",
-        "n_structures": len(structure_files),
-        "results": results,
-    }
+    if result["status"] == "completed":
+        return {
+            "status": "success",
+            "n_structures": len(structure_files),
+            "results": result["results"],
+        }
+
+    # Async remote: return submission confirmation
+    result["n_structures"] = len(structure_files)
+    return result
 
 
 @mcp.tool(

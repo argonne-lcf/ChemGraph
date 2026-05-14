@@ -25,9 +25,11 @@ See Also
 
 from chemgraph.execution.base import ExecutionBackend, TaskSpec
 from chemgraph.execution.config import get_backend
+from chemgraph.execution.job_tracker import JobTracker
 
 __all__ = [
     "ExecutionBackend",
+    "JobTracker",
     "TaskSpec",
     "get_backend",
 ]
