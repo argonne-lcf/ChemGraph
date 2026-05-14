@@ -11,8 +11,10 @@ Key improvements over the original:
 - Uses shared utilities for structure resolution and result gathering.
 """
 
+import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -27,7 +29,6 @@ from chemgraph.mcp.server_utils import run_mcp_server
 from chemgraph.tools.parsl_tools import (
     mace_input_schema,
     mace_input_schema_ensemble,
-    run_mace_core,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,19 +60,85 @@ mcp = FastMCP(
 
 
 def _run_mace_single(job: dict) -> dict:
-    """Execute a single MACE simulation (runs on the worker)."""
+    """Execute a single MACE simulation (runs on the worker).
+
+    When the ``job`` dict contains an ``inline_structure`` key (with
+    ``numbers``, ``positions``, and optional ``cell``/``pbc``), the
+    structure is materialised as a temporary XYZ file on the worker
+    filesystem before running MACE.  This allows local-agent /
+    remote-worker workflows where the original file only exists on the
+    submitting machine.
+    """
+    import os
+    import tempfile
+
     from chemgraph.tools.parsl_tools import mace_input_schema, run_mace_core
 
+    inline = job.pop("inline_structure", None)
+    if inline is not None:
+        from ase import Atoms
+        from ase.io import write as ase_write
+
+        atoms = Atoms(
+            numbers=inline["numbers"],
+            positions=inline["positions"],
+            cell=inline.get("cell"),
+            pbc=inline.get("pbc"),
+        )
+        tmpdir = tempfile.mkdtemp(prefix="chemgraph_mace_")
+        xyz_path = os.path.join(tmpdir, "structure.xyz")
+        ase_write(xyz_path, atoms)
+        job["input_structure_file"] = xyz_path
+
+        if not os.path.isabs(job.get("output_result_file", "")):
+            job["output_result_file"] = os.path.join(
+                tmpdir, job.get("output_result_file", "output.json")
+            )
+
     params = mace_input_schema(**job) if isinstance(job, dict) else job
-    return run_mace_core(params)
+    result = run_mace_core(params)
+
+    # Embed full output JSON when running with inline structure so the
+    # caller does not need to read a file on the remote filesystem.
+    if inline is not None:
+        out_file = job.get("output_result_file", "")
+        if os.path.isfile(out_file):
+            import json as _json
+
+            with open(out_file, "r") as fh:
+                result["full_output"] = _json.load(fh)
+
+    return result
 
 
 @mcp.tool(
     name="run_mace_single",
     description="Run a single MACE calculation",
 )
-def run_mace_single(params: mace_input_schema):
-    return run_mace_core(params)
+async def run_mace_single(params: mace_input_schema):
+    """Run a single MACE calculation using the configured execution backend."""
+    job = params.model_dump()
+
+    # Read the local structure file and embed it so the job is
+    # self-contained and can run on any worker (local or remote).
+    input_file = job.get("input_structure_file")
+    if input_file and os.path.isfile(input_file):
+        from ase.io import read as ase_read
+
+        from chemgraph.tools.ase_core import atoms_to_atomsdata
+
+        atoms = ase_read(input_file)
+        atomsdata = atoms_to_atomsdata(atoms)
+        job["inline_structure"] = atomsdata.model_dump()
+
+    task = TaskSpec(
+        task_id="mace_single",
+        task_type="python",
+        callable=_run_mace_single,
+        kwargs={"job": job},
+    )
+    fut = backend.submit(task)
+    return await asyncio.wrap_future(fut)
 
 
 def _mace_post_fn(meta: dict, result) -> dict:
@@ -128,6 +195,17 @@ async def run_mace_ensemble(params: mace_input_schema_ensemble):
             "steps": params.steps,
             "optimizer": params.optimizer,
         }
+
+        # Embed structure data so the job works on remote workers that
+        # cannot access the local filesystem.
+        if struct_path.is_file():
+            from ase.io import read as ase_read
+
+            from chemgraph.tools.ase_core import atoms_to_atomsdata
+
+            atoms = ase_read(str(struct_path))
+            atomsdata = atoms_to_atomsdata(atoms)
+            job["inline_structure"] = atomsdata.model_dump()
 
         task = TaskSpec(
             task_id=f"mace_{struct_path.stem}",
