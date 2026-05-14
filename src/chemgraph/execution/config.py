@@ -124,6 +124,12 @@ def get_backend(
     backend_cfg = cfg.get(resolved_backend, {})
     merged_kwargs = {**backend_cfg, **kwargs}
 
+    # Globus Compute: fall back to GLOBUS_COMPUTE_ENDPOINT_ID env var
+    if resolved_backend == "globus_compute" and "endpoint_id" not in merged_kwargs:
+        env_id = os.getenv("GLOBUS_COMPUTE_ENDPOINT_ID")
+        if env_id:
+            merged_kwargs["endpoint_id"] = env_id
+
     # -- instantiate ----------------------------------------------------------
     logger.info(
         "Creating execution backend '%s' for system '%s'",
