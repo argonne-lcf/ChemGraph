@@ -16,7 +16,11 @@ import json
 import logging
 from concurrent.futures import Future
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
+
+if TYPE_CHECKING:
+    from chemgraph.execution.base import ExecutionBackend
+    from chemgraph.execution.job_tracker import JobTracker
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,7 @@ def resolve_structure_files(
 async def gather_futures(
     pending: list[tuple[dict, Future]],
     post_fn: Optional[Callable[[dict, Any], dict]] = None,
+    timeout: Optional[float] = None,
 ) -> list[dict]:
     """Await a list of ``(metadata, future)`` pairs concurrently.
 
@@ -96,11 +101,20 @@ async def gather_futures(
         successful future resolution.  Must return a ``dict`` to include
         in the results list.  When *None*, the raw result is merged with
         metadata.
+    timeout : float, optional
+        Maximum seconds to wait for all futures to resolve.  If the
+        timeout expires, an :class:`asyncio.TimeoutError` is raised.
+        When *None* (default), wait indefinitely.
 
     Returns
     -------
     list[dict]
         One result dict per task (successful or failed).
+
+    Raises
+    ------
+    asyncio.TimeoutError
+        If *timeout* is set and exceeded before all futures complete.
     """
 
     async def _wait(meta: dict, fut: Future) -> dict:
@@ -122,9 +136,62 @@ async def gather_futures(
                 "message": str(e),
             }
 
-    return list(
-        await asyncio.gather(*(_wait(meta, fut) for meta, fut in pending))
-    )
+    coro = asyncio.gather(*(_wait(meta, fut) for meta, fut in pending))
+    if timeout is not None:
+        return list(await asyncio.wait_for(coro, timeout=timeout))
+    return list(await coro)
+
+
+async def submit_or_gather(
+    backend: ExecutionBackend,
+    pending: list[tuple[dict, Future]],
+    tracker: JobTracker,
+    tool_name: str,
+    post_fn: Optional[Callable[[dict, Any], dict]] = None,
+) -> dict:
+    """Gather results or register for async tracking, depending on the backend.
+
+    When ``backend.is_async_remote`` is ``True``, the pending futures are
+    registered with the *tracker* and a submission confirmation is
+    returned immediately (non-blocking).  Otherwise, results are gathered
+    synchronously via :func:`gather_futures`.
+
+    Parameters
+    ----------
+    backend : ExecutionBackend
+        The active execution backend.
+    pending : list[tuple[dict, Future]]
+        Each element is ``(metadata_dict, future)``.
+    tracker : JobTracker
+        The job tracker instance to register batches with.
+    tool_name : str
+        Name of the MCP tool submitting the batch.
+    post_fn : callable, optional
+        Post-processing function for results.
+
+    Returns
+    -------
+    dict
+        Either ``{"status": "submitted", "batch_id": ..., ...}`` for
+        async backends, or ``{"status": "completed", "results": ...}``
+        for synchronous backends.
+    """
+    if backend.is_async_remote:
+        batch_id = tracker.register_batch(tool_name, pending, post_fn=post_fn)
+        return {
+            "status": "submitted",
+            "batch_id": batch_id,
+            "n_tasks": len(pending),
+            "message": (
+                f"Submitted {len(pending)} task(s) to remote HPC endpoint. "
+                f"Use check_job_status(batch_id='{batch_id}') to monitor "
+                f"progress, and get_job_results(batch_id='{batch_id}') to "
+                f"retrieve results once complete."
+            ),
+        }
+
+    results = await gather_futures(pending, post_fn=post_fn)
+    return {"status": "completed", "results": results}
 
 
 def write_results_jsonl(

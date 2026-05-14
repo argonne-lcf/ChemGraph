@@ -12,12 +12,14 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from chemgraph.execution import TaskSpec, get_backend
+from chemgraph.execution.job_tracker import JobTracker
 from chemgraph.execution.utils import (
-    gather_futures,
     make_per_structure_output,
     resolve_structure_files,
+    submit_or_gather,
     write_results_jsonl,
 )
+from chemgraph.mcp.job_tools import register_job_tools
 from chemgraph.mcp.server_utils import run_mcp_server
 from chemgraph.schemas.graspa_schema import graspa_input_schema_ensemble
 
@@ -25,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # ── Initialise execution backend ────────────────────────────────────────
 backend = get_backend()
+tracker = JobTracker()
 
 # ── MCP server ──────────────────────────────────────────────────────────
 mcp = FastMCP(
@@ -34,6 +37,10 @@ mcp = FastMCP(
         The available tools are:
         1. run_graspa_ensemble: run graspa calculations over all structures in a
            directory using the configured execution backend.
+        2. check_job_status: check progress of a submitted HPC job batch.
+        3. get_job_results: retrieve results from a completed job batch.
+        4. list_jobs: list all tracked job batches.
+        5. cancel_job: cancel pending tasks in a job batch.
 
         Guidelines:
         - Use each tool only when its input schema matches the user request.
@@ -42,8 +49,11 @@ mcp = FastMCP(
           defined in the schemas.
         - When returning paths, use absolute paths.
         - Energies are in eV and wall times are in seconds.
+        - When a tool returns status='submitted' with a batch_id, use
+          check_job_status to poll for progress before calling get_job_results.
     """,
 )
+register_job_tools(mcp, tracker, backend)
 
 
 def _run_graspa_single(job: dict) -> dict:
@@ -108,16 +118,23 @@ async def run_graspa_ensemble(
             }
             pending_tasks.append((task_meta, fut))
 
-    results = await gather_futures(pending_tasks)
-
-    summary_log_path = output_dir / "simulation_results.jsonl"
-    success_count, total_count = write_results_jsonl(results, summary_log_path)
-
-    return (
-        f"Ensemble execution completed. Ran {total_count} tasks "
-        f"({success_count} successful). "
-        f"Detailed results appended to '{summary_log_path}'."
+    result = await submit_or_gather(
+        backend, pending_tasks, tracker, "run_graspa_ensemble",
     )
+
+    if result["status"] == "completed":
+        summary_log_path = output_dir / "simulation_results.jsonl"
+        success_count, total_count = write_results_jsonl(
+            result["results"], summary_log_path,
+        )
+        return (
+            f"Ensemble execution completed. Ran {total_count} tasks "
+            f"({success_count} successful). "
+            f"Detailed results appended to '{summary_log_path}'."
+        )
+
+    # Async remote: return submission confirmation
+    return result
 
 
 if __name__ == "__main__":

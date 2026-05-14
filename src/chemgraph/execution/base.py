@@ -102,6 +102,14 @@ class ExecutionBackend(ABC):
     def __init__(self) -> None:
         self._initialized: bool = False
 
+    @property
+    def is_async_remote(self) -> bool:
+        """Whether this backend submits to a remote queue where jobs may
+        take minutes to hours.  When ``True``, MCP tools should return
+        immediately after submission and provide separate status/result
+        retrieval tools instead of blocking until completion."""
+        return False
+
     @abstractmethod
     def initialize(self, system: str = "local", **kwargs: Any) -> None:
         """Prepare the backend for accepting work.
