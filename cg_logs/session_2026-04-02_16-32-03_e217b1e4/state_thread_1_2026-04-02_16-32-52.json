@@ -1,0 +1,123 @@
+{
+    "timestamp": "2026-04-02T16:32:52.941916",
+    "model_name": "Llama 3.3 70b Instruct AWQ",
+    "thread_id": 1,
+    "git_commit": "fa237327522fa2e9d19a2cdfca934c02384b26ec",
+    "state": {
+        "messages": [
+            {
+                "content": "What is the SMILES string for caffeine?",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "type": "human",
+                "name": null,
+                "id": "a08eee7b-57f5-4c74-a891-cf4285bc1cb5"
+            },
+            {
+                "content": "",
+                "additional_kwargs": {
+                    "refusal": null
+                },
+                "response_metadata": {
+                    "token_usage": {
+                        "completion_tokens": 28,
+                        "prompt_tokens": 6918,
+                        "total_tokens": 6946,
+                        "completion_tokens_details": null,
+                        "prompt_tokens_details": null
+                    },
+                    "model_provider": "openai",
+                    "model_name": "casperhansen/llama-3.3-70b-instruct-awq",
+                    "system_fingerprint": null,
+                    "id": "chatcmpl-99eb478667c4a2fe",
+                    "finish_reason": "tool_calls",
+                    "logprobs": null
+                },
+                "type": "ai",
+                "name": null,
+                "id": "lc_run--019d4e9c-703e-7e40-acd8-6e49c1540c0d-0",
+                "tool_calls": [
+                    {
+                        "name": "molecule_name_to_smiles",
+                        "args": {
+                            "name": "caffeine"
+                        },
+                        "id": "chatcmpl-tool-a08deb151e985552",
+                        "type": "tool_call"
+                    }
+                ],
+                "invalid_tool_calls": [],
+                "usage_metadata": {
+                    "input_tokens": 6918,
+                    "output_tokens": 28,
+                    "total_tokens": 6946,
+                    "input_token_details": {},
+                    "output_token_details": {}
+                }
+            },
+            {
+                "content": "{\"name\": \"caffeine\", \"smiles\": \"CN1C=NC2=C1C(=O)N(C(=O)N2C)C\"}",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "type": "tool",
+                "name": "molecule_name_to_smiles",
+                "id": "5ba6695b-d457-4fc6-a281-a65791b9b058",
+                "tool_call_id": "chatcmpl-tool-a08deb151e985552",
+                "artifact": null,
+                "status": "success"
+            },
+            {
+                "content": "",
+                "additional_kwargs": {
+                    "refusal": null
+                },
+                "response_metadata": {
+                    "token_usage": {
+                        "completion_tokens": 28,
+                        "prompt_tokens": 7259,
+                        "total_tokens": 7287,
+                        "completion_tokens_details": null,
+                        "prompt_tokens_details": null
+                    },
+                    "model_provider": "openai",
+                    "model_name": "casperhansen/llama-3.3-70b-instruct-awq",
+                    "system_fingerprint": null,
+                    "id": "chatcmpl-b48114f8a79d43b7",
+                    "finish_reason": "tool_calls",
+                    "logprobs": null
+                },
+                "type": "ai",
+                "name": null,
+                "id": "lc_run--019d4e9c-76af-7cf2-bb81-f5d3824ced7a-0",
+                "tool_calls": [
+                    {
+                        "name": "molecule_name_to_smiles",
+                        "args": {
+                            "name": "caffeine"
+                        },
+                        "id": "chatcmpl-tool-a4695ae51a238479",
+                        "type": "tool_call"
+                    }
+                ],
+                "invalid_tool_calls": [],
+                "usage_metadata": {
+                    "input_tokens": 7259,
+                    "output_tokens": 28,
+                    "total_tokens": 7287,
+                    "input_token_details": {},
+                    "output_token_details": {}
+                }
+            },
+            {
+                "content": "{\"answer\":\"CN1C=NC2=C1C(=O)N(C(=O)N2C)C\"}",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "type": "human",
+                "name": null,
+                "id": "2e98ebc2-9975-42e7-adc1-dc1322795399"
+            }
+        ]
+    },
+    "system_prompt": "You are an expert in computational chemistry, using advanced tools to solve complex problems.\n\nInstructions:\n1. Extract all relevant inputs from the user's query, such as SMILES strings, molecule names, methods, software, properties, and conditions.\n2. If a tool is needed, call it using the correct schema.\n3. Base all responses strictly on actual tool outputs\u2014never fabricate results, coordinates or SMILES string.\n4. Review previous tool outputs. If they indicate failure, retry the tool with adjusted inputs if possible.\n5. Use available simulation data directly. If data is missing, clearly state that a tool call is required.\n6. If no tool call is needed, respond using factual domain knowledge.\n",
+    "formatter_prompt": "You are an agent responsible for formatting the final output based on both the user\u2019s intent and the actual results from prior agents. Your top priority is to accurately extract and interpret **the correct values from previous agent outputs** \u2014 do not fabricate or infer values beyond what has been explicitly provided.\n\nFollow these rules for selecting the output type:\n\n1. Use `str` for:\n   - SMILES strings\n   - Yes/No questions\n   - General explanatory or descriptive responses\n\n2. Use `AtomsData` if the result contains:\n   - Atomic positions\n   - Element numbers or symbols\n   - Cell dimensions\n   - Any representation of molecular structure or geometry\n\n3. Use `VibrationalFrequency` for vibrational mode outputs:\n   - Must contain a list or array of frequencies (typically in cm\u207b\u00b9)\n   - Do **not** use `ScalarResult` for these \u2014 frequencies are not single-valued\n\n4. Use `ScalarResult` only for a single numeric value representing:\n   - Enthalpy\n   - Entropy\n   - Gibbs free energy\n   - Any other scalar thermodynamic or energetic quantity\n\nAdditional instructions:\n- Carefully check that the values you format are present in the **actual output of prior tools or agents**.\n- Pay close attention to whether the desired result is a **list vs. a scalar**, and choose the correct format accordingly.\n"
+}

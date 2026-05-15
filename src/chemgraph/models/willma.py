@@ -13,7 +13,6 @@ def load_willma_model(
     model_name: str,
     temperature: float,
     api_key: str = None,
-    prompt: str = None,
 ) -> ChatWillma:
     """Load an Willma chat model into LangChain.
 
@@ -76,7 +75,7 @@ def load_willma_model(
             model=model_name,
             temperature=temperature,
             api_key=api_key,
-            max_output_tokens=6000,
+            # max_output_tokens=6000,
         )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")
@@ -89,7 +88,7 @@ def load_willma_model(
             api_key = getpass("Please enter a valid Willma API key: ")
             os.environ["AIHUB_API_KEY"] = api_key
             # Retry with new API key
-            return load_willma_model(model_name, temperature, api_key, prompt)
+            return load_willma_model(model_name, temperature, api_key)
         else:
             logger.error(f"Error loading Willma model: {str(e)}")
             raise

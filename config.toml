@@ -1,5 +1,5 @@
 [general]
-model = "gemini-2.5-flash"
+model = "Llama 3.3 70b Instruct AWQ"
 workflow = "single_agent"
 output = "state"
 structured = true
@@ -24,6 +24,10 @@ cache_expiry = 24
 validate_keys = true
 rate_limit = true
 max_requests_per_minute = 60
+
+[api.surfai]
+base_url = "https://willma.surf.nl/api/v0"
+timeout = 30
 
 [api.openai]
 base_url = "https://api.openai.com/v1"

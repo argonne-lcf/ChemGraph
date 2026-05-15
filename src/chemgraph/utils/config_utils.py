@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 from chemgraph.models.supported_models import (
     all_supported_models,
+    supported_surfai_models,
     supported_anthropic_models,
     supported_argo_models,
     supported_gemini_models,
@@ -66,7 +67,8 @@ def get_base_url_for_model_from_nested_config(
 ) -> Optional[str]:
     """Resolve provider base URL using nested config structure."""
     api = config.get("api", {})
-
+    if model_name in supported_surfai_models:
+        return api.get("surfai", {}).get("base_url")
     if model_name in supported_openai_models or model_name in supported_argo_models:
         return normalize_openai_base_url(api.get("openai", {}).get("base_url"))
     if model_name in supported_anthropic_models:
@@ -82,6 +84,8 @@ def get_base_url_for_model_from_flat_config(
     model_name: str, config: Dict[str, Any]
 ) -> Optional[str]:
     """Resolve provider base URL using flattened config keys."""
+    if model_name in supported_surfai_models:
+        return config.get("api_surfai_base_url")
     if model_name in supported_openai_models or model_name in supported_argo_models:
         return normalize_openai_base_url(config.get("api_openai_base_url"))
     if model_name in supported_anthropic_models:

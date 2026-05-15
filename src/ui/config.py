@@ -61,7 +61,7 @@ def get_default_config() -> Dict[str, Any]:
     """Return default configuration."""
     return {
         "general": {
-            "model": "gpt-4o-mini",
+            "model": "Llama 3.3 70b Instruct AWQ",
             "workflow": "single_agent",
             "output": "state",
             "structured": False,
@@ -71,12 +71,19 @@ def get_default_config() -> Dict[str, Any]:
             "verbose": False,
         },
         "api": {
+            "surfai": {
+                "base_url": "https://willma.surf.nl/api/v0", 
+                "timeout": 30
+            },
             "openai": {
                 "base_url": "https://api.openai.com/v1",
                 "timeout": 30,
                 "argo_user": "",
             },
-            "anthropic": {"base_url": "https://api.anthropic.com", "timeout": 30},
+            "anthropic": {
+                "base_url": "https://api.anthropic.com",
+                "timeout": 30
+            },
             "google": {
                 "base_url": "https://generativelanguage.googleapis.com/v1beta",
                 "timeout": 30,

@@ -16,9 +16,9 @@ supported_surfai_models = [
     "DeepSeek Distilled Llama 70B", 
     "Llama 3.3 70b Instruct AWQ", 
     "LLaVa 1.5 7B", 
-    "Qwen 2.5 Coder 32B Instruct AWQ", 
+    "Qwen2.5 Coder 32B Instruct AWQ", 
     "default-text-large", 
-    "Qwen 2.5 VL 32B Instruct AWQ", 
+    "Qwen2.5 VL 32B Instruct AWQ", 
     "SmolVLM 2 Instruct 2.2B", 
     "DeepSeek 2 VL 4.5B", 
     "default-text-medium", 
@@ -161,7 +161,8 @@ supported_argo_models = [
 ]
 
 all_supported_models = (
-    supported_openai_models
+    supported_surfai_models
+    + supported_openai_models
     + supported_ollama_models
     + supported_alcf_models
     + supported_anthropic_models
