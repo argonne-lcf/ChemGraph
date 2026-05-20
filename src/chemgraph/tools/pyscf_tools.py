@@ -1,6 +1,6 @@
 """Core PySCF helpers for ChemGraph MCP tools.
 
-This module intentionally contains plain Python functions.  MCP wrappers live in
+This module intentionally contains plain Python functions. MCP wrappers live in
 ``chemgraph.mcp.mcp_tools`` and should delegate here.
 """
 
@@ -9,29 +9,43 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, get_args
+from typing import Any, Mapping, Optional
 
 import numpy as np
+from ase.calculators.calculator import Calculator, all_changes
 
 from chemgraph.schemas.pyscf_schema import (
+    PySCFCrystalReference,
+    PySCFCrystalSpec,
     PySCFDevice,
-    PySCFMolecularInput,
-    PySCFPostHF,
-    PySCFPeriodicInput,
-    PySCFProperty,
-    PySCFPropertyInput,
-    PySCFReference,
-    PySCFRecipeInput,
-    StructureInput,
+    PySCFDriver,
+    PySCFMoleculeReference,
+    PySCFMoleculeSpec,
+    PySCFUnit,
 )
 
 HARTREE_TO_EV = 27.211386245988
+BOHR_TO_ANGSTROM = 0.529177210903
+HARTREE_PER_BOHR_TO_EV_PER_ANGSTROM = HARTREE_TO_EV / BOHR_TO_ANGSTROM
+
+_MOLECULE_DRIVER_ALIASES = {
+    "energy": "energy",
+    "single_point": "energy",
+    "sp": "energy",
+    "optimization": "optimization",
+    "opt": "optimization",
+    "vibration": "vibration",
+    "vib": "vibration",
+    "thermochemistry": "thermochemistry",
+    "thermo": "thermochemistry",
+}
 
 
 def _resolve_path(path: str) -> str:
-    """Resolve paths under ``CHEMGRAPH_LOG_DIR`` when configured."""
+    """Resolve relative paths under ``CHEMGRAPH_LOG_DIR`` when configured."""
     log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
     if log_dir and not os.path.isabs(path):
         os.makedirs(log_dir, exist_ok=True)
@@ -59,27 +73,21 @@ def _apply_pyscf_device(obj: Any, device: str, label: str):
     if device == "cpu":
         return obj
 
-    if device == "cuda":
+    if device == "gpu":
         if importlib.util.find_spec("gpu4pyscf") is None:
             raise ImportError(
-                "PySCF CUDA execution requires gpu4pyscf, but gpu4pyscf is "
+                "PySCF GPU execution requires gpu4pyscf, but gpu4pyscf is "
                 "not installed. Install a gpu4pyscf package compatible with "
-                "your CUDA stack, then retry with device='cuda'."
+                "your CUDA stack, then retry with device='gpu'."
             )
 
         to_gpu = getattr(obj, "to_gpu", None)
         if not callable(to_gpu):
             raise NotImplementedError(
-                f"PySCF CUDA execution is not available for {label}; the "
+                f"PySCF GPU execution is not available for {label}; the "
                 "object does not expose a callable .to_gpu() method."
             )
         return to_gpu()
-
-    if device == "xpu":
-        raise NotImplementedError(
-            "PySCF XPU execution is not implemented in ChemGraph yet. "
-            "Use device='cpu' or a supported CUDA/gpu4pyscf setup."
-        )
 
     raise ValueError(f"Unsupported PySCF device: {device}")
 
@@ -93,11 +101,11 @@ def _to_builtin(value: Any) -> Any:
     if type(value).__module__.startswith("cupy") and hasattr(value, "get"):
         return _to_builtin(value.get())
     if isinstance(value, np.ndarray):
-        return value.tolist()
+        return _to_builtin(value.tolist())
     if isinstance(value, np.generic):
         return value.item()
     if isinstance(value, complex):
-        return {"real": value.real, "imag": value.imag}
+        return {"real": float(value.real), "imag": float(value.imag)}
     return value
 
 
@@ -109,55 +117,42 @@ def _json_dump(data: dict, output_json: str) -> str:
     return str(path.resolve())
 
 
-def _write_result(data: dict, output_json: str) -> str:
-    """Write a result dict and include the artifact path in the file itself."""
-    output_abs = str(Path(output_json).resolve())
+def _write_result(data: dict, output_json: Optional[str]) -> Optional[str]:
+    if not output_json:
+        return None
+    output_abs = str(Path(_resolve_path(output_json)).resolve())
     data.setdefault("artifacts", {})["output_json"] = output_abs
     return _json_dump(data, output_abs)
 
 
-def _output_path(output_dir: str, output_json: str) -> str:
-    resolved_dir = Path(_resolve_path(output_dir)).resolve()
-    output_path = Path(output_json)
-    if output_path.is_absolute():
-        return str(output_path)
-    return str(resolved_dir / output_path)
+def _read_json_artifact(json_file: str) -> dict:
+    path = Path(_resolve_path(json_file)).expanduser()
+    if not path.exists():
+        raise FileNotFoundError(f"PySCF JSON artifact not found: {path}")
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"PySCF JSON artifact must contain a JSON object: {path}")
+    return data
 
 
-def _structure_to_atom_input(structure: StructureInput, unit: str):
-    if structure.atom:
-        return structure.atom
-
-    if not structure.input_structure_file:
-        raise ValueError("No structure source provided.")
-
+def _read_ase_structure(structure_file: str, fmt: Optional[str] = None):
     from ase.io import read as ase_read
 
-    path = Path(structure.input_structure_file)
+    path = Path(_resolve_path(structure_file)).expanduser()
     if not path.exists():
         raise FileNotFoundError(f"Structure file not found: {path}")
-
-    atoms = ase_read(str(path), format=structure.fmt)
-    atom_spec = [
-        (symbol, tuple(float(x) for x in pos))
-        for symbol, pos in zip(atoms.get_chemical_symbols(), atoms.positions)
-    ]
-    return atom_spec
+    return ase_read(str(path), format=fmt), str(path.resolve())
 
 
-def _structure_cell_vectors(structure: StructureInput) -> Optional[list[list[float]]]:
-    if structure.lattice_vectors is not None:
-        return structure.lattice_vectors
-    if not structure.input_structure_file:
-        return None
-
-    from ase.io import read as ase_read
-
-    atoms = ase_read(structure.input_structure_file, format=structure.fmt)
-    cell = atoms.cell.tolist()
-    if not cell or not any(any(abs(x) > 1e-12 for x in row) for row in cell):
-        return None
-    return cell
+def _ase_atoms_payload(atoms) -> dict:
+    return {
+        "symbols": list(atoms.get_chemical_symbols()),
+        "positions": _to_builtin(np.asarray(atoms.get_positions(), dtype=float)),
+        "cell": _to_builtin(np.asarray(atoms.cell.array, dtype=float)),
+        "pbc": [bool(x) for x in atoms.pbc],
+        "formula": atoms.get_chemical_formula(),
+    }
 
 
 def _energy_payload(energy_hartree: Optional[float]) -> dict:
@@ -169,25 +164,113 @@ def _energy_payload(energy_hartree: Optional[float]) -> dict:
     }
 
 
-def _build_molecule(params: PySCFMolecularInput | PySCFRecipeInput):
+def _energy_payload_from_ev(energy_ev: Optional[float]) -> dict:
+    if energy_ev is None:
+        return {"hartree": None, "eV": None}
+    return {
+        "hartree": float(energy_ev) / HARTREE_TO_EV,
+        "eV": float(energy_ev),
+    }
+
+
+def _normalise_driver(driver: str) -> str:
+    normalised = _MOLECULE_DRIVER_ALIASES.get(driver.lower())
+    if normalised is None:
+        allowed = ", ".join(sorted(_MOLECULE_DRIVER_ALIASES))
+        raise ValueError(
+            f"Unsupported PySCF driver '{driver}'. Allowed values: {allowed}"
+        )
+    return normalised
+
+
+def _coerce_molecule_spec(pyscf_molecule: Mapping[str, Any] | PySCFMoleculeSpec):
+    if isinstance(pyscf_molecule, PySCFMoleculeSpec):
+        return pyscf_molecule
+    data = dict(pyscf_molecule)
+    if "pyscf_molecule" in data:
+        data = data["pyscf_molecule"]
+    return PySCFMoleculeSpec.model_validate(data)
+
+
+def _coerce_crystal_spec(pyscf_crystal: Mapping[str, Any] | PySCFCrystalSpec):
+    if isinstance(pyscf_crystal, PySCFCrystalSpec):
+        return pyscf_crystal
+    data = dict(pyscf_crystal)
+    if "pyscf_crystal" in data:
+        data = data["pyscf_crystal"]
+    return PySCFCrystalSpec.model_validate(data)
+
+
+def _resolve_molecule_spec(
+    pyscf_molecule: Mapping[str, Any] | PySCFMoleculeSpec | None,
+    pyscf_molecule_json: Optional[str],
+) -> tuple[PySCFMoleculeSpec, Optional[str]]:
+    if pyscf_molecule is None:
+        if not pyscf_molecule_json:
+            raise ValueError(
+                "run_pyscf_molecule requires either pyscf_molecule or "
+                "pyscf_molecule_json."
+            )
+        loaded = _read_json_artifact(pyscf_molecule_json)
+        return _coerce_molecule_spec(loaded), str(
+            Path(_resolve_path(pyscf_molecule_json)).expanduser().resolve()
+        )
+    return _coerce_molecule_spec(pyscf_molecule), None
+
+
+def _resolve_crystal_spec(
+    pyscf_crystal: Mapping[str, Any] | PySCFCrystalSpec | None,
+    pyscf_crystal_json: Optional[str],
+) -> tuple[PySCFCrystalSpec, Optional[str]]:
+    if pyscf_crystal is None:
+        if not pyscf_crystal_json:
+            raise ValueError(
+                "run_pyscf_crystal requires either pyscf_crystal or "
+                "pyscf_crystal_json."
+            )
+        loaded = _read_json_artifact(pyscf_crystal_json)
+        return _coerce_crystal_spec(loaded), str(
+            Path(_resolve_path(pyscf_crystal_json)).expanduser().resolve()
+        )
+    return _coerce_crystal_spec(pyscf_crystal), None
+
+
+def _atom_tuples(symbols: list[str], positions: list[list[float]]):
+    return [
+        (symbol, tuple(float(x) for x in position))
+        for symbol, position in zip(symbols, positions)
+    ]
+
+
+def _build_molecule(
+    spec: PySCFMoleculeSpec,
+    positions: Optional[list[list[float]]] = None,
+):
     from pyscf import gto
 
-    atom = _structure_to_atom_input(params.structure, params.unit)
+    atom_positions = positions if positions is not None else spec.positions
     return gto.M(
-        atom=atom,
-        basis=params.basis,
-        unit=params.unit,
-        charge=params.charge,
-        spin=params.spin,
-        verbose=params.verbose,
-        max_memory=params.max_memory,
+        atom=_atom_tuples(spec.symbols, atom_positions),
+        basis=spec.basis,
+        unit=spec.unit,
+        charge=spec.charge,
+        spin=spec.spin,
+        verbose=spec.verbose,
+        max_memory=spec.max_memory,
     )
 
 
-def _build_scf_method(mol, params: PySCFMolecularInput | PySCFRecipeInput):
+def _build_molecule_scf(
+    spec: PySCFMoleculeSpec,
+    mol,
+    *,
+    max_cycle: int,
+    conv_tol: float,
+    chkfile: Optional[str] = None,
+):
     from pyscf import dft, scf
 
-    reference = params.reference.upper()
+    reference = spec.reference.upper()
     if reference == "RHF":
         mf = scf.RHF(mol)
     elif reference == "UHF":
@@ -196,248 +279,65 @@ def _build_scf_method(mol, params: PySCFMolecularInput | PySCFRecipeInput):
         mf = scf.ROHF(mol)
     elif reference == "RKS":
         mf = dft.RKS(mol)
-        mf.xc = getattr(params, "xc", None) or "b3lyp"
+        mf.xc = spec.xc or "b3lyp"
     elif reference == "UKS":
         mf = dft.UKS(mol)
-        mf.xc = getattr(params, "xc", None) or "b3lyp"
+        mf.xc = spec.xc or "b3lyp"
     else:
         raise ValueError(f"Unsupported molecular PySCF reference: {reference}")
 
-    mf.max_cycle = params.max_cycle
-    mf.conv_tol = params.conv_tol
-
-    chkfile = getattr(params, "chkfile", None)
-    if not chkfile:
-        chkfile = str(Path(_resolve_path(params.output_dir)).resolve() / "pyscf.chk")
-    chkfile_path = Path(chkfile)
-    chkfile_path.parent.mkdir(parents=True, exist_ok=True)
-    mf.chkfile = str(chkfile_path)
+    mf.max_cycle = max_cycle
+    mf.conv_tol = conv_tol
+    if chkfile:
+        chkfile_path = Path(_resolve_path(chkfile)).resolve()
+        chkfile_path.parent.mkdir(parents=True, exist_ok=True)
+        mf.chkfile = str(chkfile_path)
     return mf
 
 
-def _run_post_hf(mf, methods: Iterable[str]) -> dict:
-    results: Dict[str, dict] = {}
-    ccsd_obj = None
+def _build_cell(
+    spec: PySCFCrystalSpec,
+    positions: Optional[list[list[float]]] = None,
+):
+    from pyscf.pbc import gto
 
-    for method in methods:
-        method_key = method.upper()
-        if method_key == "MP2":
-            mymp = mf.MP2()
-            e_corr, _ = mymp.kernel()
-            e_tot = getattr(mymp, "e_tot", None)
-            if e_tot is None:
-                e_tot = mf.e_tot + e_corr
-            results["MP2"] = {
-                "correlation_energy_hartree": float(e_corr),
-                "total_energy": _energy_payload(float(e_tot)),
-            }
-        elif method_key == "CCSD":
-            ccsd_obj = mf.CCSD()
-            e_corr, _, _ = ccsd_obj.kernel()
-            results["CCSD"] = {
-                "correlation_energy_hartree": float(e_corr),
-                "total_energy": _energy_payload(float(ccsd_obj.e_tot)),
-                "converged": bool(getattr(ccsd_obj, "converged", False)),
-            }
-        elif method_key == "CCSD(T)":
-            if ccsd_obj is None:
-                ccsd_obj = mf.CCSD()
-                ccsd_obj.kernel()
-            triples_corr = ccsd_obj.ccsd_t()
-            e_tot = ccsd_obj.e_tot + triples_corr
-            results["CCSD(T)"] = {
-                "triples_correction_hartree": float(triples_corr),
-                "total_energy": _energy_payload(float(e_tot)),
-            }
-        else:
-            raise ValueError(f"Unsupported post-HF method: {method}")
-
-    return results
-
-
-def _run_properties(mol, mf, properties: Iterable[str]) -> dict:
-    results: Dict[str, Any] = {}
-
-    for prop in properties:
-        prop_key = prop.lower()
-        if prop_key == "dipole":
-            results["dipole"] = {
-                "value": _to_builtin(mf.dip_moment(unit="Debye", verbose=0)),
-                "unit": "Debye",
-            }
-        elif prop_key in {"population", "mulliken_population"}:
-            pop, charges = mf.mulliken_pop(verbose=0)
-            results["mulliken_population"] = {
-                "population": _to_builtin(pop),
-                "charges": _to_builtin(charges),
-            }
-        elif prop_key == "mo_energy":
-            results["mo_energy"] = {
-                "value": _to_builtin(getattr(mf, "mo_energy", None)),
-                "unit": "Hartree",
-            }
-        elif prop_key == "gradient":
-            grad = mf.nuc_grad_method().kernel()
-            results["gradient"] = {
-                "value": _to_builtin(grad),
-                "unit": "Hartree/Bohr",
-            }
-        else:
-            raise ValueError(f"Unsupported PySCF property: {prop}")
-
-    return results
-
-
-def _schema_literal_values(model_cls: type, field_name: str) -> list[str]:
-    """Return string values from a Pydantic field annotated as a Literal."""
-    return [
-        str(value) for value in get_args(model_cls.model_fields[field_name].annotation)
-    ]
-
-
-def get_pyscf_capability_manifest_core() -> dict:
-    """Return the supported PySCF MCP surface and current v0 limitations."""
-    return {
-        "status": "success",
-        "manifest": "pyscf_capability_manifest",
-        "pyscf_available": _pyscf_available(),
-        "tools": {
-            "run_pyscf_molecular": {
-                "status": "implemented",
-                "devices": list(get_args(PySCFDevice)),
-                "references": list(get_args(PySCFReference)),
-                "post_hf": list(get_args(PySCFPostHF)),
-                "properties": list(get_args(PySCFProperty)),
-            },
-            "run_pyscf_periodic": {
-                "status": "minimal",
-                "devices": list(get_args(PySCFDevice)),
-                "references": _schema_literal_values(PySCFPeriodicInput, "reference"),
-            },
-            "run_pyscf_recipe": {
-                "status": "minimal",
-                "devices": list(get_args(PySCFDevice)),
-                "recipes": _schema_literal_values(PySCFRecipeInput, "recipe"),
-            },
-            "run_pyscf_property": {
-                "status": "implemented",
-                "scope": "extract properties already stored in a PySCF result JSON",
-            },
-            "extract_pyscf_output": {
-                "status": "implemented",
-                "scope": "load a PySCF result JSON",
-            },
-        },
-        "limitations": [
-            "No arbitrary run_pyscf_code tool is exposed.",
-            (
-                "Solvent, QMMM, TDDFT, scans, and advanced active-space "
-                "workflows are recipe candidates, not generic free-form execution."
-            ),
-            (
-                "Periodic support is intentionally minimal and should be "
-                "expanded with reference tests before production use."
-            ),
-            (
-                "PySCF device='cuda' requires gpu4pyscf and uses PySCF's "
-                ".to_gpu() path. device='xpu' is accepted by schema but raises "
-                "until a real PySCF XPU backend is wired."
-            ),
-        ],
-    }
-
-
-def run_pyscf_molecular_core(params: PySCFMolecularInput) -> dict:
-    """Run a molecular PySCF calculation and write a JSON artifact."""
-    started_at = time.time()
-    output_json = _output_path(params.output_dir, params.output_json)
-
-    if params.solvent is not None:
-        raise NotImplementedError("solvent is reserved for a future PySCF recipe.")
-
-    pyscf = _require_pyscf()
-    mol = _build_molecule(params)
-    mf = _build_scf_method(mol, params)
-    mf = _apply_pyscf_device(mf, params.device, "molecular SCF")
-    mol = getattr(mf, "mol", mol)
-    energy = mf.kernel()
-
-    post_hf_results = _run_post_hf(mf, params.post_hf)
-    property_results = _run_properties(mol, mf, params.properties)
-
-    result = {
-        "status": "success",
-        "calculation": "pyscf_molecular",
-        "pyscf_version": getattr(pyscf, "__version__", "unknown"),
-        "input": params.model_dump(),
-        "molecule": {
-            "natoms": int(mol.natm),
-            "nelectron": int(mol.nelectron),
-            "charge": int(mol.charge),
-            "spin": int(mol.spin),
-            "basis": params.basis,
-            "unit": params.unit,
-        },
-        "scf": {
-            "reference": params.reference,
-            "xc": params.xc if params.reference in {"RKS", "UKS"} else None,
-            "converged": bool(mf.converged),
-            "total_energy": _energy_payload(float(energy)),
-            "energy_unit": "Hartree",
-            "cycles": getattr(mf, "cycles", None),
-        },
-        "post_hf": post_hf_results,
-        "properties": property_results,
-        "artifacts": {
-            "chkfile": str(Path(mf.chkfile).resolve()) if mf.chkfile else None,
-        },
-        "wall_time": time.time() - started_at,
-    }
-    _write_result(result, output_json)
-    return result
-
-
-def run_pyscf_periodic_core(params: PySCFPeriodicInput) -> dict:
-    """Run a minimal periodic PySCF HF/DFT calculation."""
-    started_at = time.time()
-    output_json = _output_path(params.output_dir, params.output_json)
-
-    pyscf = _require_pyscf()
-    from pyscf.pbc import dft, gto, scf
-
-    atom = _structure_to_atom_input(params.structure, params.unit)
-    lattice_vectors = _structure_cell_vectors(params.structure)
-    if lattice_vectors is None:
-        raise ValueError(
-            "Periodic calculations require lattice_vectors or a structure "
-            "file with a nonzero cell."
-        )
-
+    atom_positions = positions if positions is not None else spec.positions
     cell = gto.Cell()
-    cell.atom = atom
-    cell.a = lattice_vectors
-    cell.basis = params.basis
-    cell.pseudo = params.pseudo
-    cell.unit = params.unit
-    cell.charge = params.charge
-    cell.spin = params.spin
-    cell.verbose = params.verbose
-    cell.max_memory = params.max_memory
+    cell.atom = _atom_tuples(spec.symbols, atom_positions)
+    cell.a = spec.lattice_vectors
+    cell.basis = spec.basis
+    cell.pseudo = spec.pseudo
+    cell.unit = spec.unit
+    cell.charge = spec.charge
+    cell.spin = spec.spin
+    cell.verbose = spec.verbose
+    cell.max_memory = spec.max_memory
     cell.build()
+    return cell
 
-    reference = params.reference.upper()
+
+def _build_crystal_scf(
+    spec: PySCFCrystalSpec,
+    cell,
+    *,
+    max_cycle: int,
+    conv_tol: float,
+):
+    from pyscf.pbc import dft, scf
+
+    reference = spec.reference.upper()
     if reference.startswith("K"):
-        kpts = cell.make_kpts(params.kpts)
+        kpts = cell.make_kpts(spec.kpts)
         if reference == "KRHF":
             mf = scf.KRHF(cell, kpts=kpts)
         elif reference == "KUHF":
             mf = scf.KUHF(cell, kpts=kpts)
         elif reference == "KRKS":
             mf = dft.KRKS(cell, kpts=kpts)
-            mf.xc = params.xc or "pbe"
+            mf.xc = spec.xc or "pbe"
         elif reference == "KUKS":
             mf = dft.KUKS(cell, kpts=kpts)
-            mf.xc = params.xc or "pbe"
+            mf.xc = spec.xc or "pbe"
         else:
             raise ValueError(f"Unsupported periodic PySCF reference: {reference}")
     else:
@@ -447,130 +347,475 @@ def run_pyscf_periodic_core(params: PySCFPeriodicInput) -> dict:
             mf = scf.UHF(cell)
         elif reference == "RKS":
             mf = dft.RKS(cell)
-            mf.xc = params.xc or "pbe"
+            mf.xc = spec.xc or "pbe"
         elif reference == "UKS":
             mf = dft.UKS(cell)
-            mf.xc = params.xc or "pbe"
+            mf.xc = spec.xc or "pbe"
         else:
             raise ValueError(f"Unsupported periodic PySCF reference: {reference}")
 
-    mf.max_cycle = params.max_cycle
-    mf.conv_tol = params.conv_tol
-    mf = _apply_pyscf_device(mf, params.device, "periodic SCF")
-    energy = mf.kernel()
+    mf.max_cycle = max_cycle
+    mf.conv_tol = conv_tol
+    return mf
 
+
+def _atoms_from_molecule_spec(spec: PySCFMoleculeSpec):
+    from ase import Atoms
+
+    return Atoms(symbols=spec.symbols, positions=spec.positions)
+
+
+def _atoms_from_crystal_spec(spec: PySCFCrystalSpec):
+    from ase import Atoms
+
+    return Atoms(
+        symbols=spec.symbols,
+        positions=spec.positions,
+        cell=spec.lattice_vectors,
+        pbc=spec.pbc,
+    )
+
+
+def _is_linear_atoms(atoms, tol: float = 1e-3) -> bool:
+    if len(atoms) <= 2:
+        return len(atoms) == 2
+    coords = np.asarray(atoms.get_positions(), dtype=float)
+    centered = coords - np.mean(coords, axis=0)
+    _, singular_values, _ = np.linalg.svd(centered)
+    if singular_values[0] == 0:
+        return False
+    return bool((singular_values[1] / singular_values[0]) < tol)
+
+
+def _run_optimizer(atoms, optimizer: str, fmax: float, steps: int) -> bool:
+    from ase.optimize import BFGS, FIRE, LBFGS, MDMin
+
+    optimizers = {
+        "bfgs": BFGS,
+        "lbfgs": LBFGS,
+        "fire": FIRE,
+        "mdmin": MDMin,
+    }
+    optimizer_cls = optimizers.get(optimizer.lower())
+    if optimizer_cls is None:
+        raise ValueError(
+            "Unsupported optimizer: "
+            f"{optimizer}. Allowed values: {', '.join(sorted(optimizers))}"
+        )
+    if len(atoms) <= 1:
+        return True
+    dyn = optimizer_cls(atoms, logfile=None)
+    return bool(dyn.run(fmax=fmax, steps=steps))
+
+
+def _run_vibrations(atoms, displacement: float) -> dict:
+    from ase import units
+    from ase.vibrations import Vibrations
+
+    with tempfile.TemporaryDirectory(prefix="chemgraph_pyscf_vib_") as tmpdir:
+        vib = Vibrations(atoms, name=os.path.join(tmpdir, "vib"), delta=displacement)
+        vib.clean()
+        vib.run()
+        energies = vib.get_energies()
+
+    frequencies_cm = [energy / units.invcm for energy in energies]
+    return {
+        "n_modes": len(energies),
+        "frequencies_cm-1": _to_builtin(frequencies_cm),
+        "energies_meV": _to_builtin([energy * 1000.0 for energy in energies]),
+        "frequency_unit": "cm-1",
+        "energy_unit": "meV",
+        "_ase_vib_energies_eV": energies,
+    }
+
+
+def _run_ideal_gas_thermochemistry(
+    atoms,
+    vib_energies,
+    *,
+    temperature: float,
+    pressure: float,
+    symmetry_number: int,
+) -> dict:
+    from ase.thermochemistry import IdealGasThermo
+
+    potential_energy = float(atoms.get_potential_energy())
+    if len(atoms) == 1:
+        geometry = "monatomic"
+    else:
+        geometry = "linear" if _is_linear_atoms(atoms) else "nonlinear"
+
+    thermo = IdealGasThermo(
+        vib_energies=vib_energies,
+        potentialenergy=potential_energy,
+        atoms=atoms,
+        geometry=geometry,
+        symmetrynumber=symmetry_number,
+        spin=0,
+        ignore_imag_modes=True,
+    )
+    enthalpy = thermo.get_enthalpy(temperature=temperature, verbose=False)
+    entropy = thermo.get_entropy(
+        temperature=temperature,
+        pressure=pressure,
+        verbose=False,
+    )
+    gibbs = thermo.get_gibbs_energy(
+        temperature=temperature,
+        pressure=pressure,
+        verbose=False,
+    )
+    return {
+        "temperature_K": float(temperature),
+        "pressure_Pa": float(pressure),
+        "geometry": geometry,
+        "symmetry_number": int(symmetry_number),
+        "enthalpy_eV": float(enthalpy),
+        "entropy_eV_per_K": float(entropy),
+        "gibbs_free_energy_eV": float(gibbs),
+    }
+
+
+class _PySCFMoleculeCalculator(Calculator):
+    """Small ASE calculator adapter backed by PySCF energies and gradients."""
+
+    implemented_properties = ["energy", "forces"]
+
+    def __init__(
+        self,
+        spec: PySCFMoleculeSpec,
+        *,
+        device: PySCFDevice,
+        max_cycle: int,
+        conv_tol: float,
+        chkfile: Optional[str],
+    ):
+        super().__init__()
+        self.spec = spec
+        self.device = device
+        self.max_cycle = max_cycle
+        self.conv_tol = conv_tol
+        self.chkfile = chkfile
+        self.last_scf: dict[str, Any] = {}
+
+    def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+        super().calculate(atoms, properties, system_changes)
+
+        positions = self.atoms.get_positions().tolist()
+        mol = _build_molecule(self.spec, positions=positions)
+        mf = _build_molecule_scf(
+            self.spec,
+            mol,
+            max_cycle=self.max_cycle,
+            conv_tol=self.conv_tol,
+            chkfile=self.chkfile,
+        )
+        mf = _apply_pyscf_device(mf, self.device, "molecular SCF")
+        energy_hartree = float(mf.kernel())
+        results: dict[str, Any] = {"energy": energy_hartree * HARTREE_TO_EV}
+        if "forces" in properties:
+            gradient = np.asarray(mf.nuc_grad_method().kernel(), dtype=float)
+            results["forces"] = -gradient * HARTREE_PER_BOHR_TO_EV_PER_ANGSTROM
+        self.last_scf = {
+            "reference": self.spec.reference,
+            "xc": self.spec.xc if self.spec.reference in {"RKS", "UKS"} else None,
+            "converged": bool(getattr(mf, "converged", False)),
+            "total_energy": _energy_payload(energy_hartree),
+        }
+        self.results = results
+
+
+class _PySCFCrystalCalculator(Calculator):
+    """ASE calculator adapter for PySCF periodic energies.
+
+    Periodic forces are evaluated with central finite differences of PySCF PBC
+    energies. This is intentionally simple and expensive, but it keeps the first
+    crystal iteration dependency-light and explicit.
+    """
+
+    implemented_properties = ["energy", "forces"]
+
+    def __init__(
+        self,
+        spec: PySCFCrystalSpec,
+        *,
+        device: PySCFDevice,
+        max_cycle: int,
+        conv_tol: float,
+        force_delta: float,
+    ):
+        super().__init__()
+        self.spec = spec
+        self.device = device
+        self.max_cycle = max_cycle
+        self.conv_tol = conv_tol
+        self.force_delta = force_delta
+        self.last_scf: dict[str, Any] = {}
+
+    def _energy_for_positions(self, positions) -> float:
+        cell = _build_cell(self.spec, positions=np.asarray(positions).tolist())
+        mf = _build_crystal_scf(
+            self.spec,
+            cell,
+            max_cycle=self.max_cycle,
+            conv_tol=self.conv_tol,
+        )
+        mf = _apply_pyscf_device(mf, self.device, "periodic SCF")
+        energy_hartree = float(mf.kernel())
+        self.last_scf = {
+            "reference": self.spec.reference,
+            "xc": self.spec.xc if "KS" in self.spec.reference else None,
+            "converged": bool(getattr(mf, "converged", False)),
+            "total_energy": _energy_payload(energy_hartree),
+        }
+        return energy_hartree * HARTREE_TO_EV
+
+    def calculate(self, atoms=None, properties=("energy",), system_changes=all_changes):
+        super().calculate(atoms, properties, system_changes)
+
+        positions = np.asarray(self.atoms.get_positions(), dtype=float)
+        energy_ev = self._energy_for_positions(positions)
+        results: dict[str, Any] = {"energy": energy_ev}
+        if "forces" in properties:
+            forces = np.zeros_like(positions)
+            for atom_index in range(positions.shape[0]):
+                for coord_index in range(positions.shape[1]):
+                    plus = positions.copy()
+                    minus = positions.copy()
+                    plus[atom_index, coord_index] += self.force_delta
+                    minus[atom_index, coord_index] -= self.force_delta
+                    e_plus = self._energy_for_positions(plus)
+                    e_minus = self._energy_for_positions(minus)
+                    forces[atom_index, coord_index] = -(e_plus - e_minus) / (
+                        2.0 * self.force_delta
+                    )
+            results["forces"] = forces
+        self.results = results
+
+
+def create_pyscf_molecule_core(
+    structure_file: str,
+    *,
+    charge: int = 0,
+    spin: int = 0,
+    basis: str = "sto-3g",
+    unit: PySCFUnit = "Angstrom",
+    reference: PySCFMoleculeReference = "RHF",
+    xc: Optional[str] = None,
+    device: PySCFDevice = "cpu",
+    fmt: Optional[str] = None,
+    max_memory: int = 4000,
+    verbose: int = 0,
+    output_json: Optional[str] = None,
+) -> dict:
+    """Create a JSON-serializable PySCF molecule specification."""
+    _require_pyscf()
+    atoms, source_file = _read_ase_structure(structure_file, fmt=fmt)
+    atom_payload = _ase_atoms_payload(atoms)
+    spec = PySCFMoleculeSpec(
+        source_structure_file=source_file,
+        symbols=atom_payload["symbols"],
+        positions=atom_payload["positions"],
+        charge=charge,
+        spin=spin,
+        basis=basis,
+        unit=unit,
+        reference=reference,
+        xc=xc,
+        device=device,
+        max_memory=max_memory,
+        verbose=verbose,
+        metadata={
+            "formula": atom_payload["formula"],
+            "source_format": fmt,
+        },
+    )
+
+    mol = _build_molecule(spec)
     result = {
         "status": "success",
-        "calculation": "pyscf_periodic",
-        "pyscf_version": getattr(pyscf, "__version__", "unknown"),
-        "input": params.model_dump(),
-        "cell": {
+        "object_type": "pyscf_molecule",
+        "pyscf_molecule": spec.model_dump(),
+        "molecule": {
+            "formula": atom_payload["formula"],
+            "natoms": int(mol.natm),
+            "nelectron": int(mol.nelectron),
+            "charge": int(mol.charge),
+            "spin": int(mol.spin),
+            "basis": basis,
+            "reference": reference,
+            "xc": xc if reference in {"RKS", "UKS"} else None,
+        },
+        "artifacts": {},
+    }
+    _write_result(result, output_json)
+    return result
+
+
+def create_pyscf_crystal_core(
+    structure_file: str,
+    *,
+    charge: int = 0,
+    spin: int = 0,
+    basis: str = "gth-szv",
+    pseudo: Optional[str] = "gth-pade",
+    unit: PySCFUnit = "Angstrom",
+    reference: PySCFCrystalReference = "RKS",
+    xc: Optional[str] = "pbe",
+    kpts: Optional[list[int]] = None,
+    device: PySCFDevice = "cpu",
+    fmt: Optional[str] = None,
+    max_memory: int = 4000,
+    verbose: int = 0,
+    output_json: Optional[str] = None,
+) -> dict:
+    """Create a JSON-serializable PySCF periodic Cell specification."""
+    _require_pyscf()
+    atoms, source_file = _read_ase_structure(structure_file, fmt=fmt)
+    atom_payload = _ase_atoms_payload(atoms)
+    lattice_vectors = atom_payload["cell"]
+    if not lattice_vectors or not any(
+        any(abs(float(x)) > 1e-12 for x in row) for row in lattice_vectors
+    ):
+        raise ValueError(
+            "create_pyscf_crystal requires a structure file with nonzero "
+            "lattice vectors."
+        )
+
+    spec = PySCFCrystalSpec(
+        source_structure_file=source_file,
+        symbols=atom_payload["symbols"],
+        positions=atom_payload["positions"],
+        lattice_vectors=lattice_vectors,
+        pbc=atom_payload["pbc"],
+        charge=charge,
+        spin=spin,
+        basis=basis,
+        pseudo=pseudo,
+        unit=unit,
+        reference=reference,
+        xc=xc,
+        kpts=kpts or [1, 1, 1],
+        device=device,
+        max_memory=max_memory,
+        verbose=verbose,
+        metadata={
+            "formula": atom_payload["formula"],
+            "source_format": fmt,
+        },
+    )
+
+    cell = _build_cell(spec)
+    result = {
+        "status": "success",
+        "object_type": "pyscf_crystal",
+        "pyscf_crystal": spec.model_dump(),
+        "crystal": {
+            "formula": atom_payload["formula"],
             "natoms": int(cell.natm),
             "nelectron": int(cell.nelectron),
-            "basis": params.basis,
-            "pseudo": params.pseudo,
-            "lattice_vectors": _to_builtin(lattice_vectors),
-        },
-        "scf": {
+            "charge": int(cell.charge),
+            "spin": int(cell.spin),
+            "basis": basis,
+            "pseudo": pseudo,
             "reference": reference,
-            "xc": params.xc if "KS" in reference else None,
-            "converged": bool(mf.converged),
-            "total_energy": _energy_payload(float(energy)),
-            "energy_unit": "Hartree",
+            "xc": xc if "KS" in reference else None,
+            "kpts": spec.kpts,
         },
         "artifacts": {},
-        "wall_time": time.time() - started_at,
     }
     _write_result(result, output_json)
     return result
 
 
-def run_pyscf_property_core(params: PySCFPropertyInput) -> dict:
-    """Extract stored properties from a PySCF result JSON."""
+def run_pyscf_molecule_core(
+    pyscf_molecule: Mapping[str, Any] | PySCFMoleculeSpec | None = None,
+    *,
+    pyscf_molecule_json: Optional[str] = None,
+    driver: PySCFDriver = "optimization",
+    device: Optional[PySCFDevice] = None,
+    optimizer: str = "bfgs",
+    fmax: float = 0.05,
+    steps: int = 100,
+    displacement: float = 0.01,
+    temperature: float = 298.15,
+    pressure: float = 101325.0,
+    symmetry_number: int = 1,
+    optimize_before_analysis: bool = True,
+    max_cycle: int = 50,
+    conv_tol: float = 1e-9,
+    chkfile: Optional[str] = None,
+    output_json: Optional[str] = "pyscf_molecule_results.json",
+) -> dict:
+    """Run a PySCF-backed molecular workflow."""
     started_at = time.time()
-
-    with open(params.result_json, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    stored = data.get("properties", {})
-    if params.properties:
-        selected = {}
-        missing = []
-        for prop in params.properties:
-            key = "mulliken_population" if prop == "population" else prop
-            if key in stored:
-                selected[key] = stored[key]
-            else:
-                missing.append(prop)
-        if missing:
-            raise KeyError(
-                "Requested properties were not found in the PySCF result JSON: "
-                f"{missing}"
-            )
-    else:
-        selected = stored
-        missing = []
-
-    result = {
-        "status": "success",
-        "calculation": "pyscf_property",
-        "source_json": str(Path(params.result_json).resolve()),
-        "properties": selected,
-        "missing_properties": missing,
-        "wall_time": time.time() - started_at,
-        "artifacts": {},
-    }
-
-    if params.output_dir:
-        output_json = _output_path(params.output_dir, params.output_json)
-        _write_result(result, output_json)
-    return result
-
-
-def run_pyscf_recipe_core(params: PySCFRecipeInput) -> dict:
-    """Run a whitelisted PySCF recipe."""
-    started_at = time.time()
-    output_json = _output_path(params.output_dir, params.output_json)
-
     pyscf = _require_pyscf()
-    from pyscf import mcscf
-
-    if params.recipe != "casscf_single_point":
-        raise ValueError(f"Unsupported PySCF recipe: {params.recipe}")
-
-    mol = _build_molecule(params)
-    mf = _build_scf_method(mol, params)
-    mf = _apply_pyscf_device(mf, params.device, "recipe SCF")
-    mol = getattr(mf, "mol", mol)
-    scf_energy = mf.kernel()
-
-    cas = mcscf.CASSCF(
-        mf,
-        params.active_space.ncas,
-        params.active_space.nelecas,
+    spec, molecule_json_path = _resolve_molecule_spec(
+        pyscf_molecule, pyscf_molecule_json
     )
-    cas = _apply_pyscf_device(cas, params.device, params.recipe)
-    cas_energy = cas.kernel()[0]
+    run_device = device or spec.device
+    driver_name = _normalise_driver(driver)
+
+    atoms = _atoms_from_molecule_spec(spec)
+    calculator = _PySCFMoleculeCalculator(
+        spec,
+        device=run_device,
+        max_cycle=max_cycle,
+        conv_tol=conv_tol,
+        chkfile=chkfile,
+    )
+    atoms.calc = calculator
+
+    optimization: dict[str, Any] = {}
+    vibrations: dict[str, Any] = {}
+    thermochemistry: dict[str, Any] = {}
+
+    if driver_name in {"optimization", "vibration", "thermochemistry"}:
+        if driver_name == "optimization" or optimize_before_analysis:
+            converged = _run_optimizer(atoms, optimizer, fmax, steps)
+            optimization = {
+                "optimizer": optimizer,
+                "converged": converged,
+                "fmax_eV_per_Angstrom": float(fmax),
+                "steps": int(steps),
+            }
+
+    energy_ev = float(atoms.get_potential_energy())
+
+    if driver_name in {"vibration", "thermochemistry"}:
+        vibrations = _run_vibrations(atoms, displacement)
+
+    if driver_name == "thermochemistry":
+        thermochemistry = _run_ideal_gas_thermochemistry(
+            atoms,
+            vibrations.pop("_ase_vib_energies_eV"),
+            temperature=temperature,
+            pressure=pressure,
+            symmetry_number=symmetry_number,
+        )
+    else:
+        vibrations.pop("_ase_vib_energies_eV", None)
 
     result = {
         "status": "success",
-        "calculation": "pyscf_recipe",
-        "recipe": params.recipe,
+        "calculation": "pyscf_molecule",
+        "driver": driver_name,
+        "device": run_device,
         "pyscf_version": getattr(pyscf, "__version__", "unknown"),
-        "input": params.model_dump(),
-        "scf": {
-            "reference": params.reference,
-            "converged": bool(mf.converged),
-            "total_energy": _energy_payload(float(scf_energy)),
+        "input": {
+            "pyscf_molecule": spec.model_dump(),
+            "pyscf_molecule_json": molecule_json_path,
+            "max_cycle": max_cycle,
+            "conv_tol": conv_tol,
         },
-        "casscf": {
-            "converged": bool(getattr(cas, "converged", False)),
-            "total_energy": _energy_payload(float(cas_energy)),
-            "ncas": params.active_space.ncas,
-            "nelecas": params.active_space.nelecas,
-        },
+        "scf": calculator.last_scf,
+        "energy": _energy_payload_from_ev(energy_ev),
+        "final_structure": _ase_atoms_payload(atoms),
+        "optimization": optimization,
+        "vibrations": vibrations,
+        "thermochemistry": thermochemistry,
         "artifacts": {
-            "chkfile": str(Path(mf.chkfile).resolve()) if mf.chkfile else None,
+            "chkfile": str(Path(chkfile).resolve()) if chkfile else None,
         },
         "wall_time": time.time() - started_at,
     }
@@ -578,7 +823,100 @@ def run_pyscf_recipe_core(params: PySCFRecipeInput) -> dict:
     return result
 
 
-def extract_pyscf_output_core(json_file: str) -> dict:
-    """Load a saved PySCF JSON result."""
-    with open(json_file, "r", encoding="utf-8") as f:
-        return json.load(f)
+def run_pyscf_crystal_core(
+    pyscf_crystal: Mapping[str, Any] | PySCFCrystalSpec | None = None,
+    *,
+    pyscf_crystal_json: Optional[str] = None,
+    driver: PySCFDriver = "energy",
+    device: Optional[PySCFDevice] = None,
+    optimizer: str = "bfgs",
+    fmax: float = 0.05,
+    steps: int = 50,
+    displacement: float = 0.01,
+    force_delta: float = 0.005,
+    optimize_before_analysis: bool = False,
+    max_cycle: int = 50,
+    conv_tol: float = 1e-9,
+    output_json: Optional[str] = "pyscf_crystal_results.json",
+) -> dict:
+    """Run a PySCF-backed periodic workflow."""
+    started_at = time.time()
+    pyscf = _require_pyscf()
+    spec, crystal_json_path = _resolve_crystal_spec(pyscf_crystal, pyscf_crystal_json)
+    run_device = device or spec.device
+    driver_name = _normalise_driver(driver)
+
+    if driver_name == "thermochemistry":
+        result = {
+            "status": "failure",
+            "calculation": "pyscf_crystal",
+            "driver": driver_name,
+            "error_type": "NotImplementedError",
+            "message": (
+                "Crystal thermochemistry requires a phonon density-of-states "
+                "workflow, which is not implemented in the first PySCF MCP iteration."
+            ),
+            "artifacts": {},
+            "wall_time": time.time() - started_at,
+        }
+        _write_result(result, output_json)
+        return result
+
+    atoms = _atoms_from_crystal_spec(spec)
+    calculator = _PySCFCrystalCalculator(
+        spec,
+        device=run_device,
+        max_cycle=max_cycle,
+        conv_tol=conv_tol,
+        force_delta=force_delta,
+    )
+    atoms.calc = calculator
+
+    optimization: dict[str, Any] = {}
+    vibrations: dict[str, Any] = {}
+    if driver_name in {"optimization", "vibration"}:
+        if driver_name == "optimization" or optimize_before_analysis:
+            converged = _run_optimizer(atoms, optimizer, fmax, steps)
+            optimization = {
+                "optimizer": optimizer,
+                "converged": converged,
+                "fmax_eV_per_Angstrom": float(fmax),
+                "steps": int(steps),
+                "force_method": "finite_difference_energy",
+                "force_delta_Angstrom": float(force_delta),
+                "cell_relaxation": "fixed_cell",
+            }
+
+    energy_ev = float(atoms.get_potential_energy())
+
+    if driver_name == "vibration":
+        vibrations = _run_vibrations(atoms, displacement)
+        vibrations.pop("_ase_vib_energies_eV", None)
+        vibrations["scope"] = "Gamma-point finite differences with fixed cell"
+
+    result = {
+        "status": "success",
+        "calculation": "pyscf_crystal",
+        "driver": driver_name,
+        "device": run_device,
+        "pyscf_version": getattr(pyscf, "__version__", "unknown"),
+        "input": {
+            "pyscf_crystal": spec.model_dump(),
+            "pyscf_crystal_json": crystal_json_path,
+            "max_cycle": max_cycle,
+            "conv_tol": conv_tol,
+        },
+        "scf": calculator.last_scf,
+        "energy": _energy_payload_from_ev(energy_ev),
+        "final_structure": _ase_atoms_payload(atoms),
+        "optimization": optimization,
+        "vibrations": vibrations,
+        "artifacts": {},
+        "wall_time": time.time() - started_at,
+        "notes": [
+            "Crystal optimization and vibration currently use finite-difference "
+            "forces from PySCF periodic energies with fixed lattice vectors."
+        ],
+    }
+    _write_result(result, output_json)
+    return result

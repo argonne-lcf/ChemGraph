@@ -1,208 +1,112 @@
-"""Schemas for PySCF-backed MCP tools."""
+"""Schemas and shared type aliases for PySCF-backed MCP tools."""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class StructureInput(BaseModel):
-    """Structure input accepted by PySCF tools.
-
-    Provide either ``input_structure_file`` or a PySCF-compatible ``atom`` string.
-    File inputs are read through ASE and converted to PySCF atom tuples.
-    """
-
-    input_structure_file: Optional[str] = Field(
-        default=None,
-        description="Path to a structure file readable by ASE, e.g. XYZ, CIF, POSCAR.",
-    )
-    atom: Optional[str] = Field(
-        default=None,
-        description=(
-            "PySCF-compatible atom specification, e.g. "
-            "'O 0 0 0; H 0 0 0.96; H 0.92 0 0'."
-        ),
-    )
-    fmt: Optional[str] = Field(
-        default=None,
-        description="Optional ASE file format hint for input_structure_file.",
-    )
-    lattice_vectors: Optional[List[List[float]]] = Field(
-        default=None,
-        description=(
-            "Optional 3x3 lattice vectors for periodic calculations. "
-            "If omitted, periodic tools try to read the cell from the structure file."
-        ),
-    )
-
-    @model_validator(mode="after")
-    def require_structure_source(self):
-        if not self.input_structure_file and not self.atom:
-            raise ValueError("Provide either input_structure_file or atom.")
-        return self
-
-
-class ActiveSpaceInput(BaseModel):
-    """Active-space parameters for CASCI/CASSCF-like recipes."""
-
-    ncas: int = Field(description="Number of active orbitals.")
-    nelecas: Union[int, List[int]] = Field(
-        description=(
-            "Number of active electrons. Use an int for spin-balanced active spaces "
-            "or [n_alpha, n_beta] for spin-resolved active spaces."
-        )
-    )
-
-
-PySCFReference = Literal["RHF", "UHF", "ROHF", "RKS", "UKS"]
-PySCFPostHF = Literal["MP2", "CCSD", "CCSD(T)"]
-PySCFDevice = Literal["cpu", "cuda", "xpu"]
-PySCFProperty = Literal[
-    "dipole",
-    "population",
-    "mulliken_population",
-    "mo_energy",
-    "gradient",
+PySCFDevice = Literal["cpu", "gpu"]
+PySCFDriver = Literal["energy", "optimization", "vibration", "thermochemistry"]
+PySCFUnit = Literal["Angstrom", "Bohr"]
+PySCFMoleculeReference = Literal["RHF", "UHF", "ROHF", "RKS", "UKS"]
+PySCFCrystalReference = Literal[
+    "RHF",
+    "UHF",
+    "RKS",
+    "UKS",
+    "KRHF",
+    "KUHF",
+    "KRKS",
+    "KUKS",
 ]
 
 
-class PySCFMolecularInput(BaseModel):
-    """Input for the main molecular PySCF MCP tool."""
+class PySCFMoleculeSpec(BaseModel):
+    """JSON-serializable molecular input produced by create_pyscf_molecule."""
 
-    structure: StructureInput = Field(description="Molecular structure.")
-    charge: int = Field(default=0, description="Total molecular charge.")
+    object_type: Literal["pyscf_molecule"] = "pyscf_molecule"
+    source_structure_file: str = Field(
+        description="Absolute path to the structure file used to create the molecule."
+    )
+    symbols: List[str] = Field(description="Atomic symbols in input order.")
+    positions: List[List[float]] = Field(
+        description="Cartesian coordinates matching symbols."
+    )
+    charge: int = 0
     spin: int = Field(
         default=0,
-        description=("PySCF spin value, N_alpha - N_beta. This is not multiplicity."),
+        description="PySCF spin value, N_alpha - N_beta. This is not multiplicity.",
     )
-    basis: str = Field(default="sto-3g", description="AO basis set.")
-    unit: Literal["Angstrom", "Bohr"] = Field(
-        default="Angstrom", description="Coordinate unit."
-    )
-    reference: PySCFReference = Field(
-        default="RHF",
-        description="SCF reference. RKS/UKS trigger DFT and use xc.",
-    )
+    basis: str = "sto-3g"
+    unit: PySCFUnit = "Angstrom"
+    reference: PySCFMoleculeReference = "RHF"
     xc: Optional[str] = Field(
         default=None,
-        description="DFT exchange-correlation functional for RKS/UKS, e.g. 'b3lyp'.",
+        description="DFT exchange-correlation functional for RKS/UKS.",
     )
-    post_hf: List[PySCFPostHF] = Field(
-        default_factory=list,
-        description="Optional post-HF methods to run after SCF.",
-    )
-    properties: List[PySCFProperty] = Field(
-        default_factory=list,
-        description="Optional properties to compute after SCF.",
-    )
-    solvent: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description=(
-            "Reserved for future solvent support. Non-null values are rejected in v0."
-        ),
-    )
-    output_dir: str = Field(
-        default="pyscf_output", description="Directory for JSON/checkpoint artifacts."
-    )
-    output_json: str = Field(
-        default="pyscf_results.json", description="Name or path of result JSON."
-    )
-    chkfile: Optional[str] = Field(
-        default=None,
-        description="Optional PySCF checkpoint file path. Defaults under output_dir.",
-    )
-    max_cycle: int = Field(default=50, description="Maximum SCF cycles.")
-    conv_tol: float = Field(default=1e-9, description="SCF convergence tolerance.")
-    max_memory: int = Field(default=4000, description="PySCF max memory in MB.")
     device: PySCFDevice = Field(
         default="cpu",
-        description=(
-            "Execution device. 'cpu' uses standard PySCF. 'cuda' uses PySCF's "
-            "gpu4pyscf .to_gpu() path when gpu4pyscf is installed. 'xpu' is "
-            "reserved for future PySCF XPU support and currently raises."
-        ),
+        description="Default execution device for downstream PySCF runs.",
     )
+    max_memory: int = Field(default=4000, description="PySCF max memory in MB.")
     verbose: int = Field(default=0, description="PySCF verbosity level.")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def require_atoms(self):
+        if len(self.symbols) != len(self.positions):
+            raise ValueError("symbols and positions must have the same length.")
+        if not self.symbols:
+            raise ValueError("A PySCF molecule requires at least one atom.")
+        return self
 
 
-class PySCFPeriodicInput(BaseModel):
-    """Input for minimal periodic PySCF HF/DFT calculations."""
+class PySCFCrystalSpec(BaseModel):
+    """JSON-serializable periodic input produced by create_pyscf_crystal."""
 
-    structure: StructureInput = Field(description="Periodic structure.")
-    charge: int = Field(default=0, description="Cell charge.")
+    object_type: Literal["pyscf_crystal"] = "pyscf_crystal"
+    source_structure_file: str = Field(
+        description="Absolute path to the structure file used to create the crystal."
+    )
+    symbols: List[str] = Field(description="Atomic symbols in input order.")
+    positions: List[List[float]] = Field(
+        description="Cartesian coordinates matching symbols."
+    )
+    lattice_vectors: List[List[float]] = Field(
+        description="3x3 lattice vectors used for the PySCF periodic Cell."
+    )
+    pbc: List[bool] = Field(description="Periodic boundary flags from ASE.")
+    charge: int = 0
     spin: int = Field(default=0, description="PySCF spin value, N_alpha - N_beta.")
-    basis: str = Field(default="gth-szv", description="Periodic AO basis set.")
-    pseudo: Optional[str] = Field(
-        default="gth-pade", description="Pseudopotential label or None."
-    )
-    unit: Literal["Angstrom", "Bohr"] = Field(default="Angstrom")
-    reference: Literal["RHF", "UHF", "RKS", "UKS", "KRHF", "KUHF", "KRKS", "KUKS"] = (
-        Field(default="RKS", description="Periodic SCF reference.")
-    )
-    xc: Optional[str] = Field(default="pbe", description="DFT functional.")
+    basis: str = "gth-szv"
+    pseudo: Optional[str] = "gth-pade"
+    unit: PySCFUnit = "Angstrom"
+    reference: PySCFCrystalReference = "RKS"
+    xc: Optional[str] = "pbe"
     kpts: List[int] = Field(
         default_factory=lambda: [1, 1, 1],
         description="Monkhorst-Pack k-point mesh for K* references.",
     )
-    output_dir: str = Field(default="pyscf_output")
-    output_json: str = Field(default="pyscf_periodic_results.json")
-    max_cycle: int = Field(default=50)
-    conv_tol: float = Field(default=1e-9)
-    max_memory: int = Field(default=4000)
     device: PySCFDevice = Field(
         default="cpu",
-        description=(
-            "Execution device. 'cpu' uses standard PySCF. 'cuda' uses PySCF's "
-            "gpu4pyscf .to_gpu() path when gpu4pyscf is installed. 'xpu' is "
-            "reserved for future PySCF XPU support and currently raises."
-        ),
+        description="Default execution device for downstream PySCF runs.",
     )
-    verbose: int = Field(default=0)
+    max_memory: int = Field(default=4000, description="PySCF max memory in MB.")
+    verbose: int = Field(default=0, description="PySCF verbosity level.")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
-
-class PySCFPropertyInput(BaseModel):
-    """Input for extracting post-processed properties from a saved PySCF summary."""
-
-    result_json: str = Field(
-        description="Path to a JSON file produced by a PySCF tool."
-    )
-    properties: List[PySCFProperty] = Field(
-        default_factory=list,
-        description="Properties to extract. Empty means return all stored properties.",
-    )
-    output_dir: Optional[str] = Field(
-        default=None, description="Optional directory to write extracted property JSON."
-    )
-    output_json: str = Field(default="pyscf_property_results.json")
-
-
-class PySCFRecipeInput(BaseModel):
-    """Input for whitelisted advanced PySCF recipes."""
-
-    recipe: Literal["casscf_single_point"] = Field(
-        description="Whitelisted recipe name."
-    )
-    structure: StructureInput = Field(description="Molecular structure.")
-    active_space: ActiveSpaceInput = Field(description="CASSCF active space.")
-    charge: int = Field(default=0)
-    spin: int = Field(default=0)
-    basis: str = Field(default="sto-3g")
-    unit: Literal["Angstrom", "Bohr"] = Field(default="Angstrom")
-    reference: Literal["RHF", "UHF", "ROHF"] = Field(default="RHF")
-    output_dir: str = Field(default="pyscf_output")
-    output_json: str = Field(default="pyscf_recipe_results.json")
-    chkfile: Optional[str] = Field(default=None)
-    max_cycle: int = Field(default=50)
-    conv_tol: float = Field(default=1e-9)
-    max_memory: int = Field(default=4000)
-    device: PySCFDevice = Field(
-        default="cpu",
-        description=(
-            "Execution device. 'cpu' uses standard PySCF. 'cuda' uses PySCF's "
-            "gpu4pyscf .to_gpu() path when gpu4pyscf is installed. 'xpu' is "
-            "reserved for future PySCF XPU support and currently raises."
-        ),
-    )
-    verbose: int = Field(default=0)
+    @model_validator(mode="after")
+    def require_valid_crystal(self):
+        if len(self.symbols) != len(self.positions):
+            raise ValueError("symbols and positions must have the same length.")
+        if not self.symbols:
+            raise ValueError("A PySCF crystal requires at least one atom.")
+        if len(self.lattice_vectors) != 3 or any(
+            len(vector) != 3 for vector in self.lattice_vectors
+        ):
+            raise ValueError("lattice_vectors must be a 3x3 matrix.")
+        if len(self.kpts) != 3:
+            raise ValueError("kpts must contain exactly three integers.")
+        return self
