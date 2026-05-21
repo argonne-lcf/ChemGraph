@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import Future
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -85,6 +85,7 @@ class TaskSpec(BaseModel):
         default=0,
         description="Number of GPUs requested per task.",
     )
+    env: Dict[str, str] = Field(default_factory=dict)
 
 
 class ExecutionBackend(ABC):
