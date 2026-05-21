@@ -144,10 +144,18 @@ def get_backend(
 
     elif resolved_backend == "ensemble_launcher":
         from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
             EnsembleLauncherBackend,
+            get_launcher_config,
         )
 
         backend = EnsembleLauncherBackend()
+        assert system in SYSTEM_CONFIG_REGISTRY, (
+            f"Unknown system: only know {SYSTEM_CONFIG_REGISTRY.keys()}"
+        )
+        merged_kwargs = {}
+        merged_kwargs["system_config"] = SYSTEM_CONFIG_REGISTRY[system]
+        merged_kwargs["launcher_config"] = get_launcher_config(**backend_cfg)
 
     elif resolved_backend == "globus_compute":
         from chemgraph.execution.globus_compute_backend import (

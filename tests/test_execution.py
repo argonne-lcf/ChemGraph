@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chemgraph.execution.base import ExecutionBackend, TaskSpec
+from chemgraph.execution.base import TaskSpec
 from chemgraph.execution.local_backend import LocalBackend
 from chemgraph.execution.utils import (
     gather_futures,
@@ -27,7 +27,6 @@ from chemgraph.execution.utils import (
     resolve_structure_files,
     write_results_jsonl,
 )
-
 
 # ── TaskSpec tests ──────────────────────────────────────────────────────
 
@@ -191,6 +190,220 @@ class TestLocalBackend:
     def test_shell_task_missing_command(self):
         backend = LocalBackend()
         backend.initialize(system="local", max_workers=1)
+        try:
+            task = TaskSpec(task_id="no_cmd", task_type="shell")
+            with pytest.raises(ValueError, match="requires a command"):
+                backend.submit(task)
+        finally:
+            backend.shutdown()
+
+
+# ── EnsembleLauncherBackend tests ──────────────────────────────────────────
+
+
+class TestELBackend:
+    @classmethod
+    def setup_class(cls):
+        project_root = str(Path(__file__).resolve().parent.parent)
+        existing = os.environ.get("PYTHONPATH", "")
+        os.environ["PYTHONPATH"] = (
+            f"{project_root}:{existing}" if existing else project_root
+        )
+
+    def test_python_task(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+            EnsembleLauncherBackend,
+            get_launcher_config,
+        )
+
+        backend = EnsembleLauncherBackend()
+        backend.initialize(
+            system="local",
+            system_config=SYSTEM_CONFIG_REGISTRY["local"],
+            launcher_config=get_launcher_config(),
+        )
+        try:
+            task = TaskSpec(
+                task_id="sq",
+                task_type="python",
+                callable=_square,
+                args=(7,),
+            )
+            fut = backend.submit(task)
+            assert isinstance(fut, Future)
+            assert fut.result(timeout=10) == 49
+        finally:
+            backend.shutdown()
+
+    def test_python_task_kwargs(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+            EnsembleLauncherBackend,
+            get_launcher_config,
+        )
+
+        backend = EnsembleLauncherBackend()
+        backend.initialize(
+            system="local",
+            system_config=SYSTEM_CONFIG_REGISTRY["local"],
+            launcher_config=get_launcher_config(),
+        )
+        try:
+            task = TaskSpec(
+                task_id="add",
+                task_type="python",
+                callable=_add,
+                kwargs={"a": 3, "b": 5},
+            )
+            assert backend.submit(task).result(timeout=10) == 8
+        finally:
+            backend.shutdown()
+
+    def test_shell_task(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+            EnsembleLauncherBackend,
+            get_launcher_config,
+        )
+
+        backend = EnsembleLauncherBackend()
+        backend.initialize(
+            system="local",
+            system_config=SYSTEM_CONFIG_REGISTRY["local"],
+            launcher_config=get_launcher_config(),
+        )
+        try:
+            task = TaskSpec(
+                task_id="echo",
+                task_type="shell",
+                command="echo hello_world",
+            )
+            fut = backend.submit(task)
+            result = fut.result(timeout=10)
+            assert result is not None
+        finally:
+            backend.shutdown()
+
+    def test_submit_batch(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+            EnsembleLauncherBackend,
+            get_launcher_config,
+        )
+
+        backend = EnsembleLauncherBackend()
+        backend.initialize(
+            system="local",
+            system_config=SYSTEM_CONFIG_REGISTRY["local"],
+            launcher_config=get_launcher_config(),
+        )
+        try:
+            tasks = [
+                TaskSpec(
+                    task_id=f"sq_{i}",
+                    task_type="python",
+                    callable=_square,
+                    args=(i,),
+                )
+                for i in range(5)
+            ]
+            futures = backend.submit_batch(tasks)
+            assert len(futures) == 5
+            results = [f.result(timeout=10) for f in futures]
+            assert results == [0, 1, 4, 9, 16]
+        finally:
+            backend.shutdown()
+
+    def test_failing_task(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+            EnsembleLauncherBackend,
+            get_launcher_config,
+        )
+
+        backend = EnsembleLauncherBackend()
+        backend.initialize(
+            system="local",
+            system_config=SYSTEM_CONFIG_REGISTRY["local"],
+            launcher_config=get_launcher_config(),
+        )
+        try:
+            task = TaskSpec(
+                task_id="fail",
+                task_type="python",
+                callable=_failing_fn,
+            )
+            fut = backend.submit(task)
+            with pytest.raises(Exception, match="intentional test error"):
+                fut.result(timeout=10)
+        finally:
+            backend.shutdown()
+
+    def test_context_manager(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+            EnsembleLauncherBackend,
+            get_launcher_config,
+        )
+
+        with EnsembleLauncherBackend() as backend:
+            backend.initialize(
+                system="local",
+                system_config=SYSTEM_CONFIG_REGISTRY["local"],
+                launcher_config=get_launcher_config(),
+            )
+            task = TaskSpec(
+                task_id="ctx",
+                task_type="python",
+                callable=_square,
+                args=(3,),
+            )
+            assert backend.submit(task).result(timeout=10) == 9
+
+    def test_not_initialized_raises(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            EnsembleLauncherBackend,
+        )
+
+        backend = EnsembleLauncherBackend()
+        task = TaskSpec(task_id="x", callable=_square, args=(1,))
+        with pytest.raises(RuntimeError, match="not initialized"):
+            backend.submit(task)
+
+    def test_python_task_missing_callable(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+            EnsembleLauncherBackend,
+            get_launcher_config,
+        )
+
+        backend = EnsembleLauncherBackend()
+        backend.initialize(
+            system="local",
+            system_config=SYSTEM_CONFIG_REGISTRY["local"],
+            launcher_config=get_launcher_config(),
+        )
+        try:
+            task = TaskSpec(task_id="no_fn", task_type="python")
+            with pytest.raises(ValueError, match="requires a callable"):
+                backend.submit(task)
+        finally:
+            backend.shutdown()
+
+    def test_shell_task_missing_command(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+            EnsembleLauncherBackend,
+            get_launcher_config,
+        )
+
+        backend = EnsembleLauncherBackend()
+        backend.initialize(
+            system="local",
+            system_config=SYSTEM_CONFIG_REGISTRY["local"],
+            launcher_config=get_launcher_config(),
+        )
         try:
             task = TaskSpec(task_id="no_cmd", task_type="shell")
             with pytest.raises(ValueError, match="requires a command"):
@@ -807,9 +1020,7 @@ def globus_backend():
         pytest.skip("chemgraph.execution not available")
 
     try:
-        backend = get_backend(
-            backend_name="globus_compute", endpoint_id=endpoint_id
-        )
+        backend = get_backend(backend_name="globus_compute", endpoint_id=endpoint_id)
     except ImportError:
         pytest.skip("globus-compute-sdk not installed")
 
