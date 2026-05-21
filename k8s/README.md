@@ -200,6 +200,39 @@ kubectl delete -f service.yaml
 kubectl delete secret chemgraph-secrets
 ```
 
+## Accessing Argo Models (SSH Tunnel via CELS)
+
+The ALCF K8s cluster cannot directly reach the Argo API at `apps.inside.anl.gov`. To access Argo models from inside the pod, you need to set up an SSH tunnel through CELS.
+
+The Docker image includes SSH client tooling and a pre-configured proxy jump through the ALCF HTTP proxy to CELS login nodes.
+
+### Setup (per user, after each pod restart)
+
+1. **Ensure your CELS SSH key is set up:**
+   - Generate a key if needed: `ssh-keygen -a 100 -t ed25519`
+   - Add your public key at https://accounts.cels.anl.gov
+
+2. **Copy your SSH key into the pod:**
+   ```bash
+   kubectl cp ~/.ssh/id_ed25519 deployment/chemgraph-streamlit:/root/.ssh/id_ed25519 -n chemgraph
+   ```
+
+3. **Exec into the pod and start the tunnel:**
+   ```bash
+   kubectl exec -it deployment/chemgraph-streamlit -n chemgraph -- bash
+   chmod 600 /root/.ssh/id_ed25519
+   ssh -f -N -L 9090:apps.inside.anl.gov:443 <your-cels-username>@homes.cels.anl.gov
+   ```
+
+4. **Approve DUO MFA on your phone.**
+
+5. **Verify the tunnel:**
+   ```bash
+   curl -sk https://localhost:9090/argoapi/api/v1/resource/chat/
+   ```
+
+The tunnel will remain active until the pod restarts. After a restart, repeat steps 2-4.
+
 ## Security Considerations
 
 1. **Never commit secrets to version control**

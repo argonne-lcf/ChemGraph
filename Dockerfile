@@ -18,6 +18,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 \
     libxrandr2 libxrender1 libxss1 libxtst6 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
     libcups2 libdrm2 libgbm1 libasound2 \
+    # SSH tunnel support (Argo API via CELS proxy jump)
+    openssh-client \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Use conda for packages that are typically more reliable from conda-forge
@@ -41,6 +44,21 @@ RUN which nwchem && python -c "from tblite.ase import TBLite"
 
 # Allow git commands in bind-mounted repo paths inside the container.
 RUN git config --system --add safe.directory /app
+
+# SSH config for CELS proxy jump (Argo API tunnel via ALCF proxy)
+# User is not set here — each user provides their CELS username at runtime:
+#   ssh -f -N -L 9090:apps.inside.anl.gov:443 <cels-user>@homes.cels.anl.gov
+RUN mkdir -p /root/.ssh && chmod 700 /root/.ssh && \
+    printf 'Host logins.cels.anl.gov\n\
+  ProxyCommand nc -X connect -x proxy.alcf.anl.gov:3128 %%h %%p\n\
+  StrictHostKeyChecking no\n\
+  UserKnownHostsFile /dev/null\n\
+\n\
+Host homes.cels.anl.gov\n\
+  ProxyJump logins.cels.anl.gov\n\
+  StrictHostKeyChecking no\n\
+  UserKnownHostsFile /dev/null\n' > /root/.ssh/config && \
+    chmod 600 /root/.ssh/config
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
