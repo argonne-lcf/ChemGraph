@@ -150,12 +150,20 @@ def get_backend(
         )
 
         backend = EnsembleLauncherBackend()
-        assert system in SYSTEM_CONFIG_REGISTRY, (
-            f"Unknown system: only know {SYSTEM_CONFIG_REGISTRY.keys()}"
-        )
-        merged_kwargs = {}
-        merged_kwargs["system_config"] = SYSTEM_CONFIG_REGISTRY[system]
-        merged_kwargs["launcher_config"] = get_launcher_config(**backend_cfg)
+
+        if merged_kwargs.get("client_only", False):
+            # Client-only mode: pass through as-is (needs checkpoint_dir).
+            pass
+        else:
+            # Managed mode: start orchestrator locally.
+            assert resolved_system in SYSTEM_CONFIG_REGISTRY, (
+                f"Unknown system {resolved_system}: "
+                f"only know {list(SYSTEM_CONFIG_REGISTRY.keys())}"
+            )
+            merged_kwargs = {
+                "system_config": SYSTEM_CONFIG_REGISTRY[resolved_system],
+                "launcher_config": get_launcher_config(**backend_cfg),
+            }
 
     elif resolved_backend == "globus_compute":
         from chemgraph.execution.globus_compute_backend import (

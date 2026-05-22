@@ -94,72 +94,107 @@ def get_launcher_config(
 
 
 class EnsembleLauncherBackend(ExecutionBackend):
-    """Execution backend that delegates work to EnsembleLauncher.
+    """Execution backend that submits tasks through a :class:`ClusterClient`.
 
-    The backend starts an EnsembleLauncher orchestrator in cluster mode
-    and submits tasks through a :class:`ClusterClient`.
+    Supports two initialization modes:
 
-    Configuration
-    -------------
-    The following ``kwargs`` are accepted by :meth:`initialize`:
+    **Client-only** — connect to a running EnsembleLauncher orchestrator::
 
-    ``comm_name`` : str
-        Communication backend (``"zmq"``, ``"async_zmq"``, ``"multiprocessing"``).
-        Default: ``"async_zmq"``.
-    ``task_executor_name`` : str
-        Task executor (``"multiprocessing"``, ``"mpi"``,
-        ``"async_processpool"``).  Default: ``"async_processpool"``.
-    ``nlevels`` : int
-        Hierarchy depth.  Default: ``0`` (single-node).
-    ``max_workers`` : int
-        Number of CPUs to expose.  Default: ``os.cpu_count()``.
-    ``checkpoint_dir`` : str
-        Directory for orchestrator checkpoint files.  Auto-generated
-        when omitted.
-    ``nodes`` : list[str]
-        List of compute node hostnames.  Defaults to ``[hostname]``.
-    ``startup_delay`` : float
-        Seconds to wait after ``el.start()`` for the orchestrator to be
-        ready.  Default: ``2.0``.
+        backend.initialize(checkpoint_dir="/path/to/running/el")
+
+    **Managed** — start a local orchestrator, then connect::
+
+        backend.initialize(system_config=..., launcher_config=...)
+
+    In both modes the backend submits work through :class:`ClusterClient`.
+    ``shutdown()`` tears down the client and, in managed mode, stops the
+    orchestrator.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self._el = None
-        self._client = None
-        self._checkpoint_dir: str | None = None
+        self._orchestrator: Optional[EnsembleLauncher] = None
+        self._client: Optional[ClusterClient] = None
 
     def initialize(
         self,
-        system: str,
-        system_config: SystemConfig,
-        launcher_config: LauncherConfig,
-        startup_delay: float = 1.0,
+        system: str = "local",
+        *,
+        client_only: bool = False,
+        checkpoint_dir: Optional[str] = None,
+        node_id: str = "global",
+        system_config: Optional[SystemConfig] = None,
+        launcher_config: Optional[LauncherConfig] = None,
+        startup_delay: float = 10.0,
+        **kwargs,
     ) -> None:
+        """Prepare the backend for accepting work.
 
-        os.makedirs(launcher_config.checkpoint_dir, exist_ok=True)
-        # -- start orchestrator ------------------------------------------------
-        self._el = EnsembleLauncher(
-            ensemble_file={},
-            system_config=system_config,
-            launcher_config=launcher_config,
-        )
-        self._el.start()
-        time.sleep(startup_delay)
+        Parameters
+        ----------
+        client_only : bool
+            When ``True``, connect to a running orchestrator via
+            *checkpoint_dir* — no orchestrator is started.
+        checkpoint_dir : str
+            Path to the orchestrator's checkpoint directory.  Required
+            when *client_only* is ``True``.
+        node_id : str
+            Orchestrator node to connect to (default ``"global"``).
+        system_config, launcher_config
+            Required for **managed** mode (``client_only=False``).
+            The backend starts its own orchestrator with these.
+        startup_delay : float
+            Seconds to wait for the orchestrator to become ready
+            (managed mode only).
+        """
+        if client_only:
+            # -- client-only mode ----------------------------------------------
+            if checkpoint_dir is None:
+                raise ValueError(
+                    "client_only=True requires a checkpoint_dir pointing "
+                    "to a running orchestrator."
+                )
+            self._client = ClusterClient(
+                checkpoint_dir=checkpoint_dir, node_id=node_id
+            )
+            self._client.start()
+            self._initialized = True
+            logger.info(
+                "EnsembleLauncherBackend initialized in client-only mode "
+                "(checkpoint_dir='%s', node_id='%s')",
+                checkpoint_dir,
+                node_id,
+            )
+        else:
+            # -- managed mode: start orchestrator first ------------------------
+            if system_config is None or launcher_config is None:
+                raise ValueError(
+                    "Managed mode requires system_config and launcher_config "
+                    "(or set client_only=True with a checkpoint_dir)."
+                )
+            os.makedirs(launcher_config.checkpoint_dir, exist_ok=True)
+            self._orchestrator = EnsembleLauncher(
+                ensemble_file={},
+                system_config=system_config,
+                launcher_config=launcher_config,
+            )
+            self._orchestrator.start()
+            time.sleep(startup_delay)
 
-        # -- connect client ----------------------------------------------------
-        self._client = ClusterClient(checkpoint_dir=launcher_config.checkpoint_dir)
-        self._client.start()
-
-        self._initialized = True
-        logger.info(
-            "EnsembleLauncherBackend initialized (system='%s', "
-            "comm='%s', executor='%s', nodes=%s)",
-            system_config.name,
-            launcher_config.comm_name,
-            launcher_config.task_executor_name,
-            len(self._el.nodes),
-        )
+            self._client = ClusterClient(
+                checkpoint_dir=launcher_config.checkpoint_dir,
+                node_id=node_id,
+            )
+            self._client.start()
+            self._initialized = True
+            logger.info(
+                "EnsembleLauncherBackend initialized in managed mode "
+                "(system='%s', comm='%s', executor='%s', nodes=%s)",
+                system_config.name,
+                launcher_config.comm_name,
+                launcher_config.task_executor_name,
+                len(self._orchestrator.nodes),
+            )
 
     def submit(self, task: TaskSpec) -> Future:
         if not self._initialized or self._client is None:
@@ -217,18 +252,19 @@ class EnsembleLauncherBackend(ExecutionBackend):
                     "Error tearing down EnsembleLauncher client.", exc_info=True
                 )
 
-        el_ok = True
-        if self._el is not None:
+        orchestrator_ok = True
+        if self._orchestrator is not None:
             try:
-                self._el.stop()
-                self._el = None
+                self._orchestrator.stop()
+                self._orchestrator = None
             except Exception:
-                el_ok = False
+                orchestrator_ok = False
                 logger.warning(
-                    "Error stopping EnsembleLauncher orchestrator.", exc_info=True
+                    "Error stopping EnsembleLauncher orchestrator.",
+                    exc_info=True,
                 )
 
-        if client_ok and el_ok:
+        if client_ok and orchestrator_ok:
             logger.info("EnsembleLauncherBackend shut down.")
         else:
             logger.warning(
