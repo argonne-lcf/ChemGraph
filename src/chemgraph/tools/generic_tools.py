@@ -1,9 +1,11 @@
+import io
 import math
 import numexpr
+import traceback
+from contextlib import redirect_stderr, redirect_stdout
 
 from langchain_core.tools import Tool
 from langchain_core.tools import tool
-from langchain_experimental.utilities import PythonREPL
 from langgraph.types import interrupt
 
 
@@ -91,6 +93,26 @@ def ask_human(question: str) -> str:
     if isinstance(response, dict):
         return response.get("answer", response.get("response", str(response)))
     return str(response)
+
+
+class PythonREPL:
+    """Small persistent Python REPL used by the python_repl tool."""
+
+    def __init__(self):
+        self.globals = {}
+
+    def run(self, command: str) -> str:
+        cleaned_command = command.strip()
+        if not cleaned_command:
+            return ""
+
+        output = io.StringIO()
+        try:
+            with redirect_stdout(output), redirect_stderr(output):
+                exec(cleaned_command, self.globals, self.globals)
+        except Exception:
+            return output.getvalue() + traceback.format_exc()
+        return output.getvalue()
 
 
 python_repl = PythonREPL()

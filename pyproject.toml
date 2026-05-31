@@ -111,4 +111,7 @@ markers = [
 filterwarnings = [
     "ignore:Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*:UserWarning",
     "ignore:In future, it will be an error for 'np.bool' scalars to be interpreted as an index:DeprecationWarning",
+    "ignore:authlib.jose module is deprecated.*:authlib.deprecate.AuthlibDeprecationWarning",
+    "ignore:`torch.jit.script` is deprecated.*:DeprecationWarning:torch.jit._script",
+    "ignore:`torch.jit.load` is deprecated.*:DeprecationWarning:torch.jit._serialization",
 ]
