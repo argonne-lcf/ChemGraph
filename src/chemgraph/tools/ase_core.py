@@ -162,7 +162,7 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     if "emt" in calc_type:
         from chemgraph.schemas.calculators.emt_calc import EMTCalc
         calc = EMTCalc(**calculator)
-    elif "tblite" in calc_type:
+    elif "tblite" in calc_type or "xtb" in calc_type:
         from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
         calc = TBLiteCalc(**calculator)
     elif "orca" in calc_type:

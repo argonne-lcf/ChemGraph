@@ -37,6 +37,18 @@ if not _engine_available("aimnet2calc"):
     AIMNET2Calc = None
 
 
+_CALCULATOR_ALIASES = {
+    "xtb": "tbli",
+    "gfn1xtb": "tbli",
+    "gfn2xtb": "tbli",
+}
+
+
+def _calculator_key(name: str) -> str:
+    normalized = "".join(ch for ch in name.lower() if ch.isalnum())
+    return _CALCULATOR_ALIASES.get(normalized, normalized[:4])
+
+
 # Define all possible calculator classes
 _all_calculator_classes: List[Optional[Type[BaseModel]]] = [
     FAIRChemCalc,
@@ -64,7 +76,14 @@ elif MaceCalc:
 else:
     default_calculator = NWChemCalc
 
-_calculator_names = ", ".join([calc.__name__ for calc in available_calculator_classes])
+_calculator_name_items = [calc.__name__ for calc in available_calculator_classes]
+_calculator_name_items = [
+    "TBLiteCalc (aliases: xTB, GFN1-xTB, GFN2-xTB)"
+    if name == "TBLiteCalc"
+    else name
+    for name in _calculator_name_items
+]
+_calculator_names = ", ".join(_calculator_name_items)
 
 
 class ASEInputSchema(BaseModel):
@@ -150,32 +169,36 @@ class ASEInputSchema(BaseModel):
             calc = default_calculator()
             data["calculator"] = calc
 
-        available_calcs = [c.__name__[:4].lower() for c in available_calculator_classes]
+        available_calcs = {
+            _calculator_key(c.__name__.removesuffix("Calc")): c
+            for c in available_calculator_classes
+        }
+        available_calc_names = [c.__name__ for c in available_calculator_classes]
 
         if isinstance(calc, dict):
             calc_name = calc.get("calculator_type")
             if not calc_name:
                 raise ValueError("Calculator dictionary must have a 'calculator_type' key.")
 
-            if calc_name[:4].lower() not in available_calcs:
+            calc_key = _calculator_key(calc_name)
+            if calc_key not in available_calcs:
                 raise ValueError(
                     f"Calculator {calc_name} is not an allowed or available calculator. "
-                    f"Available calculators are: {available_calcs}"
+                    f"Available calculators are: {available_calc_names}"
                 )
 
-            for c in available_calculator_classes:
-                if c.__name__[:4].lower() == calc_name[:4].lower():
-                    init_args = calc.copy()
-                    init_args.pop("calculator_type", None)
-                    data["calculator"] = c(**init_args)
-                    return data
+            init_args = calc.copy()
+            init_args.pop("calculator_type", None)
+            data["calculator"] = available_calcs[calc_key](**init_args)
+            return data
 
         elif hasattr(calc, "__class__"):
             calc_type_name = calc.__class__.__name__
-            if calc_type_name[:4].lower() not in available_calcs:
+            calc_key = _calculator_key(calc_type_name.removesuffix("Calc"))
+            if calc_key not in available_calcs:
                 raise ValueError(
                     f"Calculator {calc_type_name} is not an allowed or available calculator. "
-                    f"Available calculators are: {available_calcs}"
+                    f"Available calculators are: {available_calc_names}"
                 )
         return data
 
