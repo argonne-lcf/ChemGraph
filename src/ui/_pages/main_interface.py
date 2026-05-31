@@ -5,6 +5,8 @@ import logging
 import os
 import queue
 import threading
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -28,7 +30,6 @@ from ui.endpoint import check_local_model_endpoint
 from ui.file_utils import (
     extract_log_dir_from_messages,
     find_latest_xyz_file_in_dir,
-    resolve_output_path,
 )
 from ui.message_utils import (
     extract_messages_from_result,
@@ -70,6 +71,36 @@ def _get_base_url_for_model(model_name: str, config: Dict[str, Any]) -> Optional
 
 def _get_model_options(config: Dict[str, Any]) -> list:
     return get_model_options_for_nested_config(config)
+
+
+def _initial_ui_log_root() -> str:
+    """Return the root directory for per-chat UI artifacts."""
+    env_log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+    if env_log_dir:
+        path = Path(env_log_dir).expanduser()
+        if path.name.startswith(("session_", "ui_session_")):
+            path = path.parent
+        return str(path.resolve())
+    return str((Path.cwd() / "cg_logs").resolve())
+
+
+def _ensure_chat_log_dir() -> str:
+    """Create and activate a log directory owned by the current chat."""
+    if not st.session_state.get("ui_log_root"):
+        st.session_state.ui_log_root = _initial_ui_log_root()
+
+    chat_log_dir = st.session_state.get("current_chat_log_dir")
+    if not chat_log_dir:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        suffix = str(uuid.uuid4())[:8]
+        chat_log_dir = str(
+            Path(st.session_state.ui_log_root) / f"ui_session_{timestamp}_{suffix}"
+        )
+        st.session_state.current_chat_log_dir = chat_log_dir
+
+    os.makedirs(chat_log_dir, exist_ok=True)
+    os.environ["CHEMGRAPH_LOG_DIR"] = chat_log_dir
+    return chat_log_dir
 
 
 def _resolve_structured_output_for_model(
@@ -242,6 +273,8 @@ def _start_new_chat() -> None:
     st.session_state.pop("_pending_example_query", None)
     st.session_state.agent = None
     st.session_state.last_config = None
+    st.session_state.current_chat_log_dir = None
+    os.environ.pop("CHEMGRAPH_LOG_DIR", None)
     _clear_interrupt_state()
 
 
@@ -334,6 +367,9 @@ def _load_session(session_id: str) -> None:
     st.session_state.last_run_error = None
     st.session_state.last_run_result = None
     st.session_state.last_run_query = None
+    st.session_state.current_chat_log_dir = session.log_dir
+    if session.log_dir:
+        os.environ["CHEMGRAPH_LOG_DIR"] = session.log_dir
 
 
 def _active_session_metadata() -> tuple[str, str]:
@@ -374,6 +410,7 @@ def _save_exchange_to_store(query: str, result: Any) -> None:
                 model_name=model,
                 workflow_type=workflow,
                 title=title,
+                log_dir=st.session_state.get("current_chat_log_dir"),
             )
             st.session_state.session_created = True
 
@@ -451,10 +488,12 @@ def _auto_initialize_agent(
         config["general"]["recursion_limit"],
         selected_base_url,
         get_argo_user_from_nested_config(config),
+        st.session_state.get("current_chat_log_dir"),
     )
 
     if st.session_state.agent is None or st.session_state.last_config != current_config:
         with st.spinner("\U0001f680 Initializing ChemGraph agents..."):
+            chat_log_dir = _ensure_chat_log_dir()
             agent = initialize_agent(
                 selected_model,
                 selected_workflow,
@@ -465,9 +504,24 @@ def _auto_initialize_agent(
                 config["general"]["recursion_limit"],
                 selected_base_url,
                 get_argo_user_from_nested_config(config),
+                log_dir=chat_log_dir,
             )
             st.session_state.agent = agent
-            st.session_state.last_config = current_config if agent is not None else None
+            if agent is not None:
+                st.session_state.last_config = (
+                    selected_model,
+                    selected_workflow,
+                    structured_output,
+                    selected_output,
+                    generate_report,
+                    human_supervised,
+                    config["general"]["recursion_limit"],
+                    selected_base_url,
+                    get_argo_user_from_nested_config(config),
+                    chat_log_dir,
+                )
+            else:
+                st.session_state.last_config = None
 
 
 def _render_conversation_history(thread_id: int) -> None:
@@ -507,11 +561,11 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
 
         # HTML report
         if html_filename:
-            _render_html_report(idx, html_filename, messages)
+            _render_html_report(idx, html_filename, messages, entry)
 
         # IR spectrum
         if is_infrared_requested(messages):
-            _render_ir_spectrum(idx, messages)
+            _render_ir_spectrum(idx, messages, entry)
 
         # Debug expander
         _render_verbose_info(idx, messages, entry)
@@ -577,7 +631,7 @@ def _render_structure_section(
             )
         elif not html_filename:
             if has_structure_signal(messages, entry.get("query", ""), final_answer):
-                log_dir = extract_log_dir_from_messages(messages)
+                log_dir = _artifact_log_dir(messages, entry)
                 if log_dir and os.path.isdir(log_dir):
                     latest_xyz = find_latest_xyz_file_in_dir(log_dir)
                     if latest_xyz:
@@ -592,10 +646,15 @@ def _render_structure_section(
                             st.warning(f"Failed to load XYZ structure: {exc}")
 
 
-def _render_html_report(idx: int, html_filename: str, messages: list) -> None:
+def _render_html_report(
+    idx: int, html_filename: str, messages: list, entry: dict
+) -> None:
     with st.expander("\U0001f4ca Report", expanded=False):
         try:
-            resolved_html = resolve_output_path(html_filename)
+            resolved_html = _resolve_artifact_path(
+                html_filename,
+                _artifact_log_dir(messages, entry),
+            )
             with open(resolved_html, "r", encoding="utf-8") as f:
                 html_content = f.read()
 
@@ -615,23 +674,24 @@ def _render_html_report(idx: int, html_filename: str, messages: list) -> None:
             st.error(f"Error displaying HTML: {e}")
 
 
+def _artifact_log_dir(messages: list, entry: dict) -> Optional[str]:
+    """Return the log directory tied to a specific conversation entry."""
+    entry_log_dir = entry.get("log_dir")
+    if entry_log_dir:
+        return entry_log_dir
+    return extract_log_dir_from_messages(messages)
+
+
 def _latest_artifact_path(directory: Optional[str], pattern: str) -> Optional[str]:
     """Return the newest shallow match for an output artifact pattern."""
-    search_dirs: list[Path] = []
-    if directory and os.path.isdir(directory):
-        search_dirs.append(Path(directory))
-    else:
-        log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-        if log_dir and os.path.isdir(log_dir):
-            search_dirs.append(Path(log_dir))
-        search_dirs.append(Path.cwd())
+    if not directory or not os.path.isdir(directory):
+        return None
 
     candidates: list[Path] = []
-    for base in search_dirs:
-        try:
-            candidates.extend(path for path in base.glob(pattern) if path.is_file())
-        except OSError:
-            continue
+    try:
+        candidates.extend(path for path in Path(directory).glob(pattern) if path.is_file())
+    except OSError:
+        return None
 
     if not candidates:
         return None
@@ -644,11 +704,11 @@ def _resolve_artifact_path(filename: str, directory: Optional[str]) -> str:
         return filename
     if directory:
         return str(Path(directory) / filename)
-    return resolve_output_path(filename)
+    return filename
 
 
-def _render_ir_spectrum(idx: int, messages: list) -> None:
-    log_dir = extract_log_dir_from_messages(messages)
+def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
+    log_dir = _artifact_log_dir(messages, entry)
     ir_path = _latest_artifact_path(log_dir, "ir_spectrum*.png")
     freq_path = _latest_artifact_path(log_dir, "frequencies*.csv")
 
@@ -809,6 +869,7 @@ def _clear_interrupt_state() -> None:
     st.session_state.pending_interrupt_prev_msg_count = 0
     st.session_state.pending_interrupt_model = None
     st.session_state.pending_interrupt_workflow = None
+    st.session_state.pending_interrupt_log_dir = None
     st.session_state.interrupt_count = 0
     st.session_state.interrupt_exchanges = []
 
@@ -1001,8 +1062,8 @@ def _handle_query_submission(
     st.session_state.last_run_result = None
 
     # Agent setup (mirroring agent.run() preamble)
-    if not os.environ.get("CHEMGRAPH_LOG_DIR"):
-        os.environ["CHEMGRAPH_LOG_DIR"] = agent.log_dir or "cg_logs"
+    if agent.log_dir:
+        os.environ["CHEMGRAPH_LOG_DIR"] = agent.log_dir
     try:
         agent._ensure_session(trimmed_query)
     except Exception:
@@ -1061,7 +1122,12 @@ def _handle_query_submission(
 
             st.session_state.last_run_result = result
             st.session_state.conversation_history.append(
-                {"query": trimmed_query, "result": result, "thread_id": thread_id}
+                {
+                    "query": trimmed_query,
+                    "result": result,
+                    "thread_id": thread_id,
+                    "log_dir": agent.log_dir,
+                }
             )
             _save_exchange_to_store(trimmed_query, result)
             st.session_state.query_input = ""
@@ -1081,6 +1147,7 @@ def _handle_query_submission(
             st.session_state.pending_interrupt_workflow = st.session_state.get(
                 "active_workflow"
             )
+            st.session_state.pending_interrupt_log_dir = agent.log_dir
             st.session_state.interrupt_count = 1
             st.session_state.interrupt_exchanges = []
             st.rerun()
@@ -1105,6 +1172,8 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
         st.error("Agent was re-initialized. Please submit your query again.")
         _clear_interrupt_state()
         return
+    if agent.log_dir:
+        os.environ["CHEMGRAPH_LOG_DIR"] = agent.log_dir
 
     MAX_INTERRUPTS = 10
 
@@ -1159,6 +1228,8 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
                     "query": original_query,
                     "result": final_result,
                     "thread_id": thread_id,
+                    "log_dir": st.session_state.get("pending_interrupt_log_dir")
+                    or agent.log_dir,
                     "interrupt_exchanges": exchanges,
                 }
             )

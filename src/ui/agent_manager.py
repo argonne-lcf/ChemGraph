@@ -15,6 +15,7 @@ def initialize_agent(
     recursion_limit: int,
     base_url: Optional[str],
     argo_user: Optional[str],
+    log_dir: Optional[str] = None,
 ):
     """Create a :class:`ChemGraph` agent instance.
 
@@ -37,6 +38,7 @@ def initialize_agent(
             return_option=return_option,
             recursion_limit=recursion_limit,
             human_supervised=human_supervised,
+            log_dir=log_dir,
         )
     except Exception as exc:
         st.error(f"Failed to initialize agent: {exc}")

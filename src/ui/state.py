@@ -25,6 +25,8 @@ def init_session_state() -> None:
         "ui_notice": None,
         "active_model": None,
         "active_workflow": None,
+        "ui_log_root": None,
+        "current_chat_log_dir": None,
         # Session persistence
         "session_store": None,  # SessionStore instance (created lazily)
         "current_session_id": None,  # active session ID (str or None)
@@ -37,6 +39,7 @@ def init_session_state() -> None:
         "pending_interrupt_prev_msg_count": 0,  # int: msg count before query started
         "pending_interrupt_model": None,  # str: model active when query started
         "pending_interrupt_workflow": None,  # str: workflow active when query started
+        "pending_interrupt_log_dir": None,  # str: log dir active when query started
         "interrupt_count": 0,  # int: safety counter for sequential interrupts
         "interrupt_exchanges": [],  # list of {"question": str, "answer": str}
     }

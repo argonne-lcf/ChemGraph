@@ -43,12 +43,13 @@ def test_non_argo_structured_output_is_preserved():
     assert notice is None
 
 
-def test_failed_agent_initialization_is_not_cached(monkeypatch):
+def test_failed_agent_initialization_is_not_cached(monkeypatch, tmp_path):
     fake_st = _FakeStreamlit()
     fake_st.session_state.agent = None
     fake_st.session_state.last_config = ("previous",)
     monkeypatch.setattr(main_ui, "st", fake_st)
-    monkeypatch.setattr(main_ui, "initialize_agent", lambda *args: None)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(main_ui, "initialize_agent", lambda *args, **kwargs: None)
 
     main_ui._auto_initialize_agent(
         {"general": {"recursion_limit": 20}, "api": {"openai": {}}},
@@ -112,13 +113,30 @@ def test_latest_artifact_path_uses_newest_shallow_match(tmp_path):
     )
 
 
+def test_latest_artifact_path_does_not_fallback_to_global_env(monkeypatch, tmp_path):
+    stale_dir = tmp_path / "stale"
+    stale_dir.mkdir()
+    stale_file = stale_dir / "ir_spectrum_old.png"
+    stale_file.write_text("old")
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(stale_dir))
+
+    assert main_ui._latest_artifact_path(None, "ir_spectrum*.png") is None
+
+
 def test_resolve_artifact_path_uses_run_directory_for_relative_paths(tmp_path):
     assert main_ui._resolve_artifact_path("mol_vib.1.traj", str(tmp_path)) == str(
         tmp_path / "mol_vib.1.traj"
     )
 
 
-def test_start_new_chat_clears_history_and_resets_agent(monkeypatch):
+def test_artifact_log_dir_prefers_conversation_entry():
+    messages = [{"content": "saved to /old/run/output.json"}]
+    entry = {"log_dir": "/current/chat"}
+
+    assert main_ui._artifact_log_dir(messages, entry) == "/current/chat"
+
+
+def test_start_new_chat_clears_history_agent_and_log_dir(monkeypatch):
     fake_st = _FakeStreamlit()
     fake_st.session_state.conversation_history = [{"query": "old"}]
     fake_st.session_state.current_session_id = "abc123"
@@ -130,6 +148,7 @@ def test_start_new_chat_clears_history_and_resets_agent(monkeypatch):
     fake_st.session_state._pending_example_query = "example"
     fake_st.session_state.agent = object()
     fake_st.session_state.last_config = ("old",)
+    fake_st.session_state.current_chat_log_dir = "/tmp/old-chat"
     fake_st.session_state.pending_human_question = "question"
     fake_st.session_state.pending_interrupt_config = {"configurable": {"thread_id": "1"}}
     fake_st.session_state.pending_interrupt_query = "interrupted"
@@ -137,9 +156,11 @@ def test_start_new_chat_clears_history_and_resets_agent(monkeypatch):
     fake_st.session_state.pending_interrupt_prev_msg_count = 3
     fake_st.session_state.pending_interrupt_model = "old-model"
     fake_st.session_state.pending_interrupt_workflow = "single_agent"
+    fake_st.session_state.pending_interrupt_log_dir = "/tmp/old-chat"
     fake_st.session_state.interrupt_count = 2
     fake_st.session_state.interrupt_exchanges = [{"question": "q", "answer": "a"}]
     monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", "/tmp/old-chat")
 
     main_ui._start_new_chat()
 
@@ -153,6 +174,8 @@ def test_start_new_chat_clears_history_and_resets_agent(monkeypatch):
     assert "_pending_example_query" not in fake_st.session_state
     assert fake_st.session_state.agent is None
     assert fake_st.session_state.last_config is None
+    assert fake_st.session_state.current_chat_log_dir is None
+    assert "CHEMGRAPH_LOG_DIR" not in os.environ
     assert fake_st.session_state.pending_human_question is None
     assert fake_st.session_state.pending_interrupt_config is None
     assert fake_st.session_state.pending_interrupt_query is None
@@ -160,5 +183,6 @@ def test_start_new_chat_clears_history_and_resets_agent(monkeypatch):
     assert fake_st.session_state.pending_interrupt_prev_msg_count == 0
     assert fake_st.session_state.pending_interrupt_model is None
     assert fake_st.session_state.pending_interrupt_workflow is None
+    assert fake_st.session_state.pending_interrupt_log_dir is None
     assert fake_st.session_state.interrupt_count == 0
     assert fake_st.session_state.interrupt_exchanges == []
