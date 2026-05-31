@@ -118,6 +118,7 @@ def render() -> None:
     selected_model, thread_id = _render_quick_settings(
         config, selected_model, thread_id
     )
+    _render_chat_controls()
 
     structured_output, ui_notice = _resolve_structured_output_for_model(
         selected_model, structured_output
@@ -238,7 +239,17 @@ def _start_new_chat() -> None:
     st.session_state.last_run_error = None
     st.session_state.last_run_result = None
     st.session_state.last_run_query = None
+    st.session_state.pop("_pending_example_query", None)
+    st.session_state.agent = None
+    st.session_state.last_config = None
     _clear_interrupt_state()
+
+
+def _render_chat_controls() -> None:
+    """Render chat-level actions that must be available even without memory."""
+    if st.sidebar.button("New Chat", key="new_chat_btn", use_container_width=True):
+        _start_new_chat()
+        st.rerun()
 
 
 def _render_session_sidebar() -> None:
@@ -248,11 +259,6 @@ def _render_session_sidebar() -> None:
         return
 
     with st.sidebar.expander("\U0001f4c2 Sessions", expanded=False):
-        # New Chat button
-        if st.button("\u2795 New Chat", key="new_chat_btn", use_container_width=True):
-            _start_new_chat()
-            st.rerun()
-
         # Show current session info
         current_sid = st.session_state.get("current_session_id")
         if current_sid:

@@ -116,3 +116,49 @@ def test_resolve_artifact_path_uses_run_directory_for_relative_paths(tmp_path):
     assert main_ui._resolve_artifact_path("mol_vib.1.traj", str(tmp_path)) == str(
         tmp_path / "mol_vib.1.traj"
     )
+
+
+def test_start_new_chat_clears_history_and_resets_agent(monkeypatch):
+    fake_st = _FakeStreamlit()
+    fake_st.session_state.conversation_history = [{"query": "old"}]
+    fake_st.session_state.current_session_id = "abc123"
+    fake_st.session_state.session_created = True
+    fake_st.session_state.query_input = "draft"
+    fake_st.session_state.last_run_error = RuntimeError("old error")
+    fake_st.session_state.last_run_result = {"messages": ["old"]}
+    fake_st.session_state.last_run_query = "old query"
+    fake_st.session_state._pending_example_query = "example"
+    fake_st.session_state.agent = object()
+    fake_st.session_state.last_config = ("old",)
+    fake_st.session_state.pending_human_question = "question"
+    fake_st.session_state.pending_interrupt_config = {"configurable": {"thread_id": "1"}}
+    fake_st.session_state.pending_interrupt_query = "interrupted"
+    fake_st.session_state.pending_interrupt_thread_id = 1
+    fake_st.session_state.pending_interrupt_prev_msg_count = 3
+    fake_st.session_state.pending_interrupt_model = "old-model"
+    fake_st.session_state.pending_interrupt_workflow = "single_agent"
+    fake_st.session_state.interrupt_count = 2
+    fake_st.session_state.interrupt_exchanges = [{"question": "q", "answer": "a"}]
+    monkeypatch.setattr(main_ui, "st", fake_st)
+
+    main_ui._start_new_chat()
+
+    assert fake_st.session_state.conversation_history == []
+    assert fake_st.session_state.current_session_id is None
+    assert fake_st.session_state.session_created is False
+    assert fake_st.session_state.query_input == ""
+    assert fake_st.session_state.last_run_error is None
+    assert fake_st.session_state.last_run_result is None
+    assert fake_st.session_state.last_run_query is None
+    assert "_pending_example_query" not in fake_st.session_state
+    assert fake_st.session_state.agent is None
+    assert fake_st.session_state.last_config is None
+    assert fake_st.session_state.pending_human_question is None
+    assert fake_st.session_state.pending_interrupt_config is None
+    assert fake_st.session_state.pending_interrupt_query is None
+    assert fake_st.session_state.pending_interrupt_thread_id is None
+    assert fake_st.session_state.pending_interrupt_prev_msg_count == 0
+    assert fake_st.session_state.pending_interrupt_model is None
+    assert fake_st.session_state.pending_interrupt_workflow is None
+    assert fake_st.session_state.interrupt_count == 0
+    assert fake_st.session_state.interrupt_exchanges == []
