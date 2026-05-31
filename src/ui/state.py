@@ -23,6 +23,8 @@ def init_session_state() -> None:
         "last_run_result": None,
         "last_run_query": None,
         "ui_notice": None,
+        "active_model": None,
+        "active_workflow": None,
         # Session persistence
         "session_store": None,  # SessionStore instance (created lazily)
         "current_session_id": None,  # active session ID (str or None)
@@ -33,6 +35,8 @@ def init_session_state() -> None:
         "pending_interrupt_query": None,  # str: original user query
         "pending_interrupt_thread_id": None,  # int: thread_id for interrupted run
         "pending_interrupt_prev_msg_count": 0,  # int: msg count before query started
+        "pending_interrupt_model": None,  # str: model active when query started
+        "pending_interrupt_workflow": None,  # str: workflow active when query started
         "interrupt_count": 0,  # int: safety counter for sequential interrupts
         "interrupt_exchanges": [],  # list of {"question": str, "answer": str}
     }

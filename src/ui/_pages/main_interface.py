@@ -26,7 +26,6 @@ from ui.branding import LOGO_IMAGES, first_existing_asset
 from ui.config import load_config
 from ui.endpoint import check_local_model_endpoint
 from ui.file_utils import (
-    changed_recently,
     extract_log_dir_from_messages,
     find_latest_xyz_file_in_dir,
     resolve_output_path,
@@ -73,6 +72,18 @@ def _get_model_options(config: Dict[str, Any]) -> list:
     return get_model_options_for_nested_config(config)
 
 
+def _resolve_structured_output_for_model(
+    model_name: str, structured_output: bool
+) -> tuple[bool, Optional[str]]:
+    """Disable structured output for Argo models, including quick overrides."""
+    if model_name in supported_argo_models and structured_output:
+        return (
+            False,
+            "Structured output is disabled for Argo models to avoid JSON parsing errors.",
+        )
+    return structured_output, None
+
+
 # ---------------------------------------------------------------------------
 # Page entry point
 # ---------------------------------------------------------------------------
@@ -91,13 +102,6 @@ def render() -> None:
     human_supervised = config["general"].get("human_supervised", False)
     thread_id = config["general"]["thread"]
 
-    # Argo models: disable structured output
-    if selected_model in supported_argo_models and structured_output:
-        structured_output = False
-        st.session_state.ui_notice = (
-            "Structured output is disabled for Argo models to avoid JSON parsing errors."
-        )
-
     # ----- Header -----
     logo_image = first_existing_asset(LOGO_IMAGES)
     if logo_image:
@@ -105,17 +109,24 @@ def render() -> None:
     else:
         st.title("\U0001f9ea ChemGraph")
 
-    st.markdown(
-        """
+    st.markdown("""
     ChemGraph enables you to perform various **computational chemistry** tasks with
     natural-language queries using AI agents.
-    """
-    )
+    """)
 
     # ----- Quick settings sidebar -----
     selected_model, thread_id = _render_quick_settings(
         config, selected_model, thread_id
     )
+
+    structured_output, ui_notice = _resolve_structured_output_for_model(
+        selected_model, structured_output
+    )
+    st.session_state.ui_notice = ui_notice
+    st.session_state.active_model = selected_model
+    st.session_state.active_workflow = selected_workflow
+    if ui_notice:
+        st.info(ui_notice)
 
     selected_base_url = _get_base_url_for_model(selected_model, config)
     endpoint_status = check_local_model_endpoint(selected_base_url)
@@ -130,9 +141,7 @@ def render() -> None:
         st.rerun()
 
     # ----- Agent status sidebar -----
-    _render_agent_status(
-        selected_model, selected_workflow, thread_id, endpoint_status
-    )
+    _render_agent_status(selected_model, selected_workflow, thread_id, endpoint_status)
 
     # ----- Auto-initialize agent -----
     _auto_initialize_agent(
@@ -158,7 +167,11 @@ def render() -> None:
     # ----- Chat input (handles both normal queries and interrupt responses) -----
     is_interrupt = st.session_state.pending_human_question is not None
     prompt = st.chat_input(
-        "Type your response..." if is_interrupt else "Ask a computational chemistry question...",
+        (
+            "Type your response..."
+            if is_interrupt
+            else "Ask a computational chemistry question..."
+        ),
     )
 
     # Check for example query submitted via button click
@@ -225,14 +238,7 @@ def _start_new_chat() -> None:
     st.session_state.last_run_error = None
     st.session_state.last_run_result = None
     st.session_state.last_run_query = None
-    # Clear any pending interrupt state
-    st.session_state.pending_human_question = None
-    st.session_state.pending_interrupt_config = None
-    st.session_state.pending_interrupt_query = None
-    st.session_state.pending_interrupt_thread_id = None
-    st.session_state.pending_interrupt_prev_msg_count = 0
-    st.session_state.interrupt_count = 0
-    st.session_state.interrupt_exchanges = []
+    _clear_interrupt_state()
 
 
 def _render_session_sidebar() -> None:
@@ -297,7 +303,9 @@ def _render_session_sidebar() -> None:
                         if current_sid == s.session_id:
                             _start_new_chat()
                     except Exception as exc:
-                        logger.warning("Failed to delete session %s: %s", s.session_id, exc)
+                        logger.warning(
+                            "Failed to delete session %s: %s", s.session_id, exc
+                        )
                     st.rerun()
 
 
@@ -322,6 +330,22 @@ def _load_session(session_id: str) -> None:
     st.session_state.last_run_query = None
 
 
+def _active_session_metadata() -> tuple[str, str]:
+    """Return model/workflow metadata matching the active UI run."""
+    config = st.session_state.config
+    model = (
+        st.session_state.get("pending_interrupt_model")
+        or st.session_state.get("active_model")
+        or config["general"]["model"]
+    )
+    workflow = (
+        st.session_state.get("pending_interrupt_workflow")
+        or st.session_state.get("active_workflow")
+        or config["general"]["workflow"]
+    )
+    return model, normalize_workflow_name(workflow)
+
+
 def _save_exchange_to_store(query: str, result: Any) -> None:
     """Persist a single query/result exchange to the SessionStore.
 
@@ -331,9 +355,7 @@ def _save_exchange_to_store(query: str, result: Any) -> None:
     if store is None:
         return
 
-    config = st.session_state.config
-    model = config["general"]["model"]
-    workflow = normalize_workflow_name(config["general"]["workflow"])
+    model, workflow = _active_session_metadata()
 
     try:
         # Create the session row on the first exchange
@@ -353,9 +375,7 @@ def _save_exchange_to_store(query: str, result: Any) -> None:
         entry = {"query": query, "result": result}
         messages = conversation_entry_to_messages(entry)
         if messages:
-            store.save_messages(
-                st.session_state.current_session_id, messages
-            )
+            store.save_messages(st.session_state.current_session_id, messages)
     except Exception as exc:
         # Best-effort persistence -- don't break the UI.
         logger.warning("Failed to save exchange to session store: %s", exc)
@@ -367,7 +387,7 @@ def _render_agent_status(
     thread_id: int,
     endpoint_status: dict,
 ) -> None:
-    st.sidebar.header("\U0001f171\U0001f172 Agent Status")
+    st.sidebar.header("Agent Status")
 
     if st.session_state.agent:
         st.sidebar.success("\u2705 Agents Ready")
@@ -389,13 +409,7 @@ def _render_agent_status(
         if st.sidebar.button("\U0001f504 Refresh Agents"):
             st.session_state.agent = None
             # Checkpoint is lost on re-init, so clear interrupt state
-            st.session_state.pending_human_question = None
-            st.session_state.pending_interrupt_config = None
-            st.session_state.pending_interrupt_query = None
-            st.session_state.pending_interrupt_thread_id = None
-            st.session_state.pending_interrupt_prev_msg_count = 0
-            st.session_state.interrupt_count = 0
-            st.session_state.interrupt_exchanges = []
+            _clear_interrupt_state()
             st.rerun()
     else:
         st.sidebar.error("\u274c Agents Not Ready")
@@ -433,12 +447,9 @@ def _auto_initialize_agent(
         get_argo_user_from_nested_config(config),
     )
 
-    if (
-        st.session_state.agent is None
-        or st.session_state.last_config != current_config
-    ):
+    if st.session_state.agent is None or st.session_state.last_config != current_config:
         with st.spinner("\U0001f680 Initializing ChemGraph agents..."):
-            st.session_state.agent = initialize_agent(
+            agent = initialize_agent(
                 selected_model,
                 selected_workflow,
                 structured_output,
@@ -449,7 +460,8 @@ def _auto_initialize_agent(
                 selected_base_url,
                 get_argo_user_from_nested_config(config),
             )
-            st.session_state.last_config = current_config
+            st.session_state.agent = agent
+            st.session_state.last_config = current_config if agent is not None else None
 
 
 def _render_conversation_history(thread_id: int) -> None:
@@ -493,7 +505,7 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
 
         # IR spectrum
         if is_infrared_requested(messages):
-            _render_ir_spectrum(idx)
+            _render_ir_spectrum(idx, messages)
 
         # Debug expander
         _render_verbose_info(idx, messages, entry)
@@ -524,9 +536,7 @@ def _extract_final_answer(messages: list) -> str:
                     final_answer = content
                     break
         elif hasattr(message, "content"):
-            content = normalize_message_content(
-                getattr(message, "content", "")
-            ).strip()
+            content = normalize_message_content(getattr(message, "content", "")).strip()
             if content and not (
                 content.startswith("{")
                 and content.endswith("}")
@@ -599,63 +609,104 @@ def _render_html_report(idx: int, html_filename: str, messages: list) -> None:
             st.error(f"Error displaying HTML: {e}")
 
 
-def _render_ir_spectrum(idx: int) -> None:
-    if changed_recently():
-        with st.expander("\U0001f50d IR Spectrum", expanded=True):
-            col1, col2 = st.columns(2, border=True)
-
-            with col1:
-                ir_path = resolve_output_path("ir_spectrum.png")
-                if os.path.exists(ir_path):
-                    st.image(ir_path)
-                else:
-                    st.warning("IR spectrum plot not found.")
-
-            with col2:
-                freq_path = resolve_output_path("frequencies.csv")
-                if not os.path.exists(freq_path):
-                    st.warning("Frequencies file not found.")
-                else:
-                    df = pd.read_csv(
-                        freq_path,
-                        index_col=False,
-                        names=["filename", "frequency"],
-                    ).iloc[6:]
-
-                    if not df.empty:
-                        st.write("**Select a frequency to visualize:**")
-                        freq_options = {
-                            f"{float(row['frequency'].strip('i')):.2f} cm\u207b\u00b9": i
-                            for i, row in df.iterrows()
-                        }
-                        selected_freq = st.selectbox(
-                            "Frequency",
-                            list(freq_options.keys()),
-                            index=0,
-                            key=f"ir_frequency_select_{idx}",
-                        )
-                        traj_file = df.loc[freq_options[selected_freq]]["filename"]
-                        traj_path = resolve_output_path(traj_file)
-                        if not os.path.exists(traj_path):
-                            st.warning(
-                                f"Trajectory file '{traj_file}' not found."
-                            )
-                        elif not STMOL_AVAILABLE:
-                            st.info(
-                                "3D viewer not available; install stmol to animate trajectories."
-                            )
-                        else:
-                            import stmol
-                            from ase.io.trajectory import Trajectory
-
-                            traj = Trajectory(traj_path)
-                            view = visualize_trajectory(traj)
-                            view.zoomTo()
-                            stmol.showmol(view, height=400, width=500)
-                    else:
-                        st.warning("No vibrational frequencies found.")
+def _latest_artifact_path(directory: Optional[str], pattern: str) -> Optional[str]:
+    """Return the newest shallow match for an output artifact pattern."""
+    search_dirs: list[Path] = []
+    if directory and os.path.isdir(directory):
+        search_dirs.append(Path(directory))
     else:
+        log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+        if log_dir and os.path.isdir(log_dir):
+            search_dirs.append(Path(log_dir))
+        search_dirs.append(Path.cwd())
+
+    candidates: list[Path] = []
+    for base in search_dirs:
+        try:
+            candidates.extend(path for path in base.glob(pattern) if path.is_file())
+        except OSError:
+            continue
+
+    if not candidates:
+        return None
+    return str(max(candidates, key=lambda path: path.stat().st_mtime))
+
+
+def _resolve_artifact_path(filename: str, directory: Optional[str]) -> str:
+    """Resolve an artifact path relative to its run directory when known."""
+    if os.path.isabs(filename):
+        return filename
+    if directory:
+        return str(Path(directory) / filename)
+    return resolve_output_path(filename)
+
+
+def _render_ir_spectrum(idx: int, messages: list) -> None:
+    log_dir = extract_log_dir_from_messages(messages)
+    ir_path = _latest_artifact_path(log_dir, "ir_spectrum*.png")
+    freq_path = _latest_artifact_path(log_dir, "frequencies*.csv")
+
+    if not ir_path and not freq_path:
         st.warning("IR spectrum not found.")
+        return
+
+    with st.expander("\U0001f50d IR Spectrum", expanded=True):
+        col1, col2 = st.columns(2, border=True)
+
+        with col1:
+            if ir_path and os.path.exists(ir_path):
+                st.image(ir_path)
+            else:
+                st.warning("IR spectrum plot not found.")
+
+        with col2:
+            if not freq_path or not os.path.exists(freq_path):
+                st.warning("Frequencies file not found.")
+                return
+
+            df = pd.read_csv(
+                freq_path,
+                index_col=False,
+                names=["filename", "frequency"],
+            )
+            modes = df.iloc[6:] if len(df) > 6 else df
+
+            if modes.empty:
+                st.warning("No vibrational frequencies found.")
+                return
+
+            st.write("**Select a frequency to visualize:**")
+            freq_options = {}
+            for mode_idx, row in modes.iterrows():
+                freq_text = str(row["frequency"]).strip()
+                suffix = "i" if freq_text.endswith("i") else ""
+                try:
+                    freq_value = float(freq_text.rstrip("i"))
+                    label = f"Mode {mode_idx}: {freq_value:.2f}{suffix} cm\u207b\u00b9"
+                except ValueError:
+                    label = f"Mode {mode_idx}: {freq_text} cm\u207b\u00b9"
+                freq_options[label] = mode_idx
+
+            selected_freq = st.selectbox(
+                "Frequency",
+                list(freq_options.keys()),
+                index=0,
+                key=f"ir_frequency_select_{idx}",
+            )
+            traj_file = str(modes.loc[freq_options[selected_freq]]["filename"])
+            traj_path = _resolve_artifact_path(traj_file, log_dir)
+            if not os.path.exists(traj_path):
+                st.warning(f"Trajectory file '{traj_file}' not found.")
+            elif not STMOL_AVAILABLE:
+                st.info("3D viewer not available; install stmol to animate trajectories.")
+            else:
+                import stmol
+                from ase.io.trajectory import Trajectory
+
+                traj = Trajectory(traj_path)
+                view = visualize_trajectory(traj)
+                view.zoomTo()
+                stmol.showmol(view, height=400, width=500)
 
 
 def _render_verbose_info(idx: int, messages: list, entry: dict) -> None:
@@ -680,19 +731,18 @@ def _render_verbose_info(idx: int, messages: list, entry: dict) -> None:
                 content = normalize_message_content(msg.get("content", ""))
             else:
                 msg_type = type(msg).__name__
-                content = normalize_message_content(
-                    getattr(msg, "content", str(msg))
-                )
-            content_preview = (
-                (content[:100] + "...") if len(content) > 100 else content
-            )
+                content = normalize_message_content(getattr(msg, "content", str(msg)))
+            content_preview = (content[:100] + "...") if len(content) > 100 else content
             st.write(f"  **Message {i+1}:** `{msg_type}` - {content_preview}")
 
 
 def _render_example_queries(config: dict, selected_model: str) -> None:
     """Show example queries that the user can click to submit directly."""
     # Hide after the first message or during an interrupt
-    if st.session_state.conversation_history or st.session_state.pending_human_question is not None:
+    if (
+        st.session_state.conversation_history
+        or st.session_state.pending_human_question is not None
+    ):
         return
 
     with st.expander("Example Queries", expanded=False):
@@ -751,6 +801,8 @@ def _clear_interrupt_state() -> None:
     st.session_state.pending_interrupt_query = None
     st.session_state.pending_interrupt_thread_id = None
     st.session_state.pending_interrupt_prev_msg_count = 0
+    st.session_state.pending_interrupt_model = None
+    st.session_state.pending_interrupt_workflow = None
     st.session_state.interrupt_count = 0
     st.session_state.interrupt_exchanges = []
 
@@ -1017,6 +1069,12 @@ def _handle_query_submission(
             st.session_state.pending_interrupt_query = trimmed_query
             st.session_state.pending_interrupt_thread_id = thread_id
             st.session_state.pending_interrupt_prev_msg_count = prev_msg_count
+            st.session_state.pending_interrupt_model = st.session_state.get(
+                "active_model"
+            )
+            st.session_state.pending_interrupt_workflow = st.session_state.get(
+                "active_workflow"
+            )
             st.session_state.interrupt_count = 1
             st.session_state.interrupt_exchanges = []
             st.rerun()
@@ -1083,9 +1141,7 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
                 return
 
             # Only keep messages from this query (not prior thread history)
-            prev_msg_count = st.session_state.get(
-                "pending_interrupt_prev_msg_count", 0
-            )
+            prev_msg_count = st.session_state.get("pending_interrupt_prev_msg_count", 0)
             all_msgs = result_state.get("messages", [])
             new_msgs = all_msgs[prev_msg_count:]
             final_result = {"messages": new_msgs}
@@ -1123,6 +1179,3 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
             st.session_state.last_run_error = event_data
             st.error(f"Error during resume: {event_data}")
             _clear_interrupt_state()
-
-
-

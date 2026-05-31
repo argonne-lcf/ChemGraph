@@ -158,7 +158,6 @@ If you need to install from source for the latest version:
 2. Create and activate a virtual environment using uv:
     ```bash
     uv venv --python 3.11 chemgraph-env
-    # uv venv --python 3.11 chemgraph-env # For specific python version
 
     source chemgraph-env/bin/activate # Unix/macos
     # OR
@@ -231,7 +230,7 @@ If you need to install from source for the latest version:
 <details>
   <summary><strong>Streamlit Web Interface</strong></summary>
 
-ChemGraph includes a **Streamlit web interface** that provides an intuitive, chat-based UI for interacting with computational chemistry agents. The interface supports 3D molecular visualization, conversation history, and easy access to various ChemGraph workflows.
+ChemGraph includes a **Streamlit web interface** for chat-driven computational chemistry workflows. The UI auto-initializes the selected agent, streams tool-call progress while a query runs, shows generated structures and reports, and stores conversations in the same local session database used by the CLI.
 
 ### Features
 
@@ -240,7 +239,8 @@ ChemGraph includes a **Streamlit web interface** that provides an intuitive, cha
 - **📊 Report Integration**: Embedded HTML reports from computational calculations
 - **💾 Data Export**: Download molecular structures as XYZ or JSON files
 - **🔧 Multiple Workflows**: Support for single-agent, multi-agent, Python REPL, and gRASPA workflows
-- **🎨 Modern UI**: Clean, responsive interface with conversation bubbles and molecular properties display
+- **💬 Session Memory**: Browse, load, and delete saved conversations from `~/.chemgraph/sessions.db`
+- **👤 Human Supervision**: Optional follow-up prompts when the agent needs confirmation or missing inputs
 
 ### Installation Requirements
 
@@ -278,16 +278,17 @@ pip install -e ".[uma]"
 ### Using the Interface
 
 #### Configuration
-- **Model Selection**: Choose from GPT-4o, GPT-4o-mini, or Claude models
-- **Workflow Type**: Select single-agent, multi-agent, Python REPL, or gRASPA workflows
+- Use the **Configuration** page to edit `config.toml`, provider base URLs, API timeouts, workflow, recursion limit, report generation, and human supervision.
+- API keys entered in the UI are applied only to the current Streamlit process and are not written to `config.toml`.
+- Use **Quick Settings** in the main sidebar for temporary model or thread overrides without changing `config.toml`.
 
 
 #### Interaction
-1. **Initialize Agent**: Click "Initialize Agent" in the sidebar to set up your ChemGraph instance
-2. **Ask Questions**: Use the text area to enter computational chemistry queries
-3. **View Results**: See responses in chat bubbles with automatic structure detection
-4. **3D Visualization**: When molecular structures are detected, they're automatically displayed in 3D
-5. **Download Data**: Export structures and calculation results directly from the interface
+1. **Open the main page**: The agent initializes automatically from the active configuration.
+2. **Ask Questions**: Use the chat input to enter computational chemistry queries.
+3. **Monitor Tools**: Tool calls and completions stream in the assistant response while the workflow runs.
+4. **Respond to Prompts**: If human supervision is enabled and the agent pauses, answer in the same chat input.
+5. **View and Export Results**: Structures, IR artifacts, HTML reports, and download controls appear with the response when available.
 
 #### Example Queries
 - "What is the SMILES string for caffeine?"
@@ -304,8 +305,9 @@ The interface automatically detects molecular structure data in agent responses 
 
 #### Conversation Management
 - **History Display**: All queries and responses are preserved in conversation bubbles
+- **Saved Sessions**: Recent sessions can be loaded or deleted from the sidebar
 - **Structure Detection**: Molecular structures are automatically extracted and visualized
-- **Report Integration**: HTML reports from calculations are embedded directly in the interface
+- **Report Integration**: HTML reports and run artifacts are embedded directly in the interface
 - **Debug Information**: Expandable sections show detailed message processing information
 
 ### Troubleshooting
@@ -317,13 +319,14 @@ The interface automatically detects molecular structure data in agent responses 
 
 **Agent Initialization:**
 - Verify API keys are set correctly
+- Verify provider base URLs and local model endpoints on the Configuration page
 - Check that ChemGraph package is installed: `pip install -e .`
 - Ensure all dependencies are available in your environment
 
 **Performance:**
 - For large molecular systems, visualization may take longer to load
-- Use the refresh button if the interface becomes unresponsive
-- Clear conversation history to improve performance with many queries
+- Start a new chat or load a smaller saved session if rendering many prior structures becomes slow
+- Use **Refresh Agents** after changing credentials or external model services
 
 </details>
 
@@ -343,7 +346,8 @@ Create a `config.toml` file in your project directory to configure ChemGraph beh
 [general]
 # Default model to use for queries
 model = "gpt-4o-mini"
-# Workflow type: single_agent, multi_agent, python_repl, graspa
+# Workflow type: single_agent, multi_agent, python_relp, graspa, mock_agent
+# Alias accepted by CLI/UI: python_repl -> python_relp
 workflow = "single_agent"
 # Output format: state, last_message
 output = "state"
@@ -351,9 +355,13 @@ output = "state"
 structured = false
 # Generate detailed reports
 report = true
+# Default LangGraph thread ID
+thread = 1
 
 # Recursion limit for agent workflows
 recursion_limit = 20
+# Allow the agent to pause and ask for human input
+human_supervised = false
 # Enable verbose output
 verbose = false
 
@@ -460,6 +468,11 @@ rate_limit = true
 max_requests_per_minute = 60
 ```
 
+The core CLI and UI currently consume `[general]`, `[api]`, `[chemistry]`, and
+`[output]` directly. The agent uses deterministic LLM defaults internally
+(`temperature=0.0`, fixed token limits); `[llm]` entries are kept for
+documentation/forward compatibility rather than active runtime tuning.
+
 ### Using Configuration Files
 
 #### With the Command Line Interface
@@ -495,20 +508,17 @@ export OPENAI_API_KEY="<your_anl_domain_username>"
 export ARGO_USER="<your_anl_domain_username>"
 ```
 
-3. Use an Argo model ID (from `supported_argo_models` in `src/chemgraph/models/supported_models.py`):
+3. Use an Argo model ID with the `argo:` prefix (from `supported_argo_models` in `src/chemgraph/models/supported_models.py`), for example:
 
 ```text
-gpt4o, gpt4olatest, gpto3mini, gpto1, gpto3, gpto4mini,
-gpt41, gpt41mini, gpt41nano, gpt5, gpt5mini, gpt5nano, gpt51, gpt52,
-gemini25pro, gemini25flash,
-claudeopus46, claudeopus45, claudeopus41, claudeopus4,
-claudehaiku45, claudesonnet45, claudesonnet4, claudesonnet35v2, claudehaiku35
+argo:gpt-4o, argo:gpt-4o-latest, argo:gpt-5, argo:gpt-5-mini,
+argo:gemini-2.5-flash, argo:claude-sonnet-4.5
 ```
 
 4. Run with config:
 
 ```bash
-chemgraph --config config.toml -m gpt4olatest -q "calculate the energy for water molecule using mace_mp"
+chemgraph --config config.toml -m argo:gpt-4o-latest -q "calculate the energy for water molecule using mace_mp"
 ```
 
 Notes:
@@ -602,7 +612,7 @@ For Groq, the `groq:` prefix is stripped before sending to the Groq API. Any mod
 | Section       | Description                                             |
 | ------------- | ------------------------------------------------------- |
 | `[general]`   | Basic settings like model, workflow, and output format  |
-| `[llm]`       | LLM-specific parameters (temperature, max_tokens, etc.) |
+| `[llm]`       | Reserved/legacy LLM parameter documentation             |
 | `[api]`       | API endpoints and timeouts for different providers      |
 | `[chemistry]` | Chemistry-specific calculation settings                 |
 | `[output]`    | Output file formats and visualization settings          |

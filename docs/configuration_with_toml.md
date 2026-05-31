@@ -12,7 +12,8 @@ Create a `config.toml` file in your project directory to configure ChemGraph beh
 [general]
 # Default model to use for queries
 model = "gpt-4o-mini"
-# Workflow type: single_agent, multi_agent, python_repl, graspa
+# Workflow type: single_agent, multi_agent, python_relp, graspa, mock_agent
+# Alias accepted by CLI/UI: python_repl -> python_relp
 workflow = "single_agent"
 # Output format: state, last_message
 output = "state"
@@ -20,9 +21,13 @@ output = "state"
 structured = false
 # Generate detailed reports
 report = true
+# Default LangGraph thread ID
+thread = 1
 
 # Recursion limit for agent workflows
 recursion_limit = 20
+# Allow the agent to pause and ask for human input
+human_supervised = false
 # Enable verbose output
 verbose = false
 
@@ -128,6 +133,11 @@ rate_limit = true
 max_requests_per_minute = 60
 ```
 
+The core CLI and UI currently consume `[general]`, `[api]`, `[chemistry]`, and
+`[output]` directly. The agent uses deterministic LLM defaults internally
+(`temperature=0.0`, fixed token limits); `[llm]` entries are kept for
+documentation/forward compatibility rather than active runtime tuning.
+
 ### Using Configuration Files
 
 #### With the Command Line Interface
@@ -222,7 +232,7 @@ Direct model names (no prefix) are used for OpenAI, Anthropic, Google, ALCF, and
 | Section          | Description                                             |
 | ---------------- | ------------------------------------------------------- |
 | `[general]`      | Basic settings like model, workflow, and output format  |
-| `[llm]`          | LLM-specific parameters (temperature, max_tokens, etc.) |
+| `[llm]`          | Reserved/legacy LLM parameter documentation             |
 | `[api]`          | API endpoints and timeouts for different providers      |
 | `[chemistry]`    | Chemistry-specific calculation settings                 |
 | `[output]`       | Output file formats and visualization settings          |

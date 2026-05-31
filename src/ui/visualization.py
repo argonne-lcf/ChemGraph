@@ -40,9 +40,12 @@ def _stable_key(prefix: str, title: str) -> str:
 
 def warn_stmol_unavailable() -> None:
     """Display a one-time warning when stmol is not installed."""
-    if not STMOL_AVAILABLE:
-        st.warning("**stmol** not available -- falling back to text/table view.")
-        st.info("To enable 3D visualization, install with: `pip install stmol`")
+    if STMOL_AVAILABLE or st.session_state.get("_stmol_warning_shown"):
+        return
+
+    st.session_state["_stmol_warning_shown"] = True
+    st.warning("**stmol** not available -- falling back to text/table view.")
+    st.info("To enable 3D visualization, install with: `pip install stmol`")
 
 
 def create_ase_atoms_with_streamlit_error(atomic_numbers, positions):
