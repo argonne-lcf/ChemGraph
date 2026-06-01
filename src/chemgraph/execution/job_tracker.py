@@ -136,21 +136,28 @@ class JobTracker:
             logger.warning("Could not load job tracker state: %s", exc)
             return
 
+        orphaned: list[tuple[str, str]] = []  # (batch_id, task_id)
         with self._lock:
             for bid, info in data.items():
                 if bid in self._batches:
                     continue  # don't overwrite live batches
 
-                tasks = [
-                    TrackedTask(
+                tasks = []
+                for t in info.get("tasks", []):
+                    tracked = TrackedTask(
                         task_id=t["task_id"],
                         meta=t.get("meta", {}),
                         future=None,
                         globus_task_id=t.get("globus_task_id"),
                         result=t.get("result"),
                     )
-                    for t in info.get("tasks", [])
-                ]
+                    # Tasks loaded from disk with no globus_task_id and
+                    # no cached result are orphaned -- get_status cannot
+                    # query Globus for them (see line ~320).
+                    if tracked.globus_task_id is None and tracked.result is None:
+                        orphaned.append((bid, tracked.task_id))
+                    tasks.append(tracked)
+
                 self._batches[bid] = TrackedBatch(
                     batch_id=bid,
                     tool_name=info["tool_name"],
@@ -161,6 +168,13 @@ class JobTracker:
         logger.info(
             "Loaded %d batches from %s", len(data), self._persist_file
         )
+        if orphaned:
+            logger.warning(
+                "%d task(s) reloaded without a Globus task_id -- their "
+                "results cannot be recovered. Examples: %s",
+                len(orphaned),
+                ", ".join(f"{b}/{t}" for b, t in orphaned[:5]),
+            )
 
     # ── registration ───────────────────────────────────────────────────
 
@@ -241,8 +255,14 @@ class JobTracker:
                 time.sleep(0.25)
 
         if pending:
-            logger.debug(
-                "%d tasks did not receive a Globus task_id within %.1fs",
+            # Promoted from debug -> warning: tasks without a task_id
+            # at this point will be lost across a server restart, so the
+            # user should see this immediately rather than only in the
+            # post-mortem orphan warning at reload time.
+            logger.warning(
+                "%d task(s) did not receive a Globus task_id within %.1fs; "
+                "they will be unrecoverable if the server restarts before "
+                "the next get_status call",
                 len(pending),
                 timeout,
             )
