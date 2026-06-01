@@ -7,16 +7,23 @@ retrieval endpoints.
 
 Each MCP server process creates its own ``JobTracker`` instance
 (mirroring the existing ``backend = get_backend()`` pattern).
+
+When a *persist_file* is provided, batch metadata and Globus Compute
+task UUIDs are written to a JSON file so that a future session can
+reload them and query Globus Compute directly for results.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
+import time
 import uuid
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -28,7 +35,8 @@ class TrackedTask:
 
     task_id: str
     meta: dict
-    future: Future
+    future: Optional[Future] = None
+    globus_task_id: Optional[str] = None
     result: Optional[dict] = None
 
 
@@ -47,11 +55,112 @@ class JobTracker:
     """Track submitted job batches and their futures.
 
     Thread-safe: all public methods acquire an internal lock.
+
+    Parameters
+    ----------
+    persist_file : Path or str, optional
+        Path to a JSON file for persisting batch metadata across
+        sessions.  When set, batches are saved after registration and
+        after results are cached.  On init, existing batches are loaded.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, persist_file: Optional[Path | str] = None) -> None:
         self._batches: dict[str, TrackedBatch] = {}
         self._lock = threading.Lock()
+        self._gc_lock = threading.Lock()
+        self._persist_file = Path(persist_file) if persist_file else None
+        self._gc_client = None  # lazily initialised Globus Compute Client
+
+        if self._persist_file is not None:
+            self._load()
+
+    # ── Globus Compute client (lazy) ──────────────────────────────────
+
+    def _get_gc_client(self):
+        """Return a Globus Compute ``Client`` (created once, reused)."""
+        if self._gc_client is not None:
+            return self._gc_client
+        with self._gc_lock:
+            if self._gc_client is None:
+                try:
+                    from globus_compute_sdk import Client
+
+                    self._gc_client = Client()
+                except Exception:
+                    logger.warning(
+                        "Could not create Globus Compute Client",
+                        exc_info=True,
+                    )
+                    return None
+            return self._gc_client
+
+    # ── persistence ───────────────────────────────────────────────────
+
+    def _save(self) -> None:
+        """Write current batch metadata to *persist_file*."""
+        if self._persist_file is None:
+            return
+
+        data: dict[str, Any] = {}
+        with self._lock:
+            for bid, batch in self._batches.items():
+                data[bid] = {
+                    "tool_name": batch.tool_name,
+                    "submitted_at": batch.submitted_at.isoformat(),
+                    "tasks": [
+                        {
+                            "task_id": t.task_id,
+                            "meta": t.meta,
+                            "globus_task_id": t.globus_task_id,
+                            "result": t.result,
+                        }
+                        for t in batch.tasks
+                    ],
+                }
+
+        self._persist_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._persist_file.with_suffix(".tmp")
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        tmp.replace(self._persist_file)
+
+    def _load(self) -> None:
+        """Load batch metadata from *persist_file* (if it exists)."""
+        if self._persist_file is None or not self._persist_file.is_file():
+            return
+
+        try:
+            with open(self._persist_file) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Could not load job tracker state: %s", exc)
+            return
+
+        with self._lock:
+            for bid, info in data.items():
+                if bid in self._batches:
+                    continue  # don't overwrite live batches
+
+                tasks = [
+                    TrackedTask(
+                        task_id=t["task_id"],
+                        meta=t.get("meta", {}),
+                        future=None,
+                        globus_task_id=t.get("globus_task_id"),
+                        result=t.get("result"),
+                    )
+                    for t in info.get("tasks", [])
+                ]
+                self._batches[bid] = TrackedBatch(
+                    batch_id=bid,
+                    tool_name=info["tool_name"],
+                    submitted_at=datetime.fromisoformat(info["submitted_at"]),
+                    tasks=tasks,
+                )
+
+        logger.info(
+            "Loaded %d batches from %s", len(data), self._persist_file
+        )
 
     # ── registration ───────────────────────────────────────────────────
 
@@ -103,12 +212,60 @@ class JobTracker:
             tool_name,
             len(tracked),
         )
+
+        # Wait briefly for the Executor background thread to set task_ids
+        # on the ComputeFutures.  Typically takes ~1-2 s; we cap at 3 s
+        # so the MCP tool response isn't delayed excessively.
+        self._wait_for_globus_task_ids(tracked, timeout=3.0)
+        self._save()
         return batch_id
+
+    def _wait_for_globus_task_ids(
+        self, tasks: list[TrackedTask], timeout: float = 3.0
+    ) -> None:
+        """Wait up to *timeout* seconds for Globus ``task_id`` to appear
+        on each ComputeFuture, then store them for persistence."""
+        deadline = time.monotonic() + timeout
+        pending = [t for t in tasks if t.future is not None and t.globus_task_id is None]
+
+        while pending and time.monotonic() < deadline:
+            still_pending = []
+            for t in pending:
+                gc_id = getattr(t.future, "task_id", None)
+                if gc_id is not None:
+                    t.globus_task_id = str(gc_id)
+                else:
+                    still_pending.append(t)
+            pending = still_pending
+            if pending:
+                time.sleep(0.25)
+
+        if pending:
+            logger.debug(
+                "%d tasks did not receive a Globus task_id within %.1fs",
+                len(pending),
+                timeout,
+            )
+
+    def _try_capture_globus_task_ids(self, tasks: list[TrackedTask]) -> bool:
+        """Non-blocking: extract ``task_id`` from any ComputeFuture that
+        has one available.  Returns True if any new IDs were captured."""
+        captured = False
+        for t in tasks:
+            if t.globus_task_id is None and t.future is not None:
+                gc_id = getattr(t.future, "task_id", None)
+                if gc_id is not None:
+                    t.globus_task_id = str(gc_id)
+                    captured = True
+        return captured
 
     # ── status ─────────────────────────────────────────────────────────
 
     def get_status(self, batch_id: str) -> dict:
         """Return the current status of a batch.
+
+        For tasks loaded from disk (no in-memory ``Future``), queries
+        Globus Compute directly if a ``globus_task_id`` is available.
 
         Returns
         -------
@@ -125,11 +282,16 @@ class JobTracker:
         total = len(batch.tasks)
         done = 0
         failed = 0
+        # Lazily capture Globus Compute task UUIDs (set asynchronously
+        # by the Executor background thread after submission).
+        dirty = self._try_capture_globus_task_ids(batch.tasks)
 
         for t in batch.tasks:
-            if t.future.done():
-                done += 1
-                # Cache the result on first check
+            task_done = False
+
+            # --- live future path ---
+            if t.future is not None and t.future.done():
+                task_done = True
                 if t.result is None:
                     try:
                         raw = t.future.result(timeout=0)
@@ -152,8 +314,55 @@ class JobTracker:
                             "error_type": type(e).__name__,
                             "message": str(e),
                         }
-                if t.result.get("status") == "failure":
-                    failed += 1
+                    dirty = True
+
+            # --- loaded-from-disk path (no future, use Globus client) ---
+            elif t.future is None and t.result is None and t.globus_task_id:
+                gc = self._get_gc_client()
+                if gc is not None:
+                    try:
+                        task_info = gc.get_task(t.globus_task_id)
+                        if not task_info.get("pending", True):
+                            task_done = True
+                            if "result" in task_info:
+                                raw = task_info["result"]
+                                if isinstance(raw, dict):
+                                    merged = {**t.meta, **raw}
+                                    merged.setdefault("status", "success")
+                                    t.result = merged
+                                else:
+                                    t.result = {
+                                        **t.meta,
+                                        "result": raw,
+                                        "status": "success",
+                                    }
+                            elif "exception" in task_info:
+                                t.result = {
+                                    **t.meta,
+                                    "status": "failure",
+                                    "error_type": "RemoteException",
+                                    "message": str(task_info["exception"]),
+                                }
+                            dirty = True
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to query Globus task %s: %s",
+                            t.globus_task_id,
+                            e,
+                            exc_info=True,
+                        )
+
+            # --- already have a cached result ---
+            elif t.result is not None:
+                task_done = True
+
+            if task_done:
+                done += 1
+            if t.result is not None and t.result.get("status") == "failure":
+                failed += 1
+
+        if dirty:
+            self._save()
 
         pending = total - done
         if pending == total:
@@ -259,7 +468,9 @@ class JobTracker:
         cancelled = 0
         already_done = 0
         for t in batch.tasks:
-            if t.future.done():
+            if t.future is None:
+                already_done += 1
+            elif t.future.done():
                 already_done += 1
             elif t.future.cancel():
                 cancelled += 1
@@ -284,13 +495,17 @@ class JobTracker:
         with self._lock:
             for bid, batch in self._batches.items():
                 age_hours = (now - batch.submitted_at).total_seconds() / 3600
-                if age_hours > max_age_hours and all(
-                    t.future.done() for t in batch.tasks
-                ):
+                all_done = all(
+                    (t.future is not None and t.future.done())
+                    or t.result is not None
+                    for t in batch.tasks
+                )
+                if age_hours > max_age_hours and all_done:
                     to_remove.append(bid)
             for bid in to_remove:
                 del self._batches[bid]
 
         if to_remove:
             logger.info("Cleaned up %d old batches", len(to_remove))
+            self._save()
         return len(to_remove)
