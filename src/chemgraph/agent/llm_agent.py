@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import dataclasses
 import os
 from typing import Callable, List, Optional
 import uuid
@@ -64,29 +65,109 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def serialize_state(state):
+def _is_mock_object(value) -> bool:
+    """Return True for unittest.mock objects without importing test-only APIs."""
+    return value.__class__.__module__.startswith("unittest.mock")
+
+
+def serialize_state(state, *, max_depth: int = 50, _seen: set[int] | None = None):
     """Convert non-serializable objects in state to a JSON-friendly format.
 
     Parameters
     ----------
     state : Any
         The state object to be serialized. Can be a list, dict, or object with __dict__
+    max_depth : int, optional
+        Maximum object nesting depth to serialize before falling back to a
+        placeholder. This prevents runaway recursion for complex graph objects.
 
     Returns
     -------
     Any
         A JSON-serializable version of the input state
     """
-    if isinstance(state, (int, float, bool)) or state is None:
+    if _seen is None:
+        _seen = set()
+
+    if max_depth < 0:
+        return f"<max depth exceeded: {type(state).__name__}>"
+
+    if isinstance(state, (str, int, float, bool)) or state is None:
         return state
-    elif isinstance(state, list):
-        return [serialize_state(item) for item in state]
-    elif isinstance(state, dict):
-        return {key: serialize_state(value) for key, value in state.items()}
-    elif hasattr(state, "__dict__"):
-        return {key: serialize_state(value) for key, value in state.__dict__.items()}
-    else:
+
+    if isinstance(state, (datetime.datetime, datetime.date)):
+        return state.isoformat()
+
+    if _is_mock_object(state):
         return str(state)
+
+    state_id = id(state)
+    if state_id in _seen:
+        return f"<circular reference: {type(state).__name__}>"
+
+    if isinstance(state, dict):
+        _seen.add(state_id)
+        try:
+            return {
+                str(key): serialize_state(
+                    value, max_depth=max_depth - 1, _seen=_seen
+                )
+                for key, value in state.items()
+            }
+        finally:
+            _seen.remove(state_id)
+
+    if isinstance(state, (list, tuple, set, frozenset)):
+        _seen.add(state_id)
+        try:
+            return [
+                serialize_state(item, max_depth=max_depth - 1, _seen=_seen)
+                for item in state
+            ]
+        finally:
+            _seen.remove(state_id)
+
+    model_dump = getattr(state, "model_dump", None)
+    if callable(model_dump):
+        _seen.add(state_id)
+        try:
+            try:
+                dumped = model_dump(mode="json")
+            except TypeError:
+                dumped = model_dump()
+            return serialize_state(dumped, max_depth=max_depth - 1, _seen=_seen)
+        except Exception:
+            return str(state)
+        finally:
+            _seen.remove(state_id)
+
+    if dataclasses.is_dataclass(state) and not isinstance(state, type):
+        _seen.add(state_id)
+        try:
+            return {
+                field.name: serialize_state(
+                    getattr(state, field.name),
+                    max_depth=max_depth - 1,
+                    _seen=_seen,
+                )
+                for field in dataclasses.fields(state)
+            }
+        finally:
+            _seen.remove(state_id)
+
+    if hasattr(state, "__dict__"):
+        _seen.add(state_id)
+        try:
+            return {
+                str(key): serialize_state(
+                    value, max_depth=max_depth - 1, _seen=_seen
+                )
+                for key, value in vars(state).items()
+            }
+        finally:
+            _seen.remove(state_id)
+
+    return str(state)
 
 
 class ChemGraph:

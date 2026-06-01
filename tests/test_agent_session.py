@@ -16,7 +16,7 @@ import os
 import pytest
 from unittest.mock import Mock, patch
 
-from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.llm_agent import ChemGraph, serialize_state
 from chemgraph.memory.store import SessionStore
 
 
@@ -324,6 +324,24 @@ class TestSaveMessagesToStore:
 # ------------------------------------------------------------------
 # write_state file naming
 # ------------------------------------------------------------------
+
+
+def test_serialize_state_handles_circular_references():
+    state = {"messages": []}
+    state["self"] = state
+
+    serialized = serialize_state(state)
+
+    assert serialized["messages"] == []
+    assert serialized["self"] == "<circular reference: dict>"
+
+
+def test_serialize_state_handles_mock_objects_without_recursion():
+    state = {"message": Mock()}
+
+    serialized = serialize_state(state)
+
+    assert isinstance(serialized["message"], str)
 
 
 class TestWriteStateFileNaming:
