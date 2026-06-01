@@ -49,8 +49,6 @@ async def test_agent_logging():
     cg = ChemGraph(model_name="mock-model", workflow_type="mock_agent")
 
     # Mock the workflow.astream to yield a message
-    mock_workflow = MagicMock()
-
     async def mock_astream(*args, **kwargs):
         yield {"messages": [MagicMock(content="done")]}
 

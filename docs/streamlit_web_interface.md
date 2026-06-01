@@ -26,11 +26,12 @@ Then open `http://localhost:8501`.
 
 - Chat input for single-agent, multi-agent, Python REPL, gRASPA, and mock-agent workflows exposed in the UI.
 - Automatic agent initialization from the active `config.toml`.
-- Sidebar quick settings for temporary model and thread overrides.
+- Sidebar calculator availability panel showing calculators detected at startup and the selected default.
 - Live tool-call status while workflows run.
 - Optional human-supervised pauses through the `ask_human` tool.
 - 3D molecular visualization with `stmol` and `py3Dmol`, with table/XYZ fallback when the viewer is unavailable.
-- Embedded HTML reports, IR spectrum artifacts, normal-mode trajectory controls, and structure export.
+- Math-aware assistant rendering for LaTeX-style equations, reaction arrows, and thermochemistry expressions.
+- Embedded and downloadable HTML reports, IR spectrum artifacts, normal-mode trajectory controls, and structure export.
 - Session browser backed by `~/.chemgraph/sessions.db`.
 - Configuration editor for `config.toml` plus session-only API key entry.
 
@@ -55,7 +56,7 @@ API keys entered in the UI are applied as process environment variables for the 
 
 The main sidebar lists recent saved sessions. Loading a session rebuilds the visible conversation history from `~/.chemgraph/sessions.db`; deleting a session removes it from that database. A new chat clears the visible conversation and starts a new saved session on the next successful exchange.
 
-Quick Settings can override the model or thread for the current UI session. Saved session metadata uses the active override, not only the value in `config.toml`.
+The UI uses the active saved configuration for model, workflow, thread, report generation, and human-supervision settings. To change these settings, use the Configuration page, save the configuration, then click **Reload Config** or **Refresh Agents** on the main page.
 
 ## Artifacts
 
@@ -68,4 +69,4 @@ The UI detects structures and reports from agent messages. For IR calculations, 
 - If model calls fail, verify API keys and endpoint settings in `config.toml`.
 - If Argo is used, ensure `api.openai.base_url` and optional `api.openai.argo_user` are configured.
 - If a local model endpoint is selected, the UI probes `/models` and blocks queries when the local endpoint is unreachable.
-- If the UI still shows an old model after editing configuration, click **Reload Config** or **Refresh Agents**.
+- If the UI still shows an old model, workflow, or calculator default after editing configuration, click **Reload Config** or **Refresh Agents**.

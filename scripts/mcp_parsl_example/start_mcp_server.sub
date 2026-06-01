@@ -4,14 +4,21 @@
 #PBS -l filesystems=home:flare
 #PBS -q debug
 #PBS -A your_account
-#PBE -N ChemGraph
+#PBS -N ChemGraphMCP
 
 cd $PBS_O_WORKDIR
 
 export http_proxy="proxy.alcf.anl.gov:3128"
 export https_proxy="proxy.alcf.anl.gov:3128"
+export NO_PROXY=127.0.0.1,localhost,::1
+export no_proxy=127.0.0.1,localhost,::1
+export COMPUTE_SYSTEM=aurora
+export CHEMGRAPH_LOG_DIR="$PBS_O_WORKDIR/chemgraph_mcp_logs"
 
 module load frameworks
 source /path/to/venv/bin/activate
 
-python -m chemgraph.tools.mcp_parsl
+python -m chemgraph.mcp.graspa_mcp_parsl \
+  --transport streamable_http \
+  --host 0.0.0.0 \
+  --port 9001

@@ -217,9 +217,9 @@ If you need to install from source for the latest version:
 
    - **[Single-Agent System with UMA](notebooks/Demo_single_agent_UMA.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with UMA support.
 
-   - **[Multi-Agent System](notebooks/2_Demo-multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where different agents (Planner, Executor and Aggregator) handle various tasks exemplifying the collaborative potential of ChemGraph.
+   - **[Multi-Agent System](notebooks/2_Demo-multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where planner and executor agents decompose and run computational chemistry tasks.
 
-   - **[Model Context Protocol (MCP) Server](notebooks/3_MCP_server.ipynb)**: This notebook demonstrates how to run an MCP server and connect to ChemGraph.
+   - **[Model Context Protocol (MCP) Server](notebooks/3_Demo_using_MCP.ipynb)**: This notebook demonstrates how to run an MCP server and connect to ChemGraph.
    - **[Single-Agent System with gRASPA](notebooks/Demo_graspa_agent.ipynb)**: This notebook provides a sample guide on executing a gRASPA simulation using a single agent. For gRASPA-related installation instructions, visit the [gRASPA GitHub repository](https://github.com/snurr-group/gRASPA). The notebook's functionality has been validated on a single compute node at ALCF Polaris.
 
    - **[Infrared absorption spectrum prediction](notebooks/Demo_infrared_spectrum.ipynb)**: This notebook demonstrates how to calculate an infrared absorption spectrum.
@@ -236,8 +236,9 @@ ChemGraph includes a **Streamlit web interface** for chat-driven computational c
 
 - **🧪 Interactive Chat Interface**: Natural language queries for computational chemistry tasks
 - **🧬 3D Molecular Visualization**: Interactive molecular structure display using `stmol` and `py3Dmol`
-- **📊 Report Integration**: Embedded HTML reports from computational calculations
+- **📊 Report Integration**: Embedded and downloadable HTML reports from computational calculations
 - **💾 Data Export**: Download molecular structures as XYZ or JSON files
+- **🧮 Math Rendering**: Display LaTeX-style equations and reaction arrows in assistant responses
 - **🔧 Multiple Workflows**: Support for single-agent, multi-agent, Python REPL, and gRASPA workflows
 - **💬 Session Memory**: Browse, load, and delete saved conversations from `~/.chemgraph/sessions.db`
 - **👤 Human Supervision**: Optional follow-up prompts when the agent needs confirmation or missing inputs
@@ -280,7 +281,8 @@ pip install -e ".[uma]"
 #### Configuration
 - Use the **Configuration** page to edit `config.toml`, provider base URLs, API timeouts, workflow, recursion limit, report generation, and human supervision.
 - API keys entered in the UI are applied only to the current Streamlit process and are not written to `config.toml`.
-- Use **Quick Settings** in the main sidebar for temporary model or thread overrides without changing `config.toml`.
+- The main sidebar shows calculators detected during ChemGraph initialization and marks the default calculator used when a query does not specify one.
+- To change model, workflow, thread, or report settings, edit them on the **Configuration** page, save, then use **Reload Config** or **Refresh Agents**.
 
 
 #### Interaction
@@ -1068,7 +1070,7 @@ recursion_limit = 50
 To generate a new ground-truth dataset from custom molecules and reactions:
 
 ```bash
-cd scripts/new_evaluation
+cd scripts/evaluations
 
 # Full execution (runs tool chains, captures actual results)
 python generate_ground_truth.py --input_file input_data.json
@@ -1213,26 +1215,27 @@ The servers are located in `src/chemgraph/mcp/`:
     *   Supports **ensemble** calculations (directories of structures) using **Parsl** for parallel execution on HPC systems (e.g., Polaris, Aurora).
 *   **`graspa_mcp_parsl.py`**: Tools for **gRASPA** simulations (Gas Adsorption in MOFs).
     *   Supports single and ensemble runs via Parsl.
+*   **`xanes_mcp_parsl.py`**: Tools for running XANES/FDMNES ensembles with Parsl.
 *   **`data_analysis_mcp.py`**: Tools for analyzing simulation results.
     *   Aggregating JSONL logs from ensemble runs into CSV/DataFrames.
     *   Plotting isotherms and other data.
 
 ### Running a Server
 
-You can run the servers using Python. They support both `stdio` (default) and `streamable_http` (SSE) transports.
+You can run the servers using Python. They support both `stdio` (default) and `streamable_http` transports.
 
 **Basic Usage (stdio)**
 Connect this directly to your MCP client (e.g., Claude Desktop config):
 
 ```bash
-python src/chemgraph/mcp/mcp_tools.py
+python -m chemgraph.mcp.mcp_tools
 ```
 
-**Using HTTP/SSE**
+**Using streamable HTTP**
 To run a server that listens for HTTP connections (useful for remote deployment or debugging):
 
 ```bash
-python src/chemgraph/mcp/mcp_tools.py --transport streamable_http --port 8000
+python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 8000
 ```
 
 **Configuration via Arguments**
@@ -1242,7 +1245,7 @@ All servers in `src/chemgraph/mcp/` support the following arguments:
 *   `--host`: Host address (default: 127.0.0.1).
 
 **Note on HPC Servers:**
-For `mace_mcp_parsl.py` and `graspa_mcp_parsl.py`, ensure your environment is configured for the target HPC system if running actual parallel jobs. They leverage `chemgraph.hpc_configs` to load system-specific Parsl configurations (like `polaris` or `aurora`).
+For `graspa_mcp_parsl.py` and `xanes_mcp_parsl.py`, set `COMPUTE_SYSTEM=polaris` or `COMPUTE_SYSTEM=aurora` before launch so the server loads the matching Parsl configuration from `chemgraph.hpc_configs`. `mace_mcp_parsl.py` currently contains site-specific `worker_init` settings; review and edit those paths/modules before production use.
 
 </details>
 
