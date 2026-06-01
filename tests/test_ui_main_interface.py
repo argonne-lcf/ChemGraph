@@ -23,6 +23,31 @@ class _FakeStreamlit:
         return nullcontext()
 
 
+class _FakeSidebar:
+    def __init__(self):
+        self.calls = []
+
+    def expander(self, label, expanded=False):
+        self.calls.append(("expander", label, expanded))
+        return nullcontext()
+
+
+class _FakeStreamlitWithSidebar(_FakeStreamlit):
+    def __init__(self):
+        super().__init__()
+        self.sidebar = _FakeSidebar()
+        self.calls = []
+
+    def caption(self, text):
+        self.calls.append(("caption", text))
+
+    def success(self, text):
+        self.calls.append(("success", text))
+
+    def markdown(self, text):
+        self.calls.append(("markdown", text))
+
+
 def test_argo_structured_output_is_disabled_after_model_selection():
     argo_model = next(iter(main_ui.supported_argo_models))
 
@@ -41,6 +66,27 @@ def test_non_argo_structured_output_is_preserved():
 
     assert structured is True
     assert notice is None
+
+
+def test_available_calculators_sidebar_replaces_quick_settings(monkeypatch):
+    fake_st = _FakeStreamlitWithSidebar()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(
+        main_ui,
+        "get_available_calculator_names",
+        lambda: ["MaceCalc", "TBLiteCalc", "EMTCalc"],
+    )
+    monkeypatch.setattr(main_ui, "get_default_calculator_name", lambda: "MaceCalc")
+
+    main_ui._render_available_calculators_sidebar()
+
+    assert fake_st.sidebar.calls == [
+        ("expander", "\U0001f9ee Available Calculators", True)
+    ]
+    rendered_text = "\n".join(text for _, text in fake_st.calls)
+    assert "Mace (default)" in rendered_text
+    assert "TBLite (xTB, GFN1-xTB, GFN2-xTB)" in rendered_text
+    assert "Quick Settings" not in rendered_text
 
 
 def test_failed_agent_initialization_is_not_cached(monkeypatch, tmp_path):

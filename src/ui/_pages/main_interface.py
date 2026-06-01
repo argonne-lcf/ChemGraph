@@ -17,10 +17,13 @@ from ase.io import read as ase_read
 from chemgraph.agent.llm_agent import HumanInputRequired
 from chemgraph.memory.store import SessionStore
 from chemgraph.models.supported_models import supported_argo_models
+from chemgraph.schemas.ase_input import (
+    get_available_calculator_names,
+    get_default_calculator_name,
+)
 from chemgraph.utils.config_utils import (
     get_argo_user_from_nested_config,
     get_base_url_for_model_from_nested_config,
-    get_model_options_for_nested_config,
 )
 
 from ui.agent_manager import initialize_agent
@@ -67,10 +70,6 @@ logger = logging.getLogger(__name__)
 
 def _get_base_url_for_model(model_name: str, config: Dict[str, Any]) -> Optional[str]:
     return get_base_url_for_model_from_nested_config(model_name, config)
-
-
-def _get_model_options(config: Dict[str, Any]) -> list:
-    return get_model_options_for_nested_config(config)
 
 
 def _initial_ui_log_root() -> str:
@@ -145,10 +144,8 @@ def render() -> None:
     natural-language queries using AI agents.
     """)
 
-    # ----- Quick settings sidebar -----
-    selected_model, thread_id = _render_quick_settings(
-        config, selected_model, thread_id
-    )
+    # ----- Calculator availability sidebar -----
+    _render_available_calculators_sidebar()
     _render_chat_controls()
 
     structured_output, ui_notice = _resolve_structured_output_for_model(
@@ -225,40 +222,31 @@ def render() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _render_quick_settings(
-    config: dict, selected_model: str, thread_id: int
-) -> tuple[str, int]:
-    with st.sidebar.expander("\U0001f527 Quick Settings"):
-        st.write("Override settings for this session:")
+def _format_calculator_label(calculator_name: str) -> str:
+    label = calculator_name.removesuffix("Calc")
+    if label == "TBLite":
+        return "TBLite (xTB, GFN1-xTB, GFN2-xTB)"
+    return label
 
-        if st.checkbox("Override Model"):
-            model_options = _get_model_options(config)
-            selected_model = st.selectbox(
-                "Select Model",
-                model_options,
-                index=(
-                    model_options.index(selected_model)
-                    if selected_model in model_options
-                    else 0
-                ),
-            )
-            quick_custom_model = st.text_input(
-                "Custom model ID (optional)",
-                value="",
-                key="quick_custom_model",
-                help="If set, this overrides the selected model for this session.",
-            ).strip()
-            if quick_custom_model:
-                selected_model = quick_custom_model
 
-        if st.checkbox("Override Thread ID"):
-            thread_id = st.number_input(
-                "Thread ID", min_value=1, max_value=1000, value=thread_id
-            )
+def _render_available_calculators_sidebar() -> None:
+    """Render the calculators detected during ChemGraph initialization."""
+    available = get_available_calculator_names()
+    default = get_default_calculator_name()
 
-        st.info("\U0001f4a1 To make permanent changes, use the Configuration page.")
+    with st.sidebar.expander("\U0001f9ee Available Calculators", expanded=True):
+        st.caption("Detected during ChemGraph initialization.")
 
-    return selected_model, thread_id
+        for calculator_name in available:
+            label = _format_calculator_label(calculator_name)
+            if calculator_name == default:
+                st.success(f"{label} (default)")
+            else:
+                st.markdown(f"- {label}")
+
+        st.caption(
+            "The agent uses this list when choosing calculators for ASE simulations."
+        )
 
 
 def _start_new_chat() -> None:
