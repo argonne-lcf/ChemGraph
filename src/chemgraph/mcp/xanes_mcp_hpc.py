@@ -1,25 +1,29 @@
 """Backend-agnostic XANES/FDMNES MCP server.
 
-Replaces ``xanes_mcp_parsl.py`` by using the :mod:`chemgraph.execution`
-abstraction layer.  The execution backend (Parsl, EnsembleLauncher,
-local) is selected at startup via ``config.toml`` or the
-``CHEMGRAPH_EXECUTION_BACKEND`` environment variable.
+Uses :class:`~chemgraph.mcp.cg_fastmcp.CGFastMCP`. Tool functions are
+plain computation -- the framework handles backend submission, future
+resolution, and async job tracking.
+
+The ensemble expander runs server-side and prepares per-structure
+FDMNES input files in ``runs_dir``; the worker (which runs on the
+backend) executes FDMNES via subprocess and extracts convergence data.
+This assumes the server and worker share a filesystem (true for any
+Globus Compute endpoint on the same HPC where the MCP server runs;
+Globus Transfer staging is a separate concern).
+
+Nothing requiring the backend is initialised at import time so worker
+subprocesses (EnsembleLauncher, Globus Compute) can re-import this
+module safely.
 """
 
 import logging
+import subprocess
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
-
-from chemgraph.execution import TaskSpec, get_backend
-from chemgraph.execution.job_tracker import JobTracker
-from chemgraph.execution.utils import (
-    resolve_structure_files,
-    submit_or_gather,
-    write_results_jsonl,
-)
-from chemgraph.mcp.job_tools import register_job_tools
-from chemgraph.mcp.server_utils import run_mcp_server
+from chemgraph.execution.config import get_transfer_manager
+from chemgraph.execution.utils import resolve_structure_files
+from chemgraph.mcp.cg_fastmcp import CGFastMCP
+from chemgraph.mcp.transfer_tools import register_transfer_tools
 from chemgraph.schemas.xanes_schema import (
     mp_query_schema,
     xanes_input_schema,
@@ -28,14 +32,9 @@ from chemgraph.schemas.xanes_schema import (
 
 logger = logging.getLogger(__name__)
 
-# ── Initialise execution backend ────────────────────────────────────────
-backend = get_backend()
+_JOBS_FILE = Path("~/.chemgraph/xanes_jobs.json").expanduser()
 
-_jobs_file = Path("~/.chemgraph/xanes_jobs.json").expanduser()
-tracker = JobTracker(persist_file=_jobs_file)
-
-# ── MCP server ──────────────────────────────────────────────────────────
-mcp = FastMCP(
+mcp = CGFastMCP(
     name="ChemGraph XANES Tools",
     instructions="""
         You expose tools for running XANES/FDMNES simulations.
@@ -45,10 +44,11 @@ mcp = FastMCP(
            using the configured execution backend.
         3. fetch_mp_structures: fetch optimized structures from Materials Project.
         4. plot_xanes: generate normalized XANES plots for completed calculations.
-        5. check_job_status: check progress of a submitted HPC job batch.
-        6. get_job_results: retrieve results from a completed job batch.
-        7. list_jobs: list all tracked job batches.
-        8. cancel_job: cancel pending tasks in a job batch.
+        5. check_job_status / get_job_results / list_jobs / cancel_job: HPC
+           job batch management. Job state persists across sessions.
+        6. transfer_files / check_transfer_status / list_remote_files
+           (when Globus Transfer is configured): stage input files on the
+           remote HPC filesystem before running ensembles.
 
         Guidelines:
         - Use each tool only when its input schema matches the user request.
@@ -64,7 +64,20 @@ mcp = FastMCP(
           to retrieve results.
     """,
 )
-register_job_tools(mcp, tracker, backend)
+
+
+# ── Single-structure tool ──────────────────────────────────────────────
+
+
+def _xanes_single_worker(params: xanes_input_schema) -> dict:
+    """Run a single FDMNES calculation on a backend worker."""
+    from chemgraph.tools.xanes_tools import run_xanes_core
+
+    result = run_xanes_core(params)
+    if isinstance(result, dict):
+        result.setdefault("status", "success")
+        return result
+    return {"status": "success", "result": result}
 
 
 @mcp.tool(
@@ -72,18 +85,63 @@ register_job_tools(mcp, tracker, backend)
     description="Run a single XANES/FDMNES calculation for one input structure.",
 )
 def run_xanes_single(params: xanes_input_schema):
-    """Run a single FDMNES calculation using the core engine."""
-    from chemgraph.tools.xanes_tools import run_xanes_core
+    """Run a single FDMNES calculation using the core engine.
 
-    return run_xanes_core(params)
+    The CGFastMCP wrapper submits this call to the configured backend;
+    the body is the direct-call fallback when no backend is active.
+    """
+    return _xanes_single_worker(params)
 
 
-def _xanes_post_fn(meta: dict, _result) -> dict:
-    """Post-process a completed FDMNES task: extract convergence data."""
+# ── Ensemble fanout ────────────────────────────────────────────────────
+
+
+def _xanes_ensemble_worker(item: dict) -> dict:
+    """Execute one prepared FDMNES run on the backend.
+
+    The expander has already written ``input_fdmnes.txt`` (or the
+    equivalent) into ``item['run_dir']``; this worker runs the binary
+    via subprocess and then extracts convergence data.
+    """
     from chemgraph.tools.xanes_tools import extract_conv
 
+    run_dir = item["run_dir"]
+    fdmnes_exe = item["fdmnes_exe"]
+    meta = {
+        "structure": item.get("structure"),
+        "run_dir": run_dir,
+        "z_absorber": item.get("z_absorber"),
+    }
+
+    stdout_path = Path(run_dir) / "fdmnes_stdout.txt"
+    stderr_path = Path(run_dir) / "fdmnes_stderr.txt"
     try:
-        conv_data = extract_conv(meta["run_dir"])
+        with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
+            proc = subprocess.run(
+                [fdmnes_exe],
+                cwd=run_dir,
+                stdout=out,
+                stderr=err,
+                check=False,
+            )
+        if proc.returncode != 0:
+            return {
+                **meta,
+                "status": "failure",
+                "error_type": "FDMNESExitCode",
+                "message": f"FDMNES exited with code {proc.returncode}",
+                "returncode": proc.returncode,
+            }
+    except Exception as e:
+        return {
+            **meta,
+            "status": "failure",
+            "error_type": type(e).__name__,
+            "message": f"FDMNES launch failed: {e}",
+        }
+
+    try:
+        conv_data = extract_conv(run_dir)
         return {
             **meta,
             "status": "success",
@@ -98,24 +156,9 @@ def _xanes_post_fn(meta: dict, _result) -> dict:
         }
 
 
-@mcp.tool(
-    name="run_xanes_ensemble",
-    description="Run an ensemble of XANES/FDMNES calculations using the configured backend.",
-)
-async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
-    """Run ensemble XANES calculations over all structure files.
-
-    For each structure file:
-    1. Reads the structure via ASE.
-    2. Creates FDMNES input files in a per-structure subdirectory.
-    3. Submits a shell task to run FDMNES.
-    4. Gathers results and writes a JSONL summary log.
-
-    Parameters
-    ----------
-    params : xanes_input_schema_ensemble
-        Input parameters for the ensemble calculation.
-    """
+def _expand_xanes_ensemble(params: xanes_input_schema_ensemble) -> list[dict]:
+    """Server-side expansion: prepare per-structure run dirs and return
+    one item per structure for the worker to execute."""
     from ase.io import read as ase_read
 
     from chemgraph.tools.xanes_tools import write_fdmnes_input
@@ -125,19 +168,14 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
         extensions={".cif", ".xyz", ".poscar"},
     )
 
-    # Create a batch runs directory
     runs_dir = output_dir / "fdmnes_batch_runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
 
-    fdmnes_exe = params.fdmnes_exe
-
-    pending_tasks = []
-
+    items: list[dict] = []
     for i, struct_path in enumerate(structure_files):
         run_dir = runs_dir / f"run_{i}"
         run_dir.mkdir(parents=True, exist_ok=True)
 
-        # Read structure and write FDMNES inputs
         atoms = ase_read(str(struct_path))
         z_abs = (
             params.z_absorber
@@ -153,48 +191,34 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
             magnetism=params.magnetism,
         )
 
-        # Submit shell task
-        task = TaskSpec(
-            task_id=f"xanes_{struct_path.stem}_{i}",
-            task_type="shell",
-            command=f'cd "{run_dir}" && "{fdmnes_exe}"',
-            working_dir=str(run_dir),
-            stdout=str(run_dir / "fdmnes_stdout.txt"),
-            stderr=str(run_dir / "fdmnes_stderr.txt"),
-        )
-        fut = backend.submit(task)
-
-        task_meta = {
-            "structure": struct_path.name,
-            "run_dir": str(run_dir),
-            "z_absorber": z_abs,
-        }
-        pending_tasks.append((task_meta, fut))
-
-    result = await submit_or_gather(
-        backend, pending_tasks, tracker, "run_xanes_ensemble",
-        post_fn=_xanes_post_fn,
-    )
-
-    if result["status"] == "completed":
-        summary_log_path = output_dir / "xanes_results.jsonl"
-        success_count, total_count = write_results_jsonl(
-            result["results"], summary_log_path,
-        )
-        return (
-            f"Ensemble execution completed. Ran {total_count} tasks "
-            f"({success_count} successful). "
-            f"Detailed results appended to '{summary_log_path}'."
+        items.append(
+            {
+                "structure": struct_path.name,
+                "run_dir": str(run_dir),
+                "z_absorber": z_abs,
+                "fdmnes_exe": params.fdmnes_exe,
+            }
         )
 
-    # Async remote: return submission confirmation
-    return result
+    return items
 
 
-@mcp.tool(
-    name="fetch_mp_structures",
-    description="Fetch optimized structures from Materials Project.",
+@mcp.schema_fanout_tool(
+    name="run_xanes_ensemble",
+    description=(
+        "Run FDMNES/XANES calculations over every structure in an input "
+        "directory (or list of files). Each structure is prepared "
+        "server-side and submitted to the configured execution backend."
+    ),
+    worker=_xanes_ensemble_worker,
 )
+def run_xanes_ensemble(params: xanes_input_schema_ensemble) -> list[dict]:
+    return _expand_xanes_ensemble(params)
+
+
+# ── Orchestration tools (no backend involvement) ───────────────────────
+
+
 def fetch_mp_structures(params: mp_query_schema):
     """Fetch structures from Materials Project and save as CIF files and pickle database."""
     from chemgraph.tools.xanes_tools import (
@@ -214,19 +238,8 @@ def fetch_mp_structures(params: mp_query_schema):
     }
 
 
-@mcp.tool(
-    name="plot_xanes",
-    description="Generate normalized XANES plots for completed FDMNES calculations.",
-)
 def plot_xanes(runs_dir: str):
-    """Generate XANES plots for all completed runs in a directory.
-
-    Parameters
-    ----------
-    runs_dir : str
-        Path to the ``fdmnes_batch_runs`` directory containing ``run_*``
-        subdirectories with FDMNES outputs.
-    """
+    """Generate XANES plots for all completed runs in a directory."""
     from chemgraph.tools.xanes_tools import (
         _get_data_dir,
         plot_xanes_results,
@@ -247,5 +260,32 @@ def plot_xanes(runs_dir: str):
     }
 
 
+mcp.add_tool(
+    fetch_mp_structures,
+    name="fetch_mp_structures",
+    description="Fetch optimized structures from Materials Project.",
+)
+mcp.add_tool(
+    plot_xanes,
+    name="plot_xanes",
+    description="Generate normalized XANES plots for completed FDMNES calculations.",
+)
+
+
+# ── Globus Transfer (registered only when configured) ──────────────────
+
+_transfer_manager = get_transfer_manager()
+if _transfer_manager is not None:
+    register_transfer_tools(mcp, _transfer_manager)
+    logger.info("Registered Globus Transfer tools on XANES MCP server.")
+
+
 if __name__ == "__main__":
-    run_mcp_server(mcp, default_port=9007)
+    from chemgraph.mcp.server_utils import run_mcp_server
+
+    mcp.init_backend(tracker_kwargs={"persist_file": _JOBS_FILE})
+
+    try:
+        run_mcp_server(mcp, default_port=9007)
+    finally:
+        mcp.shutdown_backend()
