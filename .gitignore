@@ -29,6 +29,7 @@ eggs/
 
 # Jupyter Notebook checkpoints and modified notebooks
 .ipynb_checkpoints/
+05*_*.ipynb
 
 # env
 chemgraph-env/
@@ -36,6 +37,8 @@ chemgraph-env/
 .env
 # Log files
 *run_logs/
+cg_logs/
+runs/
 *vib/
 plots/
 initial_evaluations/
@@ -59,6 +62,13 @@ nwchem.nwi
 nwchem.nwo
 config.toml
 vib*.traj
+
+# Local calculation artifacts
+pyscf_output*/
+pyscf_h2*/
+
+# Local persistent working memory
+current_status.md
 
 # Kubernetes secrets (keep secrets.yaml.template, ignore actual secrets)
 k8s/secrets.yaml
