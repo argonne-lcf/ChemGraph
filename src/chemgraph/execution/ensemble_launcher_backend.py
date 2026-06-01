@@ -30,16 +30,31 @@ try:
     )
     from ensemble_launcher.helper_functions import get_nodes
     from ensemble_launcher.orchestrator import ClusterClient
-except ImportError as exc:
-    raise ImportError(
-        "EnsembleLauncher is required for the EnsembleLauncherBackend. "
-        "Install it with: pip install ensemble-launcher"
-    ) from exc
+
+    _ENSEMBLE_LAUNCHER_AVAILABLE = True
+except ImportError:
+    EnsembleLauncher = None
+    LauncherConfig = None
+    MPIConfig = None
+    PolicyConfig = None
+    SystemConfig = None
+    get_nodes = None
+    ClusterClient = None
+    _ENSEMBLE_LAUNCHER_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
 
+def _require_ensemble_launcher() -> None:
+    if not _ENSEMBLE_LAUNCHER_AVAILABLE:
+        raise ImportError(
+            "EnsembleLauncher is required for the EnsembleLauncherBackend. "
+            "Install it with: pip install ensemble-launcher"
+        )
+
+
 def get_local_system_config():
+    _require_ensemble_launcher()
     system_config = SystemConfig(
         name="local",
         ncpus=os.cpu_count(),
@@ -49,6 +64,7 @@ def get_local_system_config():
 
 
 def get_polaris_system_config():
+    _require_ensemble_launcher()
     system_config = SystemConfig(
         name="polaris",
         ncpus=32,
@@ -60,6 +76,7 @@ def get_polaris_system_config():
 
 
 def get_aurora_system_config():
+    _require_ensemble_launcher()
     system_config = SystemConfig(
         name="aurora",
         ncpus=102,
@@ -73,10 +90,11 @@ def get_aurora_system_config():
 def get_launcher_config(
     task_executor_name: Union[str, List] = "async_processpool",
     child_executor_policy: str = "fixed_leafs_children_policy",
-    policy_config: Optional[PolicyConfig] = None,
+    policy_config=None,
     checkpoint_dir=f"{os.getcwd()}/.ckpt_{uuid.uuid4().hex[:6]}",
     mpi_flavour: Literal["test", "mpich"] = "test",
 ):
+    _require_ensemble_launcher()
     if policy_config is None:
         policy_config = PolicyConfig(nlevels=2, leaf_nodes=len(get_nodes()))
     return LauncherConfig(
@@ -112,9 +130,10 @@ class EnsembleLauncherBackend(ExecutionBackend):
     """
 
     def __init__(self) -> None:
+        _require_ensemble_launcher()
         super().__init__()
-        self._orchestrator: Optional[EnsembleLauncher] = None
-        self._client: Optional[ClusterClient] = None
+        self._orchestrator = None
+        self._client = None
 
     def initialize(
         self,
@@ -123,8 +142,8 @@ class EnsembleLauncherBackend(ExecutionBackend):
         client_only: bool = False,
         checkpoint_dir: Optional[str] = None,
         node_id: str = "global",
-        system_config: Optional[SystemConfig] = None,
-        launcher_config: Optional[LauncherConfig] = None,
+        system_config=None,
+        launcher_config=None,
         startup_delay: float = 10.0,
         **kwargs,
     ) -> None:
@@ -273,12 +292,29 @@ class EnsembleLauncherBackend(ExecutionBackend):
             )
 
 
-SYSTEM_CONFIG_REGISTRY = {
-    "local": get_local_system_config(),
-    "aurora": get_aurora_system_config(),
-    "polaris": get_polaris_system_config(),
+_SYSTEM_CONFIG_BUILDERS = {
+    "local": get_local_system_config,
+    "aurora": get_aurora_system_config,
+    "polaris": get_polaris_system_config,
 }
 
-if __name__ == "__main__":
-    el_backend = EnsembleLauncherBackend()
-    el_backend.initialize()
+
+class _LazyRegistry:
+    """Built-on-first-access mapping of system name -> SystemConfig.
+
+    Avoids importing ``ensemble_launcher`` at module load time.
+    """
+
+    def __contains__(self, key: str) -> bool:
+        return key in _SYSTEM_CONFIG_BUILDERS
+
+    def __getitem__(self, key: str):
+        if key not in _SYSTEM_CONFIG_BUILDERS:
+            raise KeyError(key)
+        return _SYSTEM_CONFIG_BUILDERS[key]()
+
+    def keys(self):
+        return _SYSTEM_CONFIG_BUILDERS.keys()
+
+
+SYSTEM_CONFIG_REGISTRY = _LazyRegistry()

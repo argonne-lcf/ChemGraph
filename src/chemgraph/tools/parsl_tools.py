@@ -77,12 +77,8 @@ def run_mace_core(params: mace_input_schema) -> dict:
     dict
         Simulation result payload.
     """
-    try:
-        ase_params = _mace_input_to_ase_input(params)
-        return run_ase_core(ase_params)
-    except Exception as e:
-        print(f"Running ase failed with error:{e}")
-        return None
+    ase_params = _mace_input_to_ase_input(params)
+    return run_ase_core(ase_params)
 
 
 def extract_output_json(json_file: str) -> dict:
