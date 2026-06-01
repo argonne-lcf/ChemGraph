@@ -34,8 +34,7 @@ jobs:
       run: |
         python -c "import chemgraph; print('ChemGraph imported successfully')"
         python -c "from chemgraph.cli import main; print('CLI module imported successfully')"
-        # Test that CLI command is available
-        chemgraph --help || echo "CLI help command executed"
+        chemgraph --help
 
     - name: Run basic import tests
       run: |

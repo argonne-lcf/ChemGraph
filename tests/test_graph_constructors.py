@@ -51,10 +51,44 @@ def test_constructor_is_called(monkeypatch, workflow_type):
         kwargs["tools"] = ["DUMMY_TOOL"]
         kwargs["data_tools"] = ["DUMMY_TOOL"]
 
-    cg = ChemGraph(model_name="gpt-4o-mini", workflow_type=workflow_type, **kwargs)
+    cg = ChemGraph(
+        model_name="gpt-4o-mini",
+        workflow_type=workflow_type,
+        enable_memory=False,
+        **kwargs,
+    )
     assert cg.workflow == f"WORKFLOW-SENTINEL-{workflow_type}"
     args_tuple, kwargs_called = called["args"]
     if args_tuple:
         assert args_tuple[0] == "FAKE_LLM"
     else:
         assert kwargs_called.get("llm") == "FAKE_LLM"
+
+
+def test_single_agent_initialization_injects_calculator_availability(monkeypatch):
+    called = {}
+
+    def fake_constructor(*args, **kwargs):
+        called["args"] = (args, kwargs)
+        return "WORKFLOW-SENTINEL-single_agent"
+
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.construct_single_agent_graph",
+        fake_constructor,
+    )
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.load_openai_model",
+        lambda model_name, temperature, base_url=None: "FAKE_LLM",
+    )
+
+    cg = ChemGraph(
+        model_name="gpt-4o-mini",
+        workflow_type="single_agent",
+        enable_memory=False,
+    )
+
+    args_tuple, _ = called["args"]
+    system_prompt = args_tuple[1]
+    assert "Calculator availability detected during ChemGraph initialization" in system_prompt
+    assert cg.default_calculator in system_prompt
+    assert cg.default_calculator in cg.available_calculators

@@ -7,7 +7,7 @@ without a running Streamlit runtime.
 import ast
 import json
 import re
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from ase.data import chemical_symbols
 
@@ -43,6 +43,152 @@ def normalize_message_content(content: Any) -> str:
             return text
         return str(content)
     return str(content)
+
+
+def normalize_latex_delimiters(text: str) -> str:
+    """Convert common LLM math delimiters into Streamlit-renderable Markdown."""
+    if not text:
+        return ""
+
+    text = _convert_square_bracket_math(text)
+
+    return _convert_parenthetical_math_outside_display(text)
+
+
+def _is_latex_square_delimiter(text: str, index: int) -> bool:
+    prefix = text[max(0, index - 6) : index]
+    return prefix.endswith(r"\left") or prefix.endswith(r"\right")
+
+
+def _find_square_math_close(text: str, start: int) -> int | None:
+    depth = 1
+    index = start + 1
+    while index < len(text):
+        if text.startswith(r"\left[", index):
+            index += len(r"\left[")
+            continue
+        if text.startswith(r"\right]", index):
+            index += len(r"\right]")
+            continue
+
+        char = text[index]
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _convert_square_bracket_math(text: str) -> str:
+    """Convert LLM-style ``[ TeX ]`` display math while preserving normal links."""
+    chunks: list[str] = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char != "[" or _is_latex_square_delimiter(text, index):
+            chunks.append(char)
+            index += 1
+            continue
+
+        close_index = _find_square_math_close(text, index)
+        if close_index is None:
+            chunks.append(char)
+            index += 1
+            continue
+
+        body = text[index + 1 : close_index].strip()
+        has_latex_command = bool(re.search(r"\\[A-Za-z]+", body))
+        is_markdown_link = close_index + 1 < len(text) and text[close_index + 1] == "("
+        if body and has_latex_command and not is_markdown_link:
+            chunks.append(f"$$\n{body}\n$$")
+        else:
+            chunks.append(text[index : close_index + 1])
+        index = close_index + 1
+
+    return "".join(chunks)
+
+
+def _find_parenthesis_close(text: str, start: int) -> int | None:
+    depth = 1
+    index = start + 1
+    while index < len(text):
+        char = text[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _convert_parenthetical_inline_math(text: str) -> str:
+    chunks: list[str] = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char != "(":
+            chunks.append(char)
+            index += 1
+            continue
+
+        close_index = _find_parenthesis_close(text, index)
+        if close_index is None:
+            chunks.append(char)
+            index += 1
+            continue
+
+        body = text[index + 1 : close_index].strip()
+        has_latex = bool(re.search(r"\\[A-Za-z]+|\\\s|[_^{}]", body))
+        if body and has_latex:
+            chunks.append(f"${body}$")
+        else:
+            chunks.append(text[index : close_index + 1])
+        index = close_index + 1
+
+    return "".join(chunks)
+
+
+def _convert_parenthetical_math_outside_display(text: str) -> str:
+    chunks: list[str] = []
+    last_end = 0
+    for match in re.finditer(r"(?s)\$\$.*?\$\$", text):
+        chunks.append(_convert_parenthetical_inline_math(text[last_end : match.start()]))
+        chunks.append(match.group(0))
+        last_end = match.end()
+    chunks.append(_convert_parenthetical_inline_math(text[last_end:]))
+    return "".join(chunks)
+
+
+def split_markdown_latex_blocks(
+    text: str,
+) -> list[tuple[Literal["markdown", "latex"], str]]:
+    """Split text into Markdown and display-LaTeX blocks for Streamlit rendering."""
+    normalized = normalize_latex_delimiters(text)
+    if not normalized:
+        return []
+
+    parts: list[tuple[Literal["markdown", "latex"], str]] = []
+    last_end = 0
+    for match in re.finditer(r"(?s)\$\$\s*(.*?)\s*\$\$", normalized):
+        markdown = normalized[last_end : match.start()].strip()
+        if markdown:
+            parts.append(("markdown", markdown))
+
+        latex = match.group(1).strip()
+        if latex:
+            parts.append(("latex", latex))
+        last_end = match.end()
+
+    trailing = normalized[last_end:].strip()
+    if trailing:
+        parts.append(("markdown", trailing))
+
+    return parts
 
 
 # ---------------------------------------------------------------------------
@@ -150,8 +296,8 @@ def extract_molecular_structure(message_content: str) -> Optional[dict]:
 
 
 def find_structure_in_messages(messages: list) -> Optional[dict]:
-    """Look through all messages to find structure data."""
-    for message in messages:
+    """Look through messages in reverse to find the latest structure data."""
+    for message in reversed(messages):
         if hasattr(message, "content") or isinstance(message, dict):
             raw_content = (
                 getattr(message, "content", "")

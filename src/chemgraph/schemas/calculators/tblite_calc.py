@@ -110,3 +110,7 @@ class TBLiteCalc(BaseModel):
             cache_api=self.cache_api,
             verbosity=self.verbosity,
         )
+
+    def get_multiplicity(self) -> Optional[int]:
+        """Return spin multiplicity (2S+1) for thermochemistry."""
+        return self.multiplicity

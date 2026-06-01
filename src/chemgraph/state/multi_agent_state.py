@@ -1,5 +1,5 @@
 import operator
-from typing import TypedDict, Annotated, Any, Literal
+from typing import TypedDict, Annotated, Any, Literal, Optional
 
 from langgraph.graph import add_messages
 
@@ -44,12 +44,16 @@ class PlannerState(TypedDict):
     failures across iterations, enabling the planner to make informed
     retry decisions.  Each entry is a dict with keys: ``task_index``,
     ``error``, ``retry_count``, and ``executor_id``.
+
+    ``clarification`` holds the question text when the planner routes
+    to ``ask_human`` to request human input before proceeding.
     """
 
     messages: Annotated[list, add_messages]
-    next_step: Literal["executor_subgraph", "FINISH"]
+    next_step: Literal["executor_subgraph", "ask_human", "FINISH"]
     tasks: list[dict[str, Any]]
     executor_results: Annotated[list, operator.add]
     executor_logs: Annotated[dict[str, list], merge_dicts]
     planner_iterations: int
     failed_tasks: Annotated[list, operator.add]
+    clarification: Optional[str]

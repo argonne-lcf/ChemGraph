@@ -116,6 +116,7 @@ def session_to_conversation_history(session: Session) -> list[dict]:
                         "query": current_query,
                         "result": {"messages": current_messages},
                         "thread_id": 1,
+                        "log_dir": session.log_dir,
                     }
                 )
             current_query = msg.content
@@ -138,6 +139,7 @@ def session_to_conversation_history(session: Session) -> list[dict]:
                 "query": current_query,
                 "result": {"messages": current_messages},
                 "thread_id": 1,
+                "log_dir": session.log_dir,
             }
         )
 

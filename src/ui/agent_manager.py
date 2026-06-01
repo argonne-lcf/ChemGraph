@@ -11,9 +11,11 @@ def initialize_agent(
     structured_output: bool,
     return_option: str,
     generate_report: bool,
+    human_supervised: bool,
     recursion_limit: int,
     base_url: Optional[str],
     argo_user: Optional[str],
+    log_dir: Optional[str] = None,
 ):
     """Create a :class:`ChemGraph` agent instance.
 
@@ -35,6 +37,8 @@ def initialize_agent(
             generate_report=generate_report,
             return_option=return_option,
             recursion_limit=recursion_limit,
+            human_supervised=human_supervised,
+            log_dir=log_dir,
         )
     except Exception as exc:
         st.error(f"Failed to initialize agent: {exc}")

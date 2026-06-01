@@ -34,7 +34,7 @@ RUN pip install --no-cache-dir . && \
 # Install Python tblite from source with conservative flags to avoid ABI/symbol issues on ARM.
 RUN CFLAGS="-O2 -fno-tree-vectorize" \
     FFLAGS="-O2 -fno-tree-vectorize" \
-    pip install --no-cache-dir --no-binary=tblite --force-reinstall "tblite==0.5.0"
+    pip install --no-cache-dir --no-binary=tblite --force-reinstall "tblite==0.4.0"
 
 # Validate calculator runtimes at build time after package install.
 RUN which nwchem && python -c "from tblite.ase import TBLite"

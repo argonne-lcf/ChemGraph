@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
-        install_extras: [core, calculators, uma, ui, parsl, viz]
+        install_extras: [core, calculators, uma, ui, parsl, xanes, rag]
 
     steps:
     - uses: actions/checkout@v4
@@ -74,8 +74,18 @@ jobs:
             'uma': ['fairchem.core', 'e3nn'],
             'ui': ['streamlit', 'stmol'],
             'parsl': ['parsl'],
-            'viz': ['pyppeteer', 'grandalf', 'nest_asyncio']
+            'xanes': ['parsl'],
+            'rag': [
+                'faiss',
+                'langchain_text_splitters',
+                'langchain_huggingface',
+                'sentence_transformers',
+                'fitz',
+            ],
         }
+
+        if extras == 'xanes' and sys.version_info >= (3, 11):
+            extra_packages['xanes'].append('mp_api')
 
         if extras != 'core':
              # Check packages for specific extra
