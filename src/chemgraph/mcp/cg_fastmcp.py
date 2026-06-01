@@ -260,7 +260,14 @@ class CGFastMCP(FastMCP):
         def decorator(fn: Callable) -> Callable:
             self._fix_module_for_pickle(fn)
             sig = inspect.signature(fn)
-            param = list(sig.parameters.values())[0]
+            params = list(sig.parameters.values())
+            if len(params) != 1:
+                raise TypeError(
+                    f"@ensemble_tool expects a function with exactly one "
+                    f"parameter (the per-item schema), got {len(params)} "
+                    f"on {fn.__qualname__}."
+                )
+            param = params[0]
             param_type = param.annotation
 
             async def wrapper(params):
