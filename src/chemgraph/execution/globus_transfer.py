@@ -216,10 +216,25 @@ class GlobusTransferManager:
             sync_level="checksum",
         )
 
+        # Disambiguate same-basename inputs (e.g. /a/in.cif and /b/in.cif)
+        # by suffixing duplicates with _1, _2, ...  Without this the
+        # second add_item silently overwrites the first on the
+        # destination collection.
         file_mapping: dict[str, str] = {}
+        used_names: dict[str, int] = {}
         for local_path in local_paths:
             p = Path(local_path).resolve()
-            remote_path = f"{remote_dir}/{p.name}"
+            base = p.name
+            count = used_names.get(base, 0)
+            if count == 0:
+                remote_name = base
+            else:
+                stem, dot, suffix = base.partition(".")
+                remote_name = (
+                    f"{stem}_{count}.{suffix}" if dot else f"{stem}_{count}"
+                )
+            used_names[base] = count + 1
+            remote_path = f"{remote_dir}/{remote_name}"
             tdata.add_item(str(p), remote_path)
             file_mapping[str(p)] = remote_path
 

@@ -113,10 +113,30 @@ class CGFastMCP(FastMCP):
         self._pre_submit_hook = hook
 
     def _apply_pre_submit_hook(self, task):
-        """Run the registered pre-submit hook (no-op when unset)."""
+        """Run the registered pre-submit hook (no-op when unset).
+
+        Hook exceptions are wrapped in a ``ValueError`` naming the hook
+        and the offending task_id, so they surface to the agent as a
+        structured error instead of an opaque traceback.
+        """
         if self._pre_submit_hook is None:
             return task
-        return self._pre_submit_hook(task)
+        try:
+            return self._pre_submit_hook(task)
+        except Exception as exc:
+            hook_name = getattr(
+                self._pre_submit_hook, "__name__", repr(self._pre_submit_hook)
+            )
+            task_id = getattr(task, "task_id", "<unknown>")
+            logger.warning(
+                "Pre-submit hook %s failed for task %s",
+                hook_name,
+                task_id,
+                exc_info=True,
+            )
+            raise ValueError(
+                f"Pre-submit hook '{hook_name}' failed for task '{task_id}': {exc}"
+            ) from exc
 
     # ── Job tracking tools ─────────────────────────────────────────────
 

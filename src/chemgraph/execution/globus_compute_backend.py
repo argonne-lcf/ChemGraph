@@ -102,6 +102,16 @@ class GlobusComputeBackend(ExecutionBackend):
             logger.info("Re-creating Globus Compute Executor")
             self._executor = Executor(endpoint_id=self._endpoint_id)
 
+    @staticmethod
+    def _looks_like_stopped_executor(exc: BaseException) -> bool:
+        """Heuristic: did a submit fail because the Executor is shut down?
+
+        The SDK does not expose a stable exception type for this state;
+        we match on common substrings observed in practice.
+        """
+        msg = str(exc).lower()
+        return "shut down" in msg or "stopped" in msg or "closed" in msg
+
     def submit(self, task: TaskSpec) -> Future:
         if not self._initialized or self._executor is None:
             raise RuntimeError(
@@ -118,7 +128,19 @@ class GlobusComputeBackend(ExecutionBackend):
             # Executor.submit() returns a ComputeFuture (a
             # concurrent.futures.Future subclass), fully compatible
             # with asyncio.wrap_future() used by gather_futures().
-            return self._executor.submit(task.callable, *task.args, **task.kwargs)
+            try:
+                return self._executor.submit(task.callable, *task.args, **task.kwargs)
+            except Exception as exc:
+                if not self._looks_like_stopped_executor(exc):
+                    raise
+                logger.warning(
+                    "Submit raised %s -- rebuilding Globus Compute Executor "
+                    "and retrying once.",
+                    type(exc).__name__,
+                )
+                self._executor = None
+                self._ensure_executor()
+                return self._executor.submit(task.callable, *task.args, **task.kwargs)
 
         elif task.task_type == "shell":
             if task.command is None:
@@ -128,7 +150,19 @@ class GlobusComputeBackend(ExecutionBackend):
             from globus_compute_sdk import ShellFunction
 
             shell_fn = ShellFunction(task.command)
-            return self._executor.submit(shell_fn)
+            try:
+                return self._executor.submit(shell_fn)
+            except Exception as exc:
+                if not self._looks_like_stopped_executor(exc):
+                    raise
+                logger.warning(
+                    "Submit raised %s -- rebuilding Globus Compute Executor "
+                    "and retrying once.",
+                    type(exc).__name__,
+                )
+                self._executor = None
+                self._ensure_executor()
+                return self._executor.submit(shell_fn)
 
         else:
             raise ValueError(
