@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import pprint
 import queue
 import threading
 import uuid
@@ -43,6 +44,7 @@ from ui.message_utils import (
     has_structure_signal,
     is_infrared_requested,
     normalize_message_content,
+    split_markdown_latex_blocks,
     strip_viewer_from_report_html,
 )
 from ui.session_utils import (
@@ -220,6 +222,25 @@ def render() -> None:
 # ---------------------------------------------------------------------------
 # Internal renderers
 # ---------------------------------------------------------------------------
+
+
+def _render_markdown_with_math(text: str) -> None:
+    """Render Markdown text, sending display math blocks through st.latex."""
+    for block_type, content in split_markdown_latex_blocks(text):
+        if block_type == "latex":
+            st.latex(_prepare_latex_block(content))
+        else:
+            st.markdown(content)
+
+
+def _prepare_latex_block(content: str) -> str:
+    """Clean display math for Streamlit's KaTeX renderer."""
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    if len(lines) == 1 or r"\begin{" in content:
+        return " ".join(lines)
+    return "\\begin{aligned}\n" + (r" \\" + "\n").join(lines) + "\n\\end{aligned}"
 
 
 def _format_calculator_label(calculator_name: str) -> str:
@@ -529,7 +550,7 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
     # Interrupt exchanges (if any occurred during this query)
     for exch in entry.get("interrupt_exchanges", []):
         with st.chat_message("assistant"):
-            st.markdown(exch["question"])
+            _render_markdown_with_math(exch["question"])
         with st.chat_message("user"):
             st.markdown(exch["answer"])
 
@@ -541,7 +562,7 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
     # Display the AI response with visualizations
     with st.chat_message("assistant"):
         if final_answer:
-            st.markdown(final_answer)
+            _render_markdown_with_math(final_answer)
 
         # Structure visualisation
         html_filename = find_html_filename(messages)
@@ -655,6 +676,13 @@ def _render_html_report(
                 )
 
             cleaned_html = strip_viewer_from_report_html(html_content)
+            st.download_button(
+                "Download HTML Report",
+                data=html_content,
+                file_name=Path(resolved_html).name,
+                mime="text/html",
+                key=f"download_report_{idx}",
+            )
             st.components.v1.html(cleaned_html, height=600, scrolling=True)
         except FileNotFoundError:
             st.warning(f"HTML file '{html_filename}' not found")
@@ -768,26 +796,16 @@ def _render_verbose_info(idx: int, messages: list, entry: dict) -> None:
     with st.expander(f"\U0001f50d Verbose Info (Query {idx})", expanded=False):
         st.write(f"**Number of messages:** {len(messages)}")
         st.write(f"**Structure found:** {'Yes' if structure else 'No'}")
+        raw_result = entry.get("result")
         if st.session_state.last_run_query == entry.get("query"):
             if st.session_state.last_run_error:
                 st.write("**Last run error:**")
                 st.code(str(st.session_state.last_run_error))
             if st.session_state.last_run_result is not None:
-                st.write("**Raw result (repr):**")
-                st.code(repr(st.session_state.last_run_result))
+                raw_result = st.session_state.last_run_result
 
-        for i, msg in enumerate(messages):
-            if hasattr(msg, "type"):
-                msg_type = msg.type
-                content = normalize_message_content(msg.content)
-            elif isinstance(msg, dict):
-                msg_type = msg.get("type", "unknown")
-                content = normalize_message_content(msg.get("content", ""))
-            else:
-                msg_type = type(msg).__name__
-                content = normalize_message_content(getattr(msg, "content", str(msg)))
-            content_preview = (content[:100] + "...") if len(content) > 100 else content
-            st.write(f"  **Message {i+1}:** `{msg_type}` - {content_preview}")
+        st.write("**Raw result:**")
+        st.code(pprint.pformat(raw_result, width=1, compact=False), language="text")
 
 
 def _render_example_queries(config: dict, selected_model: str) -> None:
@@ -828,19 +846,19 @@ def _render_pending_interrupt() -> None:
     original_query = st.session_state.pending_interrupt_query
     if original_query:
         with st.chat_message("user"):
-            st.markdown(original_query)
+            _render_markdown_with_math(original_query)
 
     # Show any prior interrupt exchanges in this chain
     for exch in st.session_state.interrupt_exchanges:
         with st.chat_message("assistant"):
-            st.markdown(exch["question"])
+            _render_markdown_with_math(exch["question"])
         with st.chat_message("user"):
-            st.markdown(exch["answer"])
+            _render_markdown_with_math(exch["answer"])
 
     # Show the current pending question
     with st.chat_message("assistant"):
         st.info("The agent needs your input to continue.", icon="\u2753")
-        st.markdown(question)
+        _render_markdown_with_math(question)
 
     # Cancel button
     if st.button("Cancel", key="cancel_interrupt"):

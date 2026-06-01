@@ -2,6 +2,7 @@ from contextlib import nullcontext
 import os
 
 from ui._pages import main_interface as main_ui
+from ui.message_utils import normalize_latex_delimiters
 
 
 class _SessionState(dict):
@@ -47,6 +48,54 @@ class _FakeStreamlitWithSidebar(_FakeStreamlit):
     def markdown(self, text):
         self.calls.append(("markdown", text))
 
+    def latex(self, text):
+        self.calls.append(("latex", text))
+
+
+class _FakeComponentsV1:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def html(self, html, height=None, scrolling=False):
+        self.calls.append(("html", html, height, scrolling))
+
+
+class _FakeComponents:
+    def __init__(self, calls):
+        self.v1 = _FakeComponentsV1(calls)
+
+
+class _FakeStreamlitRich(_FakeStreamlit):
+    def __init__(self):
+        super().__init__()
+        self.calls = []
+        self.components = _FakeComponents(self.calls)
+
+    def expander(self, label, expanded=False):
+        self.calls.append(("expander", label, expanded))
+        return nullcontext()
+
+    def write(self, text):
+        self.calls.append(("write", text))
+
+    def markdown(self, text):
+        self.calls.append(("markdown", text))
+
+    def latex(self, text):
+        self.calls.append(("latex", text))
+
+    def code(self, text, language=None):
+        self.calls.append(("code", text, language))
+
+    def download_button(self, label, data, file_name, mime, key=None):
+        self.calls.append(("download_button", label, data, file_name, mime, key))
+
+    def warning(self, text):
+        self.calls.append(("warning", text))
+
+    def error(self, text):
+        self.calls.append(("error", text))
+
 
 def test_argo_structured_output_is_disabled_after_model_selection():
     argo_model = next(iter(main_ui.supported_argo_models))
@@ -87,6 +136,114 @@ def test_available_calculators_sidebar_replaces_quick_settings(monkeypatch):
     assert "Mace (default)" in rendered_text
     assert "TBLite (xTB, GFN1-xTB, GFN2-xTB)" in rendered_text
     assert "Quick Settings" not in rendered_text
+
+
+def test_latex_delimiters_are_normalized_for_streamlit_markdown():
+    raw = (
+        "Using the combustion reaction\n\n"
+        "[ \\mathrm{CH_4 + 2\\,O_2 \\rightarrow CO_2 + 2\\,H_2O} ]\n\n"
+        "(H(\\mathrm{CH_4}) = -21.88) eV\n\n"
+        "Per mole, using (1\\ \\text{eV} = 96.485\\ \\text{kJ mol}^{-1}):"
+    )
+
+    normalized = normalize_latex_delimiters(raw)
+
+    assert "$$\n\\mathrm{CH_4 + 2\\,O_2 \\rightarrow CO_2 + 2\\,H_2O}\n$$" in normalized
+    assert "$H(\\mathrm{CH_4}) = -21.88$ eV" in normalized
+    assert (
+        "Per mole, using $1\\ \\text{eV} = "
+        "96.485\\ \\text{kJ mol}^{-1}$:"
+    ) in normalized
+
+
+def test_nested_square_brackets_in_display_math_are_preserved():
+    raw = (
+        "Reaction enthalpy:\n\n"
+        "[ \\Delta H_\\mathrm{rxn} = \\left[H(\\mathrm{CO_2}) + "
+        "2H(\\mathrm{H_2O})\\right]\n\n"
+        "\\left[H(\\mathrm{CH_4}) + 2H(\\mathrm{O_2})\\right] ]"
+    )
+
+    blocks = main_ui.split_markdown_latex_blocks(raw)
+
+    assert blocks == [
+        ("markdown", "Reaction enthalpy:"),
+        (
+            "latex",
+            "\\Delta H_\\mathrm{rxn} = \\left[H(\\mathrm{CO_2}) + "
+            "2H(\\mathrm{H_2O})\\right]\n\n"
+            "\\left[H(\\mathrm{CH_4}) + 2H(\\mathrm{O_2})\\right]",
+        ),
+    ]
+
+
+def test_markdown_with_math_uses_streamlit_latex_for_display_blocks(monkeypatch):
+    fake_st = _FakeStreamlitRich()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+
+    main_ui._render_markdown_with_math(
+        "Using reaction\n\n"
+        "[ \\mathrm{CH_4 + 2\\,O_2 \\rightarrow CO_2 + 2\\,H_2O} ]\n\n"
+        "Done"
+    )
+
+    assert ("markdown", "Using reaction") in fake_st.calls
+    assert (
+        "latex",
+        "\\mathrm{CH_4 + 2\\,O_2 \\rightarrow CO_2 + 2\\,H_2O}",
+    ) in fake_st.calls
+    assert ("markdown", "Done") in fake_st.calls
+
+
+def test_multiline_latex_blocks_are_wrapped_for_katex():
+    prepared = main_ui._prepare_latex_block("a = b\n\nc = d")
+
+    assert prepared == "\\begin{aligned}\na = b \\\\\nc = d\n\\end{aligned}"
+
+
+def test_verbose_info_shows_pretty_raw_result_only(monkeypatch):
+    fake_st = _FakeStreamlitRich()
+    fake_st.session_state.last_run_query = "query"
+    fake_st.session_state.last_run_error = None
+    fake_st.session_state.last_run_result = {"messages": [{"type": "ai", "content": "x"}]}
+    monkeypatch.setattr(main_ui, "st", fake_st)
+
+    main_ui._render_verbose_info(
+        1,
+        [{"type": "ai", "content": "x"}],
+        {"query": "query", "result": {"messages": [{"type": "ai", "content": "x"}]}},
+    )
+
+    code_calls = [call for call in fake_st.calls if call[0] == "code"]
+    assert len(code_calls) == 1
+    assert "\n" in code_calls[0][1]
+    assert not any("Message 1" in str(call) for call in fake_st.calls)
+
+
+def test_html_report_includes_download_button(monkeypatch, tmp_path):
+    fake_st = _FakeStreamlitRich()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    report_path = tmp_path / "report.html"
+    report_path.write_text("<html><body>Report</body></html>", encoding="utf-8")
+
+    main_ui._render_html_report(
+        2,
+        "report.html",
+        [{"content": "report.html"}],
+        {"log_dir": str(tmp_path)},
+    )
+
+    download_calls = [call for call in fake_st.calls if call[0] == "download_button"]
+    assert download_calls == [
+        (
+            "download_button",
+            "Download HTML Report",
+            "<html><body>Report</body></html>",
+            "report.html",
+            "text/html",
+            "download_report_2",
+        )
+    ]
 
 
 def test_failed_agent_initialization_is_not_cached(monkeypatch, tmp_path):
