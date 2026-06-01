@@ -1,5 +1,7 @@
 import importlib.util
 import json
+import os
+import shutil
 from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import Union, Optional, Any, List, Type
 from chemgraph.schemas.atomsdata import AtomsData
@@ -24,6 +26,11 @@ def _engine_available(module_name: str) -> bool:
     except (ImportError, ModuleNotFoundError):
         return False
 
+
+def _command_available(command_name: str, env_var_name: str) -> bool:
+    return bool(os.environ.get(env_var_name)) or shutil.which(command_name) is not None
+
+
 if not _engine_available("fairchem.core"):
     FAIRChemCalc = None
 
@@ -35,6 +42,12 @@ if not _engine_available("tblite"):
 
 if not _engine_available("aimnet2calc"):
     AIMNET2Calc = None
+
+if not _command_available("nwchem", "ASE_NWCHEM_COMMAND"):
+    NWChemCalc = None
+
+if not _command_available("orca", "ASE_ORCA_COMMAND"):
+    OrcaCalc = None
 
 
 _CALCULATOR_ALIASES = {
@@ -53,11 +66,11 @@ def _calculator_key(name: str) -> str:
 _all_calculator_classes: List[Optional[Type[BaseModel]]] = [
     FAIRChemCalc,
     MaceCalc,
-    NWChemCalc,
-    TBLiteCalc,
-    OrcaCalc,
-    EMTCalc,
     AIMNET2Calc,
+    TBLiteCalc,
+    EMTCalc,
+    NWChemCalc,
+    OrcaCalc,
 ]
 
 # Filter out unavailable calculators
@@ -68,14 +81,6 @@ available_calculator_classes: List[Type[BaseModel]] = [
 # Create a union for type hinting
 CalculatorUnion = Union[tuple(available_calculator_classes)]
 
-# Determine default calculator and names string
-if FAIRChemCalc:
-    default_calculator = FAIRChemCalc
-elif MaceCalc:
-    default_calculator = MaceCalc
-else:
-    default_calculator = NWChemCalc
-
 _calculator_name_items = [calc.__name__ for calc in available_calculator_classes]
 _calculator_name_items = [
     "TBLiteCalc (aliases: xTB, GFN1-xTB, GFN2-xTB)"
@@ -84,6 +89,34 @@ _calculator_name_items = [
     for name in _calculator_name_items
 ]
 _calculator_names = ", ".join(_calculator_name_items)
+
+# Determine default calculator using only calculators detected as available.
+default_calculator = available_calculator_classes[0]
+
+
+def get_available_calculator_names() -> List[str]:
+    """Return calculator class names detected as available in this environment."""
+    return [calc.__name__ for calc in available_calculator_classes]
+
+
+def get_default_calculator_name() -> str:
+    """Return the default calculator class name selected for this environment."""
+    return default_calculator.__name__
+
+
+def get_calculator_selection_context() -> str:
+    """Return prompt text describing available calculators and default choice."""
+    return (
+        "\n\nCalculator availability detected during ChemGraph initialization:\n"
+        f"- Available ASE calculators: {_calculator_names}.\n"
+        f"- Default calculator when the user does not specify one: "
+        f"{default_calculator.__name__}.\n"
+        "- When calling run_ase, choose only from the available calculators above. "
+        "If the user requests an unavailable calculator, choose the default "
+        "available calculator when that substitution is appropriate; otherwise "
+        "ask for clarification or explain that the requested calculator is not "
+        "available."
+    )
 
 
 class ASEInputSchema(BaseModel):

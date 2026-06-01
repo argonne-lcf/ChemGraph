@@ -24,6 +24,23 @@ def test_xtb_alias_maps_to_tblite_calculator_schema():
     assert params.calculator.method == "GFN2-xTB"
 
 
+def test_default_calculator_is_in_detected_available_calculators():
+    from chemgraph.schemas.ase_input import (
+        get_available_calculator_names,
+        get_calculator_selection_context,
+        get_default_calculator_name,
+    )
+
+    available = get_available_calculator_names()
+    default = get_default_calculator_name()
+    context = get_calculator_selection_context()
+
+    assert default in available
+    assert available
+    assert "Calculator availability detected during ChemGraph initialization" in context
+    assert default in context
+
+
 def test_emt_calculator():
     # Test EMT calculator initialization
     calc = EMTCalc()
