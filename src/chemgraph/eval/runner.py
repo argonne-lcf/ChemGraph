@@ -61,6 +61,13 @@ class ModelBenchmarkRunner:
     """
 
     def __init__(self, config: BenchmarkConfig):
+        """Initialize the benchmark runner.
+
+        Parameters
+        ----------
+        config : BenchmarkConfig
+            Validated benchmark configuration.
+        """
         self.config = config
         full_dataset: List[GroundTruthItem] = load_dataset(config.dataset)
         # Apply max_queries limit if configured (0 = no limit).
@@ -109,7 +116,20 @@ class ModelBenchmarkRunner:
         return d
 
     def _checkpoint_path(self, model_name: str, workflow_type: str) -> str:
-        """Return the JSONL checkpoint file path for a (model, workflow) pair."""
+        """Return the JSONL checkpoint file path for a model/workflow pair.
+
+        Parameters
+        ----------
+        model_name : str
+            Model identifier being evaluated.
+        workflow_type : str
+            Workflow type being evaluated.
+
+        Returns
+        -------
+        str
+            Checkpoint JSONL file path.
+        """
         safe_name = model_name.replace("/", "_").replace(":", "_")
         return os.path.join(
             self._checkpoint_dir(),
@@ -130,6 +150,19 @@ class ModelBenchmarkRunner:
         the query ID, index, and full result (raw output + judge scores).
         Append-only writes make this crash-safe: at worst the last line
         may be truncated (one query lost, not all).
+
+        Parameters
+        ----------
+        model_name : str
+            Model identifier being evaluated.
+        workflow_type : str
+            Workflow type being evaluated.
+        query_id : str
+            Ground-truth query identifier.
+        query_idx : int
+            Query index used as the LangGraph thread ID.
+        query_result : dict
+            Result payload to checkpoint.
         """
         record = {
             "query_id": query_id,
@@ -142,6 +175,13 @@ class ModelBenchmarkRunner:
 
     def _load_checkpoint(self, model_name: str, workflow_type: str) -> Dict[str, dict]:
         """Load completed query results from a checkpoint file.
+
+        Parameters
+        ----------
+        model_name : str
+            Model identifier being evaluated.
+        workflow_type : str
+            Workflow type being evaluated.
 
         Returns
         -------
@@ -186,6 +226,13 @@ class ModelBenchmarkRunner:
 
         Called when *not* resuming, so that stale checkpoint data from a
         previous run does not leak into the current run.
+
+        Parameters
+        ----------
+        model_name : str
+            Model identifier being evaluated.
+        workflow_type : str
+            Workflow type being evaluated.
         """
         path = self._checkpoint_path(model_name, workflow_type)
         if os.path.exists(path):
@@ -202,6 +249,13 @@ class ModelBenchmarkRunner:
         workflow_type: str,
     ) -> dict:
         """Run all queries for one (model, workflow) pair.
+
+        Parameters
+        ----------
+        model_name : str
+            Model identifier to evaluate.
+        workflow_type : str
+            Workflow type to evaluate.
 
         Returns
         -------
@@ -342,6 +396,24 @@ class ModelBenchmarkRunner:
         """Execute and evaluate a single query.
 
         Returns ``{"raw": ..., "judge": ..., "structured_judge": ...}``.
+
+        Parameters
+        ----------
+        cg : ChemGraph
+            Initialized ChemGraph agent.
+        item : GroundTruthItem
+            Ground-truth query item.
+        idx : int
+            Query index used as the LangGraph thread ID.
+        model_name : str
+            Model identifier being evaluated.
+        workflow_type : str
+            Workflow type being evaluated.
+
+        Returns
+        -------
+        dict
+            Query result containing raw output and judge results.
         """
         try:
             config = {"configurable": {"thread_id": str(idx)}}
@@ -540,7 +612,20 @@ class ModelBenchmarkRunner:
 
     @staticmethod
     def _make_error_result(error_msg: str, n_queries: int) -> dict:
-        """Build an error placeholder result for a failed model init."""
+        """Build an error placeholder result for a failed model init.
+
+        Parameters
+        ----------
+        error_msg : str
+            Error message to store in the aggregate result.
+        n_queries : int
+            Number of benchmark queries that were skipped.
+
+        Returns
+        -------
+        dict
+            Placeholder aggregate result.
+        """
         return {
             "judge_aggregate": {
                 "n_queries": n_queries,

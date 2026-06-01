@@ -9,13 +9,36 @@ import streamlit as st
 
 
 def _is_local_address(hostname: str) -> bool:
+    """Return whether a hostname points to the local machine.
+
+    Parameters
+    ----------
+    hostname : str
+        Hostname parsed from a URL.
+
+    Returns
+    -------
+    bool
+        ``True`` for localhost-style addresses.
+    """
     host = (hostname or "").strip().lower()
     return host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 
 
 @st.cache_data(ttl=10)
 def check_local_model_endpoint(base_url: Optional[str]) -> Dict[str, Any]:
-    """Quick reachability check for local OpenAI-compatible endpoints."""
+    """Quick reachability check for local OpenAI-compatible endpoints.
+
+    Parameters
+    ----------
+    base_url : str, optional
+        Base URL to probe.
+
+    Returns
+    -------
+    dict[str, Any]
+        Status dictionary with ``ok`` and ``message`` keys.
+    """
     if not base_url:
         return {"ok": True, "message": "No base URL configured."}
 

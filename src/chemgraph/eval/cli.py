@@ -38,6 +38,11 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
     This function is used by both the standalone ``chemgraph-eval``
     entry point and the ``chemgraph eval`` subcommand so that the
     argument interface is consistent.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser or subparser to receive evaluation arguments.
     """
     parser.add_argument(
         "--models",
@@ -152,6 +157,16 @@ def _resolve_profile(args: argparse.Namespace) -> Optional[str]:
     ``[eval] default_profile``, use that as the profile name.
 
     Returns ``None`` if no profile should be used.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed evaluation arguments.
+
+    Returns
+    -------
+    str or None
+        Selected profile name, or ``None`` when no profile applies.
     """
     if args.profile:
         return args.profile
@@ -180,6 +195,16 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
     When ``--config`` is provided without ``--profile``, the
     ``[eval] default_profile`` from the config file is used
     automatically if it exists.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed evaluation arguments.
+
+    Returns
+    -------
+    BenchmarkConfig
+        Validated benchmark configuration.
     """
     profile = _resolve_profile(args)
 
@@ -247,7 +272,13 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
 
 
 def run_eval(args: argparse.Namespace) -> None:
-    """Execute an evaluation benchmark from parsed CLI arguments."""
+    """Execute an evaluation benchmark from parsed CLI arguments.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed evaluation arguments.
+    """
     config = build_config_from_args(args)
     runner = ModelBenchmarkRunner(config)
 
@@ -274,7 +305,18 @@ def run_eval(args: argparse.Namespace) -> None:
 
 
 def parse_args(argv=None) -> argparse.Namespace:
-    """Parse arguments for the standalone ``chemgraph-eval`` command."""
+    """Parse arguments for the standalone ``chemgraph-eval`` command.
+
+    Parameters
+    ----------
+    argv : list[str], optional
+        Argument list to parse. Uses ``sys.argv`` when omitted.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed command-line arguments.
+    """
     parser = argparse.ArgumentParser(
         prog="chemgraph-eval",
         description="Run ChemGraph multi-model evaluation benchmarks.",
@@ -284,7 +326,13 @@ def parse_args(argv=None) -> argparse.Namespace:
 
 
 def main(argv=None) -> None:
-    """Standalone entry point for ``chemgraph-eval``."""
+    """Standalone entry point for ``chemgraph-eval``.
+
+    Parameters
+    ----------
+    argv : list[str], optional
+        Argument list to parse. Uses ``sys.argv`` when omitted.
+    """
     args = parse_args(argv)
     run_eval(args)
 

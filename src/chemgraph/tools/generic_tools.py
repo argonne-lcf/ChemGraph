@@ -99,9 +99,22 @@ class PythonREPL:
     """Small persistent Python REPL used by the python_repl tool."""
 
     def __init__(self):
+        """Initialize an empty persistent global namespace."""
         self.globals = {}
 
     def run(self, command: str) -> str:
+        """Execute Python code in the persistent REPL namespace.
+
+        Parameters
+        ----------
+        command : str
+            Python code to execute.
+
+        Returns
+        -------
+        str
+            Captured stdout/stderr and traceback text, if any.
+        """
         cleaned_command = command.strip()
         if not cleaned_command:
             return ""

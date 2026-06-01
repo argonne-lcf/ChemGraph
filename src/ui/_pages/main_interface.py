@@ -71,6 +71,20 @@ logger = logging.getLogger(__name__)
 
 
 def _get_base_url_for_model(model_name: str, config: Dict[str, Any]) -> Optional[str]:
+    """Resolve the configured base URL for a model.
+
+    Parameters
+    ----------
+    model_name : str
+        Selected model identifier.
+    config : dict[str, Any]
+        Nested UI configuration.
+
+    Returns
+    -------
+    str or None
+        Provider base URL, or ``None`` when not configured.
+    """
     return get_base_url_for_model_from_nested_config(model_name, config)
 
 
@@ -107,7 +121,20 @@ def _ensure_chat_log_dir() -> str:
 def _resolve_structured_output_for_model(
     model_name: str, structured_output: bool
 ) -> tuple[bool, Optional[str]]:
-    """Disable structured output for Argo models, including quick overrides."""
+    """Disable structured output for Argo models, including quick overrides.
+
+    Parameters
+    ----------
+    model_name : str
+        Selected model identifier.
+    structured_output : bool
+        Requested structured-output setting.
+
+    Returns
+    -------
+    tuple[bool, str | None]
+        Effective structured-output setting and optional warning message.
+    """
     if model_name in supported_argo_models and structured_output:
         return (
             False,
@@ -225,7 +252,13 @@ def render() -> None:
 
 
 def _render_markdown_with_math(text: str) -> None:
-    """Render Markdown text, sending display math blocks through st.latex."""
+    """Render Markdown text, sending display math blocks through ``st.latex``.
+
+    Parameters
+    ----------
+    text : str
+        Markdown text that may contain display math blocks.
+    """
     for block_type, content in split_markdown_latex_blocks(text):
         if block_type == "latex":
             st.latex(_prepare_latex_block(content))
@@ -234,7 +267,18 @@ def _render_markdown_with_math(text: str) -> None:
 
 
 def _prepare_latex_block(content: str) -> str:
-    """Clean display math for Streamlit's KaTeX renderer."""
+    """Clean display math for Streamlit's KaTeX renderer.
+
+    Parameters
+    ----------
+    content : str
+        Raw LaTeX block content.
+
+    Returns
+    -------
+    str
+        KaTeX-compatible display math.
+    """
     lines = [line.strip() for line in content.splitlines() if line.strip()]
     if not lines:
         return ""
@@ -244,6 +288,18 @@ def _prepare_latex_block(content: str) -> str:
 
 
 def _format_calculator_label(calculator_name: str) -> str:
+    """Format calculator class names for display.
+
+    Parameters
+    ----------
+    calculator_name : str
+        Calculator class name or label.
+
+    Returns
+    -------
+    str
+        Human-readable calculator label.
+    """
     label = calculator_name.removesuffix("Calc")
     if label == "TBLite":
         return "TBLite (xTB, GFN1-xTB, GFN2-xTB)"
@@ -358,7 +414,13 @@ def _render_session_sidebar() -> None:
 
 
 def _load_session(session_id: str) -> None:
-    """Load a stored session into the active conversation."""
+    """Load a stored session into the active conversation.
+
+    Parameters
+    ----------
+    session_id : str
+        Session ID or prefix selected in the sidebar.
+    """
     store: Optional[SessionStore] = st.session_state.get("session_store")
     if store is None:
         return
@@ -401,6 +463,13 @@ def _save_exchange_to_store(query: str, result: Any) -> None:
     """Persist a single query/result exchange to the SessionStore.
 
     Creates the session DB row on the first call, then appends messages.
+
+    Parameters
+    ----------
+    query : str
+        User query text.
+    result : Any
+        Agent result to persist as session messages.
     """
     store: Optional[SessionStore] = st.session_state.get("session_store")
     if store is None:
@@ -439,6 +508,19 @@ def _render_agent_status(
     thread_id: int,
     endpoint_status: dict,
 ) -> None:
+    """Render sidebar status for the active agent.
+
+    Parameters
+    ----------
+    selected_model : str
+        Selected model name.
+    selected_workflow : str
+        Selected workflow name.
+    thread_id : int
+        Current LangGraph thread ID.
+    endpoint_status : dict
+        Local endpoint status dictionary.
+    """
     st.sidebar.header("Agent Status")
 
     if st.session_state.agent:
@@ -487,6 +569,27 @@ def _auto_initialize_agent(
     human_supervised: bool,
     selected_base_url: Optional[str],
 ) -> None:
+    """Initialize or refresh the cached Streamlit agent when config changes.
+
+    Parameters
+    ----------
+    config : dict
+        Nested UI configuration.
+    selected_model : str
+        Selected model name.
+    selected_workflow : str
+        Selected workflow name.
+    structured_output : bool
+        Effective structured-output setting.
+    selected_output : str
+        Agent return mode.
+    generate_report : bool
+        Whether report generation is enabled.
+    human_supervised : bool
+        Whether human-supervision tools are enabled.
+    selected_base_url : str, optional
+        Model endpoint URL.
+    """
     current_config = (
         selected_model,
         selected_workflow,
@@ -534,6 +637,13 @@ def _auto_initialize_agent(
 
 
 def _render_conversation_history(thread_id: int) -> None:
+    """Render all saved conversation exchanges.
+
+    Parameters
+    ----------
+    thread_id : int
+        Current LangGraph thread ID.
+    """
     if not st.session_state.conversation_history:
         return
 
@@ -542,7 +652,17 @@ def _render_conversation_history(thread_id: int) -> None:
 
 
 def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
-    """Render one user-query / agent-response exchange."""
+    """Render one user-query / agent-response exchange.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    entry : dict
+        Conversation-history entry.
+    thread_id : int
+        Current LangGraph thread ID.
+    """
     # User message
     with st.chat_message("user"):
         st.markdown(entry["query"])
@@ -581,7 +701,18 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
 
 
 def _extract_final_answer(messages: list) -> str:
-    """Walk messages in reverse to find the last non-JSON AI message."""
+    """Walk messages in reverse to find the last non-JSON AI message.
+
+    Parameters
+    ----------
+    messages : list
+        Message-like objects or dictionaries.
+
+    Returns
+    -------
+    str
+        Final displayable answer text, or an empty string.
+    """
     final_answer = ""
     for message in reversed(messages):
         if hasattr(message, "content") and hasattr(message, "type"):
@@ -623,6 +754,21 @@ def _render_structure_section(
     entry: dict,
     html_filename: Optional[str],
 ) -> None:
+    """Render molecular structure artifacts for an exchange.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    messages : list
+        Message-like objects from the exchange.
+    final_answer : str
+        Final assistant answer text.
+    entry : dict
+        Conversation-history entry.
+    html_filename : str, optional
+        HTML report path/filename, if detected.
+    """
     structure = find_structure_in_messages(messages)
     if structure:
         display_molecular_structure(
@@ -658,6 +804,19 @@ def _render_structure_section(
 def _render_html_report(
     idx: int, html_filename: str, messages: list, entry: dict
 ) -> None:
+    """Render an HTML report expander and download button.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    html_filename : str
+        HTML report path or filename.
+    messages : list
+        Message-like objects from the exchange.
+    entry : dict
+        Conversation-history entry.
+    """
     with st.expander("\U0001f4ca Report", expanded=False):
         try:
             resolved_html = _resolve_artifact_path(
@@ -691,7 +850,20 @@ def _render_html_report(
 
 
 def _artifact_log_dir(messages: list, entry: dict) -> Optional[str]:
-    """Return the log directory tied to a specific conversation entry."""
+    """Return the log directory tied to a specific conversation entry.
+
+    Parameters
+    ----------
+    messages : list
+        Message-like objects from the exchange.
+    entry : dict
+        Conversation-history entry.
+
+    Returns
+    -------
+    str or None
+        Artifact/log directory, if found.
+    """
     entry_log_dir = entry.get("log_dir")
     if entry_log_dir:
         return entry_log_dir
@@ -699,7 +871,20 @@ def _artifact_log_dir(messages: list, entry: dict) -> Optional[str]:
 
 
 def _latest_artifact_path(directory: Optional[str], pattern: str) -> Optional[str]:
-    """Return the newest shallow match for an output artifact pattern."""
+    """Return the newest shallow match for an output artifact pattern.
+
+    Parameters
+    ----------
+    directory : str, optional
+        Directory to search.
+    pattern : str
+        Glob pattern to match.
+
+    Returns
+    -------
+    str or None
+        Newest matching file path, or ``None``.
+    """
     if not directory or not os.path.isdir(directory):
         return None
 
@@ -715,7 +900,20 @@ def _latest_artifact_path(directory: Optional[str], pattern: str) -> Optional[st
 
 
 def _resolve_artifact_path(filename: str, directory: Optional[str]) -> str:
-    """Resolve an artifact path relative to its run directory when known."""
+    """Resolve an artifact path relative to its run directory when known.
+
+    Parameters
+    ----------
+    filename : str
+        Absolute or relative artifact path.
+    directory : str, optional
+        Run artifact directory.
+
+    Returns
+    -------
+    str
+        Resolved artifact path.
+    """
     if os.path.isabs(filename):
         return filename
     if directory:
@@ -724,6 +922,17 @@ def _resolve_artifact_path(filename: str, directory: Optional[str]) -> str:
 
 
 def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
+    """Render IR spectrum plot, frequency table, and trajectory viewer.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    messages : list
+        Message-like objects from the exchange.
+    entry : dict
+        Conversation-history entry.
+    """
     log_dir = _artifact_log_dir(messages, entry)
     ir_path = _latest_artifact_path(log_dir, "ir_spectrum*.png")
     freq_path = _latest_artifact_path(log_dir, "frequencies*.csv")
@@ -792,6 +1001,17 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
 
 
 def _render_verbose_info(idx: int, messages: list, entry: dict) -> None:
+    """Render raw result/debug information for an exchange.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    messages : list
+        Message-like objects from the exchange.
+    entry : dict
+        Conversation-history entry.
+    """
     structure = find_structure_in_messages(messages)
     with st.expander(f"\U0001f50d Verbose Info (Query {idx})", expanded=False):
         st.write(f"**Number of messages:** {len(messages)}")
@@ -809,7 +1029,15 @@ def _render_verbose_info(idx: int, messages: list, entry: dict) -> None:
 
 
 def _render_example_queries(config: dict, selected_model: str) -> None:
-    """Show example queries that the user can click to submit directly."""
+    """Show example queries that the user can click to submit directly.
+
+    Parameters
+    ----------
+    config : dict
+        Nested UI configuration.
+    selected_model : str
+        Selected model name.
+    """
     # Hide after the first message or during an interrupt
     if (
         st.session_state.conversation_history
@@ -883,10 +1111,16 @@ def _clear_interrupt_state() -> None:
 def _classify_message(msg):
     """Classify a LangGraph message for UI display.
 
-    Returns:
-        ("tool_call", [tool_names])  — AI decided to call tool(s)
-        ("tool_result", tool_name)   — a tool finished
-        None                         — not relevant for display
+    Parameters
+    ----------
+    msg : Any
+        LangGraph/LangChain message to classify.
+
+    Returns
+    -------
+    tuple or None
+        ``("tool_call", [tool_names])``, ``("tool_result", tool_name)``, or
+        ``None`` when not relevant for display.
     """
     tool_calls = getattr(msg, "tool_calls", None)
     if tool_calls:
@@ -909,10 +1143,22 @@ def _stream_workflow(stream_input, config, agent, msg_queue):
         ("interrupt", question_str)
         ("done", last_state)
         ("error", exception)
+
+    Parameters
+    ----------
+    stream_input : dict or Command
+        Initial workflow input or resume command.
+    config : dict
+        LangGraph run configuration.
+    agent : ChemGraph
+        Active ChemGraph agent.
+    msg_queue : queue.Queue
+        Queue receiving stream events for the UI thread.
     """
     from langgraph.errors import GraphInterrupt
 
     async def _run():
+        """Stream the workflow and enqueue UI events."""
         prev_msgs: list = []
         last_st = None
         interrupt_val = None
@@ -986,11 +1232,29 @@ def _poll_and_display(msg_queue, status_container, placeholder, thread):
 
     Returns:
         ("done", last_state) | ("interrupt", question) | ("error", exception)
+
+    Parameters
+    ----------
+    msg_queue : queue.Queue
+        Queue receiving stream events.
+    status_container : DeltaGenerator
+        Streamlit status container.
+    placeholder : DeltaGenerator
+        Placeholder used for the tool-call log.
+    thread : threading.Thread
+        Background stream thread.
+
+    Returns
+    -------
+    tuple
+        ``("done", state)``, ``("interrupt", question)``, or
+        ``("error", exception)``.
     """
     completed: list[str] = []  # tools that finished
     active: list[str] = []  # tools currently running
 
     def _render():
+        """Render the current tool-call status list."""
         lines = []
         for name in completed:
             lines.append(f"- :green[**{name}**] :white_check_mark:")
@@ -1045,6 +1309,19 @@ def _handle_query_submission(
     endpoint_status: dict,
     selected_base_url: Optional[str],
 ) -> None:
+    """Handle a submitted user query and stream the workflow response.
+
+    Parameters
+    ----------
+    query : str
+        User query text.
+    thread_id : int
+        Current LangGraph thread ID.
+    endpoint_status : dict
+        Local endpoint status dictionary.
+    selected_base_url : str, optional
+        Model endpoint URL used in error messages.
+    """
     if not endpoint_status["ok"]:
         msg = (
             f"Cannot reach local model endpoint `{selected_base_url}`. "
@@ -1165,7 +1442,15 @@ def _handle_query_submission(
 
 
 def _handle_human_response(answer: str, thread_id: int) -> None:
-    """Resume the agent workflow with the human's answer."""
+    """Resume the agent workflow with the human's answer.
+
+    Parameters
+    ----------
+    answer : str
+        Human response to the pending interrupt question.
+    thread_id : int
+        Current LangGraph thread ID.
+    """
     from langgraph.types import Command
 
     agent = st.session_state.agent

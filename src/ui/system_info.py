@@ -23,7 +23,22 @@ from chemgraph import __version__ as chemgraph_version
 
 
 def _run_command(cmd: list[str], cwd: Optional[Path] = None, timeout: int = 2) -> str:
-    """Run a shell command and return stripped stdout; empty string on failure."""
+    """Run a shell command and return stripped stdout.
+
+    Parameters
+    ----------
+    cmd : list[str]
+        Command and arguments to execute.
+    cwd : pathlib.Path, optional
+        Working directory for the command.
+    timeout : int, optional
+        Timeout in seconds.
+
+    Returns
+    -------
+    str
+        Stripped stdout, or an empty string on failure.
+    """
     try:
         completed = subprocess.run(
             cmd,
@@ -39,7 +54,18 @@ def _run_command(cmd: list[str], cwd: Optional[Path] = None, timeout: int = 2) -
 
 
 def _find_repo_root(start: Path) -> Optional[Path]:
-    """Find git repo root by walking up parents from a starting path."""
+    """Find git repo root by walking up parents from a starting path.
+
+    Parameters
+    ----------
+    start : pathlib.Path
+        Starting path for the search.
+
+    Returns
+    -------
+    pathlib.Path or None
+        Repository root, or ``None`` when not found.
+    """
     start = start.resolve()
     candidates = [start] + list(start.parents)
     for candidate in candidates:
@@ -49,6 +75,18 @@ def _find_repo_root(start: Path) -> Optional[Path]:
 
 
 def _format_bytes(num_bytes: int) -> str:
+    """Format a byte count with binary-size units.
+
+    Parameters
+    ----------
+    num_bytes : int
+        Byte count to format.
+
+    Returns
+    -------
+    str
+        Human-readable size, or ``"Unknown"`` for non-positive values.
+    """
     if num_bytes <= 0:
         return "Unknown"
     units = ["B", "KB", "MB", "GB", "TB", "PB"]

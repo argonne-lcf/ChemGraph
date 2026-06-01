@@ -21,6 +21,18 @@ from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
 # package is missing, so we guard with try/except.
 
 def _engine_available(module_name: str) -> bool:
+    """Return whether a Python calculator engine module is importable.
+
+    Parameters
+    ----------
+    module_name : str
+        Module name passed to ``importlib.util.find_spec``.
+
+    Returns
+    -------
+    bool
+        ``True`` when the module can be found.
+    """
     try:
         return importlib.util.find_spec(module_name) is not None
     except (ImportError, ModuleNotFoundError):
@@ -28,6 +40,20 @@ def _engine_available(module_name: str) -> bool:
 
 
 def _command_available(command_name: str, env_var_name: str) -> bool:
+    """Return whether a calculator command is configured or on ``PATH``.
+
+    Parameters
+    ----------
+    command_name : str
+        Executable name to locate.
+    env_var_name : str
+        Environment variable that can provide the command.
+
+    Returns
+    -------
+    bool
+        ``True`` when the command is configured or discoverable.
+    """
     return bool(os.environ.get(env_var_name)) or shutil.which(command_name) is not None
 
 
@@ -58,6 +84,18 @@ _CALCULATOR_ALIASES = {
 
 
 def _calculator_key(name: str) -> str:
+    """Return a normalized calculator lookup key.
+
+    Parameters
+    ----------
+    name : str
+        Calculator name or alias.
+
+    Returns
+    -------
+    str
+        Four-character normalized key used for calculator matching.
+    """
     normalized = "".join(ch for ch in name.lower() if ch.isalnum())
     return _CALCULATOR_ALIASES.get(normalized, normalized[:4])
 
@@ -194,6 +232,18 @@ class ASEInputSchema(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _validate_calculator_type(cls, data: Any):
+        """Validate and coerce the calculator payload.
+
+        Parameters
+        ----------
+        data : Any
+            Raw ASE input payload before Pydantic validation.
+
+        Returns
+        -------
+        Any
+            Payload with calculator converted to an available calculator model.
+        """
         if not isinstance(data, dict):
             return data
 
@@ -287,7 +337,18 @@ class ASEOutputSchema(BaseModel):
     @field_validator("vibrational_frequencies", "ir_data", "thermochemistry", mode="before")
     @classmethod
     def _coerce_json_string_to_dict(cls, v: Any) -> dict:
-        """Accept dict-like payloads serialized as JSON strings."""
+        """Accept dict-like payloads serialized as JSON strings.
+
+        Parameters
+        ----------
+        v : Any
+            Raw field value.
+
+        Returns
+        -------
+        dict
+            Parsed dictionary or empty dictionary.
+        """
         if v is None:
             return {}
         if isinstance(v, dict):
@@ -306,7 +367,18 @@ class ASEOutputSchema(BaseModel):
     @field_validator("error", mode="before")
     @classmethod
     def _coerce_error_to_string(cls, v: Any) -> str:
-        """Allow null/non-string error fields from intermediate tool payloads."""
+        """Allow null/non-string error fields from intermediate tool payloads.
+
+        Parameters
+        ----------
+        v : Any
+            Raw error value.
+
+        Returns
+        -------
+        str
+            Normalized error string.
+        """
         if v is None:
             return ""
         return v if isinstance(v, str) else str(v)

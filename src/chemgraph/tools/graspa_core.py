@@ -156,6 +156,24 @@ def mock_graspa(params: graspa_input_schema) -> dict:
     def rand_uptake(
         low: float, high: float, ndigits: int = 3, min_positive: float | None = None
     ) -> float:
+        """Generate a rounded mock uptake value.
+
+        Parameters
+        ----------
+        low : float
+            Lower bound for the random value.
+        high : float
+            Upper bound for the random value.
+        ndigits : int, optional
+            Number of decimal places to round to.
+        min_positive : float, optional
+            Replacement value when rounding produces zero.
+
+        Returns
+        -------
+        float
+            Mock uptake value.
+        """
         value = random.uniform(low, high)
         value = round(value, ndigits)
         if min_positive is not None and value == 0.0:
@@ -223,7 +241,20 @@ def run_graspa_core(params: graspa_input_schema) -> dict:
     def _calculate_cell_size(
         atoms: ase.Atoms, cutoff: float = 12.8
     ) -> list[int]:
-        """Calculate unit-cell replication for GCMC with the given cutoff."""
+        """Calculate unit-cell replication for GCMC with the given cutoff.
+
+        Parameters
+        ----------
+        atoms : ase.Atoms
+            Unit-cell structure.
+        cutoff : float, optional
+            Minimum replicated cell length in angstrom.
+
+        Returns
+        -------
+        list[int]
+            Replication factors along the three lattice vectors.
+        """
         unit_cell = atoms.cell[:]
         a = unit_cell[0]
         b = unit_cell[1]

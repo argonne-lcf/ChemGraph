@@ -27,9 +27,21 @@ def remove_ignored_fields(obj, ignored_keys=("cell", "pbc")):
 
 
 def apply_defaults(args: dict, schema: dict) -> dict:
-    """
-    Recursively fills missing fields with default values based on a JSON-like schema.
+    """Fill missing fields with default values from a JSON-like schema.
+
     Handles nested objects and anyOf/default combinations.
+
+    Parameters
+    ----------
+    args : dict
+        Tool-call arguments to augment.
+    schema : dict
+        JSON schema containing properties and defaults.
+
+    Returns
+    -------
+    dict
+        Arguments with applicable default values filled in.
     """
     if not isinstance(args, dict):
         return args  # Only process dicts
@@ -65,7 +77,18 @@ def apply_defaults(args: dict, schema: dict) -> dict:
 
 
 def lowercase_dict(obj):
-    """Recursively lowercases string keys and string values in a dict/list structure."""
+    """Recursively lowercase string keys and string values.
+
+    Parameters
+    ----------
+    obj : Any
+        Dictionary, list, string, or scalar value to normalize.
+
+    Returns
+    -------
+    Any
+        Normalized object with lowercased string keys/values.
+    """
     if isinstance(obj, dict):
         return {(k.lower() if isinstance(k, str) else k): lowercase_dict(v) for k, v in obj.items()}
     elif isinstance(obj, list):

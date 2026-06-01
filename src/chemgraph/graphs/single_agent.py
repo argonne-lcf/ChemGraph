@@ -27,7 +27,18 @@ logger = setup_logger(__name__)
 
 
 def _tool_call_signature(tool_calls) -> tuple:
-    """Create a comparable signature for a list of tool calls."""
+    """Create a comparable signature for a list of tool calls.
+
+    Parameters
+    ----------
+    tool_calls : list
+        Tool-call dictionaries from an AI message.
+
+    Returns
+    -------
+    tuple
+        Deterministic signature of tool names and arguments.
+    """
     signature = []
     for call in tool_calls or []:
         name = call.get("name") if isinstance(call, dict) else None
@@ -42,7 +53,18 @@ def _tool_call_signature(tool_calls) -> tuple:
 
 
 def _is_repeated_tool_cycle(messages) -> bool:
-    """Detect if the most recent AI tool-call set repeats the previous AI tool-call set."""
+    """Detect if the most recent AI tool-call set repeats the previous one.
+
+    Parameters
+    ----------
+    messages : list
+        Message history to inspect.
+
+    Returns
+    -------
+    bool
+        ``True`` when the last two AI tool-call sets are identical.
+    """
     ai_with_calls = []
     for message in messages:
         if hasattr(message, "tool_calls") and getattr(message, "tool_calls", None):
@@ -57,21 +79,54 @@ def _is_repeated_tool_cycle(messages) -> bool:
 
 
 def _tool_message_name(message):
-    """Extract tool name from a message-like object."""
+    """Extract tool name from a message-like object.
+
+    Parameters
+    ----------
+    message : Any
+        Message dictionary or object.
+
+    Returns
+    -------
+    str or None
+        Tool name when present.
+    """
     if isinstance(message, dict):
         return message.get("name")
     return getattr(message, "name", None)
 
 
 def _tool_message_content(message):
-    """Extract content text from a message-like object."""
+    """Extract content text from a message-like object.
+
+    Parameters
+    ----------
+    message : Any
+        Message dictionary or object.
+
+    Returns
+    -------
+    Any
+        Message content, or an empty string when unavailable.
+    """
     if isinstance(message, dict):
         return message.get("content", "")
     return getattr(message, "content", "")
 
 
 def _is_successful_report_message(message) -> bool:
-    """Return True when message indicates successful generate_html execution."""
+    """Return True when a message indicates successful report generation.
+
+    Parameters
+    ----------
+    message : Any
+        Tool message dictionary or object.
+
+    Returns
+    -------
+    bool
+        ``True`` for non-error ``generate_html`` tool output.
+    """
     if _tool_message_name(message) != "generate_html":
         return False
 
@@ -111,7 +166,18 @@ def route_tools(state: State):
 
 
 def route_report_tools(state: State):
-    """Route report tool execution and stop if a report was already generated."""
+    """Route report tool execution and stop if a report was already generated.
+
+    Parameters
+    ----------
+    state : State
+        Current graph state or message list.
+
+    Returns
+    -------
+    str
+        ``"tools"`` when ``generate_html`` should run, otherwise ``"done"``.
+    """
     if isinstance(state, list):
         messages = state
         ai_message = state[-1] if state else None
@@ -140,7 +206,18 @@ def route_report_tools(state: State):
 
 
 def route_after_report_tools(state: State):
-    """After report tool execution, stop on success; otherwise retry report generation."""
+    """After report tool execution, stop on success or retry on failure.
+
+    Parameters
+    ----------
+    state : State
+        Current graph state or message list after report tool execution.
+
+    Returns
+    -------
+    str
+        ``"done"`` after a successful report message, otherwise ``"retry"``.
+    """
     if isinstance(state, list):
         messages = state
     elif messages := state.get("messages", []):

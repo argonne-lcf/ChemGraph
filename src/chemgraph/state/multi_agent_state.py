@@ -5,7 +5,20 @@ from langgraph.graph import add_messages
 
 
 def merge_dicts(a: dict, b: dict) -> dict:
-    """Reducer that merges dictionaries (used for executor logs)."""
+    """Reducer that merges dictionaries for executor logs.
+
+    Parameters
+    ----------
+    a : dict
+        Existing accumulated dictionary.
+    b : dict
+        New dictionary update.
+
+    Returns
+    -------
+    dict
+        Merged dictionary where values from ``b`` override ``a``.
+    """
     return {**a, **b}
 
 

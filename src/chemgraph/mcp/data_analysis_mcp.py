@@ -98,9 +98,19 @@ def aggregate_simulation_results(
     file_paths: list[str],
     output_csv_path: str,
 ) -> str:
-    """
-    Reads a provided list of specific JSONL simulation file paths and combines them into a CSV.
-    Splits the absolute 'cif_path' into 'cif_base_path' and 'cif_filename'.
+    """Aggregate JSONL simulation records into a CSV summary.
+
+    Parameters
+    ----------
+    file_paths : list[str]
+        JSONL files to read. Each line should contain one simulation result.
+    output_csv_path : str
+        Destination CSV path.
+
+    Returns
+    -------
+    str
+        Human-readable success or error message.
     """
     all_data = []
 
@@ -218,6 +228,20 @@ def rank_mofs_performance(
     for cif_name, group in grouped:
         # Helper: Robust lookup with tolerances
         def get_uptake(target_p, target_t):
+            """Return the uptake matching target pressure and temperature.
+
+            Parameters
+            ----------
+            target_p : float or None
+                Target pressure in Pa.
+            target_t : float or None
+                Target temperature in K.
+
+            Returns
+            -------
+            float or None
+                Mean uptake for matching rows, or ``None`` when no match exists.
+            """
             if target_p is None or target_t is None:
                 return None
 

@@ -67,6 +67,18 @@ def _normalize_argo_model(model_name: str, base_url: str) -> str:
       names via ``ARGO_MODEL_MAP`` (e.g. ``argo:gpt-4o`` -> ``gpt4o``).
     * Other endpoints (ArgoProxy, custom): strip the ``argo:`` prefix
       and send the remainder as-is (e.g. ``argo:gpt-4o`` -> ``gpt-4o``).
+
+    Parameters
+    ----------
+    model_name : str
+        Requested model identifier.
+    base_url : str
+        Endpoint base URL used to choose normalization behavior.
+
+    Returns
+    -------
+    str
+        Endpoint-specific model name.
     """
     if not model_name.startswith("argo:"):
         return model_name

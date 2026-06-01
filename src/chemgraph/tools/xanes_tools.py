@@ -48,6 +48,16 @@ def run_xanes(params: xanes_input_schema) -> str:
 
     This tool reads the structure, generates FDMNES input files, runs FDMNES,
     and returns the result status. Requires the FDMNES_EXE environment variable.
+
+    Parameters
+    ----------
+    params : xanes_input_schema
+        Input parameters for the XANES/FDMNES calculation.
+
+    Returns
+    -------
+    str
+        Human-readable completion summary.
     """
     result = run_xanes_core(params)
     if result["status"] == "success":
@@ -69,6 +79,16 @@ def fetch_xanes_data(params: mp_query_schema) -> str:
 
     Requires a Materials Project API key via the mp_api_key parameter
     or the MP_API_KEY environment variable.
+
+    Parameters
+    ----------
+    params : mp_query_schema
+        Materials Project query parameters.
+
+    Returns
+    -------
+    str
+        Human-readable fetch summary.
     """
     data_dir = _get_data_dir()
     result = fetch_materials_project_data(params, data_dir)

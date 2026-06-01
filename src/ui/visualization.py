@@ -33,6 +33,18 @@ def _stable_key(prefix: str, title: str) -> str:
     Using ``uuid4()`` caused widget keys to change on every rerun, which
     reset user selections (e.g. the style selectbox) and leaked stale
     widget state in memory.
+
+    Parameters
+    ----------
+    prefix : str
+        Widget key prefix.
+    title : str
+        Viewer title used to derive the key suffix.
+
+    Returns
+    -------
+    str
+        Stable Streamlit widget key.
     """
     slug = _re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
     return f"{prefix}_{slug}"
@@ -49,7 +61,20 @@ def warn_stmol_unavailable() -> None:
 
 
 def create_ase_atoms_with_streamlit_error(atomic_numbers, positions):
-    """Wrapper for ``create_ase_atoms`` that shows errors via Streamlit."""
+    """Create ASE atoms and display Streamlit errors on failure.
+
+    Parameters
+    ----------
+    atomic_numbers : sequence
+        Atomic numbers for each atom.
+    positions : sequence
+        Cartesian coordinates for each atom.
+
+    Returns
+    -------
+    ase.Atoms or None
+        Constructed atoms object, or ``None`` if creation fails.
+    """
     atoms = create_ase_atoms(atomic_numbers, positions)
     if atoms is None:
         st.error("Error creating ASE Atoms object")
@@ -60,6 +85,20 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure") ->
     """Render an interactive 3-D molecular viewer with info panel.
 
     Returns ``True`` on success, ``False`` on error.
+
+    Parameters
+    ----------
+    atomic_numbers : sequence
+        Atomic numbers for each atom.
+    positions : sequence
+        Cartesian coordinates for each atom.
+    title : str, optional
+        Title displayed above the structure viewer.
+
+    Returns
+    -------
+    bool
+        ``True`` when the structure is rendered successfully.
     """
     try:
         atoms = create_ase_atoms_with_streamlit_error(atomic_numbers, positions)
@@ -124,7 +163,18 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure") ->
 
 
 def visualize_trajectory(traj):
-    """Create an animated py3Dmol view from an ASE ``Trajectory``."""
+    """Create an animated py3Dmol view from an ASE trajectory.
+
+    Parameters
+    ----------
+    traj : Iterable[ase.Atoms]
+        Trajectory frames to visualize.
+
+    Returns
+    -------
+    py3Dmol.view
+        Configured animated viewer.
+    """
     import py3Dmol
 
     xyz_frames = []
@@ -155,7 +205,15 @@ def visualize_trajectory(traj):
 
 
 def _render_structure_table(atomic_numbers, positions) -> None:
-    """Render a DataFrame table of atom positions."""
+    """Render a DataFrame table of atom positions.
+
+    Parameters
+    ----------
+    atomic_numbers : sequence
+        Atomic numbers for each atom.
+    positions : sequence
+        Cartesian coordinates for each atom.
+    """
     data = []
     for idx, (num, pos) in enumerate(zip(atomic_numbers, positions), 1):
         sym = chemical_symbols[num] if num < len(chemical_symbols) else f"X{num}"
@@ -172,7 +230,21 @@ def _render_structure_table(atomic_numbers, positions) -> None:
 
 
 def _render_structure_info(atoms, atomic_numbers, positions, xyz_string, title) -> None:
-    """Render the info/download panel beside the 3-D viewer."""
+    """Render the info/download panel beside the 3-D viewer.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms
+        Structure object.
+    atomic_numbers : sequence
+        Atomic numbers for each atom.
+    positions : sequence
+        Cartesian coordinates for each atom.
+    xyz_string : str
+        XYZ-format structure text.
+    title : str
+        Structure title used for download naming.
+    """
     st.markdown("**Structure Information**")
     st.write(f"- **Atoms:** {len(atoms)}")
     st.write(f"- **Formula:** {atoms.get_chemical_formula()}")

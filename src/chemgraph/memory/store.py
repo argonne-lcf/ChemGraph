@@ -60,6 +60,13 @@ class SessionStore:
     """
 
     def __init__(self, db_path: Optional[str] = None):
+        """Initialize the SQLite session store.
+
+        Parameters
+        ----------
+        db_path : str, optional
+            SQLite database path. Defaults to ``~/.chemgraph/sessions.db``.
+        """
         self.db_path = db_path or DEFAULT_DB_PATH
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self._init_db()
@@ -420,6 +427,16 @@ class SessionStore:
 
         Allows users to type just the first few characters of a UUID.
         Returns None if no match or ambiguous.
+
+        Parameters
+        ----------
+        session_id : str
+            Full session ID or prefix.
+
+        Returns
+        -------
+        str or None
+            Resolved full session ID, or ``None``.
         """
         with self._connect() as conn:
             # Try exact match first

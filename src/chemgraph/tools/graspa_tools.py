@@ -30,6 +30,16 @@ def run_graspa(graspa_input: graspa_input_schema):
     """Run a gRASPA simulation using the core engine and return the uptakes.
 
     This tool acts as a wrapper for the agentic workflow.
+
+    Parameters
+    ----------
+    graspa_input : graspa_input_schema
+        Legacy gRASPA tool input.
+
+    Returns
+    -------
+    float
+        Uptake in mol/kg from the core gRASPA result.
     """
     params = graspa_input_schema(
         input_structure_file=graspa_input.cif_path,

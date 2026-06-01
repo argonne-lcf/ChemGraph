@@ -38,7 +38,18 @@ mcp = FastMCP(
     description="Convert a molecule name to a canonical SMILES string using PubChem.",
 )
 async def molecule_name_to_smiles(name: str) -> str:
-    """Resolve a molecule name to its canonical SMILES via PubChem."""
+    """Resolve a molecule name to its canonical SMILES via PubChem.
+
+    Parameters
+    ----------
+    name : str
+        Molecule name to resolve.
+
+    Returns
+    -------
+    str
+        Canonical SMILES string.
+    """
     return molecule_name_to_smiles_core(name)
 
 
@@ -52,7 +63,24 @@ async def smiles_to_coordinate_file(
     seed: int = 2025,
     fmt: Literal["xyz"] = "xyz",
 ) -> dict:
-    """Convert a SMILES string to a coordinate file on disk."""
+    """Convert a SMILES string to a coordinate file on disk.
+
+    Parameters
+    ----------
+    smiles : str
+        Input SMILES string.
+    output_file : str, optional
+        Coordinate file path to write.
+    seed : int, optional
+        Random seed used for conformer generation.
+    fmt : {"xyz"}, optional
+        Output coordinate format.
+
+    Returns
+    -------
+    dict
+        Coordinate-generation result metadata.
+    """
     return smiles_to_coordinate_file_core(
         smiles, output_file=output_file, seed=seed, fmt=fmt
     )
@@ -63,7 +91,18 @@ async def smiles_to_coordinate_file(
     description="Load simulation results from a JSON file produced by run_ase.",
 )
 def extract_output_json(json_file: str) -> dict:
-    """Load simulation results from a JSON file produced by run_ase."""
+    """Load simulation results from a JSON file produced by run_ase.
+
+    Parameters
+    ----------
+    json_file : str
+        Path to the JSON output file.
+
+    Returns
+    -------
+    dict
+        Parsed simulation results.
+    """
     return extract_output_json_core(json_file)
 
 

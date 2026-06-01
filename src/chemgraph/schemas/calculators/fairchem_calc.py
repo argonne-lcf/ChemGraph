@@ -67,6 +67,18 @@ class FAIRChemCalc(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _accept_spin_alias(cls, data: Any) -> Any:
+        """Accept deprecated ``spin`` input as ``multiplicity``.
+
+        Parameters
+        ----------
+        data : Any
+            Raw calculator payload before Pydantic validation.
+
+        Returns
+        -------
+        Any
+            Payload with ``spin`` converted when applicable.
+        """
         if isinstance(data, dict) and "spin" in data and "multiplicity" not in data:
             logging.warning(
                 "FAIRChemCalc: field 'spin' is deprecated; use 'multiplicity' instead."

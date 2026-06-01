@@ -45,6 +45,13 @@ class BasicToolNode:
     """
 
     def __init__(self, tools: list) -> None:
+        """Initialize the tool node.
+
+        Parameters
+        ----------
+        tools : list
+            Tool objects keyed by their ``name`` attribute.
+        """
         self.tools_by_name = {tool.name: tool for tool in tools}
 
     def __call__(self, inputs: State) -> State:

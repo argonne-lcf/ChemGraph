@@ -58,7 +58,18 @@ WORKFLOW_ALIASES: Dict[str, str] = {
 
 
 def resolve_workflow(name: str) -> str:
-    """Resolve a workflow name, applying aliases."""
+    """Resolve a workflow name, applying aliases.
+
+    Parameters
+    ----------
+    name : str
+        Workflow name or supported alias.
+
+    Returns
+    -------
+    str
+        Canonical workflow name.
+    """
     return WORKFLOW_ALIASES.get(name, name)
 
 
@@ -70,7 +81,16 @@ def resolve_workflow(name: str) -> str:
 def check_api_keys(model_name: str) -> tuple[bool, str]:
     """Check if required API keys are available for *model_name*.
 
-    Returns ``(is_available, error_message)``.
+    Parameters
+    ----------
+    model_name : str
+        Model identifier selected for a run.
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(is_available, error_message)``. The message is empty when the
+        required credentials are available or not required.
     """
     model_lower = model_name.lower()
 
@@ -162,6 +182,37 @@ def initialize_agent(
 
     Uses a thread-pool executor for the timeout so it works on all
     platforms.
+
+    Parameters
+    ----------
+    model_name : str
+        LLM model identifier.
+    workflow_type : str
+        ChemGraph workflow name or alias.
+    structured_output : bool
+        Whether to request structured final output.
+    return_option : str
+        Agent return mode, such as ``"state"`` or ``"last_message"``.
+    generate_report : bool
+        Whether the agent should generate an HTML report.
+    recursion_limit : int
+        LangGraph recursion limit for the run.
+    base_url : str, optional
+        Custom model endpoint URL.
+    argo_user : str, optional
+        Argo username for Argo-hosted models.
+    verbose : bool, optional
+        Whether to print initialization details.
+    human_supervised : bool, optional
+        Whether to enable human-interrupt tooling.
+    tools : list, optional
+        Custom tool list for MCP-backed workflows.
+
+    Returns
+    -------
+    Any
+        Initialized ``ChemGraph`` instance, or ``None`` when initialization
+        fails.
     """
     # Resolve workflow alias before initializing.
     workflow_type = resolve_workflow(workflow_type)
@@ -208,6 +259,13 @@ def initialize_agent(
         task = progress.add_task("Initializing ChemGraph agent...", total=None)
 
         def _create_agent() -> Any:
+            """Create the ChemGraph agent inside the initialization worker.
+
+            Returns
+            -------
+            Any
+                Initialized ``ChemGraph`` instance.
+            """
             from chemgraph.agent.llm_agent import ChemGraph
 
             return ChemGraph(
@@ -267,6 +325,13 @@ _thread_counter: int = 0
 
 
 def _next_thread_id() -> int:
+    """Return the next interactive-mode thread ID.
+
+    Returns
+    -------
+    int
+        Incremented thread ID.
+    """
     global _thread_counter
     _thread_counter += 1
     return _thread_counter
@@ -286,6 +351,24 @@ def run_query(
     user is prompted for a response.  The graph is then resumed with the
     user's answer and the spinner restarts.  This loop repeats until the
     graph completes or a non-interrupt error occurs.
+
+    Parameters
+    ----------
+    agent : Any
+        Initialized ChemGraph-like agent with ``run`` and ``workflow`` methods.
+    query : str
+        User query to execute.
+    thread_id : int, optional
+        LangGraph thread identifier. A new ID is allocated when omitted.
+    verbose : bool, optional
+        Whether to print execution details.
+    resume_from : str, optional
+        Previous ChemGraph session ID to load as context.
+
+    Returns
+    -------
+    Any
+        Agent result, resumed graph result, or ``None`` on failure.
     """
     from langgraph.types import Command
     from chemgraph.agent.llm_agent import HumanInputRequired
@@ -353,6 +436,13 @@ def run_query(
         resume_config["recursion_limit"] = agent.recursion_limit
 
         async def _resume_stream():
+            """Resume an interrupted graph and stream updates until completion.
+
+            Returns
+            -------
+            dict or None
+                Final streamed graph state.
+            """
             prev_msgs: list = []
             last_st = None
             async for s in agent.workflow.astream(
@@ -399,7 +489,15 @@ def run_query(
 
 
 def list_sessions(limit: int = 20, db_path: Optional[str] = None) -> None:
-    """Display recent sessions in a formatted table."""
+    """Display recent sessions in a formatted table.
+
+    Parameters
+    ----------
+    limit : int, optional
+        Maximum number of sessions to display.
+    db_path : str, optional
+        Path to the session SQLite database.
+    """
     store = SessionStore(db_path=db_path)
     sessions = store.list_sessions(limit=limit)
 
@@ -441,7 +539,17 @@ def show_session(
     db_path: Optional[str] = None,
     max_content: int = 500,
 ) -> None:
-    """Display a session's full conversation."""
+    """Display a session's full conversation.
+
+    Parameters
+    ----------
+    session_id : str
+        Session ID or unique session prefix.
+    db_path : str, optional
+        Path to the session SQLite database.
+    max_content : int, optional
+        Maximum number of characters displayed for each message.
+    """
     store = SessionStore(db_path=db_path)
     session = store.get_session(session_id)
 
@@ -501,7 +609,15 @@ def show_session(
 
 
 def delete_session_cmd(session_id: str, db_path: Optional[str] = None) -> None:
-    """Delete a session from the database."""
+    """Delete a session from the database.
+
+    Parameters
+    ----------
+    session_id : str
+        Session ID or unique session prefix to delete.
+    db_path : str, optional
+        Path to the session SQLite database.
+    """
     store = SessionStore(db_path=db_path)
 
     # Show session info before deleting
@@ -527,7 +643,15 @@ def delete_session_cmd(session_id: str, db_path: Optional[str] = None) -> None:
 
 
 def save_output(content: str, output_file: str) -> None:
-    """Save output to a file."""
+    """Save output to a file.
+
+    Parameters
+    ----------
+    content : str
+        Text content to write.
+    output_file : str
+        Destination file path.
+    """
     try:
         with open(output_file, "w") as f:
             f.write(content)
@@ -559,6 +683,31 @@ def interactive_mode(
     Accepts the same configuration parameters as a normal run so that
     ``--config`` and CLI flags are honoured when entering interactive
     mode.
+
+    Parameters
+    ----------
+    model : str, optional
+        Initial model selection.
+    workflow : str, optional
+        Initial workflow selection.
+    structured : bool, optional
+        Whether structured output is requested.
+    return_option : str, optional
+        Agent return mode.
+    generate_report : bool, optional
+        Whether report generation is enabled.
+    human_supervised : bool, optional
+        Whether human supervision tools are enabled.
+    recursion_limit : int, optional
+        LangGraph recursion limit.
+    base_url : str, optional
+        Custom model endpoint URL.
+    argo_user : str, optional
+        Argo username for Argo-hosted models.
+    verbose : bool, optional
+        Whether to print diagnostic output.
+    tools : list, optional
+        Custom tool list for MCP-backed workflows.
     """
     console.print(create_banner())
     console.print("[bold green]Welcome to ChemGraph Interactive Mode![/bold green]")

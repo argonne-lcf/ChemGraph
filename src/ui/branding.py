@@ -19,7 +19,18 @@ ICON_IMAGES = (
 
 
 def first_existing_asset(paths: tuple[Path, ...]) -> str | None:
-    """Return the first available Streamlit-compatible asset path."""
+    """Return the first available Streamlit-compatible asset path.
+
+    Parameters
+    ----------
+    paths : tuple[pathlib.Path, ...]
+        Candidate asset paths in priority order.
+
+    Returns
+    -------
+    str or None
+        First existing asset path as a string, or ``None``.
+    """
     for path in paths:
         if path.exists():
             return str(path)

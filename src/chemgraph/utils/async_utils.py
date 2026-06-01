@@ -13,6 +13,16 @@ def run_async_callable(fn: Callable[..., Any]) -> Any:
     If no event loop is running, uses ``asyncio.run`` directly.
     Otherwise, spawns a daemon thread so that the call does not
     conflict with an already-running loop (e.g. inside Streamlit).
+
+    Parameters
+    ----------
+    fn : Callable[..., Any]
+        Zero-argument callable that returns an awaitable.
+
+    Returns
+    -------
+    Any
+        Result of the awaited callable.
     """
     try:
         asyncio.get_running_loop()
@@ -23,6 +33,7 @@ def run_async_callable(fn: Callable[..., Any]) -> Any:
     error_container: dict[str, Exception] = {}
 
     def runner() -> None:
+        """Run the awaitable in a background event loop."""
         try:
             result_container["value"] = asyncio.run(fn())
         except Exception as exc:

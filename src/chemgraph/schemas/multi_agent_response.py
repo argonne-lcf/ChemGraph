@@ -65,7 +65,18 @@ class PlannerResponse(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_planner_payload(cls, data: Any) -> Any:
-        """Accept common planner variants and coerce into PlannerResponse shape."""
+        """Accept common planner variants and coerce into PlannerResponse shape.
+
+        Parameters
+        ----------
+        data : Any
+            Raw planner payload before Pydantic validation.
+
+        Returns
+        -------
+        Any
+            Normalized payload compatible with ``PlannerResponse``.
+        """
         if isinstance(data, list):
             return {
                 "thought_process": "Delegating parsed tasks to executors.",

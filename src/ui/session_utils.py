@@ -40,6 +40,16 @@ def messages_from_result(result: Any) -> list[SessionMessage]:
     *result* is the value stored in ``conversation_history[i]["result"]``,
     which may be a list of LangChain messages, a dict with a ``"messages"``
     key, or a plain object.
+
+    Parameters
+    ----------
+    result : Any
+        Agent run result stored in conversation history.
+
+    Returns
+    -------
+    list[SessionMessage]
+        Session messages extracted from the result.
     """
     raw_messages: list[Any] = []
     if isinstance(result, list):
@@ -82,6 +92,16 @@ def conversation_entry_to_messages(entry: dict) -> list[SessionMessage]:
     An entry has the shape ``{"query": str, "result": ..., "thread_id": int}``.
     We produce one ``human`` message for the query, followed by messages
     extracted from the result.
+
+    Parameters
+    ----------
+    entry : dict
+        Conversation-history entry from Streamlit session state.
+
+    Returns
+    -------
+    list[SessionMessage]
+        Messages suitable for persistence.
     """
     out: list[SessionMessage] = []
 
@@ -102,6 +122,16 @@ def session_to_conversation_history(session: Session) -> list[dict]:
     Groups messages into exchanges by splitting on ``human`` role messages.
     Each exchange becomes ``{"query": str, "result": {"messages": [...]},
     "thread_id": 1}``.
+
+    Parameters
+    ----------
+    session : Session
+        Stored session loaded from the session database.
+
+    Returns
+    -------
+    list[dict]
+        Conversation-history entries for the UI.
     """
     history: list[dict] = []
     current_query: Optional[str] = None
@@ -152,7 +182,18 @@ def session_to_conversation_history(session: Session) -> list[dict]:
 
 
 def _langchain_type_to_role(msg_type: str) -> str:
-    """Map a LangChain message ``type`` to a SessionMessage ``role``."""
+    """Map a LangChain message ``type`` to a SessionMessage ``role``.
+
+    Parameters
+    ----------
+    msg_type : str
+        LangChain message type.
+
+    Returns
+    -------
+    str
+        Session message role.
+    """
     mapping = {
         "human": "human",
         "ai": "ai",
