@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 
 # ── Initialise execution backend ────────────────────────────────────────
 backend = get_backend()
-tracker = JobTracker()
+
+_jobs_file = Path("~/.chemgraph/xanes_jobs.json").expanduser()
+tracker = JobTracker(persist_file=_jobs_file)
 
 # ── MCP server ──────────────────────────────────────────────────────────
 mcp = FastMCP(
@@ -54,8 +56,12 @@ mcp = FastMCP(
         - Keep responses compact -- full results are in the output directories.
         - When returning paths, use absolute paths.
         - Energies are in eV.
-        - When a tool returns status='submitted' with a batch_id, use
-          check_job_status to poll for progress before calling get_job_results.
+        - When a tool returns status='submitted' with a batch_id, call
+          get_job_results(batch_id) to retrieve results.  If the job is
+          still pending, report the batch_id to the user so they can
+          check later.  Job state is persisted across sessions -- the
+          user can call list_jobs or get_job_results in a future session
+          to retrieve results.
     """,
 )
 register_job_tools(mcp, tracker, backend)

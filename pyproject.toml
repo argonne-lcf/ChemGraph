@@ -73,6 +73,9 @@ ensemble_launcher = [
 globus_compute = [
     "globus-compute-sdk",
 ]
+academy = [
+    "academy-py",
+]
 xanes = [
     "mp-api; python_version >= '3.11'",
     "parsl"
@@ -115,6 +118,9 @@ testpaths = ["tests"]
 markers = [
     "llm: marks tests as requiring LLM API access (run with --run-llm)",
     "globus_compute: marks tests requiring a live Globus Compute endpoint (run with --run-globus-compute)",
+    "parsl: marks tests requiring a live Parsl deployment (run with --run-parsl)",
+    "ensemble_launcher: marks tests requiring a live EnsembleLauncher deployment (run with --run-ensemble-launcher)",
+    "academy: marks tests requiring Academy agent infrastructure (run with --run-academy)",
     "asyncio: marks async tests",
 ]
 filterwarnings = [
