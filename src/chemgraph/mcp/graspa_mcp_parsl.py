@@ -1,7 +1,18 @@
 import asyncio
 import json
 import os
+import warnings
 from pathlib import Path
+
+warnings.warn(
+    "chemgraph.mcp.graspa_mcp_parsl is deprecated; use "
+    "chemgraph.mcp.graspa_mcp_hpc, which dispatches via the "
+    "chemgraph.execution backend abstraction (Parsl, EnsembleLauncher, "
+    "Globus Compute, or local). This module will be removed in a future "
+    "release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from mcp.server.fastmcp import FastMCP
 
