@@ -37,18 +37,33 @@ class CGFastMCP(FastMCP):
         self._backend = None
         self._tracker = None
         self._backend_kwargs: Optional[dict[str, Any]] = None
+        self._tracker_kwargs: dict[str, Any] = {}
+        self._pre_submit_hook: Optional[Callable] = None
 
     # ── Backend lifecycle ───────────────────────────────────────────────
 
-    def init_backend(self, **kwargs: Any) -> None:
+    def init_backend(
+        self,
+        *,
+        tracker_kwargs: Optional[dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> None:
         """Register backend configuration for lazy initialisation.
 
         The backend is not created until the first tool invocation,
         so the MCP server can start accepting connections immediately.
-        All keyword arguments are forwarded to
-        :func:`~chemgraph.execution.config.get_backend`.
+
+        Parameters
+        ----------
+        tracker_kwargs : dict, optional
+            Forwarded to :class:`~chemgraph.execution.job_tracker.JobTracker`
+            on first use. Use this to pass ``persist_file`` for cross-session
+            job state recovery.
+        **kwargs
+            Forwarded to :func:`~chemgraph.execution.config.get_backend`.
         """
         self._backend_kwargs = kwargs
+        self._tracker_kwargs = tracker_kwargs or {}
         self._register_job_tools()
         logger.info("CGFastMCP backend configured (lazy init).")
 
@@ -63,7 +78,7 @@ class CGFastMCP(FastMCP):
         from chemgraph.execution import JobTracker, get_backend
 
         self._backend = get_backend(**self._backend_kwargs)
-        self._tracker = JobTracker()
+        self._tracker = JobTracker(**self._tracker_kwargs)
         logger.info(
             "CGFastMCP backend initialised: %s", type(self._backend).__name__
         )
@@ -78,7 +93,30 @@ class CGFastMCP(FastMCP):
             self._backend = None
             self._tracker = None
             self._backend_kwargs = None
+            self._tracker_kwargs = {}
             logger.info("CGFastMCP backend shut down.")
+
+    # ── Pre-submit transport hook ──────────────────────────────────────
+
+    def set_pre_submit_hook(self, hook: Optional[Callable]) -> None:
+        """Register a hook that transforms each TaskSpec before submission.
+
+        The hook receives the :class:`~chemgraph.execution.base.TaskSpec`
+        and must return one (possibly the same instance). Used for
+        transport concerns that should apply to every backend-submitted
+        tool on this server -- e.g. embedding a local structure file
+        into ``kwargs`` so a remote worker can materialise it, or
+        rewriting a local path to a pre-staged remote path.
+
+        Pass ``None`` to clear the hook.
+        """
+        self._pre_submit_hook = hook
+
+    def _apply_pre_submit_hook(self, task):
+        """Run the registered pre-submit hook (no-op when unset)."""
+        if self._pre_submit_hook is None:
+            return task
+        return self._pre_submit_hook(task)
 
     # ── Job tracking tools ─────────────────────────────────────────────
 
@@ -281,6 +319,7 @@ class CGFastMCP(FastMCP):
                         kwargs={param.name: p},
                         **task_spec_kwargs,
                     )
+                    task = self._apply_pre_submit_hook(task)
                     fut = self._backend.submit(task)
                     pending.append(({"index": i}, fut))
 
@@ -310,6 +349,130 @@ class CGFastMCP(FastMCP):
 
         return decorator
 
+    # ── Schema-driven fanout tool ──────────────────────────────────────
+
+    def schema_fanout_tool(
+        self,
+        *,
+        worker: Callable,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        annotations: Optional[ToolAnnotations] = None,
+        # ── TaskSpec resource hints ──────────────────────────────────
+        num_nodes: int = 1,
+        processes_per_node: int = 1,
+        gpus_per_task: int = 0,
+        env: Optional[Dict[str, str]] = None,
+        working_dir: Optional[str] = None,
+    ) -> Callable:
+        """Register a fan-out tool driven by a single *ensemble* schema.
+
+        The decorated function is an **expander**: it receives the
+        ensemble schema and returns a list of per-item arguments. The
+        framework calls ``worker(item)`` on the backend for each item,
+        gathers the results, and returns a batch summary -- same shape
+        as :meth:`ensemble_tool`.
+
+        Unlike :meth:`ensemble_tool` (whose tool signature is
+        ``list[Schema]``), this preserves the ensemble schema as the
+        agent-facing API, so the LLM makes a single tool call against
+        e.g. ``input_structure_directory`` and server-side expansion
+        produces the per-file jobs.
+
+        Parameters
+        ----------
+        worker : Callable
+            The per-item function executed on the backend. Must take
+            a single positional argument (the item produced by the
+            expander).
+        name, description, annotations
+            Passed through to :meth:`FastMCP.add_tool`.
+        num_nodes, processes_per_node, gpus_per_task, env, working_dir
+            Forwarded to each :class:`~chemgraph.execution.base.TaskSpec`.
+        """
+        from chemgraph.execution.base import TaskSpec
+        from chemgraph.execution.utils import submit_or_gather
+
+        task_spec_kwargs: dict[str, Any] = {
+            "num_nodes": num_nodes,
+            "processes_per_node": processes_per_node,
+            "gpus_per_task": gpus_per_task,
+            "env": env or {},
+        }
+        if working_dir is not None:
+            task_spec_kwargs["working_dir"] = working_dir
+
+        fastmcp_kwargs: dict[str, Any] = {}
+        if name is not None:
+            fastmcp_kwargs["name"] = name
+        if description is not None:
+            fastmcp_kwargs["description"] = description
+        if annotations is not None:
+            fastmcp_kwargs["annotations"] = annotations
+
+        # Worker is what actually runs on the backend, so it must be
+        # picklable from the MCP server's __main__ module.
+        self._fix_module_for_pickle(worker)
+
+        worker_sig = inspect.signature(worker)
+        worker_params = list(worker_sig.parameters.values())
+        if len(worker_params) != 1:
+            raise TypeError(
+                f"schema_fanout_tool worker must take exactly one "
+                f"parameter, got {len(worker_params)} on "
+                f"{worker.__qualname__}."
+            )
+        worker_param_name = worker_params[0].name
+
+        def decorator(expander: Callable) -> Callable:
+            sig = inspect.signature(expander)
+            params = list(sig.parameters.values())
+            if len(params) != 1:
+                raise TypeError(
+                    f"@schema_fanout_tool expander must take exactly one "
+                    f"parameter (the ensemble schema), got {len(params)} "
+                    f"on {expander.__qualname__}."
+                )
+            param = params[0]
+            tool_name = name or expander.__name__
+
+            async def wrapper(**kwargs):
+                self._ensure_backend()
+                ensemble_params = kwargs[param.name]
+                items = expander(ensemble_params)
+                pending = []
+                for i, item in enumerate(items):
+                    task = TaskSpec(
+                        task_id=f"{tool_name}_{i}",
+                        task_type="python",
+                        callable=worker,
+                        kwargs={worker_param_name: item},
+                        **task_spec_kwargs,
+                    )
+                    task = self._apply_pre_submit_hook(task)
+                    fut = self._backend.submit(task)
+                    pending.append(({"index": i}, fut))
+
+                return await submit_or_gather(
+                    self._backend,
+                    pending,
+                    self._tracker,
+                    tool_name,
+                )
+
+            wrapper.__name__ = tool_name
+            wrapper.__doc__ = expander.__doc__
+            wrapper.__module__ = expander.__module__
+            wrapper.__qualname__ = expander.__qualname__
+            # Preserve the expander's signature so FastMCP advertises the
+            # ensemble schema to the LLM, not the worker's per-item one.
+            wrapper.__signature__ = sig
+
+            self.add_tool(wrapper, **fastmcp_kwargs)
+            return expander
+
+        return decorator
+
     # ── Internal ────────────────────────────────────────────────────────
 
     def _make_backend_wrapper(
@@ -331,6 +494,7 @@ class CGFastMCP(FastMCP):
                 kwargs=kwargs,
                 **task_spec_kwargs,
             )
+            task = self._apply_pre_submit_hook(task)
             fut = self._backend.submit(task)
 
             if self._backend.is_async_remote:
