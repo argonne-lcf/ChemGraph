@@ -93,11 +93,22 @@ class GlobusComputeBackend(ExecutionBackend):
 
     # ── task submission ─────────────────────────────────────────────────
 
+    def _ensure_executor(self) -> None:
+        """Re-create the Executor if it was shut down (e.g. after a
+        task failure)."""
+        from globus_compute_sdk import Executor
+
+        if self._executor is None or getattr(self._executor, "_stopped", False):
+            logger.info("Re-creating Globus Compute Executor")
+            self._executor = Executor(endpoint_id=self._endpoint_id)
+
     def submit(self, task: TaskSpec) -> Future:
         if not self._initialized or self._executor is None:
             raise RuntimeError(
                 "GlobusComputeBackend is not initialized. Call initialize() first."
             )
+
+        self._ensure_executor()
 
         if task.task_type == "python":
             if task.callable is None:
@@ -142,6 +153,9 @@ class GlobusComputeBackend(ExecutionBackend):
                 "status": status,
             }
         except Exception as e:
+            logger.warning(
+                "Endpoint status check failed: %s", e, exc_info=True,
+            )
             return {
                 "endpoint_id": self._endpoint_id,
                 "status": "error",
