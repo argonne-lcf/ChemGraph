@@ -125,7 +125,7 @@ def get_backend(
     merged_kwargs = {**backend_cfg, **kwargs}
 
     # Globus Compute: fall back to GLOBUS_COMPUTE_ENDPOINT_ID env var
-    if resolved_backend == "globus_compute" and "endpoint_id" not in merged_kwargs:
+    if resolved_backend == "globus_compute" and not merged_kwargs.get("endpoint_id"):
         env_id = os.getenv("GLOBUS_COMPUTE_ENDPOINT_ID")
         if env_id:
             merged_kwargs["endpoint_id"] = env_id
@@ -183,3 +183,63 @@ def get_backend(
 
     backend.initialize(system=resolved_system, **merged_kwargs)
     return backend
+
+
+def get_transfer_manager(
+    config_path: Optional[str] = None,
+    **kwargs: Any,
+):
+    """Create a :class:`GlobusTransferManager` from config, or ``None``.
+
+    Reads the ``[execution.globus_transfer]`` section from
+    ``config.toml``.  Returns ``None`` when the required endpoint IDs
+    are not configured, so callers can skip transfer-tool registration.
+
+    Environment variable overrides
+    ------------------------------
+    ``GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID``
+    ``GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID``
+    ``GLOBUS_TRANSFER_DESTINATION_BASE_PATH``
+    """
+    cfg = _load_execution_config(config_path)
+    transfer_cfg = cfg.get("globus_transfer", {})
+    merged = {**transfer_cfg, **kwargs}
+
+    for key, env_var in (
+        ("source_endpoint_id", "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID"),
+        ("destination_endpoint_id", "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID"),
+        ("destination_base_path", "GLOBUS_TRANSFER_DESTINATION_BASE_PATH"),
+    ):
+        if not merged.get(key):
+            env_val = os.getenv(env_var)
+            if env_val:
+                merged[key] = env_val
+
+    required = (
+        "source_endpoint_id",
+        "destination_endpoint_id",
+        "destination_base_path",
+    )
+    if not all(merged.get(k) for k in required):
+        logger.debug(
+            "Globus Transfer not configured (missing %s). "
+            "Transfer tools will not be registered.",
+            [k for k in required if not merged.get(k)],
+        )
+        return None
+
+    from chemgraph.execution.globus_transfer import GlobusTransferManager
+
+    manager = GlobusTransferManager(
+        source_endpoint_id=merged["source_endpoint_id"],
+        destination_endpoint_id=merged["destination_endpoint_id"],
+        destination_base_path=merged["destination_base_path"],
+        source_base_path=merged.get("source_base_path"),
+        client_id=merged.get("client_id"),
+    )
+    logger.info(
+        "GlobusTransferManager created: %s -> %s",
+        merged["source_endpoint_id"],
+        merged["destination_endpoint_id"],
+    )
+    return manager
