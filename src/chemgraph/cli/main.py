@@ -59,6 +59,11 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
 
     Used by both the ``run`` subcommand and the legacy (no subcommand)
     argument parser for backward compatibility.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser or subparser to receive query/run arguments.
     """
     parser.add_argument(
         "-q", "--query", type=str, help="The computational chemistry query to execute"
@@ -91,6 +96,11 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "-r", "--report", action="store_true", help="Generate detailed report"
+    )
+    parser.add_argument(
+        "--human-supervised",
+        action="store_true",
+        help="Enable the ask_human tool for human-in-the-loop interaction",
     )
     parser.add_argument(
         "--recursion-limit",
@@ -144,6 +154,24 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         default=None,
         help="Base URL for the LLM API endpoint (overrides config file)",
+    )
+    parser.add_argument(
+        "--mcp-url",
+        type=str,
+        default=None,
+        help="MCP server URL for streamable_http transport (e.g. http://localhost:9003/mcp/)",
+    )
+    parser.add_argument(
+        "--mcp-command",
+        type=str,
+        default=None,
+        help="MCP server command for stdio transport (e.g. 'python -m chemgraph.mcp.mcp_tools')",
+    )
+    parser.add_argument(
+        "--mcp-server-name",
+        type=str,
+        default="ChemGraph General Tools",
+        help="Display name for the MCP server connection (default: 'ChemGraph General Tools')",
     )
 
 
@@ -228,6 +256,16 @@ def load_config(config_file: str) -> Dict[str, Any]:
     Merges missing keys from a sensible default so that partial config
     files don't crash the CLI (addresses Bug 4 -- parity with the
     Streamlit config loader).
+
+    Parameters
+    ----------
+    config_file : str
+        Path to a TOML configuration file.
+
+    Returns
+    -------
+    dict[str, Any]
+        Flattened configuration dictionary with defaults filled in.
     """
     try:
         with open(config_file, "r") as f:
@@ -244,11 +282,13 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 "report": False,
                 "thread": 1,
                 "recursion_limit": 20,
+                "human_supervised": False,
                 "verbose": False,
             },
             "api": {},
             "chemistry": {},
             "output": {},
+            "mcp": {},
         }
 
         for section, defaults in _DEFAULT_SECTIONS.items():
@@ -258,7 +298,14 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 for key, value in defaults.items():
                     raw_config[section].setdefault(key, value)
 
-        return flatten_config(raw_config)
+        flat = flatten_config(raw_config)
+
+        # Inject MCP config keys (not handled by flatten_config).
+        if "mcp" in raw_config and isinstance(raw_config["mcp"], dict):
+            for key, value in raw_config["mcp"].items():
+                flat[f"mcp_{key}"] = value
+
+        return flat
 
     except FileNotFoundError:
         console.print(f"[red]Configuration file not found: {config_file}[/red]")
@@ -274,7 +321,13 @@ def load_config(config_file: str) -> Dict[str, Any]:
 
 
 def _handle_run(args: argparse.Namespace) -> None:
-    """Handle the ``run`` subcommand (and legacy no-subcommand mode)."""
+    """Handle the ``run`` subcommand and legacy no-subcommand mode.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed CLI arguments.
+    """
     # Handle special commands first
     if getattr(args, "list_models", False):
         list_models()
@@ -334,6 +387,27 @@ def _handle_run(args: argparse.Namespace) -> None:
     # Resolve workflow alias (e.g. python_repl -> python_relp)
     args.workflow = resolve_workflow(args.workflow)
 
+    # ---- MCP tool loading ----------------------------------------------
+    mcp_tools = None
+    mcp_url = getattr(args, "mcp_url", None) or config.get("mcp_url")
+    mcp_command = getattr(args, "mcp_command", None) or config.get("mcp_command")
+    mcp_server_name = (
+        getattr(args, "mcp_server_name", None)
+        or config.get("mcp_server_name", "ChemGraph General Tools")
+    )
+
+    if mcp_url or mcp_command:
+        from chemgraph.cli.mcp_utils import load_mcp_tools_from_config
+
+        mcp_tools = load_mcp_tools_from_config(
+            url=mcp_url,
+            command=mcp_command,
+            server_name=mcp_server_name,
+            verbose=(args.verbose > 0),
+        )
+        if mcp_tools is None:
+            sys.exit(1)
+
     if getattr(args, "interactive", False):
         interactive_mode(
             model=args.model,
@@ -341,10 +415,12 @@ def _handle_run(args: argparse.Namespace) -> None:
             structured=args.structured,
             return_option=args.output,
             generate_report=args.report,
+            human_supervised=args.human_supervised,
             recursion_limit=args.recursion_limit,
             base_url=base_url,
             argo_user=argo_user,
             verbose=(args.verbose > 0),
+            tools=mcp_tools,
         )
         return
 
@@ -375,6 +451,8 @@ def _handle_run(args: argparse.Namespace) -> None:
         base_url=base_url,
         argo_user=argo_user,
         verbose=(args.verbose > 0),
+        human_supervised=args.human_supervised,
+        tools=mcp_tools,
     )
 
     if not agent:

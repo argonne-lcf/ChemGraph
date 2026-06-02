@@ -12,7 +12,18 @@ from typing import Any, Optional
 
 
 def resolve_output_path(path: str) -> str:
-    """Resolve output paths relative to CHEMGRAPH_LOG_DIR when set."""
+    """Resolve output paths relative to CHEMGRAPH_LOG_DIR when set.
+
+    Parameters
+    ----------
+    path : str
+        Absolute or relative output path.
+
+    Returns
+    -------
+    str
+        Resolved output path.
+    """
     if not path:
         return path
     if os.path.isabs(path):
@@ -24,7 +35,20 @@ def resolve_output_path(path: str) -> str:
 
 
 def changed_recently(path: str = "ir_spectrum.png", window_seconds: int = 300) -> bool:
-    """Return True if *path* exists and was modified within *window_seconds*."""
+    """Return True if a file was modified within a recent time window.
+
+    Parameters
+    ----------
+    path : str, optional
+        File path to inspect.
+    window_seconds : int, optional
+        Recency window in seconds.
+
+    Returns
+    -------
+    bool
+        ``True`` when the file exists and is recent.
+    """
     p = Path(resolve_output_path(path))
     if not p.exists():
         return False
@@ -59,7 +83,18 @@ def find_latest_xyz_file() -> Optional[str]:
 
 
 def find_latest_xyz_file_in_dir(directory: str) -> Optional[str]:
-    """Find the most recently modified ``.xyz`` file under *directory*."""
+    """Find the most recently modified ``.xyz`` file under a directory.
+
+    Parameters
+    ----------
+    directory : str
+        Directory to search recursively.
+
+    Returns
+    -------
+    str or None
+        Latest XYZ file path, or ``None`` when none is found.
+    """
     if not directory or not os.path.isdir(directory):
         return None
     latest_path: Optional[str] = None
@@ -76,7 +111,18 @@ def find_latest_xyz_file_in_dir(directory: str) -> Optional[str]:
 
 
 def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
-    """Extract a directory path from message content that references an output file."""
+    """Extract a log directory from messages that reference output files.
+
+    Parameters
+    ----------
+    messages : Any
+        Message object, dictionary, list, or text to scan.
+
+    Returns
+    -------
+    str or None
+        Parent directory of a referenced output file, or ``None``.
+    """
     if not messages:
         return None
     patterns = [
@@ -87,6 +133,18 @@ def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
     ]
 
     def _scan_value(value: Any) -> Optional[str]:
+        """Recursively scan a value for absolute output-file references.
+
+        Parameters
+        ----------
+        value : Any
+            Message content, mapping, list, or scalar to scan.
+
+        Returns
+        -------
+        str or None
+            Parent directory of a referenced file, or ``None``.
+        """
         if isinstance(value, str):
             for pattern in patterns:
                 match = re.search(pattern, value)

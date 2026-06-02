@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chemgraph-mcp
+  labels:
+    app: chemgraph
+    component: mcp
+spec:
+  type: LoadBalancer
+  selector:
+    app: chemgraph
+    component: mcp
+  ports:
+  - name: http
+    protocol: TCP
+    port: 9003
+    targetPort: 9003

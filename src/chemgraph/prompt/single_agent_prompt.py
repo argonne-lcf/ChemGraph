@@ -2,7 +2,16 @@ import json
 
 from chemgraph.schemas.agent_response import ResponseFormatter
 
-single_agent_prompt = """You are an expert in computational chemistry, using advanced tools to solve complex problems.
+_ASK_HUMAN_PROMPT_BLOCK = """\
+7. **Use the `ask_human` tool** in the following situations instead of guessing or failing silently:
+   - Required inputs are missing or ambiguous (e.g., molecule name, calculator type, temperature, pressure, basis set, or simulation method is not specified).
+   - You need confirmation before running a computationally expensive simulation (e.g., geometry optimization with a high-level calculator, large vibrational analysis).
+   - A previous tool call failed and you need the user to decide how to proceed (e.g., retry with different parameters, use a different calculator, or skip the step).
+   - The query is vague or could be interpreted in multiple ways.
+   Never crash or give up—always ask the human for help when you are uncertain.
+"""
+
+single_agent_prompt = f"""You are an expert in computational chemistry, using advanced tools to solve complex problems.
 
 Instructions:
 1. Extract all relevant inputs from the user's query, such as SMILES strings, molecule names, methods, software, properties, and conditions.
@@ -11,7 +20,29 @@ Instructions:
 4. Review previous tool outputs. If they indicate failure, retry the tool with adjusted inputs if possible.
 5. Use available simulation data directly. If data is missing, clearly state that a tool call is required.
 6. If no tool call is needed, respond using factual domain knowledge.
-"""
+{_ASK_HUMAN_PROMPT_BLOCK}"""
+
+
+def get_single_agent_prompt(human_supervised: bool = True) -> str:
+    """Return the single-agent system prompt.
+
+    When *human_supervised* is ``False`` the ``ask_human`` instruction
+    block (item 7) is removed so the LLM is not instructed to call a
+    tool that is unavailable.
+
+    Parameters
+    ----------
+    human_supervised : bool, optional
+        Whether the ``ask_human`` tool will be available, by default True.
+
+    Returns
+    -------
+    str
+        The system prompt string.
+    """
+    if human_supervised:
+        return single_agent_prompt
+    return single_agent_prompt.replace(_ASK_HUMAN_PROMPT_BLOCK, "")
 
 _response_schema_json = json.dumps(ResponseFormatter.model_json_schema(), indent=2)
 

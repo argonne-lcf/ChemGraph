@@ -6,6 +6,7 @@
 - `mcp_tools.py`: general ASE-powered chemistry tools
 - `mace_mcp_parsl.py`: MACE + Parsl workflows
 - `graspa_mcp_parsl.py`: gRASPA + Parsl workflows
+- `xanes_mcp_parsl.py`: XANES/FDMNES + Parsl workflows
 - `data_analysis_mcp.py`: analysis utilities for generated results
 
 ## Run a server
@@ -85,6 +86,7 @@ The example config (`.opencode/opencode.example.jsonc`) includes all servers. En
 | `chemgraph` | `chemgraph.mcp.mcp_tools` | molecule_name_to_smiles, smiles_to_coordinate_file, run_ase, extract_output_json | Stable
 | `chemgraph-mace-parsl` | `chemgraph.mcp.mace_mcp_parsl` | MACE ensemble calculations via Parsl (HPC) | Experimental
 | `chemgraph-graspa-parsl` | `chemgraph.mcp.graspa_mcp_parsl` | gRASPA gas adsorption via Parsl (HPC) | Experimental
+| `chemgraph-xanes-parsl` | `chemgraph.mcp.xanes_mcp_parsl` | XANES/FDMNES ensembles via Parsl (HPC) | Experimental
 | `chemgraph-data-analysis` | `chemgraph.mcp.data_analysis_mcp` | CIF splitting, JSONL aggregation, isotherm plotting | Experimental
 
 ### How it works
@@ -93,4 +95,17 @@ OpenCode spawns the MCP server as a local child process using stdio transport. T
 
 ## Notes for Parsl-based servers
 
-`mace_mcp_parsl.py` and `graspa_mcp_parsl.py` rely on Parsl and HPC-specific configuration. Ensure your environment is prepared for the target system before running production jobs.
+Install the Parsl optional dependency when using HPC-backed servers:
+
+```bash
+pip install -e ".[parsl]"
+```
+
+`graspa_mcp_parsl.py` and `xanes_mcp_parsl.py` load system-specific Parsl configuration through `COMPUTE_SYSTEM`:
+
+```bash
+export COMPUTE_SYSTEM=polaris  # or aurora
+python -m chemgraph.mcp.graspa_mcp_parsl --transport streamable_http --host 0.0.0.0 --port 9001
+```
+
+`mace_mcp_parsl.py` also uses Parsl, but currently contains site-specific `worker_init` settings in the module. Review the module loads, conda environment path, and filesystem paths before running production jobs.

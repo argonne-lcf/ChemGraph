@@ -1,43 +1,114 @@
+import importlib.util
 import json
+import os
+import shutil
 from pydantic import BaseModel, Field, model_validator, field_validator
 from typing import Union, Optional, Any, List, Type
 from chemgraph.schemas.atomsdata import AtomsData
 
-try:
-    from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
-except ImportError:
-    TBLiteCalc = None
 from chemgraph.schemas.calculators.emt_calc import EMTCalc
 from chemgraph.schemas.calculators.nwchem_calc import NWChemCalc
 from chemgraph.schemas.calculators.orca_calc import OrcaCalc
+from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
+from chemgraph.schemas.calculators.mace_calc import MaceCalc
+from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
+from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
 
-try:
-    from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
-except ImportError:
-    AIMNET2Calc = None
+# Gate optional calculators on whether their engine package is installed.
+# Schema classes are always importable (internal to ChemGraph), so we must
+# probe the underlying engine with importlib.util.find_spec().
+# find_spec() can raise ModuleNotFoundError for sub-packages when the parent
+# package is missing, so we guard with try/except.
+
+def _engine_available(module_name: str) -> bool:
+    """Return whether a Python calculator engine module is importable.
+
+    Parameters
+    ----------
+    module_name : str
+        Module name passed to ``importlib.util.find_spec``.
+
+    Returns
+    -------
+    bool
+        ``True`` when the module can be found.
+    """
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, ModuleNotFoundError):
+        return False
 
 
-# Attempt to import optional calculators
-try:
-    from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
-except ImportError:
+def _command_available(command_name: str, env_var_name: str) -> bool:
+    """Return whether a calculator command is configured or on ``PATH``.
+
+    Parameters
+    ----------
+    command_name : str
+        Executable name to locate.
+    env_var_name : str
+        Environment variable that can provide the command.
+
+    Returns
+    -------
+    bool
+        ``True`` when the command is configured or discoverable.
+    """
+    return bool(os.environ.get(env_var_name)) or shutil.which(command_name) is not None
+
+
+if not _engine_available("fairchem.core"):
     FAIRChemCalc = None
 
-try:
-    from chemgraph.schemas.calculators.mace_calc import MaceCalc
-except ImportError:
+if not _engine_available("mace"):
     MaceCalc = None
+
+if not _engine_available("tblite"):
+    TBLiteCalc = None
+
+if not _engine_available("aimnet2calc"):
+    AIMNET2Calc = None
+
+if not _command_available("nwchem", "ASE_NWCHEM_COMMAND"):
+    NWChemCalc = None
+
+if not _command_available("orca", "ASE_ORCA_COMMAND"):
+    OrcaCalc = None
+
+
+_CALCULATOR_ALIASES = {
+    "xtb": "tbli",
+    "gfn1xtb": "tbli",
+    "gfn2xtb": "tbli",
+}
+
+
+def _calculator_key(name: str) -> str:
+    """Return a normalized calculator lookup key.
+
+    Parameters
+    ----------
+    name : str
+        Calculator name or alias.
+
+    Returns
+    -------
+    str
+        Four-character normalized key used for calculator matching.
+    """
+    normalized = "".join(ch for ch in name.lower() if ch.isalnum())
+    return _CALCULATOR_ALIASES.get(normalized, normalized[:4])
 
 
 # Define all possible calculator classes
 _all_calculator_classes: List[Optional[Type[BaseModel]]] = [
     FAIRChemCalc,
     MaceCalc,
-    NWChemCalc,
-    TBLiteCalc,
-    OrcaCalc,
-    EMTCalc,
     AIMNET2Calc,
+    TBLiteCalc,
+    EMTCalc,
+    NWChemCalc,
+    OrcaCalc,
 ]
 
 # Filter out unavailable calculators
@@ -48,15 +119,42 @@ available_calculator_classes: List[Type[BaseModel]] = [
 # Create a union for type hinting
 CalculatorUnion = Union[tuple(available_calculator_classes)]
 
-# Determine default calculator and names string
-if FAIRChemCalc:
-    default_calculator = FAIRChemCalc
-elif MaceCalc:
-    default_calculator = MaceCalc
-else:
-    default_calculator = NWChemCalc
+_calculator_name_items = [calc.__name__ for calc in available_calculator_classes]
+_calculator_name_items = [
+    "TBLiteCalc (aliases: xTB, GFN1-xTB, GFN2-xTB)"
+    if name == "TBLiteCalc"
+    else name
+    for name in _calculator_name_items
+]
+_calculator_names = ", ".join(_calculator_name_items)
 
-_calculator_names = ", ".join([calc.__name__ for calc in available_calculator_classes])
+# Determine default calculator using only calculators detected as available.
+default_calculator = available_calculator_classes[0]
+
+
+def get_available_calculator_names() -> List[str]:
+    """Return calculator class names detected as available in this environment."""
+    return [calc.__name__ for calc in available_calculator_classes]
+
+
+def get_default_calculator_name() -> str:
+    """Return the default calculator class name selected for this environment."""
+    return default_calculator.__name__
+
+
+def get_calculator_selection_context() -> str:
+    """Return prompt text describing available calculators and default choice."""
+    return (
+        "\n\nCalculator availability detected during ChemGraph initialization:\n"
+        f"- Available ASE calculators: {_calculator_names}.\n"
+        f"- Default calculator when the user does not specify one: "
+        f"{default_calculator.__name__}.\n"
+        "- When calling run_ase, choose only from the available calculators above. "
+        "If the user requests an unavailable calculator, choose the default "
+        "available calculator when that substitution is appropriate; otherwise "
+        "ask for clarification or explain that the requested calculator is not "
+        "available."
+    )
 
 
 class ASEInputSchema(BaseModel):
@@ -134,6 +232,18 @@ class ASEInputSchema(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _validate_calculator_type(cls, data: Any):
+        """Validate and coerce the calculator payload.
+
+        Parameters
+        ----------
+        data : Any
+            Raw ASE input payload before Pydantic validation.
+
+        Returns
+        -------
+        Any
+            Payload with calculator converted to an available calculator model.
+        """
         if not isinstance(data, dict):
             return data
 
@@ -142,32 +252,36 @@ class ASEInputSchema(BaseModel):
             calc = default_calculator()
             data["calculator"] = calc
 
-        available_calcs = [c.__name__[:4].lower() for c in available_calculator_classes]
+        available_calcs = {
+            _calculator_key(c.__name__.removesuffix("Calc")): c
+            for c in available_calculator_classes
+        }
+        available_calc_names = [c.__name__ for c in available_calculator_classes]
 
         if isinstance(calc, dict):
             calc_name = calc.get("calculator_type")
             if not calc_name:
                 raise ValueError("Calculator dictionary must have a 'calculator_type' key.")
 
-            if calc_name[:4].lower() not in available_calcs:
+            calc_key = _calculator_key(calc_name)
+            if calc_key not in available_calcs:
                 raise ValueError(
                     f"Calculator {calc_name} is not an allowed or available calculator. "
-                    f"Available calculators are: {available_calcs}"
+                    f"Available calculators are: {available_calc_names}"
                 )
 
-            for c in available_calculator_classes:
-                if c.__name__[:4].lower() == calc_name[:4].lower():
-                    init_args = calc.copy()
-                    init_args.pop("calculator_type", None)
-                    data["calculator"] = c(**init_args)
-                    return data
+            init_args = calc.copy()
+            init_args.pop("calculator_type", None)
+            data["calculator"] = available_calcs[calc_key](**init_args)
+            return data
 
         elif hasattr(calc, "__class__"):
             calc_type_name = calc.__class__.__name__
-            if calc_type_name[:4].lower() not in available_calcs:
+            calc_key = _calculator_key(calc_type_name.removesuffix("Calc"))
+            if calc_key not in available_calcs:
                 raise ValueError(
                     f"Calculator {calc_type_name} is not an allowed or available calculator. "
-                    f"Available calculators are: {available_calcs}"
+                    f"Available calculators are: {available_calc_names}"
                 )
         return data
 
@@ -223,7 +337,18 @@ class ASEOutputSchema(BaseModel):
     @field_validator("vibrational_frequencies", "ir_data", "thermochemistry", mode="before")
     @classmethod
     def _coerce_json_string_to_dict(cls, v: Any) -> dict:
-        """Accept dict-like payloads serialized as JSON strings."""
+        """Accept dict-like payloads serialized as JSON strings.
+
+        Parameters
+        ----------
+        v : Any
+            Raw field value.
+
+        Returns
+        -------
+        dict
+            Parsed dictionary or empty dictionary.
+        """
         if v is None:
             return {}
         if isinstance(v, dict):
@@ -242,7 +367,18 @@ class ASEOutputSchema(BaseModel):
     @field_validator("error", mode="before")
     @classmethod
     def _coerce_error_to_string(cls, v: Any) -> str:
-        """Allow null/non-string error fields from intermediate tool payloads."""
+        """Allow null/non-string error fields from intermediate tool payloads.
+
+        Parameters
+        ----------
+        v : Any
+            Raw error value.
+
+        Returns
+        -------
+        str
+            Normalized error string.
+        """
         if v is None:
             return ""
         return v if isinstance(v, str) else str(v)

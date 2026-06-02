@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -28,6 +30,10 @@ class Psi4Calc(BaseModel):
         'cd' (Cholesky Decomposition), by default 'pk'
     maxiter : int, optional
         Maximum number of SCF iterations, by default 50
+    charge : int, optional
+        Total charge of the system, by default 0
+    multiplicity : int, optional
+        Spin multiplicity (2S+1) of the system, by default 1 (singlet)
     """
 
     calculator_type: str = Field(
@@ -58,6 +64,10 @@ class Psi4Calc(BaseModel):
     maxiter: int = Field(
         default=50, description="Maximum number of SCF iterations. Default is 50."
     )
+    charge: int = Field(default=0, description="Total charge of the system.")
+    multiplicity: int = Field(
+        default=1, description="Spin multiplicity (2S+1) of the system.", ge=1
+    )
 
     def get_calculator(self) -> dict:
         """Get a dictionary of PSI4 calculation parameters.
@@ -77,5 +87,11 @@ class Psi4Calc(BaseModel):
             "reference": self.reference,
             "scf_type": self.scf_type,
             "maxiter": self.maxiter,
+            "charge": self.charge,
+            "multiplicity": self.multiplicity,
         }
         return params
+
+    def get_multiplicity(self) -> Optional[int]:
+        """Return spin multiplicity (2S+1) for thermochemistry."""
+        return self.multiplicity

@@ -19,7 +19,18 @@ from chemgraph.models.supported_models import (
 
 
 def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Flatten nested TOML-like config into top-level keys used by the CLI."""
+    """Flatten nested TOML-like config into top-level keys used by the CLI.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Nested configuration dictionary.
+
+    Returns
+    -------
+    dict[str, Any]
+        Flattened configuration with section names included in keys.
+    """
     flattened: Dict[str, Any] = {}
 
     if "general" in config:
@@ -50,7 +61,18 @@ def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def normalize_openai_base_url(base_url: Optional[str]) -> Optional[str]:
-    """Normalize Argo-style URLs to OpenAI-compatible /v1 URLs."""
+    """Normalize Argo-style URLs to OpenAI-compatible /v1 URLs.
+
+    Parameters
+    ----------
+    base_url : str, optional
+        Provider base URL.
+
+    Returns
+    -------
+    str or None
+        Normalized URL, or ``None`` when no URL was provided.
+    """
     if not base_url:
         return base_url
     if (
@@ -67,7 +89,20 @@ def normalize_openai_base_url(base_url: Optional[str]) -> Optional[str]:
 def get_base_url_for_model_from_nested_config(
     model_name: str, config: Dict[str, Any]
 ) -> Optional[str]:
-    """Resolve provider base URL using nested config structure."""
+    """Resolve provider base URL using nested config structure.
+
+    Parameters
+    ----------
+    model_name : str
+        Model identifier.
+    config : dict[str, Any]
+        Nested configuration dictionary.
+
+    Returns
+    -------
+    str or None
+        Matching provider base URL, or ``None`` when not configured.
+    """
     api = config.get("api", {})
 
     if model_name in supported_argo_models:
@@ -90,7 +125,20 @@ def get_base_url_for_model_from_nested_config(
 def get_base_url_for_model_from_flat_config(
     model_name: str, config: Dict[str, Any]
 ) -> Optional[str]:
-    """Resolve provider base URL using flattened config keys."""
+    """Resolve provider base URL using flattened config keys.
+
+    Parameters
+    ----------
+    model_name : str
+        Model identifier.
+    config : dict[str, Any]
+        Flattened configuration dictionary.
+
+    Returns
+    -------
+    str or None
+        Matching provider base URL, or ``None`` when not configured.
+    """
     if model_name in supported_argo_models:
         return normalize_openai_base_url(
             config.get("api_openai_base_url") or ARGO_DEFAULT_BASE_URL
@@ -113,6 +161,16 @@ def get_model_options_for_nested_config(config: Dict[str, Any]) -> list[str]:
 
     Always show all curated models so users can switch providers from the UI.
     If Argo endpoint is configured, prioritize Argo model IDs at the top.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Nested configuration dictionary.
+
+    Returns
+    -------
+    list[str]
+        Model identifiers for UI selection.
     """
     base_url = config.get("api", {}).get("openai", {}).get("base_url")
     if base_url and "argoapi" in base_url:
@@ -122,7 +180,18 @@ def get_model_options_for_nested_config(config: Dict[str, Any]) -> list[str]:
 
 
 def get_argo_user_from_nested_config(config: Dict[str, Any]) -> Optional[str]:
-    """Resolve Argo user from nested config (if configured)."""
+    """Resolve Argo user from nested config.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Nested configuration dictionary.
+
+    Returns
+    -------
+    str or None
+        Configured Argo username, or ``None``.
+    """
     value = config.get("api", {}).get("openai", {}).get("argo_user")
     if isinstance(value, str):
         value = value.strip()
@@ -130,7 +199,18 @@ def get_argo_user_from_nested_config(config: Dict[str, Any]) -> Optional[str]:
 
 
 def get_argo_user_from_flat_config(config: Dict[str, Any]) -> Optional[str]:
-    """Resolve Argo user from flattened config (if configured)."""
+    """Resolve Argo user from flattened config.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Flattened configuration dictionary.
+
+    Returns
+    -------
+    str or None
+        Configured Argo username, or ``None``.
+    """
     value = config.get("api_openai_argo_user")
     if isinstance(value, str):
         value = value.strip()

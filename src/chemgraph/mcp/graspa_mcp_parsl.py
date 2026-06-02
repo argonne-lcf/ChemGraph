@@ -1,13 +1,12 @@
 import asyncio
 import json
-import logging
 import os
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
 import parsl
-from chemgraph.mcp.server_utils import run_mcp_server
+from chemgraph.mcp.server_utils import load_parsl_config, run_mcp_server
 from chemgraph.schemas.graspa_schema import (
     graspa_input_schema_ensemble,
 )
@@ -27,7 +26,7 @@ def run_graspa_parsl_app(job: dict):
     from chemgraph.schemas.graspa_schema import (
         graspa_input_schema,
     )
-    from chemgraph.tools.graspa_tools import run_graspa_core
+    from chemgraph.tools.graspa_core import run_graspa_core
 
     if isinstance(job, dict):
         params = graspa_input_schema(**job)
@@ -39,31 +38,6 @@ def run_graspa_parsl_app(job: dict):
         )
 
     return run_graspa_core(params)
-
-
-def load_parsl_config(system_name: str):
-    """
-    Dynamically imports and returns the Parsl config based on the system name.
-    """
-    system_name = system_name.lower()
-    run_dir = os.getcwd()
-
-    logging.info("Initializing Parsl for system: %s", system_name)
-
-    if system_name == "polaris":
-        from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
-
-        return get_polaris_config(run_dir=run_dir)
-
-    elif system_name == "aurora":
-        from chemgraph.hpc_configs.aurora_parsl import get_aurora_config
-
-        return get_aurora_config(run_dir=run_dir)
-
-    else:
-        raise ValueError(
-            f"Unknown system specified: '{system_name}'. Supported: polaris, aurora"
-        )
 
 
 # Load Parsl Config
@@ -166,6 +140,20 @@ async def run_graspa_ensemble(
             pending_tasks.append((task_meta, fut))
 
     async def wait_for_task(struct_name, parsl_future):
+        """Await a Parsl gRASPA task and normalize failures.
+
+        Parameters
+        ----------
+        struct_name : str
+            Structure identifier associated with the task.
+        parsl_future : concurrent.futures.Future
+            Parsl future returned by the submitted app.
+
+        Returns
+        -------
+        dict
+            Task result dictionary, or a normalized failure dictionary.
+        """
         try:
             # Wrap the Parsl/Concurrent future so it becomes Awaitable
             res = await asyncio.wrap_future(parsl_future)

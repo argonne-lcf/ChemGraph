@@ -139,6 +139,18 @@ class BenchmarkConfig(BaseModel):
     @field_validator("dataset")
     @classmethod
     def dataset_must_exist(cls, v: str) -> str:
+        """Validate that the dataset path exists and points to JSON.
+
+        Parameters
+        ----------
+        v : str
+            Dataset path supplied to the benchmark config.
+
+        Returns
+        -------
+        str
+            Absolute resolved dataset path.
+        """
         p = Path(v)
         if not p.exists():
             raise ValueError(f"Dataset file does not exist: {v}")
@@ -173,6 +185,18 @@ class BenchmarkConfig(BaseModel):
     @field_validator("judge_type")
     @classmethod
     def validate_judge_type(cls, v: str) -> str:
+        """Validate the requested judge strategy.
+
+        Parameters
+        ----------
+        v : str
+            Judge strategy name.
+
+        Returns
+        -------
+        str
+            Validated judge strategy.
+        """
         valid = {"llm", "structured", "both"}
         if v not in valid:
             raise ValueError(f"Unknown judge_type: {v!r}. Valid: {sorted(valid)}")
@@ -181,6 +205,18 @@ class BenchmarkConfig(BaseModel):
     @field_validator("workflow_types")
     @classmethod
     def validate_workflow_types(cls, v: List[str]) -> List[str]:
+        """Validate benchmark workflow names.
+
+        Parameters
+        ----------
+        v : list[str]
+            Workflow names requested for the benchmark.
+
+        Returns
+        -------
+        list[str]
+            Validated workflow names.
+        """
         valid = {
             "single_agent",
             "multi_agent",
@@ -202,6 +238,16 @@ class BenchmarkConfig(BaseModel):
 
         Returns ``None`` when no config file was provided (the provider
         loaders will fall back to their defaults / environment variables).
+
+        Parameters
+        ----------
+        model_name : str
+            Model identifier whose provider URL should be resolved.
+
+        Returns
+        -------
+        str or None
+            Configured base URL, or ``None`` when no override is available.
         """
         if not self._flat_config:
             return None

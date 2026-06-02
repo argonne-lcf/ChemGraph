@@ -24,7 +24,7 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.types import Send
+from langgraph.types import Send, interrupt
 
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.utils.parsing import extract_json_block, parse_response_formatter
@@ -45,7 +45,18 @@ logger = setup_logger(__name__)
 
 
 def _to_jsonable(obj: Any) -> Any:
-    """Recursively convert Pydantic models to plain dicts."""
+    """Recursively convert Pydantic models to plain dictionaries.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to convert.
+
+    Returns
+    -------
+    Any
+        JSON-compatible version of the object where possible.
+    """
     if isinstance(obj, BaseModel):
         return obj.model_dump()
     elif isinstance(obj, dict):
@@ -68,6 +79,16 @@ def sanitize_tool_calls(messages: list[BaseMessage]) -> list[BaseMessage]:
 
     This function walks every ``AIMessage.tool_calls`` entry and
     recursively converts Pydantic models back to plain dicts.
+
+    Parameters
+    ----------
+    messages : list[BaseMessage]
+        LangChain messages that may contain tool-call arguments.
+
+    Returns
+    -------
+    list[BaseMessage]
+        Messages with JSON-serializable tool-call arguments.
     """
     for m in messages:
         if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
@@ -92,6 +113,16 @@ def _parse_planner_response(
 
     Returns ``(parsed_response, None)`` on success,
     or ``(None, error_msg)`` on failure.
+
+    Parameters
+    ----------
+    raw_text : str
+        Raw planner model output.
+
+    Returns
+    -------
+    tuple[PlannerResponse | None, str | None]
+        Parsed response and optional parse error.
     """
     # 1. Direct validation
     try:
@@ -135,6 +166,23 @@ def planner_agent(
     The LLM is prompted to return a JSON object matching the
     ``PlannerResponse`` schema.  If parsing fails, the LLM is retried
     up to ``max_retries`` times with error feedback.
+
+    Parameters
+    ----------
+    state : PlannerState
+        Current global planner state.
+    llm : ChatOpenAI
+        Chat model used for planning.
+    system_prompt : str
+        Planner system prompt.
+    max_retries : int, optional
+        Number of parse-retry attempts after invalid planner output.
+
+    Returns
+    -------
+    dict
+        Planner state update containing messages, next step, tasks, and
+        iteration count.
     """
     executor_outputs = state.get("executor_results", [])
     failed_tasks = state.get("failed_tasks", [])
@@ -204,11 +252,65 @@ def planner_agent(
 
     logger.info("PLANNER: %s", response_obj.model_dump_json())
     current_iterations = state.get("planner_iterations", 0)
-    return {
+    result = {
         "messages": [AIMessage(content=response_obj.thought_process)],
         "next_step": response_obj.next_step,
         "tasks": response_obj.tasks if response_obj.tasks else [],
         "planner_iterations": current_iterations + 1,
+    }
+    if response_obj.next_step == "ask_human" and response_obj.clarification:
+        result["clarification"] = response_obj.clarification
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Human review node (interrupt for human-in-the-loop)
+# ---------------------------------------------------------------------------
+
+
+def human_review_node(state: PlannerState):
+    """Pause the graph and ask the human for clarification.
+
+    This node calls ``interrupt()`` with the planner's clarification
+    question. Execution halts until a human provides a response via
+    ``Command(resume=...)``.  The human's answer is injected back into
+    the conversation as an ``AIMessage`` summarising what was asked and
+    what the human replied, then control returns to the Planner.
+
+    Parameters
+    ----------
+    state : PlannerState
+        Current planner state containing the clarification question.
+
+    Returns
+    -------
+    dict
+        Planner state update containing the human clarification message.
+    """
+    question = state.get("clarification", "Could you please provide more details?")
+    logger.info("HUMAN_REVIEW: interrupting with question: %s", question)
+
+    human_response = interrupt({"question": question})
+
+    # Normalise the response to a plain string.
+    if isinstance(human_response, dict):
+        answer = human_response.get(
+            "answer", human_response.get("response", str(human_response))
+        )
+    else:
+        answer = str(human_response)
+
+    logger.info("HUMAN_REVIEW: received response: %s", answer)
+    return {
+        "messages": [
+            AIMessage(
+                content=(
+                    f"Human clarification received.\n"
+                    f"Question: {question}\n"
+                    f"Answer: {answer}"
+                )
+            )
+        ],
     }
 
 
@@ -226,6 +328,7 @@ def unified_planner_router(
     """Route based on the planner's ``next_step`` decision.
 
     * ``executor_subgraph`` -- fan-out tasks via ``Send()``
+    * ``ask_human`` -- pause for human clarification via ``human_review``
     * ``FINISH`` -- go to ``ResponseAgent`` (if structured_output) or ``END``
 
     A cycle guard forces ``FINISH`` when the planner has dispatched
@@ -234,9 +337,28 @@ def unified_planner_router(
     For retried tasks, the ``retry_count`` from the ``WorkerTask`` is
     checked against ``max_task_retries``.  Tasks that have exceeded the
     retry limit are skipped and logged as permanently failed.
+
+    Parameters
+    ----------
+    state : PlannerState
+        Current planner state.
+    structured_output : bool, optional
+        Whether to route final output through the response formatter.
+    max_planner_iterations : int, optional
+        Maximum planner dispatch iterations before forcing completion.
+    max_task_retries : int, optional
+        Maximum retry count for individual executor tasks.
+
+    Returns
+    -------
+    str or list[Send]
+        Next graph node name, ``END``, or fan-out ``Send`` instructions.
     """
     next_step = state.get("next_step")
     iterations = state.get("planner_iterations", 0)
+
+    if next_step == "ask_human":
+        return "human_review"
 
     if next_step == "executor_subgraph":
         if iterations > max_planner_iterations:
@@ -321,6 +443,22 @@ async def executor_model_node(
 
     Reads its own ``messages`` history, calls the LLM with bound tools,
     and returns the response.
+
+    Parameters
+    ----------
+    state : ExecutorState
+        Local executor state.
+    llm : ChatOpenAI
+        Chat model used by the executor.
+    system_prompt : str
+        Executor system prompt.
+    tools : list
+        Tools available to the executor.
+
+    Returns
+    -------
+    dict
+        Executor state update containing the new model message.
     """
     sanitized = sanitize_tool_calls(list(state["messages"]))
     messages = [{"role": "system", "content": system_prompt}] + sanitized
@@ -348,7 +486,19 @@ async def executor_model_node(
 
 
 def route_executor(state: ExecutorState):
-    """Standard ReAct routing: tool calls -> ``tools``, else -> ``done``."""
+    """Route executor output to tools or completion.
+
+    Parameters
+    ----------
+    state : ExecutorState
+        Local executor state.
+
+    Returns
+    -------
+    str
+        ``"tools"`` when the last message has tool calls, otherwise
+        ``"done"``.
+    """
     last_message = state["messages"][-1]
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         return "tools"
@@ -382,6 +532,16 @@ def _detect_executor_failure(messages: list) -> tuple[bool, str | None]:
     2. Error markers in the final assistant message content.
 
     Returns ``(is_failed, error_summary)``.
+
+    Parameters
+    ----------
+    messages : list
+        Executor message history.
+
+    Returns
+    -------
+    tuple[bool, str | None]
+        Failure flag and optional error summary.
     """
     # Collect all tool-level errors
     tool_errors = []
@@ -421,6 +581,16 @@ def format_executor_output(state: ExecutorState) -> dict:
     Detects executor failures by scanning the message history for tool
     errors and error markers.  When a failure is detected, populates
     ``failed_tasks`` so the planner can decide whether to retry.
+
+    Parameters
+    ----------
+    state : ExecutorState
+        Local executor state at subgraph completion.
+
+    Returns
+    -------
+    dict
+        Planner-state update with executor results, logs, and failure data.
     """
     executor_id = state["executor_id"]
     task_index = state.get("task_index", -1)
@@ -473,6 +643,20 @@ def construct_executor_subgraph(
     The subgraph is compiled and used as a node in the main graph.
     Each ``Send()`` invocation creates an independent copy with its own
     ``ExecutorState``.
+
+    Parameters
+    ----------
+    llm : ChatOpenAI
+        Chat model used by executor agents.
+    tools : list
+        Tools available to executor agents.
+    system_prompt : str
+        Executor system prompt.
+
+    Returns
+    -------
+    CompiledStateGraph
+        Compiled executor subgraph.
     """
     workflow = StateGraph(ExecutorState)
     workflow.add_node(
@@ -512,6 +696,22 @@ def response_agent(
     Mirrors the ``ResponseAgent`` from ``single_agent.py``: invokes the
     LLM with a formatter prompt and manually parses the response into a
     ``ResponseFormatter`` with retry logic on parse failure.
+
+    Parameters
+    ----------
+    state : PlannerState
+        Final planner state to summarize.
+    llm : ChatOpenAI
+        Chat model used for response formatting.
+    formatter_prompt : str
+        Prompt instructing the model how to format the final answer.
+    max_retries : int, optional
+        Number of parse-retry attempts after invalid formatter output.
+
+    Returns
+    -------
+    dict
+        State update containing the formatted response message.
     """
     messages = [
         {"role": "system", "content": formatter_prompt},
@@ -639,9 +839,10 @@ def construct_multi_agent_graph(
         ),
     )
     graph_builder.add_node("executor_subgraph", executor_subgraph)
+    graph_builder.add_node("human_review", human_review_node)
 
     # Conditional destinations list for the planner router
-    conditional_targets = ["executor_subgraph", END]
+    conditional_targets = ["executor_subgraph", "human_review", END]
 
     if structured_output:
         graph_builder.add_node(
@@ -670,6 +871,9 @@ def construct_multi_agent_graph(
 
     # Executors feed results back to the planner
     graph_builder.add_edge("executor_subgraph", "Planner")
+
+    # After human clarification, return to the planner for re-planning
+    graph_builder.add_edge("human_review", "Planner")
 
     if structured_output:
         graph_builder.add_edge("ResponseAgent", END)

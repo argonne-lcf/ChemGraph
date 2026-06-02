@@ -9,8 +9,19 @@ def get_polaris_config(
     run_dir=None,
     worker_init: str = "export TMPDIR=/tmp",
 ):
-    """
-    Generates the Parsl configuration for the Polaris supercomputer.
+    """Generate the Parsl configuration for the Polaris supercomputer.
+
+    Parameters
+    ----------
+    run_dir : str, optional
+        Directory used as Parsl's run directory.
+    worker_init : str, optional
+        Shell initialization snippet run by each Parsl worker.
+
+    Returns
+    -------
+    parsl.config.Config
+        Configured Parsl ``Config`` for Polaris.
     """
     if run_dir is None:
         run_dir = os.getcwd()

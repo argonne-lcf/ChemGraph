@@ -27,6 +27,22 @@ def planner_agent(
     llm: ChatOpenAI,
     system_prompt: str,
 ):
+    """Plan the next gRASPA MCP workflow step.
+
+    Parameters
+    ----------
+    state : PlannerState
+        Current planner state containing messages and executor results.
+    llm : ChatOpenAI
+        Chat model used for planning.
+    system_prompt : str
+        Planner system prompt.
+
+    Returns
+    -------
+    dict
+        Planner state update containing messages, next step, and tasks.
+    """
     executor_outputs = state.get("executor_results", [])
     content_block = f"Current Conversation History: {state['messages']}"
     if executor_outputs:
@@ -51,8 +67,17 @@ def planner_agent(
 
 
 def unified_planner_router(state: PlannerState) -> Union[str, list[Send]]:
-    """
-    Routes based on the Planner's structured 'next_step'.
+    """Route based on the planner's structured ``next_step``.
+
+    Parameters
+    ----------
+    state : PlannerState
+        Current planner state.
+
+    Returns
+    -------
+    str or list[Send]
+        Next node name, ``END``, or fan-out executor sends.
     """
     next_step = state.get("next_step")
 
@@ -81,9 +106,23 @@ async def executor_model_node(
     system_prompt: str,
     tools: list,
 ):
-    """
-    The reasoning engine for a single executor.
-    It sees its own 'task_prompt' and its own 'messages' history.
+    """Run the reasoning step for a single gRASPA executor.
+
+    Parameters
+    ----------
+    state : ExecutorState
+        Local executor state.
+    llm : ChatOpenAI
+        Chat model used by the executor.
+    system_prompt : str
+        Executor system prompt.
+    tools : list
+        Tools available to the executor.
+
+    Returns
+    -------
+    dict
+        Executor state update containing the model response.
     """
     messages = [{"role": "system", "content": system_prompt}] + state["messages"]
 
@@ -106,7 +145,18 @@ async def executor_model_node(
     return {"messages": [response]}
 
 def route_executor(state: ExecutorState):
-    """Standard ReAct routing: Tool vs End."""
+    """Route executor output to tools or completion.
+
+    Parameters
+    ----------
+    state : ExecutorState
+        Local executor state.
+
+    Returns
+    -------
+    str
+        ``"tools"`` when tool calls are present, otherwise ``"done"``.
+    """
     messages = state["messages"]
     last_message = messages[-1]
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
@@ -115,9 +165,17 @@ def route_executor(state: ExecutorState):
 
 
 def format_executor_output(state: ExecutorState) -> PlannerState:
-    """
-    Bridge function:
-    Converts the Local ExecutorState into an update for the Global PlannerState.
+    """Convert local executor state into a global planner update.
+
+    Parameters
+    ----------
+    state : ExecutorState
+        Local executor state at subgraph completion.
+
+    Returns
+    -------
+    PlannerState
+        Planner update containing executor results and logs.
     """
     executor_id = state["executor_id"]
     final_message = state["messages"][-1].content
@@ -130,7 +188,22 @@ def format_executor_output(state: ExecutorState) -> PlannerState:
 
 
 def construct_executor_subgraph(llm: ChatOpenAI, tools: list, system_prompt: str):
-    """Builds the reusable executor subgraph (Agent -> Tools -> Agent)."""
+    """Build the reusable executor subgraph.
+
+    Parameters
+    ----------
+    llm : ChatOpenAI
+        Chat model used by executor agents.
+    tools : list
+        Tools available to executor agents.
+    system_prompt : str
+        Executor system prompt.
+
+    Returns
+    -------
+    CompiledStateGraph
+        Compiled executor subgraph.
+    """
     workflow = StateGraph(ExecutorState)
     workflow.add_node(
         "executor_agent",
@@ -160,7 +233,24 @@ def insight_analyst_node(
     tools: list,
     system_prompt: str,
 ):
-    """Analyzes the gathered results."""
+    """Analyze gathered executor results.
+
+    Parameters
+    ----------
+    state : PlannerState
+        Planner state containing executor results.
+    llm : ChatOpenAI
+        Chat model used by the analyst.
+    tools : list
+        Analysis tools available to the analyst.
+    system_prompt : str
+        Analyst system prompt.
+
+    Returns
+    -------
+    dict
+        Planner state update containing the analyst response.
+    """
     results_text = "\n".join(state["executor_results"])
     messages = [
         {"role": "system", "content": system_prompt},
@@ -176,8 +266,18 @@ def insight_analyst_node(
 
 
 def route_analyst(state: PlannerState):
-    """
-    Determines if the Analyst is calling a tool or giving the final answer.
+    """Route analyst output to tools or back to the planner.
+
+    Parameters
+    ----------
+    state : PlannerState
+        Planner state containing the analyst's latest message.
+
+    Returns
+    -------
+    str
+        ``"analyst_tools"`` when tool calls are present, otherwise
+        ``"Planner"``.
     """
     last_msg = state["messages"][-1]
 
@@ -197,8 +297,27 @@ def construct_graspa_mcp_graph(
     executor_tools: list = None,
     analysis_tools: list = None,
 ):
-    """
-    Constructs the Main Graph using the Map-Reduce (Send) pattern.
+    """Construct the gRASPA MCP map-reduce graph.
+
+    Parameters
+    ----------
+    llm : ChatOpenAI
+        Chat model shared by planner, executors, and analyst.
+    planner_prompt : str, optional
+        Planner system prompt.
+    executor_prompt : str, optional
+        Executor system prompt.
+    analyst_prompt : str, optional
+        Analyst system prompt.
+    executor_tools : list, optional
+        Tools available to executor subgraphs.
+    analysis_tools : list, optional
+        Tools available to the analyst node.
+
+    Returns
+    -------
+    CompiledStateGraph
+        Compiled gRASPA MCP graph.
     """
     checkpointer = MemorySaver()
 

@@ -9,6 +9,18 @@ from parsl.addresses import address_by_interface
 def get_aurora_config(
     run_dir=None,
 ):
+    """Create a Parsl configuration for Aurora PBS jobs.
+
+    Parameters
+    ----------
+    run_dir : str, optional
+        Directory used as Parsl's run directory and worker working directory.
+
+    Returns
+    -------
+    parsl.config.Config
+        Configured Parsl ``Config`` for Aurora.
+    """
     if run_dir is None:
         run_dir = os.getcwd()
 

@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 
@@ -12,11 +11,11 @@ from parsl.utils import get_all_checkpoints
 import parsl
 
 from chemgraph.mcp.server_utils import run_mcp_server
-from chemgraph.tools.parsl_tools import (
+from chemgraph.schemas.mace_parsl_schema import (
     mace_input_schema,
     mace_input_schema_ensemble,
-    run_mace_core,
 )
+from chemgraph.tools.parsl_tools import run_mace_core
 from parsl import python_app
 
 
@@ -36,7 +35,8 @@ def run_mace_parsl_app(job: dict):
     dict
         The result of `run_mace_core(job)`.
     """
-    from chemgraph.tools.parsl_tools import mace_input_schema, run_mace_core
+    from chemgraph.schemas.mace_parsl_schema import mace_input_schema
+    from chemgraph.tools.parsl_tools import run_mace_core
 
     if isinstance(job, dict):
         params = mace_input_schema(**job)
@@ -73,6 +73,18 @@ mcp = FastMCP(
     description="Run a single MACE calculation",
 )
 def run_mace_single(params: mace_input_schema):
+    """Run one MACE calculation.
+
+    Parameters
+    ----------
+    params : mace_input_schema
+        Input parameters for the MACE calculation.
+
+    Returns
+    -------
+    dict
+        MACE calculation result.
+    """
     return run_mace_core(params)
 
 
@@ -177,29 +189,21 @@ def run_mace_ensemble(params: mace_input_schema_ensemble):
     description="Load output from a JSON file.",
 )
 def extract_output_json(json_file: str) -> dict:
-    """
-    Load simulation results from a JSON file produced by run_ase.
+    """Load simulation results from a JSON file produced by run_ase.
 
     Parameters
     ----------
     json_file : str
-        Path to the JSON file containing ASE simulation results.
+        Path to a JSON output file.
 
     Returns
     -------
-    Dict[str, Any]
-        Parsed results from the JSON file as a Python dictionary.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the specified file does not exist.
-    json.JSONDecodeError
-        If the file is not valid JSON.
+    dict
+        Parsed simulation results.
     """
-    with open(json_file, "r") as f:
-        data = json.load(f)
-    return data
+    from chemgraph.tools.ase_core import extract_output_json_core
+
+    return extract_output_json_core(json_file)
 
 
 # User-specific paths and settings

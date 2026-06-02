@@ -18,6 +18,16 @@ def extract_json_block(text: str) -> str | None:
 
     Handles markdown-fenced blocks (```json ... ```) and bare JSON objects.
     Returns the extracted string or *None* if nothing looks like JSON.
+
+    Parameters
+    ----------
+    text : str
+        Text that may contain a JSON object.
+
+    Returns
+    -------
+    str or None
+        Extracted JSON text, or ``None`` when no object is found.
     """
     # Try markdown-fenced JSON first
     m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
@@ -39,6 +49,11 @@ def parse_response_formatter(
     from the text.  Falls back to an empty ``ResponseFormatter`` (all
     fields ``None``) so the pipeline never breaks -- the raw text is
     still available in the agent's message history.
+
+    Parameters
+    ----------
+    raw_text : str
+        Raw LLM output to parse.
 
     Returns
     -------

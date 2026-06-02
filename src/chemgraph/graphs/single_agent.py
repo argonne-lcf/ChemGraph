@@ -13,7 +13,7 @@ from chemgraph.tools.cheminformatics_tools import (
     smiles_to_coordinate_file,
 )
 from chemgraph.tools.report_tools import generate_html
-from chemgraph.tools.generic_tools import calculator
+from chemgraph.tools.generic_tools import calculator, ask_human
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
@@ -27,7 +27,18 @@ logger = setup_logger(__name__)
 
 
 def _tool_call_signature(tool_calls) -> tuple:
-    """Create a comparable signature for a list of tool calls."""
+    """Create a comparable signature for a list of tool calls.
+
+    Parameters
+    ----------
+    tool_calls : list
+        Tool-call dictionaries from an AI message.
+
+    Returns
+    -------
+    tuple
+        Deterministic signature of tool names and arguments.
+    """
     signature = []
     for call in tool_calls or []:
         name = call.get("name") if isinstance(call, dict) else None
@@ -42,7 +53,18 @@ def _tool_call_signature(tool_calls) -> tuple:
 
 
 def _is_repeated_tool_cycle(messages) -> bool:
-    """Detect if the most recent AI tool-call set repeats the previous AI tool-call set."""
+    """Detect if the most recent AI tool-call set repeats the previous one.
+
+    Parameters
+    ----------
+    messages : list
+        Message history to inspect.
+
+    Returns
+    -------
+    bool
+        ``True`` when the last two AI tool-call sets are identical.
+    """
     ai_with_calls = []
     for message in messages:
         if hasattr(message, "tool_calls") and getattr(message, "tool_calls", None):
@@ -57,21 +79,54 @@ def _is_repeated_tool_cycle(messages) -> bool:
 
 
 def _tool_message_name(message):
-    """Extract tool name from a message-like object."""
+    """Extract tool name from a message-like object.
+
+    Parameters
+    ----------
+    message : Any
+        Message dictionary or object.
+
+    Returns
+    -------
+    str or None
+        Tool name when present.
+    """
     if isinstance(message, dict):
         return message.get("name")
     return getattr(message, "name", None)
 
 
 def _tool_message_content(message):
-    """Extract content text from a message-like object."""
+    """Extract content text from a message-like object.
+
+    Parameters
+    ----------
+    message : Any
+        Message dictionary or object.
+
+    Returns
+    -------
+    Any
+        Message content, or an empty string when unavailable.
+    """
     if isinstance(message, dict):
         return message.get("content", "")
     return getattr(message, "content", "")
 
 
 def _is_successful_report_message(message) -> bool:
-    """Return True when message indicates successful generate_html execution."""
+    """Return True when a message indicates successful report generation.
+
+    Parameters
+    ----------
+    message : Any
+        Tool message dictionary or object.
+
+    Returns
+    -------
+    bool
+        ``True`` for non-error ``generate_html`` tool output.
+    """
     if _tool_message_name(message) != "generate_html":
         return False
 
@@ -111,7 +166,18 @@ def route_tools(state: State):
 
 
 def route_report_tools(state: State):
-    """Route report tool execution and stop if a report was already generated."""
+    """Route report tool execution and stop if a report was already generated.
+
+    Parameters
+    ----------
+    state : State
+        Current graph state or message list.
+
+    Returns
+    -------
+    str
+        ``"tools"`` when ``generate_html`` should run, otherwise ``"done"``.
+    """
     if isinstance(state, list):
         messages = state
         ai_message = state[-1] if state else None
@@ -140,7 +206,18 @@ def route_report_tools(state: State):
 
 
 def route_after_report_tools(state: State):
-    """After report tool execution, stop on success; otherwise retry report generation."""
+    """After report tool execution, stop on success or retry on failure.
+
+    Parameters
+    ----------
+    state : State
+        Current graph state or message list after report tool execution.
+
+    Returns
+    -------
+    str
+        ``"done"`` after a successful report message, otherwise ``"retry"``.
+    """
     if isinstance(state, list):
         messages = state
     elif messages := state.get("messages", []):
@@ -151,7 +228,13 @@ def route_after_report_tools(state: State):
     return "done" if _is_successful_report_message(messages[-1]) else "retry"
 
 
-def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
+def ChemGraphAgent(
+    state: State,
+    llm: ChatOpenAI,
+    system_prompt: str,
+    tools=None,
+    human_supervised: bool = False,
+):
     """LLM node that processes messages and decides next actions.
 
     Parameters
@@ -164,6 +247,8 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
         The system prompt to guide the LLM's behavior
     tools : list, optional
         List of tools available to the agent, by default None
+    human_supervised : bool, optional
+        Whether to include the ``ask_human`` tool, by default False
 
     Returns
     -------
@@ -180,6 +265,12 @@ def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None
             extract_output_json,
             calculator,
         ]
+        if human_supervised:
+            tools.append(ask_human)
+    elif human_supervised and ask_human not in tools:
+        # Ensure ask_human is available when custom tools are provided
+        # and human supervision is enabled.
+        tools = list(tools) + [ask_human]
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"{state['messages']}"},
@@ -319,6 +410,7 @@ def construct_single_agent_graph(
     report_prompt: str = report_prompt,
     tools: list = None,
     max_retries: int = 1,
+    human_supervised: bool = False,
 ):
     """Construct a geometry optimization graph.
 
@@ -341,6 +433,10 @@ def construct_single_agent_graph(
     max_retries : int, optional
         Maximum number of LLM retry attempts when the ResponseAgent
         fails to parse the formatter output, by default 1
+    human_supervised : bool, optional
+        Whether to include the ``ask_human`` tool so the agent can
+        pause and request human input, by default False
+
     Returns
     -------
     StateGraph
@@ -357,6 +453,12 @@ def construct_single_agent_graph(
                 extract_output_json,
                 calculator,
             ]
+            if human_supervised:
+                tools.append(ask_human)
+        elif human_supervised and ask_human not in tools:
+            # Ensure ask_human is available when custom tools are provided
+            # and human supervision is enabled.
+            tools = list(tools) + [ask_human]
         tool_node = ToolNode(tools=tools)
         graph_builder = StateGraph(State)
 
@@ -364,7 +466,11 @@ def construct_single_agent_graph(
             graph_builder.add_node(
                 "ChemGraphAgent",
                 lambda state: ChemGraphAgent(
-                    state, llm, system_prompt=system_prompt, tools=tools
+                    state,
+                    llm,
+                    system_prompt=system_prompt,
+                    tools=tools,
+                    human_supervised=human_supervised,
                 ),
             )
             graph_builder.add_node("tools", tool_node)
@@ -403,7 +509,6 @@ def construct_single_agent_graph(
                     {"tools": "tools", "done": END},
                 )
                 graph_builder.add_edge("tools", "ChemGraphAgent")
-                graph_builder.add_edge("ChemGraphAgent", END)
 
             graph = graph_builder.compile(checkpointer=checkpointer)
             logger.info("Graph construction completed")
@@ -412,7 +517,11 @@ def construct_single_agent_graph(
             graph_builder.add_node(
                 "ChemGraphAgent",
                 lambda state: ChemGraphAgent(
-                    state, llm, system_prompt=system_prompt, tools=tools
+                    state,
+                    llm,
+                    system_prompt=system_prompt,
+                    tools=tools,
+                    human_supervised=human_supervised,
                 ),
             )
             graph_builder.add_node("tools", tool_node)

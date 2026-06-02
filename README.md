@@ -158,7 +158,6 @@ If you need to install from source for the latest version:
 2. Create and activate a virtual environment using uv:
     ```bash
     uv venv --python 3.11 chemgraph-env
-    # uv venv --python 3.11 chemgraph-env # For specific python version
 
     source chemgraph-env/bin/activate # Unix/macos
     # OR
@@ -218,9 +217,9 @@ If you need to install from source for the latest version:
 
    - **[Single-Agent System with UMA](notebooks/Demo_single_agent_UMA.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with UMA support.
 
-   - **[Multi-Agent System](notebooks/2_Demo-multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where different agents (Planner, Executor and Aggregator) handle various tasks exemplifying the collaborative potential of ChemGraph.
+   - **[Multi-Agent System](notebooks/2_Demo-multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where planner and executor agents decompose and run computational chemistry tasks.
 
-   - **[Model Context Protocol (MCP) Server](notebooks/3_MCP_server.ipynb)**: This notebook demonstrates how to run an MCP server and connect to ChemGraph.
+   - **[Model Context Protocol (MCP) Server](notebooks/3_Demo_using_MCP.ipynb)**: This notebook demonstrates how to run an MCP server and connect to ChemGraph.
    - **[Single-Agent System with gRASPA](notebooks/Demo_graspa_agent.ipynb)**: This notebook provides a sample guide on executing a gRASPA simulation using a single agent. For gRASPA-related installation instructions, visit the [gRASPA GitHub repository](https://github.com/snurr-group/gRASPA). The notebook's functionality has been validated on a single compute node at ALCF Polaris.
 
    - **[Infrared absorption spectrum prediction](notebooks/Demo_infrared_spectrum.ipynb)**: This notebook demonstrates how to calculate an infrared absorption spectrum.
@@ -231,16 +230,18 @@ If you need to install from source for the latest version:
 <details>
   <summary><strong>Streamlit Web Interface</strong></summary>
 
-ChemGraph includes a **Streamlit web interface** that provides an intuitive, chat-based UI for interacting with computational chemistry agents. The interface supports 3D molecular visualization, conversation history, and easy access to various ChemGraph workflows.
+ChemGraph includes a **Streamlit web interface** for chat-driven computational chemistry workflows. The UI auto-initializes the selected agent, streams tool-call progress while a query runs, shows generated structures and reports, and stores conversations in the same local session database used by the CLI.
 
 ### Features
 
 - **🧪 Interactive Chat Interface**: Natural language queries for computational chemistry tasks
 - **🧬 3D Molecular Visualization**: Interactive molecular structure display using `stmol` and `py3Dmol`
-- **📊 Report Integration**: Embedded HTML reports from computational calculations
+- **📊 Report Integration**: Embedded and downloadable HTML reports from computational calculations
 - **💾 Data Export**: Download molecular structures as XYZ or JSON files
+- **🧮 Math Rendering**: Display LaTeX-style equations and reaction arrows in assistant responses
 - **🔧 Multiple Workflows**: Support for single-agent, multi-agent, Python REPL, and gRASPA workflows
-- **🎨 Modern UI**: Clean, responsive interface with conversation bubbles and molecular properties display
+- **💬 Session Memory**: Browse, load, and delete saved conversations from `~/.chemgraph/sessions.db`
+- **👤 Human Supervision**: Optional follow-up prompts when the agent needs confirmation or missing inputs
 
 ### Installation Requirements
 
@@ -278,16 +279,18 @@ pip install -e ".[uma]"
 ### Using the Interface
 
 #### Configuration
-- **Model Selection**: Choose from GPT-4o, GPT-4o-mini, or Claude models
-- **Workflow Type**: Select single-agent, multi-agent, Python REPL, or gRASPA workflows
+- Use the **Configuration** page to edit `config.toml`, provider base URLs, API timeouts, workflow, recursion limit, report generation, and human supervision.
+- API keys entered in the UI are applied only to the current Streamlit process and are not written to `config.toml`.
+- The main sidebar shows calculators detected during ChemGraph initialization and marks the default calculator used when a query does not specify one.
+- To change model, workflow, thread, or report settings, edit them on the **Configuration** page, save, then use **Reload Config** or **Refresh Agents**.
 
 
 #### Interaction
-1. **Initialize Agent**: Click "Initialize Agent" in the sidebar to set up your ChemGraph instance
-2. **Ask Questions**: Use the text area to enter computational chemistry queries
-3. **View Results**: See responses in chat bubbles with automatic structure detection
-4. **3D Visualization**: When molecular structures are detected, they're automatically displayed in 3D
-5. **Download Data**: Export structures and calculation results directly from the interface
+1. **Open the main page**: The agent initializes automatically from the active configuration.
+2. **Ask Questions**: Use the chat input to enter computational chemistry queries.
+3. **Monitor Tools**: Tool calls and completions stream in the assistant response while the workflow runs.
+4. **Respond to Prompts**: If human supervision is enabled and the agent pauses, answer in the same chat input.
+5. **View and Export Results**: Structures, IR artifacts, HTML reports, and download controls appear with the response when available.
 
 #### Example Queries
 - "What is the SMILES string for caffeine?"
@@ -304,8 +307,9 @@ The interface automatically detects molecular structure data in agent responses 
 
 #### Conversation Management
 - **History Display**: All queries and responses are preserved in conversation bubbles
+- **Saved Sessions**: Recent sessions can be loaded or deleted from the sidebar
 - **Structure Detection**: Molecular structures are automatically extracted and visualized
-- **Report Integration**: HTML reports from calculations are embedded directly in the interface
+- **Report Integration**: HTML reports and run artifacts are embedded directly in the interface
 - **Debug Information**: Expandable sections show detailed message processing information
 
 ### Troubleshooting
@@ -317,13 +321,14 @@ The interface automatically detects molecular structure data in agent responses 
 
 **Agent Initialization:**
 - Verify API keys are set correctly
+- Verify provider base URLs and local model endpoints on the Configuration page
 - Check that ChemGraph package is installed: `pip install -e .`
 - Ensure all dependencies are available in your environment
 
 **Performance:**
 - For large molecular systems, visualization may take longer to load
-- Use the refresh button if the interface becomes unresponsive
-- Clear conversation history to improve performance with many queries
+- Start a new chat or load a smaller saved session if rendering many prior structures becomes slow
+- Use **Refresh Agents** after changing credentials or external model services
 
 </details>
 
@@ -343,7 +348,8 @@ Create a `config.toml` file in your project directory to configure ChemGraph beh
 [general]
 # Default model to use for queries
 model = "gpt-4o-mini"
-# Workflow type: single_agent, multi_agent, python_repl, graspa
+# Workflow type: single_agent, multi_agent, python_relp, graspa, mock_agent
+# Alias accepted by CLI/UI: python_repl -> python_relp
 workflow = "single_agent"
 # Output format: state, last_message
 output = "state"
@@ -351,9 +357,13 @@ output = "state"
 structured = false
 # Generate detailed reports
 report = true
+# Default LangGraph thread ID
+thread = 1
 
 # Recursion limit for agent workflows
 recursion_limit = 20
+# Allow the agent to pause and ask for human input
+human_supervised = false
 # Enable verbose output
 verbose = false
 
@@ -460,6 +470,11 @@ rate_limit = true
 max_requests_per_minute = 60
 ```
 
+The core CLI and UI currently consume `[general]`, `[api]`, `[chemistry]`, and
+`[output]` directly. The agent uses deterministic LLM defaults internally
+(`temperature=0.0`, fixed token limits); `[llm]` entries are kept for
+documentation/forward compatibility rather than active runtime tuning.
+
 ### Using Configuration Files
 
 #### With the Command Line Interface
@@ -495,20 +510,17 @@ export OPENAI_API_KEY="<your_anl_domain_username>"
 export ARGO_USER="<your_anl_domain_username>"
 ```
 
-3. Use an Argo model ID (from `supported_argo_models` in `src/chemgraph/models/supported_models.py`):
+3. Use an Argo model ID with the `argo:` prefix (from `supported_argo_models` in `src/chemgraph/models/supported_models.py`), for example:
 
 ```text
-gpt4o, gpt4olatest, gpto3mini, gpto1, gpto3, gpto4mini,
-gpt41, gpt41mini, gpt41nano, gpt5, gpt5mini, gpt5nano, gpt51, gpt52,
-gemini25pro, gemini25flash,
-claudeopus46, claudeopus45, claudeopus41, claudeopus4,
-claudehaiku45, claudesonnet45, claudesonnet4, claudesonnet35v2, claudehaiku35
+argo:gpt-4o, argo:gpt-4o-latest, argo:gpt-5, argo:gpt-5-mini,
+argo:gemini-2.5-flash, argo:claude-sonnet-4.5
 ```
 
 4. Run with config:
 
 ```bash
-chemgraph --config config.toml -m gpt4olatest -q "calculate the energy for water molecule using mace_mp"
+chemgraph --config config.toml -m argo:gpt-4o-latest -q "calculate the energy for water molecule using mace_mp"
 ```
 
 Notes:
@@ -602,7 +614,7 @@ For Groq, the `groq:` prefix is stripped before sending to the Groq API. Any mod
 | Section       | Description                                             |
 | ------------- | ------------------------------------------------------- |
 | `[general]`   | Basic settings like model, workflow, and output format  |
-| `[llm]`       | LLM-specific parameters (temperature, max_tokens, etc.) |
+| `[llm]`       | Reserved/legacy LLM parameter documentation             |
 | `[api]`       | API endpoints and timeouts for different providers      |
 | `[chemistry]` | Chemistry-specific calculation settings                 |
 | `[output]`    | Output file formats and visualization settings          |
@@ -1058,7 +1070,7 @@ recursion_limit = 50
 To generate a new ground-truth dataset from custom molecules and reactions:
 
 ```bash
-cd scripts/new_evaluation
+cd scripts/evaluations
 
 # Full execution (runs tool chains, captures actual results)
 python generate_ground_truth.py --input_file input_data.json
@@ -1170,6 +1182,19 @@ If you use [Colmena](https://github.com/exalearn/colmena), run ChemGraph service
 3. Mount the same project/output volume if Colmena workers and Docker run on the same host.
 
 Use this as an orchestration layer: Colmena schedules tasks; ChemGraph handles chemistry execution.
+
+### Kubernetes Deployment
+
+ChemGraph Streamlit can also be deployed on Kubernetes clusters. See the [`k8s/`](k8s/) directory for deployment manifests and instructions.
+
+**Quick deployment:**
+
+```bash
+cd k8s
+./deploy.sh deploy
+```
+
+For detailed instructions, see [`k8s/README.md`](k8s/README.md).
 </details>
 
 <details>
@@ -1190,26 +1215,27 @@ The servers are located in `src/chemgraph/mcp/`:
     *   Supports **ensemble** calculations (directories of structures) using **Parsl** for parallel execution on HPC systems (e.g., Polaris, Aurora).
 *   **`graspa_mcp_parsl.py`**: Tools for **gRASPA** simulations (Gas Adsorption in MOFs).
     *   Supports single and ensemble runs via Parsl.
+*   **`xanes_mcp_parsl.py`**: Tools for running XANES/FDMNES ensembles with Parsl.
 *   **`data_analysis_mcp.py`**: Tools for analyzing simulation results.
     *   Aggregating JSONL logs from ensemble runs into CSV/DataFrames.
     *   Plotting isotherms and other data.
 
 ### Running a Server
 
-You can run the servers using Python. They support both `stdio` (default) and `streamable_http` (SSE) transports.
+You can run the servers using Python. They support both `stdio` (default) and `streamable_http` transports.
 
 **Basic Usage (stdio)**
 Connect this directly to your MCP client (e.g., Claude Desktop config):
 
 ```bash
-python src/chemgraph/mcp/mcp_tools.py
+python -m chemgraph.mcp.mcp_tools
 ```
 
-**Using HTTP/SSE**
+**Using streamable HTTP**
 To run a server that listens for HTTP connections (useful for remote deployment or debugging):
 
 ```bash
-python src/chemgraph/mcp/mcp_tools.py --transport streamable_http --port 8000
+python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 8000
 ```
 
 **Configuration via Arguments**
@@ -1219,7 +1245,7 @@ All servers in `src/chemgraph/mcp/` support the following arguments:
 *   `--host`: Host address (default: 127.0.0.1).
 
 **Note on HPC Servers:**
-For `mace_mcp_parsl.py` and `graspa_mcp_parsl.py`, ensure your environment is configured for the target HPC system if running actual parallel jobs. They leverage `chemgraph.hpc_configs` to load system-specific Parsl configurations (like `polaris` or `aurora`).
+For `graspa_mcp_parsl.py` and `xanes_mcp_parsl.py`, set `COMPUTE_SYSTEM=polaris` or `COMPUTE_SYSTEM=aurora` before launch so the server loads the matching Parsl configuration from `chemgraph.hpc_configs`. `mace_mcp_parsl.py` currently contains site-specific `worker_init` settings; review and edit those paths/modules before production use.
 
 </details>
 

@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 from pathlib import Path
 
@@ -9,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 import parsl
 from parsl import bash_app
 
-from chemgraph.mcp.server_utils import run_mcp_server
+from chemgraph.mcp.server_utils import load_parsl_config, run_mcp_server
 from chemgraph.schemas.xanes_schema import (
     xanes_input_schema,
     xanes_input_schema_ensemble,
@@ -34,35 +33,6 @@ def run_fdmnes_parsl_app(
         Path to the FDMNES executable.
     """
     return f'cd "{run_dir}" && "{fdmnes_exe}"'
-
-
-def load_parsl_config(system_name: str):
-    """Dynamically import and return a Parsl config for the given HPC system.
-
-    Parameters
-    ----------
-    system_name : str
-        Target system name. Supported: ``polaris``, ``aurora``.
-    """
-    system_name = system_name.lower()
-    run_dir = os.getcwd()
-
-    logging.info("Initializing Parsl for system: %s", system_name)
-
-    if system_name == "polaris":
-        from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
-
-        return get_polaris_config(run_dir=run_dir)
-
-    elif system_name == "aurora":
-        from chemgraph.hpc_configs.aurora_parsl import get_aurora_config
-
-        return get_aurora_config(run_dir=run_dir)
-
-    else:
-        raise ValueError(
-            f"Unknown system specified: '{system_name}'. Supported: polaris, aurora"
-        )
 
 
 # Load Parsl config at module level (same pattern as graspa_mcp_parsl.py)
@@ -96,8 +66,19 @@ mcp = FastMCP(
     description="Run a single XANES/FDMNES calculation for one input structure.",
 )
 def run_xanes_single(params: xanes_input_schema):
-    """Run a single FDMNES calculation using the core engine."""
-    from chemgraph.tools.xanes_tools import run_xanes_core
+    """Run a single FDMNES calculation using the core engine.
+
+    Parameters
+    ----------
+    params : xanes_input_schema
+        Input parameters for one XANES/FDMNES calculation.
+
+    Returns
+    -------
+    dict
+        XANES calculation result.
+    """
+    from chemgraph.tools.xanes_core import run_xanes_core
 
     return run_xanes_core(params)
 
@@ -122,7 +103,7 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
     """
     from ase.io import read as ase_read
 
-    from chemgraph.tools.xanes_tools import (
+    from chemgraph.tools.xanes_core import (
         write_fdmnes_input,
         extract_conv,
     )
@@ -194,6 +175,20 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
         pending_tasks.append((task_meta, fut))
 
     async def wait_for_task(meta, parsl_future):
+        """Await a Parsl FDMNES task and collect result metadata.
+
+        Parameters
+        ----------
+        meta : dict
+            Metadata describing the submitted structure/run.
+        parsl_future : concurrent.futures.Future
+            Parsl future returned by the submitted app.
+
+        Returns
+        -------
+        dict
+            Success or failure metadata for the task.
+        """
         try:
             await asyncio.wrap_future(parsl_future)
             conv_data = extract_conv(meta["run_dir"])
@@ -235,8 +230,19 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
     description="Fetch optimized structures from Materials Project.",
 )
 def fetch_mp_structures(params: mp_query_schema):
-    """Fetch structures from Materials Project and save as CIF files and pickle database."""
-    from chemgraph.tools.xanes_tools import (
+    """Fetch structures from Materials Project and save local artifacts.
+
+    Parameters
+    ----------
+    params : mp_query_schema
+        Materials Project query parameters.
+
+    Returns
+    -------
+    dict
+        Fetch summary including output directory and number of structures.
+    """
+    from chemgraph.tools.xanes_core import (
         fetch_materials_project_data,
         _get_data_dir,
     )
@@ -266,7 +272,7 @@ def plot_xanes(runs_dir: str):
         Path to the ``fdmnes_batch_runs`` directory containing ``run_*``
         subdirectories with FDMNES outputs.
     """
-    from chemgraph.tools.xanes_tools import (
+    from chemgraph.tools.xanes_core import (
         plot_xanes_results,
         _get_data_dir,
     )

@@ -51,7 +51,18 @@ logger = setup_logger(__name__)
 # Helpers (reuse the repeated-tool-call detection from single_agent)
 # ---------------------------------------------------------------------------
 def _tool_call_signature(tool_calls) -> tuple:
-    """Create a comparable signature for a list of tool calls."""
+    """Create a comparable signature for a list of tool calls.
+
+    Parameters
+    ----------
+    tool_calls : list
+        Tool-call dictionaries from an AI message.
+
+    Returns
+    -------
+    tuple
+        Deterministic signature of tool names and arguments.
+    """
     signature = []
     for call in tool_calls or []:
         name = call.get("name") if isinstance(call, dict) else None
@@ -65,7 +76,18 @@ def _tool_call_signature(tool_calls) -> tuple:
 
 
 def _is_repeated_tool_cycle(messages) -> bool:
-    """Detect if the most recent AI tool-call set repeats the previous one."""
+    """Detect if the most recent AI tool-call set repeats the previous one.
+
+    Parameters
+    ----------
+    messages : list
+        Message history to inspect.
+
+    Returns
+    -------
+    bool
+        ``True`` when the last two AI tool-call sets are identical.
+    """
     ai_with_calls = [
         m
         for m in messages
