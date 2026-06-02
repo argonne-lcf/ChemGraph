@@ -706,6 +706,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sessions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sessions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Artifacts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1041,6 +1074,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sessions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sessions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#artifacts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Artifacts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#troubleshooting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1075,13 +1141,16 @@
 
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>ChemGraph includes a Streamlit web UI for chat-driven chemistry workflows, structure visualization, and report viewing.</p>
+<p>ChemGraph includes a Streamlit web UI for chat-driven chemistry workflows, live tool progress, structure visualization, report viewing, and saved-session management.</p>
 </div>
 <h2 id="run-the-app">Run the app</h2>
-<p>Set provider keys as needed:</p>
+<p>Install ChemGraph, then set the provider credentials required by the model you plan to use:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_API_KEY</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GROQ_API_KEY</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># ALCF inference endpoints:</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ALCF_ACCESS_TOKEN</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
 </span></code></pre></div>
 <p>Launch:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py
@@ -1089,18 +1158,44 @@
 <p>Then open <code>http://localhost:8501</code>.</p>
 <h2 id="features">Features</h2>
 <ul>
-<li>Chat interface for single-agent and multi-agent workflows</li>
-<li>Model selection across supported providers</li>
-<li>3D molecular visualization with <code>stmol</code>/<code>py3Dmol</code></li>
-<li>Embedded report display and structure export</li>
-<li>Config editor for <code>config.toml</code></li>
+<li>Chat input for single-agent, multi-agent, Python REPL, gRASPA, and mock-agent workflows exposed in the UI.</li>
+<li>Automatic agent initialization from the active <code>config.toml</code>.</li>
+<li>Sidebar calculator availability panel showing calculators detected at startup and the selected default.</li>
+<li>Live tool-call status while workflows run.</li>
+<li>Optional human-supervised pauses through the <code>ask_human</code> tool.</li>
+<li>3D molecular visualization with <code>stmol</code> and <code>py3Dmol</code>, with table/XYZ fallback when the viewer is unavailable.</li>
+<li>Math-aware assistant rendering for LaTeX-style equations, reaction arrows, and thermochemistry expressions.</li>
+<li>Embedded and downloadable HTML reports, IR spectrum artifacts, normal-mode trajectory controls, and structure export.</li>
+<li>Session browser backed by <code>~/.chemgraph/sessions.db</code>.</li>
+<li>Configuration editor for <code>config.toml</code> plus session-only API key entry.</li>
 </ul>
+<h2 id="configuration">Configuration</h2>
+<p>The UI reads <code>config.toml</code> from the working directory where Streamlit is launched. If the file is missing, the app creates one with defaults.</p>
+<p>Use the Configuration page for persistent settings:</p>
+<ul>
+<li><code>general.model</code>: default model.</li>
+<li><code>general.workflow</code>: workflow type. The UI accepts <code>single_agent</code>, <code>multi_agent</code>, <code>python_relp</code>, <code>graspa</code>, and <code>mock_agent</code>; <code>python_repl</code> is accepted as an alias for <code>python_relp</code>.</li>
+<li><code>general.thread</code>: default LangGraph thread ID.</li>
+<li><code>general.recursion_limit</code>: workflow recursion limit.</li>
+<li><code>general.report</code>: generate HTML reports when supported.</li>
+<li><code>general.human_supervised</code>: allow the agent to pause and request human input.</li>
+<li><code>api.*.base_url</code> and <code>api.*.timeout</code>: provider endpoint settings.</li>
+<li><code>api.openai.argo_user</code>: optional Argo username; <code>ARGO_USER</code> is used only as a fallback.</li>
+</ul>
+<p>API keys entered in the UI are applied as process environment variables for the current Streamlit process and are not saved to <code>config.toml</code>. For shared deployments, prefer server-side environment variables.</p>
+<h2 id="sessions">Sessions</h2>
+<p>The main sidebar lists recent saved sessions. Loading a session rebuilds the visible conversation history from <code>~/.chemgraph/sessions.db</code>; deleting a session removes it from that database. A new chat clears the visible conversation and starts a new saved session on the next successful exchange.</p>
+<p>The UI uses the active saved configuration for model, workflow, thread, report generation, and human-supervision settings. To change these settings, use the Configuration page, save the configuration, then click <strong>Reload Config</strong> or <strong>Refresh Agents</strong> on the main page.</p>
+<h2 id="artifacts">Artifacts</h2>
+<p>The UI detects structures and reports from agent messages. For IR calculations, it looks in the run directory referenced by the result message for files such as <code>ir_spectrum_&lt;name&gt;.png</code>, <code>frequencies_&lt;name&gt;.csv</code>, and <code>&lt;name&gt;_vib.&lt;mode&gt;.traj</code>.</p>
 <h2 id="troubleshooting">Troubleshooting</h2>
 <ul>
 <li>If 3D rendering is unavailable, install <code>stmol</code>:
   <code>pip install stmol</code></li>
 <li>If model calls fail, verify API keys and endpoint settings in <code>config.toml</code>.</li>
 <li>If Argo is used, ensure <code>api.openai.base_url</code> and optional <code>api.openai.argo_user</code> are configured.</li>
+<li>If a local model endpoint is selected, the UI probes <code>/models</code> and blocks queries when the local endpoint is unreachable.</li>
+<li>If the UI still shows an old model, workflow, or calculator default after editing configuration, click <strong>Reload Config</strong> or <strong>Refresh Agents</strong>.</li>
 </ul>
 
 

@@ -1282,6 +1282,7 @@
 <li><code>mcp_tools.py</code>: general ASE-powered chemistry tools</li>
 <li><code>mace_mcp_parsl.py</code>: MACE + Parsl workflows</li>
 <li><code>graspa_mcp_parsl.py</code>: gRASPA + Parsl workflows</li>
+<li><code>xanes_mcp_parsl.py</code>: XANES/FDMNES + Parsl workflows</li>
 <li><code>data_analysis_mcp.py</code>: analysis utilities for generated results</li>
 </ul>
 <h2 id="run-a-server">Run a server</h2>
@@ -1342,11 +1343,19 @@
 | <code>chemgraph</code> | <code>chemgraph.mcp.mcp_tools</code> | molecule_name_to_smiles, smiles_to_coordinate_file, run_ase, extract_output_json | Stable
 | <code>chemgraph-mace-parsl</code> | <code>chemgraph.mcp.mace_mcp_parsl</code> | MACE ensemble calculations via Parsl (HPC) | Experimental
 | <code>chemgraph-graspa-parsl</code> | <code>chemgraph.mcp.graspa_mcp_parsl</code> | gRASPA gas adsorption via Parsl (HPC) | Experimental
+| <code>chemgraph-xanes-parsl</code> | <code>chemgraph.mcp.xanes_mcp_parsl</code> | XANES/FDMNES ensembles via Parsl (HPC) | Experimental
 | <code>chemgraph-data-analysis</code> | <code>chemgraph.mcp.data_analysis_mcp</code> | CIF splitting, JSONL aggregation, isotherm plotting | Experimental</p>
 <h3 id="how-it-works">How it works</h3>
 <p>OpenCode spawns the MCP server as a local child process using stdio transport. The <code>{env:CHEMGRAPH_PYTHON}</code> variable in the config is resolved at startup, so different users (or the same user on different machines) can each point to their own ChemGraph installation without modifying the committed config.</p>
 <h2 id="notes-for-parsl-based-servers">Notes for Parsl-based servers</h2>
-<p><code>mace_mcp_parsl.py</code> and <code>graspa_mcp_parsl.py</code> rely on Parsl and HPC-specific configuration. Ensure your environment is prepared for the target system before running production jobs.</p>
+<p>Install the Parsl optional dependency when using HPC-backed servers:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[parsl]&quot;</span>
+</span></code></pre></div>
+<p><code>graspa_mcp_parsl.py</code> and <code>xanes_mcp_parsl.py</code> load system-specific Parsl configuration through <code>COMPUTE_SYSTEM</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">COMPUTE_SYSTEM</span><span class="o">=</span>polaris<span class="w">  </span><span class="c1"># or aurora</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.graspa_mcp_parsl<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9001</span>
+</span></code></pre></div>
+<p><code>mace_mcp_parsl.py</code> also uses Parsl, but currently contains site-specific <code>worker_init</code> settings in the module. Review the module loads, conda environment path, and filesystem paths before running production jobs.</p>
 
 
 
