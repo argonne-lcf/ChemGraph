@@ -812,11 +812,13 @@ def construct_multi_agent_graph(
             smiles_to_coordinate_file,
         )
         from chemgraph.tools.generic_tools import calculator
+        from chemgraph.tools.phonopy_tools import run_phonopy
 
         executor_tools = [
             molecule_name_to_smiles,
             smiles_to_coordinate_file,
             run_ase,
+            run_phonopy,
             extract_output_json,
             calculator,
         ]

@@ -4,13 +4,6 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 import logging
 
-try:
-    from tblite.ase import TBLite
-except ImportError:
-    logging.warning(
-        "tblite is not installed. If you want to use tblite, please install it using 'pip install tblite'."
-    )
-
 
 class TBLiteCalc(BaseModel):
     """TBLite tight-binding calculator configuration.
@@ -96,6 +89,7 @@ class TBLiteCalc(BaseModel):
             An ASE-compatible TBLite calculator instance with the specified
             configuration parameters
         """
+        from tblite.ase import TBLite
         return TBLite(
             method=self.method,
             charge=self.charge,

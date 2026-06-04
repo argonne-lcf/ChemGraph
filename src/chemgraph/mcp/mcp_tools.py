@@ -16,6 +16,8 @@ from chemgraph.tools.cheminformatics_core import (
     smiles_to_coordinate_file_core,
 )
 from chemgraph.schemas.ase_input import ASEInputSchema
+from chemgraph.tools.phonopy_core import run_phonopy_core
+from chemgraph.schemas.phonopy_schema import PhonopyInputSchema
 
 
 mcp = FastMCP(
@@ -134,6 +136,31 @@ async def run_ase(params: ASEInputSchema) -> dict:
     f = io.StringIO()
     with redirect_stdout(f):
         return run_ase_core(params)
+
+
+@mcp.tool(
+    name="run_phonopy",
+    description="Run Phonopy calculations using specified input parameters.",
+)
+async def run_phonopy(params: PhonopyInputSchema) -> dict:
+    """Run Phonopy calculations using specified input parameters.
+
+    Parameters
+    ----------
+    params : PhonopyInputSchema
+        Input parameters for the Phonopy calculation
+
+    Returns
+    -------
+    dict
+        Output containing calculation status
+    """
+    import io
+    from contextlib import redirect_stdout
+
+    f = io.StringIO()
+    with redirect_stdout(f):
+        return run_phonopy_core(params)
 
 
 if __name__ == "__main__":

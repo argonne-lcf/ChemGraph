@@ -37,7 +37,7 @@ dependencies = [
     "ase",
     "rdkit",
     "pymatgen",
-    "mace-torch",
+    # "mace-torch",  # disabled for UMA-only CPU environment
     "globus_sdk",
     "streamlit==1.48.1",
     "stmol==0.0.9",
@@ -48,7 +48,9 @@ dependencies = [
     "mcp",
     "fastmcp",
     "pytest-asyncio",
-    "grandalf==0.8"
+    "grandalf==0.8",
+    "phonopy>=2.33.0",
+    "seekpath>=2.2.1"
     ]
 
 [project.optional-dependencies]

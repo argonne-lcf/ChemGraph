@@ -12,6 +12,7 @@ from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_coordinate_file,
 )
+from chemgraph.tools.phonopy_tools import run_phonopy
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator, ask_human
 from chemgraph.prompt.single_agent_prompt import (
@@ -261,6 +262,7 @@ def ChemGraphAgent(
         tools = [
             smiles_to_coordinate_file,
             run_ase,
+            run_phonopy,
             molecule_name_to_smiles,
             extract_output_json,
             calculator,
@@ -450,6 +452,7 @@ def construct_single_agent_graph(
                 smiles_to_coordinate_file,
                 molecule_name_to_smiles,
                 run_ase,
+                run_phonopy,
                 extract_output_json,
                 calculator,
             ]
