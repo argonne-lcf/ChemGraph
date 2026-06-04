@@ -8,7 +8,9 @@ the Python standard library.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
+import sys
 from concurrent.futures import Future, ProcessPoolExecutor
 from typing import Any
 
@@ -18,6 +20,24 @@ logger = logging.getLogger(__name__)
 
 # Default number of worker processes (can be overridden via config).
 _DEFAULT_MAX_WORKERS = 4
+
+
+def _silence_worker_stdout() -> None:
+    """ProcessPoolExecutor *initializer*: redirect this worker's stdout fd to stderr.
+
+    Used when ``LocalBackend`` runs inside a stdio MCP server, where the
+    parent process's stdout is the JSON-RPC channel. Worker children inherit
+    that fd by default, so any unguarded print (e.g. ``mace/tools/cg.py``'s
+    "cuequivariance ... will be disabled" notice) corrupts the protocol
+    stream. dup2 redirects this child's stdout fd to its stderr fd so prints
+    are logged but never reach the client.
+    """
+    try:
+        os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    except (OSError, ValueError, AttributeError):
+        # Best-effort: skip silently if the fds aren't real (e.g. in some
+        # test or notebook contexts where stderr is captured).
+        pass
 
 
 def _run_shell_task(
@@ -72,10 +92,26 @@ class LocalBackend(ExecutionBackend):
 
     def initialize(self, system: str = "local", **kwargs: Any) -> None:
         max_workers = kwargs.get("max_workers", _DEFAULT_MAX_WORKERS)
-        self._pool = ProcessPoolExecutor(max_workers=max_workers)
+
+        # Opt-in: silence worker stdout (redirect fd to stderr) so prints
+        # from worker callables don't pollute a parent's stdout. Required
+        # when LocalBackend runs under stdio MCP, where the parent's stdout
+        # IS the JSON-RPC channel. Off by default so notebook/CLI users
+        # still see prints. Explicit kwarg wins; otherwise env var.
+        silence = kwargs.get("silence_worker_stdout")
+        if silence is None:
+            silence = os.environ.get("CHEMGRAPH_LOCAL_SILENCE_STDOUT") == "1"
+
+        pool_kwargs: dict[str, Any] = {"max_workers": max_workers}
+        if silence:
+            pool_kwargs["initializer"] = _silence_worker_stdout
+
+        self._pool = ProcessPoolExecutor(**pool_kwargs)
         self._initialized = True
         logger.info(
-            "LocalBackend initialized with %d workers", max_workers
+            "LocalBackend initialized with %d workers (silence_worker_stdout=%s)",
+            max_workers,
+            bool(silence),
         )
 
     def submit(self, task: TaskSpec) -> Future:
