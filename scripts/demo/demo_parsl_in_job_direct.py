@@ -64,9 +64,16 @@ def main() -> None:
     if not args.system:
         _abort("COMPUTE_SYSTEM env var not set and --system not given.")
     system = args.system.lower().strip()
-    if system not in ("polaris", "aurora"):
+    if system not in ("polaris", "aurora", "crux"):
         _abort(f"Unsupported --system: {system!r}")
-    device = args.device or ("xpu" if system == "aurora" else "cuda")
+    if args.device:
+        device = args.device
+    elif system == "aurora":
+        device = "xpu"
+    elif system == "crux":
+        device = "cpu"
+    else:
+        device = "cuda"
 
     run_dir = args.run_dir or os.environ.get("PBS_O_WORKDIR")
     if run_dir:

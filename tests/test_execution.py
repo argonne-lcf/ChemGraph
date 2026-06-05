@@ -412,6 +412,31 @@ class TestELBackend:
             backend.shutdown()
 
 
+class TestELSystemConfigCrux:
+    """EnsembleLauncher SystemConfig builder for Crux (CPU-only)."""
+
+    def test_crux_in_registry(self):
+        from chemgraph.execution.ensemble_launcher_backend import (
+            SYSTEM_CONFIG_REGISTRY,
+        )
+
+        assert "crux" in SYSTEM_CONFIG_REGISTRY
+
+    def test_crux_system_config_cpu_only(self):
+        pytest.importorskip("ensemble_launcher")
+        from chemgraph.execution.ensemble_launcher_backend import (
+            get_crux_system_config,
+        )
+
+        cfg = get_crux_system_config()
+        assert cfg.name == "crux"
+        assert cfg.ncpus == 128
+        assert len(cfg.cpus) == 128
+        # CPU-only: ngpus / gpus must not be populated
+        assert getattr(cfg, "ngpus", None) in (None, 0)
+        assert not getattr(cfg, "gpus", None)
+
+
 # ── GlobusComputeBackend tests ──────────────────────────────────────────
 
 

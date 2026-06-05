@@ -10,7 +10,7 @@ Environment variables
     ``"globus_compute"``, ``"local"``).
 ``COMPUTE_SYSTEM``
     Override the target HPC system (``"polaris"``, ``"aurora"``,
-    ``"local"``).
+    ``"crux"``, ``"local"``).
 """
 
 from __future__ import annotations

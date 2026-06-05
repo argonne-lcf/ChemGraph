@@ -20,7 +20,7 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
     ----------
     system_name : str
         Target system name.  Supported: ``"local"``, ``"polaris"``,
-        ``"aurora"``.
+        ``"aurora"``, ``"crux"``.
     run_dir : str, optional
         Parsl run directory.  Defaults to the current working directory.
     **kwargs
@@ -58,8 +58,13 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
 
         return get_aurora_config(run_dir=run_dir, **kwargs)
 
+    elif system_name == "crux":
+        from chemgraph.hpc_configs.crux_parsl import get_crux_config
+
+        return get_crux_config(run_dir=run_dir, **kwargs)
+
     else:
         raise ValueError(
             f"Unknown HPC system: '{system_name}'. "
-            f"Supported systems: local, polaris, aurora"
+            f"Supported systems: local, polaris, aurora, crux"
         )

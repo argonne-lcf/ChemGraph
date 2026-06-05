@@ -87,6 +87,16 @@ def get_aurora_system_config():
     return system_config
 
 
+def get_crux_system_config():
+    _require_ensemble_launcher()
+    system_config = SystemConfig(
+        name="crux",
+        ncpus=128,
+        cpus=list(range(128)),
+    )
+    return system_config
+
+
 def get_launcher_config(
     task_executor_name: Union[str, List] = "async_processpool",
     child_executor_policy: str = "fixed_leafs_children_policy",
@@ -296,6 +306,7 @@ _SYSTEM_CONFIG_BUILDERS = {
     "local": get_local_system_config,
     "aurora": get_aurora_system_config,
     "polaris": get_polaris_system_config,
+    "crux": get_crux_system_config,
 }
 
 

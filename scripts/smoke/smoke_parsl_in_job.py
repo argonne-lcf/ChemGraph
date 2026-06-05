@@ -76,10 +76,17 @@ def main() -> None:
     if not args.system:
         _abort("COMPUTE_SYSTEM env var not set and --system not given.")
     system = args.system.lower().strip()
-    if system not in ("polaris", "aurora"):
-        _abort(f"Unsupported --system: {system!r} (expected polaris|aurora)")
+    if system not in ("polaris", "aurora", "crux"):
+        _abort(f"Unsupported --system: {system!r} (expected polaris|aurora|crux)")
 
-    device = args.device or ("xpu" if system == "aurora" else "cuda")
+    if args.device:
+        device = args.device
+    elif system == "aurora":
+        device = "xpu"
+    elif system == "crux":
+        device = "cpu"
+    else:
+        device = "cuda"
     nodes = Path(pbs_nodefile).read_text().splitlines()
 
     run_dir = args.run_dir or os.environ.get("PBS_O_WORKDIR")
@@ -142,11 +149,12 @@ def main() -> None:
         )
         info = fut.result(timeout=120)
         print(f"       worker env: {info}")
-        # Polaris should show cuda; Aurora should show xpu.
+        # Polaris should show cuda; Aurora should show xpu; Crux is CPU-only.
         if system == "polaris":
             assert info.get("cuda_devices", 0) >= 1, info
         elif system == "aurora":
             assert info.get("xpu_devices", 0) >= 1, info
+        # Crux: CPU-only; no accelerator assertion.
 
     with r.check("shell TaskSpec exits 0"):
         fut = backend.submit(
