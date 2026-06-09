@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChemGraph Academy Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --line: #d7dde5;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #0f766e;
+      --danger: #b42318;
+      --warn: #a16207;
+      --ok: #15803d;
+      --detail-width: 430px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1 { font-size: 17px; margin: 0; font-weight: 650; }
+    main {
+      display: grid;
+      grid-template-columns: minmax(620px, 1fr) 8px var(--detail-width);
+      gap: 10px;
+      padding: 14px;
+    }
+    .detail-resizer {
+      cursor: col-resize;
+      border-radius: 999px;
+      background: transparent;
+      position: relative;
+    }
+    .detail-resizer::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 3px;
+      width: 2px;
+      border-radius: 999px;
+      background: var(--line);
+    }
+    .detail-resizer:hover::before,
+    .detail-resizer.active::before { background: var(--accent); }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-width: 0;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      gap: 10px;
+    }
+    .section-title { font-size: 14px; font-weight: 650; }
+    .content { padding: 12px 14px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .metric { border: 1px solid var(--line); border-radius: 6px; padding: 10px; min-height: 66px; }
+    .metric .label { font-size: 12px; color: var(--muted); }
+    .metric .value { font-size: 20px; font-weight: 700; margin-top: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-size: 12px; font-weight: 600; }
+    tr.selected { background: #e8f3f1; }
+    button, select, textarea, input {
+      font: inherit;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+    }
+    button { padding: 7px 10px; cursor: pointer; }
+    button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+    button.danger { background: var(--danger); color: white; border-color: var(--danger); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    textarea { width: 100%; min-height: 88px; padding: 8px; resize: vertical; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .timeline {
+      display: grid;
+      grid-template-columns: auto minmax(180px, 1fr) auto auto auto;
+      gap: 8px 12px;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .timeline input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .timeline select { min-height: 34px; padding: 0 7px; }
+    .timeline-controls {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .graph-actions { display: inline-flex; gap: 6px; align-items: center; }
+    .graph-actions button { min-width: 34px; padding: 7px 9px; }
+    .segmented {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      background: #fff;
+    }
+    .segmented button {
+      border: 0;
+      border-right: 1px solid var(--line);
+      border-radius: 0;
+      padding: 7px 9px;
+      min-width: 62px;
+    }
+    .segmented button:last-child { border-right: 0; }
+    .segmented button.active {
+      background: var(--accent);
+      color: #fff;
+    }
+    .timeline-meta {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .muted { color: var(--muted); }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--danger); }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #eef2f7;
+      font-size: 12px;
+      color: #374151;
+      margin: 2px 4px 2px 0;
+    }
+    .graph-wrap {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: auto;
+      margin-bottom: 12px;
+      background: #fbfcfd;
+    }
+    .graph-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #374151;
+    }
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      border: 1px solid rgba(31, 41, 55, 0.24);
+    }
+    .graph-svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      min-height: 520px;
+      cursor: grab;
+      user-select: none;
+    }
+    .graph-svg.panning { cursor: grabbing; }
+    .embedded-workflow-svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      cursor: grab;
+      user-select: none;
+      background: #fbfcfd;
+    }
+    .embedded-workflow-svg.panning { cursor: grabbing; }
+    .graph-hint { fill: #6b7280; font-size: 13px; font-weight: 650; }
+    .host-band { stroke: #d8dee7; stroke-width: 1; }
+    .host-label { fill: #4b5563; font-size: 12px; font-weight: 650; }
+    .edge { fill: none; stroke: #7b8794; stroke-width: 1.5; opacity: 0.38; }
+    .edge.cross-node { stroke: #0f766e; opacity: 0.68; }
+    .edge.recent { stroke-width: 3.2; opacity: 0.96; }
+    .edge.selected { stroke: #111827; stroke-width: 4; opacity: 1; }
+    .edge.dimmed { opacity: 0.08; }
+    .edge-hit { fill: none; stroke: transparent; stroke-width: 20; cursor: pointer; }
+    .edge-label {
+      fill: #374151;
+      font-size: 11px;
+      font-weight: 650;
+      paint-order: stroke;
+      stroke: #fbfcfd;
+      stroke-width: 4px;
+      stroke-linejoin: round;
+    }
+    .dimmed { opacity: 0.16; }
+    .agent-node { cursor: pointer; }
+    .agent-node rect {
+      stroke: #5e6b78;
+      stroke-width: 1.2;
+      filter: drop-shadow(0 1px 1px rgba(31, 41, 55, 0.08));
+    }
+    .agent-node.selected rect { stroke: var(--accent); stroke-width: 3; }
+    .agent-node.current rect { stroke: #111827; stroke-width: 3; }
+    .agent-node.error rect { stroke: var(--danger); stroke-width: 2.5; }
+    .agent-node.pending { opacity: 0.45; }
+    .agent-name { fill: #111827; font-size: 12px; font-weight: 750; }
+    .agent-role { fill: #4b5563; font-size: 10.5px; }
+    .agent-host { fill: #6b7280; font-size: 10px; }
+    .workflow-node { cursor: pointer; }
+    .workflow-node rect {
+      fill: #eef6f5;
+      stroke: #0f766e;
+      stroke-width: 1.4;
+      filter: drop-shadow(0 1px 1px rgba(31, 41, 55, 0.08));
+    }
+    .workflow-node.selected rect { stroke: #111827; stroke-width: 2.4; }
+    .workflow-node.current rect { stroke: #2563eb; stroke-width: 2.4; }
+    .workflow-node.error rect { fill: #fee2e2; stroke: #dc2626; }
+    .workflow-node.pending { opacity: 0.38; }
+    .workflow-node.input rect { fill: #fef3c7; stroke: #d97706; }
+    .workflow-node.lm rect { fill: #dbeafe; stroke: #2563eb; }
+    .workflow-node.tool rect,
+    .workflow-node.science-tool rect { fill: #dcfce7; stroke: #16a34a; }
+    .workflow-node.action-tool rect { fill: #fffbeb; stroke: #d97706; }
+    .workflow-node.output rect { fill: #ede9fe; stroke: #7c3aed; }
+    .workflow-node-title { fill: #111827; font-size: 12px; font-weight: 750; }
+    .workflow-node-meta { fill: #4b5563; font-size: 10.5px; }
+    .workflow-edge { fill: none; stroke: #7b8794; stroke-width: 1.5; opacity: 0.36; }
+    .workflow-edge.current { stroke: #0f766e; stroke-width: 2.1; opacity: 0.58; }
+    .workflow-edge.related { stroke: #374151; stroke-width: 1.9; opacity: 0.52; }
+    .activity-bubble { cursor: pointer; }
+    .activity-bubble rect {
+      stroke-width: 1.2;
+      filter: drop-shadow(0 1px 1px rgba(31, 41, 55, 0.12));
+    }
+    .activity-bubble text { font-size: 10px; font-weight: 750; fill: #111827; }
+    .activity-bubble.selected rect { stroke: #111827; stroke-width: 2.4; }
+    .bubble-decision rect { fill: #dbeafe; stroke: #2563eb; }
+    .bubble-tool rect { fill: #dcfce7; stroke: #16a34a; }
+    .bubble-chemgraph rect { fill: #ccfbf1; stroke: #0f766e; }
+    .bubble-warning rect { fill: #fef3c7; stroke: #d97706; }
+    .bubble-belief rect { fill: #fef3c7; stroke: #d97706; }
+    .bubble-error rect { fill: #fee2e2; stroke: #dc2626; }
+    .detail-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .detail-card {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px;
+      min-height: 52px;
+    }
+    .detail-card .label { color: var(--muted); font-size: 11px; }
+    .detail-card .value { margin-top: 4px; font-weight: 650; font-size: 13px; overflow-wrap: anywhere; }
+    .turn-list {
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      white-space: normal;
+    }
+    .turn-list {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .turn-row {
+      width: 100%;
+      display: grid;
+      grid-template-columns: minmax(84px, 0.35fr) minmax(130px, 1fr);
+      gap: 8px;
+      text-align: left;
+      padding: 8px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .turn-row:hover { border-color: var(--accent); }
+    .turn-row .turn-title { font-weight: 750; font-size: 12px; color: #111827; }
+    .turn-row .turn-meta { color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .detail-rich {
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      white-space: normal;
+      color: var(--text);
+      display: grid;
+      gap: 10px;
+    }
+    .detail-rich pre {
+      max-height: 220px;
+      margin: 0;
+      background: #f8fafc;
+    }
+    .detail-prompt {
+      margin-top: 10px;
+    }
+    .detail-prompt summary {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: #111827;
+      font-size: 12px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    .detail-prompt summary:hover {
+      border-color: var(--accent);
+    }
+    .detail-prompt pre {
+      max-height: 360px;
+      margin-top: 8px;
+    }
+    .detail-section {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      padding: 10px;
+    }
+    .detail-section.info { border-color: #bfdbfe; background: #eff6ff; }
+    .detail-section.ok { border-color: #bbf7d0; background: #f0fdf4; }
+    .detail-section.warn { border-color: #fde68a; background: #fffbeb; }
+    .detail-section.error { border-color: #fecaca; background: #fef2f2; }
+    .detail-section-title {
+      margin-bottom: 7px;
+      color: #111827;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .detail-kv {
+      display: grid;
+      grid-template-columns: minmax(92px, 0.35fr) minmax(0, 1fr);
+      gap: 6px 10px;
+      align-items: baseline;
+    }
+    .detail-key {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+    }
+    .detail-value {
+      color: #111827;
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+    .detail-value.mono,
+    .detail-chip {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+    .detail-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .detail-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 7px;
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      background: #f8fafc;
+      color: #334155;
+      font-size: 11px;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .detail-chip.action { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
+    .detail-chip.science { border-color: #22c55e; background: #f0fdf4; color: #166534; }
+    .detail-chip.error { border-color: #ef4444; background: #fef2f2; color: #991b1b; }
+    .detail-text {
+      color: #111827;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .detail-text p { margin: 0 0 8px; }
+    .detail-text p:last-child { margin-bottom: 0; }
+    .detail-raw summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .detail-raw pre { margin-top: 8px; }
+    .hidden { display: none !important; }
+    .detail-pane,
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f3f5f7;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      max-height: 300px;
+      overflow: auto;
+      font-size: 12px;
+    }
+    .workflow-floating-tab {
+      position: fixed;
+      left: 18px;
+      bottom: 18px;
+      z-index: 60;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+      color: #111827;
+      font-size: 13px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .workflow-floating-panel {
+      position: fixed;
+      z-index: 55;
+      left: 28px;
+      top: 76px;
+      width: min(1120px, calc(100vw - 64px));
+      height: min(640px, calc(100vh - 108px));
+      min-width: 520px;
+      min-height: 320px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #ffffff;
+      box-shadow: 0 22px 60px rgba(15, 23, 42, 0.22);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .workflow-floating-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 10px 9px 12px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+      cursor: move;
+      user-select: none;
+    }
+    .workflow-floating-title {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+    .workflow-floating-title strong {
+      font-size: 13px;
+      color: #111827;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workflow-floating-title span {
+      font-size: 11px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workflow-floating-body {
+      position: relative;
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+    }
+    .embedded-workflow-graph-region {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .embedded-workflow-inspector {
+      min-width: 0;
+      min-height: 0;
+      border-left: 1px solid var(--line);
+      background: #fff;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .embedded-inspector-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 2px;
+    }
+    .embedded-inspector-head strong {
+      font-size: 13px;
+      color: #111827;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .embedded-inspector-head span {
+      color: var(--muted);
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .embedded-inspector-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 10px;
+    }
+    .workflow-floating-empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+      padding: 24px;
+      background: #fbfcfd;
+    }
+    .workflow-panel-resize {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 18px;
+      height: 18px;
+      cursor: nwse-resize;
+      background:
+        linear-gradient(135deg, transparent 50%, #cbd5e1 50%) right bottom / 12px 12px no-repeat;
+    }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      .detail-resizer { display: none; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .workflow-floating-panel {
+        left: 10px !important;
+        top: 64px !important;
+        width: calc(100vw - 20px) !important;
+        height: min(580px, calc(100vh - 84px)) !important;
+        min-width: 0;
+      }
+      .workflow-floating-body {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) minmax(180px, 0.45fr);
+      }
+      .embedded-workflow-inspector {
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ChemGraph Academy Dashboard</h1>
+    <div class="toolbar">
+      <span id="updated" class="muted"></span>
+      <button id="refresh">Refresh</button>
+    </div>
+  </header>
+  <main>
+    <div>
+      <section>
+        <div class="section-head">
+          <div class="section-title">Run State</div>
+          <div id="runPath" class="muted"></div>
+        </div>
+        <div class="content">
+          <div class="grid" id="metrics"></div>
+        </div>
+      </section>
+      <section style="margin-top:14px">
+        <div class="section-head">
+          <div class="section-title" id="graphTitle">Agent Graph</div>
+          <div id="proof" class="muted"></div>
+        </div>
+        <div class="content">
+          <div class="timeline">
+            <button id="playReplay" type="button">Replay</button>
+            <input id="timeSlider" type="range" min="0" max="0" value="0">
+            <select id="replaySpeed" aria-label="Replay speed">
+              <option value="3">3x</option>
+              <option value="5" selected>5x</option>
+              <option value="8">8x</option>
+            </select>
+            <select id="eventHold" aria-label="Event hold time">
+              <option value="0.5">hold 0.5s</option>
+              <option value="1" selected>hold 1s</option>
+              <option value="2">hold 2s</option>
+            </select>
+            <button id="latest">Latest</button>
+            <div class="timeline-controls">
+              <div class="segmented" id="graphMode">
+                <button type="button" data-mode="current">Now</button>
+                <button type="button" data-mode="recent">Recent</button>
+                <button type="button" data-mode="cumulative">All</button>
+              </div>
+              <div class="graph-actions">
+                <span class="muted">Graph</span>
+                <button id="zoomOut" type="button" title="Zoom out">-</button>
+                <button id="zoomIn" type="button" title="Zoom in">+</button>
+                <button id="zoomReset" type="button">Reset</button>
+              </div>
+            </div>
+            <div class="timeline-meta">
+              <span id="timeLabel"></span>
+              <span id="timeEvent"></span>
+            </div>
+          </div>
+          <div class="graph-wrap">
+            <div class="graph-legend" id="hostLegend"></div>
+            <svg class="graph-svg" id="graph" role="img" aria-label="Agent communication graph"></svg>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div id="detailResizer" class="detail-resizer" title="Resize detail pane"></div>
+    <div>
+      <section>
+        <div class="section-head">
+          <div class="section-title" id="detailTitle">Selection</div>
+          <select id="agentSelect"></select>
+        </div>
+        <div class="content">
+          <div id="detailCards" class="detail-cards"></div>
+          <h3 id="detailPrimaryTitle" style="font-size:13px;margin:16px 0 8px">State</h3>
+          <div id="detailPrimary" class="detail-pane"></div>
+          <h3 id="detailSecondaryTitle" style="font-size:13px;margin:16px 0 8px">Evidence</h3>
+          <div id="detailSecondary" class="detail-pane"></div>
+          <h3 id="detailTertiaryTitle" style="font-size:13px;margin:16px 0 8px">History</h3>
+          <div id="detailTertiary" class="detail-pane"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <button id="workflowFloatingTab" class="workflow-floating-tab hidden" type="button">ChemGraph</button>
+  <div id="workflowFloatingPanel" class="workflow-floating-panel hidden">
+    <div id="workflowFloatingHead" class="workflow-floating-head">
+      <div class="workflow-floating-title">
+        <strong id="workflowFloatingTitle">ChemGraph Turn</strong>
+        <span id="workflowFloatingMeta">No turn selected</span>
+      </div>
+      <div class="graph-actions">
+        <button id="workflowZoomOut" type="button" title="Zoom out">-</button>
+        <button id="workflowZoomIn" type="button" title="Zoom in">+</button>
+        <button id="workflowZoomReset" type="button">Reset</button>
+        <button id="workflowPanelClose" type="button">Close</button>
+      </div>
+    </div>
+    <div class="workflow-floating-body">
+      <div class="embedded-workflow-graph-region">
+        <svg id="embeddedWorkflowGraph" class="embedded-workflow-svg" role="img" aria-label="ChemGraph turn graph"></svg>
+        <div id="embeddedWorkflowEmpty" class="workflow-floating-empty hidden"></div>
+      </div>
+      <aside id="embeddedWorkflowInspector" class="embedded-workflow-inspector">
+        <div class="embedded-inspector-head">
+          <strong id="embeddedWorkflowInspectorTitle">ChemGraph Inspector</strong>
+          <span id="embeddedWorkflowInspectorMeta">Select a node in this panel.</span>
+        </div>
+        <div id="embeddedWorkflowInspectorBody" class="embedded-inspector-body"></div>
+      </aside>
+      <div id="workflowPanelResize" class="workflow-panel-resize" title="Resize ChemGraph panel"></div>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

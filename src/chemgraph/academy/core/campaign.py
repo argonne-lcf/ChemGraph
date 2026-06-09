@@ -1,0 +1,484 @@
+from __future__ import annotations
+
+import dataclasses
+import json
+import pathlib
+from collections.abc import Mapping
+from typing import Any
+
+from chemgraph.academy.examples import resolve_builtin_campaign
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+_REMOVED_CAMPAIGN_FIELDS = frozenset(
+    {
+        'completion_criteria',
+        'parameters',
+        'routing_policy',
+        'workflow_stages',
+    },
+)
+_RESOURCE_KINDS = frozenset({'directory', 'file', 'json'})
+_RESOURCE_SCOPES = frozenset(
+    {
+        'absolute',
+        'campaign_file',
+        'external',
+        'shared_run',
+    },
+)
+
+
+class ToolSpec(BaseModel):
+    """Campaign-declared in-process FastMCP tool available to agents."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    name: str
+    module: str
+    tool: str
+    description: str = ''
+
+    @field_validator('name', 'module', 'tool')
+    @classmethod
+    def _non_empty(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError('tool spec fields must be non-empty strings')
+        return value
+
+
+class ExecutionSpec(BaseModel):
+    """Execution defaults used when configuring ChemGraph FastMCP backends."""
+
+    model_config = ConfigDict(extra='forbid')
+
+    backend: str = 'local'
+    system: str = 'local'
+    config_path: str | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResourceSpec(BaseModel):
+    """Campaign-declared resource or artifact handle.
+
+    The runtime resolves only these explicit ``path`` fields. It never scans
+    arbitrary campaign metadata looking for strings that might be paths.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+
+    kind: str
+    path: str | None = None
+    uri: str | None = None
+    scope: str = 'campaign_file'
+    description: str = ''
+    expose_content: bool = False
+
+    @field_validator('kind')
+    @classmethod
+    def _known_resource_kind(cls, value: str) -> str:
+        value = value.strip()
+        if value not in _RESOURCE_KINDS:
+            raise ValueError(
+                f'resource kind must be one of {sorted(_RESOURCE_KINDS)}',
+            )
+        return value
+
+    @field_validator('scope')
+    @classmethod
+    def _known_resource_scope(cls, value: str) -> str:
+        value = value.strip()
+        if value not in _RESOURCE_SCOPES:
+            raise ValueError(
+                f'resource scope must be one of {sorted(_RESOURCE_SCOPES)}',
+            )
+        return value
+
+    @field_validator('path', 'uri', 'description')
+    @classmethod
+    def _strip_optional_resource_field(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+
+@dataclasses.dataclass(frozen=True)
+class ChemGraphAgentSpec:
+    name: str
+    role: str
+    mission: str
+    allowed_peers: tuple[str, ...]
+    tools: tuple[ToolSpec, ...]
+    resources: tuple[str, ...] = ()
+
+    @property
+    def tool_names(self) -> tuple[str, ...]:
+        return tuple(tool.name for tool in self.tools)
+
+
+@dataclasses.dataclass(frozen=True)
+class ChemGraphCampaign:
+    run_id: str
+    user_task: str
+    initial_agent: str
+    prompt_profile: pathlib.Path
+    agents: tuple[ChemGraphAgentSpec, ...]
+    tool_catalog: tuple[ToolSpec, ...] = ()
+    resources: Mapping[str, ResourceSpec] = dataclasses.field(default_factory=dict)
+
+
+@dataclasses.dataclass(frozen=True)
+class ChemGraphDaemonConfig:
+    run_dir: pathlib.Path
+    run_token: str
+    agent_count: int
+    campaign_config: pathlib.Path
+    lm_config: pathlib.Path
+    max_decisions: int
+    poll_timeout_s: float
+    idle_timeout_s: float
+    startup_timeout_s: float
+    completion_timeout_s: float
+    status_interval_s: float
+    redis_host: str
+    redis_port: int
+    redis_namespace: str
+    clean_redis: bool
+    rank: int
+    local_rank: int | None
+    chemgraph_repo_root: pathlib.Path
+
+
+def namespace_for_run(run_dir: pathlib.Path) -> str:
+    return f'academy-chemgraph-swarm:{run_dir.name}'
+
+
+def resolve_campaign_resources(
+    campaign: ChemGraphCampaign,
+    run_dir: str | pathlib.Path,
+    *,
+    shared_dir_name: str = 'shared',
+) -> ChemGraphCampaign:
+    """Resolve explicit shared-run resource paths for one concrete run."""
+    shared_root = (pathlib.Path(run_dir).resolve() / shared_dir_name)
+    resources: dict[str, ResourceSpec] = {}
+
+    for name, spec in campaign.resources.items():
+        if spec.path is None:
+            resources[name] = spec
+            continue
+        if spec.scope != 'shared_run':
+            resources[name] = spec
+            continue
+        path = pathlib.Path(spec.path)
+        resolved = path if path.is_absolute() else shared_root / path
+        resources[name] = spec.model_copy(
+            update={
+                'path': str(resolved.resolve()),
+                'uri': spec.uri or _file_uri(resolved.resolve()),
+            },
+        )
+
+    return dataclasses.replace(campaign, resources=resources)
+
+
+def _file_uri(path: pathlib.Path) -> str:
+    return path.resolve().as_uri()
+
+
+def _resolve_resource_spec(
+    raw: Mapping[str, Any],
+    *,
+    campaign_path: pathlib.Path,
+) -> ResourceSpec:
+    spec = ResourceSpec.model_validate(raw)
+    if spec.path is None:
+        return spec
+    if spec.scope == 'campaign_file':
+        path = pathlib.Path(spec.path)
+        resolved = path if path.is_absolute() else campaign_path.parent / path
+        resolved = resolved.resolve()
+        return spec.model_copy(
+            update={
+                'path': str(resolved),
+                'uri': spec.uri or _file_uri(resolved),
+            },
+        )
+    if spec.scope == 'absolute':
+        path = pathlib.Path(spec.path)
+        if not path.is_absolute():
+            raise RuntimeError(
+                f'absolute resource path must be absolute: {spec.path}',
+            )
+        resolved = path.resolve()
+        return spec.model_copy(
+            update={
+                'path': str(resolved),
+                'uri': spec.uri or _file_uri(resolved),
+            },
+        )
+    if spec.scope in {'shared_run', 'external'}:
+        return spec
+
+    raise RuntimeError(f'unsupported resource scope {spec.scope!r}')
+
+
+def load_campaign(path: str | pathlib.Path) -> ChemGraphCampaign:
+    path = resolve_builtin_campaign(path)
+    data = _load_jsonc(path)
+    _reject_removed_campaign_fields(data, campaign_path=path)
+    prompt_profile = _resolve_campaign_relative_path(
+        data.get('prompt_profile'),
+        campaign_path=path,
+        field_name='prompt_profile',
+    )
+
+    tool_catalog = _load_tool_catalog(data)
+    resources = {
+        name: _resolve_resource_spec(raw, campaign_path=path)
+        for name, raw in dict(data.get('resources', {})).items()
+    }
+    agents = []
+    for item in data['agents']:
+        agents.append(
+            ChemGraphAgentSpec(
+                name=item['name'],
+                role=item['role'],
+                mission=item['mission'],
+                allowed_peers=tuple(item.get('allowed_peers', ())),
+                tools=_load_declared_tools(item, tool_catalog),
+                resources=tuple(item.get('resources', ())),
+            ),
+        )
+    return ChemGraphCampaign(
+        run_id=data.get('run_id', path.stem),
+        user_task=data['user_task'],
+        initial_agent=data.get('initial_agent', agents[0].name),
+        prompt_profile=prompt_profile,
+        agents=tuple(agents),
+        tool_catalog=tuple(tool_catalog.values()),
+        resources=resources,
+    )
+
+
+def _load_jsonc(path: pathlib.Path) -> dict[str, Any]:
+    """Load a campaign file that may contain JSONC-style comments."""
+    data = json.loads(_strip_json_comments(path.read_text(encoding='utf-8')))
+    if not isinstance(data, dict):
+        raise RuntimeError(f'campaign {path} must contain a JSON object')
+    return data
+
+
+def _strip_json_comments(text: str) -> str:
+    """Remove // and /* */ comments without touching JSON string values."""
+    out: list[str] = []
+    in_string = False
+    escape = False
+    i = 0
+
+    while i < len(text):
+        char = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ''
+
+        if in_string:
+            out.append(char)
+            if escape:
+                escape = False
+            elif char == '\\':
+                escape = True
+            elif char == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if char == '"':
+            in_string = True
+            out.append(char)
+            i += 1
+            continue
+
+        if char == '/' and nxt == '/':
+            i += 2
+            while i < len(text) and text[i] not in '\r\n':
+                i += 1
+            continue
+
+        if char == '/' and nxt == '*':
+            i += 2
+            while i < len(text):
+                if text[i] in '\r\n':
+                    out.append(text[i])
+                    i += 1
+                    continue
+                if text[i] == '*' and i + 1 < len(text) and text[i + 1] == '/':
+                    i += 2
+                    break
+                i += 1
+            continue
+
+        out.append(char)
+        i += 1
+
+    return ''.join(out)
+
+
+def _reject_removed_campaign_fields(
+    data: Mapping[str, Any],
+    *,
+    campaign_path: pathlib.Path,
+) -> None:
+    removed = sorted(_REMOVED_CAMPAIGN_FIELDS.intersection(data))
+    if not removed:
+        return
+    raise RuntimeError(
+        f'campaign {campaign_path} uses removed structured orchestration '
+        f'field(s): {removed}. Put simple natural-language coordination hints '
+        'in agent mission fields and enforce the communication graph with '
+        'allowed_peers.',
+    )
+
+
+def _resolve_campaign_relative_path(
+    raw: Any,
+    *,
+    campaign_path: pathlib.Path,
+    field_name: str,
+) -> pathlib.Path:
+    if not isinstance(raw, str) or not raw.strip():
+        raise RuntimeError(f'campaign requires non-empty {field_name!r}')
+    path = pathlib.Path(raw.strip())
+    if not path.is_absolute():
+        path = campaign_path.parent / path
+    return path.resolve()
+
+
+def _load_tool_catalog(data: Mapping[str, Any]) -> dict[str, ToolSpec]:
+    catalog: dict[str, ToolSpec] = {}
+    for raw in data.get('tools', ()):
+        if not isinstance(raw, dict):
+            raise RuntimeError('campaign top-level tools[] entries must be objects')
+        spec = ToolSpec.model_validate(raw)
+        if spec.name in catalog:
+            raise RuntimeError(f'duplicate campaign tool name: {spec.name}')
+        catalog[spec.name] = spec
+    return catalog
+
+
+def _load_declared_tools(
+    item: Mapping[str, Any],
+    catalog: Mapping[str, ToolSpec],
+) -> tuple[ToolSpec, ...]:
+    raw_tools = item.get('tools')
+    if raw_tools is None:
+        raw_tools = item.get('tool_names', ())
+    tools: list[ToolSpec] = []
+    for raw in raw_tools:
+        if isinstance(raw, str):
+            try:
+                tools.append(catalog[raw])
+            except KeyError as exc:
+                raise RuntimeError(
+                    f'agent {item.get("name")!r} references unknown campaign tool {raw!r}; '
+                    'declare it in top-level tools[] or inline as a FastMCP ToolSpec object',
+                ) from exc
+        elif isinstance(raw, dict):
+            tools.append(ToolSpec.model_validate(raw))
+        else:
+            raise RuntimeError(
+                f'agent {item.get("name")!r} tools[] entries must be strings or objects',
+            )
+    return tuple(tools)
+
+
+def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
+    if len(campaign.agents) != agent_count:
+        raise RuntimeError(
+            f'campaign defines {len(campaign.agents)} agents but '
+            f'agent_count={agent_count}',
+        )
+    names = [agent.name for agent in campaign.agents]
+    if len(set(names)) != len(names):
+        raise RuntimeError('campaign agent names must be unique')
+    if campaign.initial_agent not in names:
+        raise RuntimeError(
+            f'initial_agent {campaign.initial_agent!r} is not an agent',
+        )
+    for agent in campaign.agents:
+        unknown = sorted(set(agent.allowed_peers).difference(names))
+        if unknown:
+            raise RuntimeError(
+                f'{agent.name} has unknown allowed peers: {unknown}',
+            )
+        if agent.name in agent.allowed_peers:
+            raise RuntimeError(f'{agent.name} must not list itself as a peer')
+        tool_names = list(agent.tool_names)
+        if len(set(tool_names)) != len(tool_names):
+            raise RuntimeError(f'{agent.name} has duplicate tool declarations')
+        unknown_resources = sorted(set(agent.resources).difference(campaign.resources))
+        if unknown_resources:
+            raise RuntimeError(
+                f'{agent.name} references unknown resources: {unknown_resources}',
+            )
+
+
+def selected_agent(campaign: ChemGraphCampaign, rank: int) -> ChemGraphAgentSpec:
+    if rank < 0 or rank >= len(campaign.agents):
+        raise RuntimeError(
+            f'MPI rank {rank} has no agent. Launch exactly '
+            f'{len(campaign.agents)} ranks for this campaign.',
+        )
+    return campaign.agents[rank]
+
+
+def campaign_bootstrap_text(campaign: ChemGraphCampaign) -> str:
+    initial_agent = next(
+        (agent for agent in campaign.agents if agent.name == campaign.initial_agent),
+        None,
+    )
+    initial_resources = initial_agent.resources if initial_agent is not None else ()
+    payload: dict[str, Any] = {
+        'user_task': campaign.user_task,
+        'resources': _resources_payload(campaign, initial_resources),
+        'resource_data': _resource_data_payload(campaign, initial_resources),
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
+def _resources_payload(
+    campaign: ChemGraphCampaign,
+    resource_names: tuple[str, ...] | list[str],
+) -> dict[str, dict[str, Any]]:
+    payload: dict[str, dict[str, Any]] = {}
+    for name in resource_names:
+        spec = campaign.resources.get(name)
+        if spec is None:
+            continue
+        payload[name] = spec.model_dump(exclude_none=True)
+    return payload
+
+
+def _resource_data_payload(
+    campaign: ChemGraphCampaign,
+    resource_names: tuple[str, ...] | list[str],
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for name in resource_names:
+        spec = campaign.resources.get(name)
+        if spec is None or not spec.expose_content:
+            continue
+        if spec.kind != 'json' or spec.path is None:
+            continue
+        path = pathlib.Path(spec.path)
+        if not path.exists():
+            raise FileNotFoundError(f'campaign resource does not exist: {path}')
+        payload[name] = json.loads(path.read_text(encoding='utf-8'))
+    return payload
+
+
+def visible_resources_payload(
+    campaign: ChemGraphCampaign,
+    agent: ChemGraphAgentSpec,
+) -> dict[str, dict[str, Any]]:
+    return _resources_payload(campaign, agent.resources)
