@@ -98,6 +98,14 @@ where = ["src/"]
 
 [tool.setuptools.package-data]
 "chemgraph.eval" = ["data/*.json"]
+"chemgraph.academy.examples" = [
+    "example-*/*.json",
+    "example-*/*.jsonc",
+    "example-*/data/*.json",
+    "example-*/prompt_profiles/*.json",
+]
+"chemgraph.academy.runtime.profiles" = ["*.json"]
+"chemgraph.academy.dashboard" = ["static/*"]
 "ui" = ["assets/*.png"]
 
 [tool.ruff]

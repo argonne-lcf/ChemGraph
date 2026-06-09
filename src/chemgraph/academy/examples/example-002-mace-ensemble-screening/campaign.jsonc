@@ -1,0 +1,117 @@
+{
+  // Campaign files support JSONC-style comments.
+  "run_id": "mace-ensemble-screening-20",
+  "user_task": "Given 20 staged SMILES candidates, generate 3D XYZ structures, run a MACE ensemble energy screen over generated structures, and rank candidates by calculation readiness and available MACE evidence.",
+  "prompt_profile": "prompt_profiles/default.json",
+  "initial_agent": "coordinator-agent",
+  "resources": {
+    // Resource fields:
+    //   kind: "json" | "file" | "directory"
+    //   scope: "campaign_file" | "shared_run" | "absolute" | "external"
+    //     campaign_file: relative paths resolve next to this campaign file.
+    //     shared_run: relative paths resolve under <run_dir>/shared/.
+    //     absolute: path must already be absolute.
+    //     external: runtime leaves path/uri unchanged.
+    //   expose_content: only meaningful for kind="json"; true includes parsed JSON in the bootstrap task.
+    "candidate_dataset": {
+      "kind": "json",
+      "path": "data/mace_screening_20_smiles.json",
+      "scope": "campaign_file",
+      "description": "The full input candidate list. Coordinator-agent may inspect it and delegate records by peer message.",
+      "expose_content": true
+    },
+    "structure_output_directory": {
+      "kind": "directory",
+      "path": "academy_mace_structures",
+      "scope": "shared_run",
+      "description": "Shared run directory where generated XYZ coordinate files should be written."
+    },
+    "mace_output_result_file": {
+      "kind": "file",
+      "path": "academy_mace_outputs/mace_results.json",
+      "scope": "shared_run",
+      "description": "Shared run file requested for the MACE ensemble result summary."
+    },
+    "mace_model_file": {
+      "kind": "file",
+      "path": "models/mace-mpa-0-medium.model",
+      "scope": "campaign_file",
+      "description": "Local MACE model file shipped with this campaign example."
+    }
+  },
+  "agents": [
+    {
+      "name": "coordinator-agent",
+      "role": "MACEReadinessCoordinatorAgent",
+      "mission": "Coordinate the campaign from the bootstrap task. Send odd-numbered MOL candidates to structure-agent-a and even-numbered MOL candidates to structure-agent-b, including candidate_id, label, SMILES, and output_file. After structure evidence returns, ask mace-agent to run one MACE energy calculation on CPU using the provided structure directory, output result path, and local model file resource, then ask assessment-agent for readiness/ranking evidence before submitting the final result.",
+      "allowed_peers": [
+        "structure-agent-a",
+        "structure-agent-b",
+        "mace-agent",
+        "assessment-agent"
+      ],
+      "tools": [],
+      "resources": [
+        "candidate_dataset",
+        "structure_output_directory",
+        "mace_output_result_file",
+        "mace_model_file"
+      ]
+    },
+    {
+      "name": "structure-agent-a",
+      "role": "MolecularStructureWorkerAgent",
+      "mission": "Process only candidates assigned by coordinator-agent. Generate XYZ coordinate files, then report concise artifact evidence and failures back to coordinator-agent.",
+      "allowed_peers": ["coordinator-agent"],
+      "tools": ["smiles_to_coordinate_file"],
+      "resources": []
+    },
+    {
+      "name": "structure-agent-b",
+      "role": "MolecularStructureWorkerAgent",
+      "mission": "Process only candidates assigned by coordinator-agent. Generate XYZ coordinate files, then report concise artifact evidence and failures back to coordinator-agent.",
+      "allowed_peers": ["coordinator-agent"],
+      "tools": ["smiles_to_coordinate_file"],
+      "resources": []
+    },
+    {
+      "name": "mace-agent",
+      "role": "MACEEnsembleAgent",
+      "mission": "Run MACE only after a concrete request from coordinator-agent. Report started, completed, partial, or failed evidence back to coordinator-agent, including output paths and tool_result_ids; pending work is not a failure.",
+      "allowed_peers": ["coordinator-agent"],
+      "tools": ["run_mace_ensemble", "inspect_json"],
+      "resources": ["mace_model_file"]
+    },
+    {
+      "name": "assessment-agent",
+      "role": "ScreeningAssessmentAgent",
+      "mission": "Assess evidence received from coordinator-agent. Summarize structure coverage, MACE coverage, failures, ranking readiness, and pending work without treating pending MACE work as failure.",
+      "allowed_peers": ["coordinator-agent"],
+      "tools": ["inspect_json"],
+      "resources": []
+    }
+  ],
+  "tools": [
+    // Tool fields:
+    //   module: Python module containing the ChemGraph FastMCP object.
+    //   tool: concrete tool name exposed by that module.
+    {
+      "name": "smiles_to_coordinate_file",
+      "module": "chemgraph.mcp.mcp_tools",
+      "tool": "smiles_to_coordinate_file",
+      "description": "Convert one SMILES string to a generated XYZ coordinate file."
+    },
+    {
+      "name": "run_mace_ensemble",
+      "module": "chemgraph.mcp.mace_mcp_hpc",
+      "tool": "run_mace_ensemble",
+      "description": "Run MACE calculations over every generated structure in a directory."
+    },
+    {
+      "name": "inspect_json",
+      "module": "chemgraph.mcp.hpc_misc_mcp",
+      "tool": "inspect_json",
+      "description": "Inspect a JSON file, output directory, or missing expected JSON path and return compact summaries."
+    }
+  ]
+}
