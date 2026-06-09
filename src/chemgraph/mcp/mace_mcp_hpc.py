@@ -119,6 +119,10 @@ def _mace_worker(job: dict) -> dict:
                 tmpdir, job.get("output_result_file", "output.json")
             )
 
+    output_file = job.get("output_result_file")
+    if output_file:
+        os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
+
     params = mace_input_schema(**job)
     result = run_mace_core(params)
 
