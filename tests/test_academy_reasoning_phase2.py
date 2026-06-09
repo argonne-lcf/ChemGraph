@@ -133,7 +133,6 @@ async def test_reasoning_adapter_finish_turn_updates_runtime_state(tmp_path) -> 
 
     assert [tool.name for tool in tools] == [
         "send_message",
-        "ask_peer",
         "submit_result",
         "finish_turn",
     ]
@@ -184,6 +183,7 @@ async def test_send_message_does_not_block_on_busy_peer(tmp_path) -> None:
                 "content": "full message",
                 "artifact_refs": [],
                 "tool_result_ids": [],
+                "reply_requested": False,
                 "reason": "peer needs this evidence",
                 "confidence": 0.8,
             },
@@ -305,6 +305,7 @@ def test_reasoning_engine_builds_bounded_wakeup_state(tmp_path) -> None:
         {
             "type": "send_message",
             "recipient": "agent-b",
+            "reply_requested": False,
             "tldr": "old message",
             "message_id": "msg-old",
             "timestamp": 1,
@@ -312,6 +313,7 @@ def test_reasoning_engine_builds_bounded_wakeup_state(tmp_path) -> None:
         {
             "type": "send_message",
             "recipient": "agent-b",
+            "reply_requested": False,
             "tldr": "new message",
             "message_id": "msg-new",
             "timestamp": 3,

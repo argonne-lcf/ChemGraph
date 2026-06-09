@@ -25,7 +25,7 @@
     let lastRenderedDetailIdentity = null;
     let lastEmbeddedWorkflowInspectorIdentity = null;
     const recentMessageWindow = 4;
-    const actionToolNames = new Set(['send_message', 'ask_peer', 'submit_result', 'finish_turn']);
+    const actionToolNames = new Set(['send_message', 'submit_result', 'finish_turn']);
     const renderedHtmlCache = new WeakMap();
 
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

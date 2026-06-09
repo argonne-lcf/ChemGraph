@@ -122,15 +122,19 @@ async def test_send_message_disallowed_recipient_does_not_deliver(tmp_path) -> N
 
 
 @pytest.mark.asyncio
-async def test_ask_peer_requires_tldr(tmp_path) -> None:
+async def test_send_message_request_requires_tldr(tmp_path) -> None:
     env = await _build_tools(tmp_path)
 
-    result = await env["tools"]["ask_peer"].ainvoke(
+    result = await env["tools"]["send_message"].ainvoke(
         {
             "recipient": "agent-b",
             "tldr": "",
-            "question": "What happened?",
+            "content": "What happened?",
+            "artifact_refs": [],
+            "tool_result_ids": [],
+            "reply_requested": True,
             "reason": "need a peer check",
+            "confidence": 0.5,
         }
     )
 
@@ -139,6 +143,28 @@ async def test_ask_peer_requires_tldr(tmp_path) -> None:
     assert result["errors"][0]["field"] == "tldr"
     assert env["outbox"] == []
     assert env["peer_handle"].calls == []
+
+
+@pytest.mark.asyncio
+async def test_send_message_reply_requested_marks_question(tmp_path) -> None:
+    env = await _build_tools(tmp_path)
+
+    result = await env["tools"]["send_message"].ainvoke(
+        {
+            "recipient": "agent-b",
+            "tldr": "need status",
+            "content": "Please send current status.",
+            "artifact_refs": [],
+            "tool_result_ids": [],
+            "reply_requested": True,
+            "reason": "the report needs the peer status",
+            "confidence": 0.7,
+        }
+    )
+
+    assert result["status"] == "sent"
+    assert env["outbox"][0]["reply_requested"] is True
+    assert env["outbox"][0]["kind"] == "question"
 
 
 @pytest.mark.asyncio
@@ -152,6 +178,7 @@ async def test_valid_send_message_still_delivers(tmp_path) -> None:
             "content": "Candidate C1 has a usable artifact.",
             "artifact_refs": ["artifacts/c1.xyz"],
             "tool_result_ids": ["tool-1"],
+            "reply_requested": False,
             "reason": "peer needs the result",
             "confidence": 0.9,
         }
@@ -160,6 +187,7 @@ async def test_valid_send_message_still_delivers(tmp_path) -> None:
     assert result["status"] == "sent"
     assert result["recipient"] == "agent-b"
     assert len(env["outbox"]) == 1
+    assert env["outbox"][0]["reply_requested"] is False
     assert env["peer_handle"].calls[0][0] == "receive_message"
     assert env["peer_handle"].calls[0][1]["message_id"] == result["message_id"]
     assert [event for event, _ in env["traces"]] == [

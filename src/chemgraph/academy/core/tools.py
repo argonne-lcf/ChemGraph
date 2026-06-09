@@ -96,6 +96,13 @@ class SendMessageArgs(BaseModel):
         default_factory=list,
         description="JSON array of ChemGraph tool_result_id strings cited by this message.",
     )
+    reply_requested: bool = Field(
+        default=False,
+        description=(
+            "Set true when this message asks the peer to reply or take a "
+            "specific follow-up action; false for one-way updates."
+        ),
+    )
     reason: str = Field(
         min_length=1,
         max_length=600,
@@ -106,21 +113,6 @@ class SendMessageArgs(BaseModel):
         le=1,
         description="Numeric confidence from 0 to 1.",
     )
-
-
-class AskPeerArgs(BaseModel):
-    """Arguments for asking a peer a question."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    recipient: str = Field(min_length=1)
-    tldr: str = Field(
-        min_length=1,
-        max_length=160,
-        description="One-line user-visible summary for dashboard edge labels.",
-    )
-    question: str = Field(min_length=1, max_length=900)
-    reason: str = Field(min_length=1, max_length=600)
 
 
 class SubmitResultArgs(BaseModel):
@@ -230,14 +222,15 @@ async def build_chemgraph_reasoning_tools(
         content: str,
         artifact_refs: list[str],
         tool_result_ids: list[str],
+        reply_requested: bool,
         reason: str,
         confidence: float,
-        kind: str,
     ) -> dict[str, Any]:
         if recipient not in peer_names:
             raise ValueError(
                 f"{spec.name} tried to message disallowed peer {recipient}",
             )
+        kind = "question" if reply_requested else "message"
         message = build_message(
             sender=spec.name,
             recipient=recipient,
@@ -247,6 +240,7 @@ async def build_chemgraph_reasoning_tools(
             tldr=tldr,
             artifact_refs=artifact_refs,
             tool_result_ids=tool_result_ids,
+            reply_requested=reply_requested,
             reason=reason,
             confidence=confidence,
         )
@@ -325,33 +319,9 @@ async def build_chemgraph_reasoning_tools(
             content=args.content,
             artifact_refs=args.artifact_refs,
             tool_result_ids=args.tool_result_ids,
+            reply_requested=args.reply_requested,
             reason=args.reason,
             confidence=args.confidence,
-            kind="message",
-        )
-
-    async def ask_peer(**kwargs: Any) -> dict[str, Any]:
-        runtime_state.record_action("ask_peer")
-        try:
-            args = AskPeerArgs.model_validate(kwargs)
-        except ValidationError as exc:
-            return _invalid_args_response("ask_peer", exc, trace)
-        if args.recipient not in peer_names:
-            return _disallowed_recipient_response(
-                "ask_peer",
-                args.recipient,
-                peer_names,
-                trace,
-            )
-        return await _send_message_impl(
-            recipient=args.recipient,
-            tldr=args.tldr,
-            content=args.question,
-            artifact_refs=[],
-            tool_result_ids=[],
-            reason=args.reason,
-            confidence=0.0,
-            kind="question",
         )
 
     async def submit_result(**kwargs: Any) -> dict[str, Any]:
@@ -395,23 +365,12 @@ async def build_chemgraph_reasoning_tools(
                 "Send tool-backed evidence, reasoning, or a request to one "
                 "allowed peer. Always provide recipient, tldr, content, "
                 "artifact_refs as an array of strings or [], tool_result_ids "
-                "as an array of strings or [], a non-empty reason, and numeric "
+                "as an array of strings or [], reply_requested as true when "
+                "the peer should respond, a non-empty reason, and numeric "
                 "confidence from 0 to 1."
             ),
             args_schema=SendMessageArgs,
             handle_validation_error=_validation_error_handler("send_message"),
-            metadata={"chemgraph_academy_tool_kind": "action_tool"},
-        ),
-        StructuredTool.from_function(
-            coroutine=ask_peer,
-            name="ask_peer",
-            description=(
-                "Ask an allowed peer for missing information or a tool result "
-                "needed for the molecule workflow. Always provide recipient, "
-                "tldr, question, and reason."
-            ),
-            args_schema=AskPeerArgs,
-            handle_validation_error=_validation_error_handler("ask_peer"),
             metadata={"chemgraph_academy_tool_kind": "action_tool"},
         ),
         StructuredTool.from_function(

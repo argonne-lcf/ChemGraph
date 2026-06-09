@@ -517,12 +517,11 @@ def build_recent_actions(
 
     actions: list[dict[str, Any]] = []
     for message in outbox[-limit:]:
-        kind = str(message.get("kind") or "message")
-        action_type = "ask_peer" if kind == "question" else "send_message"
         actions.append(
             {
-                "type": action_type,
+                "type": "send_message",
                 "recipient": message.get("recipient"),
+                "reply_requested": bool(message.get("reply_requested")),
                 "tldr": message.get("tldr") or _preview(message.get("content")),
                 "message_id": message.get("message_id"),
                 "timestamp": message.get("timestamp"),

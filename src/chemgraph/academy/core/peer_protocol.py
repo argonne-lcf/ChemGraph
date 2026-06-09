@@ -29,6 +29,7 @@ def build_message(
     tldr: str | None = None,
     artifact_refs: list[str] | None = None,
     tool_result_ids: list[str] | None = None,
+    reply_requested: bool = False,
     reason: str | None = None,
     confidence: float | None = None,
 ) -> dict[str, Any]:
@@ -40,6 +41,7 @@ def build_message(
         'recipient': recipient,
         'kind': kind,
         'content': content,
+        'reply_requested': reply_requested,
         'artifact_refs': artifact_refs or [],
         'tool_result_ids': tool_result_ids or [],
     }
