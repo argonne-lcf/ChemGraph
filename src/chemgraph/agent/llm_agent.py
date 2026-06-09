@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 import os
-from typing import Callable, List, Optional
+from typing import Callable, Collection, List, Optional
 import uuid
 
 from chemgraph.memory.store import SessionStore
@@ -172,6 +172,7 @@ class ChemGraph:
         max_retries: int = 1,
         human_input_handler: Optional[Callable[[str], str]] = None,
         human_supervised: bool = False,
+        terminal_tool_names: Collection[str] = (),
     ):
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
@@ -302,6 +303,7 @@ class ChemGraph:
         self.max_retries = max_retries
         self.human_input_handler = human_input_handler
         self.human_supervised = human_supervised
+        self.terminal_tool_names = tuple(terminal_tool_names)
 
         # When human supervision is disabled and the caller is using the
         # default system prompt, strip the ask_human instructions so the
@@ -342,6 +344,7 @@ class ChemGraph:
                 self.tools,
                 max_retries=self.max_retries,
                 human_supervised=self.human_supervised,
+                terminal_tool_names=self.terminal_tool_names,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
