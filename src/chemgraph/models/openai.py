@@ -74,9 +74,21 @@ def _normalize_argo_model(model_name: str, base_url: str) -> str:
     """Normalize an ``argo:``-prefixed model name for the target endpoint.
 
     * Hosted Argo API endpoints use internal wire names via
-      ``ARGO_MODEL_MAP`` (e.g. ``argo:gpt-4o`` -> ``gpt4o``).
+      ``ARGO_MODEL_MAP``.
     * Argo shim, ArgoProxy, and custom OpenAI-compatible endpoints strip the
       ``argo:`` prefix and keep the OpenAI-style name.
+
+    Parameters
+    ----------
+    model_name : str
+        Requested model identifier.
+    base_url : str
+        Endpoint base URL used to choose normalization behavior.
+
+    Returns
+    -------
+    str
+        Endpoint-specific model name.
     """
     if not model_name.startswith("argo:"):
         return model_name

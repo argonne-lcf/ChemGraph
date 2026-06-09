@@ -11,6 +11,18 @@ def get_aurora_config(
     worker_init: str | None = None,
     max_workers_per_node: int | None = None,
 ):
+    """Create a Parsl configuration for Aurora PBS jobs.
+
+    Parameters
+    ----------
+    run_dir : str, optional
+        Directory used as Parsl's run directory and worker working directory.
+
+    Returns
+    -------
+    parsl.config.Config
+        Configured Parsl ``Config`` for Aurora.
+    """
     if run_dir is None:
         run_dir = os.getcwd()
 

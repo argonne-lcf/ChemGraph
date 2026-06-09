@@ -63,6 +63,20 @@ def _relative_close(a: float, b: float, tol: float = 0.05) -> bool:
     """Return True if *a* and *b* are within *tol* relative tolerance.
 
     Falls back to absolute comparison when *b* is near zero.
+
+    Parameters
+    ----------
+    a : float
+        Actual value.
+    b : float
+        Expected value.
+    tol : float, optional
+        Relative tolerance.
+
+    Returns
+    -------
+    bool
+        ``True`` when the values are close enough.
     """
     if b == 0:
         return abs(a) < 1e-8
@@ -70,7 +84,18 @@ def _relative_close(a: float, b: float, tol: float = 0.05) -> bool:
 
 
 def _parse_numeric(val: Any) -> Optional[float]:
-    """Try to parse *val* as a float, returning None on failure."""
+    """Try to parse a value as a float.
+
+    Parameters
+    ----------
+    val : Any
+        Candidate numeric value.
+
+    Returns
+    -------
+    float or None
+        Parsed float, or ``None`` on failure.
+    """
     if isinstance(val, (int, float)):
         return float(val)
     if isinstance(val, str):
@@ -84,12 +109,34 @@ def _parse_numeric(val: Any) -> Optional[float]:
 
 
 def _is_imaginary_freq(val: str) -> bool:
-    """Return True if *val* represents an imaginary frequency."""
+    """Return True if a value represents an imaginary frequency.
+
+    Parameters
+    ----------
+    val : str
+        Frequency value to inspect.
+
+    Returns
+    -------
+    bool
+        ``True`` when the value ends with the imaginary-frequency marker.
+    """
     return isinstance(val, str) and val.strip().endswith("i")
 
 
 def _canonicalise_smiles(smiles: str) -> Optional[str]:
-    """Return the RDKit canonical SMILES, or None if RDKit is unavailable."""
+    """Return the RDKit canonical SMILES.
+
+    Parameters
+    ----------
+    smiles : str
+        Input SMILES string.
+
+    Returns
+    -------
+    str or None
+        Canonical SMILES, or ``None`` if RDKit is unavailable/invalid.
+    """
     try:
         from rdkit import Chem
 
@@ -114,6 +161,20 @@ def _compare_scalar(
     """Compare two ``ScalarResult`` dicts.
 
     Returns ``(passed, reason)``.
+
+    Parameters
+    ----------
+    expected : dict[str, Any]
+        Expected scalar result.
+    actual : dict[str, Any]
+        Actual scalar result.
+    tolerance : float
+        Relative tolerance for value comparison.
+
+    Returns
+    -------
+    tuple[bool, str]
+        Pass/fail flag and explanation.
     """
     reasons: List[str] = []
 
@@ -158,6 +219,18 @@ def _compare_smiles(
     string comparison.
 
     Returns ``(passed, reason)``.
+
+    Parameters
+    ----------
+    expected : list[str]
+        Expected SMILES strings.
+    actual : list[str]
+        Actual SMILES strings.
+
+    Returns
+    -------
+    tuple[bool, str]
+        Pass/fail flag and explanation.
     """
     if not expected:
         return True, "expected smiles list is empty (skipped)"
@@ -167,6 +240,18 @@ def _compare_smiles(
 
     # Build canonical sets.
     def _canon_set(smiles_list: List[str]) -> set[str]:
+        """Canonicalize a SMILES list into a set.
+
+        Parameters
+        ----------
+        smiles_list : list[str]
+            SMILES strings to canonicalize.
+
+        Returns
+        -------
+        set[str]
+            Canonicalized SMILES strings.
+        """
         result: set[str] = set()
         for s in smiles_list:
             canon = _canonicalise_smiles(s)
@@ -197,6 +282,20 @@ def _compare_vibrational(
     """Compare two ``VibrationalFrequency`` dicts.
 
     Filters imaginary frequencies and compares real ones element-wise.
+
+    Parameters
+    ----------
+    expected : dict[str, Any]
+        Expected vibrational data.
+    actual : dict[str, Any]
+        Actual vibrational data.
+    tolerance : float
+        Relative tolerance for frequency comparison.
+
+    Returns
+    -------
+    tuple[bool, str]
+        Pass/fail flag and explanation.
     """
     exp_freqs = expected.get("frequency_cm1", [])
     act_freqs = actual.get("frequency_cm1", [])
@@ -230,7 +329,22 @@ def _compare_ir_spectrum(
     actual: Dict[str, Any],
     tolerance: float,
 ) -> tuple[bool, str]:
-    """Compare two ``IRSpectrum`` dicts (frequencies + intensities)."""
+    """Compare two ``IRSpectrum`` dicts.
+
+    Parameters
+    ----------
+    expected : dict[str, Any]
+        Expected IR spectrum data.
+    actual : dict[str, Any]
+        Actual IR spectrum data.
+    tolerance : float
+        Relative tolerance for frequency/intensity comparison.
+
+    Returns
+    -------
+    tuple[bool, str]
+        Pass/fail flag and explanation.
+    """
     # Compare frequencies.
     freq_ok, freq_reason = _compare_vibrational(
         {"frequency_cm1": expected.get("frequency_cm1", [])},

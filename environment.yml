@@ -16,6 +16,9 @@ dependencies:
     - ase==3.25.0
     - rdkit==2025.3.3
     - langgraph==0.4.7
+    - langgraph-checkpoint==2.1.0
+    - langgraph-prebuilt==0.5.2
+    - langgraph-sdk==0.1.72
     - langchain
     - langchain-openai==0.3.27
     - langchain-ollama==0.3.4
@@ -24,7 +27,6 @@ dependencies:
     - langchain-groq
     - langchain-experimental==0.3.4
     - langchain-mcp-adapters
-    - langgraph-prebuilt
     - pydantic==2.11.7
     - pubchempy==1.0.5
     - pyppeteer==2.0.0

@@ -6,6 +6,7 @@ MCP-enabled workflows (single_agent, multi_agent, etc.).
 
 from __future__ import annotations
 
+import os
 import shlex
 import time
 from typing import List, Optional
@@ -14,6 +15,35 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from chemgraph.cli.formatting import console
 from chemgraph.utils.async_utils import run_async_callable
+
+# Env vars that the MCP stdio subprocess may need. The MCP SDK's stdio
+# transport inherits only a hard-coded whitelist of standard system vars
+# (PATH, HOME, etc.) by default -- ChemGraph- and Globus-specific keys
+# must be passed through explicitly or the spawned MCP server has no way
+# to see what the user exported in their shell.
+_FORWARDED_ENV_VARS = (
+    # Shell essentials (so python and the user's HOME resolve correctly)
+    "PATH",
+    "HOME",
+    "USER",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "VIRTUAL_ENV",
+    "CONDA_PREFIX",
+    "CONDA_DEFAULT_ENV",
+    # ChemGraph runtime selection
+    "CHEMGRAPH_EXECUTION_BACKEND",
+    "CHEMGRAPH_LOG_DIR",
+    # Globus Compute
+    "GLOBUS_COMPUTE_ENDPOINT_ID",
+    # Globus Transfer
+    "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID",
+    "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
+    "GLOBUS_TRANSFER_DESTINATION_BASE_PATH",
+    # ALCF inference endpoints
+    "ALCF_ACCESS_TOKEN",
+)
 
 
 def load_mcp_tools_from_config(
@@ -65,11 +95,13 @@ def load_mcp_tools_from_config(
         transport_label = f"streamable_http @ {url}"
     elif command:
         parts = shlex.split(command)
+        env = {k: os.environ[k] for k in _FORWARDED_ENV_VARS if k in os.environ}
         connections = {
             server_name: {
                 "command": parts[0],
                 "args": parts[1:],
                 "transport": "stdio",
+                "env": env,
             }
         }
         transport_label = f"stdio: {command}"

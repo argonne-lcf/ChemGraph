@@ -85,6 +85,13 @@ def get_workflow_from_state(state) -> dict:
     workflow_dict = {"tool_calls": []}
 
     def recurse(obj):
+        """Collect AI tool calls from nested workflow state objects.
+
+        Parameters
+        ----------
+        obj : Any
+            Dictionary, list, or scalar value from the serialized workflow.
+        """
         if isinstance(obj, dict):
             # Extract tool_calls if it's an AI message
             if obj.get("type") == "ai":

@@ -14,7 +14,18 @@ logger = setup_logger(__name__)
 
 
 def _safe_pct(value: float) -> str:
-    """Format a 0-1 fraction as a percentage string."""
+    """Format a 0-1 fraction as a percentage string.
+
+    Parameters
+    ----------
+    value : float
+        Fractional value to format.
+
+    Returns
+    -------
+    str
+        Percentage string with one decimal place.
+    """
     return f"{value * 100:.1f}%"
 
 
@@ -313,7 +324,18 @@ def print_summary_table(results: Dict[str, Dict[str, dict]]) -> None:
 
 
 def _make_serializable(obj):
-    """Recursively convert non-serializable objects to strings."""
+    """Recursively convert non-serializable objects to strings.
+
+    Parameters
+    ----------
+    obj : Any
+        Object to convert.
+
+    Returns
+    -------
+    Any
+        JSON-serializable object.
+    """
     if isinstance(obj, dict):
         return {k: _make_serializable(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):

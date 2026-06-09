@@ -77,7 +77,18 @@ mcp = FastMCP(
     description="Run a single XANES/FDMNES calculation for one input structure.",
 )
 def run_xanes_single(params: xanes_input_schema):
-    """Run a single FDMNES calculation using the core engine."""
+    """Run a single FDMNES calculation using the core engine.
+
+    Parameters
+    ----------
+    params : xanes_input_schema
+        Input parameters for one XANES/FDMNES calculation.
+
+    Returns
+    -------
+    dict
+        XANES calculation result.
+    """
     from chemgraph.tools.xanes_core import run_xanes_core
 
     return run_xanes_core(params)
@@ -175,6 +186,20 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
         pending_tasks.append((task_meta, fut))
 
     async def wait_for_task(meta, parsl_future):
+        """Await a Parsl FDMNES task and collect result metadata.
+
+        Parameters
+        ----------
+        meta : dict
+            Metadata describing the submitted structure/run.
+        parsl_future : concurrent.futures.Future
+            Parsl future returned by the submitted app.
+
+        Returns
+        -------
+        dict
+            Success or failure metadata for the task.
+        """
         try:
             await asyncio.wrap_future(parsl_future)
             conv_data = extract_conv(meta["run_dir"])
@@ -216,7 +241,18 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
     description="Fetch optimized structures from Materials Project.",
 )
 def fetch_mp_structures(params: mp_query_schema):
-    """Fetch structures from Materials Project and save as CIF files and pickle database."""
+    """Fetch structures from Materials Project and save local artifacts.
+
+    Parameters
+    ----------
+    params : mp_query_schema
+        Materials Project query parameters.
+
+    Returns
+    -------
+    dict
+        Fetch summary including output directory and number of structures.
+    """
     from chemgraph.tools.xanes_core import (
         fetch_materials_project_data,
         _get_data_dir,

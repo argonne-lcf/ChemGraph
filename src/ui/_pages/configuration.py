@@ -28,12 +28,36 @@ WORKFLOW_OPTIONS: list[str] = [
 
 
 def normalize_workflow_name(value: str) -> str:
+    """Normalize workflow aliases to internal workflow names.
+
+    Parameters
+    ----------
+    value : str
+        Workflow name or alias from configuration/UI state.
+
+    Returns
+    -------
+    str
+        Canonical workflow name.
+    """
     if not value:
         return value
     return WORKFLOW_ALIASES.get(value, value)
 
 
 def get_model_options(config: Dict[str, Any]) -> list:
+    """Return model options for the configuration UI.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Nested UI configuration dictionary.
+
+    Returns
+    -------
+    list
+        Model names shown in the model selector.
+    """
     from chemgraph.utils.config_utils import get_model_options_for_nested_config
 
     return get_model_options_for_nested_config(config)
@@ -91,6 +115,13 @@ def render() -> None:
 
 
 def _render_general_settings(config: dict) -> None:
+    """Render and update general configuration widgets.
+
+    Parameters
+    ----------
+    config : dict
+        Mutable draft configuration dictionary.
+    """
     st.subheader("General Settings")
 
     col1, col2 = st.columns(2)
@@ -252,6 +283,13 @@ def _render_general_settings(config: dict) -> None:
 
 
 def _render_api_settings(config: dict) -> None:
+    """Render and update API configuration widgets.
+
+    Parameters
+    ----------
+    config : dict
+        Mutable draft configuration dictionary.
+    """
     st.subheader("API Settings")
 
     st.markdown("**API Keys (Session Only)**")
@@ -428,6 +466,13 @@ def _render_api_settings(config: dict) -> None:
 
 
 def _render_raw_toml(config: dict) -> None:
+    """Render raw TOML editor for the draft configuration.
+
+    Parameters
+    ----------
+    config : dict
+        Mutable draft configuration dictionary.
+    """
     st.subheader("Raw TOML Configuration")
     st.markdown(
         """
@@ -461,6 +506,13 @@ def _render_raw_toml(config: dict) -> None:
 
 
 def _render_action_buttons(config: dict) -> None:
+    """Render save/reload/reset/download configuration actions.
+
+    Parameters
+    ----------
+    config : dict
+        Mutable draft configuration dictionary.
+    """
     st.markdown("---")
     col1, col2, col3, col4 = st.columns(4)
 
@@ -501,6 +553,13 @@ def _render_action_buttons(config: dict) -> None:
 
 
 def _render_config_summary(config: dict) -> None:
+    """Render a compact summary of the draft configuration.
+
+    Parameters
+    ----------
+    config : dict
+        Draft configuration dictionary.
+    """
     with st.expander("\U0001f4ca Configuration Summary", expanded=False):
         st.write("**Current Configuration:**")
         st.write(f"- Model: {config['general']['model']}")

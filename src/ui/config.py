@@ -9,7 +9,18 @@ from chemgraph.utils.config_utils import flatten_config as _flatten_config
 
 
 def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
-    """Load configuration from TOML file."""
+    """Load configuration from a TOML file.
+
+    Parameters
+    ----------
+    config_path : str, optional
+        Path to the TOML configuration file.
+
+    Returns
+    -------
+    dict[str, Any]
+        Nested configuration dictionary with defaults filled in.
+    """
     try:
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
@@ -47,7 +58,20 @@ def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
 
 
 def save_config(config: Dict[str, Any], config_path: str = "config.toml") -> bool:
-    """Save configuration to TOML file."""
+    """Save configuration to a TOML file.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Nested configuration dictionary to write.
+    config_path : str, optional
+        Destination TOML file path.
+
+    Returns
+    -------
+    bool
+        ``True`` if the file was written successfully.
+    """
     try:
         with open(config_path, "w") as f:
             toml.dump(config, f)
@@ -103,5 +127,16 @@ def get_default_config() -> Dict[str, Any]:
 
 
 def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Flatten nested configuration for easier access."""
+    """Flatten nested configuration for easier access.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Nested configuration dictionary.
+
+    Returns
+    -------
+    dict[str, Any]
+        Flattened configuration dictionary.
+    """
     return _flatten_config(config)

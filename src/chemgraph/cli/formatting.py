@@ -167,6 +167,16 @@ def _is_atomic_json(content: str) -> bool:
 
     This replaces the old fragile substring check (Bug 10) with a
     proper parse attempt.
+
+    Parameters
+    ----------
+    content : str
+        Candidate JSON text.
+
+    Returns
+    -------
+    bool
+        ``True`` when the parsed object contains atomic-structure keys.
     """
     try:
         data = json.loads(content.strip())
@@ -179,7 +189,15 @@ def _is_atomic_json(content: str) -> bool:
 
 
 def format_response(result: Any, verbose: bool = False) -> None:
-    """Format the agent response for display."""
+    """Format the agent response for display.
+
+    Parameters
+    ----------
+    result : Any
+        Agent result, message list, state dictionary, or message object.
+    verbose : bool, optional
+        Whether to include raw message details.
+    """
     if not result:
         console.print("[red]No response received from agent.[/red]")
         return

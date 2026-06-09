@@ -59,6 +59,11 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
 
     Used by both the ``run`` subcommand and the legacy (no subcommand)
     argument parser for backward compatibility.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser or subparser to receive query/run arguments.
     """
     parser.add_argument(
         "-q", "--query", type=str, help="The computational chemistry query to execute"
@@ -318,6 +323,16 @@ def load_config(config_file: str) -> Dict[str, Any]:
     Merges missing keys from a sensible default so that partial config
     files don't crash the CLI (addresses Bug 4 -- parity with the
     Streamlit config loader).
+
+    Parameters
+    ----------
+    config_file : str
+        Path to a TOML configuration file.
+
+    Returns
+    -------
+    dict[str, Any]
+        Flattened configuration dictionary with defaults filled in.
     """
     try:
         with open(config_file, "r") as f:
@@ -373,7 +388,13 @@ def load_config(config_file: str) -> Dict[str, Any]:
 
 
 def _handle_run(args: argparse.Namespace) -> None:
-    """Handle the ``run`` subcommand (and legacy no-subcommand mode)."""
+    """Handle the ``run`` subcommand and legacy no-subcommand mode.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed CLI arguments.
+    """
     # Handle special commands first
     if getattr(args, "list_models", False):
         list_models()

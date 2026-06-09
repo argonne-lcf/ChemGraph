@@ -84,6 +84,18 @@ mcp = FastMCP(
     description="Run a single MACE calculation",
 )
 def run_mace_single(params: mace_input_schema):
+    """Run one MACE calculation.
+
+    Parameters
+    ----------
+    params : mace_input_schema
+        Input parameters for the MACE calculation.
+
+    Returns
+    -------
+    dict
+        MACE calculation result.
+    """
     return run_mace_core(params)
 
 
@@ -188,7 +200,18 @@ def run_mace_ensemble(params: mace_input_schema_ensemble):
     description="Load output from a JSON file.",
 )
 def extract_output_json(json_file: str) -> dict:
-    """Load simulation results from a JSON file produced by run_ase."""
+    """Load simulation results from a JSON file produced by run_ase.
+
+    Parameters
+    ----------
+    json_file : str
+        Path to a JSON output file.
+
+    Returns
+    -------
+    dict
+        Parsed simulation results.
+    """
     from chemgraph.tools.ase_core import extract_output_json_core
 
     return extract_output_json_core(json_file)

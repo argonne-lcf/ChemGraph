@@ -119,6 +119,16 @@ def _get_embeddings(provider: str = "openai"):
 
     Supports OpenAI-compatible custom endpoints via OPENAI_BASE_URL.
     Falls back to HuggingFace if OpenAI embeddings are unavailable.
+
+    Parameters
+    ----------
+    provider : str, optional
+        Preferred embedding provider.
+
+    Returns
+    -------
+    Embeddings
+        LangChain-compatible embeddings object.
     """
     if provider == "openai":
         try:

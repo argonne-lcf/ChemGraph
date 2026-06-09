@@ -10,7 +10,6 @@ Tests cover:
 
 import json
 
-import pytest
 from langchain_core.messages import AIMessage
 
 from chemgraph.schemas.multi_agent_response import PlannerResponse
@@ -180,7 +179,7 @@ def test_human_review_node_default_question(monkeypatch):
     monkeypatch.setattr("chemgraph.graphs.multi_agent.interrupt", fake_interrupt)
 
     state = {"messages": []}
-    result = human_review_node(state)
+    human_review_node(state)
 
     assert "provide more details" in captured_values[0]["question"].lower()
 
@@ -251,7 +250,6 @@ def test_ask_human_tool_handles_dict_response(monkeypatch):
 def test_single_agent_graph_includes_ask_human(monkeypatch):
     """construct_single_agent_graph should include ask_human when human_supervised=True."""
     from chemgraph.graphs.single_agent import construct_single_agent_graph
-    from chemgraph.tools.generic_tools import ask_human
 
     # Use a dummy LLM
     class FakeLLM:
@@ -271,7 +269,6 @@ def test_single_agent_graph_includes_ask_human(monkeypatch):
 def test_single_agent_graph_excludes_ask_human_when_unsupervised():
     """construct_single_agent_graph should exclude ask_human when human_supervised=False."""
     from chemgraph.graphs.single_agent import construct_single_agent_graph
-    from chemgraph.tools.generic_tools import ask_human
 
     captured_tools = []
 

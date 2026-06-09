@@ -32,7 +32,18 @@ logger = logging.getLogger(__name__)
 
 
 def _mace_input_to_ase_input(params: mace_input_schema) -> ASEInputSchema:
-    """Convert a MACE-specific input schema to a generic ASEInputSchema."""
+    """Convert a MACE-specific input schema to a generic ASEInputSchema.
+
+    Parameters
+    ----------
+    params : mace_input_schema
+        MACE-specific tool input.
+
+    Returns
+    -------
+    ASEInputSchema
+        Equivalent generic ASE input.
+    """
     return ASEInputSchema(
         input_structure_file=params.input_structure_file,
         output_results_file=params.output_result_file,

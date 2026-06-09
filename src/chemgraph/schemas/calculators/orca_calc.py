@@ -121,3 +121,7 @@ class OrcaCalc(BaseModel):
             directory=self.directory,
             profile=profile,
         )
+
+    def get_multiplicity(self) -> Optional[int]:
+        """Return spin multiplicity (2S+1) for thermochemistry."""
+        return self.multiplicity

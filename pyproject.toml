@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "chemgraphagent"
-version = "0.4.0"
+version = "0.5.0"
 description = "A computational chemistry agent for molecular simulation tasks."
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
@@ -13,7 +13,10 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "langgraph",
+    "langgraph==0.4.7",
+    "langgraph-checkpoint==2.1.0",
+    "langgraph-prebuilt==0.5.2",
+    "langgraph-sdk==0.1.72",
     "langchain",
     "langchain-openai",
     "langchain-ollama",
@@ -22,7 +25,6 @@ dependencies = [
     "langchain-groq",
     "langchain-experimental",
     "langchain-mcp-adapters",
-    "langgraph-prebuilt",
     "pydantic",
     "pandas==2.2.3",
     "pubchempy==1.0.5",
@@ -30,6 +32,7 @@ dependencies = [
     "numpy==2.2.6",
     "numexpr==2.11.0",
     "pytest==8.4.1",
+    "deepdiff==8.5.0",
 
     "ase",
     "rdkit",
@@ -124,6 +127,7 @@ indent-style = "space"  # Use spaces for indentation
 skip-magic-trailing-comma = false  # Ensure Black-style formatting
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "llm: marks tests as requiring LLM API access (run with --run-llm)",
     "globus_compute: marks tests requiring a live Globus Compute endpoint (run with --run-globus-compute)",
@@ -135,4 +139,7 @@ markers = [
 filterwarnings = [
     "ignore:Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*:UserWarning",
     "ignore:In future, it will be an error for 'np.bool' scalars to be interpreted as an index:DeprecationWarning",
+    "ignore:authlib.jose module is deprecated.*:authlib.deprecate.AuthlibDeprecationWarning",
+    "ignore:`torch.jit.script` is deprecated.*:DeprecationWarning:torch.jit._script",
+    "ignore:`torch.jit.load` is deprecated.*:DeprecationWarning:torch.jit._serialization",
 ]

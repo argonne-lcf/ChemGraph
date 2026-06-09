@@ -10,10 +10,19 @@ from mcp.server.fastmcp import FastMCP
 def run_mcp_server(
     mcp: FastMCP, default_port: int = 8000, default_host: str = "127.0.0.1"
 ):
-    """
-    Standardizes the startup process for ChemGraph MCP servers.
+    """Standardize the startup process for ChemGraph MCP servers.
+
     Supports 'stdio' (default) and 'sse' (HTTP) transports.
     Ensures logging is correctly routed to stderr to avoid corrupting stdio transport.
+
+    Parameters
+    ----------
+    mcp : FastMCP
+        MCP server instance to run.
+    default_port : int, optional
+        Default port for streamable HTTP transport.
+    default_host : str, optional
+        Default host for streamable HTTP transport.
     """
     parser = argparse.ArgumentParser(description=f"Run {mcp.name} MCP Server")
     parser.add_argument(

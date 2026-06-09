@@ -151,6 +151,20 @@ async def run_graspa_ensemble(
             pending_tasks.append((task_meta, fut))
 
     async def wait_for_task(struct_name, parsl_future):
+        """Await a Parsl gRASPA task and normalize failures.
+
+        Parameters
+        ----------
+        struct_name : str
+            Structure identifier associated with the task.
+        parsl_future : concurrent.futures.Future
+            Parsl future returned by the submitted app.
+
+        Returns
+        -------
+        dict
+            Task result dictionary, or a normalized failure dictionary.
+        """
         try:
             # Wrap the Parsl/Concurrent future so it becomes Awaitable
             res = await asyncio.wrap_future(parsl_future)

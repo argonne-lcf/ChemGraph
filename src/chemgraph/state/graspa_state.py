@@ -5,7 +5,20 @@ from langgraph.graph import add_messages
 
 
 def merge_dicts(a: dict, b: dict) -> dict:
-    """Reducer to merge dictionaries (for worker logs)."""
+    """Reducer to merge dictionaries for worker logs.
+
+    Parameters
+    ----------
+    a : dict
+        Existing accumulated dictionary.
+    b : dict
+        New dictionary update.
+
+    Returns
+    -------
+    dict
+        Merged dictionary where values from ``b`` override ``a``.
+    """
     return {**a, **b}
 
 
@@ -73,7 +86,18 @@ class PlannerResponse(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_planner_payload(cls, data: Any) -> Any:
-        """Accept common planner variants and coerce into full PlannerResponse shape."""
+        """Accept common planner variants and coerce into PlannerResponse shape.
+
+        Parameters
+        ----------
+        data : Any
+            Raw planner payload before Pydantic validation.
+
+        Returns
+        -------
+        Any
+            Normalized payload compatible with ``PlannerResponse``.
+        """
         if isinstance(data, list):
             return {
                 "thought_process": "Delegating parsed tasks to executors.",

@@ -26,7 +26,18 @@ from chemgraph.tools.ase_core import (
 
 @tool
 def extract_output_json(json_file: str) -> Dict[str, Any]:
-    """Load simulation results from a JSON file produced by run_ase."""
+    """Load simulation results from a JSON file produced by run_ase.
+
+    Parameters
+    ----------
+    json_file : str
+        Path to the JSON output file.
+
+    Returns
+    -------
+    dict[str, Any]
+        Parsed simulation results.
+    """
     return extract_output_json_core(json_file)
 
 

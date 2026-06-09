@@ -28,7 +28,18 @@ from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
 # ---------------------------------------------------------------------------
 
 def _resolve_path(path: str) -> str:
-    """If ``CHEMGRAPH_LOG_DIR`` is set and *path* is relative, prepend it."""
+    """Resolve a path relative to ``CHEMGRAPH_LOG_DIR`` when appropriate.
+
+    Parameters
+    ----------
+    path : str
+        Absolute or relative file path.
+
+    Returns
+    -------
+    str
+        Resolved path.
+    """
     log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
     if log_dir and not os.path.isabs(path):
         os.makedirs(log_dir, exist_ok=True)
@@ -162,7 +173,7 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     if "emt" in calc_type:
         from chemgraph.schemas.calculators.emt_calc import EMTCalc
         calc = EMTCalc(**calculator)
-    elif "tblite" in calc_type:
+    elif "tblite" in calc_type or "xtb" in calc_type:
         from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
         calc = TBLiteCalc(**calculator)
     elif "orca" in calc_type:
@@ -202,6 +213,16 @@ def extract_ase_atoms_from_tool_result(tool_result: dict):
     """Extract ``(atomic_numbers, positions)`` from a tool-result dict.
 
     Returns ``(None, None)`` if extraction fails.
+
+    Parameters
+    ----------
+    tool_result : dict
+        Tool result that may contain atom numbers and positions.
+
+    Returns
+    -------
+    tuple
+        ``(atomic_numbers, positions)`` or ``(None, None)``.
     """
     for keyset in ({"numbers", "positions"}, {"atomic_numbers", "positions"}):
         if keyset.issubset(tool_result.keys()):
@@ -216,7 +237,20 @@ def extract_ase_atoms_from_tool_result(tool_result: dict):
 
 
 def create_ase_atoms(atomic_numbers, positions):
-    """Create an ASE ``Atoms`` object from atomic numbers and positions."""
+    """Create an ASE ``Atoms`` object from atomic numbers and positions.
+
+    Parameters
+    ----------
+    atomic_numbers : sequence
+        Atomic numbers for each atom.
+    positions : sequence
+        Cartesian coordinates for each atom.
+
+    Returns
+    -------
+    ase.Atoms or None
+        Constructed atoms object, or ``None`` if construction fails.
+    """
     from ase import Atoms
 
     try:
@@ -227,7 +261,20 @@ def create_ase_atoms(atomic_numbers, positions):
 
 
 def create_xyz_string(atomic_numbers, positions) -> Optional[str]:
-    """Create an XYZ-format string from atomic numbers and positions."""
+    """Create an XYZ-format string from atomic numbers and positions.
+
+    Parameters
+    ----------
+    atomic_numbers : sequence
+        Atomic numbers for each atom.
+    positions : sequence
+        Cartesian coordinates for each atom.
+
+    Returns
+    -------
+    str or None
+        XYZ-format structure text, or ``None`` if conversion fails.
+    """
     from ase import Atoms
 
     try:
@@ -521,13 +568,21 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                         geometry = "linear" if linear else "nonlinear"
                         symmetrynumber = get_symmetry_number(final_structure)
 
+                        # IdealGasThermo expects total spin S; calculators expose
+                        # multiplicity (2S+1) via get_multiplicity() when supported.
+                        multiplicity = (
+                            getattr(calc_model, "get_multiplicity", lambda: None)()
+                            or 1
+                        )
+                        spin_S = (multiplicity - 1) / 2.0
+
                         thermo = IdealGasThermo(
                             vib_energies=energies,
                             potentialenergy=single_point_energy,
                             atoms=atoms,
                             geometry=geometry,
                             symmetrynumber=symmetrynumber,
-                            spin=0,
+                            spin=spin_S,
                         )
                         thermo_data = {
                             "enthalpy": float(
