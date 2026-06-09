@@ -1,6 +1,6 @@
 {
   "name": "polaris",
-  "operator_host": "${ALCF_USER}@polaris.alcf.anl.gov",
+  "remote_host": "${ALCF_USER}@polaris.alcf.anl.gov",
   "remote_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}",
   "academy_repo_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/academy",
   "repo_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph",

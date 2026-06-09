@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from chemgraph.academy.runtime import operator_console
+from chemgraph.academy.runtime import dashboard_launcher
 from chemgraph.academy.runtime.profiles.system import SystemProfile
 
 
 def _profile(tmp_path: Path) -> SystemProfile:
     return SystemProfile(
         name="test-system",
-        operator_host="user@example",
+        remote_host="user@example",
         remote_root="/remote/root",
         academy_repo_root="/remote/root/academy",
         repo_root="/remote/root/ChemGraph",
@@ -36,12 +36,12 @@ def test_delete_existing_run_removes_remote_and_local(tmp_path, monkeypatch) -> 
     calls: list[list[str]] = []
 
     monkeypatch.setattr(
-        operator_console,
+        dashboard_launcher,
         "_run",
         lambda command, **kwargs: calls.append(command),
     )
 
-    operator_console._delete_existing_run(
+    dashboard_launcher._delete_existing_run(
         profile=_profile(tmp_path),
         host="user@example",
         ssh_opts=["-o", "BatchMode=yes"],
@@ -59,7 +59,7 @@ def test_delete_existing_run_removes_remote_and_local(tmp_path, monkeypatch) -> 
 
 def test_delete_existing_run_rejects_unsafe_run_id(tmp_path) -> None:
     with pytest.raises(RuntimeError, match="unsafe run id"):
-        operator_console._delete_existing_run(
+        dashboard_launcher._delete_existing_run(
             profile=_profile(tmp_path),
             host="user@example",
             ssh_opts=[],

@@ -18,7 +18,7 @@ class SystemProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    operator_host: str
+    remote_host: str
     remote_root: str
     academy_repo_root: str
     repo_root: str

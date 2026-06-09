@@ -20,7 +20,7 @@ from chemgraph.academy.runtime.profiles import load_system_profile
 from chemgraph.academy.runtime.profiles.system import SystemProfile
 
 
-OPERATOR_METADATA_FILE = "operator_metadata.json"
+DASHBOARD_METADATA_FILE = "dashboard_metadata.json"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,8 +99,8 @@ def _prepare_environment(profile: SystemProfile) -> None:
     os.environ["NO_PROXY"] = profile.no_proxy
 
 
-def _load_operator_metadata(run_dir: Path) -> dict[str, Any]:
-    path = run_dir / OPERATOR_METADATA_FILE
+def _load_dashboard_metadata(run_dir: Path) -> dict[str, Any]:
+    path = run_dir / DASHBOARD_METADATA_FILE
     if not path.exists():
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -113,8 +113,8 @@ def _relay_host_from_profile(profile: SystemProfile) -> str:
     path = Path(profile.relay_host_file)
     if not path.exists():
         raise RuntimeError(
-            "Could not determine UAN relay host. Start the Mac operator "
-            f"console first, or pass --lm-base-url. Missing: {path}",
+            "Could not determine UAN relay host. Start the Mac dashboard "
+            f"first, or pass --lm-base-url. Missing: {path}",
         )
     host = path.read_text(encoding="utf-8").strip()
     if not host:
@@ -216,14 +216,14 @@ def _run_token() -> str:
 
 
 def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
-    """Resolve a system profile and operator metadata into an allocation plan."""
+    """Resolve a system profile and dashboard metadata into an allocation plan."""
     profile = load_system_profile(args.system)
     _prepare_environment(profile)
 
     defaults = campaign_launch_defaults(args.campaign)
     run_dir = Path(args.run_dir or Path(profile.run_root) / args.run_id).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    metadata = _load_operator_metadata(run_dir)
+    metadata = _load_dashboard_metadata(run_dir)
     metadata_campaign = metadata.get("campaign")
     if metadata_campaign and metadata_campaign != args.campaign:
         raise RuntimeError(

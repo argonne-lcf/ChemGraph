@@ -1,6 +1,6 @@
 {
   "name": "aurora",
-  "operator_host": "${ALCF_USER}@aurora.alcf.anl.gov",
+  "remote_host": "${ALCF_USER}@aurora.alcf.anl.gov",
   "remote_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}",
   "academy_repo_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/academy",
   "repo_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph",

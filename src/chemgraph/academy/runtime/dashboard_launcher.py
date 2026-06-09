@@ -22,8 +22,9 @@ from chemgraph.academy.runtime.profiles.system import SystemProfile
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
+        prog="chemgraph academy dashboard",
         description=(
-            "Start the local operator console for a ChemGraph Academy run. "
+            "Start the local dashboard for a ChemGraph Academy run. "
             "This prepares remote run metadata, starts the local dashboard, "
             "and optionally starts the temporary Mac-to-UAN Argo relay."
         ),
@@ -53,7 +54,7 @@ def parse_args() -> argparse.Namespace:
         "--lm-base-url",
         help="Required for --lm-connect direct. Overrides generated relay URL.",
     )
-    parser.add_argument("--operator-host", help="SSH target for the login/UAN host.")
+    parser.add_argument("--remote-host", help="SSH target for the login/UAN host.")
     parser.add_argument("--ssh-control-path")
     parser.add_argument("--keep-ssh-master", action="store_true")
     parser.add_argument("--local-argo-host", default="127.0.0.1")
@@ -77,7 +78,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-dashboard",
         action="store_true",
-        help="Prepare operator metadata and return without serving dashboard.",
+        help="Prepare dashboard metadata and return without serving dashboard.",
     )
     parser.add_argument(
         "--overwrite-run",
@@ -419,7 +420,7 @@ def _wait_for_relay(
     raise RuntimeError("Relay readiness timed out. Local relay log:\n" + detail)
 
 
-def _write_operator_metadata(
+def _write_dashboard_metadata(
     *,
     profile: SystemProfile,
     host: str,
@@ -434,12 +435,12 @@ def _write_operator_metadata(
     remote_run_dir = f"{profile.run_root}/{run_id}"
     payload: dict[str, Any] = {
         "created_at": time.time(),
-        "created_by": "chemgraph-academy-console",
+        "created_by": "chemgraph-academy-dashboard",
         "run_id": run_id,
         "system": profile.name,
         "campaign": campaign,
         "remote_run_dir": remote_run_dir,
-        "operator_host": host,
+        "remote_host": host,
         "lm_connect": lm_connect,
         "lm_base_url": lm_base_url,
         "workspace_root": profile.remote_root,
@@ -452,12 +453,12 @@ def _write_operator_metadata(
         payload["relay_port"] = relay_port
 
     metadata = json.dumps(payload, indent=2) + "\n"
-    remote_path = f"{remote_run_dir}/operator_metadata.json"
+    remote_path = f"{remote_run_dir}/dashboard_metadata.json"
     remote_command = (
         f"mkdir -p {shlex.quote(remote_run_dir)} && "
         f"cat > {shlex.quote(remote_path)}"
     )
-    _log(f"Writing run metadata: {host}:{remote_run_dir}/operator_metadata.json")
+    _log(f"Writing run metadata: {host}:{remote_run_dir}/dashboard_metadata.json")
     _run(
         ["ssh", *ssh_opts, host, remote_command],
         input_text=metadata,
@@ -557,7 +558,7 @@ def _run_dashboard(*, local_run_dir: Path, host: str, port: int) -> int:
     old_argv = sys.argv
     try:
         sys.argv = [
-            "chemgraph-academy-console dashboard",
+            "chemgraph-academy-dashboard serve",
             "--run-dir",
             str(local_run_dir),
             "--host",
@@ -578,7 +579,7 @@ def _print_compute_command(
     campaign: str,
 ) -> None:
     _log("")
-    _log("Operator console is ready.")
+    _log("Dashboard launcher is ready.")
     _log("")
     _log(f"On the {profile.name} compute node, use:")
     if profile.name == "polaris":
@@ -629,7 +630,7 @@ def main() -> int:
             port=args.dashboard_port,
         )
 
-    operator_host = args.operator_host or profile.operator_host
+    remote_host = args.remote_host or profile.remote_host
     control_path = (
         args.ssh_control_path
         or str(Path.home() / f".ssh/{profile.name}-dashboard-%r@%h:%p")
@@ -656,21 +657,21 @@ def main() -> int:
             raise RuntimeError("--lm-connect direct requires --lm-base-url")
 
         started_ssh_master = _start_ssh_master(
-            host=operator_host,
+            host=remote_host,
             control_path=control_path,
         )
         ssh_opts = _ssh_options(control_path)
         if args.overwrite_run:
             _delete_existing_run(
                 profile=profile,
-                host=operator_host,
+                host=remote_host,
                 ssh_opts=ssh_opts,
                 run_id=args.run_id,
                 local_run_dir=local_run_dir,
             )
         wrapper_path = _install_compute_wrapper(
             profile=profile,
-            host=operator_host,
+            host=remote_host,
             ssh_opts=ssh_opts,
         )
 
@@ -678,7 +679,7 @@ def main() -> int:
         if args.lm_connect == "mac-argo-relay":
             relay_process = _start_mac_argo_relay(
                 profile=profile,
-                host=operator_host,
+                host=remote_host,
                 ssh_opts=ssh_opts,
                 local_argo_host=args.local_argo_host,
                 local_argo_port=args.local_argo_port,
@@ -689,7 +690,7 @@ def main() -> int:
             )
             relay_host = _wait_for_relay(
                 profile=profile,
-                host=operator_host,
+                host=remote_host,
                 ssh_opts=ssh_opts,
                 relay_port=relay_port,
                 relay_process=relay_process,
@@ -700,9 +701,9 @@ def main() -> int:
             lm_base_url = str(args.lm_base_url)
 
         _log(f"Compute-node LM URL: {lm_base_url}")
-        _write_operator_metadata(
+        _write_dashboard_metadata(
             profile=profile,
-            host=operator_host,
+            host=remote_host,
             ssh_opts=ssh_opts,
             run_id=args.run_id,
             campaign=args.campaign,
@@ -713,10 +714,10 @@ def main() -> int:
         )
 
         _log("Starting rsync mirror:")
-        _log(f"  {operator_host}:{remote_run_dir}/")
+        _log(f"  {remote_host}:{remote_run_dir}/")
         _log(f"  {local_run_dir}/")
         _start_rsync_loop(
-            host=operator_host,
+            host=remote_host,
             control_path=control_path,
             remote_run_dir=remote_run_dir,
             local_run_dir=local_run_dir,
@@ -752,7 +753,7 @@ def main() -> int:
                 relay_process.kill()
         keep = args.keep_ssh_master or os.environ.get("CHEMGRAPH_ACADEMY_KEEP_SSH_MASTER") == "1"
         if started_ssh_master and not keep:
-            _stop_ssh_master(host=operator_host, control_path=control_path)
+            _stop_ssh_master(host=remote_host, control_path=control_path)
 
 
 if __name__ == "__main__":

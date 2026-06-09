@@ -270,16 +270,6 @@ Examples:
         help="Arguments forwarded to chemgraph.academy.runtime.daemon.",
     )
 
-    dashboard_parser = academy_sub.add_parser(
-        "dashboard",
-        help="Serve the ChemGraph Academy dashboard for a run directory.",
-    )
-    dashboard_parser.add_argument(
-        "dashboard_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.dashboard.",
-    )
-
     compute_parser = academy_sub.add_parser(
         "run-compute",
         help="Run a profile-backed ChemGraph Academy campaign in this allocation.",
@@ -290,14 +280,14 @@ Examples:
         help="Arguments forwarded to chemgraph.academy.runtime.compute_launcher.",
     )
 
-    console_parser = academy_sub.add_parser(
-        "console",
-        help="Start the local operator console for a ChemGraph Academy run.",
+    dashboard_parser = academy_sub.add_parser(
+        "dashboard",
+        help="Start the local dashboard launcher for a ChemGraph Academy run.",
     )
-    console_parser.add_argument(
-        "console_args",
+    dashboard_parser.add_argument(
+        "dashboard_args",
         nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.runtime.operator_console.",
+        help="Arguments forwarded to chemgraph.academy.runtime.dashboard_launcher.",
     )
 
     academy_sub.add_parser(
@@ -571,7 +561,7 @@ def _handle_academy(args: argparse.Namespace) -> None:
         return
     if command == "dashboard":
         _run_module_main(
-            "chemgraph.academy.dashboard",
+            "chemgraph.academy.runtime.dashboard_launcher",
             _strip_remainder_separator(args.dashboard_args),
         )
         return
@@ -581,12 +571,6 @@ def _handle_academy(args: argparse.Namespace) -> None:
         code = compute_main(_strip_remainder_separator(args.compute_args))
         if code:
             sys.exit(code)
-        return
-    if command == "console":
-        _run_module_main(
-            "chemgraph.academy.runtime.operator_console",
-            _strip_remainder_separator(args.console_args),
-        )
         return
     if command == "campaigns":
         from chemgraph.academy.examples import list_builtin_campaigns
@@ -602,7 +586,7 @@ def _handle_academy(args: argparse.Namespace) -> None:
         return
     console.print(
         "Usage: chemgraph academy "
-        "{mpi-daemon,run-compute,console,dashboard,campaigns,"
+        "{mpi-daemon,run-compute,dashboard,campaigns,"
         "logical-agent-configs}.",
     )
 
