@@ -484,9 +484,13 @@ class CGFastMCP(FastMCP):
             wrapper.__doc__ = expander.__doc__
             wrapper.__module__ = expander.__module__
             wrapper.__qualname__ = expander.__qualname__
-            # Preserve the expander's signature so FastMCP advertises the
-            # ensemble schema to the LLM, not the worker's per-item one.
-            wrapper.__signature__ = sig
+            # Preserve the expander's input signature so FastMCP advertises
+            # the ensemble schema to the LLM, not the worker's per-item one.
+            # The wrapper returns a submit_or_gather batch summary, though,
+            # so it must not inherit the expander's list-of-jobs annotation.
+            wrapper.__signature__ = sig.replace(
+                return_annotation=dict[str, Any]
+            )
 
             self.add_tool(wrapper, **fastmcp_kwargs)
             return expander
