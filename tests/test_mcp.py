@@ -1,19 +1,79 @@
 """Test suite for MCP servers."""
 
+import inspect
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 try:
     from mcp.types import TextContent
     from fastmcp import Client
+    from chemgraph.mcp.cg_fastmcp import CGFastMCP
     from chemgraph.mcp.mcp_tools import mcp
     from chemgraph.mcp.data_analysis_mcp import mcp as data_mcp
 except ModuleNotFoundError:
     pytest.skip("MCP test dependencies are not installed", allow_module_level=True)
 
 TEST_DIR = Path(__file__).parent
+
+
+def _fanout_worker(item: dict) -> dict:
+    return item
+
+
+def test_schema_fanout_tool_advertises_batch_result_signature(monkeypatch):
+    """Fanout tools expose an ensemble input but return batch summaries."""
+    local_mcp = CGFastMCP(name="test")
+    captured = {}
+
+    def capture_tool(fn, **kwargs):
+        captured["fn"] = fn
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(local_mcp, "add_tool", capture_tool)
+
+    @local_mcp.schema_fanout_tool(name="fanout", worker=_fanout_worker)
+    def fanout(params: dict) -> list[dict]:
+        return [params]
+
+    sig = inspect.signature(captured["fn"])
+
+    assert list(sig.parameters) == ["params"]
+    assert sig.parameters["params"].annotation is dict
+    assert sig.return_annotation == dict[str, Any]
+
+
+def test_mace_worker_creates_inline_output_parent(monkeypatch):
+    from ase import Atoms
+
+    from chemgraph.mcp import mace_mcp_hpc
+    from chemgraph.tools.ase_core import atoms_to_atomsdata
+
+    atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 0.74]])
+    output_file = "nested/family/output.json"
+
+    def fake_run_mace_core(params):
+        output_path = Path(params.output_result_file)
+        assert output_path.parent.is_dir()
+        output_path.write_text('{"ok": true}', encoding="utf-8")
+        return {"status": "success"}
+
+    monkeypatch.setattr(mace_mcp_hpc, "run_mace_core", fake_run_mace_core)
+
+    result = mace_mcp_hpc._mace_worker(
+        {
+            "inline_structure": atoms_to_atomsdata(atoms).model_dump(),
+            "output_result_file": output_file,
+            "driver": "energy",
+            "model": "small",
+            "device": "cpu",
+        }
+    )
+
+    assert result["status"] == "success"
+    assert result["full_output"] == {"ok": True}
 
 
 @pytest.mark.asyncio
