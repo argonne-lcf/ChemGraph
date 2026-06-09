@@ -23,11 +23,13 @@ class mace_input_schema(BaseModel):
     )
     model: str = Field(
         default="medium-mpa-0",
-        description="MACE foundation model name (NOT the calculator type). "
+        description="MACE foundation model name or absolute local model file path "
+        "(NOT the calculator type). "
         "Options: 'small', 'medium', 'large', 'small-0b', 'medium-0b', "
         "'small-0b2', 'medium-0b2', 'large-0b2', 'medium-0b3', "
         "'medium-mpa-0', 'medium-omat-0', 'mace-matpes-pbe-0', "
-        "'mace-matpes-r2scan-0'. Default is 'medium-mpa-0'. "
+        "'mace-matpes-r2scan-0', or an absolute path to a local .model file. "
+        "Default is 'medium-mpa-0'. "
         "Do NOT pass 'mace_mp' — that is the calculator type, not a model name.",
     )
     device: str = Field(
@@ -81,11 +83,13 @@ class mace_input_schema_ensemble(BaseModel):
     )
     model: str = Field(
         default="medium-mpa-0",
-        description="MACE foundation model name (NOT the calculator type). "
+        description="MACE foundation model name or absolute local model file path "
+        "(NOT the calculator type). "
         "Options: 'small', 'medium', 'large', 'small-0b', 'medium-0b', "
         "'small-0b2', 'medium-0b2', 'large-0b2', 'medium-0b3', "
         "'medium-mpa-0', 'medium-omat-0', 'mace-matpes-pbe-0', "
-        "'mace-matpes-r2scan-0'. Default is 'medium-mpa-0'. "
+        "'mace-matpes-r2scan-0', or an absolute path to a local .model file. "
+        "Default is 'medium-mpa-0'. "
         "Do NOT pass 'mace_mp' — that is the calculator type, not a model name.",
     )
     device: str = Field(
@@ -122,7 +126,11 @@ class mace_output_schema(BaseModel):
         description="Path to a JSON file where simulation results is saved.",
     )
     model: str | None = Field(
-        default=None, description="Path to the model. Default is medium-mpa-0."
+        default=None,
+        description=(
+            "MACE foundation model name or absolute local model file path. "
+            "Default is medium-mpa-0."
+        ),
     )
     device: str = Field(
         default="cpu",
