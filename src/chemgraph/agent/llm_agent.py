@@ -21,6 +21,8 @@ from chemgraph.models.supported_models import (
     supported_gemini_models,
 
 )
+from chemgraph.observability.langgraph_stream import ChemGraphWorkflowCallback
+from chemgraph.observability.langgraph_stream import emit_live_message_events
 
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
@@ -697,7 +699,13 @@ class ChemGraph:
             return await handler(question)
         return handler(question)
 
-    async def run(self, query: str, config=None, resume_from: Optional[str] = None):
+    async def run(
+        self,
+        query: str,
+        config=None,
+        resume_from: Optional[str] = None,
+        workflow_span_id: Optional[str] = None,
+    ):
         """
         Async-only runner. Requires `self.workflow.astream(...)`.
         Streams values, logs new messages, writes state, and returns according to
@@ -736,6 +744,12 @@ class ChemGraph:
 
             cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
             cfg["recursion_limit"] = self.recursion_limit
+            if workflow_span_id:
+                callbacks = list(cfg.get("callbacks") or [])
+                callbacks.append(
+                    ChemGraphWorkflowCallback(workflow_span_id=workflow_span_id),
+                )
+                cfg["callbacks"] = callbacks
             return cfg
 
         def _save_state_and_select_return(last_state, cfg):
@@ -792,13 +806,25 @@ class ChemGraph:
                             }
 
                     if "messages" in s and s["messages"] != prev_msgs:
-                        new_message = s["messages"][-1]
-                        try:
-                            new_message.pretty_print()
-                        except Exception:
-                            pass
-                        logger.info(new_message)
-                        prev_msgs = s["messages"]
+                        messages = s["messages"]
+                        if workflow_span_id:
+                            emit_live_message_events(
+                                previous_messages=prev_msgs,
+                                current_messages=messages,
+                                workflow_span_id=workflow_span_id,
+                            )
+                        new_messages = (
+                            messages[len(prev_msgs) :]
+                            if len(messages) >= len(prev_msgs)
+                            else messages[-1:]
+                        )
+                        for new_message in new_messages:
+                            try:
+                                new_message.pretty_print()
+                            except Exception:
+                                pass
+                            logger.info(new_message)
+                        prev_msgs = list(messages)
                     last_st = s
             except GraphInterrupt as gi:
                 # Fallback: some LangGraph versions may still raise.
