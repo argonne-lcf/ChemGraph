@@ -232,6 +232,83 @@ Examples:
     # ---- "models" subcommand ---------------------------------------------
     subparsers.add_parser("models", help="List all available LLM models.")
 
+    # ---- "dashboard" subcommands ----------------------------------------
+    dashboard_parser = subparsers.add_parser(
+        "dashboard",
+        help="Serve the ChemGraph dashboard for a run directory.",
+    )
+    dashboard_parser.add_argument(
+        "dashboard_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to chemgraph.academy.dashboard.",
+    )
+
+    dashboard_run_parser = subparsers.add_parser(
+        "dashboard-run",
+        help="Run a local ChemGraph workflow and write dashboard artifacts.",
+    )
+    dashboard_run_parser.add_argument(
+        "dashboard_run_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to chemgraph.observability.local_dashboard_run.",
+    )
+
+    # ---- "academy" subcommand -------------------------------------------
+    academy_parser = subparsers.add_parser(
+        "academy",
+        help="Run and inspect Academy-backed ChemGraph agent campaigns.",
+    )
+    academy_sub = academy_parser.add_subparsers(dest="academy_command")
+
+    daemon_parser = academy_sub.add_parser(
+        "mpi-daemon",
+        help="Run one ChemGraph Academy agent daemon inside mpiexec.",
+    )
+    daemon_parser.add_argument(
+        "daemon_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to chemgraph.academy.runtime.daemon.",
+    )
+
+    dashboard_parser = academy_sub.add_parser(
+        "dashboard",
+        help="Serve the ChemGraph Academy dashboard for a run directory.",
+    )
+    dashboard_parser.add_argument(
+        "dashboard_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to chemgraph.academy.dashboard.",
+    )
+
+    compute_parser = academy_sub.add_parser(
+        "run-compute",
+        help="Run a profile-backed ChemGraph Academy campaign in this allocation.",
+    )
+    compute_parser.add_argument(
+        "compute_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to chemgraph.academy.runtime.compute_launcher.",
+    )
+
+    console_parser = academy_sub.add_parser(
+        "console",
+        help="Start the local operator console for a ChemGraph Academy run.",
+    )
+    console_parser.add_argument(
+        "console_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to chemgraph.academy.runtime.operator_console.",
+    )
+
+    academy_sub.add_parser(
+        "campaigns",
+        help="List built-in ChemGraph Academy campaign specs.",
+    )
+    academy_sub.add_parser(
+        "logical-agent-configs",
+        help="List built-in ChemGraph Academy logical-agent prompt configs.",
+    )
+
     # ---- Legacy fallback args -------------------------------------------
     # Also add run args to the top-level parser so that
     # `chemgraph -q "..."` keeps working without a subcommand.
@@ -461,6 +538,75 @@ def _handle_run(args: argparse.Namespace) -> None:
     console.print("[dim]Thank you for using ChemGraph CLI![/dim]")
 
 
+def _strip_remainder_separator(args: list[str]) -> list[str]:
+    """Remove an optional argparse remainder separator."""
+    if args and args[0] == "--":
+        return args[1:]
+    return args
+
+
+def _run_module_main(module_name: str, argv: list[str]) -> None:
+    """Run a module-level main() with forwarded command-line arguments."""
+    import importlib
+
+    module = importlib.import_module(module_name)
+    old_argv = sys.argv
+    try:
+        sys.argv = [f"chemgraph {module_name.rsplit('.', 1)[-1]}", *argv]
+        code = module.main()
+    finally:
+        sys.argv = old_argv
+    if isinstance(code, int) and code:
+        sys.exit(code)
+
+
+def _handle_academy(args: argparse.Namespace) -> None:
+    """Handle Academy-backed ChemGraph campaign commands."""
+    command = getattr(args, "academy_command", None)
+    if command == "mpi-daemon":
+        _run_module_main(
+            "chemgraph.academy.runtime.daemon",
+            _strip_remainder_separator(args.daemon_args),
+        )
+        return
+    if command == "dashboard":
+        _run_module_main(
+            "chemgraph.academy.dashboard",
+            _strip_remainder_separator(args.dashboard_args),
+        )
+        return
+    if command == "run-compute":
+        from chemgraph.academy.runtime.compute_launcher import main as compute_main
+
+        code = compute_main(_strip_remainder_separator(args.compute_args))
+        if code:
+            sys.exit(code)
+        return
+    if command == "console":
+        _run_module_main(
+            "chemgraph.academy.runtime.operator_console",
+            _strip_remainder_separator(args.console_args),
+        )
+        return
+    if command == "campaigns":
+        from chemgraph.academy.examples import list_builtin_campaigns
+
+        for name in list_builtin_campaigns():
+            console.print(name)
+        return
+    if command == "logical-agent-configs":
+        from chemgraph.academy.examples import list_builtin_logical_agent_configs
+
+        for name in list_builtin_logical_agent_configs():
+            console.print(name)
+        return
+    console.print(
+        "Usage: chemgraph academy "
+        "{mpi-daemon,run-compute,console,dashboard,campaigns,"
+        "logical-agent-configs}.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -495,6 +641,21 @@ def main() -> None:
 
     elif args.command == "models":
         list_models()
+
+    elif args.command == "dashboard":
+        _run_module_main(
+            "chemgraph.academy.dashboard",
+            _strip_remainder_separator(args.dashboard_args),
+        )
+
+    elif args.command == "dashboard-run":
+        _run_module_main(
+            "chemgraph.observability.local_dashboard_run",
+            _strip_remainder_separator(args.dashboard_run_args),
+        )
+
+    elif args.command == "academy":
+        _handle_academy(args)
 
     elif args.command == "run":
         _handle_run(args)
