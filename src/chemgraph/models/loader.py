@@ -63,6 +63,8 @@ def load_chat_model(
             "temperature": temperature,
             "base_url": base_url,
         }
+        if api_key is not None:
+            kwargs["api_key"] = api_key
         if argo_user is not None:
             kwargs["argo_user"] = argo_user
         return load_openai_model(**kwargs)
@@ -87,5 +89,6 @@ def load_chat_model(
     else:
         raise ValueError(
             f"Model '{model_name}' not found in any supported model list. "
-            f"Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, argo:<model>, ALCF, or Ollama."
+            "Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, "
+            "argo:<model>, ALCF, or Ollama."
         )

@@ -86,6 +86,34 @@ def serialize_state(state):
         return str(state)
 
 
+def _custom_openai_compatible_kwargs(
+    *,
+    model_name: str,
+    temperature: float,
+    base_url: str,
+    api_key: str,
+    max_tokens: int,
+    top_p: float,
+    frequency_penalty: float,
+    presence_penalty: float,
+    argo_user: str | None,
+) -> dict:
+    kwargs = {
+        "model": model_name,
+        "temperature": temperature,
+        "base_url": base_url,
+        "api_key": api_key,
+        "max_tokens": max_tokens,
+        "top_p": top_p,
+        "frequency_penalty": frequency_penalty,
+        "presence_penalty": presence_penalty,
+    }
+    user = argo_user or os.getenv("ARGO_USER")
+    if base_url and "argoapi" in base_url and user:
+        kwargs["model_kwargs"] = {"user": user}
+    return kwargs
+
+
 class ChemGraph:
     """A graph-based workflow for LLM-powered computational chemistry tasks.
 
@@ -260,8 +288,8 @@ class ChemGraph:
                     )
                     from langchain_openai import ChatOpenAI
 
-                    llm = ChatOpenAI(
-                        model=model_name,
+                    llm_kwargs = _custom_openai_compatible_kwargs(
+                        model_name=model_name,
                         temperature=temperature,
                         base_url=vllm_base_url,
                         api_key=vllm_api_key,
@@ -269,7 +297,9 @@ class ChemGraph:
                         top_p=top_p,
                         frequency_penalty=frequency_penalty,
                         presence_penalty=presence_penalty,
+                        argo_user=argo_user,
                     )
+                    llm = ChatOpenAI(**llm_kwargs)
                     logger.info(
                         f"Successfully initialized ChatOpenAI for model '{model_name}' at {vllm_base_url}"
                     )
