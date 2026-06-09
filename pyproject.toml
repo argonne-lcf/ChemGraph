@@ -72,6 +72,7 @@ globus_compute = [
 ]
 academy = [
     "academy-py",
+    "redis",
 ]
 xanes = [
     "mp-api; python_version >= '3.11'",
