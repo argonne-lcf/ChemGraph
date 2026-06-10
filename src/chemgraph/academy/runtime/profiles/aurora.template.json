@@ -14,8 +14,7 @@
   "redis_protected_mode": "no",
   "mpiexec": "mpiexec",
   "pythonpath_entries": [
-    "/flare/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph/src",
-    "/flare/${ALCF_PROJECT}/${ALCF_USER}/academy"
+    "/flare/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph/src"
   ],
   "path_entries": [
     "/flare/${ALCF_PROJECT}/${ALCF_USER}/tools/redis/bin",
