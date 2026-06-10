@@ -2602,7 +2602,8 @@
     }
 
     function isWorkflowEvent(event) {
-      return [
+      const p = event.payload || {};
+      const workflowNames = [
         'run_started',
         'run_finished',
         'workflow_started',
@@ -2614,7 +2615,18 @@
         'tool_call_started',
         'tool_call_finished',
         'tool_call_failed',
-      ].includes(event.event) && Boolean(event.payload?.nested || event.payload?.runtime);
+      ];
+      if (!workflowNames.includes(event.event)) return false;
+      return Boolean(
+        p.nested
+        || p.runtime
+        || p.workflow_type
+        || p.workflow_span_id
+        || p.span_id
+        || p.parent_span_id
+        || p.thread_id
+        || (event.agent_id && p.round !== undefined && p.round !== null)
+      );
     }
 
     function workflowSpanId(event) {
@@ -2635,10 +2647,18 @@
     function workflowRootSpanId(event) {
       const p = event.payload || {};
       if (p.workflow_span_id) return p.workflow_span_id;
+      if (p.thread_id) return p.thread_id;
       if ((event.event === 'workflow_started' || event.event === 'workflow_finished') && p.span_id) {
         return p.span_id;
       }
-      return p.parent_span_id || p.span_id || event.correlation_id || null;
+      if (p.parent_span_id || p.span_id || event.correlation_id) {
+        return p.parent_span_id || p.span_id || event.correlation_id;
+      }
+      const agentId = workflowAgentId(event);
+      if (agentId && p.round !== undefined && p.round !== null) {
+        return `${agentId}-round-${p.round}`;
+      }
+      return null;
     }
 
     function workflowEventsForSpan(spanId) {
