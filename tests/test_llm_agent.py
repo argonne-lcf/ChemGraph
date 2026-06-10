@@ -10,13 +10,17 @@ def mock_llm():
     return Mock()
 
 
-def test_chemgraph_initialization():
+def test_chemgraph_initialization(tmp_path):
     with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
         mock_load.return_value = Mock()
-        agent = ChemGraph(model_name="gpt-4o-mini")
+        agent = ChemGraph(
+            model_name="gpt-4o-mini",
+            enable_memory=False,
+            log_dir=str(tmp_path / "logs"),
+        )
         assert hasattr(agent, "workflow")
 
-def test_agent_query(mock_llm):
+def test_agent_query(mock_llm, tmp_path):
     with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
         # Set up the mock chain
         mock_chain = Mock()
@@ -24,7 +28,11 @@ def test_agent_query(mock_llm):
         mock_llm.bind_tools.return_value = mock_chain
         mock_load.return_value = mock_llm
 
-        agent = ChemGraph(model_name="gpt-4o-mini")
+        agent = ChemGraph(
+            model_name="gpt-4o-mini",
+            enable_memory=False,
+            log_dir=str(tmp_path / "logs"),
+        )
         response = asyncio.run(agent.run("What is the SMILES string for water?"))
         assert isinstance(response, AIMessage)
         assert response.content == "Test response"

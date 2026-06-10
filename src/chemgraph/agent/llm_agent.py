@@ -42,28 +42,117 @@ from chemgraph.prompt.multi_agent_prompt import (
     planner_prompt as default_planner_prompt,
 )
 from langgraph.errors import GraphInterrupt
+from langchain_core.messages import AIMessage
 from langchain_core.callbacks import BaseCallbackHandler
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
-
-
-from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import construct_multi_agent_graph
-from chemgraph.graphs.graspa_agent import construct_graspa_graph
-from chemgraph.graphs.mock_agent import construct_mock_agent_graph
-from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
-from chemgraph.graphs.rag_agent import construct_rag_agent_graph
-from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
 from chemgraph.prompt.rag_prompt import rag_agent_prompt
 from chemgraph.prompt.xanes_prompt import (
     xanes_single_agent_prompt as default_xanes_single_agent_prompt,
     xanes_formatter_prompt as default_xanes_formatter_prompt,
 )
+from chemgraph.tools.ase_tools import (
+    file_to_atomsdata,
+    run_ase,
+    save_atomsdata_to_file,
+)
+from chemgraph.tools.cheminformatics_tools import (
+    molecule_name_to_smiles,
+    smiles_to_atomsdata,
+    smiles_to_coordinate_file,
+)
+from chemgraph.tools.generic_tools import calculator, repl_tool
+from chemgraph.tools.graspa_tools import run_graspa
+from chemgraph.tools.rag_tools import load_document, query_knowledge_base
+from chemgraph.tools.xanes_tools import (
+    fetch_xanes_data,
+    plot_xanes_data,
+    run_xanes,
+)
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+SINGLE_AGENT_TURN_WORKFLOWS = {
+    "single_agent",
+    "python_relp",
+    "graspa",
+    "mock_agent",
+    "single_agent_mcp",
+    "rag_agent",
+    "single_agent_xanes",
+}
+
+LEGACY_GRAPH_WORKFLOWS = {"multi_agent", "graspa_mcp"}
+
+
+def _tool_name(tool: Any) -> str:
+    return str(getattr(tool, "name", getattr(tool, "__name__", repr(tool))))
+
+
+def _merge_tools(*groups: Collection[Any] | None) -> list[Any]:
+    """Merge tool groups by visible tool name while preserving order."""
+    merged: list[Any] = []
+    seen: set[str] = set()
+    for group in groups:
+        for tool in group or ():
+            name = _tool_name(tool)
+            if name not in seen:
+                merged.append(tool)
+                seen.add(name)
+    return merged
+
+
+def _xanes_tools() -> list[Any]:
+    return [
+        molecule_name_to_smiles,
+        smiles_to_coordinate_file,
+        run_ase,
+        run_xanes,
+        fetch_xanes_data,
+        plot_xanes_data,
+    ]
+
+
+def _rag_tools() -> list[Any]:
+    return [
+        load_document,
+        query_knowledge_base,
+        file_to_atomsdata,
+        smiles_to_coordinate_file,
+        run_ase,
+        molecule_name_to_smiles,
+        save_atomsdata_to_file,
+        calculator,
+    ]
+
+
+def _mock_tools() -> list[Any]:
+    return [
+        file_to_atomsdata,
+        smiles_to_atomsdata,
+        run_ase,
+        molecule_name_to_smiles,
+        save_atomsdata_to_file,
+        calculator,
+    ]
+
+
+def _last_ai_message(state: dict[str, Any], fallback_text: str) -> AIMessage:
+    """Return the last AI message from a turn state, preserving objects when present."""
+    messages = state.get("messages", []) if isinstance(state, dict) else []
+    for message in reversed(messages):
+        if isinstance(message, AIMessage):
+            return message
+        if isinstance(message, dict):
+            message_type = message.get("type") or message.get("role")
+            if message_type in {"ai", "assistant"}:
+                return AIMessage(content=_message_text(message))
+    return AIMessage(content=fallback_text)
 
 
 def _is_mock_object(value) -> bool:
@@ -817,6 +906,16 @@ class ChemGraph:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
             raise e
 
+        supported_workflows = SINGLE_AGENT_TURN_WORKFLOWS | LEGACY_GRAPH_WORKFLOWS
+        if workflow_type not in supported_workflows:
+            raise ValueError(
+                f"Unsupported workflow type: {workflow_type}. "
+                f"Available types: {sorted(supported_workflows)}"
+            )
+
+        self._using_default_system_prompt = system_prompt == single_agent_prompt
+        self._using_default_formatter_prompt = formatter_prompt == default_formatter_prompt
+
         self.workflow_type = workflow_type
         self.model_name = model_name
         self.base_url = base_url
@@ -839,6 +938,7 @@ class ChemGraph:
         self.human_input_handler = human_input_handler
         self.human_supervised = human_supervised
         self.terminal_tool_names = tuple(terminal_tool_names)
+        self._last_run_state: dict[str, Any] | None = None
 
         # When human supervision is disabled and the caller is using the
         # default system prompt, strip the ask_human instructions so the
@@ -879,36 +979,14 @@ class ChemGraph:
             self.support_structured_output = support_structured_output
 
         self.workflow_map = {
-            "single_agent": {"constructor": construct_single_agent_graph},
             "multi_agent": {"constructor": construct_multi_agent_graph},
-            "python_relp": {"constructor": construct_relp_graph},
-            "graspa": {"constructor": construct_graspa_graph},
-            "mock_agent": {"constructor": construct_mock_agent_graph},
-            "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
-            "rag_agent": {"constructor": construct_rag_agent_graph},
-            "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
         }
 
-        if workflow_type not in self.workflow_map:
-            raise ValueError(
-                f"Unsupported workflow type: {workflow_type}. Available types: {list(self.workflow_map.keys())}"
-            )
+        self.tools = self._resolve_turn_tools(tools, data_tools)
+        self._resolve_turn_prompts()
 
-        if self.workflow_type == "single_agent":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm,
-                self.system_prompt,
-                self.structured_output,
-                self.formatter_prompt,
-                self.generate_report,
-                self.report_prompt,
-                self.tools,
-                max_retries=self.max_retries,
-                human_supervised=self.human_supervised,
-                terminal_tool_names=self.terminal_tool_names,
-            )
-        elif self.workflow_type == "multi_agent":
+        if self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 planner_prompt=self.planner_prompt,
@@ -918,55 +996,51 @@ class ChemGraph:
                 formatter_prompt=self.formatter_multi_prompt,
                 max_retries=self.max_retries,
             )
-        elif self.workflow_type == "python_relp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm,
-                self.system_prompt,
-            )
-        elif self.workflow_type == "graspa":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm,
-                self.system_prompt,
-                self.structured_output,
-                self.formatter_prompt,
-            )
-        elif self.workflow_type == "mock_agent":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm=llm,
-                system_prompt=self.system_prompt,
-            )
-        elif self.workflow_type == "single_agent_mcp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm=llm,
-                system_prompt=self.system_prompt,
-                tools=self.tools,
-            )
         elif self.workflow_type == "graspa_mcp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 executor_tools=self.tools,
                 analysis_tools=self.data_tools,
             )
-        elif self.workflow_type == "rag_agent":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm=llm,
-                system_prompt=self.system_prompt
-                if self.system_prompt != single_agent_prompt
-                else rag_agent_prompt,
-                tools=self.tools,
-            )
+        else:
+            self.workflow = None
+
+    def _resolve_turn_tools(
+        self,
+        tools: Collection[Any] | None,
+        data_tools: Collection[Any] | None,
+    ) -> list[Any] | None:
+        """Resolve the LangGraph tools for run_turn-backed workflows."""
+        if self.workflow_type == "single_agent":
+            return list(tools) if tools is not None else None
+        if self.workflow_type == "python_relp":
+            return _merge_tools(tools, [repl_tool, calculator])
+        if self.workflow_type == "graspa":
+            return _merge_tools(tools, [run_graspa])
+        if self.workflow_type == "mock_agent":
+            return _merge_tools(tools, _mock_tools())
+        if self.workflow_type == "single_agent_mcp":
+            resolved = _merge_tools(tools, data_tools)
+            if not resolved:
+                raise ValueError(
+                    "No MCP tools loaded. Ensure MCP servers are configured and reachable."
+                )
+            return resolved
+        if self.workflow_type == "rag_agent":
+            return _merge_tools(tools, _rag_tools())
+        if self.workflow_type == "single_agent_xanes":
+            return _merge_tools(tools, _xanes_tools())
+        return list(tools) if tools is not None else None
+
+    def _resolve_turn_prompts(self) -> None:
+        """Apply workflow-specific prompt defaults before run_turn."""
+        if self.workflow_type == "rag_agent" and self._using_default_system_prompt:
+            self.system_prompt = rag_agent_prompt
         elif self.workflow_type == "single_agent_xanes":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm,
-                system_prompt=self.system_prompt
-                if self.system_prompt != single_agent_prompt
-                else default_xanes_single_agent_prompt,
-                structured_output=self.structured_output,
-                formatter_prompt=self.formatter_prompt
-                if self.formatter_prompt != default_formatter_prompt
-                else default_xanes_formatter_prompt,
-                tools=self.tools,
-            )
+            if self._using_default_system_prompt:
+                self.system_prompt = default_xanes_single_agent_prompt
+            if self._using_default_formatter_prompt:
+                self.formatter_prompt = default_xanes_formatter_prompt
 
     def visualize(self, method: str = "ascii"):
         """Visualize the LangGraph graph structure.
@@ -991,6 +1065,11 @@ class ChemGraph:
         Requires IPython and nest_asyncio to be installed.
         The visualization uses Mermaid diagrams with custom styling.
         """
+        if self.workflow is None:
+            raise RuntimeError(
+                f"Workflow {self.workflow_type!r} is run-turn-backed and is built "
+                "inside ChemGraph.run(); it is not available for pre-run visualization."
+            )
         import nest_asyncio
         from IPython.display import Image, display
         from langchain_core.runnables.graph import (
@@ -1034,6 +1113,12 @@ class ChemGraph:
         list
             List of messages in the current state
         """
+        if self.workflow is None:
+            if self._last_run_state is None:
+                raise RuntimeError(
+                    f"Workflow {self.workflow_type!r} has not produced state yet."
+                )
+            return self._last_run_state
         return self.workflow.get_state(config).values
 
     def write_state(
@@ -1307,9 +1392,12 @@ class ChemGraph:
         resume_from: Optional[str] = None,
     ):
         """
-        Async-only runner. Requires `self.workflow.astream(...)`.
-        Streams values, logs new messages, writes state, and returns according to
-        `self.return_option` ("last_message" or "state").
+        Async runner for run-turn-backed and legacy graph-backed workflows.
+
+        Run-turn-backed workflows delegate to :func:`run_turn`, while legacy
+        multi-node graph workflows stream through ``self.workflow.astream``.
+        The return value follows ``self.return_option`` ("last_message" or
+        "state").
 
         When the graph pauses for human input (via ``interrupt()``), the
         ``human_input_handler`` callback is invoked to obtain the user's
@@ -1351,7 +1439,7 @@ class ChemGraph:
                 logger.info(f"Injected context from session {resume_from}")
 
         thread_id = str(config["configurable"]["thread_id"])
-        if self.workflow_type == "single_agent":
+        if self.workflow_type in SINGLE_AGENT_TURN_WORKFLOWS:
             result = await run_turn(
                 query=query,
                 tools=self.tools,
@@ -1369,11 +1457,13 @@ class ChemGraph:
                 terminal_tool_names=self.terminal_tool_names,
                 human_supervised=self.human_supervised,
             )
+            self._last_run_state = result.state
             self._save_messages_to_store(result.state, query)
+            self.write_state(config=config, file_path=None)
             if self.return_option == "state":
                 return result.state
             if self.return_option == "last_message":
-                return result.final_text
+                return _last_ai_message(result.state, result.final_text)
             raise ValueError(
                 f"Unsupported return_option: {self.return_option}. "
                 "Use 'last_message' or 'state'."
@@ -1396,6 +1486,7 @@ class ChemGraph:
                 last_state = state
             if last_state is None:
                 raise RuntimeError("Workflow produced no states")
+            self._last_run_state = serialize_state(last_state)
             self._save_messages_to_store(last_state, query)
             self.write_state(config=config, file_path=None)
             if self.return_option == "state":
