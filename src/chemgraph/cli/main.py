@@ -289,10 +289,6 @@ Examples:
         "campaigns",
         help="List built-in ChemGraph Academy campaign specs.",
     )
-    academy_sub.add_parser(
-        "logical-agent-configs",
-        help="List built-in ChemGraph Academy logical-agent prompt configs.",
-    )
 
     # ---- Legacy fallback args -------------------------------------------
     # Also add run args to the top-level parser so that
@@ -589,16 +585,9 @@ def _handle_academy(args: argparse.Namespace) -> None:
         for name in list_builtin_campaigns():
             console.print(name)
         return
-    if command == "logical-agent-configs":
-        from chemgraph.academy.examples import list_builtin_logical_agent_configs
-
-        for name in list_builtin_logical_agent_configs():
-            console.print(name)
-        return
     console.print(
         "Usage: chemgraph academy "
-        "{mpi-daemon,run-compute,dashboard,campaigns,"
-        "logical-agent-configs}.",
+        "{mpi-daemon,run-compute,dashboard,campaigns}.",
     )
 
 

@@ -12,7 +12,6 @@ BUILTIN_CAMPAIGNS = {
 }
 
 BUILTIN_LM_CONFIG_TEMPLATES = {
-    'argo-gpt54-template': f'{EXAMPLE_002}/lm_config.template.json',
     'argo-gpt54-mace-template': f'{EXAMPLE_002}/lm_config.template.json',
 }
 
@@ -61,10 +60,6 @@ def resolve_builtin_lm_config_template(path_or_name: str | Path) -> Path:
 
 def list_builtin_campaigns() -> list[str]:
     return sorted(BUILTIN_CAMPAIGNS)
-
-
-def list_builtin_lm_config_templates() -> list[str]:
-    return sorted(BUILTIN_LM_CONFIG_TEMPLATES)
 
 
 def campaign_launch_defaults(campaign: str) -> CampaignLaunchDefaults:
