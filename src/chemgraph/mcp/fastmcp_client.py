@@ -1,20 +1,20 @@
-"""Campaign-scoped in-process FastMCP tool loading and invocation."""
+"""In-process client adapter for FastMCP tool modules."""
 
 from __future__ import annotations
 
 import importlib
 import json
 import uuid
+from collections.abc import Mapping
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
+from typing import Protocol
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
 
-from chemgraph.academy.core.campaign import ExecutionSpec
-from chemgraph.academy.core.campaign import ToolSpec
 
 class ToolInvocation(BaseModel):
     """A normalized record of one agent-requested FastMCP tool call."""
@@ -40,6 +40,24 @@ class ToolResult(BaseModel):
     correlation_id: str
 
 
+class FastMCPToolSpec(Protocol):
+    """Structural interface for config-declared FastMCP tools."""
+
+    name: str
+    module: str
+    tool: str
+    description: str | None
+
+
+class FastMCPExecutionSpec(Protocol):
+    """Structural interface for backend configuration used by CGFastMCP."""
+
+    backend: str | None
+    system: str | None
+    config_path: str | None
+    options: Mapping[str, Any]
+
+
 def load_fastmcp_tool_module(
     module_name: str,
     *,
@@ -63,7 +81,9 @@ def load_fastmcp_tool_module(
     return server
 
 
-async def fastmcp_tool_schemas(specs: list[ToolSpec]) -> list[dict[str, Any]]:
+async def fastmcp_tool_schemas(
+    specs: Sequence[FastMCPToolSpec],
+) -> list[dict[str, Any]]:
     """Build OpenAI tool schemas from declared FastMCP ToolSpecs."""
     schemas: list[dict[str, Any]] = []
     module_cache: dict[str, Any] = {}
@@ -108,7 +128,7 @@ def _fastmcp_tool_payload(tool: Any) -> dict[str, Any]:
 
 
 def _openai_tool_schema(
-    spec: ToolSpec,
+    spec: FastMCPToolSpec,
     tool_payload: dict[str, Any],
 ) -> dict[str, Any]:
     parameters = _sanitize_input_schema(
@@ -195,14 +215,14 @@ def _first_json_text_result(values: list[Any]) -> Any | None:
     return None
 
 
-class CampaignFastMCPToolInvoker:
-    """Invoke campaign-allowed tools through in-process FastMCP modules."""
+class FastMCPToolInvoker:
+    """Invoke allowed tools through in-process FastMCP modules."""
 
     def __init__(
         self,
         *,
-        specs: list[ToolSpec],
-        execution: ExecutionSpec,
+        specs: Sequence[FastMCPToolSpec],
+        execution: FastMCPExecutionSpec,
         run_dir: str | Path,
     ) -> None:
         self.specs = {spec.name: spec for spec in specs}
@@ -298,7 +318,7 @@ def _configure_fastmcp_backend(
     mcp: Any,
     *,
     module_name: str,
-    execution: ExecutionSpec,
+    execution: FastMCPExecutionSpec,
     run_dir: str | Path,
 ) -> None:
     """Configure a CGFastMCP backend without initialising compute resources."""
@@ -323,15 +343,15 @@ def _configure_fastmcp_backend(
     )
 
 
-async def build_campaign_fastmcp_tool_invoker(
+async def build_fastmcp_tool_invoker(
     *,
-    specs: list[ToolSpec],
-    execution: ExecutionSpec,
+    specs: Sequence[FastMCPToolSpec],
+    execution: FastMCPExecutionSpec,
     run_dir: str | Path,
     agent_name: str,
-) -> CampaignFastMCPToolInvoker:
-    """Build and verify one agent's campaign-scoped FastMCP tool invoker."""
-    invoker = CampaignFastMCPToolInvoker(
+) -> FastMCPToolInvoker:
+    """Build and verify one agent's in-process FastMCP tool invoker."""
+    invoker = FastMCPToolInvoker(
         specs=list(specs),
         execution=execution,
         run_dir=run_dir,

@@ -34,8 +34,8 @@ from chemgraph.academy.runtime.mpi import rank_from_env
 from chemgraph.academy.core.agent import ChemGraphLogicalAgent
 from chemgraph.academy.core.lm import load_lm_config
 from chemgraph.academy.core.prompt import load_prompt_profile
-from chemgraph.academy.core.fastmcp import (
-    build_campaign_fastmcp_tool_invoker,
+from chemgraph.mcp.fastmcp_client import (
+    build_fastmcp_tool_invoker,
 )
 
 
@@ -106,7 +106,7 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
         if peer in registrations
     }
 
-    tool_invoker = await build_campaign_fastmcp_tool_invoker(
+    tool_invoker = await build_fastmcp_tool_invoker(
         specs=list(agent_spec.tools),
         execution=ExecutionSpec(backend='local', system='local'),
         run_dir=config.run_dir,

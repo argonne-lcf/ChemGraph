@@ -13,8 +13,8 @@ from academy.agent import loop
 from academy.handle import Handle
 from academy.identifier import AgentId
 
-from chemgraph.academy.core.fastmcp import (
-    CampaignFastMCPToolInvoker,
+from chemgraph.mcp.fastmcp_client import (
+    FastMCPToolInvoker,
 )
 from chemgraph.academy.core.peer_protocol import validate_message
 from chemgraph.academy.observability.event_log import EventLog
@@ -39,7 +39,7 @@ class ChemGraphLogicalAgent(Agent):
         prompt_profile: PromptProfile,
         run_dir: Path,
         max_decisions: int,
-        tool_invoker: CampaignFastMCPToolInvoker,
+        tool_invoker: FastMCPToolInvoker,
         peer_agent_ids: Mapping[str, AgentId[Any]] | None = None,
         placement: dict[str, Any] | None = None,
         poll_timeout_s: float = 2.0,

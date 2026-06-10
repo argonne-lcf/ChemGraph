@@ -22,10 +22,10 @@ from pydantic import Field
 from pydantic import ValidationError
 
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
-from chemgraph.academy.core.fastmcp import ToolInvocation
-from chemgraph.academy.core.fastmcp import fastmcp_tool_schemas
-from chemgraph.academy.core.fastmcp import (
-    CampaignFastMCPToolInvoker,
+from chemgraph.mcp.fastmcp_client import ToolInvocation
+from chemgraph.mcp.fastmcp_client import fastmcp_tool_schemas
+from chemgraph.mcp.fastmcp_client import (
+    FastMCPToolInvoker,
 )
 from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.observability.run_files import append_jsonl
@@ -203,7 +203,7 @@ async def build_chemgraph_reasoning_tools(
     *,
     spec: ChemGraphAgentSpec,
     run_dir: pathlib.Path,
-    tool_invoker: CampaignFastMCPToolInvoker,
+    tool_invoker: FastMCPToolInvoker,
     peer_names: tuple[str, ...],
     peer_handles: Mapping[str, Handle[Any]],
     outbox: list[dict[str, Any]],

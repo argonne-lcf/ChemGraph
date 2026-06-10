@@ -13,8 +13,8 @@ from typing import Any
 from academy.handle import Handle
 from langchain_core.tools import BaseTool
 
-from chemgraph.academy.core.fastmcp import (
-    CampaignFastMCPToolInvoker,
+from chemgraph.mcp.fastmcp_client import (
+    FastMCPToolInvoker,
 )
 from chemgraph.academy.core.tools import (
     ReasoningToolRuntimeState,
@@ -98,7 +98,7 @@ class ChemGraphReasoningRoundEngine:
         prompt_profile: PromptProfile,
         run_dir: Path,
         max_decisions: int,
-        tool_invoker: CampaignFastMCPToolInvoker,
+        tool_invoker: FastMCPToolInvoker,
         peer_names: tuple[str, ...],
         peer_handles: Mapping[str, Handle[Any]],
         received_message_history: list[dict[str, Any]],
