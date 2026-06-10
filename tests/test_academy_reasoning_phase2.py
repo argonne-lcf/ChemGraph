@@ -256,7 +256,6 @@ def test_build_peer_status_uses_agent_status_file(tmp_path) -> None:
                 "finished": False,
                 "last_error": None,
                 "status_updated_at": 100.0,
-                "recent_outbox": [{"message_id": "msg-ack", "tldr": "MACE running"}],
             },
         )
         + "\n",
@@ -267,7 +266,7 @@ def test_build_peer_status_uses_agent_status_file(tmp_path) -> None:
 
     assert status["agent-b"]["state"] == "idle"
     assert status["agent-b"]["round"] == 3
-    assert status["agent-b"]["last_outbox_tldr"] == "MACE running"
+    assert status["agent-b"]["last_error"] is None
 
 
 def test_campaign_resources_resolve_to_shared_run_artifacts(tmp_path) -> None:

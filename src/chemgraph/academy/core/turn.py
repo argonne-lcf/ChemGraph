@@ -117,17 +117,7 @@ def _status(run_dir: Path, peer: str, *, now: float) -> dict[str, Any]:
     data = read_json_file(run_dir / "agent_status" / f"{peer}.json", default={})
     timestamp = _float(data.get("status_updated_at"))
     state = "unknown" if not data else "error" if data.get("last_error") else "finished" if data.get("finished") else "idle"
-    return {"state": state, "round": data.get("round"), "finished": bool(data.get("finished")) if data else False, "last_error": data.get("last_error"), "current_activity": data.get("current_activity"), "seconds_since_update": None if timestamp is None else max(0.0, round(now - timestamp, 3)), "last_outbox_tldr": _last_outbox(data), "last_belief": _belief(data.get("belief"))}
-
-
-def _last_outbox(data: dict[str, Any]) -> str | None:
-    recent = data.get("recent_outbox")
-    return (recent[-1].get("tldr") or _preview(recent[-1].get("content"))) if isinstance(recent, list) and recent and isinstance(recent[-1], dict) else None
-
-
-def _belief(value: Any) -> dict[str, Any] | None:
-    summary = value.get("summary") or value.get("hypothesis") if isinstance(value, dict) else None
-    return {"summary": _preview(summary, max_chars=220), "confidence": value.get("confidence")} if summary else None
+    return {"state": state, "round": data.get("round"), "finished": bool(data.get("finished")) if data else False, "last_error": data.get("last_error"), "seconds_since_update": None if timestamp is None else max(0.0, round(now - timestamp, 3))}
 
 
 def _tail(items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:

@@ -175,15 +175,6 @@ def default_agent_state(spec: ChemGraphAgentSpec) -> dict[str, Any]:
         'round': 0,
         'finished': False,
         'last_error': None,
-        'current_activity': None,
-        'recent_outbox': [],
-        'belief': {
-            'hypothesis': None,
-            'confidence': 0.0,
-            'supporting_message_ids': [],
-            'supporting_tool_result_ids': [],
-            'reason': None,
-        },
     }
 
 

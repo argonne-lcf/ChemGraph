@@ -188,15 +188,6 @@ class ChemGraphLogicalAgent(Agent):
             'round': self.round_index,
             'finished': self.finished,
             'last_error': self.last_error,
-            'current_activity': None,
-            'recent_outbox': self.outbox[-10:],
-            'belief': self.final_result or {
-                'hypothesis': None,
-                'confidence': 0.0,
-                'supporting_message_ids': [],
-                'supporting_tool_result_ids': [],
-                'reason': None,
-            },
         }
 
     async def _reasoning_round(self) -> bool:
