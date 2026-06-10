@@ -17,7 +17,7 @@ from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 from chemgraph.academy.core.campaign import ChemGraphCampaign
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
 from chemgraph.academy.runtime.mpi import append_system_trace
-from chemgraph.academy.core.lm import LLMSettings
+from chemgraph.models.settings import LLMSettings
 
 
 def write_run_artifacts(run_dir: str | pathlib.Path) -> dict[str, Any]:

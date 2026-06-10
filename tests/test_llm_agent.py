@@ -21,12 +21,15 @@ def test_chemgraph_initialization(tmp_path):
         assert hasattr(agent, "workflow")
 
 def test_agent_query(mock_llm, tmp_path):
-    with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
+    with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_init_load, patch(
+        "chemgraph.models.loader.load_openai_model"
+    ) as mock_turn_load:
         # Set up the mock chain
         mock_chain = Mock()
         mock_chain.invoke.return_value = AIMessage(content="Test response")
         mock_llm.bind_tools.return_value = mock_chain
-        mock_load.return_value = mock_llm
+        mock_init_load.return_value = mock_llm
+        mock_turn_load.return_value = mock_llm
 
         agent = ChemGraph(
             model_name="gpt-4o-mini",

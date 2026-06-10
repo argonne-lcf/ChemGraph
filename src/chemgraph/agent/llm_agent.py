@@ -14,6 +14,7 @@ from chemgraph.models.local_model import load_ollama_model
 from chemgraph.models.anthropic import load_anthropic_model
 from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
+from chemgraph.models.loader import load_chat_model
 from chemgraph.models.supported_models import (
     supported_openai_models,
     supported_ollama_models,
@@ -23,6 +24,7 @@ from chemgraph.models.supported_models import (
     supported_gemini_models,
 
 )
+from chemgraph.models.settings import LLMSettings
 from chemgraph.schemas.ase_input import (
     get_available_calculator_names,
     get_calculator_selection_context,
@@ -485,41 +487,18 @@ def _load_turn_llm(
     argo_user: str | None,
 ) -> Any:
     temperature = 0.0
-    if model_name in supported_openai_models or model_name in supported_argo_models:
-        kwargs = {
-            "model_name": model_name,
-            "temperature": temperature,
-            "base_url": base_url,
-        }
-        if argo_user is not None:
-            kwargs["argo_user"] = argo_user
-        return load_openai_model(**kwargs)
-    if model_name in supported_ollama_models:
-        return load_ollama_model(model_name=model_name, temperature=temperature)
-    if model_name in supported_alcf_models:
-        return load_alcf_model(
-            model_name=model_name,
-            base_url=base_url,
-            api_key=api_key,
+    try:
+        return load_chat_model(
+            settings=LLMSettings(
+                model=model_name,
+                base_url=base_url,
+                api_key=api_key,
+                argo_user=argo_user,
+                temperature=temperature,
+            ),
         )
-    if model_name in supported_anthropic_models:
-        return load_anthropic_model(
-            model_name=model_name,
-            api_key=api_key,
-            temperature=temperature,
-        )
-    if model_name in supported_gemini_models:
-        return load_gemini_model(
-            model_name=model_name,
-            api_key=api_key,
-            temperature=temperature,
-        )
-    if model_name.startswith("groq:"):
-        return load_groq_model(
-            model_name=model_name,
-            api_key=api_key,
-            temperature=temperature,
-        )
+    except ValueError:
+        pass
 
     endpoint = os.getenv("VLLM_BASE_URL", base_url or "")
     key = os.getenv("OPENAI_API_KEY", api_key or "dummy_vllm_key")

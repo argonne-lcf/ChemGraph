@@ -23,8 +23,8 @@ from chemgraph.academy.core.tools import build_chemgraph_reasoning_tools
 from chemgraph.academy.core.turn import run_academy_turn
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 from chemgraph.academy.core.campaign import ChemGraphCampaign
-from chemgraph.academy.core.lm import LLMSettings
 from chemgraph.academy.core.prompt import PromptProfile
+from chemgraph.models.settings import LLMSettings
 
 
 class ChemGraphLogicalAgent(Agent):

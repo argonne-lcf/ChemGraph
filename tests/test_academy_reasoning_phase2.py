@@ -13,11 +13,11 @@ from chemgraph.academy.core import turn as turn_module
 from chemgraph.academy.core.agent import ChemGraphLogicalAgent
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec, ChemGraphCampaign
 from chemgraph.academy.core.campaign import ResourceSpec, resolve_campaign_resources
-from chemgraph.academy.core.lm import LLMSettings
 from chemgraph.academy.core.prompt import PromptProfile, PromptStateLimits
 from chemgraph.academy.core.tools import build_chemgraph_reasoning_tools
 from chemgraph.academy.core.turn import ReasoningTurnResult, build_peer_status
 from chemgraph.agent.llm_agent import TurnResult
+from chemgraph.models.settings import LLMSettings
 
 
 def _agent_spec() -> ChemGraphAgentSpec:

@@ -10,10 +10,10 @@ from typing import Any
 from langchain_core.tools import BaseTool
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec, ChemGraphCampaign
 from chemgraph.academy.core.campaign import visible_resources_payload
-from chemgraph.academy.core.lm import LLMSettings
 from chemgraph.academy.core.prompt import PromptProfile
 from chemgraph.academy.observability.run_files import read_json_file
 from chemgraph.agent.llm_agent import run_turn
+from chemgraph.models.settings import LLMSettings
 
 TraceFn = Callable[[str, dict[str, Any]], None]
 ACTION_TOOL_NAMES = frozenset({"send_message", "ask_peer", "submit_result", "finish_turn"})

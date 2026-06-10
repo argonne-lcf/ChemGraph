@@ -31,8 +31,8 @@ from chemgraph.academy.runtime.mpi import local_rank_from_env
 from chemgraph.academy.runtime.mpi import placement_payload
 from chemgraph.academy.runtime.mpi import rank_from_env
 from chemgraph.academy.core.agent import ChemGraphLogicalAgent
-from chemgraph.academy.core.lm import load_lm_config
 from chemgraph.academy.core.prompt import load_prompt_profile
+from chemgraph.models.settings import load_lm_settings
 from chemgraph.mcp.fastmcp_client import (
     FastMCPExecutionConfig,
     build_fastmcp_tool_invoker,
@@ -41,7 +41,7 @@ from chemgraph.mcp.fastmcp_client import (
 
 async def run_daemon(config: ChemGraphDaemonConfig) -> int:
     config.run_dir.mkdir(parents=True, exist_ok=True)
-    llm_settings = load_lm_config(config.lm_config)
+    llm_settings = load_lm_settings(config.lm_config)
     campaign = resolve_campaign_resources(
         load_campaign(config.campaign_config),
         config.run_dir,
