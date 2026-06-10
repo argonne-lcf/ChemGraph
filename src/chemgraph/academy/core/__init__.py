@@ -4,8 +4,8 @@ from chemgraph.academy.core.agent import ChemGraphLogicalAgent
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 from chemgraph.academy.core.campaign import ChemGraphCampaign
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
+from chemgraph.academy.core.campaign import MCPServerSpec
 from chemgraph.academy.core.campaign import ResourceSpec
-from chemgraph.academy.core.campaign import ToolSpec
 from chemgraph.academy.core.campaign import load_campaign
 from chemgraph.academy.core.campaign import resolve_campaign_resources
 from chemgraph.academy.core.prompt import PromptProfile
@@ -18,10 +18,10 @@ __all__ = [
     "ChemGraphCampaign",
     "ChemGraphDaemonConfig",
     "ChemGraphLogicalAgent",
+    "MCPServerSpec",
     "PromptProfile",
     "ReasoningTurnResult",
     "ResourceSpec",
-    "ToolSpec",
     "load_campaign",
     "load_prompt_profile",
     "resolve_campaign_resources",

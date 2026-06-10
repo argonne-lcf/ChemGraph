@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -12,10 +12,8 @@ from academy.agent import Agent, action
 from academy.agent import loop
 from academy.handle import Handle
 from academy.identifier import AgentId
+from langchain_core.tools import BaseTool
 
-from chemgraph.mcp.fastmcp_client import (
-    FastMCPToolInvoker,
-)
 from chemgraph.academy.core.peer_protocol import validate_message
 from chemgraph.academy.observability.event_log import EventLog
 from chemgraph.academy.observability.run_artifacts import write_status_snapshot
@@ -39,7 +37,7 @@ class ChemGraphLogicalAgent(Agent):
         prompt_profile: PromptProfile,
         run_dir: Path,
         max_decisions: int,
-        tool_invoker: FastMCPToolInvoker,
+        external_tools: Sequence[BaseTool] = (),
         peer_agent_ids: Mapping[str, AgentId[Any]] | None = None,
         placement: dict[str, Any] | None = None,
         poll_timeout_s: float = 2.0,
@@ -53,7 +51,7 @@ class ChemGraphLogicalAgent(Agent):
         self.prompt_profile = prompt_profile
         self.run_dir = run_dir
         self.max_decisions = max_decisions
-        self.tool_invoker = tool_invoker
+        self.external_tools = list(external_tools)
         self.peer_agent_ids = dict(peer_agent_ids or {})
         self.placement = placement or {}
         self.poll_timeout_s = poll_timeout_s
@@ -82,7 +80,7 @@ class ChemGraphLogicalAgent(Agent):
             'agent_started',
             {
                 'role': self.spec.role,
-                'tool_names': list(self.spec.tool_names),
+                'tool_names': [tool.name for tool in self.external_tools],
                 'allowed_peers': list(self.spec.allowed_peers),
                 'placement': self.placement,
                 **self.placement,
@@ -195,7 +193,7 @@ class ChemGraphLogicalAgent(Agent):
         tools = await build_chemgraph_reasoning_tools(
             spec=self.spec,
             run_dir=self.run_dir,
-            tool_invoker=self.tool_invoker,
+            external_tools=self.external_tools,
             peer_names=self.peer_names,
             peer_handles=self.peer_handles,
             outbox=self.outbox,

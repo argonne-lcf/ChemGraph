@@ -53,8 +53,11 @@ async def run_academy_turn(
     def on_event(event: str, payload: dict) -> None:
         trace(event, {"round": round_index, **payload})
 
+    available_tool_names = tuple(
+        tool.name for tool in tools if tool.name not in ACTION_TOOL_NAMES
+    )
     result = await run_turn(
-        query=json.dumps(_state(campaign, spec, prompt_profile, run_dir, max_decisions, round_index, received_message_history, outbox, tool_results, get_final_result, peer_names), sort_keys=True),
+        query=json.dumps(_state(campaign, spec, prompt_profile, run_dir, max_decisions, round_index, received_message_history, outbox, tool_results, get_final_result, peer_names, available_tool_names), sort_keys=True),
         tools=tools,
         model_name=llm_settings.model,
         base_url=llm_settings.base_url,
@@ -82,7 +85,7 @@ async def run_academy_turn(
     trace("chemgraph_reasoning_turn_finished", {"round": round_index, "thread_id": out.thread_id, "action_tools_called": list(action_tools), "science_tools_called": list(science_tools), "requested_finish": out.requested_finish, "requested_self_wake": out.requested_self_wake})
     return out
 
-def _state(campaign, spec, profile, run_dir, max_decisions, round_index, messages, outbox, results, get_final_result, peer_names) -> dict[str, Any]:
+def _state(campaign, spec, profile, run_dir, max_decisions, round_index, messages, outbox, results, get_final_result, peer_names, available_tool_names) -> dict[str, Any]:
     limits = profile.state_limits
     return {
         "campaign": campaign.run_id,
@@ -95,7 +98,7 @@ def _state(campaign, spec, profile, run_dir, max_decisions, round_index, message
         "resources": visible_resources_payload(campaign, spec),
         "allowed_peers": list(spec.allowed_peers),
         "peer_status": build_peer_status(run_dir=run_dir, peer_names=peer_names),
-        "available_chemgraph_tools": list(spec.tool_names),
+        "available_chemgraph_tools": list(available_tool_names),
         "received_messages": _tail(messages, limits.received_messages_last_n),
         "local_chemgraph_tool_results": _tail(results, limits.tool_results_last_n),
         "recent_actions": build_recent_actions(outbox=outbox, tool_results=results, limit=limits.actions_last_n),

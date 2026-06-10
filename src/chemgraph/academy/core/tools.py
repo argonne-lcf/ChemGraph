@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import pathlib
 import time
-import uuid
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from academy.handle import Handle
@@ -15,9 +13,6 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
-from chemgraph.mcp.fastmcp_client import ToolInvocation
-from chemgraph.mcp.fastmcp_client import fastmcp_tool_schemas
-from chemgraph.mcp.fastmcp_client import FastMCPToolInvoker
 from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.observability.run_files import append_jsonl
 
@@ -104,29 +99,11 @@ def _disallowed_recipient_response(
     return {**payload, "status": "error"}
 
 
-def _compact_for_lm(value: Any, *, max_chars: int = 4000) -> Any:
-    """Return a JSON-safe, size-bounded value for tool feedback."""
-    try:
-        text = json.dumps(value, sort_keys=True)
-    except TypeError:
-        text = repr(value)
-    if len(text) <= max_chars:
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return text
-    return {
-        "truncated": True,
-        "preview": text[:max_chars],
-        "full_result_location": "tool_results.jsonl",
-    }
-
-
 async def build_chemgraph_reasoning_tools(
     *,
     spec: ChemGraphAgentSpec,
     run_dir: pathlib.Path,
-    tool_invoker: FastMCPToolInvoker,
+    external_tools: Sequence[BaseTool] = (),
     peer_names: tuple[str, ...],
     peer_handles: Mapping[str, Handle[Any]],
     outbox: list[dict[str, Any]],
@@ -314,80 +291,6 @@ async def build_chemgraph_reasoning_tools(
             metadata={"chemgraph_academy_tool_kind": "action_tool"},
         ),
     ]
-
-    fastmcp_schemas = await fastmcp_tool_schemas(list(spec.tools))
-    schema_by_name = {
-        schema["function"]["name"]: schema["function"]
-        for schema in fastmcp_schemas
-        if schema.get("type") == "function"
-    }
-
-    for tool_spec in spec.tools:
-        function_schema = schema_by_name[tool_spec.name]
-
-        async def run_fastmcp_tool(
-            __tool_name: str = tool_spec.name,
-            **kwargs: Any,
-        ) -> dict[str, Any]:
-            if __tool_name not in spec.tool_names:
-                raise RuntimeError(
-                    f"{spec.name} cannot call unavailable tool {__tool_name}",
-                )
-            tool_result_id = f"tool-{uuid.uuid4()}"
-            started = {
-                "tool_result_id": tool_result_id,
-                "tool_name": __tool_name,
-                "arguments": kwargs,
-            }
-            trace("tool_call_started", started)
-            result_record = await tool_invoker.invoke(
-                ToolInvocation(
-                    tool_name=__tool_name,
-                    arguments=kwargs,
-                    agent_id=spec.name,
-                    role=spec.role,
-                    correlation_id=tool_result_id,
-                ),
-            )
-            if result_record.status != "success":
-                failure = {
-                    **started,
-                    "status": "failed",
-                    "error": result_record.error
-                    or "tool returned non-success status",
-                }
-                append_jsonl(run_dir / "tool_results.jsonl", failure)
-                trace("tool_call_failed", failure)
-                raise RuntimeError(f"{__tool_name} failed: {failure['error']}")
-
-            record = {
-                **started,
-                "timestamp": time.time(),
-                "agent_name": spec.name,
-                "status": "ok",
-                "result": result_record.result,
-            }
-            tool_results.append(record)
-            append_jsonl(run_dir / "tool_results.jsonl", record)
-            trace("tool_call_finished", record)
-            return {
-                "status": "ok",
-                "tool_result_id": tool_result_id,
-                "tool_name": __tool_name,
-                "result": _compact_for_lm(result_record.result),
-            }
-
-        tools.append(
-            StructuredTool.from_function(
-                coroutine=run_fastmcp_tool,
-                name=tool_spec.name,
-                description=function_schema.get("description")
-                or tool_spec.description
-                or f"Run ChemGraph FastMCP tool {tool_spec.name}.",
-                args_schema=function_schema.get("parameters")
-                or {"type": "object", "properties": {}},
-                metadata={"chemgraph_academy_tool_kind": "science_tool"},
-            ),
-        )
+    tools.extend(external_tools)
 
     return tools

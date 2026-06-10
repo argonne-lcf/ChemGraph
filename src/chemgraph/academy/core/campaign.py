@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from chemgraph.academy.examples import resolve_builtin_campaign
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 _REMOVED_CAMPAIGN_FIELDS = frozenset(
@@ -29,22 +29,28 @@ _RESOURCE_SCOPES = frozenset(
 )
 
 
-class ToolSpec(BaseModel):
-    """Campaign-declared external tool available to agents."""
+class MCPServerSpec(BaseModel):
+    """Campaign-declared MCP server subprocess available to agents."""
 
     model_config = ConfigDict(extra='forbid')
 
-    name: str
-    module: str
-    tool: str
-    description: str = ''
+    name: str = Field(min_length=1)
+    command: str = Field(
+        min_length=1,
+        description=(
+            "Shell command to launch the MCP server. Tokens after the first "
+            "are arguments. Do not include --transport/--host/--port; the "
+            "supervisor adds them."
+        ),
+    )
+    env: dict[str, str] = Field(default_factory=dict)
 
-    @field_validator('name', 'module', 'tool')
+    @field_validator('name', 'command')
     @classmethod
     def _non_empty(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError('tool spec fields must be non-empty strings')
+            raise ValueError('field must be non-empty')
         return value
 
 
@@ -99,12 +105,8 @@ class ChemGraphAgentSpec:
     role: str
     mission: str
     allowed_peers: tuple[str, ...]
-    tools: tuple[ToolSpec, ...]
+    mcp_servers: tuple[str, ...] = ()
     resources: tuple[str, ...] = ()
-
-    @property
-    def tool_names(self) -> tuple[str, ...]:
-        return tuple(tool.name for tool in self.tools)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -114,7 +116,7 @@ class ChemGraphCampaign:
     initial_agent: str
     prompt_profile: pathlib.Path
     agents: tuple[ChemGraphAgentSpec, ...]
-    tool_catalog: tuple[ToolSpec, ...] = ()
+    mcp_servers: tuple[MCPServerSpec, ...] = ()
     resources: Mapping[str, ResourceSpec] = dataclasses.field(default_factory=dict)
 
 
@@ -223,7 +225,10 @@ def load_campaign(path: str | pathlib.Path) -> ChemGraphCampaign:
         field_name='prompt_profile',
     )
 
-    tool_catalog = _load_tool_catalog(data)
+    mcp_servers = tuple(
+        MCPServerSpec.model_validate(raw)
+        for raw in data.get('mcp_servers', ())
+    )
     resources = {
         name: _resolve_resource_spec(raw, campaign_path=path)
         for name, raw in dict(data.get('resources', {})).items()
@@ -236,7 +241,7 @@ def load_campaign(path: str | pathlib.Path) -> ChemGraphCampaign:
                 role=item['role'],
                 mission=item['mission'],
                 allowed_peers=tuple(item.get('allowed_peers', ())),
-                tools=_load_declared_tools(item, tool_catalog),
+                mcp_servers=tuple(item.get('mcp_servers', ())),
                 resources=tuple(item.get('resources', ())),
             ),
         )
@@ -246,7 +251,7 @@ def load_campaign(path: str | pathlib.Path) -> ChemGraphCampaign:
         initial_agent=data.get('initial_agent', agents[0].name),
         prompt_profile=prompt_profile,
         agents=tuple(agents),
-        tool_catalog=tuple(tool_catalog.values()),
+        mcp_servers=mcp_servers,
         resources=resources,
     )
 
@@ -342,44 +347,6 @@ def _resolve_campaign_relative_path(
     return path.resolve()
 
 
-def _load_tool_catalog(data: Mapping[str, Any]) -> dict[str, ToolSpec]:
-    catalog: dict[str, ToolSpec] = {}
-    for raw in data.get('tools', ()):
-        if not isinstance(raw, dict):
-            raise RuntimeError('campaign top-level tools[] entries must be objects')
-        spec = ToolSpec.model_validate(raw)
-        if spec.name in catalog:
-            raise RuntimeError(f'duplicate campaign tool name: {spec.name}')
-        catalog[spec.name] = spec
-    return catalog
-
-
-def _load_declared_tools(
-    item: Mapping[str, Any],
-    catalog: Mapping[str, ToolSpec],
-) -> tuple[ToolSpec, ...]:
-    raw_tools = item.get('tools')
-    if raw_tools is None:
-        raw_tools = item.get('tool_names', ())
-    tools: list[ToolSpec] = []
-    for raw in raw_tools:
-        if isinstance(raw, str):
-            try:
-                tools.append(catalog[raw])
-            except KeyError as exc:
-                raise RuntimeError(
-                    f'agent {item.get("name")!r} references unknown campaign tool {raw!r}; '
-                    'declare it in top-level tools[] or inline as a FastMCP ToolSpec object',
-                ) from exc
-        elif isinstance(raw, dict):
-            tools.append(ToolSpec.model_validate(raw))
-        else:
-            raise RuntimeError(
-                f'agent {item.get("name")!r} tools[] entries must be strings or objects',
-            )
-    return tuple(tools)
-
-
 def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
     if len(campaign.agents) != agent_count:
         raise RuntimeError(
@@ -393,6 +360,10 @@ def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
         raise RuntimeError(
             f'initial_agent {campaign.initial_agent!r} is not an agent',
         )
+    server_names = [server.name for server in campaign.mcp_servers]
+    if len(set(server_names)) != len(server_names):
+        raise RuntimeError('campaign MCP server names must be unique')
+    declared_servers = set(server_names)
     for agent in campaign.agents:
         unknown = sorted(set(agent.allowed_peers).difference(names))
         if unknown:
@@ -401,9 +372,11 @@ def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
             )
         if agent.name in agent.allowed_peers:
             raise RuntimeError(f'{agent.name} must not list itself as a peer')
-        tool_names = list(agent.tool_names)
-        if len(set(tool_names)) != len(tool_names):
-            raise RuntimeError(f'{agent.name} has duplicate tool declarations')
+        unknown_servers = sorted(set(agent.mcp_servers).difference(declared_servers))
+        if unknown_servers:
+            raise RuntimeError(
+                f'{agent.name} references unknown MCP servers: {unknown_servers}',
+            )
         unknown_resources = sorted(set(agent.resources).difference(campaign.resources))
         if unknown_resources:
             raise RuntimeError(

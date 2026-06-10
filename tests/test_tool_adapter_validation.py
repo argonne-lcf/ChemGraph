@@ -23,7 +23,7 @@ def _agent_spec() -> ChemGraphAgentSpec:
         role="Worker",
         mission="Use explicit tools only.",
         allowed_peers=("agent-b",),
-        tools=(),
+        mcp_servers=(),
     )
 
 
@@ -34,7 +34,6 @@ async def _build_tools(tmp_path):
     tools = await build_chemgraph_reasoning_tools(
         spec=_agent_spec(),
         run_dir=tmp_path,
-        tool_invoker=object(),  # unused when spec.tools is empty
         peer_names=("agent-b",),
         peer_handles={"agent-b": peer_handle},
         outbox=outbox,

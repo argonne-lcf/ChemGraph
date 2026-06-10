@@ -26,7 +26,7 @@ def _agent_spec() -> ChemGraphAgentSpec:
         role="Worker",
         mission="Use explicit tools only.",
         allowed_peers=(),
-        tools=(),
+        mcp_servers=(),
     )
 
 
@@ -91,7 +91,6 @@ async def test_reasoning_adapter_finish_turn_traces(tmp_path) -> None:
     tools = await build_chemgraph_reasoning_tools(
         spec=_agent_spec(),
         run_dir=tmp_path,
-        tool_invoker=object(),
         peer_names=(),
         peer_handles={},
         outbox=[],
@@ -122,7 +121,6 @@ async def test_send_message_does_not_block_on_busy_peer(tmp_path) -> None:
     tools = await build_chemgraph_reasoning_tools(
         spec=_agent_spec_with_peer(),
         run_dir=tmp_path,
-        tool_invoker=object(),
         peer_names=("agent-b",),
         peer_handles={"agent-b": peer},
         outbox=outbox,
@@ -210,7 +208,6 @@ async def test_logical_agent_reasoning_round_calls_turn_runner(monkeypatch, tmp_
         prompt_profile=_prompt_profile(),
         run_dir=tmp_path,
         max_decisions=5,
-        tool_invoker=object(),
     )
     agent.round_index = 1
 

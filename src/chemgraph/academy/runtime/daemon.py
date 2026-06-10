@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import pathlib
+import signal
 
 from academy.exchange.redis import RedisExchangeFactory
 from academy.handle import Handle
@@ -32,11 +33,8 @@ from chemgraph.academy.runtime.mpi import placement_payload
 from chemgraph.academy.runtime.mpi import rank_from_env
 from chemgraph.academy.core.agent import ChemGraphLogicalAgent
 from chemgraph.academy.core.prompt import load_prompt_profile
+from chemgraph.academy.runtime.mcp_supervisor import MCPServerSupervisor
 from chemgraph.models.settings import load_lm_settings
-from chemgraph.mcp.fastmcp_client import (
-    FastMCPExecutionConfig,
-    build_fastmcp_tool_invoker,
-)
 
 
 async def run_daemon(config: ChemGraphDaemonConfig) -> int:
@@ -50,142 +48,150 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
     validate_campaign(campaign, config.agent_count)
     agent_spec = selected_agent(campaign, config.rank)
     placement = placement_payload(config, agent_spec.name)
-
-    academy_factory = RedisExchangeFactory(
-        hostname=config.redis_host,
-        port=config.redis_port,
+    supervisor = MCPServerSupervisor(
+        specs=[
+            spec
+            for spec in campaign.mcp_servers
+            if spec.name in agent_spec.mcp_servers
+        ],
+        run_dir=config.run_dir / f'rank{config.rank}',
     )
-    if config.rank == 0:
-        initialize_run_files(
-            run_dir=config.run_dir,
-            campaign=campaign,
-            config=config,
-            llm_settings=llm_settings,
+
+    try:
+        await supervisor.start_all()
+        external_tools = await supervisor.get_tools(agent_spec.mcp_servers)
+
+        academy_factory = RedisExchangeFactory(
+            hostname=config.redis_host,
+            port=config.redis_port,
         )
-        registrar = await academy_factory.create_user_client(
-            name=f'{config.run_dir.name}-registrar',
-            start_listener=False,
-        )
-        try:
-            registered = await registrar.register_agents(
-                [
-                    (ChemGraphLogicalAgent, spec.name)
-                    for spec in campaign.agents
-                ],
+        if config.rank == 0:
+            initialize_run_files(
+                run_dir=config.run_dir,
+                campaign=campaign,
+                config=config,
+                llm_settings=llm_settings,
             )
-        finally:
-            await registrar.close()
-        registrations = dict(
-            zip(
-                (spec.name for spec in campaign.agents),
-                registered,
-                strict=True,
-            ),
-        )
-        write_academy_registrations(
-            run_dir=config.run_dir,
-            run_token=config.run_token,
-            registrations=registrations,
-        )
-    else:
-        registrations = await wait_academy_registrations(
-            config.run_dir,
-            run_token=config.run_token,
-            timeout_s=config.startup_timeout_s,
-        )
-
-    if config.rank == 0:
-        registrations = load_academy_registrations(
-            config.run_dir,
-            run_token=config.run_token,
-        )
-    registration = registrations[agent_spec.name]
-    peer_agent_ids = {
-        peer: registrations[peer].agent_id
-        for peer in agent_spec.allowed_peers
-        if peer in registrations
-    }
-
-    tool_invoker = await build_fastmcp_tool_invoker(
-        specs=list(agent_spec.tools),
-        execution=FastMCPExecutionConfig(backend='local', system='local'),
-        run_dir=config.run_dir,
-        agent_name=agent_spec.name,
-    )
-    agent = ChemGraphLogicalAgent(
-        agent_spec,
-        campaign=campaign,
-        llm_settings=llm_settings,
-        prompt_profile=prompt_profile,
-        run_dir=config.run_dir,
-        max_decisions=config.max_decisions,
-        tool_invoker=tool_invoker,
-        peer_agent_ids=peer_agent_ids,
-        placement=placement,
-        poll_timeout_s=config.poll_timeout_s,
-        idle_timeout_s=config.idle_timeout_s,
-        status_interval_s=config.status_interval_s,
-    )
-    runtime_config = RuntimeConfig(
-        terminate_on_success=False,
-        terminate_on_error=False,
-    )
-    runtime = Runtime(
-        agent,
-        exchange_factory=academy_factory,
-        registration=registration,
-        config=runtime_config,
-    )
-    async with runtime:
-        await agent.write_runtime_status()
+            registrar = await academy_factory.create_user_client(
+                name=f'{config.run_dir.name}-registrar',
+                start_listener=False,
+            )
+            try:
+                registered = await registrar.register_agents(
+                    [
+                        (ChemGraphLogicalAgent, spec.name)
+                        for spec in campaign.agents
+                    ],
+                )
+            finally:
+                await registrar.close()
+            registrations = dict(
+                zip(
+                    (spec.name for spec in campaign.agents),
+                    registered,
+                    strict=True,
+                ),
+            )
+            write_academy_registrations(
+                run_dir=config.run_dir,
+                run_token=config.run_token,
+                registrations=registrations,
+            )
+        else:
+            registrations = await wait_academy_registrations(
+                config.run_dir,
+                run_token=config.run_token,
+                timeout_s=config.startup_timeout_s,
+            )
 
         if config.rank == 0:
-            bootstrap = build_message(
-                sender='campaign',
-                recipient=campaign.initial_agent,
-                content=campaign_bootstrap_text(campaign),
-                kind='message',
-                tldr='Campaign bootstrap',
-                reason='Initial campaign task dispatch.',
-                confidence=1.0,
+            registrations = load_academy_registrations(
+                config.run_dir,
+                run_token=config.run_token,
             )
-            initial_handle: Handle[Any] = Handle(
-                registrations[campaign.initial_agent].agent_id,
-            )
-            await initial_handle.action(
-                'receive_message',
-                bootstrap,
+        registration = registrations[agent_spec.name]
+        peer_agent_ids = {
+            peer: registrations[peer].agent_id
+            for peer in agent_spec.allowed_peers
+            if peer in registrations
+        }
+
+        agent = ChemGraphLogicalAgent(
+            agent_spec,
+            campaign=campaign,
+            llm_settings=llm_settings,
+            prompt_profile=prompt_profile,
+            run_dir=config.run_dir,
+            max_decisions=config.max_decisions,
+            external_tools=external_tools,
+            peer_agent_ids=peer_agent_ids,
+            placement=placement,
+            poll_timeout_s=config.poll_timeout_s,
+            idle_timeout_s=config.idle_timeout_s,
+            status_interval_s=config.status_interval_s,
+        )
+        runtime_config = RuntimeConfig(
+            terminate_on_success=False,
+            terminate_on_error=False,
+        )
+        runtime = Runtime(
+            agent,
+            exchange_factory=academy_factory,
+            registration=registration,
+            config=runtime_config,
+        )
+        async with runtime:
+            await agent.write_runtime_status()
+
+            if config.rank == 0:
+                bootstrap = build_message(
+                    sender='campaign',
+                    recipient=campaign.initial_agent,
+                    content=campaign_bootstrap_text(campaign),
+                    kind='message',
+                    tldr='Campaign bootstrap',
+                    reason='Initial campaign task dispatch.',
+                    confidence=1.0,
+                )
+                initial_handle: Handle[Any] = Handle(
+                    registrations[campaign.initial_agent].agent_id,
+                )
+                await initial_handle.action(
+                    'receive_message',
+                    bootstrap,
+                )
+                append_system_trace(
+                    config.run_dir,
+                    'bootstrap_message_dispatched',
+                    {
+                        'agent': campaign.initial_agent,
+                        'message_id': bootstrap['message_id'],
+                        'via': 'academy_action',
+                    },
+                )
+
+            await runtime.wait_shutdown()
+
+        if config.rank == 0:
+            all_done = await wait_for_agent_statuses_finished(
+                run_dir=config.run_dir,
+                campaign=campaign,
+                timeout_s=config.completion_timeout_s,
             )
             append_system_trace(
                 config.run_dir,
-                'bootstrap_message_dispatched',
-                {
-                    'agent': campaign.initial_agent,
-                    'message_id': bootstrap['message_id'],
-                    'via': 'academy_action',
-                },
+                'campaign_finished',
+                {'all_agents_done': all_done},
             )
-
-        await runtime.wait_shutdown()
-
-    if config.rank == 0:
-        all_done = await wait_for_agent_statuses_finished(
-            run_dir=config.run_dir,
-            campaign=campaign,
-            timeout_s=config.completion_timeout_s,
-        )
-        append_system_trace(
-            config.run_dir,
-            'campaign_finished',
-            {'all_agents_done': all_done},
-        )
-        write_status_snapshot(
-            run_dir=config.run_dir,
-            campaign=campaign,
-            agent_state=await agent.report_state(),
-            placement=placement,
-        )
-    return 0
+            write_status_snapshot(
+                run_dir=config.run_dir,
+                campaign=campaign,
+                agent_state=await agent.report_state(),
+                placement=placement,
+            )
+        return 0
+    finally:
+        await supervisor.shutdown()
 
 
 def parse_args() -> argparse.Namespace:
@@ -243,8 +249,22 @@ def config_from_args(args: argparse.Namespace) -> ChemGraphDaemonConfig:
     )
 
 
+async def _main_async() -> int:
+    task = asyncio.create_task(run_daemon(config_from_args(parse_args())))
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, task.cancel)
+        except (NotImplementedError, RuntimeError):
+            pass
+    try:
+        return await task
+    except asyncio.CancelledError:
+        return 130
+
+
 def main() -> int:
-    return asyncio.run(run_daemon(config_from_args(parse_args())))
+    return asyncio.run(_main_async())
 
 
 if __name__ == '__main__':

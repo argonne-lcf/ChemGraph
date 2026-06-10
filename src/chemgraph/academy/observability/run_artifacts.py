@@ -332,8 +332,8 @@ def initialize_run_files(
         {
             'agents': [spec.name for spec in campaign.agents],
             'roles': {spec.name: spec.role for spec in campaign.agents},
-            'tool_names': {
-                spec.name: list(spec.tool_names)
+            'mcp_servers': {
+                spec.name: list(spec.mcp_servers)
                 for spec in campaign.agents
             },
         },

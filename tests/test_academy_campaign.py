@@ -6,6 +6,7 @@ import pytest
 
 from chemgraph.academy.core.campaign import campaign_bootstrap_text
 from chemgraph.academy.core.campaign import load_campaign
+from chemgraph.academy.core.campaign import MCPServerSpec
 from chemgraph.academy.core.campaign import validate_campaign
 
 
@@ -55,10 +56,10 @@ def test_removed_structured_orchestration_fields_are_rejected(tmp_path) -> None:
                         "role": "Role",
                         "mission": "Do the task.",
                         "allowed_peers": [],
-                        "tools": [],
+                        "mcp_servers": [],
                     },
                 ],
-                "tools": [],
+                "mcp_servers": [],
             },
         ),
         encoding="utf-8",
@@ -92,11 +93,16 @@ def test_campaign_loader_accepts_jsonc_comments(tmp_path) -> None:
               "role": "Role",
               "mission": "Do the task.",
               "allowed_peers": [],
-              "tools": [],
+              "mcp_servers": ["general"],
               "resources": ["input"]
             }
           ],
-          "tools": []
+          "mcp_servers": [
+            {
+              "name": "general",
+              "command": "python -m chemgraph.mcp.mcp_tools"
+            }
+          ]
         }
         """,
         encoding="utf-8",
@@ -106,6 +112,23 @@ def test_campaign_loader_accepts_jsonc_comments(tmp_path) -> None:
 
     assert campaign.run_id == "commented"
     assert campaign.resources["input"].kind == "json"
+    assert campaign.mcp_servers[0].name == "general"
+    assert campaign.agents[0].mcp_servers == ("general",)
+
+
+def test_mcp_server_spec_validation() -> None:
+    spec = MCPServerSpec.model_validate(
+        {"name": "general", "command": "python -m server"},
+    )
+    assert spec.env == {}
+
+    with pytest.raises(ValueError, match="field required|Field required"):
+        MCPServerSpec.model_validate({"name": "general"})
+
+    with pytest.raises(ValueError):
+        MCPServerSpec.model_validate(
+            {"name": "general", "command": "python -m server", "extra": "bad"},
+        )
 
 
 def test_resource_kind_and_scope_are_option_sets(tmp_path) -> None:
@@ -129,10 +152,10 @@ def test_resource_kind_and_scope_are_option_sets(tmp_path) -> None:
                         "role": "Role",
                         "mission": "Do the task.",
                         "allowed_peers": [],
-                        "tools": [],
+                        "mcp_servers": [],
                     },
                 ],
-                "tools": [],
+                "mcp_servers": [],
             },
         ),
         encoding="utf-8",
@@ -140,3 +163,62 @@ def test_resource_kind_and_scope_are_option_sets(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="resource kind must be one of"):
         load_campaign(campaign_path)
+
+
+def test_validate_campaign_rejects_unknown_mcp_server(tmp_path) -> None:
+    campaign_path = tmp_path / "campaign.json"
+    campaign_path.write_text(
+        json.dumps(
+            {
+                "run_id": "bad-server",
+                "user_task": "test",
+                "prompt_profile": "prompt.json",
+                "mcp_servers": [],
+                "agents": [
+                    {
+                        "name": "agent-a",
+                        "role": "Role",
+                        "mission": "Do the task.",
+                        "allowed_peers": [],
+                        "mcp_servers": ["missing"],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    campaign = load_campaign(campaign_path)
+    with pytest.raises(RuntimeError, match="unknown MCP servers"):
+        validate_campaign(campaign, 1)
+
+
+def test_validate_campaign_rejects_duplicate_mcp_server_names(tmp_path) -> None:
+    campaign_path = tmp_path / "campaign.json"
+    campaign_path.write_text(
+        json.dumps(
+            {
+                "run_id": "duplicate-server",
+                "user_task": "test",
+                "prompt_profile": "prompt.json",
+                "mcp_servers": [
+                    {"name": "general", "command": "python -m one"},
+                    {"name": "general", "command": "python -m two"},
+                ],
+                "agents": [
+                    {
+                        "name": "agent-a",
+                        "role": "Role",
+                        "mission": "Do the task.",
+                        "allowed_peers": [],
+                        "mcp_servers": ["general"],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    campaign = load_campaign(campaign_path)
+    with pytest.raises(RuntimeError, match="MCP server names must be unique"):
+        validate_campaign(campaign, 1)
