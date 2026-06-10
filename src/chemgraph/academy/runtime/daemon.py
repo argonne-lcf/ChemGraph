@@ -20,7 +20,6 @@ from chemgraph.academy.observability.run_artifacts import (
 from chemgraph.academy.observability.run_artifacts import write_status_snapshot
 from chemgraph.academy.core.campaign import campaign_bootstrap_text
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
-from chemgraph.academy.core.campaign import ExecutionSpec
 from chemgraph.academy.core.campaign import load_campaign
 from chemgraph.academy.core.campaign import namespace_for_run
 from chemgraph.academy.core.campaign import resolve_campaign_resources
@@ -35,6 +34,7 @@ from chemgraph.academy.core.agent import ChemGraphLogicalAgent
 from chemgraph.academy.core.lm import load_lm_config
 from chemgraph.academy.core.prompt import load_prompt_profile
 from chemgraph.mcp.fastmcp_client import (
+    FastMCPExecutionConfig,
     build_fastmcp_tool_invoker,
 )
 
@@ -108,7 +108,7 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
 
     tool_invoker = await build_fastmcp_tool_invoker(
         specs=list(agent_spec.tools),
-        execution=ExecutionSpec(backend='local', system='local'),
+        execution=FastMCPExecutionConfig(backend='local', system='local'),
         run_dir=config.run_dir,
         agent_name=agent_spec.name,
     )
@@ -206,9 +206,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--redis-host', default='127.0.0.1')
     parser.add_argument('--redis-port', type=int, required=True)
     parser.add_argument('--redis-namespace')
-    parser.add_argument('--rank', type=int)
-    parser.add_argument('--local-rank', type=int)
-    parser.add_argument('--no-clean-redis', action='store_true')
     parser.add_argument('--chemgraph-repo-root')
     return parser.parse_args()
 
@@ -236,13 +233,8 @@ def config_from_args(args: argparse.Namespace) -> ChemGraphDaemonConfig:
         redis_host=args.redis_host,
         redis_port=args.redis_port,
         redis_namespace=args.redis_namespace or namespace_for_run(run_dir),
-        clean_redis=not args.no_clean_redis,
-        rank=args.rank if args.rank is not None else rank_from_env(),
-        local_rank=(
-            args.local_rank
-            if args.local_rank is not None
-            else local_rank_from_env()
-        ),
+        rank=rank_from_env(),
+        local_rank=local_rank_from_env(),
         chemgraph_repo_root=(
             pathlib.Path(args.chemgraph_repo_root).resolve()
             if args.chemgraph_repo_root

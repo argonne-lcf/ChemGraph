@@ -29,7 +29,7 @@ class ToolInvocation(BaseModel):
 
 
 class ToolResult(BaseModel):
-    """Normalized result from a campaign FastMCP tool call."""
+    """Normalized result from a FastMCP tool call."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -56,6 +56,17 @@ class FastMCPExecutionSpec(Protocol):
     system: str | None
     config_path: str | None
     options: Mapping[str, Any]
+
+
+class FastMCPExecutionConfig(BaseModel):
+    """Concrete backend configuration for in-process FastMCP clients."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    backend: str | None = "local"
+    system: str | None = "local"
+    config_path: str | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
 
 
 def load_fastmcp_tool_module(
@@ -251,7 +262,7 @@ class FastMCPToolInvoker:
         spec = self.specs.get(invocation.tool_name)
         if spec is None:
             raise KeyError(
-                f"unknown campaign FastMCP tool: {invocation.tool_name}",
+                f"unknown FastMCP tool: {invocation.tool_name}",
             )
 
         try:
@@ -350,7 +361,7 @@ async def build_fastmcp_tool_invoker(
     run_dir: str | Path,
     agent_name: str,
 ) -> FastMCPToolInvoker:
-    """Build and verify one agent's in-process FastMCP tool invoker."""
+    """Build and verify one in-process FastMCP tool invoker."""
     invoker = FastMCPToolInvoker(
         specs=list(specs),
         execution=execution,

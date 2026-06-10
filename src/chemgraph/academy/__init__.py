@@ -12,7 +12,6 @@ from chemgraph.academy.core.agent import ChemGraphLogicalAgent
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 from chemgraph.academy.core.campaign import ChemGraphCampaign
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
-from chemgraph.academy.core.campaign import ExecutionSpec
 from chemgraph.academy.core.campaign import ResourceSpec
 from chemgraph.academy.core.campaign import ToolSpec
 from chemgraph.academy.core.campaign import load_campaign
@@ -29,7 +28,6 @@ __all__ = [
     "ChemGraphCampaign",
     "ChemGraphDaemonConfig",
     "EventLog",
-    "ExecutionSpec",
     "PromptProfile",
     "ResourceSpec",
     "ChemGraphLogicalAgent",

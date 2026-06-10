@@ -1,4 +1,4 @@
-"""Adapt Academy actions and campaign FastMCP tools for ChemGraph turns."""
+"""Build Academy action tools and attach configured science tools."""
 
 from __future__ import annotations
 
@@ -40,21 +40,14 @@ class ReasoningToolRuntimeState:
     """Mutable per-turn state updated by ChemGraph reasoning tools."""
 
     science_tool_completed: bool = False
-    submitted_result: bool = False
     finished_turn: bool = False
     executed_tool_names: list[str] = field(default_factory=list)
     action_tool_names: list[str] = field(default_factory=list)
     science_tool_names: list[str] = field(default_factory=list)
     background_tasks: set[asyncio.Task[Any]] = field(default_factory=set)
 
-    @property
-    def tool_completed(self) -> bool:
-        """Backward-compatible name for a completed science tool call."""
-        return self.science_tool_completed
-
     def reset(self) -> None:
         self.science_tool_completed = False
-        self.submitted_result = False
         self.finished_turn = False
         self.executed_tool_names.clear()
         self.action_tool_names.clear()
@@ -330,7 +323,6 @@ async def build_chemgraph_reasoning_tools(
             args = SubmitResultArgs.model_validate(kwargs)
         except ValidationError as exc:
             return _invalid_args_response("submit_result", exc, trace)
-        runtime_state.submitted_result = True
         result = {
             "timestamp": time.time(),
             "round": get_round_index(),

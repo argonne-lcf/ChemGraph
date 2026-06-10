@@ -102,7 +102,6 @@ def status_payload(handler: DashboardHandler) -> dict[str, Any]:
         "schema": schema,
         "status": status,
         "placement": artifacts["placement"],
-        "communication_proof": artifacts["communication_proof"],
         "summary": artifacts["summary"],
     }
 

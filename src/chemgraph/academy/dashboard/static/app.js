@@ -385,9 +385,8 @@
       document.getElementById('metrics').innerHTML = values.map(([k,v]) => `
         <div class="metric"><div class="label">${esc(k)}</div><div class="value">${esc(v)}</div></div>
       `).join('');
-      const proof = snapshot.communication_proof || {};
-      document.getElementById('proof').innerHTML = proof.passes
-        ? Object.entries(proof.passes).map(([k,v]) => `<span class="pill ${v ? 'ok' : 'bad'}">${esc(k)}=${v}</span>`).join('')
+      document.getElementById('proof').innerHTML = crossNodeMessages.length
+        ? `<span class="pill ok">cross-node messages=${crossNodeMessages.length}</span>`
         : '';
     }
 

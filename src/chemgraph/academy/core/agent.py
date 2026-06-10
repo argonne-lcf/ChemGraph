@@ -19,7 +19,6 @@ from chemgraph.mcp.fastmcp_client import (
 from chemgraph.academy.core.peer_protocol import validate_message
 from chemgraph.academy.observability.event_log import EventLog
 from chemgraph.academy.observability.run_artifacts import write_status_snapshot
-from chemgraph.academy.core.turn import build_recent_actions
 from chemgraph.academy.core.turn import ChemGraphReasoningRoundEngine
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 from chemgraph.academy.core.campaign import ChemGraphCampaign
@@ -208,18 +207,7 @@ class ChemGraphLogicalAgent(Agent):
             'finished': self.finished,
             'last_error': self.last_error,
             'current_activity': None,
-            'received_message_count': len(self.received_message_history),
-            'outbox_count': len(self.outbox),
-            'recent_received_messages': self.received_message_history[-10:],
             'recent_outbox': self.outbox[-10:],
-            'tool_names': list(self.spec.tool_names),
-            'tool_result_count': len(self.tool_results),
-            'recent_tool_results': self.tool_results[-8:],
-            'recent_actions': build_recent_actions(
-                outbox=self.outbox,
-                tool_results=self.tool_results,
-                limit=12,
-            ),
             'belief': self.final_result or {
                 'hypothesis': None,
                 'confidence': 0.0,
@@ -227,7 +215,6 @@ class ChemGraphLogicalAgent(Agent):
                 'supporting_tool_result_ids': [],
                 'reason': None,
             },
-            'belief_history': [self.final_result] if self.final_result else [],
         }
 
     async def _reasoning_round(self) -> bool:

@@ -45,7 +45,7 @@ def test_dashboard_reads_canonical_events_jsonl(tmp_path) -> None:
     assert events[1]["payload"]["actions"] == [{"action": "send_message"}]
 
 
-def test_status_payload_builds_summary_and_proof_from_events(tmp_path) -> None:
+def test_status_payload_builds_summary_from_events(tmp_path) -> None:
     run_dir = tmp_path / "daemon-run"
     run_dir.mkdir()
     (run_dir / "status.json").write_text(
@@ -101,7 +101,6 @@ def test_status_payload_builds_summary_and_proof_from_events(tmp_path) -> None:
     payload = dashboard.status_payload(handler)
 
     assert set(payload) == {
-        "communication_proof",
         "placement",
         "run_dir",
         "schema",
@@ -110,9 +109,15 @@ def test_status_payload_builds_summary_and_proof_from_events(tmp_path) -> None:
         "updated",
     }
     assert payload["summary"]["message_count"] == 1
-    assert payload["communication_proof"]["passes"]["has_message"] is True
-    assert payload["communication_proof"]["passes"]["has_cross_node_message"] is True
-    assert payload["communication_proof"]["passes"]["has_belief_citing_message"] is True
+    assert payload["summary"]["final_reports"] == [
+        {
+            "agent_id": "agent-01",
+            "confidence": 0.8,
+            "summary": "used peer evidence",
+            "supporting_message_ids": ["msg-1"],
+            "supporting_tool_result_ids": [],
+        },
+    ]
 
 
 def test_dashboard_ignores_legacy_trace_jsonl(tmp_path) -> None:

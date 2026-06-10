@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from chemgraph.academy.examples import resolve_builtin_campaign
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 _REMOVED_CAMPAIGN_FIELDS = frozenset(
@@ -30,7 +30,7 @@ _RESOURCE_SCOPES = frozenset(
 
 
 class ToolSpec(BaseModel):
-    """Campaign-declared in-process FastMCP tool available to agents."""
+    """Campaign-declared external tool available to agents."""
 
     model_config = ConfigDict(extra='forbid')
 
@@ -46,17 +46,6 @@ class ToolSpec(BaseModel):
         if not value:
             raise ValueError('tool spec fields must be non-empty strings')
         return value
-
-
-class ExecutionSpec(BaseModel):
-    """Execution defaults used when configuring ChemGraph FastMCP backends."""
-
-    model_config = ConfigDict(extra='forbid')
-
-    backend: str = 'local'
-    system: str = 'local'
-    config_path: str | None = None
-    options: dict[str, Any] = Field(default_factory=dict)
 
 
 class ResourceSpec(BaseModel):
@@ -145,7 +134,6 @@ class ChemGraphDaemonConfig:
     redis_host: str
     redis_port: int
     redis_namespace: str
-    clean_redis: bool
     rank: int
     local_rank: int | None
     chemgraph_repo_root: pathlib.Path

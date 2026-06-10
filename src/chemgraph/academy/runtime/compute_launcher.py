@@ -165,38 +165,6 @@ def _write_lm_config(
     return path
 
 
-def _write_compute_launch_metadata(
-    *,
-    run_dir: Path,
-    args: argparse.Namespace,
-    profile: SystemProfile,
-    lm_config: Path,
-    lm_base_url: str,
-    agent_count: int,
-    agents_per_node: int,
-    max_decisions: int,
-    redis_port: int,
-) -> None:
-    payload = {
-        "system": profile.name,
-        "run_id": args.run_id,
-        "campaign": args.campaign,
-        "run_dir": str(run_dir),
-        "lm_base_url": lm_base_url,
-        "lm_config": str(lm_config),
-        "agent_count": agent_count,
-        "agents_per_node": agents_per_node,
-        "max_decisions": max_decisions,
-        "redis_host": socket.getfqdn(),
-        "redis_port": redis_port,
-        "repo_root": profile.repo_root,
-    }
-    (run_dir / "compute_launch.json").write_text(
-        json.dumps(payload, indent=2) + "\n",
-        encoding="utf-8",
-    )
-
-
 def _export_workflow_lm_environment(lm_config: Path) -> None:
     data = json.loads(lm_config.read_text(encoding="utf-8"))
     values = {
@@ -249,18 +217,6 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
     agents_per_node = args.agents_per_node or defaults.agents_per_node
     max_decisions = args.max_decisions or defaults.max_decisions
     redis_port = args.redis_port or profile.redis_port
-
-    _write_compute_launch_metadata(
-        run_dir=run_dir,
-        args=args,
-        profile=profile,
-        lm_config=lm_config,
-        lm_base_url=lm_base_url,
-        agent_count=agent_count,
-        agents_per_node=agents_per_node,
-        max_decisions=max_decisions,
-        redis_port=redis_port,
-    )
 
     campaign_config = resolve_builtin_campaign(args.campaign)
     if not campaign_config.exists():
