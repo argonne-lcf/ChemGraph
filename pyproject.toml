@@ -99,7 +99,6 @@ chemgraph-eval = "chemgraph.eval.cli:main"
 chemgraph-academy-run = "chemgraph.academy.runtime.compute_launcher:main"
 chemgraph-academy-dashboard = "chemgraph.academy.runtime.dashboard_launcher:main"
 chemgraph-dashboard = "chemgraph.academy.dashboard:main"
-chemgraph-dashboard-run = "chemgraph.observability.local_dashboard_run:main"
 
 [tool.setuptools.packages.find]
 where = ["src/"]

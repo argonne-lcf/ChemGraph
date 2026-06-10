@@ -248,16 +248,6 @@ Examples:
         help="Arguments forwarded to chemgraph.academy.dashboard.",
     )
 
-    dashboard_run_parser = subparsers.add_parser(
-        "dashboard-run",
-        help="Run a local ChemGraph workflow and write dashboard artifacts.",
-    )
-    dashboard_run_parser.add_argument(
-        "dashboard_run_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.observability.local_dashboard_run.",
-    )
-
     # ---- "academy" subcommand -------------------------------------------
     academy_parser = subparsers.add_parser(
         "academy",
@@ -651,12 +641,6 @@ def main() -> None:
         _run_module_main(
             "chemgraph.academy.dashboard",
             _strip_remainder_separator(args.dashboard_args),
-        )
-
-    elif args.command == "dashboard-run":
-        _run_module_main(
-            "chemgraph.observability.local_dashboard_run",
-            _strip_remainder_separator(args.dashboard_run_args),
         )
 
     elif args.command == "academy":

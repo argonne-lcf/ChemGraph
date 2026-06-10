@@ -7,110 +7,43 @@ import pathlib
 import time
 import uuid
 import asyncio
-from collections.abc import Callable
-from collections.abc import Mapping
-from dataclasses import dataclass
-from dataclasses import field
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from academy.handle import Handle
-from langchain_core.tools import BaseTool
-from langchain_core.tools import StructuredTool
-from pydantic import BaseModel
-from pydantic import ConfigDict
-from pydantic import Field
-from pydantic import ValidationError
+from langchain_core.tools import BaseTool, StructuredTool
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 from chemgraph.mcp.fastmcp_client import ToolInvocation
 from chemgraph.mcp.fastmcp_client import fastmcp_tool_schemas
-from chemgraph.mcp.fastmcp_client import (
-    FastMCPToolInvoker,
-)
+from chemgraph.mcp.fastmcp_client import FastMCPToolInvoker
 from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.observability.run_files import append_jsonl
 
 
 TraceFn = Callable[[str, dict[str, Any]], None]
 SetFinalResultFn = Callable[[dict[str, Any]], None]
-
-
-@dataclass
-class ReasoningToolRuntimeState:
-    """Mutable per-turn state updated by ChemGraph reasoning tools."""
-
-    science_tool_completed: bool = False
-    finished_turn: bool = False
-    executed_tool_names: list[str] = field(default_factory=list)
-    action_tool_names: list[str] = field(default_factory=list)
-    science_tool_names: list[str] = field(default_factory=list)
-    background_tasks: set[asyncio.Task[Any]] = field(default_factory=set)
-
-    def reset(self) -> None:
-        self.science_tool_completed = False
-        self.finished_turn = False
-        self.executed_tool_names.clear()
-        self.action_tool_names.clear()
-        self.science_tool_names.clear()
-
-    def record_action(self, name: str) -> None:
-        self.executed_tool_names.append(name)
-        self.action_tool_names.append(name)
-
-    def record_science(self, name: str) -> None:
-        self.executed_tool_names.append(name)
-        self.science_tool_names.append(name)
+_BACKGROUND_DELIVERIES: set[asyncio.Task[Any]] = set()
 
 
 class SendMessageArgs(BaseModel):
-    """Arguments for the LM-visible peer-message action."""
-
     model_config = ConfigDict(extra="forbid")
 
-    recipient: str = Field(
-        min_length=1,
-        description="Allowed peer agent name that should receive this message.",
-    )
-    tldr: str = Field(
-        min_length=1,
-        max_length=160,
-        description="One-line user-visible summary for dashboard edge labels.",
-    )
-    content: str = Field(
-        min_length=1,
-        max_length=1800,
-        description="Full peer message content with concise evidence summaries.",
-    )
-    artifact_refs: list[str] = Field(
-        default_factory=list,
-        description="JSON array of artifact path strings cited by this message.",
-    )
-    tool_result_ids: list[str] = Field(
-        default_factory=list,
-        description="JSON array of ChemGraph tool_result_id strings cited by this message.",
-    )
+    recipient: str = Field(min_length=1, description="Allowed peer agent name.")
+    tldr: str = Field(min_length=1, max_length=160, description="One-line dashboard edge label.")
+    content: str = Field(min_length=1, max_length=1800, description="Full peer message content.")
+    artifact_refs: list[str] = Field(default_factory=list, description="Artifact path strings.")
+    tool_result_ids: list[str] = Field(default_factory=list, description="ChemGraph tool_result_id strings.")
     reply_requested: bool = Field(
         default=False,
-        description=(
-            "Set true when this message asks the peer to reply or take a "
-            "specific follow-up action; false for one-way updates."
-        ),
+        description="True when this asks the peer to reply or act.",
     )
-    reason: str = Field(
-        min_length=1,
-        max_length=600,
-        description="Non-empty sentence explaining why this peer needs the message now.",
-    )
-    confidence: float = Field(
-        ge=0,
-        le=1,
-        description="Numeric confidence from 0 to 1.",
-    )
+    reason: str = Field(min_length=1, max_length=600, description="Why this peer needs the message now.")
+    confidence: float = Field(ge=0, le=1, description="Numeric confidence from 0 to 1.")
 
 
 class SubmitResultArgs(BaseModel):
-    """Arguments for submitting a logical agent's current result."""
-
     model_config = ConfigDict(extra="forbid")
 
     summary: str = Field(min_length=1, max_length=1200)
@@ -122,15 +55,12 @@ class SubmitResultArgs(BaseModel):
 
 
 class FinishTurnArgs(BaseModel):
-    """Arguments for ending the current logical-agent turn."""
-
     model_config = ConfigDict(extra="forbid")
 
     reason: str = Field(min_length=1, max_length=600)
 
 
 def _stable_validation_errors(exc: ValidationError) -> list[dict[str, str]]:
-    """Project Pydantic validation errors to a stable LM-facing shape."""
     return [
         {
             "field": ".".join(str(part) for part in error.get("loc", ())),
@@ -204,7 +134,6 @@ async def build_chemgraph_reasoning_tools(
     get_round_index: Callable[[], int],
     set_final_result: SetFinalResultFn,
     trace: TraceFn,
-    runtime_state: ReasoningToolRuntimeState,
 ) -> list[BaseTool]:
     """Build explicit tools for one ChemGraph-backed reasoning turn."""
 
@@ -250,8 +179,8 @@ async def build_chemgraph_reasoning_tools(
                 trace=trace,
             ),
         )
-        runtime_state.background_tasks.add(task)
-        task.add_done_callback(runtime_state.background_tasks.discard)
+        _BACKGROUND_DELIVERIES.add(task)
+        task.add_done_callback(_BACKGROUND_DELIVERIES.discard)
         return {
             "status": "sent",
             "delivery": "queued",
@@ -288,13 +217,11 @@ async def build_chemgraph_reasoning_tools(
 
     def _validation_error_handler(tool_name: str) -> Callable[[ValidationError], dict[str, Any]]:
         def handle(exc: ValidationError) -> dict[str, Any]:
-            runtime_state.record_action(tool_name)
             return _invalid_args_response(tool_name, exc, trace)
 
         return handle
 
     async def send_message(**kwargs: Any) -> dict[str, Any]:
-        runtime_state.record_action("send_message")
         try:
             args = SendMessageArgs.model_validate(kwargs)
         except ValidationError as exc:
@@ -318,7 +245,6 @@ async def build_chemgraph_reasoning_tools(
         )
 
     async def submit_result(**kwargs: Any) -> dict[str, Any]:
-        runtime_state.record_action("submit_result")
         try:
             args = SubmitResultArgs.model_validate(kwargs)
         except ValidationError as exc:
@@ -340,12 +266,10 @@ async def build_chemgraph_reasoning_tools(
         return {"status": "submitted", "confidence": result["confidence"]}
 
     async def finish_turn(**kwargs: Any) -> dict[str, Any]:
-        runtime_state.record_action("finish_turn")
         try:
             args = FinishTurnArgs.model_validate(kwargs)
         except ValidationError as exc:
             return _invalid_args_response("finish_turn", exc, trace)
-        runtime_state.finished_turn = True
         trace("turn_finished_without_external_action", {"reason": args.reason})
         return {"status": "finished", "reason": args.reason}
 
@@ -405,7 +329,6 @@ async def build_chemgraph_reasoning_tools(
             __tool_name: str = tool_spec.name,
             **kwargs: Any,
         ) -> dict[str, Any]:
-            runtime_state.record_science(__tool_name)
             if __tool_name not in spec.tool_names:
                 raise RuntimeError(
                     f"{spec.name} cannot call unavailable tool {__tool_name}",
@@ -437,7 +360,6 @@ async def build_chemgraph_reasoning_tools(
                 trace("tool_call_failed", failure)
                 raise RuntimeError(f"{__tool_name} failed: {failure['error']}")
 
-            runtime_state.science_tool_completed = True
             record = {
                 **started,
                 "timestamp": time.time(),

@@ -19,7 +19,8 @@ from chemgraph.mcp.fastmcp_client import (
 from chemgraph.academy.core.peer_protocol import validate_message
 from chemgraph.academy.observability.event_log import EventLog
 from chemgraph.academy.observability.run_artifacts import write_status_snapshot
-from chemgraph.academy.core.turn import ChemGraphReasoningRoundEngine
+from chemgraph.academy.core.tools import build_chemgraph_reasoning_tools
+from chemgraph.academy.core.turn import run_academy_turn
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 from chemgraph.academy.core.campaign import ChemGraphCampaign
 from chemgraph.academy.core.lm import LLMSettings
@@ -69,7 +70,6 @@ class ChemGraphLogicalAgent(Agent):
         self.finished = False
         self.last_error: str | None = None
         self._wake_event: asyncio.Event | None = None
-        self._reasoning_engine: ChemGraphReasoningRoundEngine | None = None
 
     async def agent_on_startup(self) -> None:
         self._wake_event = asyncio.Event()
@@ -78,24 +78,6 @@ class ChemGraphLogicalAgent(Agent):
             for name, agent_id in self.peer_agent_ids.items()
             if name in self.peer_names
         }
-        self._reasoning_engine = await ChemGraphReasoningRoundEngine.create(
-            campaign=self.campaign,
-            spec=self.spec,
-            llm_settings=self.llm_settings,
-            prompt_profile=self.prompt_profile,
-            run_dir=self.run_dir,
-            max_decisions=self.max_decisions,
-            tool_invoker=self.tool_invoker,
-            peer_names=self.peer_names,
-            peer_handles=self.peer_handles,
-            received_message_history=self.received_message_history,
-            outbox=self.outbox,
-            tool_results=self.tool_results,
-            get_final_result=lambda: self.final_result,
-            get_round_index=lambda: self.round_index,
-            set_final_result=self._set_final_result,
-            trace=self._trace,
-        )
         self._trace(
             'agent_started',
             {
@@ -218,10 +200,35 @@ class ChemGraphLogicalAgent(Agent):
         }
 
     async def _reasoning_round(self) -> bool:
-        if self._reasoning_engine is None:
-            raise RuntimeError('agent startup did not initialize reasoning engine')
         self._trace('round_started', {'round': self.round_index})
-        result = await self._reasoning_engine.run_turn()
+        tools = await build_chemgraph_reasoning_tools(
+            spec=self.spec,
+            run_dir=self.run_dir,
+            tool_invoker=self.tool_invoker,
+            peer_names=self.peer_names,
+            peer_handles=self.peer_handles,
+            outbox=self.outbox,
+            tool_results=self.tool_results,
+            get_round_index=lambda: self.round_index,
+            set_final_result=self._set_final_result,
+            trace=self._trace,
+        )
+        result = await run_academy_turn(
+            campaign=self.campaign,
+            spec=self.spec,
+            llm_settings=self.llm_settings,
+            prompt_profile=self.prompt_profile,
+            run_dir=self.run_dir,
+            max_decisions=self.max_decisions,
+            tools=tools,
+            received_message_history=self.received_message_history,
+            outbox=self.outbox,
+            tool_results=self.tool_results,
+            get_final_result=lambda: self.final_result,
+            get_round_index=lambda: self.round_index,
+            trace=self._trace,
+            peer_names=self.peer_names,
+        )
         self._trace(
             'agent_decision',
             {
@@ -232,7 +239,6 @@ class ChemGraphLogicalAgent(Agent):
                 'tool_names': list(result.executed_tool_names),
                 'action_tools_called': list(result.action_tools_called),
                 'science_tools_called': list(result.science_tools_called),
-                'workflow_span_id': result.workflow_span_id,
                 'thread_id': result.thread_id,
                 'engine': 'chemgraph_single_agent',
                 'actions': [

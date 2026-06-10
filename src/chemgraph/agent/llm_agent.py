@@ -2,7 +2,8 @@ import asyncio
 import datetime
 import dataclasses
 import os
-from typing import Callable, Collection, List, Optional
+import time
+from typing import Any, Callable, Collection, List, Optional
 import uuid
 
 from chemgraph.memory.store import SessionStore
@@ -22,8 +23,6 @@ from chemgraph.models.supported_models import (
     supported_gemini_models,
 
 )
-from chemgraph.observability.langgraph_stream import ChemGraphWorkflowCallback
-from chemgraph.observability.langgraph_stream import emit_live_message_events
 from chemgraph.schemas.ase_input import (
     get_available_calculator_names,
     get_calculator_selection_context,
@@ -42,8 +41,8 @@ from chemgraph.prompt.multi_agent_prompt import (
     aggregator_prompt as default_aggregator_prompt,
     planner_prompt as default_planner_prompt,
 )
-from langgraph.types import Command
 from langgraph.errors import GraphInterrupt
+from langchain_core.callbacks import BaseCallbackHandler
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 
@@ -209,6 +208,355 @@ def _custom_openai_compatible_kwargs(
     if base_url and "argoapi" in base_url and user:
         kwargs["model_kwargs"] = {"user": user}
     return kwargs
+
+
+EventCallback = Callable[[str, dict], None]
+
+
+@dataclasses.dataclass(frozen=True)
+class TurnResult:
+    """Result of one bounded ChemGraph single-agent turn."""
+
+    final_text: str
+    state: dict[str, Any]
+    executed_tool_names: tuple[str, ...]
+    terminal_tool: str | None
+    thread_id: str
+    duration_s: float
+
+
+class _TurnEventCallback(BaseCallbackHandler):
+    """Forward LangChain callback events to a small stable callback surface."""
+
+    def __init__(self, on_event: EventCallback, thread_id: str) -> None:
+        self._on_event = on_event
+        self._thread_id = thread_id
+
+    def _emit(self, event: str, payload: dict[str, Any]) -> None:
+        try:
+            self._on_event(event, {"thread_id": self._thread_id, **payload})
+        except Exception:  # noqa: BLE001 - callbacks must not break the run.
+            logger.debug("turn event callback failed", exc_info=True)
+
+    def on_chat_model_start(self, serialized, messages, **kwargs) -> None:
+        self._emit(
+            "llm_call_started",
+            {
+                "model": _serialized_name(serialized),
+                "message_count": len(messages[0]) if messages else 0,
+            },
+        )
+
+    def on_llm_start(self, serialized, prompts, **kwargs) -> None:
+        self._emit(
+            "llm_call_started",
+            {
+                "model": _serialized_name(serialized),
+                "message_count": len(prompts or []),
+            },
+        )
+
+    def on_llm_end(self, response, **kwargs) -> None:
+        payload: dict[str, Any] = {}
+        usage = getattr(response, "llm_output", None)
+        if isinstance(usage, dict):
+            payload["llm_output"] = usage
+        self._emit("llm_call_finished", payload)
+
+    def on_llm_error(self, error, **kwargs) -> None:
+        self._emit("llm_call_failed", {"error": repr(error)})
+
+    def on_tool_start(self, serialized, input_str, **kwargs) -> None:
+        self._emit(
+            "tool_call_started",
+            {
+                "tool_name": _serialized_name(serialized),
+                "arguments": serialize_state(input_str),
+            },
+        )
+
+    def on_tool_end(self, output, **kwargs) -> None:
+        payload: dict[str, Any] = {"result": serialize_state(output)}
+        name = kwargs.get("name")
+        if name:
+            payload["tool_name"] = name
+        self._emit("tool_call_finished", payload)
+
+    def on_tool_error(self, error, **kwargs) -> None:
+        payload = {"error": repr(error)}
+        name = kwargs.get("name")
+        if name:
+            payload["tool_name"] = name
+        self._emit("tool_call_failed", payload)
+
+
+def _serialized_name(serialized: Any) -> str | None:
+    if isinstance(serialized, dict):
+        return serialized.get("name") or serialized.get("id")
+    return None
+
+
+def _message_tool_calls(message: Any) -> list[Any]:
+    if isinstance(message, dict):
+        calls = message.get("tool_calls")
+    else:
+        calls = getattr(message, "tool_calls", None)
+    return calls if isinstance(calls, list) else []
+
+
+def _tool_message_name(message: Any) -> str | None:
+    if isinstance(message, dict):
+        name = message.get("name")
+        role = message.get("role") or message.get("type")
+        if name and role in {"tool", "tool_message", "ToolMessage"}:
+            return str(name)
+        return str(name) if name and not _message_tool_calls(message) else None
+    name = getattr(message, "name", None)
+    message_type = getattr(message, "type", None)
+    if name and message_type == "tool":
+        return str(name)
+    return str(name) if name and not _message_tool_calls(message) else None
+
+
+def _call_name(call: Any) -> str | None:
+    if isinstance(call, dict):
+        if call.get("name"):
+            return str(call["name"])
+        function = call.get("function")
+        if isinstance(function, dict) and function.get("name"):
+            return str(function["name"])
+    name = getattr(call, "name", None)
+    return str(name) if name else None
+
+
+def _state_messages(state: Any) -> list[Any]:
+    if isinstance(state, dict):
+        messages = state.get("messages", [])
+    else:
+        messages = getattr(state, "messages", [])
+    return list(messages or [])
+
+
+def _executed_tool_names(messages: list[Any]) -> tuple[str, ...]:
+    names: list[str] = []
+    for message in messages:
+        name = _tool_message_name(message)
+        if name:
+            names.append(name)
+    if names:
+        return tuple(names)
+    for message in messages:
+        for call in _message_tool_calls(message):
+            if name := _call_name(call):
+                names.append(name)
+    return tuple(names)
+
+
+def _terminal_tool_name(
+    executed_tool_names: tuple[str, ...],
+    terminal_tool_names: Collection[str],
+) -> str | None:
+    terminal = set(terminal_tool_names)
+    for name in reversed(executed_tool_names):
+        if name in terminal:
+            return name
+    return None
+
+
+def _message_text(message: Any) -> str:
+    content = message.get("content") if isinstance(message, dict) else getattr(message, "content", "")
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                parts.append(str(item.get("text") or item.get("content") or item))
+            else:
+                parts.append(str(item))
+        return "\n".join(parts)
+    return "" if content is None else str(content)
+
+
+def _final_text(messages: list[Any]) -> str:
+    for message in reversed(messages):
+        message_type = (
+            message.get("role") or message.get("type")
+            if isinstance(message, dict)
+            else getattr(message, "type", None)
+        )
+        if message_type in {"ai", "assistant"}:
+            return _message_text(message)
+    return _message_text(messages[-1]) if messages else ""
+
+
+def _load_turn_llm(
+    *,
+    model_name: str,
+    base_url: str | None,
+    api_key: str | None,
+    argo_user: str | None,
+) -> Any:
+    temperature = 0.0
+    if model_name in supported_openai_models or model_name in supported_argo_models:
+        kwargs = {
+            "model_name": model_name,
+            "temperature": temperature,
+            "base_url": base_url,
+        }
+        if argo_user is not None:
+            kwargs["argo_user"] = argo_user
+        return load_openai_model(**kwargs)
+    if model_name in supported_ollama_models:
+        return load_ollama_model(model_name=model_name, temperature=temperature)
+    if model_name in supported_alcf_models:
+        return load_alcf_model(
+            model_name=model_name,
+            base_url=base_url,
+            api_key=api_key,
+        )
+    if model_name in supported_anthropic_models:
+        return load_anthropic_model(
+            model_name=model_name,
+            api_key=api_key,
+            temperature=temperature,
+        )
+    if model_name in supported_gemini_models:
+        return load_gemini_model(
+            model_name=model_name,
+            api_key=api_key,
+            temperature=temperature,
+        )
+    if model_name.startswith("groq:"):
+        return load_groq_model(
+            model_name=model_name,
+            api_key=api_key,
+            temperature=temperature,
+        )
+
+    endpoint = os.getenv("VLLM_BASE_URL", base_url or "")
+    key = os.getenv("OPENAI_API_KEY", api_key or "dummy_vllm_key")
+    if not endpoint:
+        raise ValueError(f"Unsupported model or missing base URL for: {model_name}")
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        **_custom_openai_compatible_kwargs(
+            model_name=model_name,
+            temperature=temperature,
+            base_url=endpoint,
+            api_key=key,
+            max_tokens=4000,
+            top_p=1.0,
+            frequency_penalty=0.0,
+            presence_penalty=0.0,
+            argo_user=argo_user,
+        ),
+    )
+
+
+async def run_turn(
+    *,
+    query: str,
+    tools: list[Any] | None = None,
+    model_name: str = "gpt-4o-mini",
+    base_url: str | None = None,
+    api_key: str | None = None,
+    argo_user: str | None = None,
+    system_prompt: str = single_agent_prompt,
+    formatter_prompt: str = default_formatter_prompt,
+    structured_output: bool = False,
+    generate_report: bool = False,
+    report_prompt: str = default_report_prompt,
+    recursion_limit: int = 50,
+    thread_id: str | None = None,
+    terminal_tool_names: Collection[str] = (),
+    human_supervised: bool = False,
+    on_event: EventCallback | None = None,
+) -> TurnResult:
+    """Run one bounded single-agent ChemGraph LangGraph turn."""
+
+    started = time.time()
+    thread_id = thread_id or str(uuid.uuid4())
+    callbacks = [_TurnEventCallback(on_event, thread_id)] if on_event else []
+    event = on_event or (lambda _event, _payload: None)
+    event(
+        "workflow_started",
+        {
+            "workflow_type": "single_agent",
+            "thread_id": thread_id,
+            "tool_names": [getattr(tool, "name", str(tool)) for tool in tools or []],
+        },
+    )
+    llm = _load_turn_llm(
+        model_name=model_name,
+        base_url=base_url,
+        api_key=api_key,
+        argo_user=argo_user,
+    )
+    workflow = construct_single_agent_graph(
+        llm,
+        system_prompt,
+        structured_output,
+        formatter_prompt,
+        generate_report,
+        report_prompt,
+        tools,
+        human_supervised=human_supervised,
+        terminal_tool_names=terminal_tool_names,
+    )
+    config: dict[str, Any] = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": recursion_limit,
+    }
+    if callbacks:
+        config["callbacks"] = callbacks
+
+    last_state: Any = None
+    try:
+        async for state in workflow.astream(
+            {"messages": query},
+            stream_mode="values",
+            config=config,
+        ):
+            last_state = state
+    except Exception as exc:
+        event(
+            "workflow_finished",
+            {
+                "workflow_type": "single_agent",
+                "thread_id": thread_id,
+                "status": "failed",
+                "error": repr(exc),
+                "duration_s": round(time.time() - started, 3),
+            },
+        )
+        raise
+
+    if last_state is None:
+        raise RuntimeError("ChemGraph turn produced no states.")
+
+    messages = _state_messages(last_state)
+    executed_tools = _executed_tool_names(messages)
+    terminal_tool = _terminal_tool_name(executed_tools, terminal_tool_names)
+    result = TurnResult(
+        final_text=_final_text(messages),
+        state=serialize_state(last_state),
+        executed_tool_names=executed_tools,
+        terminal_tool=terminal_tool,
+        thread_id=thread_id,
+        duration_s=round(time.time() - started, 3),
+    )
+    event(
+        "workflow_finished",
+        {
+            "workflow_type": "single_agent",
+            "thread_id": thread_id,
+            "status": "completed",
+            "executed_tool_names": list(result.executed_tool_names),
+            "terminal_tool": terminal_tool,
+            "duration_s": result.duration_s,
+        },
+    )
+    return result
 
 
 class ChemGraph:
@@ -471,6 +819,9 @@ class ChemGraph:
 
         self.workflow_type = workflow_type
         self.model_name = model_name
+        self.base_url = base_url
+        self.api_key = api_key
+        self.argo_user = argo_user
         self.system_prompt = system_prompt
         self.formatter_prompt = formatter_prompt
         self.structured_output = structured_output
@@ -954,7 +1305,6 @@ class ChemGraph:
         query: str,
         config=None,
         resume_from: Optional[str] = None,
-        workflow_span_id: Optional[str] = None,
     ):
         """
         Async-only runner. Requires `self.workflow.astream(...)`.
@@ -977,191 +1327,19 @@ class ChemGraph:
             Session ID to load context from. The previous conversation
             summary is prepended to the query.
         """
+        if config is None:
+            config = {}
+        if not isinstance(config, dict):
+            raise TypeError(f"`config` must be a dictionary, got {type(config).__name__}")
+        if "thread_id" in config:
+            config.setdefault("configurable", {})["thread_id"] = str(config["thread_id"])
+        config.setdefault("configurable", {}).setdefault("thread_id", "1")
+        config["recursion_limit"] = self.recursion_limit
 
-        def _validate_config(cfg):
-            """Normalize and validate the LangGraph run configuration.
-
-            Parameters
-            ----------
-            cfg : dict or None
-                User-provided configuration, optionally with top-level
-                ``thread_id``.
-
-            Returns
-            -------
-            dict
-                Config with ``configurable.thread_id`` and recursion limit set.
-            """
-            if cfg is None:
-                cfg = {}
-            if not isinstance(cfg, dict):
-                raise TypeError(
-                    f"`config` must be a dictionary, got {type(cfg).__name__}"
-                )
-
-            # Support top-level thread_id for convenience
-            if "thread_id" in cfg:
-                if "configurable" not in cfg:
-                    cfg["configurable"] = {}
-                cfg["configurable"]["thread_id"] = str(cfg["thread_id"])
-
-            cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
-            cfg["recursion_limit"] = self.recursion_limit
-            if workflow_span_id:
-                callbacks = list(cfg.get("callbacks") or [])
-                callbacks.append(
-                    ChemGraphWorkflowCallback(workflow_span_id=workflow_span_id),
-                )
-                cfg["callbacks"] = callbacks
-            return cfg
-
-        def _save_state_and_select_return(last_state, cfg):
-            """Persist the final state and apply the configured return option.
-
-            Parameters
-            ----------
-            last_state : dict
-                Final streamed graph state.
-            cfg : dict
-                LangGraph run configuration used to retrieve/write state.
-
-            Returns
-            -------
-            Any
-                Final message or serialized state, depending on
-                ``self.return_option``.
-            """
-            log_dir = self.log_dir
-            if not log_dir:
-                log_dir = "cg_logs"
-
-            os.makedirs(log_dir, exist_ok=True)
-            log_path = None
-            self.write_state(config=cfg, file_path=log_path)
-
-            if self.return_option == "last_message":
-                return last_state["messages"][-1]
-            elif self.return_option == "state":
-                return serialize_state(self.get_state(config=cfg))
-            else:
-                raise ValueError(
-                    f"Unsupported return_option: {self.return_option}. Use 'last_message' or 'state'."
-                )
-
-        async def _stream_until_interrupt(stream_input, cfg):
-            """Stream the workflow until completion or an interrupt.
-
-            Parameters
-            ----------
-            stream_input : dict or Command
-                Initial graph input or resume command to stream.
-            cfg : dict
-                LangGraph run configuration.
-
-            Returns
-            -------
-            tuple
-                ``(last_state, interrupt_value)`` where ``interrupt_value`` is
-                ``None`` when the graph completed normally.
-
-            LangGraph's ``astream(stream_mode="values")`` does **not**
-            raise ``GraphInterrupt``.  Instead the stream emits a state
-            containing an ``__interrupt__`` key and then ends.  We
-            detect this in two ways:
-
-            1. Check for the ``__interrupt__`` key in streamed states.
-            2. After the stream ends, inspect the checkpoint snapshot
-               for pending interrupt tasks.
-            """
-            prev_msgs: list = []
-            last_st = None
-            interrupt_val = None
-            try:
-                async for s in self.workflow.astream(
-                    stream_input, stream_mode="values", config=cfg
-                ):
-                    # Detect inline interrupt marker emitted by astream.
-                    if "__interrupt__" in s:
-                        int_data = s["__interrupt__"]
-                        if isinstance(int_data, (list, tuple)) and int_data:
-                            interrupt_val = int_data[0].value
-                        elif hasattr(int_data, "value"):
-                            interrupt_val = int_data.value
-                        else:
-                            interrupt_val = {
-                                "question": "The workflow needs your input."
-                            }
-
-                    if "messages" in s and s["messages"] != prev_msgs:
-                        messages = s["messages"]
-                        if workflow_span_id:
-                            emit_live_message_events(
-                                previous_messages=prev_msgs,
-                                current_messages=messages,
-                                workflow_span_id=workflow_span_id,
-                            )
-                        new_messages = (
-                            messages[len(prev_msgs) :]
-                            if len(messages) >= len(prev_msgs)
-                            else messages[-1:]
-                        )
-                        for new_message in new_messages:
-                            try:
-                                new_message.pretty_print()
-                            except Exception:
-                                pass
-                            logger.info(new_message)
-                        prev_msgs = list(messages)
-                    last_st = s
-            except GraphInterrupt as gi:
-                # Fallback: some LangGraph versions may still raise.
-                interrupts = gi.args[0] if gi.args else []
-                if interrupts:
-                    interrupt_val = interrupts[0].value
-                else:
-                    interrupt_val = {
-                        "question": "The workflow needs your input."
-                    }
-
-            # Double-check the checkpoint for pending interrupts that
-            # the stream may not have surfaced explicitly.
-            if interrupt_val is None:
-                try:
-                    snapshot = self.workflow.get_state(cfg)
-                    if snapshot and snapshot.tasks:
-                        for t in snapshot.tasks:
-                            t_interrupts = getattr(t, "interrupts", None)
-                            if t_interrupts:
-                                interrupt_val = t_interrupts[0].value
-                                break
-                except Exception:
-                    pass
-
-            if interrupt_val is not None:
-                logger.info("Graph interrupted: %s", interrupt_val)
-                # Refresh state from checkpoint for consistency.
-                try:
-                    snapshot = self.workflow.get_state(cfg)
-                    if snapshot:
-                        last_st = snapshot.values
-                except Exception:
-                    pass
-
-            return last_st, interrupt_val
-
-        logger.debug("run called with config=%s", config)
-        config = _validate_config(config)
-        logger.debug("validated config=%s", config)
-
-        # Initialize logging directory before determining inputs or running workflow
-        # Check if CHEMGRAPH_LOG_DIR is already set
         if not os.environ.get("CHEMGRAPH_LOG_DIR"):
             os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
 
-        # Ensure session exists in memory store
         self._ensure_session(query)
-
-        # If resuming from a previous session, prepend context
         if resume_from and self.session_store:
             context = self.session_store.build_context_summary(resume_from)
             if context:
@@ -1172,61 +1350,63 @@ class ChemGraph:
                 )
                 logger.info(f"Injected context from session {resume_from}")
 
-        inputs = {"messages": query}
+        thread_id = str(config["configurable"]["thread_id"])
+        if self.workflow_type == "single_agent":
+            result = await run_turn(
+                query=query,
+                tools=self.tools,
+                model_name=self.model_name,
+                base_url=self.base_url,
+                api_key=self.api_key,
+                argo_user=self.argo_user,
+                system_prompt=self.system_prompt,
+                formatter_prompt=self.formatter_prompt,
+                structured_output=self.structured_output,
+                generate_report=self.generate_report,
+                report_prompt=self.report_prompt,
+                recursion_limit=self.recursion_limit,
+                thread_id=thread_id,
+                terminal_tool_names=self.terminal_tool_names,
+                human_supervised=self.human_supervised,
+            )
+            self._save_messages_to_store(result.state, query)
+            if self.return_option == "state":
+                return result.state
+            if self.return_option == "last_message":
+                return result.final_text
+            raise ValueError(
+                f"Unsupported return_option: {self.return_option}. "
+                "Use 'last_message' or 'state'."
+            )
 
         try:
-            last_state, interrupt_value = await _stream_until_interrupt(inputs, config)
-
-            # --- Human-in-the-loop resume loop ---
-            # When the graph pauses with an interrupt, ask the human and
-            # resume.  This loop handles chains of multiple interrupts
-            # (e.g., the agent asks a follow-up question after receiving
-            # the first answer).
-            max_interrupts = 10  # safety guard against infinite interrupt loops
-            interrupt_count = 0
-            while interrupt_value is not None:
-                interrupt_count += 1
-                if interrupt_count > max_interrupts:
-                    logger.error(
-                        "Exceeded maximum number of human interrupts (%d); "
-                        "aborting workflow.",
-                        max_interrupts,
-                    )
-                    raise RuntimeError(
-                        f"Workflow exceeded maximum of {max_interrupts} "
-                        f"human interrupts."
-                    )
-
-                # Extract the question text from the interrupt value.
-                if isinstance(interrupt_value, dict):
-                    question = interrupt_value.get(
-                        "question",
-                        interrupt_value.get("message", str(interrupt_value)),
-                    )
-                else:
-                    question = str(interrupt_value)
-
-                logger.info("Requesting human input: %s", question)
-                human_answer = await self._call_human_input_handler(question)
-                logger.info("Human responded: %s", human_answer)
-
-                # Resume the graph from the checkpoint with the human's answer.
-                resume_cmd = Command(resume=human_answer)
-                last_state, interrupt_value = await _stream_until_interrupt(
-                    resume_cmd, config
-                )
-
+            last_state = None
+            async for state in self.workflow.astream(
+                {"messages": query},
+                stream_mode="values",
+                config=config,
+            ):
+                if "messages" in state:
+                    for message in state["messages"][-1:]:
+                        try:
+                            message.pretty_print()
+                        except Exception:
+                            pass
+                        logger.info(message)
+                last_state = state
             if last_state is None:
-                raise RuntimeError("Workflow produced no states.")
-
-            # Save messages to persistent session store
+                raise RuntimeError("Workflow produced no states")
             self._save_messages_to_store(last_state, query)
-
-            return _save_state_and_select_return(last_state, config)
-
-        except HumanInputRequired:
-            # No human_input_handler configured — propagate so the
-            # caller (CLI / UI) can prompt the user and resume.
+            self.write_state(config=config, file_path=None)
+            if self.return_option == "state":
+                return serialize_state(self.get_state(config=config))
+            if self.return_option == "last_message":
+                return last_state["messages"][-1]
+            raise ValueError(
+                f"Unsupported return_option: {self.return_option}. "
+                "Use 'last_message' or 'state'."
+            )
+        except GraphInterrupt:
             raise
         except Exception as e:
             logger.error(f"Error running workflow {self.workflow_type}: {e}")

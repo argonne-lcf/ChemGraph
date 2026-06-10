@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 
-from chemgraph.academy.core.tools import ReasoningToolRuntimeState
 from chemgraph.academy.core.tools import build_chemgraph_reasoning_tools
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 
@@ -29,7 +28,6 @@ def _agent_spec() -> ChemGraphAgentSpec:
 
 
 async def _build_tools(tmp_path):
-    runtime_state = ReasoningToolRuntimeState()
     traces: list[tuple[str, dict[str, Any]]] = []
     outbox: list[dict[str, Any]] = []
     peer_handle = _FakePeerHandle()
@@ -44,11 +42,9 @@ async def _build_tools(tmp_path):
         get_round_index=lambda: 1,
         set_final_result=lambda result: None,
         trace=lambda event, payload: traces.append((event, payload)),
-        runtime_state=runtime_state,
     )
     return {
         "tools": {tool.name: tool for tool in tools},
-        "runtime_state": runtime_state,
         "traces": traces,
         "outbox": outbox,
         "peer_handle": peer_handle,
@@ -74,7 +70,6 @@ async def test_send_message_invalid_args_return_structured_tool_error(tmp_path) 
     assert result["status"] == "error"
     assert result["error_type"] == "invalid_tool_arguments"
     assert result["errors"][0]["field"] == "confidence"
-    assert env["runtime_state"].action_tool_names == ["send_message"]
     assert env["outbox"] == []
     assert env["peer_handle"].calls == []
     assert env["traces"] == [

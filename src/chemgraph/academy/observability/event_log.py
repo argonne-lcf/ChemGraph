@@ -55,6 +55,9 @@ EventKind = Literal[
     "workflow_finished",
     "workflow_node_started",
     "workflow_node_finished",
+    "llm_call_started",
+    "llm_call_finished",
+    "llm_call_failed",
     "llm_decision",
     "workflow_output",
 ]

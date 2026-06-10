@@ -279,22 +279,7 @@ class FastMCPToolInvoker:
                 execution=self.execution,
                 run_dir=self.run_dir,
             )
-            from chemgraph.observability.events import WorkflowEventContext
-            from chemgraph.observability.events import workflow_event_context
-
-            context = WorkflowEventContext(
-                run_id=self.run_dir.name,
-                run_dir=str(self.run_dir),
-                agent_id=invocation.agent_id,
-                role=invocation.role,
-                parent_span_id=invocation.correlation_id,
-                tool_name=invocation.tool_name,
-            )
-            with workflow_event_context(
-                jsonl_path=self.run_dir / "events.jsonl",
-                context=context,
-            ):
-                result = await mcp.call_tool(spec.tool, invocation.arguments)
+            result = await mcp.call_tool(spec.tool, invocation.arguments)
         except Exception as exc:  # noqa: BLE001 - preserve tool failure as data
             return ToolResult(
                 tool_name=invocation.tool_name,
