@@ -113,6 +113,7 @@ where = ["src/"]
     "example-*/prompt_profiles/*.json",
 ]
 "chemgraph.academy.runtime.profiles" = ["*.json"]
+"chemgraph.academy.runtime.templates" = ["*"]
 "chemgraph.academy.dashboard" = ["static/*"]
 "ui" = ["assets/*.png"]
 
