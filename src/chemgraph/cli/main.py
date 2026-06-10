@@ -173,6 +173,16 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         default="ChemGraph General Tools",
         help="Display name for the MCP server connection (default: 'ChemGraph General Tools')",
     )
+    parser.add_argument(
+        "--trace-dir",
+        type=str,
+        default=None,
+        help=(
+            "Write per-run events to this directory so the run is viewable "
+            "via 'chemgraph dashboard -- --run-dir <trace-dir>'. "
+            "Currently only effective for single-agent workflows."
+        ),
+    )
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -493,6 +503,33 @@ def _handle_run(args: argparse.Namespace) -> None:
     # Show banner
     console.print(create_banner())
 
+    # ---- Optional run trace for the local dashboard --------------------
+    trace = None
+    trace_dir = getattr(args, "trace_dir", None) or config.get("trace_dir")
+    if trace_dir:
+        from pathlib import Path
+
+        from chemgraph.cli.trace import CLIRunTrace
+
+        if args.workflow != "single_agent":
+            console.print(
+                "[yellow]--trace-dir is currently only effective for the "
+                "single_agent workflow; events will not be written for "
+                f"{args.workflow!r}.[/yellow]"
+            )
+        else:
+            trace = CLIRunTrace(
+                Path(trace_dir),
+                model_name=args.model,
+                workflow_type=args.workflow,
+                query=args.query,
+            )
+            trace.start()
+            console.print(
+                f"[dim]Tracing run to {trace.trace_dir}. "
+                f"View with: chemgraph dashboard -- --run-dir {trace.trace_dir}[/dim]"
+            )
+
     # Initialize agent
     agent = initialize_agent(
         args.model,
@@ -506,18 +543,28 @@ def _handle_run(args: argparse.Namespace) -> None:
         verbose=(args.verbose > 0),
         human_supervised=args.human_supervised,
         tools=mcp_tools,
+        on_event=trace.on_event if trace else None,
     )
 
     if not agent:
+        if trace is not None:
+            trace.finish(status="failed", error="agent_initialization_failed")
         sys.exit(1)
 
     # Execute query
     console.print(f"[bold blue]Query:[/bold blue] {args.query}")
     if args.resume:
         console.print(f"[bold blue]Resuming from:[/bold blue] {args.resume}")
-    result = run_query(
-        agent, args.query, verbose=(args.verbose > 0), resume_from=args.resume
-    )
+    try:
+        result = run_query(
+            agent, args.query, verbose=(args.verbose > 0), resume_from=args.resume
+        )
+    except Exception:
+        if trace is not None:
+            trace.finish(status="failed")
+        raise
+    if trace is not None:
+        trace.finish(status="completed")
 
     if result:
         format_response(result, verbose=(args.verbose > 0))

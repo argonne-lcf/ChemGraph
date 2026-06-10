@@ -747,6 +747,7 @@ class ChemGraph:
         human_input_handler: Optional[Callable[[str], str]] = None,
         human_supervised: bool = False,
         terminal_tool_names: Collection[str] = (),
+        on_event: Optional[EventCallback] = None,
     ):
         """Initialize a ChemGraph workflow instance.
 
@@ -950,6 +951,7 @@ class ChemGraph:
         self.human_input_handler = human_input_handler
         self.human_supervised = human_supervised
         self.terminal_tool_names = tuple(terminal_tool_names)
+        self.on_event = on_event
         self._last_run_state: dict[str, Any] | None = None
 
         # When human supervision is disabled and the caller is using the
@@ -1468,6 +1470,7 @@ class ChemGraph:
                 thread_id=thread_id,
                 terminal_tool_names=self.terminal_tool_names,
                 human_supervised=self.human_supervised,
+                on_event=self.on_event,
             )
             self._last_run_state = result.state
             self._save_messages_to_store(result.state, query)
