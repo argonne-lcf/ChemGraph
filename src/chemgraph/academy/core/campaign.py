@@ -139,6 +139,7 @@ class ChemGraphDaemonConfig:
     rank: int
     local_rank: int | None
     chemgraph_repo_root: pathlib.Path
+    exchange_type: str = 'redis'
 
 
 def namespace_for_run(run_dir: pathlib.Path) -> str:

@@ -95,6 +95,7 @@ def placement_payload(config: Any, agent_name: str) -> dict[str, Any]:
         'python_executable': sys.executable,
         'rank': config.rank,
         'local_rank': config.local_rank,
+        'exchange_type': config.exchange_type,
         'redis_host': config.redis_host,
         'redis_port': config.redis_port,
         'redis_namespace': config.redis_namespace,

@@ -53,5 +53,6 @@ def test_run_allocation_builds_single_mpiexec_command(tmp_path, monkeypatch) -> 
     assert "mpi-daemon" in cmd
     assert "--campaign-config" in cmd
     assert "--lm-config" in cmd
+    assert "--exchange-type" in cmd
     assert "--chemgraph-repo-root" in cmd
     assert (tmp_path / "launch_command.txt").exists()

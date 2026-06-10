@@ -47,6 +47,7 @@ class AllocationPlan:
     start_redis: bool
     mpiexec: str
     chemgraph_repo_root: Path
+    exchange_type: str = "redis"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -76,6 +77,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--agents-per-node", type=int)
     parser.add_argument("--max-decisions", type=int)
     parser.add_argument("--redis-port", type=int)
+    parser.add_argument(
+        "--exchange-type",
+        choices=("redis", "local", "hybrid"),
+        default="redis",
+    )
     parser.add_argument("--no-start-redis", action="store_true")
     return parser.parse_args(argv)
 
@@ -243,6 +249,7 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         start_redis=not args.no_start_redis,
         mpiexec=profile.mpiexec,
         chemgraph_repo_root=Path(profile.repo_root).resolve(),
+        exchange_type=args.exchange_type,
     )
 
 
@@ -267,7 +274,8 @@ def run_allocation(plan: AllocationPlan) -> int:
     """Start Redis if requested and run per-rank daemons under mpiexec."""
     plan.run_dir.mkdir(parents=True, exist_ok=True)
     redis_proc: subprocess.Popen[bytes] | None = None
-    if plan.start_redis:
+    uses_redis = plan.exchange_type in {"redis", "hybrid"}
+    if plan.start_redis and uses_redis:
         redis_server = shutil.which("redis-server")
         if redis_server is None:
             raise RuntimeError("redis-server is required unless --no-start-redis is set")
@@ -296,7 +304,8 @@ def run_allocation(plan: AllocationPlan) -> int:
             encoding="utf-8",
         )
     try:
-        wait_redis(plan.redis_host, plan.redis_port, plan.run_dir)
+        if uses_redis:
+            wait_redis(plan.redis_host, plan.redis_port, plan.run_dir)
         daemon_args = [
             "--run-dir", str(plan.run_dir),
             "--run-token", plan.run_token,
@@ -312,6 +321,7 @@ def run_allocation(plan: AllocationPlan) -> int:
             "--redis-host", plan.redis_host,
             "--redis-port", str(plan.redis_port),
             "--redis-namespace", plan.redis_namespace,
+            "--exchange-type", plan.exchange_type,
             "--chemgraph-repo-root", str(plan.chemgraph_repo_root),
         ]
         cmd = [

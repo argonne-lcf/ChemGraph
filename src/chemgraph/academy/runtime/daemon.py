@@ -5,12 +5,12 @@ import asyncio
 import pathlib
 import signal
 
-from academy.exchange.redis import RedisExchangeFactory
 from academy.handle import Handle
 from academy.runtime import Runtime
 from academy.runtime import RuntimeConfig
 
 from chemgraph.academy.core.peer_protocol import build_message
+from chemgraph.academy.runtime.exchange import build_exchange_factory
 from chemgraph.academy.runtime.registration import load_academy_registrations
 from chemgraph.academy.runtime.registration import wait_academy_registrations
 from chemgraph.academy.runtime.registration import write_academy_registrations
@@ -61,10 +61,7 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
         await supervisor.start_all()
         external_tools = await supervisor.get_tools(agent_spec.mcp_servers)
 
-        academy_factory = RedisExchangeFactory(
-            hostname=config.redis_host,
-            port=config.redis_port,
-        )
+        academy_factory = build_exchange_factory(config)
         if config.rank == 0:
             initialize_run_files(
                 run_dir=config.run_dir,
@@ -212,6 +209,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--redis-host', default='127.0.0.1')
     parser.add_argument('--redis-port', type=int, required=True)
     parser.add_argument('--redis-namespace')
+    parser.add_argument(
+        '--exchange-type',
+        choices=('redis', 'local', 'hybrid'),
+        default='redis',
+    )
     parser.add_argument('--chemgraph-repo-root')
     return parser.parse_args()
 
@@ -239,6 +241,7 @@ def config_from_args(args: argparse.Namespace) -> ChemGraphDaemonConfig:
         redis_host=args.redis_host,
         redis_port=args.redis_port,
         redis_namespace=args.redis_namespace or namespace_for_run(run_dir),
+        exchange_type=args.exchange_type,
         rank=rank_from_env(),
         local_rank=local_rank_from_env(),
         chemgraph_repo_root=(
