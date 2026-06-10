@@ -287,7 +287,7 @@ Examples:
 
     academy_sub.add_parser(
         "campaigns",
-        help="List built-in ChemGraph Academy campaign specs.",
+        help="List ChemGraph Academy campaign specs.",
     )
 
     # ---- Legacy fallback args -------------------------------------------
@@ -580,9 +580,9 @@ def _handle_academy(args: argparse.Namespace) -> None:
             sys.exit(code)
         return
     if command == "campaigns":
-        from chemgraph.academy.examples import list_builtin_campaigns
+        from chemgraph.academy.campaigns import list_campaigns
 
-        for name in list_builtin_campaigns():
+        for name in list_campaigns():
             console.print(name)
         return
     console.print(

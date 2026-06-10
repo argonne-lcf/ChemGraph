@@ -10,7 +10,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from chemgraph.academy.dashboard import serve_dashboard
-from chemgraph.academy.examples import campaign_launch_defaults
+from chemgraph.academy.campaigns import campaign_launch_defaults
 from chemgraph.academy.runtime.profiles import list_builtin_system_profiles
 from chemgraph.academy.runtime.profiles import load_system_profile
 from chemgraph.academy.runtime.profiles.system import SystemProfile

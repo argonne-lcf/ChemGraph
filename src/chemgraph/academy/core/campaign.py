@@ -6,7 +6,7 @@ import pathlib
 from collections.abc import Mapping
 from typing import Any
 
-from chemgraph.academy.examples import resolve_builtin_campaign
+from chemgraph.academy.campaigns import resolve_campaign
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -217,7 +217,7 @@ def _resolve_resource_spec(
 
 
 def load_campaign(path: str | pathlib.Path) -> ChemGraphCampaign:
-    path = resolve_builtin_campaign(path)
+    path = resolve_campaign(path)
     data = _load_jsonc(path)
     _reject_removed_campaign_fields(data, campaign_path=path)
     prompt_profile = _resolve_campaign_relative_path(

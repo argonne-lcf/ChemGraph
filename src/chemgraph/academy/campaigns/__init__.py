@@ -7,18 +7,18 @@ from pathlib import Path
 
 EXAMPLE_002 = 'example-002-mace-ensemble-screening'
 
-BUILTIN_CAMPAIGNS = {
-    'mace-ensemble-screening-20': f'{EXAMPLE_002}/campaign.jsonc',
+CAMPAIGNS = {
+    'mace-ensemble-screening-20': f'{EXAMPLE_002}/campaign.json',
 }
 
-BUILTIN_LM_CONFIG_TEMPLATES = {
-    'argo-gpt54-mace-template': f'{EXAMPLE_002}/lm_config.template.json',
+LM_CONFIG_TEMPLATES = {
+    'argo-gpt54-mace-template': f'{EXAMPLE_002}/lm_config.json',
 }
 
 
 @dataclasses.dataclass(frozen=True)
 class CampaignLaunchDefaults:
-    """Runtime defaults for a built-in ChemGraph Academy campaign."""
+    """Runtime defaults for a packaged ChemGraph Academy campaign."""
 
     lm_config_template: str
     agent_count: int
@@ -26,7 +26,7 @@ class CampaignLaunchDefaults:
     max_decisions: int
 
 
-BUILTIN_CAMPAIGN_LAUNCH_DEFAULTS = {
+CAMPAIGN_LAUNCH_DEFAULTS = {
     'mace-ensemble-screening-20': CampaignLaunchDefaults(
         lm_config_template='argo-gpt54-mace-template',
         agent_count=5,
@@ -36,36 +36,36 @@ BUILTIN_CAMPAIGN_LAUNCH_DEFAULTS = {
 }
 
 
-def _resolve_builtin(
+def _resolve_campaign_asset(
     path_or_name: str | Path,
-    builtins: dict[str, str],
+    known_assets: dict[str, str],
 ) -> Path:
     value = str(path_or_name)
     path = Path(value)
     if path.exists():
         return path.resolve()
-    relative = builtins.get(value)
+    relative = known_assets.get(value)
     if relative is None:
         return path
     return Path(str(resources.files(__package__).joinpath(relative)))
 
 
-def resolve_builtin_campaign(path_or_name: str | Path) -> Path:
-    return _resolve_builtin(path_or_name, BUILTIN_CAMPAIGNS)
+def resolve_campaign(path_or_name: str | Path) -> Path:
+    return _resolve_campaign_asset(path_or_name, CAMPAIGNS)
 
 
-def resolve_builtin_lm_config_template(path_or_name: str | Path) -> Path:
-    return _resolve_builtin(path_or_name, BUILTIN_LM_CONFIG_TEMPLATES)
+def resolve_lm_config_template(path_or_name: str | Path) -> Path:
+    return _resolve_campaign_asset(path_or_name, LM_CONFIG_TEMPLATES)
 
 
-def list_builtin_campaigns() -> list[str]:
-    return sorted(BUILTIN_CAMPAIGNS)
+def list_campaigns() -> list[str]:
+    return sorted(CAMPAIGNS)
 
 
 def campaign_launch_defaults(campaign: str) -> CampaignLaunchDefaults:
     try:
-        return BUILTIN_CAMPAIGN_LAUNCH_DEFAULTS[campaign]
+        return CAMPAIGN_LAUNCH_DEFAULTS[campaign]
     except KeyError as exc:
         raise KeyError(
-            f'No built-in launch defaults for campaign {campaign!r}',
+            f'No launch defaults for campaign {campaign!r}',
         ) from exc

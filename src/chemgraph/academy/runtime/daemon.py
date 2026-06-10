@@ -26,7 +26,7 @@ from chemgraph.academy.core.campaign import namespace_for_run
 from chemgraph.academy.core.campaign import resolve_campaign_resources
 from chemgraph.academy.core.campaign import selected_agent
 from chemgraph.academy.core.campaign import validate_campaign
-from chemgraph.academy.examples import resolve_builtin_campaign
+from chemgraph.academy.campaigns import resolve_campaign
 from chemgraph.academy.runtime.mpi import append_system_trace
 from chemgraph.academy.runtime.mpi import local_rank_from_env
 from chemgraph.academy.runtime.mpi import placement_payload
@@ -220,7 +220,7 @@ def parse_args() -> argparse.Namespace:
 
 def config_from_args(args: argparse.Namespace) -> ChemGraphDaemonConfig:
     run_dir = pathlib.Path(args.run_dir).resolve()
-    resolved_campaign = resolve_builtin_campaign(args.campaign_config)
+    resolved_campaign = resolve_campaign(args.campaign_config)
     campaign_config = (
         resolved_campaign.resolve()
         if resolved_campaign.exists()

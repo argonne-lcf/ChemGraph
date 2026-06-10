@@ -12,9 +12,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from chemgraph.academy.examples import campaign_launch_defaults
-from chemgraph.academy.examples import resolve_builtin_campaign
-from chemgraph.academy.examples import resolve_builtin_lm_config_template
+from chemgraph.academy.campaigns import campaign_launch_defaults
+from chemgraph.academy.campaigns import resolve_campaign
+from chemgraph.academy.campaigns import resolve_lm_config_template
 from chemgraph.academy.runtime.profiles import list_builtin_system_profiles
 from chemgraph.academy.runtime.profiles import load_system_profile
 from chemgraph.academy.runtime.profiles.system import SystemProfile
@@ -53,7 +53,7 @@ class AllocationPlan:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run a built-in ChemGraph Academy campaign inside the current "
+            "Run a ChemGraph Academy campaign inside the current "
             "HPC compute allocation."
         ),
     )
@@ -154,7 +154,7 @@ def _write_lm_config(
     lm_user: str | None,
     max_tokens: int | None,
 ) -> Path:
-    template_path = resolve_builtin_lm_config_template(template_name)
+    template_path = resolve_lm_config_template(template_name)
     data = json.loads(template_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise RuntimeError(f"LM template must contain a JSON object: {template_path}")
@@ -224,7 +224,7 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
     max_decisions = args.max_decisions or defaults.max_decisions
     redis_port = args.redis_port or profile.redis_port
 
-    campaign_config = resolve_builtin_campaign(args.campaign)
+    campaign_config = resolve_campaign(args.campaign)
     if not campaign_config.exists():
         campaign_config = Path(args.campaign).resolve()
 
