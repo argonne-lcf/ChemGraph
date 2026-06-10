@@ -48,7 +48,8 @@ def test_schema_fanout_tool_advertises_batch_result_signature(monkeypatch):
 def test_mace_worker_creates_inline_output_parent(monkeypatch):
     from ase import Atoms
 
-    from chemgraph.mcp import mace_mcp_hpc
+    from chemgraph.mcp import mace_worker
+    from chemgraph.tools import parsl_tools
     from chemgraph.tools.ase_core import atoms_to_atomsdata
 
     atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 0.74]])
@@ -60,9 +61,9 @@ def test_mace_worker_creates_inline_output_parent(monkeypatch):
         output_path.write_text('{"ok": true}', encoding="utf-8")
         return {"status": "success"}
 
-    monkeypatch.setattr(mace_mcp_hpc, "run_mace_core", fake_run_mace_core)
+    monkeypatch.setattr(parsl_tools, "run_mace_core", fake_run_mace_core)
 
-    result = mace_mcp_hpc._mace_worker(
+    result = mace_worker._mace_worker(
         {
             "inline_structure": atoms_to_atomsdata(atoms).model_dump(),
             "output_result_file": output_file,
@@ -74,6 +75,28 @@ def test_mace_worker_creates_inline_output_parent(monkeypatch):
 
     assert result["status"] == "success"
     assert result["full_output"] == {"ok": True}
+
+
+def test_hpc_worker_functions_are_dill_picklable():
+    dill = pytest.importorskip("dill")
+
+    from chemgraph.mcp.graspa_worker import (
+        _graspa_worker,
+        _ls_remote_files as _graspa_ls_remote_files,
+    )
+    from chemgraph.mcp.mace_worker import _ls_remote_files as _mace_ls_remote_files
+    from chemgraph.mcp.mace_worker import _mace_worker
+    from chemgraph.mcp.xanes_worker import _xanes_ensemble_worker, run_xanes_single
+
+    for worker in (
+        _mace_worker,
+        _mace_ls_remote_files,
+        run_xanes_single,
+        _xanes_ensemble_worker,
+        _graspa_worker,
+        _graspa_ls_remote_files,
+    ):
+        dill.dumps(worker)
 
 
 @pytest.mark.asyncio
