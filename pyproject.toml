@@ -96,9 +96,6 @@ rag = [
 [project.scripts]
 chemgraph = "chemgraph.cli:main"
 chemgraph-eval = "chemgraph.eval.cli:main"
-chemgraph-academy-run = "chemgraph.academy.runtime.compute_launcher:main"
-chemgraph-academy-dashboard = "chemgraph.academy.runtime.dashboard_launcher:main"
-chemgraph-dashboard = "chemgraph.academy.dashboard:main"
 
 [tool.setuptools.packages.find]
 where = ["src/"]

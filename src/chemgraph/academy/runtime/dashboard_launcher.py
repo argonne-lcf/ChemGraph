@@ -107,7 +107,7 @@ def start_rsync(host: str, control_path: str, remote_run_dir: str, local_run_dir
 
 def compute_lines(profile: SystemProfile, wrapper_path: str, run_id: str, campaign: str) -> list[str]:
     lines = ["  module use /soft/modulefiles", "  module load conda", "  conda activate base"] if profile.name == "polaris" else ["  module load frameworks"]
-    return lines + [f"  source {profile.remote_root}/venvs/academy-swarm/bin/activate", f"  export PATH={profile.remote_root}/bin:$PATH", "  chemgraph-academy-run \\", f"    --system {profile.name} \\", f"    --run-id {run_id} \\", f"    --campaign {campaign}", "", "If PATH is not configured, use:", f"  {wrapper_path} \\", f"    --system {profile.name} \\", f"    --run-id {run_id} \\", f"    --campaign {campaign}"]
+    return lines + [f"  source {profile.remote_root}/venvs/academy-swarm/bin/activate", f"  export PATH={profile.remote_root}/bin:$PATH", "  chemgraph academy run-compute \\", f"    --system {profile.name} \\", f"    --run-id {run_id} \\", f"    --campaign {campaign}", "", "If PATH is not configured, use:", f"  {wrapper_path} \\", f"    --system {profile.name} \\", f"    --run-id {run_id} \\", f"    --campaign {campaign}"]
 
 def main() -> int:
     args = parse_args()
@@ -162,7 +162,7 @@ def main() -> int:
             relay_host = wait_relay(profile, remote_host, control_path, relay_port, relay_process, Path(f"/tmp/chemgraph-academy-{args.run_id}-relay.log"))
         lm_base_url = f"http://{relay_host}:{relay_port}/argoapi/v1" if relay_host else str(args.lm_base_url)
         print(f"Compute-node LM URL: {lm_base_url}", flush=True)
-        metadata = {"created_at": time.time(), "created_by": "chemgraph-academy-dashboard", "run_id": args.run_id, "system": profile.name, "campaign": args.campaign, "remote_run_dir": remote_run_dir, "remote_host": remote_host, "lm_connect": args.lm_connect, "lm_base_url": lm_base_url, "workspace_root": profile.remote_root, "academy_repo_root": profile.academy_repo_root, "chemgraph_repo_root": profile.repo_root}
+        metadata = {"created_at": time.time(), "created_by": "chemgraph academy dashboard", "run_id": args.run_id, "system": profile.name, "campaign": args.campaign, "remote_run_dir": remote_run_dir, "remote_host": remote_host, "lm_connect": args.lm_connect, "lm_base_url": lm_base_url, "workspace_root": profile.remote_root, "academy_repo_root": profile.academy_repo_root, "chemgraph_repo_root": profile.repo_root}
         if relay_host:
             metadata.update({"relay_host": relay_host, "relay_port": relay_port})
         print(f"Writing run metadata: {remote_host}:{remote_run_dir}/dashboard_metadata.json", flush=True)
