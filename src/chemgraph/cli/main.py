@@ -179,8 +179,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             "Write per-run events to this directory so the run is viewable "
-            "via 'chemgraph dashboard -- --run-dir <trace-dir>'. "
-            "Currently only effective for single-agent workflows."
+            "via 'chemgraph dashboard -- --run-dir <trace-dir>'."
         ),
     )
 

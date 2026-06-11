@@ -12,7 +12,7 @@ from chemgraph.academy.core.campaign import ChemGraphAgentSpec, ChemGraphCampaig
 from chemgraph.academy.core.campaign import visible_resources_payload
 from chemgraph.academy.core.prompt import PromptProfile
 from chemgraph.academy.observability.run_files import read_json_file
-from chemgraph.agent.llm_agent import run_turn
+from chemgraph.agent.turn import run_turn
 from chemgraph.models.settings import LLMSettings
 
 TraceFn = Callable[[str, dict[str, Any]], None]

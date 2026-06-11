@@ -1,9 +1,9 @@
 """Trace writer for traditional ChemGraph CLI runs.
 
-Bridges the `run_turn` event callback into the dashboard's on-disk
-schema (`events.jsonl` + `status.json` + `manifest.json`), so the
-existing ``chemgraph dashboard`` browser UI can render a single-agent
-ChemGraph run without going through the Academy daemon path.
+Bridges ChemGraph run events into the dashboard's on-disk schema
+(`events.jsonl` + `status.json` + `manifest.json`), so the existing
+``chemgraph dashboard`` browser UI can render a traditional ChemGraph run
+without going through the Academy daemon path.
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ class CLIRunTrace:
         self._write_status()
 
     def on_event(self, event: str, payload: dict) -> None:
-        """Callback handed to :func:`chemgraph.agent.llm_agent.run_turn`."""
+        """Callback handed to :class:`chemgraph.agent.llm_agent.ChemGraph`."""
         self._log.emit(
             event,  # type: ignore[arg-type]
             run_id=self.run_id,
