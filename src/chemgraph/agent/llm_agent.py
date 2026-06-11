@@ -1,8 +1,7 @@
 import asyncio
 import datetime
 import os
-import time
-from typing import Any, Callable, Collection, List, Optional
+from typing import Callable, List, Optional
 import uuid
 
 from chemgraph.memory.store import SessionStore
@@ -20,11 +19,7 @@ from chemgraph.models.supported_models import (
     supported_alcf_models,
     supported_argo_models,
     supported_gemini_models,
-)
-from chemgraph.schemas.ase_input import (
-    get_available_calculator_names,
-    get_calculator_selection_context,
-    get_default_calculator_name,
+
 )
 
 from chemgraph.prompt.single_agent_prompt import (
@@ -39,29 +34,20 @@ from chemgraph.prompt.multi_agent_prompt import (
     aggregator_prompt as default_aggregator_prompt,
     planner_prompt as default_planner_prompt,
 )
+from langgraph.types import Command
 from langgraph.errors import GraphInterrupt
-from langchain_core.callbacks import BaseCallbackHandler
 
-from chemgraph.agent.turn import (
-    EventCallback,
-    _custom_openai_compatible_kwargs,
-    _executed_tool_names,
-    _response_tool_calls,
-    _serialized_name,
-    _state_messages,
-    _terminal_tool_name,
-    serialize_state,
-)
 from chemgraph.graphs.single_agent import construct_single_agent_graph
-from chemgraph.graphs.multi_agent import construct_multi_agent_graph
+
+
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
+from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
 from chemgraph.graphs.rag_agent import construct_rag_agent_graph
 from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
-from chemgraph.graphs.single_agent_architector import construct_single_agent_architector_graph
 from chemgraph.prompt.rag_prompt import rag_agent_prompt
 from chemgraph.prompt.xanes_prompt import (
     xanes_single_agent_prompt as default_xanes_single_agent_prompt,
@@ -73,71 +59,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class _AstreamEventCallback(BaseCallbackHandler):
-    """Forward LangChain callback events from graph-backed CLI runs."""
+def serialize_state(state):
+    """Convert non-serializable objects in state to a JSON-friendly format.
 
-    def __init__(self, on_event: EventCallback, thread_id: str) -> None:
-        self._on_event = on_event
-        self._thread_id = thread_id
+    Parameters
+    ----------
+    state : Any
+        The state object to be serialized. Can be a list, dict, or object with __dict__
 
-    def _emit(self, event: str, payload: dict[str, Any]) -> None:
-        try:
-            self._on_event(event, {"thread_id": self._thread_id, **payload})
-        except Exception:  # noqa: BLE001 - callbacks must not break the run.
-            logger.debug("astream event callback failed", exc_info=True)
-
-    def on_chat_model_start(self, serialized, messages, **kwargs) -> None:
-        self._emit(
-            "llm_call_started",
-            {
-                "model": _serialized_name(serialized),
-                "message_count": len(messages[0]) if messages else 0,
-            },
-        )
-
-    def on_llm_start(self, serialized, prompts, **kwargs) -> None:
-        self._emit(
-            "llm_call_started",
-            {
-                "model": _serialized_name(serialized),
-                "message_count": len(prompts or []),
-            },
-        )
-
-    def on_llm_end(self, response, **kwargs) -> None:
-        payload: dict[str, Any] = {}
-        usage = getattr(response, "llm_output", None)
-        if isinstance(usage, dict):
-            payload["llm_output"] = usage
-        self._emit("llm_call_finished", payload)
-        if tool_calls := _response_tool_calls(response):
-            self._emit("llm_decision", {"tool_calls": tool_calls})
-
-    def on_llm_error(self, error, **kwargs) -> None:
-        self._emit("llm_call_failed", {"error": repr(error)})
-
-    def on_tool_start(self, serialized, input_str, **kwargs) -> None:
-        self._emit(
-            "tool_call_started",
-            {
-                "tool_name": _serialized_name(serialized),
-                "arguments": serialize_state(input_str),
-            },
-        )
-
-    def on_tool_end(self, output, **kwargs) -> None:
-        payload: dict[str, Any] = {"result": serialize_state(output)}
-        name = kwargs.get("name")
-        if name:
-            payload["tool_name"] = name
-        self._emit("tool_call_finished", payload)
-
-    def on_tool_error(self, error, **kwargs) -> None:
-        payload = {"error": repr(error)}
-        name = kwargs.get("name")
-        if name:
-            payload["tool_name"] = name
-        self._emit("tool_call_failed", payload)
+    Returns
+    -------
+    Any
+        A JSON-serializable version of the input state
+    """
+    if isinstance(state, (int, float, bool)) or state is None:
+        return state
+    elif isinstance(state, list):
+        return [serialize_state(item) for item in state]
+    elif isinstance(state, dict):
+        return {key: serialize_state(value) for key, value in state.items()}
+    elif hasattr(state, "__dict__"):
+        return {key: serialize_state(value) for key, value in state.__dict__.items()}
+    else:
+        return str(state)
 
 
 class ChemGraph:
@@ -226,66 +170,7 @@ class ChemGraph:
         max_retries: int = 1,
         human_input_handler: Optional[Callable[[str], str]] = None,
         human_supervised: bool = False,
-        terminal_tool_names: Collection[str] = (),
-        on_event: Optional[EventCallback] = None,
     ):
-        """Initialize a ChemGraph workflow instance.
-
-        Parameters
-        ----------
-        model_name : str, optional
-            LLM model identifier.
-        workflow_type : str, optional
-            Workflow constructor key.
-        base_url : str, optional
-            Custom provider endpoint URL.
-        api_key : str, optional
-            API key passed to compatible model loaders.
-        argo_user : str, optional
-            Argo username for Argo-hosted models.
-        system_prompt : str, optional
-            System prompt for single-agent-style workflows.
-        formatter_prompt : str, optional
-            Prompt used to format single-agent final output.
-        structured_output : bool, optional
-            Whether structured final output is requested.
-        return_option : str, optional
-            Return mode, such as ``"last_message"`` or ``"state"``.
-        recursion_limit : int, optional
-            LangGraph recursion limit.
-        planner_prompt : str, optional
-            Planner prompt for multi-agent workflows.
-        executor_prompt : str, optional
-            Executor prompt for multi-agent workflows.
-        aggregator_prompt : str, optional
-            Aggregator prompt retained for compatibility.
-        formatter_multi_prompt : str, optional
-            Formatter prompt for multi-agent workflows.
-        generate_report : bool, optional
-            Whether report generation is enabled.
-        report_prompt : str, optional
-            Prompt used by the report-generation workflow.
-        support_structured_output : bool, optional
-            Whether the selected model supports structured output.
-        tools : list, optional
-            Custom tool list for applicable workflows.
-        data_tools : list, optional
-            Additional data-analysis tools for MCP workflows.
-        session_store : SessionStore, optional
-            Existing session store instance.
-        enable_memory : bool, optional
-            Whether persistent session memory is enabled.
-        memory_db_path : str, optional
-            SQLite path for the session store.
-        log_dir : str, optional
-            Directory for run logs and artifacts.
-        max_retries : int, optional
-            LLM parse-retry limit for formatter/planner nodes.
-        human_input_handler : Callable[[str], str], optional
-            Callback used to answer graph human-interrupt prompts.
-        human_supervised : bool, optional
-            Whether to expose human-supervision tools to the agent.
-        """
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
 
@@ -372,8 +257,8 @@ class ChemGraph:
                     )
                     from langchain_openai import ChatOpenAI
 
-                    llm_kwargs = _custom_openai_compatible_kwargs(
-                        model_name=model_name,
+                    llm = ChatOpenAI(
+                        model=model_name,
                         temperature=temperature,
                         base_url=vllm_base_url,
                         api_key=vllm_api_key,
@@ -381,9 +266,7 @@ class ChemGraph:
                         top_p=top_p,
                         frequency_penalty=frequency_penalty,
                         presence_penalty=presence_penalty,
-                        argo_user=argo_user,
                     )
-                    llm = ChatOpenAI(**llm_kwargs)
                     logger.info(
                         f"Successfully initialized ChatOpenAI for model '{model_name}' at {vllm_base_url}"
                     )
@@ -399,36 +282,8 @@ class ChemGraph:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
             raise e
 
-        self.workflow_map = {
-            "single_agent": {"constructor": construct_single_agent_graph},
-            "multi_agent": {"constructor": construct_multi_agent_graph},
-            "python_relp": {"constructor": construct_relp_graph},
-            "graspa": {"constructor": construct_graspa_graph},
-            "graspa_agent": {"constructor": construct_graspa_graph},
-            "mock_agent": {"constructor": construct_mock_agent_graph},
-            "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
-            "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
-            "rag_agent": {"constructor": construct_rag_agent_graph},
-            "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
-            "single_agent_architector": {
-                "constructor": construct_single_agent_architector_graph,
-            },
-        }
-
-        if workflow_type not in self.workflow_map:
-            raise ValueError(
-                f"Unsupported workflow type: {workflow_type}. "
-                f"Available types: {list(self.workflow_map.keys())}"
-            )
-
-        self._using_default_system_prompt = system_prompt == single_agent_prompt
-        self._using_default_formatter_prompt = formatter_prompt == default_formatter_prompt
-
         self.workflow_type = workflow_type
         self.model_name = model_name
-        self.base_url = base_url
-        self.api_key = api_key
-        self.argo_user = argo_user
         self.system_prompt = system_prompt
         self.formatter_prompt = formatter_prompt
         self.structured_output = structured_output
@@ -445,9 +300,6 @@ class ChemGraph:
         self.max_retries = max_retries
         self.human_input_handler = human_input_handler
         self.human_supervised = human_supervised
-        self.terminal_tool_names = tuple(terminal_tool_names)
-        self.on_event = on_event
-        self._last_run_state: dict[str, Any] | None = None
 
         # When human supervision is disabled and the caller is using the
         # default system prompt, strip the ask_human instructions so the
@@ -455,26 +307,27 @@ class ChemGraph:
         if not self.human_supervised and self.system_prompt == single_agent_prompt:
             self.system_prompt = get_single_agent_prompt(human_supervised=False)
 
-        self.available_calculators = get_available_calculator_names()
-        self.default_calculator = get_default_calculator_name()
-        self.calculator_selection_context = get_calculator_selection_context()
-
-        def append_calculator_context(prompt: str) -> str:
-            """Append calculator availability guidance to a prompt once."""
-            if self.calculator_selection_context in prompt:
-                return prompt
-            return f"{prompt}{self.calculator_selection_context}"
-
-        if self.workflow_type in {"single_agent", "mock_agent", "single_agent_mcp"}:
-            self.system_prompt = append_calculator_context(self.system_prompt)
-        elif self.workflow_type == "multi_agent":
-            self.planner_prompt = append_calculator_context(self.planner_prompt)
-            self.executor_prompt = append_calculator_context(self.executor_prompt)
-
         if model_name in supported_argo_models:
             self.support_structured_output = False
         else:
             self.support_structured_output = support_structured_output
+
+        self.workflow_map = {
+            "single_agent": {"constructor": construct_single_agent_graph},
+            "multi_agent": {"constructor": construct_multi_agent_graph},
+            "python_relp": {"constructor": construct_relp_graph},
+            "graspa": {"constructor": construct_graspa_graph},
+            "mock_agent": {"constructor": construct_mock_agent_graph},
+            "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
+            "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
+            "rag_agent": {"constructor": construct_rag_agent_graph},
+            "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
+        }
+
+        if workflow_type not in self.workflow_map:
+            raise ValueError(
+                f"Unsupported workflow type: {workflow_type}. Available types: {list(self.workflow_map.keys())}"
+            )
 
         if self.workflow_type == "single_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -487,7 +340,6 @@ class ChemGraph:
                 self.tools,
                 max_retries=self.max_retries,
                 human_supervised=self.human_supervised,
-                terminal_tool_names=self.terminal_tool_names,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -504,7 +356,7 @@ class ChemGraph:
                 llm,
                 self.system_prompt,
             )
-        elif self.workflow_type in {"graspa", "graspa_agent"}:
+        elif self.workflow_type == "graspa":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 self.system_prompt,
@@ -532,7 +384,7 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 system_prompt=self.system_prompt
-                if not self._using_default_system_prompt
+                if self.system_prompt != single_agent_prompt
                 else rag_agent_prompt,
                 tools=self.tools,
             )
@@ -540,18 +392,12 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 system_prompt=self.system_prompt
-                if not self._using_default_system_prompt
+                if self.system_prompt != single_agent_prompt
                 else default_xanes_single_agent_prompt,
                 structured_output=self.structured_output,
                 formatter_prompt=self.formatter_prompt
-                if not self._using_default_formatter_prompt
+                if self.formatter_prompt != default_formatter_prompt
                 else default_xanes_formatter_prompt,
-                tools=self.tools,
-            )
-        elif self.workflow_type == "single_agent_architector":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm=llm,
-                system_prompt=self.system_prompt,
                 tools=self.tools,
             )
 
@@ -560,18 +406,6 @@ class ChemGraph:
 
         This method creates and displays a visual representation of the workflow graph
         using Mermaid diagrams. The visualization is shown in Jupyter notebooks.
-
-        Parameters
-        ----------
-        method : str, optional
-            Visualization backend. ``"ascii"`` returns an ASCII graph;
-            any other value renders a Mermaid PNG in the active notebook.
-
-        Returns
-        -------
-        str or None
-            ASCII graph text when ``method`` is ``"ascii"``; otherwise
-            displays an image and returns ``None``.
 
         Notes
         -----
@@ -743,13 +577,7 @@ class ChemGraph:
         return self.uuid
 
     def _ensure_session(self, query: str) -> None:
-        """Create a session record on first run if memory is enabled.
-
-        Parameters
-        ----------
-        query : str
-            User query used to generate the session title.
-        """
+        """Create a session record on first run if memory is enabled."""
         if self.session_store is None:
             return
         if self._session_created:
@@ -767,15 +595,7 @@ class ChemGraph:
         logger.info(f"Created session {self.uuid}: {self._session_title}")
 
     def _save_messages_to_store(self, last_state: dict, query: str) -> None:
-        """Extract messages from workflow state and persist to session store.
-
-        Parameters
-        ----------
-        last_state : dict
-            Latest LangGraph state containing a ``messages`` sequence.
-        query : str
-            Original user query associated with the saved messages.
-        """
+        """Extract messages from workflow state and persist to session store."""
         if self.session_store is None or not self._session_created:
             return
 
@@ -869,16 +689,6 @@ class ChemGraph:
         Raises :class:`HumanInputRequired` when no handler is configured,
         allowing external callers (CLI, UI) to catch it, prompt the user,
         and resume the graph.
-
-        Parameters
-        ----------
-        question : str
-            Prompt emitted by the graph for a human response.
-
-        Returns
-        -------
-        str
-            Human response returned by the configured handler.
         """
         handler = self.human_input_handler
         if handler is None:
@@ -887,31 +697,158 @@ class ChemGraph:
             return await handler(question)
         return handler(question)
 
-    async def run(
-        self,
-        query: str,
-        config=None,
-        resume_from: Optional[str] = None,
-    ):
-        """Run a graph-backed ChemGraph workflow.
-
-        All CLI workflows execute through their restored LangGraph
-        constructors. Academy uses :func:`run_turn` directly instead of this
-        method.
+    async def run(self, query: str, config=None, resume_from: Optional[str] = None):
         """
-        if config is None:
-            config = {}
-        if not isinstance(config, dict):
-            raise TypeError(f"`config` must be a dictionary, got {type(config).__name__}")
-        if "thread_id" in config:
-            config.setdefault("configurable", {})["thread_id"] = str(config["thread_id"])
-        config.setdefault("configurable", {}).setdefault("thread_id", "1")
-        config["recursion_limit"] = self.recursion_limit
+        Async-only runner. Requires `self.workflow.astream(...)`.
+        Streams values, logs new messages, writes state, and returns according to
+        `self.return_option` ("last_message" or "state").
 
+        When the graph pauses for human input (via ``interrupt()``), the
+        ``human_input_handler`` callback is invoked to obtain the user's
+        response, and the graph is automatically resumed.  If no handler
+        is configured, the ``GraphInterrupt`` exception propagates to the
+        caller.
+
+        Parameters
+        ----------
+        query : str
+            The user query to execute.
+        config : dict, optional
+            LangGraph config with thread_id, etc.
+        resume_from : str, optional
+            Session ID to load context from. The previous conversation
+            summary is prepended to the query.
+        """
+
+        def _validate_config(cfg):
+            if cfg is None:
+                cfg = {}
+            if not isinstance(cfg, dict):
+                raise TypeError(
+                    f"`config` must be a dictionary, got {type(cfg).__name__}"
+                )
+
+            # Support top-level thread_id for convenience
+            if "thread_id" in cfg:
+                if "configurable" not in cfg:
+                    cfg["configurable"] = {}
+                cfg["configurable"]["thread_id"] = str(cfg["thread_id"])
+
+            cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
+            cfg["recursion_limit"] = self.recursion_limit
+            return cfg
+
+        def _save_state_and_select_return(last_state, cfg):
+            log_dir = self.log_dir
+            if not log_dir:
+                log_dir = "cg_logs"
+
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = None
+            self.write_state(config=cfg, file_path=log_path)
+
+            if self.return_option == "last_message":
+                return last_state["messages"][-1]
+            elif self.return_option == "state":
+                return serialize_state(self.get_state(config=cfg))
+            else:
+                raise ValueError(
+                    f"Unsupported return_option: {self.return_option}. Use 'last_message' or 'state'."
+                )
+
+        async def _stream_until_interrupt(stream_input, cfg):
+            """Stream the workflow until completion or an interrupt.
+
+            Returns ``(last_state, interrupt_value)`` where
+            ``interrupt_value`` is ``None`` when the graph completed
+            normally.
+
+            LangGraph's ``astream(stream_mode="values")`` does **not**
+            raise ``GraphInterrupt``.  Instead the stream emits a state
+            containing an ``__interrupt__`` key and then ends.  We
+            detect this in two ways:
+
+            1. Check for the ``__interrupt__`` key in streamed states.
+            2. After the stream ends, inspect the checkpoint snapshot
+               for pending interrupt tasks.
+            """
+            prev_msgs: list = []
+            last_st = None
+            interrupt_val = None
+            try:
+                async for s in self.workflow.astream(
+                    stream_input, stream_mode="values", config=cfg
+                ):
+                    # Detect inline interrupt marker emitted by astream.
+                    if "__interrupt__" in s:
+                        int_data = s["__interrupt__"]
+                        if isinstance(int_data, (list, tuple)) and int_data:
+                            interrupt_val = int_data[0].value
+                        elif hasattr(int_data, "value"):
+                            interrupt_val = int_data.value
+                        else:
+                            interrupt_val = {
+                                "question": "The workflow needs your input."
+                            }
+
+                    if "messages" in s and s["messages"] != prev_msgs:
+                        new_message = s["messages"][-1]
+                        try:
+                            new_message.pretty_print()
+                        except Exception:
+                            pass
+                        logger.info(new_message)
+                        prev_msgs = s["messages"]
+                    last_st = s
+            except GraphInterrupt as gi:
+                # Fallback: some LangGraph versions may still raise.
+                interrupts = gi.args[0] if gi.args else []
+                if interrupts:
+                    interrupt_val = interrupts[0].value
+                else:
+                    interrupt_val = {
+                        "question": "The workflow needs your input."
+                    }
+
+            # Double-check the checkpoint for pending interrupts that
+            # the stream may not have surfaced explicitly.
+            if interrupt_val is None:
+                try:
+                    snapshot = self.workflow.get_state(cfg)
+                    if snapshot and snapshot.tasks:
+                        for t in snapshot.tasks:
+                            t_interrupts = getattr(t, "interrupts", None)
+                            if t_interrupts:
+                                interrupt_val = t_interrupts[0].value
+                                break
+                except Exception:
+                    pass
+
+            if interrupt_val is not None:
+                logger.info("Graph interrupted: %s", interrupt_val)
+                # Refresh state from checkpoint for consistency.
+                try:
+                    snapshot = self.workflow.get_state(cfg)
+                    if snapshot:
+                        last_st = snapshot.values
+                except Exception:
+                    pass
+
+            return last_st, interrupt_val
+
+        logger.debug("run called with config=%s", config)
+        config = _validate_config(config)
+        logger.debug("validated config=%s", config)
+
+        # Initialize logging directory before determining inputs or running workflow
+        # Check if CHEMGRAPH_LOG_DIR is already set
         if not os.environ.get("CHEMGRAPH_LOG_DIR"):
             os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
 
+        # Ensure session exists in memory store
         self._ensure_session(query)
+
+        # If resuming from a previous session, prepend context
         if resume_from and self.session_store:
             context = self.session_store.build_context_summary(resume_from)
             if context:
@@ -922,81 +859,63 @@ class ChemGraph:
                 )
                 logger.info(f"Injected context from session {resume_from}")
 
-        started = time.time()
-        thread_id = str(config["configurable"]["thread_id"])
-        event = self.on_event or (lambda _event, _payload: None)
-        if self.on_event:
-            callbacks = list(config.get("callbacks") or [])
-            callbacks.append(_AstreamEventCallback(self.on_event, thread_id))
-            config["callbacks"] = callbacks
-        event(
-            "workflow_started",
-            {
-                "workflow_type": self.workflow_type,
-                "thread_id": thread_id,
-                "tool_names": [getattr(tool, "name", str(tool)) for tool in self.tools or []],
-            },
-        )
+        inputs = {"messages": query}
 
         try:
-            last_state = None
-            async for state in self.workflow.astream(
-                {"messages": query},
-                stream_mode="values",
-                config=config,
-            ):
-                if "messages" in state:
-                    for message in state["messages"][-1:]:
-                        try:
-                            message.pretty_print()
-                        except Exception:
-                            pass
-                        logger.info(message)
-                last_state = state
-            if last_state is None:
-                raise RuntimeError("Workflow produced no states")
+            last_state, interrupt_value = await _stream_until_interrupt(inputs, config)
 
-            messages = _state_messages(last_state)
-            executed_tools = _executed_tool_names(messages)
-            terminal_tool = _terminal_tool_name(
-                executed_tools,
-                self.terminal_tool_names,
-            )
-            event(
-                "workflow_finished",
-                {
-                    "workflow_type": self.workflow_type,
-                    "thread_id": thread_id,
-                    "status": "completed",
-                    "executed_tool_names": list(executed_tools),
-                    "terminal_tool": terminal_tool,
-                    "duration_s": round(time.time() - started, 3),
-                },
-            )
-            self._last_run_state = serialize_state(last_state)
+            # --- Human-in-the-loop resume loop ---
+            # When the graph pauses with an interrupt, ask the human and
+            # resume.  This loop handles chains of multiple interrupts
+            # (e.g., the agent asks a follow-up question after receiving
+            # the first answer).
+            max_interrupts = 10  # safety guard against infinite interrupt loops
+            interrupt_count = 0
+            while interrupt_value is not None:
+                interrupt_count += 1
+                if interrupt_count > max_interrupts:
+                    logger.error(
+                        "Exceeded maximum number of human interrupts (%d); "
+                        "aborting workflow.",
+                        max_interrupts,
+                    )
+                    raise RuntimeError(
+                        f"Workflow exceeded maximum of {max_interrupts} "
+                        f"human interrupts."
+                    )
+
+                # Extract the question text from the interrupt value.
+                if isinstance(interrupt_value, dict):
+                    question = interrupt_value.get(
+                        "question",
+                        interrupt_value.get("message", str(interrupt_value)),
+                    )
+                else:
+                    question = str(interrupt_value)
+
+                logger.info("Requesting human input: %s", question)
+                human_answer = await self._call_human_input_handler(question)
+                logger.info("Human responded: %s", human_answer)
+
+                # Resume the graph from the checkpoint with the human's answer.
+                resume_cmd = Command(resume=human_answer)
+                last_state, interrupt_value = await _stream_until_interrupt(
+                    resume_cmd, config
+                )
+
+            if last_state is None:
+                raise RuntimeError("Workflow produced no states.")
+
+            # Save messages to persistent session store
             self._save_messages_to_store(last_state, query)
-            self.write_state(config=config, file_path=None)
-            if self.return_option == "state":
-                return serialize_state(self.get_state(config=config))
-            if self.return_option == "last_message":
-                return last_state["messages"][-1]
-            raise ValueError(
-                f"Unsupported return_option: {self.return_option}. "
-                "Use 'last_message' or 'state'."
-            )
-        except GraphInterrupt:
+
+            return _save_state_and_select_return(last_state, config)
+
+        except HumanInputRequired:
+            # No human_input_handler configured — propagate so the
+            # caller (CLI / UI) can prompt the user and resume.
             raise
         except Exception as e:
-            event(
-                "workflow_finished",
-                {
-                    "workflow_type": self.workflow_type,
-                    "thread_id": thread_id,
-                    "status": "failed",
-                    "error": repr(e),
-                    "duration_s": round(time.time() - started, 3),
-                },
-            )
             logger.error(f"Error running workflow {self.workflow_type}: {e}")
             raise
 
@@ -1009,12 +928,5 @@ class HumanInputRequired(Exception):
     """
 
     def __init__(self, question: str):
-        """Initialize the exception with the pending human question.
-
-        Parameters
-        ----------
-        question : str
-            Question that should be presented to the user.
-        """
         self.question = question
         super().__init__(question)
