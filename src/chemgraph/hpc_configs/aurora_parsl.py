@@ -5,9 +5,12 @@ from parsl.executors import HighThroughputExecutor
 from parsl.launchers import MpiExecLauncher
 from parsl.addresses import address_by_interface
 
+from chemgraph.hpc_configs.loader import resolve_worker_init
+
 
 def get_aurora_config(
     run_dir=None,
+    worker_init: str | None = None,
 ):
     """Create a Parsl configuration for Aurora PBS jobs.
 
@@ -15,6 +18,11 @@ def get_aurora_config(
     ----------
     run_dir : str, optional
         Directory used as Parsl's run directory and worker working directory.
+    worker_init : str, optional
+        Explicit shell snippet for worker init. When ``None`` (default),
+        :func:`resolve_worker_init` picks ``CHEMGRAPH_WORKER_INIT`` /
+        ``VIRTUAL_ENV`` / ``CONDA_PREFIX`` over the Aurora fallback
+        (``module load frameworks``).
 
     Returns
     -------
@@ -24,8 +32,8 @@ def get_aurora_config(
     if run_dir is None:
         run_dir = os.getcwd()
 
-    # Hard-wired worker_init for aurora
-    worker_init = f"export TMPDIR=/tmp; cd {run_dir}; module load frameworks"
+    if worker_init is None:
+        worker_init = resolve_worker_init(run_dir, fallback="module load frameworks")
 
     # Get the number of nodes:
     node_file = os.getenv("PBS_NODEFILE")

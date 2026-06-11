@@ -4,10 +4,13 @@ from parsl.providers import LocalProvider
 from parsl.executors import HighThroughputExecutor
 from parsl.launchers import MpiExecLauncher
 
+from chemgraph.hpc_configs.loader import resolve_worker_init
+
 
 def get_crux_config(
     run_dir=None,
     max_workers_per_node: int = 16,
+    worker_init: str | None = None,
 ):
     """Create a Parsl configuration for ALCF Crux PBS jobs.
 
@@ -20,6 +23,10 @@ def get_crux_config(
     max_workers_per_node : int, optional
         Number of concurrent workers per node. Defaults to 16
         (≈8 cores per worker on a 128-core node).
+    worker_init : str, optional
+        Explicit shell snippet for worker init. When ``None`` (default),
+        :func:`resolve_worker_init` picks ``CHEMGRAPH_WORKER_INIT`` /
+        ``VIRTUAL_ENV`` / ``CONDA_PREFIX`` over the Crux fallback.
 
     Returns
     -------
@@ -29,10 +36,10 @@ def get_crux_config(
     if run_dir is None:
         run_dir = os.getcwd()
 
-    worker_init = (
-        f"export TMPDIR=/tmp; cd {run_dir}; "
-        "module load conda; conda activate base"
-    )
+    if worker_init is None:
+        worker_init = resolve_worker_init(
+            run_dir, fallback="module load conda; conda activate base"
+        )
 
     node_file = os.getenv("PBS_NODEFILE")
     if node_file and os.path.exists(node_file):
