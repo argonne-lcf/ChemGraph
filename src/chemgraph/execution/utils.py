@@ -18,11 +18,37 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from pydantic import BaseModel
+
 if TYPE_CHECKING:
     from chemgraph.execution.base import ExecutionBackend
     from chemgraph.execution.job_tracker import JobTracker
 
 logger = logging.getLogger(__name__)
+
+
+def to_picklable(value: Any) -> Any:
+    """Recursively convert Pydantic instances to plain dicts.
+
+    FastMCP's ``func_metadata`` builds tool-argument models with
+    ``pydantic.create_model`` and a ``__module__`` that does not actually
+    contain the class, so cloudpickle cannot serialize instances of those
+    classes to a Parsl/Globus-Compute worker. Converting every Pydantic
+    instance to a dict at the framework boundary side-steps the problem
+    without patching the third-party library.
+
+    Containers (``dict``, ``list``, ``tuple``) are walked recursively and
+    rebuilt with the same shape; everything else passes through unchanged.
+    """
+    if isinstance(value, BaseModel):
+        return value.model_dump()
+    if isinstance(value, dict):
+        return {k: to_picklable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [to_picklable(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(to_picklable(v) for v in value)
+    return value
 
 
 def resolve_structure_files(

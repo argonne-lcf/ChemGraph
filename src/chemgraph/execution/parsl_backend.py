@@ -91,7 +91,11 @@ class ParslBackend(ExecutionBackend):
                 raise ValueError(
                     f"Task '{task.task_id}': task_type='python' requires a callable."
                 )
-            return self._python_app(task.callable, task.args, task.kwargs)
+            from chemgraph.execution.utils import to_picklable
+
+            return self._python_app(
+                task.callable, to_picklable(task.args), to_picklable(task.kwargs)
+            )
 
         elif task.task_type == "shell":
             if task.command is None:

@@ -133,6 +133,17 @@ def _mace_worker(job: dict) -> dict:
     return result
 
 
+# Force pickle-by-reference for callables that the transport hook installs
+# as `task.callable`. Without this, dill sees `__module__ == "__main__"`
+# (this file is run as ``python -m chemgraph.mcp.mace_mcp_hpc``) and falls
+# back to pickle-by-value, which walks the module's globals and tries to
+# serialize the dynamic ``run_mace_singleArguments`` class held by
+# ``mcp._tool_manager._tools[...].fn_metadata.arg_model`` -- that class
+# was created by ``pydantic.create_model`` with a ``__module__`` it was
+# never registered into, so dill raises a PicklingError.
+CGFastMCP._fix_module_for_pickle(_mace_worker)
+
+
 # ── Pre-submit transport hook ──────────────────────────────────────────
 
 
@@ -163,6 +174,11 @@ def _normalize_model(job: dict) -> None:
 def _mace_transport_hook(task: TaskSpec) -> TaskSpec:
     """Route single-tool calls to the dict-based worker and embed
     local structures on whichever path is taken."""
+    logger.debug(
+        "mace transport hook: task_id=%s callable=%s",
+        task.task_id,
+        getattr(task.callable, "__qualname__", task.callable),
+    )
     if task.callable is run_mace_single:
         params = task.kwargs.get("params")
         if params is None:
@@ -215,6 +231,9 @@ def _ls_remote_files(path: str) -> list[str]:
     return sorted(
         f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))
     )
+
+
+CGFastMCP._fix_module_for_pickle(_ls_remote_files)
 
 
 def _expand_mace_ensemble(params: mace_input_schema_ensemble) -> list[dict]:

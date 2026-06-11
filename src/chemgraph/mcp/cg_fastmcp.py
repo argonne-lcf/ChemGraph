@@ -23,6 +23,66 @@ from mcp.types import ToolAnnotations
 logger = logging.getLogger(__name__)
 
 
+def _register_fastmcp_dynamic_models() -> None:
+    """Make pydantic models built by ``fastmcp.func_metadata`` pickle-by-qualname.
+
+    FastMCP builds per-tool ``<tool>Arguments`` / ``<tool>Output`` classes via
+    ``pydantic.create_model(__module__="mcp.server.fastmcp.utilities.func_metadata")``
+    but never inserts them into that module's namespace. Dill's by-qualname
+    lookup then fails and either raises ``PicklingError`` or falls back to
+    pickle-by-value, which walks ``__globals__`` and can hit other surprises.
+    Wrapping ``func_metadata`` so the resulting models are inserted into the
+    module's ``__dict__`` makes the lookup succeed regardless of how the
+    pickle graph reaches the class.
+    """
+    import sys
+
+    from mcp.server.fastmcp.utilities import func_metadata as _fm
+
+    if getattr(_fm, "_chemgraph_models_registered", False):
+        return
+
+    _orig = _fm.func_metadata
+    _mod_ns = sys.modules[_fm.__name__].__dict__
+
+    def _register(model):
+        if model is None:
+            return
+        name = getattr(model, "__name__", None)
+        if name and name not in _mod_ns:
+            _mod_ns[name] = model
+            try:
+                model.__module__ = _fm.__name__
+            except (AttributeError, TypeError):
+                pass
+
+    def _patched(*args, **kwargs):
+        meta = _orig(*args, **kwargs)
+        _register(getattr(meta, "arg_model", None))
+        _register(getattr(meta, "output_model", None))
+        return meta
+
+    _fm.func_metadata = _patched
+    # Several fastmcp modules captured the original via
+    # ``from mcp.server.fastmcp.utilities.func_metadata import func_metadata``
+    # before this patch ran, so they hold their own bound name. Rebind the
+    # name in each known call site so every tool registration goes through
+    # the wrapper.
+    for _modname in (
+        "mcp.server.fastmcp.tools.base",
+        "mcp.server.fastmcp.prompts.base",
+        "mcp.server.fastmcp.resources.templates",
+    ):
+        _m = sys.modules.get(_modname)
+        if _m is not None and getattr(_m, "func_metadata", None) is _orig:
+            _m.func_metadata = _patched
+
+    _fm._chemgraph_models_registered = True
+
+
+_register_fastmcp_dynamic_models()
+
+
 class CGFastMCP(FastMCP):
     """FastMCP with an integrated execution backend.
 
@@ -187,15 +247,46 @@ class CGFastMCP(FastMCP):
 
     @staticmethod
     def _fix_module_for_pickle(fn: Callable) -> None:
-        """Ensure *fn* is picklable when the MCP server runs as ``__main__``."""
+        """Ensure *fn* is picklable when the MCP server runs as ``__main__``.
+
+        Under ``python -m pkg.mod`` runpy sets ``__name__ == "__main__"``
+        and populates both ``sys.modules["__main__"]`` and
+        ``sys.modules["pkg.mod"]`` -- but it does **not** attach
+        ``mod`` as an attribute of the parent package ``pkg``. Dill's
+        by-qualname pickling resolves ``pkg.mod.fn`` via
+        ``__import__("pkg", fromlist=["mod"])`` followed by
+        ``getattr(pkg, "mod")``, which fails for that reason and silently
+        falls back to pickle-by-value -- dragging the entire module's
+        globals (including the FastMCP dynamic ``arg_model`` classes)
+        into the byte stream.
+
+        Three things must be true for dill to pickle ``fn`` by reference:
+
+        1. ``fn.__module__`` points at the real dotted name (not ``__main__``).
+        2. ``sys.modules[fn.__module__]`` exists and contains ``fn`` as
+           an attribute.
+        3. The parent package has the leaf module attached as an attribute
+           (so ``getattr(pkg, leaf)`` resolves to the same module object).
+        """
         if fn.__module__ == "__main__":
             import sys
 
             spec = getattr(sys.modules.get("__main__"), "__spec__", None)
             if spec and spec.name:
                 fn.__module__ = spec.name
-                if spec.name not in sys.modules:
-                    sys.modules[spec.name] = sys.modules["__main__"]
+                target = sys.modules.get(spec.name)
+                if target is None:
+                    target = sys.modules["__main__"]
+                    sys.modules[spec.name] = target
+                elif getattr(target, fn.__name__, None) is not fn:
+                    setattr(target, fn.__name__, fn)
+                # Attach the leaf module to its parent package so dill's
+                # ``__import__(parent, fromlist=[leaf])`` lookup succeeds.
+                if "." in spec.name:
+                    parent_name, _, leaf = spec.name.rpartition(".")
+                    parent = sys.modules.get(parent_name)
+                    if parent is not None and getattr(parent, leaf, None) is not target:
+                        setattr(parent, leaf, target)
 
     # ── Tool registration ───────────────────────────────────────────────
 
@@ -329,6 +420,8 @@ class CGFastMCP(FastMCP):
             param_type = param.annotation
 
             async def wrapper(params):
+                from chemgraph.execution.utils import to_picklable
+
                 self._ensure_backend()
                 pending = []
                 for i, p in enumerate(params):
@@ -336,7 +429,7 @@ class CGFastMCP(FastMCP):
                         task_id=f"{fn.__name__}_{i}",
                         task_type="python",
                         callable=fn,
-                        kwargs={param.name: p},
+                        kwargs={param.name: to_picklable(p)},
                         **task_spec_kwargs,
                     )
                     task = self._apply_pre_submit_hook(task)
@@ -457,6 +550,8 @@ class CGFastMCP(FastMCP):
             tool_name = name or expander.__name__
 
             async def wrapper(**kwargs):
+                from chemgraph.execution.utils import to_picklable
+
                 self._ensure_backend()
                 ensemble_params = kwargs[param.name]
                 items = expander(ensemble_params)
@@ -466,7 +561,7 @@ class CGFastMCP(FastMCP):
                         task_id=f"{tool_name}_{i}",
                         task_type="python",
                         callable=worker,
-                        kwargs={worker_param_name: item},
+                        kwargs={worker_param_name: to_picklable(item)},
                         **task_spec_kwargs,
                     )
                     task = self._apply_pre_submit_hook(task)
@@ -500,7 +595,7 @@ class CGFastMCP(FastMCP):
     ) -> Callable:
         """Build an async wrapper that submits *fn* to the backend."""
         from chemgraph.execution.base import TaskSpec
-        from chemgraph.execution.utils import submit_or_gather
+        from chemgraph.execution.utils import submit_or_gather, to_picklable
 
         self._fix_module_for_pickle(fn)
 
@@ -511,7 +606,7 @@ class CGFastMCP(FastMCP):
                 task_id=fn.__name__,
                 task_type="python",
                 callable=fn,
-                kwargs=kwargs,
+                kwargs=to_picklable(kwargs),
                 **task_spec_kwargs,
             )
             task = self._apply_pre_submit_hook(task)
