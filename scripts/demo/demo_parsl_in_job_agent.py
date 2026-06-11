@@ -2,11 +2,11 @@
 """Agent + MCP + Parsl demo on an HPC compute node.
 
 LLM agent on the compute node drives a local ``mace_mcp_hpc``
-subprocess whose backend is ``parsl`` configured for Polaris or
-Aurora. The agent uses ``run_mace_single`` to compute thermochemistry
+subprocess whose backend is ``parsl`` configured for Polaris, Aurora,
+or Crux. The agent uses ``run_mace_single`` to compute thermochemistry
 for each of the 5 molecules and reports a markdown table.
 
-Must run inside ``qsub -I`` on Polaris/Aurora. LLM API key required.
+Must run inside ``qsub -I`` on Polaris/Aurora/Crux. LLM API key required.
 
 Run::
 
@@ -53,6 +53,9 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int) 
         "PATH": os.environ.get("PATH", ""),
         "HOME": os.environ.get("HOME", ""),
         "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", ""),
+        "CONDA_PREFIX": os.environ.get("CONDA_PREFIX", ""),
+        "CONDA_DEFAULT_ENV": os.environ.get("CONDA_DEFAULT_ENV", ""),
+        "CHEMGRAPH_WORKER_INIT": os.environ.get("CHEMGRAPH_WORKER_INIT", ""),
         "PBS_NODEFILE": os.environ.get("PBS_NODEFILE", ""),
         "PBS_O_WORKDIR": os.environ.get("PBS_O_WORKDIR", ""),
     }
@@ -116,9 +119,16 @@ def main() -> None:
     if not args.system:
         _abort("COMPUTE_SYSTEM env var not set and --system not given.")
     system = args.system.lower().strip()
-    if system not in ("polaris", "aurora"):
-        _abort(f"Unsupported --system: {system!r}")
-    device = args.device or ("xpu" if system == "aurora" else "cuda")
+    if system not in ("polaris", "aurora", "crux"):
+        _abort(f"Unsupported --system: {system!r} (expected polaris|aurora|crux)")
+    if args.device:
+        device = args.device
+    elif system == "aurora":
+        device = "xpu"
+    elif system == "crux":
+        device = "cpu"
+    else:
+        device = "cuda"
     query = args.query or agent_prompt(device=device)
     asyncio.run(amain(args.model, system, device, query, args.verbose))
 

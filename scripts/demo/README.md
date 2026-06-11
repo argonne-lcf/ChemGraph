@@ -144,6 +144,22 @@ python scripts/demo/demo_parsl_in_job_direct.py --device xpu
 python scripts/demo/demo_ensemble_launcher_in_job_direct.py --device xpu
 ```
 
+### Inside a PBS allocation on Crux (CPU-only)
+
+```bash
+qsub -I -A <proj> -l select=1 -l walltime=01:00:00 -q debug -l filesystems=home:eagle
+cd /lus/eagle/projects/ChemGraph/thang/ChemGraph
+
+bash scripts/demo/run_crux_demo.sh                       # Parsl + EL, all 5 molecules
+bash scripts/demo/run_crux_demo.sh --molecules water methane
+bash scripts/demo/run_crux_demo.sh --parsl-only
+bash scripts/demo/run_crux_demo.sh --el-only
+```
+
+The wrapper activates `.cg_crux_hpc/`, exports `COMPUTE_SYSTEM=crux`, and runs
+`demo_parsl_in_job_direct.py` then `demo_ensemble_launcher_in_job_direct.py`
+with `--device cpu`. CSVs land in `$PBS_O_WORKDIR/demo_{parsl,el}_out_crux/`.
+
 Agent variants on either system require an LLM key and follow the
 same pattern as `demo_local_agent.py`.
 

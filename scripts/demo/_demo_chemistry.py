@@ -269,7 +269,7 @@ def agent_prompt(device: str = "cpu") -> str:
         f"For each result, retrieve the optimized electronic energy, enthalpy, "
         f"entropy and Gibbs free energy by reading the output JSON via "
         f"extract_output_json. After all five complete, report a markdown table "
-        f"with columns: molecule, energy (eV), H (eV), G (eV), then a one-line "
+        f"with columns: molecule, energy (eV), H (eV), G (eV), and wall-time then a one-line "
         f"observation about which molecule has the lowest Gibbs free energy.\n\n"
         f"(Structure paths for reference: {files})"
     )
