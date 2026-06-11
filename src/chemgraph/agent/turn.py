@@ -6,9 +6,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Callable, Collection
-
-from langchain_core.callbacks import BaseCallbackHandler
+from typing import Any, Collection
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.models.loader import load_chat_model
@@ -166,9 +164,6 @@ def _custom_openai_compatible_kwargs(
     return kwargs
 
 
-EventCallback = Callable[[str, dict], None]
-
-
 @dataclasses.dataclass(frozen=True)
 class TurnResult:
     """Result of one bounded ChemGraph single-agent turn."""
@@ -179,73 +174,6 @@ class TurnResult:
     terminal_tool: str | None
     thread_id: str
     duration_s: float
-
-
-class _TurnEventCallback(BaseCallbackHandler):
-    """Forward LangChain callback events to a small stable callback surface."""
-
-    def __init__(self, on_event: EventCallback, thread_id: str) -> None:
-        self._on_event = on_event
-        self._thread_id = thread_id
-
-    def _emit(self, event: str, payload: dict[str, Any]) -> None:
-        try:
-            self._on_event(event, {"thread_id": self._thread_id, **payload})
-        except Exception:  # noqa: BLE001 - callbacks must not break the run.
-            logger.debug("turn event callback failed", exc_info=True)
-
-    def on_chat_model_start(self, serialized, messages, **kwargs) -> None:
-        self._emit(
-            "llm_call_started",
-            {
-                "model": _serialized_name(serialized),
-                "message_count": len(messages[0]) if messages else 0,
-            },
-        )
-
-    def on_llm_start(self, serialized, prompts, **kwargs) -> None:
-        self._emit(
-            "llm_call_started",
-            {
-                "model": _serialized_name(serialized),
-                "message_count": len(prompts or []),
-            },
-        )
-
-    def on_llm_end(self, response, **kwargs) -> None:
-        payload: dict[str, Any] = {}
-        usage = getattr(response, "llm_output", None)
-        if isinstance(usage, dict):
-            payload["llm_output"] = usage
-        self._emit("llm_call_finished", payload)
-        if tool_calls := _response_tool_calls(response):
-            self._emit("llm_decision", {"tool_calls": tool_calls})
-
-    def on_llm_error(self, error, **kwargs) -> None:
-        self._emit("llm_call_failed", {"error": repr(error)})
-
-    def on_tool_start(self, serialized, input_str, **kwargs) -> None:
-        self._emit(
-            "tool_call_started",
-            {
-                "tool_name": _serialized_name(serialized),
-                "arguments": serialize_state(input_str),
-            },
-        )
-
-    def on_tool_end(self, output, **kwargs) -> None:
-        payload: dict[str, Any] = {"result": serialize_state(output)}
-        name = kwargs.get("name")
-        if name:
-            payload["tool_name"] = name
-        self._emit("tool_call_finished", payload)
-
-    def on_tool_error(self, error, **kwargs) -> None:
-        payload = {"error": repr(error)}
-        name = kwargs.get("name")
-        if name:
-            payload["tool_name"] = name
-        self._emit("tool_call_failed", payload)
 
 
 def _serialized_name(serialized: Any) -> str | None:
@@ -417,6 +345,9 @@ def _load_turn_llm(
             argo_user=argo_user,
         ),
     )
+
+
+from chemgraph.agent.events import EventCallback, _TurnEventCallback
 
 
 async def run_turn(
