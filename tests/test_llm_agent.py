@@ -5,7 +5,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 from langchain_core.messages import AIMessage
-from chemgraph.agent.llm_agent import ChemGraph, _TurnEventCallback
+from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.turn import _TurnEventCallback
 
 
 @pytest.fixture

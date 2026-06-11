@@ -17,7 +17,8 @@ import pytest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from chemgraph.agent.llm_agent import ChemGraph, TurnResult, serialize_state
+from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.turn import TurnResult, serialize_state
 from chemgraph.memory.store import SessionStore
 
 

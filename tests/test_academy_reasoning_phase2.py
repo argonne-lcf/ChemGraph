@@ -16,7 +16,7 @@ from chemgraph.academy.core.campaign import ResourceSpec, resolve_campaign_resou
 from chemgraph.academy.core.prompt import PromptProfile, PromptStateLimits
 from chemgraph.academy.core.tools import build_chemgraph_reasoning_tools
 from chemgraph.academy.core.turn import ReasoningTurnResult, build_peer_status
-from chemgraph.agent.llm_agent import TurnResult
+from chemgraph.agent.turn import TurnResult
 from chemgraph.models.settings import LLMSettings
 
 
