@@ -119,6 +119,14 @@ class ParslBackend(ExecutionBackend):
             try:
                 import parsl
 
+                # cleanup() stops executors and releases resources;
+                # clear() only removes the DFK from the global registry.
+                # Without cleanup(), Parsl logs
+                # "Python is exiting with a DFK still running" at interpreter exit.
+                try:
+                    parsl.dfk().cleanup()
+                except Exception:
+                    logger.warning("Error during Parsl DFK cleanup.", exc_info=True)
                 parsl.clear()
                 logger.info("ParslBackend shut down.")
             except Exception:
