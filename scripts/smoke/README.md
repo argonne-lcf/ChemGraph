@@ -94,6 +94,22 @@ python scripts/smoke/smoke_parsl_in_job.py --device xpu
 python scripts/smoke/smoke_ensemble_launcher_in_job.py --mode managed --device xpu
 ```
 
+### Inside a PBS allocation on Crux (CPU-only)
+
+```bash
+qsub -I -A <proj> -l select=1 -l walltime=00:30:00 -q debug -l filesystems=home:eagle
+cd /lus/eagle/projects/ChemGraph/thang/ChemGraph
+
+bash scripts/smoke/run_crux_smoke.sh           # both backends + MACE on CPU
+bash scripts/smoke/run_crux_smoke.sh --quick   # skip MACE
+bash scripts/smoke/run_crux_smoke.sh --parsl-only
+bash scripts/smoke/run_crux_smoke.sh --el-only
+```
+
+The wrapper activates `.cg_crux_hpc/`, exports `COMPUTE_SYSTEM=crux`, and runs
+`smoke_parsl_in_job.py` then `smoke_ensemble_launcher_in_job.py` with
+`--device cpu`. It exits non-zero if either backend fails.
+
 ### EnsembleLauncher client-only mode
 
 Exercises `EnsembleLauncherBackend(client_only=True, ...)` introduced in

@@ -47,11 +47,14 @@ from pathlib import Path
 
 from _smoke_utils import (
     SmokeReporter,
+    ensure_on_worker_pythonpath,
     trivial_add,
     trivial_hostname,
     trivial_square,
     water_xyz_path,
 )
+
+ensure_on_worker_pythonpath()
 
 
 def _abort(msg: str) -> None:

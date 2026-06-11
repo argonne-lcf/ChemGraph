@@ -108,3 +108,18 @@ def trivial_env_probe() -> dict:
     except Exception as exc:
         info["torch_error"] = str(exc)
     return info
+
+
+def ensure_on_worker_pythonpath() -> None:
+    """Add this file's directory to ``PYTHONPATH`` so that worker processes
+    (Parsl HTEX, EnsembleLauncher, Globus Compute) can ``import _smoke_utils``
+    when unpickling tasks. Safe to call from the main process before backend
+    creation; no-op if already present.
+    """
+    import os
+
+    here = str(Path(__file__).resolve().parent)
+    existing = os.environ.get("PYTHONPATH", "")
+    parts = existing.split(os.pathsep) if existing else []
+    if here not in parts:
+        os.environ["PYTHONPATH"] = os.pathsep.join([here, *parts]) if parts else here
