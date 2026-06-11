@@ -67,8 +67,10 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
         if isinstance(usage, dict):
             payload["llm_output"] = usage
         self._emit("llm_call_finished", payload)
-        if tool_calls := _response_tool_calls(response):
-            self._emit("llm_decision", {"tool_calls": tool_calls})
+        self._emit(
+            "llm_decision",
+            {"tool_calls": _response_tool_calls(response) or []},
+        )
 
     def on_llm_error(self, error, **kwargs) -> None:
         self._emit("llm_call_failed", {"error": repr(error)})

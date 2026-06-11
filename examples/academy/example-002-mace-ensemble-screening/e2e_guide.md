@@ -234,6 +234,51 @@ PYTHONPATH=src python -m chemgraph.cli.main academy dashboard -- \
   --local
 ```
 
+## Dashboard For Traditional ChemGraph Runs
+
+The dashboard also renders single-agent ChemGraph runs that were not launched
+through Academy. Pass `--trace-dir <path>` to `chemgraph run` to write the
+events the dashboard needs (`events.jsonl`, `status.json`, `manifest.json`),
+then point the dashboard at that directory.
+
+On-site at ANL, the simplest path is the built-in Argo support — no shim or
+relay needed (set `ARGO_USER` once per shell, or in your shell profile):
+
+```bash
+export ARGO_USER="$ARGO_USER"
+
+chemgraph run \
+  -q "What is the SMILES for water" \
+  -m "argo:gpt-5.4" \
+  --trace-dir ./run-001
+```
+
+Then serve the trace directory:
+
+```bash
+chemgraph dashboard -- --run-dir ./run-001 --port 8765
+# Open http://127.0.0.1:8765
+```
+
+The browser shows the same per-agent workflow inspector that Academy displays
+for a logical-agent node (query → LLM call → tool calls → output), but at the
+top level since the run only has one agent. Use a fresh `--trace-dir` per run
+so multiple runs don't pile into one `events.jsonl`.
+
+`--trace-dir` is currently only effective for the `single_agent` workflow.
+Other workflows (`multi_agent`, `python_relp`, `graspa`, `rag_agent`,
+`single_agent_xanes`, ...) run normally but don't yet emit dashboard events,
+and the CLI prints a yellow warning for those.
+
+If the browser shows "Waiting for ChemGraph workflow execution events" after a
+run completed successfully, the remote checkout is missing the
+`llm_decision`-on-every-LLM-call fix. Sync the latest ChemGraph and clear
+stale bytecode locally:
+
+```bash
+find src/chemgraph -name __pycache__ -type d -exec rm -rf {} +
+```
+
 ## Troubleshooting
 
 Check the relay from compute:
