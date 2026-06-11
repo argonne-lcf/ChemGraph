@@ -1,9 +1,11 @@
 import asyncio
 import datetime
 import os
-from typing import Callable, List, Optional
+import time
+from typing import Callable, Collection, List, Optional
 import uuid
 
+from chemgraph.agent.events import EventCallback, _AstreamEventCallback
 from chemgraph.memory.store import SessionStore
 from chemgraph.memory.schemas import SessionMessage
 from chemgraph.models.openai import load_openai_model
@@ -133,6 +135,11 @@ class ChemGraph:
         pause and request human input.  When ``False`` the tool is
         excluded from the tool list and the corresponding instruction
         is removed from the default system prompt, by default False.
+    terminal_tool_names : Collection[str], optional
+        Tool names that should terminate supported workflows after
+        successful execution, by default empty.
+    on_event : callable, optional
+        Callback invoked with dashboard workflow events, by default None.
 
     Raises
     ------
@@ -170,6 +177,8 @@ class ChemGraph:
         max_retries: int = 1,
         human_input_handler: Optional[Callable[[str], str]] = None,
         human_supervised: bool = False,
+        terminal_tool_names: Collection[str] = (),
+        on_event: Optional[EventCallback] = None,
     ):
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
@@ -300,6 +309,8 @@ class ChemGraph:
         self.max_retries = max_retries
         self.human_input_handler = human_input_handler
         self.human_supervised = human_supervised
+        self.terminal_tool_names = tuple(terminal_tool_names)
+        self.on_event = on_event
 
         # When human supervision is disabled and the caller is using the
         # default system prompt, strip the ask_human instructions so the
@@ -340,6 +351,7 @@ class ChemGraph:
                 self.tools,
                 max_retries=self.max_retries,
                 human_supervised=self.human_supervised,
+                terminal_tool_names=self.terminal_tool_names,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -719,6 +731,11 @@ class ChemGraph:
             Session ID to load context from. The previous conversation
             summary is prepended to the query.
         """
+        from chemgraph.agent.turn import (
+            _executed_tool_names,
+            _state_messages,
+            _terminal_tool_name,
+        )
 
         def _validate_config(cfg):
             if cfg is None:
@@ -838,6 +855,13 @@ class ChemGraph:
 
         logger.debug("run called with config=%s", config)
         config = _validate_config(config)
+        thread_id = str(config["configurable"]["thread_id"])
+        started = time.time()
+        event = self.on_event or (lambda _event, _payload: None)
+        if self.on_event:
+            callbacks = list(config.get("callbacks") or [])
+            callbacks.append(_AstreamEventCallback(self.on_event, thread_id))
+            config["callbacks"] = callbacks
         logger.debug("validated config=%s", config)
 
         # Initialize logging directory before determining inputs or running workflow
@@ -860,6 +884,16 @@ class ChemGraph:
                 logger.info(f"Injected context from session {resume_from}")
 
         inputs = {"messages": query}
+        event(
+            "workflow_started",
+            {
+                "workflow_type": self.workflow_type,
+                "thread_id": thread_id,
+                "tool_names": [
+                    getattr(tool, "name", str(tool)) for tool in self.tools or []
+                ],
+            },
+        )
 
         try:
             last_state, interrupt_value = await _stream_until_interrupt(inputs, config)
@@ -909,6 +943,24 @@ class ChemGraph:
             # Save messages to persistent session store
             self._save_messages_to_store(last_state, query)
 
+            messages = _state_messages(last_state)
+            executed_tools = _executed_tool_names(messages)
+            terminal_tool = _terminal_tool_name(
+                executed_tools,
+                self.terminal_tool_names,
+            )
+            event(
+                "workflow_finished",
+                {
+                    "workflow_type": self.workflow_type,
+                    "thread_id": thread_id,
+                    "status": "completed",
+                    "executed_tool_names": list(executed_tools),
+                    "terminal_tool": terminal_tool,
+                    "duration_s": round(time.time() - started, 3),
+                },
+            )
+
             return _save_state_and_select_return(last_state, config)
 
         except HumanInputRequired:
@@ -916,6 +968,16 @@ class ChemGraph:
             # caller (CLI / UI) can prompt the user and resume.
             raise
         except Exception as e:
+            event(
+                "workflow_finished",
+                {
+                    "workflow_type": self.workflow_type,
+                    "thread_id": thread_id,
+                    "status": "failed",
+                    "error": repr(e),
+                    "duration_s": round(time.time() - started, 3),
+                },
+            )
             logger.error(f"Error running workflow {self.workflow_type}: {e}")
             raise
 
