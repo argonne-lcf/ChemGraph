@@ -202,7 +202,18 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     if hasattr(calc, "get_atoms_properties"):
         extra_info = calc.get_atoms_properties()
 
-    return calc.get_calculator(), extra_info, calc
+    if "mace" in calc_type:
+        # MACE's torch.load + symbolic_trace is unsafe under concurrent loads,
+        # whether the concurrency is threads in one process or sibling processes
+        # spawned by the EnsembleLauncher process pool. See mace_calc._mace_lock.
+        from chemgraph.schemas.calculators.mace_calc import mace_loading_lock
+
+        with mace_loading_lock():
+            ase_calculator = calc.get_calculator()
+    else:
+        ase_calculator = calc.get_calculator()
+
+    return ase_calculator, extra_info, calc
 
 
 # ---------------------------------------------------------------------------
