@@ -63,10 +63,7 @@ def test_mace_worker_creates_inline_output_parent(monkeypatch):
 
     monkeypatch.setattr(parsl_tools, "run_mace_core", fake_run_mace_core)
 
-    # Exercise the in-proc body so we can monkeypatch run_mace_core. The
-    # public _mace_worker wraps this in a subprocess to dodge a Parsl-on-
-    # Aurora hang and would not see test monkeypatches.
-    result = mace_worker._mace_worker_inproc(
+    result = mace_worker._mace_worker(
         {
             "inline_structure": atoms_to_atomsdata(atoms).model_dump(),
             "output_result_file": output_file,
