@@ -15,6 +15,19 @@ The coordinator delegates 20 SMILES candidates, structure agents generate XYZ
 files, the MACE agent runs an ensemble energy screen, and the assessment agent
 summarizes readiness/ranking evidence.
 
+## About The MACE Path
+
+This example deliberately runs MACE through the general `run_ase` tool
+(`chemgraph.mcp.mcp_tools`), which executes MACE in-process inside the MCP
+server. It does **not** exercise `chemgraph.mcp.mace_mcp_hpc` or the
+Parsl/EnsembleLauncher/Globus Compute backends — those are being reworked in
+a separate PR. Once that lands and the WorkerLost subprocess fix is folded
+back in, this example can be switched back to the HPC MACE path.
+
+In-process MACE means each per-structure energy evaluation runs synchronously
+in the mace-agent's MCP server process. A 20-structure screen completes in
+a few minutes on CPU.
+
 ## Configure Paths
 
 Set these values in each terminal before copying the commands below:
@@ -80,7 +93,7 @@ module load frameworks
 # conda activate base
 
 source "$REMOTE_ROOT/venvs/academy-swarm/bin/activate"
-python -m pip install -e ".[academy,parsl]"
+python -m pip install -e ".[academy]"
 ```
 
 Verify the campaign is visible:
@@ -116,20 +129,14 @@ make -j4
 make PREFIX="$REMOTE_ROOT/tools/redis" install
 ```
 
-Stage the MACE model:
+The `mace_mp` calculator downloads its foundation model on first use into
+`~/.cache/mace`, so no manual MACE-model staging is needed for this example.
+First-call download can take a minute; pre-warm it once on the compute node
+if you want to skip that wait at run time:
 
 ```bash
-cd "$LOCAL_CHEMGRAPH"
-
-MODEL=src/chemgraph/academy/campaigns/example-002-mace-ensemble-screening/models/mace-mpa-0-medium.model
-URL=https://github.com/ACEsuit/mace-mp/releases/download/mace_mpa_0/mace-mpa-0-medium.model
-
-mkdir -p "$(dirname "$MODEL")"
-test -f "$MODEL" || curl -L --fail -o "$MODEL" "$URL"
-ls -lh "$MODEL"
+python -c "from mace.calculators import mace_mp; mace_mp(model='medium-mpa-0', device='cpu')"
 ```
-
-Then sync ChemGraph again.
 
 ## Start argo-shim
 
@@ -185,15 +192,7 @@ export NUMEXPR_NUM_THREADS=64
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
-export CHEMGRAPH_EXECUTION_BACKEND=parsl
-export COMPUTE_SYSTEM="$ALCF_SYSTEM"
-
 export PATH="$REMOTE_ROOT/bin:$REMOTE_ROOT/tools/redis/bin:$PATH"
-
-: "${CHEMGRAPH_EXECUTION_BACKEND:?must be set to 'parsl' before launch}"
-: "${COMPUTE_SYSTEM:?must be set to aurora or polaris before launch}"
-echo "execution backend = $CHEMGRAPH_EXECUTION_BACKEND"
-echo "compute system    = $COMPUTE_SYSTEM"
 
 chemgraph academy run-compute \
   --system "$ALCF_SYSTEM" \
@@ -201,13 +200,6 @@ chemgraph academy run-compute \
   --campaign mace-ensemble-screening-20 \
   --lm-user "$ARGO_USER"
 ```
-
-If you reconnect to the login/compute node and re-run only the final
-`chemgraph academy run-compute` invocation, the env exports above will not be
-in your shell. Re-run the full block, or re-export both variables, before
-relaunching. If `CHEMGRAPH_EXECUTION_BACKEND` is unset, the MCP server can fall
-back to LocalBackend and produce `BrokenProcessPool` failures under per-rank
-memory pressure.
 
 If the wrapper is installed but `chemgraph` is not on `PATH`, use:
 
@@ -308,32 +300,7 @@ export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 ```
 
-If MACE results come back as `PicklingError: Can't pickle
-run_mace_singleArguments`, the remote ChemGraph checkout does not have the
-worker-module fix synced. Sync the latest ChemGraph checkout to the ALCF
-filesystem, restart the dashboard with a fresh run id, and rerun from a fresh
-compute allocation.
-
-If MACE results come back as `BrokenProcessPool` failures, confirm the MACE MCP
-server initialized Parsl:
-
-```bash
-grep "backend initialised" \
-  "$REMOTE_ROOT/runs/$RUN_ID/rank3/mcp_logs/mace.log"
-```
-
-Expected:
-
-```text
-CGFastMCP backend initialised: ParslBackend
-```
-
-If the log shows `LocalBackend initialized with 4 workers`, re-run the full
-compute block with `CHEMGRAPH_EXECUTION_BACKEND=parsl`.
-
-If the log shows `Parsl is required for the ParslBackend`, the Parsl package is
-missing from the venv:
-
-```bash
-python -m pip install -e ".[academy,parsl]"
-```
+If MACE energy evaluations are slow, the first call per worker pays a
+one-time foundation-model download into `~/.cache/mace`. Pre-warm by
+running the snippet under "About The MACE Path" above on the compute node
+before launching the campaign.

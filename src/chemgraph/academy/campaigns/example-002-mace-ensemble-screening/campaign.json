@@ -1,7 +1,7 @@
 {
   // Campaign files support JSONC-style comments.
   "run_id": "mace-ensemble-screening-20",
-  "user_task": "Given 20 staged SMILES candidates, generate 3D XYZ structures, run a MACE ensemble energy screen over generated structures, and rank candidates by calculation readiness and available MACE evidence.",
+  "user_task": "Given 20 staged SMILES candidates, generate 3D XYZ structures, run a per-structure MACE energy calculation through the run_ase tool, and rank candidates by calculation readiness and available MACE evidence.",
   "prompt_profile": "prompt_profiles/default.json",
   "initial_agent": "coordinator-agent",
   "resources": {
@@ -26,40 +26,30 @@
       "scope": "shared_run",
       "description": "Shared run directory where generated XYZ coordinate files should be written."
     },
-    "mace_output_result_file": {
-      "kind": "file",
-      "path": "academy_mace_outputs/mace_results.json",
+    "mace_output_directory": {
+      "kind": "directory",
+      "path": "academy_mace_outputs",
       "scope": "shared_run",
-      "description": "Shared run file requested for the MACE ensemble result summary."
-    },
-    "mace_model_file": {
-      "kind": "file",
-      "path": "models/mace-mpa-0-medium.model",
-      "scope": "campaign_file",
-      "description": "Local MACE model file shipped with this campaign example."
+      "description": "Shared run directory where mace-agent should write one JSON result file per structure (e.g. academy_mace_outputs/<candidate_id>.json)."
     }
   },
   "mcp_servers": [
     // MCP server fields:
     //   command: launch command; runtime appends --transport/--host/--port.
+    // The HPC-specific servers (mace_mcp_hpc, hpc_misc_mcp) are intentionally
+    // omitted here because they go through chemgraph.execution.ParslBackend,
+    // which is being reworked in a separate PR. This example exercises the
+    // in-process MACE path through the general ``run_ase`` tool instead.
     {
       "name": "general",
       "command": "python -m chemgraph.mcp.mcp_tools"
-    },
-    {
-      "name": "mace",
-      "command": "python -m chemgraph.mcp.mace_mcp_hpc"
-    },
-    {
-      "name": "hpc_misc",
-      "command": "python -m chemgraph.mcp.hpc_misc_mcp"
     }
   ],
   "agents": [
     {
       "name": "coordinator-agent",
       "role": "MACEReadinessCoordinatorAgent",
-      "mission": "Coordinate the campaign from the bootstrap task. Send odd-numbered MOL candidates to structure-agent-a and even-numbered MOL candidates to structure-agent-b, including candidate_id, label, SMILES, and output_file. After structure evidence returns, ask mace-agent to run one MACE energy calculation on CPU using the provided structure directory, output result path, and local model file resource, then ask assessment-agent for readiness/ranking evidence before submitting the final result.",
+      "mission": "Coordinate the campaign from the bootstrap task. Send odd-numbered MOL candidates to structure-agent-a and even-numbered MOL candidates to structure-agent-b, including candidate_id, label, SMILES, and output_file. After structure evidence returns, ask mace-agent to run one MACE energy calculation per generated XYZ file using the run_ase tool with the mace_mp calculator on CPU, then ask assessment-agent for readiness/ranking evidence before submitting the final result.",
       "allowed_peers": [
         "structure-agent-a",
         "structure-agent-b",
@@ -70,8 +60,7 @@
       "resources": [
         "candidate_dataset",
         "structure_output_directory",
-        "mace_output_result_file",
-        "mace_model_file"
+        "mace_output_directory"
       ]
     },
     {
@@ -92,18 +81,18 @@
     },
     {
       "name": "mace-agent",
-      "role": "MACEEnsembleAgent",
-      "mission": "Run MACE only after a concrete request from coordinator-agent. Report started, completed, partial, or failed evidence back to coordinator-agent, including output paths and tool_result_ids; pending work is not a failure.",
+      "role": "MACEEnergyAgent",
+      "mission": "Run MACE only after a concrete request from coordinator-agent. For each assigned XYZ file, call the run_ase tool with driver='energy', a calculator block of {'calculator_type': 'mace_mp', 'model': 'medium-mpa-0', 'device': 'cpu'}, the input_structure_file pointing at the XYZ, and an output_results_file under the requested output directory. Report started, completed, partial, or failed evidence back to coordinator-agent, including output paths and tool_result_ids; pending work is not a failure.",
       "allowed_peers": ["coordinator-agent"],
-      "mcp_servers": ["mace", "hpc_misc"],
-      "resources": ["mace_model_file"]
+      "mcp_servers": ["general"],
+      "resources": ["mace_output_directory"]
     },
     {
       "name": "assessment-agent",
       "role": "ScreeningAssessmentAgent",
       "mission": "Assess evidence received from coordinator-agent. Summarize structure coverage, MACE coverage, failures, ranking readiness, and pending work without treating pending MACE work as failure.",
       "allowed_peers": ["coordinator-agent"],
-      "mcp_servers": ["hpc_misc"],
+      "mcp_servers": [],
       "resources": []
     }
   ]
