@@ -102,8 +102,17 @@ def get_launcher_config(
     child_executor_policy: str = "fixed_leafs_children_policy",
     policy_config=None,
     checkpoint_dir=f"{os.getcwd()}/.ckpt_{uuid.uuid4().hex[:6]}",
-    mpi_flavour: Literal["test", "mpich"] = "test",
+    mpi_flavour: Literal[
+        "test", "mpich", "intel", "cray-pals", "openmpi", "srun", "aprun", "jsrun"
+    ] = "mpich",
 ):
+    """Build a LauncherConfig.
+
+    ``mpi_flavour`` defaults to ``"mpich"`` (hydra ``mpiexec``) which is the
+    multi-node-safe choice for Aurora/Polaris/Crux. Use ``"test"`` only for
+    single-node local runs — its ``write_file_to_nodes`` does not actually
+    distribute child-spec JSON to remote ``/tmp``.
+    """
     _require_ensemble_launcher()
     if policy_config is None:
         policy_config = PolicyConfig(nlevels=2, leaf_nodes=len(get_nodes()))

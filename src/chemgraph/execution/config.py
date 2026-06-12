@@ -160,9 +160,23 @@ def get_backend(
                 f"Unknown system {resolved_system}: "
                 f"only know {list(SYSTEM_CONFIG_REGISTRY.keys())}"
             )
+            # System-appropriate MPI flavour: multi-node HPC systems need
+            # mpich/hydra so child-spec JSON actually lands on remote /tmp;
+            # "test" only works for single-host runs.
+            launcher_cfg_kwargs = dict(backend_cfg)
+            if "mpi_flavour" not in launcher_cfg_kwargs:
+                _system_mpi_flavour = {
+                    "aurora": "mpich",
+                    "polaris": "mpich",
+                    "crux": "mpich",
+                    "local": "test",
+                }
+                launcher_cfg_kwargs["mpi_flavour"] = _system_mpi_flavour.get(
+                    resolved_system, "mpich"
+                )
             merged_kwargs = {
                 "system_config": SYSTEM_CONFIG_REGISTRY[resolved_system],
-                "launcher_config": get_launcher_config(**backend_cfg),
+                "launcher_config": get_launcher_config(**launcher_cfg_kwargs),
             }
 
     elif resolved_backend == "globus_compute":
