@@ -17,15 +17,16 @@ module safely.
 """
 
 import logging
+import subprocess
 from pathlib import Path
 
 from chemgraph.execution.config import get_transfer_manager
 from chemgraph.execution.utils import resolve_structure_files
 from chemgraph.mcp.cg_fastmcp import CGFastMCP
 from chemgraph.mcp.transfer_tools import register_transfer_tools
-from chemgraph.mcp.xanes_worker import _xanes_ensemble_worker, run_xanes_single
 from chemgraph.schemas.xanes_schema import (
     mp_query_schema,
+    xanes_input_schema,
     xanes_input_schema_ensemble,
 )
 
@@ -65,15 +66,94 @@ mcp = CGFastMCP(
 )
 
 
-mcp.tool(
+# ── Single-structure tool ──────────────────────────────────────────────
+
+
+def _xanes_single_worker(params: xanes_input_schema) -> dict:
+    """Run a single FDMNES calculation on a backend worker."""
+    from chemgraph.tools.xanes_tools import run_xanes_core
+
+    result = run_xanes_core(params)
+    if isinstance(result, dict):
+        result.setdefault("status", "success")
+        return result
+    return {"status": "success", "result": result}
+
+
+@mcp.tool(
     name="run_xanes_single",
     description="Run a single XANES/FDMNES calculation for one input structure.",
-)(
-    run_xanes_single
 )
+def run_xanes_single(params: xanes_input_schema):
+    """Run a single FDMNES calculation using the core engine.
+
+    The CGFastMCP wrapper submits this call to the configured backend;
+    the body is the direct-call fallback when no backend is active.
+    """
+    return _xanes_single_worker(params)
 
 
 # ── Ensemble fanout ────────────────────────────────────────────────────
+
+
+def _xanes_ensemble_worker(item: dict) -> dict:
+    """Execute one prepared FDMNES run on the backend.
+
+    The expander has already written ``input_fdmnes.txt`` (or the
+    equivalent) into ``item['run_dir']``; this worker runs the binary
+    via subprocess and then extracts convergence data.
+    """
+    from chemgraph.tools.xanes_tools import extract_conv
+
+    run_dir = item["run_dir"]
+    fdmnes_exe = item["fdmnes_exe"]
+    meta = {
+        "structure": item.get("structure"),
+        "run_dir": run_dir,
+        "z_absorber": item.get("z_absorber"),
+    }
+
+    stdout_path = Path(run_dir) / "fdmnes_stdout.txt"
+    stderr_path = Path(run_dir) / "fdmnes_stderr.txt"
+    try:
+        with open(stdout_path, "w") as out, open(stderr_path, "w") as err:
+            proc = subprocess.run(
+                [fdmnes_exe],
+                cwd=run_dir,
+                stdout=out,
+                stderr=err,
+                check=False,
+            )
+        if proc.returncode != 0:
+            return {
+                **meta,
+                "status": "failure",
+                "error_type": "FDMNESExitCode",
+                "message": f"FDMNES exited with code {proc.returncode}",
+                "returncode": proc.returncode,
+            }
+    except Exception as e:
+        return {
+            **meta,
+            "status": "failure",
+            "error_type": type(e).__name__,
+            "message": f"FDMNES launch failed: {e}",
+        }
+
+    try:
+        conv_data = extract_conv(run_dir)
+        return {
+            **meta,
+            "status": "success",
+            "n_conv_files": len(conv_data),
+        }
+    except Exception as e:
+        return {
+            **meta,
+            "status": "failure",
+            "error_type": type(e).__name__,
+            "message": f"Post-processing failed: {e}",
+        }
 
 
 def _expand_xanes_ensemble(params: xanes_input_schema_ensemble) -> list[dict]:
