@@ -101,7 +101,7 @@ def get_launcher_config(
     task_executor_name: Union[str, List] = "async_processpool",
     child_executor_policy: str = "fixed_leafs_children_policy",
     policy_config=None,
-    checkpoint_dir=f"{os.getcwd()}/.ckpt_{uuid.uuid4().hex[:6]}",
+    checkpoint_dir=None,
     mpi_flavour: Literal[
         "test", "mpich", "intel", "cray-pals", "openmpi", "srun", "aprun", "jsrun"
     ] = "mpich",
@@ -116,6 +116,8 @@ def get_launcher_config(
     _require_ensemble_launcher()
     if policy_config is None:
         policy_config = PolicyConfig(nlevels=2, leaf_nodes=len(get_nodes()))
+    if checkpoint_dir is None:
+        checkpoint_dir = f"{os.getcwd()}/.ckpt_{uuid.uuid4().hex[:6]}"
     return LauncherConfig(
         child_executor_name="async_mpi",
         task_executor_name=task_executor_name,
@@ -192,9 +194,7 @@ class EnsembleLauncherBackend(ExecutionBackend):
                     "client_only=True requires a checkpoint_dir pointing "
                     "to a running orchestrator."
                 )
-            self._client = ClusterClient(
-                checkpoint_dir=checkpoint_dir, node_id=node_id
-            )
+            self._client = ClusterClient(checkpoint_dir=checkpoint_dir, node_id=node_id)
             self._client.start()
             self._initialized = True
             logger.info(
