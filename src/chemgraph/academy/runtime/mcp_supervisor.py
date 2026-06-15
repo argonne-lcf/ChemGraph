@@ -90,7 +90,20 @@ class MCPServerSupervisor:
     async def get_tools(
         self,
         server_names: tuple[str, ...] | None = None,
+        allowed_tools: frozenset[str] | None = None,
     ) -> list[BaseTool]:
+        """Return LangChain tools advertised by the requested MCP servers.
+
+        Parameters
+        ----------
+        server_names
+            Optional subset of supervised servers to query. Defaults to all.
+        allowed_tools
+            Optional per-agent tool-name whitelist. When provided, tools
+            advertised by the connected servers but whose name is not in the
+            set are filtered out. When ``None`` (or empty), every tool the
+            servers advertise is returned (legacy behavior).
+        """
         if not self._urls:
             return []
         wanted = tuple(server_names) if server_names else tuple(self._urls)
@@ -100,12 +113,14 @@ class MCPServerSupervisor:
                 f"agent requested unknown MCP servers: {unknown}; "
                 f"available: {sorted(self._urls)}",
             )
+        whitelist = frozenset(allowed_tools) if allowed_tools else None
         connections = {
             name: self._urls[name]
             for name in wanted
         }
         tools: list[BaseTool] = []
         tool_names: set[str] = set()
+        matched_whitelist: set[str] = set()
         for server_name, url in connections.items():
             async with streamablehttp_client(url) as (read, write, _):
                 async with ClientSession(read, write) as session:
@@ -118,6 +133,10 @@ class MCPServerSupervisor:
                                 f"from server {server_name!r}",
                             )
                         tool_names.add(mcp_tool.name)
+                        if whitelist is not None:
+                            if mcp_tool.name not in whitelist:
+                                continue
+                            matched_whitelist.add(mcp_tool.name)
                         tools.append(
                             _langchain_tool(
                                 server_name=server_name,
@@ -128,6 +147,15 @@ class MCPServerSupervisor:
                                 input_schema=mcp_tool.inputSchema,
                             ),
                         )
+        if whitelist is not None:
+            missing = sorted(whitelist - matched_whitelist)
+            if missing:
+                logger.warning(
+                    "allowed_tools whitelist references tools not advertised "
+                    "by the connected MCP servers; they will be silently "
+                    "absent from the agent: %s",
+                    missing,
+                )
         return tools
 
     async def shutdown(self) -> None:

@@ -222,3 +222,132 @@ def test_validate_campaign_rejects_duplicate_mcp_server_names(tmp_path) -> None:
     campaign = load_campaign(campaign_path)
     with pytest.raises(RuntimeError, match="MCP server names must be unique"):
         validate_campaign(campaign, 1)
+
+
+def test_agent_allowed_tools_parses(tmp_path) -> None:
+    campaign_path = tmp_path / "campaign.jsonc"
+    campaign_path.write_text(
+        json.dumps(
+            {
+                "run_id": "allowed-tools-ok",
+                "user_task": "test",
+                "prompt_profile": "prompt.json",
+                "mcp_servers": [
+                    {"name": "general", "command": "python -m chemgraph.mcp.mcp_tools"},
+                ],
+                "agents": [
+                    {
+                        "name": "agent-a",
+                        "role": "Role",
+                        "mission": "Do the task.",
+                        "allowed_peers": [],
+                        "mcp_servers": ["general"],
+                        "allowed_tools": ["run_ase", "extract_output_json"],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    campaign = load_campaign(campaign_path)
+    validate_campaign(campaign, 1)
+
+    assert campaign.agents[0].allowed_tools == (
+        "run_ase",
+        "extract_output_json",
+    )
+
+
+def test_agent_allowed_tools_defaults_to_empty(tmp_path) -> None:
+    campaign_path = tmp_path / "campaign.jsonc"
+    campaign_path.write_text(
+        json.dumps(
+            {
+                "run_id": "allowed-tools-default",
+                "user_task": "test",
+                "prompt_profile": "prompt.json",
+                "mcp_servers": [
+                    {"name": "general", "command": "python -m chemgraph.mcp.mcp_tools"},
+                ],
+                "agents": [
+                    {
+                        "name": "agent-a",
+                        "role": "Role",
+                        "mission": "Do the task.",
+                        "allowed_peers": [],
+                        "mcp_servers": ["general"],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    campaign = load_campaign(campaign_path)
+    validate_campaign(campaign, 1)
+
+    assert campaign.agents[0].allowed_tools == ()
+
+
+def test_validate_campaign_rejects_duplicate_allowed_tools(tmp_path) -> None:
+    campaign_path = tmp_path / "campaign.jsonc"
+    campaign_path.write_text(
+        json.dumps(
+            {
+                "run_id": "duplicate-allowed-tools",
+                "user_task": "test",
+                "prompt_profile": "prompt.json",
+                "mcp_servers": [
+                    {"name": "general", "command": "python -m chemgraph.mcp.mcp_tools"},
+                ],
+                "agents": [
+                    {
+                        "name": "agent-a",
+                        "role": "Role",
+                        "mission": "Do the task.",
+                        "allowed_peers": [],
+                        "mcp_servers": ["general"],
+                        "allowed_tools": ["run_ase", "run_ase"],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    campaign = load_campaign(campaign_path)
+    with pytest.raises(RuntimeError, match="duplicate allowed_tools"):
+        validate_campaign(campaign, 1)
+
+
+def test_validate_campaign_rejects_allowed_tools_without_servers(tmp_path) -> None:
+    campaign_path = tmp_path / "campaign.jsonc"
+    campaign_path.write_text(
+        json.dumps(
+            {
+                "run_id": "allowed-tools-no-servers",
+                "user_task": "test",
+                "prompt_profile": "prompt.json",
+                "mcp_servers": [],
+                "agents": [
+                    {
+                        "name": "agent-a",
+                        "role": "Role",
+                        "mission": "Do the task.",
+                        "allowed_peers": [],
+                        "mcp_servers": [],
+                        "allowed_tools": ["run_ase"],
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    campaign = load_campaign(campaign_path)
+    with pytest.raises(
+        RuntimeError,
+        match="allowed_tools but no mcp_servers",
+    ):
+        validate_campaign(campaign, 1)

@@ -69,6 +69,7 @@
       "mission": "Process only candidates assigned by coordinator-agent. Generate XYZ coordinate files, then report concise artifact evidence and failures back to coordinator-agent.",
       "allowed_peers": ["coordinator-agent"],
       "mcp_servers": ["general"],
+      "allowed_tools": ["molecule_name_to_smiles", "smiles_to_coordinate_file"],
       "resources": []
     },
     {
@@ -77,6 +78,7 @@
       "mission": "Process only candidates assigned by coordinator-agent. Generate XYZ coordinate files, then report concise artifact evidence and failures back to coordinator-agent.",
       "allowed_peers": ["coordinator-agent"],
       "mcp_servers": ["general"],
+      "allowed_tools": ["molecule_name_to_smiles", "smiles_to_coordinate_file"],
       "resources": []
     },
     {
@@ -85,6 +87,7 @@
       "mission": "Run MACE only after a concrete request from coordinator-agent. For each assigned XYZ file, call the run_ase tool with driver='energy', a calculator block of {'calculator_type': 'mace_mp', 'model': 'medium-mpa-0', 'device': 'cpu'}, the input_structure_file pointing at the XYZ, and an output_results_file under the requested output directory. Report started, completed, partial, or failed evidence back to coordinator-agent, including output paths and tool_result_ids; pending work is not a failure.",
       "allowed_peers": ["coordinator-agent"],
       "mcp_servers": ["general"],
+      "allowed_tools": ["run_ase", "extract_output_json"],
       "resources": ["mace_output_directory"]
     },
     {

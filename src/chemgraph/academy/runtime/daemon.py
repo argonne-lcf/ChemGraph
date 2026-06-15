@@ -59,7 +59,12 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
 
     try:
         await supervisor.start_all()
-        external_tools = await supervisor.get_tools(agent_spec.mcp_servers)
+        external_tools = await supervisor.get_tools(
+            agent_spec.mcp_servers,
+            allowed_tools=frozenset(agent_spec.allowed_tools)
+            if agent_spec.allowed_tools
+            else None,
+        )
 
         academy_factory = build_exchange_factory(config)
         if config.rank == 0:

@@ -38,6 +38,35 @@ if __name__ == "__main__":
     )
 
 
+def _write_multi_tool_server(tmp_path: Path) -> None:
+    """A server that advertises three tools so allowed_tools can subset it."""
+    (tmp_path / "multi_mcp.py").write_text(
+        """
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("multi")
+
+@mcp.tool(name="alpha", description="Tool alpha.")
+def alpha(text: str) -> dict:
+    return {"who": "alpha", "text": text}
+
+@mcp.tool(name="beta", description="Tool beta.")
+def beta(text: str) -> dict:
+    return {"who": "beta", "text": text}
+
+@mcp.tool(name="gamma", description="Tool gamma.")
+def gamma(text: str) -> dict:
+    return {"who": "gamma", "text": text}
+
+if __name__ == "__main__":
+    from chemgraph.mcp.server_utils import run_mcp_server
+
+    run_mcp_server(mcp, default_port=0)
+""",
+        encoding="utf-8",
+    )
+
+
 @pytest.mark.asyncio
 async def test_mcp_supervisor_starts_server_and_gets_tools(tmp_path) -> None:
     _write_tiny_server(tmp_path)
@@ -123,3 +152,105 @@ async def test_mcp_supervisor_rejects_unknown_server_request(tmp_path) -> None:
             await supervisor.get_tools(("missing",))
     finally:
         await supervisor.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_get_tools_returns_all_when_no_allowed_tools(tmp_path) -> None:
+    _write_multi_tool_server(tmp_path)
+    supervisor = MCPServerSupervisor(
+        [
+            MCPServerSpec(
+                name="multi",
+                command=f"{sys.executable} -m multi_mcp",
+                env={"PYTHONPATH": _pythonpath(tmp_path)},
+            ),
+        ],
+        run_dir=tmp_path / "run",
+    )
+    try:
+        await supervisor.start_all()
+        tools = await supervisor.get_tools(("multi",))
+    finally:
+        await supervisor.shutdown()
+
+    assert {tool.name for tool in tools} == {"alpha", "beta", "gamma"}
+
+
+@pytest.mark.asyncio
+async def test_get_tools_filters_by_allowed_tools(tmp_path) -> None:
+    _write_multi_tool_server(tmp_path)
+    supervisor = MCPServerSupervisor(
+        [
+            MCPServerSpec(
+                name="multi",
+                command=f"{sys.executable} -m multi_mcp",
+                env={"PYTHONPATH": _pythonpath(tmp_path)},
+            ),
+        ],
+        run_dir=tmp_path / "run",
+    )
+    try:
+        await supervisor.start_all()
+        tools = await supervisor.get_tools(
+            ("multi",),
+            allowed_tools=frozenset({"alpha", "gamma"}),
+        )
+    finally:
+        await supervisor.shutdown()
+
+    assert {tool.name for tool in tools} == {"alpha", "gamma"}
+
+
+@pytest.mark.asyncio
+async def test_get_tools_warns_on_whitelist_misses(tmp_path, caplog) -> None:
+    _write_multi_tool_server(tmp_path)
+    supervisor = MCPServerSupervisor(
+        [
+            MCPServerSpec(
+                name="multi",
+                command=f"{sys.executable} -m multi_mcp",
+                env={"PYTHONPATH": _pythonpath(tmp_path)},
+            ),
+        ],
+        run_dir=tmp_path / "run",
+    )
+    try:
+        await supervisor.start_all()
+        with caplog.at_level("WARNING"):
+            tools = await supervisor.get_tools(
+                ("multi",),
+                allowed_tools=frozenset({"alpha", "does_not_exist"}),
+            )
+    finally:
+        await supervisor.shutdown()
+
+    assert {tool.name for tool in tools} == {"alpha"}
+    assert any(
+        "does_not_exist" in record.message for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_tools_empty_allowed_tools_returns_all(tmp_path) -> None:
+    """An empty whitelist is treated as None (no filter)."""
+    _write_multi_tool_server(tmp_path)
+    supervisor = MCPServerSupervisor(
+        [
+            MCPServerSpec(
+                name="multi",
+                command=f"{sys.executable} -m multi_mcp",
+                env={"PYTHONPATH": _pythonpath(tmp_path)},
+            ),
+        ],
+        run_dir=tmp_path / "run",
+    )
+    try:
+        await supervisor.start_all()
+        tools = await supervisor.get_tools(
+            ("multi",),
+            allowed_tools=frozenset(),
+        )
+    finally:
+        await supervisor.shutdown()
+
+    assert {tool.name for tool in tools} == {"alpha", "beta", "gamma"}

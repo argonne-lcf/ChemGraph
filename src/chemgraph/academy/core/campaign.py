@@ -106,6 +106,19 @@ class ChemGraphAgentSpec:
     mission: str
     allowed_peers: tuple[str, ...]
     mcp_servers: tuple[str, ...] = ()
+    allowed_tools: tuple[str, ...] = ()
+    """Optional per-agent whitelist of MCP tool names.
+
+    Empty (the default) means the agent sees every tool advertised by the
+    servers listed in :attr:`mcp_servers`. When non-empty, only tools whose
+    name appears in this tuple are exposed to the agent; everything else
+    that the servers advertise is filtered out before reaching LangChain.
+
+    The whitelist is flat and server-agnostic: a name matches any tool with
+    that name across the agent's connected servers. Duplicate tool names
+    across an agent's servers are still rejected by the supervisor (today's
+    behavior), so the whitelist does not introduce new ambiguity.
+    """
     resources: tuple[str, ...] = ()
 
 
@@ -243,6 +256,7 @@ def load_campaign(path: str | pathlib.Path) -> ChemGraphCampaign:
                 mission=item['mission'],
                 allowed_peers=tuple(item.get('allowed_peers', ())),
                 mcp_servers=tuple(item.get('mcp_servers', ())),
+                allowed_tools=tuple(item.get('allowed_tools', ())),
                 resources=tuple(item.get('resources', ())),
             ),
         )
@@ -378,6 +392,16 @@ def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
             raise RuntimeError(
                 f'{agent.name} references unknown MCP servers: {unknown_servers}',
             )
+        if agent.allowed_tools:
+            if len(set(agent.allowed_tools)) != len(agent.allowed_tools):
+                raise RuntimeError(
+                    f'{agent.name} has duplicate allowed_tools entries',
+                )
+            if not agent.mcp_servers:
+                raise RuntimeError(
+                    f'{agent.name} declares allowed_tools but no mcp_servers '
+                    'to draw them from',
+                )
         unknown_resources = sorted(set(agent.resources).difference(campaign.resources))
         if unknown_resources:
             raise RuntimeError(
