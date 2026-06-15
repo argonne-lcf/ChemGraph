@@ -42,6 +42,8 @@ def main() -> None:
     parser.add_argument("--device", default=None)
     parser.add_argument("--output-dir", default="demo_el_out")
     parser.add_argument("--molecules", nargs="+", default=MOLECULE_NAMES)
+    parser.add_argument("--ppn", type=int, default=16,
+                        help="Processes (cores) per node for each task")
     parser.add_argument("--timeout", type=float, default=6000.0)
     args = parser.parse_args()
 
@@ -69,7 +71,7 @@ def main() -> None:
             "Install via scripts/hpc_setup/install_remote.sh on HPC."
         )
 
-    print(f"system={system}  device={device}  mode=managed")
+    print(f"system={system}  device={device}  ppn={args.ppn}  mode=managed")
 
     from chemgraph.execution.config import get_backend
 
@@ -82,6 +84,7 @@ def main() -> None:
             output_dir=args.output_dir,
             inline=False,
             timeout=args.timeout,
+            ppn=args.ppn,
         )
     finally:
         backend.shutdown()

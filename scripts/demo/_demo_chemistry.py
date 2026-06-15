@@ -154,6 +154,7 @@ def submit_and_collect(
     output_dir: Path | str,
     inline: bool,
     timeout: float = 6000.0,
+    ppn: int = 1,
 ) -> list[dict]:
     """Submit one MACE thermo job per molecule, gather and summarise.
 
@@ -177,6 +178,7 @@ def submit_and_collect(
             task_type="python",
             callable=_mace_worker,
             kwargs={"job": job},
+            processes_per_node=ppn,
         )
         for name, job in zip(names, jobs)
     ]
