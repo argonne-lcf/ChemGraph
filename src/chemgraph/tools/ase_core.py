@@ -322,13 +322,28 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     dict
         Minimal result payload (status, message, key numbers).
     """
+    import logging
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
+
+    # ---- file logger (cg_logs/) ----
+    log_dir = os.path.join(os.getcwd(), "cg_logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "ase_core.log")
+    logger = logging.getLogger(f"chemgraph.ase_core.{id(params)}")
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+    _fh = logging.FileHandler(log_file)
+    _fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    logger.addHandler(_fh)
+
+    logger.info("run_ase_core called with params: %s", params.model_dump_json())
 
     # ---- unpack params ----
     try:
         calculator = params.calculator.model_dump()
     except Exception as e:
+        logger.error("Calculator validation failed: %s", e)
         return {
             "status": "failure",
             "error_type": "ValidationError",
@@ -347,7 +362,11 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     pressure = params.pressure
 
     # ---- input validation ----
+    logger.info("driver=%s, input=%s, output=%s, optimizer=%s, fmax=%s, steps=%s",
+                driver, input_structure_file, output_results_file, optimizer, fmax, steps)
+
     if not os.path.isfile(input_structure_file):
+        logger.error("Input file not found: %s", input_structure_file)
         return {
             "status": "failure",
             "error_type": "FileNotFoundError",
@@ -355,15 +374,18 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         }
 
     if not output_results_file.endswith(".json"):
+        logger.error("Invalid output file extension: %s", output_results_file)
         return {
             "status": "failure",
             "error_type": "ValueError",
             "message": f"Output results file must end with '.json', got: {params.output_results_file}",
         }
 
+    logger.info("Loading calculator: %s", calculator)
     calc, system_info, calc_model = load_calculator(calculator)
 
     if calc is None:
+        logger.error("Unsupported calculator: %s", calculator)
         return {
             "status": "failure",
             "error_type": "ValueError",
@@ -372,16 +394,19 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 "MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
             ),
         }
+    logger.info("Calculator loaded successfully: %s", type(calc).__name__)
 
     try:
         atoms = read(input_structure_file)
     except Exception as e:
+        logger.error("Failed to read input structure: %s", e)
         return {
             "status": "failure",
             "error_type": type(e).__name__,
             "message": f"Cannot read {input_structure_file} using ASE. Exception from ASE: {e}",
         }
 
+    logger.info("Read %d atoms from %s", len(atoms), input_structure_file)
     atoms.info.update(system_info)
     atoms.calc = calc
 
@@ -389,7 +414,9 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     # Driver: energy / dipole  (single-point, no optimization)
     # ------------------------------------------------------------------
     if driver in ("energy", "dipole"):
+        logger.info("Running single-point %s calculation", driver)
         energy = atoms.get_potential_energy()
+        logger.info("Single-point energy: %s eV", energy)
         final_structure = atoms_to_atomsdata(atoms)
 
         dipole: List[Optional[float]] = [None, None, None]
@@ -414,6 +441,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         )
         with open(output_results_file, "w", encoding="utf-8") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
+        logger.info("Results saved to %s (wall_time=%.2fs)", output_results_file, wall_time)
 
         if driver == "energy":
             return {
@@ -445,13 +473,16 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         if optimizer_class is None:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
 
+        logger.info("Running optimization with %s (fmax=%s, steps=%s)", optimizer, fmax, steps)
         if len(atoms) > 1:
             dyn = optimizer_class(atoms)
             converged = dyn.run(fmax=fmax, steps=steps)
         else:
             converged = True
+        logger.info("Optimization converged=%s", converged)
 
         single_point_energy = float(atoms.get_potential_energy())
+        logger.info("Post-optimization energy: %s eV", single_point_energy)
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=atoms.positions,
@@ -466,6 +497,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         # Vibrational / thermo / IR analysis
         # --------------------------------------------------------------
         if driver in {"vib", "thermo", "ir"}:
+            logger.info("Starting vibrational analysis (driver=%s)", driver)
             from ase.vibrations import Vibrations
             from ase import units
 
@@ -481,6 +513,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 vib = Vibrations(atoms, name=vib_name)
                 vib.clean()
                 vib.run()
+                logger.info("Vibrational analysis complete")
 
                 vib_data = {
                     "energies": [],
@@ -527,6 +560,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
                 # ---- IR ----
                 if driver == "ir":
+                    logger.info("Running IR calculation")
                     from ase.vibrations import Infrared
                     import matplotlib
 
@@ -558,6 +592,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     fig.savefig(ir_plot_path, format="png", dpi=300)
                     plt.close(fig)
 
+                    logger.info("IR spectrum plot saved to %s", ir_plot_path)
                     ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
                     ir_data["Normal mode data"] = (
                         f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
@@ -565,6 +600,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
                 # ---- Thermochemistry ----
                 if driver == "thermo":
+                    logger.info("Computing thermochemistry (T=%s K, P=%s Pa)", temperature, pressure)
                     if len(atoms) == 1:
                         thermo_data = {
                             "enthalpy": single_point_energy,
@@ -615,6 +651,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         # ---- serialise full output ----
         end_time = time.time()
         wall_time = end_time - start_time
+        logger.info("Simulation finished (driver=%s, wall_time=%.2fs, converged=%s)", driver, wall_time, converged)
 
         simulation_output = ASEOutputSchema(
             input_structure_file=input_structure_file,
@@ -671,6 +708,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             }
 
     except Exception as e:
+        logger.exception("run_ase_core failed with %s: %s", type(e).__name__, e)
         return {
             "status": "failure",
             "error_type": type(e).__name__,
