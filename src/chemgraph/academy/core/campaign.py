@@ -165,7 +165,15 @@ def resolve_campaign_resources(
     *,
     shared_dir_name: str = 'shared',
 ) -> ChemGraphCampaign:
-    """Resolve explicit shared-run resource paths for one concrete run."""
+    """Resolve explicit shared-run resource paths for one concrete run.
+
+    Also pre-creates the on-disk directories these resources name so that
+    tools whose first action is to write under a declared output directory
+    do not fail with ``FileNotFoundError`` partway through. For ``kind:
+    directory`` resources the directory itself is created; for ``kind:
+    file`` and ``kind: json`` resources the file's parent directory is
+    created (the file itself is the agent's responsibility to write).
+    """
     shared_root = (pathlib.Path(run_dir).resolve() / shared_dir_name)
     resources: dict[str, ResourceSpec] = {}
 
@@ -177,15 +185,25 @@ def resolve_campaign_resources(
             resources[name] = spec
             continue
         path = pathlib.Path(spec.path)
-        resolved = path if path.is_absolute() else shared_root / path
+        resolved = (path if path.is_absolute() else shared_root / path).resolve()
+        _ensure_resource_dir(resolved, spec.kind)
         resources[name] = spec.model_copy(
             update={
-                'path': str(resolved.resolve()),
-                'uri': spec.uri or _file_uri(resolved.resolve()),
+                'path': str(resolved),
+                'uri': spec.uri or _file_uri(resolved),
             },
         )
 
     return dataclasses.replace(campaign, resources=resources)
+
+
+def _ensure_resource_dir(resolved: pathlib.Path, kind: str) -> None:
+    """Materialise on-disk directories for a resolved shared_run resource."""
+    if kind == 'directory':
+        resolved.mkdir(parents=True, exist_ok=True)
+    else:
+        # 'file' and 'json': create the parent so the agent can write the file.
+        resolved.parent.mkdir(parents=True, exist_ok=True)
 
 
 def _file_uri(path: pathlib.Path) -> str:

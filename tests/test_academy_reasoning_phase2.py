@@ -306,3 +306,42 @@ def test_campaign_resources_resolve_to_shared_run_artifacts(tmp_path) -> None:
     assert resolved.resources["mace_output_result_file"].path == str(
         tmp_path / "run-1" / "shared" / "academy_mace_outputs" / "mace_results.json",
     )
+
+    # The directory resource itself is materialised on disk so tools that
+    # expect to write into it do not hit FileNotFoundError on first use.
+    assert (
+        tmp_path / "run-1" / "shared" / "academy_mace_structures"
+    ).is_dir()
+    # File resources get their parent directory materialised (the file
+    # itself is the agent's responsibility to write).
+    assert (
+        tmp_path / "run-1" / "shared" / "academy_mace_outputs"
+    ).is_dir()
+    assert not (
+        tmp_path / "run-1" / "shared" / "academy_mace_outputs" / "mace_results.json"
+    ).exists()
+
+
+def test_resolve_campaign_resources_skips_non_shared_run_paths(tmp_path) -> None:
+    """Only shared_run resources get on-disk materialisation."""
+    spec = dataclasses.replace(_agent_spec(), resources=("local_dataset",))
+    campaign = ChemGraphCampaign(
+        run_id="campaign-2",
+        user_task="Static dataset.",
+        initial_agent=spec.name,
+        prompt_profile=Path("prompt_profiles/default.json"),
+        agents=(spec,),
+        resources={
+            "local_dataset": ResourceSpec(
+                kind="json",
+                path="/should/not/exist/data.json",
+                scope="absolute",
+            ),
+        },
+    )
+
+    resolved = resolve_campaign_resources(campaign, tmp_path / "run-1")
+
+    # The absolute path is preserved verbatim and no directory is created.
+    assert resolved.resources["local_dataset"].path == "/should/not/exist/data.json"
+    assert not Path("/should/not/exist").exists()
