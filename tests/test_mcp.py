@@ -76,6 +76,53 @@ def test_mace_worker_creates_inline_output_parent(monkeypatch):
     assert result["full_output"] == {"ok": True}
 
 
+def test_run_ase_core_creates_output_parent_directory(monkeypatch, tmp_path):
+    """run_ase_core should mkdir the output file's parent before writing.
+
+    Academy agents and CLI users routinely point output_results_file at a
+    not-yet-existing nested subdirectory of a shared run dir. Without this,
+    the final ``open(output_results_file, "w")`` fails with
+    FileNotFoundError after the calculation has already burned its compute
+    time.
+    """
+    from ase import Atoms
+    from ase.io import write as ase_write
+
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from chemgraph.tools import ase_core
+
+    # Real XYZ that ase.io.read can parse.
+    input_path = tmp_path / "h2.xyz"
+    ase_write(input_path, Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 0.74]]))
+
+    # Output path under a nested subdirectory that does NOT exist yet.
+    output_path = tmp_path / "deeply" / "nested" / "output.json"
+    assert not output_path.parent.exists()
+
+    class _FakeCalc:
+        # ASE's Atoms.get_potential_energy invokes self._calc.get_potential_energy(atoms).
+        def get_potential_energy(self, _atoms=None, force_consistent=False):
+            return -1.234
+
+    def fake_load_calculator(_calculator):
+        return _FakeCalc(), {}, None
+
+    monkeypatch.setattr(ase_core, "load_calculator", fake_load_calculator)
+
+    params = ASEInputSchema(
+        input_structure_file=str(input_path),
+        output_results_file=str(output_path),
+        driver="energy",
+        calculator={"calculator_type": "emt"},
+    )
+
+    result = ase_core.run_ase_core(params)
+
+    assert result["status"] == "success", result
+    assert output_path.exists()
+    assert output_path.parent.is_dir()
+
+
 @pytest.mark.asyncio
 async def test_split_cif_dataset(tmp_path):
     """Test splitting a dataset of CIF files."""

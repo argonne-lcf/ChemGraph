@@ -350,6 +350,15 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             "message": f"Output results file must end with '.json', got: {params.output_results_file}",
         }
 
+    # Make sure the destination directory exists before the simulation runs;
+    # otherwise the trailing ``open(output_results_file, "w")`` fails with
+    # FileNotFoundError after the calculation has already burned its
+    # compute time. Callers (LLM agents, scripts) routinely point at a
+    # not-yet-created subdirectory of a shared run dir, so create it now.
+    output_parent = os.path.dirname(os.path.abspath(output_results_file))
+    if output_parent:
+        os.makedirs(output_parent, exist_ok=True)
+
     calc, system_info, calc_model = load_calculator(calculator)
 
     if calc is None:
