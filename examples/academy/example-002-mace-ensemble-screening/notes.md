@@ -9,7 +9,7 @@ Packaged assets:
 
 ```text
 src/chemgraph/academy/campaigns/example-002-mace-ensemble-screening/
-  campaign.json
+  campaign.jsonc
   lm_config.json
   prompt_profiles/
   data/

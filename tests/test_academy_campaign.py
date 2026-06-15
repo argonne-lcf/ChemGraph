@@ -41,7 +41,7 @@ def test_builtin_mace_campaign_uses_star_coordinator_without_routing_policy() ->
 
 
 def test_removed_structured_orchestration_fields_are_rejected(tmp_path) -> None:
-    campaign_path = tmp_path / "campaign.json"
+    campaign_path = tmp_path / "campaign.jsonc"
     campaign_path.write_text(
         json.dumps(
             {
@@ -70,7 +70,7 @@ def test_removed_structured_orchestration_fields_are_rejected(tmp_path) -> None:
 
 
 def test_campaign_loader_accepts_jsonc_comments(tmp_path) -> None:
-    campaign_path = tmp_path / "campaign.json"
+    campaign_path = tmp_path / "campaign.jsonc"
     campaign_path.write_text(
         """
         {
@@ -132,7 +132,7 @@ def test_mcp_server_spec_validation() -> None:
 
 
 def test_resource_kind_and_scope_are_option_sets(tmp_path) -> None:
-    campaign_path = tmp_path / "campaign.json"
+    campaign_path = tmp_path / "campaign.jsonc"
     campaign_path.write_text(
         json.dumps(
             {
@@ -166,7 +166,7 @@ def test_resource_kind_and_scope_are_option_sets(tmp_path) -> None:
 
 
 def test_validate_campaign_rejects_unknown_mcp_server(tmp_path) -> None:
-    campaign_path = tmp_path / "campaign.json"
+    campaign_path = tmp_path / "campaign.jsonc"
     campaign_path.write_text(
         json.dumps(
             {
@@ -194,7 +194,7 @@ def test_validate_campaign_rejects_unknown_mcp_server(tmp_path) -> None:
 
 
 def test_validate_campaign_rejects_duplicate_mcp_server_names(tmp_path) -> None:
-    campaign_path = tmp_path / "campaign.json"
+    campaign_path = tmp_path / "campaign.jsonc"
     campaign_path.write_text(
         json.dumps(
             {

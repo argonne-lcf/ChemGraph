@@ -8,7 +8,7 @@ from pathlib import Path
 EXAMPLE_002 = 'example-002-mace-ensemble-screening'
 
 CAMPAIGNS = {
-    'mace-ensemble-screening-20': f'{EXAMPLE_002}/campaign.json',
+    'mace-ensemble-screening-20': f'{EXAMPLE_002}/campaign.jsonc',
 }
 
 LM_CONFIG_TEMPLATES = {

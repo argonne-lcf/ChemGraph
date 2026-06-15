@@ -20,7 +20,7 @@ def _config(tmp_path: Path, exchange_type: str) -> ChemGraphDaemonConfig:
         run_dir=tmp_path,
         run_token='token-1',
         agent_count=1,
-        campaign_config=tmp_path / 'campaign.json',
+        campaign_config=tmp_path / 'campaign.jsonc',
         lm_config=tmp_path / 'lm.json',
         max_decisions=1,
         poll_timeout_s=1.0,

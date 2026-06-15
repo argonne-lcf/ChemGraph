@@ -8,7 +8,7 @@ from chemgraph.academy.runtime.compute_launcher import AllocationPlan
 
 def _plan(tmp_path: Path) -> AllocationPlan:
     lm_config = tmp_path / "lm.json"
-    campaign = tmp_path / "campaign.json"
+    campaign = tmp_path / "campaign.jsonc"
     lm_config.write_text("{}\n", encoding="utf-8")
     campaign.write_text("{}\n", encoding="utf-8")
     return AllocationPlan(
