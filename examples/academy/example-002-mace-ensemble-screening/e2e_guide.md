@@ -132,9 +132,12 @@ make PREFIX="$REMOTE_ROOT/tools/redis" install
 The `mace_mp` calculator downloads its foundation model on first use into
 `~/.cache/mace`, so no manual MACE-model staging is needed for this example.
 First-call download can take a minute; pre-warm it once on the compute node
-if you want to skip that wait at run time:
+to skip that wait at run time. The compute node only reaches external sites
+through the ALCF outbound proxy, so set the proxy env vars first:
 
 ```bash
+export http_proxy="http://proxy.alcf.anl.gov:3128"
+export https_proxy="http://proxy.alcf.anl.gov:3128"
 python -c "from mace.calculators import mace_mp; mace_mp(model='medium-mpa-0', device='cpu')"
 ```
 
@@ -191,6 +194,13 @@ export NUMEXPR_MAX_THREADS=256
 export NUMEXPR_NUM_THREADS=64
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
+
+# Aurora/Polaris compute nodes reach external sites (GitHub, S3) only
+# through the ALCF outbound proxy. Without these, mace_mp(model="medium-mpa-0")
+# hangs trying to fetch the foundation model on first use.
+export http_proxy="http://proxy.alcf.anl.gov:3128"
+export https_proxy="http://proxy.alcf.anl.gov:3128"
+export no_proxy="localhost,127.0.0.1"
 
 export PATH="$REMOTE_ROOT/bin:$REMOTE_ROOT/tools/redis/bin:$PATH"
 
