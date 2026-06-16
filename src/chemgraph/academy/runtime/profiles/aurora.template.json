@@ -2,7 +2,6 @@
   "name": "aurora",
   "remote_host": "${ALCF_USER}@aurora.alcf.anl.gov",
   "remote_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}",
-  "academy_repo_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/academy",
   "repo_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph",
   "run_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/runs",
   "relay_host_file": "/flare/${ALCF_PROJECT}/${ALCF_USER}/uan-relay-18186.host",

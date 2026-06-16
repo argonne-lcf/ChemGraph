@@ -44,6 +44,29 @@ def parse_args() -> argparse.Namespace:
 def template(name: str) -> str:
     return files("chemgraph.academy.runtime.templates").joinpath(name).read_text()
 
+
+REMOTE_RELAY_SUBPATH = ".chemgraph/uan_http_relay.py"
+
+
+def stage_relay_script(profile: SystemProfile, host: str, control_path: str) -> str:
+    """Copy the bundled UAN relay script to the remote host.
+
+    The relay script is shipped inside the chemgraph package so we no longer
+    require a separate ``academy`` source checkout on the remote system.
+    We materialize it under ``$REMOTE_ROOT/.chemgraph/uan_http_relay.py``
+    on every dashboard launch (idempotent overwrite), then return that
+    absolute path for the start_relay shell template to reference.
+    """
+    relay_dir = f"{profile.remote_root}/.chemgraph"
+    relay_path = f"{relay_dir}/uan_http_relay.py"
+    contents = template("uan_http_relay.py")
+    cmd = (
+        f"mkdir -p {shlex.quote(relay_dir)} && "
+        f"cat > {shlex.quote(relay_path)}"
+    )
+    ssh(host, cmd, control_path=control_path, input_text=contents)
+    return relay_path
+
 def ssh(host: str, command: str | list[str] | None, *, control_path: str, input_text: str | None = None, check: bool = True, capture: bool = False, batch_mode: bool = True, extra: list[str] | None = None) -> subprocess.CompletedProcess[str]:
     cmd = ["ssh"]
     if batch_mode:
@@ -62,8 +85,7 @@ def wrapper(profile: SystemProfile) -> str:
         .replace("%{venv_python}%", profile.venv_python)
     )
 
-def start_relay(profile: SystemProfile, host: str, control_path: str, args: argparse.Namespace, relay_port: int, relay_python: str, log_path: Path) -> subprocess.Popen[str]:
-    relay_script = f"{profile.academy_repo_root}/examples/09-polaris-lm-swarm/uan_http_relay.py"
+def start_relay(profile: SystemProfile, host: str, control_path: str, args: argparse.Namespace, relay_port: int, relay_python: str, log_path: Path, relay_script: str) -> subprocess.Popen[str]:
     relay_args = ["bash", "-s", "--", profile.remote_root, relay_script, profile.relay_host_file, f"{profile.remote_root}/uan-relay-{relay_port}.pid", f"{profile.remote_root}/uan-relay-{relay_port}.log", str(relay_port), str(args.reverse_port), relay_python]
     log_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["ssh", "-o", "BatchMode=yes", "-o", f"ControlPath={control_path}", "-o", "ControlMaster=auto", "-o", "ControlPersist=yes", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=4", "-R", f"127.0.0.1:{args.reverse_port}:{args.local_argo_host}:{args.local_argo_port}", host, *relay_args]
@@ -157,12 +179,14 @@ def main() -> int:
         ssh(remote_host, f"mkdir -p {shlex.quote(profile.remote_root + '/bin')} && cat > {shlex.quote(wrapper_path)} && chmod +x {shlex.quote(wrapper_path)}", control_path=control_path, input_text=wrapper(profile))
         relay_host = None
         if args.lm_connect == "mac-argo-relay":
+            print(f"Staging UAN relay script under {profile.remote_root}/{REMOTE_RELAY_SUBPATH}...", flush=True)
+            relay_script = stage_relay_script(profile, remote_host, control_path)
             print(f"Starting {profile.name} UAN relay through {remote_host}...", flush=True)
-            relay_process = start_relay(profile, remote_host, control_path, args, relay_port, args.relay_python or profile.venv_python, Path(f"/tmp/chemgraph-academy-{args.run_id}-relay.log"))
+            relay_process = start_relay(profile, remote_host, control_path, args, relay_port, args.relay_python or profile.venv_python, Path(f"/tmp/chemgraph-academy-{args.run_id}-relay.log"), relay_script)
             relay_host = wait_relay(profile, remote_host, control_path, relay_port, relay_process, Path(f"/tmp/chemgraph-academy-{args.run_id}-relay.log"))
         lm_base_url = f"http://{relay_host}:{relay_port}/argoapi/v1" if relay_host else str(args.lm_base_url)
         print(f"Compute-node LM URL: {lm_base_url}", flush=True)
-        metadata = {"created_at": time.time(), "created_by": "chemgraph academy dashboard", "run_id": args.run_id, "system": profile.name, "campaign": args.campaign, "remote_run_dir": remote_run_dir, "remote_host": remote_host, "lm_connect": args.lm_connect, "lm_base_url": lm_base_url, "workspace_root": profile.remote_root, "academy_repo_root": profile.academy_repo_root, "chemgraph_repo_root": profile.repo_root}
+        metadata = {"created_at": time.time(), "created_by": "chemgraph academy dashboard", "run_id": args.run_id, "system": profile.name, "campaign": args.campaign, "remote_run_dir": remote_run_dir, "remote_host": remote_host, "lm_connect": args.lm_connect, "lm_base_url": lm_base_url, "workspace_root": profile.remote_root, "chemgraph_repo_root": profile.repo_root}
         if relay_host:
             metadata.update({"relay_host": relay_host, "relay_port": relay_port})
         print(f"Writing run metadata: {remote_host}:{remote_run_dir}/dashboard_metadata.json", flush=True)

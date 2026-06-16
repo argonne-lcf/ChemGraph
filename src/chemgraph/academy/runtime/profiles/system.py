@@ -20,7 +20,6 @@ class SystemProfile(BaseModel):
     name: str
     remote_host: str
     remote_root: str
-    academy_repo_root: str
     repo_root: str
     run_root: str
     relay_host_file: str

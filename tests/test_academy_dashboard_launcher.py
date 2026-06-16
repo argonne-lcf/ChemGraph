@@ -16,7 +16,6 @@ def _profile(tmp_path: Path) -> SystemProfile:
         name="test-system",
         remote_host="user@example",
         remote_root="/remote/root",
-        academy_repo_root="/remote/root/academy",
         repo_root="/remote/root/ChemGraph",
         run_root="/remote/root/runs",
         relay_host_file="/remote/root/relay.host",
