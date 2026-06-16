@@ -39,7 +39,8 @@ def _abort(msg: str) -> None:
     sys.exit(2)
 
 
-async def amain(model: str, system: str, device: str, query: str, verbose: int) -> None:
+async def amain(model: str, system: str, device: str, query: str, verbose: int,
+                *, ppn: int = 1, ngpus_per_process: int = 0) -> None:
     if verbose:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
         logging.getLogger("chemgraph").setLevel(logging.INFO if verbose == 1 else logging.DEBUG)
@@ -58,7 +59,9 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int) 
         "ChemGraph MACE (EnsembleLauncher)": {
             "transport": "stdio",
             "command": python,
-            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc"],
+            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc",
+                    "--ppn", str(ppn),
+                    "--ngpus-per-process", str(ngpus_per_process)],
             "env": env,
         },
     }
@@ -107,6 +110,10 @@ def main() -> None:
     parser.add_argument("--model", default="gpt-4o-mini")
     parser.add_argument("--system", default=os.environ.get("COMPUTE_SYSTEM"))
     parser.add_argument("--device", default=None)
+    parser.add_argument("--ppn", type=int, default=1,
+                        help="Processes per node for MCP backend tasks")
+    parser.add_argument("--ngpus-per-process", type=int, default=0,
+                        help="GPUs per process for MCP backend tasks")
     parser.add_argument("--query", default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
@@ -120,7 +127,8 @@ def main() -> None:
         _abort(f"Unsupported --system: {system!r}")
     device = args.device or ("xpu" if system == "aurora" else "cuda")
     query = args.query or agent_prompt(device=device)
-    asyncio.run(amain(args.model, system, device, query, args.verbose))
+    asyncio.run(amain(args.model, system, device, query, args.verbose,
+                      ppn=args.ppn, ngpus_per_process=args.ngpus_per_process))
 
 
 if __name__ == "__main__":

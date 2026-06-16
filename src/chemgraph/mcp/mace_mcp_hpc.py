@@ -18,6 +18,7 @@ module safely.
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 from chemgraph.execution.base import TaskSpec
@@ -204,10 +205,6 @@ mcp.set_pre_submit_hook(_mace_transport_hook)
 # ── Single-structure tool ──────────────────────────────────────────────
 
 
-@mcp.tool(
-    name="run_mace_single",
-    description="Run a single MACE calculation",
-)
 def run_mace_single(params: mace_input_schema) -> dict:
     """Run a single MACE calculation on the configured backend.
 
@@ -300,16 +297,6 @@ def _expand_mace_ensemble(params: mace_input_schema_ensemble) -> list[dict]:
     ]
 
 
-@mcp.schema_fanout_tool(
-    name="run_mace_ensemble",
-    description=(
-        "Run MACE calculations over every structure in a directory. "
-        "Local mode uses input_structure_directory; remote mode uses "
-        "remote_structure_directory (pre-stage files first with "
-        "transfer_files)."
-    ),
-    worker=_mace_worker,
-)
 def run_mace_ensemble(params: mace_input_schema_ensemble) -> list[dict]:
     return _expand_mace_ensemble(params)
 
@@ -333,7 +320,37 @@ if _transfer_manager is not None:
 
 
 if __name__ == "__main__":
+    import argparse as _ap
+
     from chemgraph.mcp.server_utils import run_mcp_server
+
+    _parser = _ap.ArgumentParser(add_help=False)
+    _parser.add_argument("--ppn", type=int, default=1,
+                         help="Processes per node for backend tasks")
+    _parser.add_argument("--ngpus-per-process", type=int, default=0,
+                         help="GPUs per process for backend tasks")
+    _args, _remaining = _parser.parse_known_args()
+    sys.argv = [sys.argv[0]] + _remaining
+
+    mcp.tool(
+        name="run_mace_single",
+        description="Run a single MACE calculation",
+        processes_per_node=_args.ppn,
+        gpus_per_task=_args.ngpus_per_process,
+    )(run_mace_single)
+
+    mcp.schema_fanout_tool(
+        name="run_mace_ensemble",
+        description=(
+            "Run MACE calculations over every structure in a directory. "
+            "Local mode uses input_structure_directory; remote mode uses "
+            "remote_structure_directory (pre-stage files first with "
+            "transfer_files)."
+        ),
+        worker=_mace_worker,
+        processes_per_node=_args.ppn,
+        gpus_per_task=_args.ngpus_per_process,
+    )(run_mace_ensemble)
 
     mcp.init_backend(tracker_kwargs={"persist_file": _JOBS_FILE})
 
