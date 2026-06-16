@@ -142,6 +142,9 @@ def smiles_to_coordinate_file_core(
     atoms = Atoms(numbers=numbers, positions=positions)
 
     final_output_file = _resolve_path(output_file)
+    parent = os.path.dirname(os.path.abspath(final_output_file))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     ase_write(final_output_file, atoms)
 
     return {

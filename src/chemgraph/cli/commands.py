@@ -48,6 +48,7 @@ ALL_WORKFLOW_TYPES = [
     "graspa_mcp",
     "rag_agent",
     "single_agent_xanes",
+    "single_agent_architector",
 ]
 
 # Common aliases so users can type the "obvious" name.
@@ -177,6 +178,7 @@ def initialize_agent(
     verbose: bool = False,
     human_supervised: bool = False,
     tools: Optional[list] = None,
+    on_event: Optional[Any] = None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -280,6 +282,7 @@ def initialize_agent(
                 structured_output=structured_output,
                 human_supervised=human_supervised,
                 tools=tools,
+                on_event=on_event,
             )
 
         try:

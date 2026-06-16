@@ -1,4 +1,5 @@
 import json
+from collections.abc import Collection
 
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
@@ -114,6 +115,36 @@ def _tool_message_content(message):
     return getattr(message, "content", "")
 
 
+def _message_tool_calls(message) -> list:
+    """Extract tool calls from a message-like object."""
+    if isinstance(message, dict):
+        calls = message.get("tool_calls")
+    else:
+        calls = getattr(message, "tool_calls", None)
+    return calls if isinstance(calls, list) else []
+
+
+def _state_messages(state: State):
+    """Extract messages from a LangGraph state or message list."""
+    if isinstance(state, list):
+        return state
+    if messages := state.get("messages", []):
+        return messages
+    raise ValueError(f"No messages found in input state to tool_edge: {state}")
+
+
+def _tool_result_names_after_latest_ai_tool_call(messages) -> set[str]:
+    """Return tool-result names appended after the latest AI tool-call message."""
+    names: set[str] = set()
+    for message in reversed(messages):
+        if _message_tool_calls(message):
+            return names
+        name = _tool_message_name(message)
+        if name:
+            names.add(str(name))
+    return names
+
+
 def _is_successful_report_message(message) -> bool:
     """Return True when a message indicates successful report generation.
 
@@ -152,17 +183,27 @@ def route_tools(state: State):
     str
         Either 'tools' or 'done' based on the state conditions
     """
-    if isinstance(state, list):
-        ai_message = state[-1]
-    elif messages := state.get("messages", []):
-        ai_message = messages[-1]
-    else:
-        raise ValueError(f"No messages found in input state to tool_edge: {state}")
-    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+    messages = _state_messages(state)
+    ai_message = messages[-1]
+    if _message_tool_calls(ai_message):
         if not isinstance(state, list) and _is_repeated_tool_cycle(messages):
             return "done"
         return "tools"
     return "done"
+
+
+def route_after_tools(
+    state: State,
+    terminal_tool_names: Collection[str] = (),
+):
+    """Stop the graph after terminal tools; otherwise continue to the LLM."""
+    if not terminal_tool_names:
+        return "continue"
+    executed_names = _tool_result_names_after_latest_ai_tool_call(
+        _state_messages(state),
+    )
+    terminal_names = {str(name) for name in terminal_tool_names}
+    return "done" if executed_names & terminal_names else "continue"
 
 
 def route_report_tools(state: State):
@@ -186,14 +227,15 @@ def route_report_tools(state: State):
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
 
-    if not (hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0):
+    tool_calls = _message_tool_calls(ai_message)
+    if not tool_calls:
         return "done"
 
     # Only allow known report tool calls to reach ToolNode.
     valid_report_tools = {"generate_html"}
     requested_tools = {
         call.get("name")
-        for call in getattr(ai_message, "tool_calls", [])
+        for call in tool_calls
         if isinstance(call, dict)
     }
     if not requested_tools or not requested_tools.issubset(valid_report_tools):
@@ -411,6 +453,7 @@ def construct_single_agent_graph(
     tools: list = None,
     max_retries: int = 1,
     human_supervised: bool = False,
+    terminal_tool_names: Collection[str] = (),
 ):
     """Construct a geometry optimization graph.
 
@@ -436,6 +479,9 @@ def construct_single_agent_graph(
     human_supervised : bool, optional
         Whether to include the ``ask_human`` tool so the agent can
         pause and request human input, by default False
+    terminal_tool_names : Collection[str], optional
+        Tool names that should terminate the graph after successful tool
+        execution instead of routing back to the LLM, by default empty.
 
     Returns
     -------
@@ -491,7 +537,11 @@ def construct_single_agent_graph(
                     route_tools,
                     {"tools": "tools", "done": "ReportAgent"},
                 )
-                graph_builder.add_edge("tools", "ChemGraphAgent")
+                graph_builder.add_conditional_edges(
+                    "tools",
+                    lambda state: route_after_tools(state, terminal_tool_names),
+                    {"continue": "ChemGraphAgent", "done": END},
+                )
                 graph_builder.add_conditional_edges(
                     "ReportAgent",
                     route_report_tools,
@@ -508,7 +558,11 @@ def construct_single_agent_graph(
                     route_tools,
                     {"tools": "tools", "done": END},
                 )
-                graph_builder.add_edge("tools", "ChemGraphAgent")
+                graph_builder.add_conditional_edges(
+                    "tools",
+                    lambda state: route_after_tools(state, terminal_tool_names),
+                    {"continue": "ChemGraphAgent", "done": END},
+                )
 
             graph = graph_builder.compile(checkpointer=checkpointer)
             logger.info("Graph construction completed")
@@ -539,7 +593,11 @@ def construct_single_agent_graph(
                 route_tools,
                 {"tools": "tools", "done": "ResponseAgent"},
             )
-            graph_builder.add_edge("tools", "ChemGraphAgent")
+            graph_builder.add_conditional_edges(
+                "tools",
+                lambda state: route_after_tools(state, terminal_tool_names),
+                {"continue": "ChemGraphAgent", "done": END},
+            )
             graph_builder.add_edge(START, "ChemGraphAgent")
             graph_builder.add_edge("ResponseAgent", END)
 
