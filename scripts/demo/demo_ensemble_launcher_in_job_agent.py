@@ -46,15 +46,11 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int,
         logging.getLogger("chemgraph").setLevel(logging.INFO if verbose == 1 else logging.DEBUG)
 
     python = sys.executable
-    env = {
+    env = os.environ.copy()
+    env.update({
         "CHEMGRAPH_EXECUTION_BACKEND": "ensemble_launcher",
         "COMPUTE_SYSTEM": system,
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", ""),
-        "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", ""),
-        "PBS_NODEFILE": os.environ.get("PBS_NODEFILE", ""),
-        "PBS_O_WORKDIR": os.environ.get("PBS_O_WORKDIR", ""),
-    }
+    })
     server_configs = {
         "ChemGraph MACE (EnsembleLauncher)": {
             "transport": "stdio",
@@ -81,13 +77,21 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int,
         tools = await load_mcp_tools(session)
         print(f"Loaded {len(tools)} MCP tools: {[t.name for t in tools]}\n")
 
+        #cg = ChemGraph(
+        #    model_name=model,
+        #    workflow_type="single_agent",
+        #    structured_output=False,
+        #    return_option="state",
+        #    tools=tools,
+        #    )
         cg = ChemGraph(
-            model_name=model,
-            workflow_type="single_agent",
-            structured_output=False,
-            return_option="state",
-            tools=tools,
-        )
+                      model_name="argo:gpt-5.4",
+                      workflow_type="single_agent",
+                      structured_output=False,
+                      return_option="state",
+                      tools=tools,
+                      base_url="http://127.0.0.1:12985/argoapi/v1"
+                    )
 
         print("Running agent...\n" + "=" * 60)
         result = await cg.run(query)
@@ -123,7 +127,7 @@ def main() -> None:
     if not args.system:
         _abort("COMPUTE_SYSTEM env var not set and --system not given.")
     system = args.system.lower().strip()
-    if system not in ("polaris", "aurora"):
+    if system not in ("polaris", "aurora", "crux"):
         _abort(f"Unsupported --system: {system!r}")
     device = args.device or ("xpu" if system == "aurora" else "cuda")
     query = args.query or agent_prompt(device=device)
