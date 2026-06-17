@@ -228,6 +228,7 @@ class EnsembleLauncherBackend(ExecutionBackend):
                     "--launcher-config-file",
                     f"{launcher_config_fname}",
                 ]
+                logger.info(f"Executing {cmd}")
                 self._orchestrator = subprocess.Popen(
                     cmd,
                     stderr=subprocess.DEVNULL,
@@ -235,6 +236,12 @@ class EnsembleLauncherBackend(ExecutionBackend):
                     stdin=subprocess.DEVNULL,
                 )
                 time.sleep(startup_delay)
+
+                if self._orchestrator.poll() is not None:
+                    logger.error(
+                        f"Starting el failed with error code: {self._orchestrator.poll()}"
+                    )
+                    raise RuntimeError()
 
                 self._client = ClusterClient(
                     checkpoint_dir=launcher_config.checkpoint_dir,
