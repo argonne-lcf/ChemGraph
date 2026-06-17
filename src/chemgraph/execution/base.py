@@ -111,6 +111,17 @@ class ExecutionBackend(ABC):
         retrieval tools instead of blocking until completion."""
         return False
 
+    @property
+    def shares_filesystem(self) -> bool:
+        """Whether workers see the same filesystem as the submitting server.
+
+        When ``True`` (default), a path written by the server is readable by
+        the worker, so file-transport tricks (inline embedding, ``/tmp``
+        re-materialisation) are unnecessary.  Globus Compute overrides this to
+        ``False`` because its workers run on a remote host without a shared
+        filesystem."""
+        return True
+
     @abstractmethod
     def initialize(self, system: str = "local", **kwargs: Any) -> None:
         """Prepare the backend for accepting work.
