@@ -99,6 +99,7 @@ class CGFastMCP(FastMCP):
         self._backend_kwargs: Optional[dict[str, Any]] = None
         self._tracker_kwargs: dict[str, Any] = {}
         self._pre_submit_hook: Optional[Callable] = None
+        self._task_counter: int = 0
 
     # ── Backend lifecycle ───────────────────────────────────────────────
 
@@ -423,10 +424,12 @@ class CGFastMCP(FastMCP):
                 from chemgraph.execution.utils import to_picklable
 
                 self._ensure_backend()
+                self._task_counter += 1
+                batch_counter = self._task_counter
                 pending = []
                 for i, p in enumerate(params):
                     task = TaskSpec(
-                        task_id=f"{fn.__name__}_{i}",
+                        task_id=f"{fn.__name__}_{batch_counter}_{i}",
                         task_type="python",
                         callable=fn,
                         kwargs={param.name: to_picklable(p)},
@@ -553,12 +556,14 @@ class CGFastMCP(FastMCP):
                 from chemgraph.execution.utils import to_picklable
 
                 self._ensure_backend()
+                self._task_counter += 1
+                batch_counter = self._task_counter
                 ensemble_params = kwargs[param.name]
                 items = expander(ensemble_params)
                 pending = []
                 for i, item in enumerate(items):
                     task = TaskSpec(
-                        task_id=f"{tool_name}_{i}",
+                        task_id=f"{tool_name}_{batch_counter}_{i}",
                         task_type="python",
                         callable=worker,
                         kwargs={worker_param_name: to_picklable(item)},
@@ -602,8 +607,10 @@ class CGFastMCP(FastMCP):
         @functools.wraps(fn)
         async def wrapper(**kwargs: Any) -> Any:
             self._ensure_backend()
+            self._task_counter += 1
+            task_id = f"{fn.__name__}_{self._task_counter}"
             task = TaskSpec(
-                task_id=fn.__name__,
+                task_id=task_id,
                 task_type="python",
                 callable=fn,
                 kwargs=to_picklable(kwargs),
@@ -615,7 +622,7 @@ class CGFastMCP(FastMCP):
             if self._backend.is_async_remote:
                 return await submit_or_gather(
                     self._backend,
-                    [({"task_id": fn.__name__}, fut)],
+                    [({"task_id": task_id}, fut)],
                     self._tracker,
                     fn.__name__,
                 )
