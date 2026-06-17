@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import tempfile
 import time
 import uuid
 from concurrent.futures import Future
@@ -163,8 +165,8 @@ class EnsembleLauncherBackend(ExecutionBackend):
         client_only: bool = False,
         checkpoint_dir: Optional[str] = None,
         node_id: str = "global",
-        system_config=None,
-        launcher_config=None,
+        system_config: Optional[SystemConfig] = None,
+        launcher_config: Optional[LauncherConfig] = None,
         startup_delay: float = 10.0,
         **kwargs,
     ) -> None:
@@ -211,27 +213,41 @@ class EnsembleLauncherBackend(ExecutionBackend):
                     "(or set client_only=True with a checkpoint_dir)."
                 )
             os.makedirs(launcher_config.checkpoint_dir, exist_ok=True)
-            self._orchestrator = EnsembleLauncher(
-                ensemble_file={},
-                system_config=system_config,
-                launcher_config=launcher_config,
-            )
-            self._orchestrator.start()
-            time.sleep(startup_delay)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                launcher_config_fname = os.path.join(tmp_dir, "launcher_config.json")
+                with open(launcher_config_fname, "w") as f:
+                    f.write(launcher_config.model_dump_json())
+                system_config_fname = os.path.join(tmp_dir, "system_config.json")
+                with open(system_config_fname, "w") as f:
+                    f.write(system_config.model_dump_json())
+                cmd = [
+                    "el",
+                    "start",
+                    "--system-config-file",
+                    f"{system_config_fname}",
+                    "--launcher-config-file",
+                    f"{launcher_config_fname}",
+                ]
+                self._orchestrator = subprocess.Popen(
+                    cmd,
+                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                )
+                time.sleep(startup_delay)
 
-            self._client = ClusterClient(
-                checkpoint_dir=launcher_config.checkpoint_dir,
-                node_id=node_id,
-            )
-            self._client.start()
-            self._initialized = True
+                self._client = ClusterClient(
+                    checkpoint_dir=launcher_config.checkpoint_dir,
+                    node_id=node_id,
+                )
+                self._client.start()
+                self._initialized = True
             logger.info(
                 "EnsembleLauncherBackend initialized in managed mode "
                 "(system='%s', comm='%s', executor='%s', nodes=%s)",
                 system_config.name,
                 launcher_config.comm_name,
                 launcher_config.task_executor_name,
-                len(self._orchestrator.nodes),
             )
 
     def submit(self, task: TaskSpec) -> Future:
@@ -293,14 +309,11 @@ class EnsembleLauncherBackend(ExecutionBackend):
         orchestrator_ok = True
         if self._orchestrator is not None:
             try:
-                self._orchestrator.stop()
-                self._orchestrator = None
-            except Exception:
-                orchestrator_ok = False
-                logger.warning(
-                    "Error stopping EnsembleLauncher orchestrator.",
-                    exc_info=True,
-                )
+                self._orchestrator.terminate()
+                self._orchestrator.wait(timeout=10.0)
+            finally:
+                if self._orchestrator.poll() is None:
+                    self._orchestrator.kill()
 
         if client_ok and orchestrator_ok:
             logger.info("EnsembleLauncherBackend shut down.")
