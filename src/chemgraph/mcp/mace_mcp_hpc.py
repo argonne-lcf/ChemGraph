@@ -83,7 +83,6 @@ def _mace_worker(job: dict) -> dict:
     attach transport keys ``inline_structure`` / ``remote_structure_file``
     before submission.
     """
-    import json
     import tempfile
 
     job = dict(job)
@@ -121,15 +120,6 @@ def _mace_worker(job: dict) -> dict:
 
     params = mace_input_schema(**job)
     result = run_mace_core(params)
-
-    # When inline, embed full output so the caller doesn't need to read
-    # a file on the remote filesystem to recover the results.
-    if inline is not None and isinstance(result, dict):
-        out_file = job.get("output_result_file", "")
-        if os.path.isfile(out_file):
-            with open(out_file) as fh:
-                result["full_output"] = json.load(fh)
-
     return result
 
 
