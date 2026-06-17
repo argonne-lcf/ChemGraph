@@ -171,9 +171,19 @@ def _normalize_model(job: dict) -> None:
         job["model"] = "medium-mpa-0"
 
 
+def _backend_shares_fs() -> bool:
+    """Whether the active backend shares the server's filesystem.
+
+    When it does, inline embedding (and the worker's ``/tmp`` round-trip)
+    is unnecessary -- the worker reads ``input_structure_file`` directly.
+    Defaults to ``True`` (skip embedding) when no backend exists yet."""
+    backend = getattr(mcp, "_backend", None)
+    return getattr(backend, "shares_filesystem", True)
+
+
 def _mace_transport_hook(task: TaskSpec) -> TaskSpec:
     """Route single-tool calls to the dict-based worker and embed
-    local structures on whichever path is taken."""
+    local structures only when the backend has no shared filesystem."""
     logger.debug(
         "mace transport hook: task_id=%s callable=%s",
         task.task_id,
@@ -187,13 +197,15 @@ def _mace_transport_hook(task: TaskSpec) -> TaskSpec:
             params.model_dump() if hasattr(params, "model_dump") else dict(params)
         )
         _normalize_model(job)
-        _embed_inline_if_local(job)
+        if not _backend_shares_fs():
+            _embed_inline_if_local(job)
         task.callable = _mace_worker
         task.kwargs = {"job": job}
     elif task.callable is _mace_worker:
         job = dict(task.kwargs.get("job", {}))
         _normalize_model(job)
-        _embed_inline_if_local(job)
+        if not _backend_shares_fs():
+            _embed_inline_if_local(job)
         task.kwargs = {"job": job}
     return task
 
