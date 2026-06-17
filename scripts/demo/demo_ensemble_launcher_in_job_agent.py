@@ -90,7 +90,7 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int,
                       structured_output=False,
                       return_option="state",
                       tools=tools,
-                      base_url="http://127.0.0.1:12985/argoapi/v1"
+                      base_url="http://127.0.0.1:12986/argoapi/v1"
                     )
 
         print("Running agent...\n" + "=" * 60)

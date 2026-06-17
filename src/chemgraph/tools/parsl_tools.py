@@ -85,5 +85,9 @@ def extract_output_json(json_file: str) -> dict:
     """Load simulation results from a JSON file produced by run_ase."""
     import json
 
-    with open(json_file, "r") as f:
-        return json.load(f)
+    try:
+        with open(json_file, "r") as f:
+            ret = json.load(f)
+    except Exception as e:
+        ret = {}
+    return ret

@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+import json
 from concurrent.futures import Future
 from typing import List, Literal, Optional, Union
 
@@ -220,9 +221,13 @@ class EnsembleLauncherBackend(ExecutionBackend):
                 system_config_fname = os.path.join(tmp_dir, "system_config.json")
                 with open(system_config_fname, "w") as f:
                     f.write(system_config.model_dump_json())
+                ensemble_fname = os.path.join(tmp_dir,"ensemble_file.json")
+                with open(ensemble_fname, "w") as f:
+                    json.dump({"ensembles":{}}, f)
                 cmd = [
                     "el",
                     "start",
+                    ensemble_fname,
                     "--system-config-file",
                     f"{system_config_fname}",
                     "--launcher-config-file",
@@ -313,10 +318,15 @@ class EnsembleLauncherBackend(ExecutionBackend):
                     "Error tearing down EnsembleLauncher client.", exc_info=True
                 )
 
+        p = subprocess.Popen(["el","stop"])
+        try:
+            p.wait(timeout=10.0)
+        except Exception:
+            pass
+
         orchestrator_ok = True
         if self._orchestrator is not None:
             try:
-                self._orchestrator.terminate()
                 self._orchestrator.wait(timeout=10.0)
             finally:
                 if self._orchestrator.poll() is None:
