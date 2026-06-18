@@ -81,21 +81,13 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int) 
         tools = await load_mcp_tools(session)
         print(f"Loaded {len(tools)} MCP tools: {[t.name for t in tools]}\n")
 
-        #cg = ChemGraph(
-        #    model_name=model,
-        #    workflow_type="single_agent",
-        #    structured_output=False,
-        #    return_option="state",
-        #    tools=tools,
-        #)
         cg = ChemGraph(
-                      model_name="argo:gpt-5.4",
-                      workflow_type="single_agent",
-                      structured_output=False,
-                      return_option="state",
-                      tools=tools,
-                      base_url="http://127.0.0.1:12986/argoapi/v1"
-                    )
+            model_name=model,
+            workflow_type="single_agent",
+            structured_output=False,
+            return_option="state",
+            tools=tools,
+        )
 
         print("Running agent...\n" + "=" * 60)
         result = await cg.run(query)
