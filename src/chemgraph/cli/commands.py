@@ -48,7 +48,6 @@ ALL_WORKFLOW_TYPES = [
     "graspa_mcp",
     "rag_agent",
     "single_agent_xanes",
-    "single_agent_architector",
 ]
 
 # Common aliases so users can type the "obvious" name.

@@ -67,10 +67,11 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
         if isinstance(usage, dict):
             payload["llm_output"] = usage
         self._emit("llm_call_finished", payload)
-        self._emit(
-            "llm_decision",
-            {"tool_calls": _response_tool_calls(response) or []},
-        )
+        # Only surface an llm_decision when the model actually requested tool
+        # calls; a plain text answer has no decision to report.
+        tool_calls = _response_tool_calls(response)
+        if tool_calls:
+            self._emit("llm_decision", {"tool_calls": tool_calls})
 
     def on_llm_error(self, error, **kwargs) -> None:
         self._emit("llm_call_failed", {"error": repr(error)})

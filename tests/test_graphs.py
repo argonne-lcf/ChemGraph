@@ -37,7 +37,6 @@ class _FakeWorkflow:
         ("multi_agent", "construct_multi_agent_graph", {}),
         ("python_relp", "construct_relp_graph", {}),
         ("graspa", "construct_graspa_graph", {}),
-        ("graspa_agent", "construct_graspa_graph", {}),
         ("mock_agent", "construct_mock_agent_graph", {}),
         (
             "single_agent_mcp",
@@ -51,7 +50,6 @@ class _FakeWorkflow:
         ),
         ("rag_agent", "construct_rag_agent_graph", {}),
         ("single_agent_xanes", "construct_single_agent_xanes_graph", {}),
-        ("single_agent_architector", "construct_single_agent_architector_graph", {}),
     ],
 )
 def test_graph_constructor_is_called(

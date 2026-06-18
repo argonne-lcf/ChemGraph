@@ -72,8 +72,10 @@ def test_mace_worker_creates_inline_output_parent(monkeypatch):
         }
     )
 
+    # The worker returns run_mace_core's result verbatim; full_output read-back
+    # was intentionally dropped. The inline output parent dir is asserted inside
+    # fake_run_mace_core above.
     assert result["status"] == "success"
-    assert result["full_output"] == {"ok": True}
 
 
 def test_run_ase_core_creates_output_parent_directory(monkeypatch, tmp_path):

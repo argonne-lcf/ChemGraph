@@ -156,6 +156,10 @@ def _xanes_ensemble_worker(item: dict) -> dict:
         }
 
 
+# Note: ``_xanes_ensemble_worker`` is registered via ``@mcp.schema_fanout_tool``
+# below, which fixes its module for pickling automatically.
+
+
 def _expand_xanes_ensemble(params: xanes_input_schema_ensemble) -> list[dict]:
     """Server-side expansion: prepare per-structure run dirs and return
     one item per structure for the worker to execute."""

@@ -107,6 +107,10 @@ def _graspa_worker(job: dict) -> dict:
     }
 
 
+# Note: ``_graspa_worker`` is registered via ``@mcp.schema_fanout_tool`` below,
+# which fixes its module for pickling automatically; no explicit fix is needed.
+
+
 # ── Ensemble fanout ────────────────────────────────────────────────────
 
 
@@ -115,6 +119,12 @@ def _ls_remote_files(path: str) -> list[str]:
     return sorted(
         f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))
     )
+
+
+# Submitted as a bare ``callable=`` TaskSpec (not via a decorator), so it must
+# be fixed explicitly for pickle-by-reference when run as ``__main__``. Mirrors
+# the equivalent fix in mace_mcp_hpc.py.
+CGFastMCP._fix_module_for_pickle(_ls_remote_files)
 
 
 def _expand_graspa_ensemble(params: graspa_input_schema_ensemble) -> list[dict]:
