@@ -84,6 +84,11 @@ def run_mcp_server(
         uvicorn.run(app, host=args.host, port=args.port)
     else:
         logging.info("Starting %s via stdio transport...", mcp.name)
+        # Under stdio, the server's stdout IS the JSON-RPC channel. Any
+        # unguarded print from a worker (e.g. mace's "cuequivariance ...
+        # will be disabled" notice) would corrupt it. setdefault so the
+        # user can override with CHEMGRAPH_LOCAL_SILENCE_STDOUT=0.
+        os.environ.setdefault("CHEMGRAPH_LOCAL_SILENCE_STDOUT", "1")
         # FastMCP.run(transport='stdio') handles the stdio loop
         mcp.run(transport="stdio")
 

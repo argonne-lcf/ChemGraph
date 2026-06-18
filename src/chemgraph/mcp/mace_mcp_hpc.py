@@ -18,6 +18,7 @@ module safely.
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 from chemgraph.execution.base import TaskSpec
@@ -83,7 +84,6 @@ def _mace_worker(job: dict) -> dict:
     attach transport keys ``inline_structure`` / ``remote_structure_file``
     before submission.
     """
-    import json
     import tempfile
 
     job = dict(job)
@@ -125,16 +125,18 @@ def _mace_worker(job: dict) -> dict:
 
     params = mace_input_schema(**job)
     result = run_mace_core(params)
-
-    # When inline, embed full output so the caller doesn't need to read
-    # a file on the remote filesystem to recover the results.
-    if inline is not None and isinstance(result, dict):
-        out_file = job.get("output_result_file", "")
-        if os.path.isfile(out_file):
-            with open(out_file) as fh:
-                result["full_output"] = json.load(fh)
-
     return result
+
+
+# Force pickle-by-reference for callables that the transport hook installs
+# as `task.callable`. Without this, dill sees `__module__ == "__main__"`
+# (this file is run as ``python -m chemgraph.mcp.mace_mcp_hpc``) and falls
+# back to pickle-by-value, which walks the module's globals and tries to
+# serialize the dynamic ``run_mace_singleArguments`` class held by
+# ``mcp._tool_manager._tools[...].fn_metadata.arg_model`` -- that class
+# was created by ``pydantic.create_model`` with a ``__module__`` it was
+# never registered into, so dill raises a PicklingError.
+CGFastMCP._fix_module_for_pickle(_mace_worker)
 
 
 # ── Pre-submit transport hook ──────────────────────────────────────────
@@ -164,9 +166,24 @@ def _normalize_model(job: dict) -> None:
         job["model"] = "medium-mpa-0"
 
 
+def _backend_shares_fs() -> bool:
+    """Whether the active backend shares the server's filesystem.
+
+    When it does, inline embedding (and the worker's ``/tmp`` round-trip)
+    is unnecessary -- the worker reads ``input_structure_file`` directly.
+    Defaults to ``True`` (skip embedding) when no backend exists yet."""
+    backend = getattr(mcp, "_backend", None)
+    return getattr(backend, "shares_filesystem", True)
+
+
 def _mace_transport_hook(task: TaskSpec) -> TaskSpec:
     """Route single-tool calls to the dict-based worker and embed
-    local structures on whichever path is taken."""
+    local structures only when the backend has no shared filesystem."""
+    logger.debug(
+        "mace transport hook: task_id=%s callable=%s",
+        task.task_id,
+        getattr(task.callable, "__qualname__", task.callable),
+    )
     if task.callable is run_mace_single:
         params = task.kwargs.get("params")
         if params is None:
@@ -175,13 +192,15 @@ def _mace_transport_hook(task: TaskSpec) -> TaskSpec:
             params.model_dump() if hasattr(params, "model_dump") else dict(params)
         )
         _normalize_model(job)
-        _embed_inline_if_local(job)
+        if not _backend_shares_fs():
+            _embed_inline_if_local(job)
         task.callable = _mace_worker
         task.kwargs = {"job": job}
     elif task.callable is _mace_worker:
         job = dict(task.kwargs.get("job", {}))
         _normalize_model(job)
-        _embed_inline_if_local(job)
+        if not _backend_shares_fs():
+            _embed_inline_if_local(job)
         task.kwargs = {"job": job}
     return task
 
@@ -192,10 +211,6 @@ mcp.set_pre_submit_hook(_mace_transport_hook)
 # ── Single-structure tool ──────────────────────────────────────────────
 
 
-@mcp.tool(
-    name="run_mace_single",
-    description="Run a single MACE calculation",
-)
 def run_mace_single(params: mace_input_schema) -> dict:
     """Run a single MACE calculation on the configured backend.
 
@@ -219,6 +234,9 @@ def _ls_remote_files(path: str) -> list[str]:
     return sorted(
         f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))
     )
+
+
+CGFastMCP._fix_module_for_pickle(_ls_remote_files)
 
 
 def _expand_mace_ensemble(params: mace_input_schema_ensemble) -> list[dict]:
@@ -285,16 +303,6 @@ def _expand_mace_ensemble(params: mace_input_schema_ensemble) -> list[dict]:
     ]
 
 
-@mcp.schema_fanout_tool(
-    name="run_mace_ensemble",
-    description=(
-        "Run MACE calculations over every structure in a directory. "
-        "Local mode uses input_structure_directory; remote mode uses "
-        "remote_structure_directory (pre-stage files first with "
-        "transfer_files)."
-    ),
-    worker=_mace_worker,
-)
 def run_mace_ensemble(params: mace_input_schema_ensemble) -> list[dict]:
     return _expand_mace_ensemble(params)
 
@@ -318,7 +326,37 @@ if _transfer_manager is not None:
 
 
 if __name__ == "__main__":
+    import argparse as _ap
+
     from chemgraph.mcp.server_utils import run_mcp_server
+
+    _parser = _ap.ArgumentParser(add_help=False)
+    _parser.add_argument("--ppn", type=int, default=1,
+                         help="Processes per node for backend tasks")
+    _parser.add_argument("--ngpus-per-process", type=int, default=0,
+                         help="GPUs per process for backend tasks")
+    _args, _remaining = _parser.parse_known_args()
+    sys.argv = [sys.argv[0]] + _remaining
+
+    mcp.tool(
+        name="run_mace_single",
+        description="Run a single MACE calculation",
+        processes_per_node=_args.ppn,
+        gpus_per_task=_args.ngpus_per_process,
+    )(run_mace_single)
+
+    mcp.schema_fanout_tool(
+        name="run_mace_ensemble",
+        description=(
+            "Run MACE calculations over every structure in a directory. "
+            "Local mode uses input_structure_directory; remote mode uses "
+            "remote_structure_directory (pre-stage files first with "
+            "transfer_files)."
+        ),
+        worker=_mace_worker,
+        processes_per_node=_args.ppn,
+        gpus_per_task=_args.ngpus_per_process,
+    )(run_mace_ensemble)
 
     mcp.init_backend(tracker_kwargs={"persist_file": _JOBS_FILE})
 

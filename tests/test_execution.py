@@ -204,6 +204,9 @@ class TestLocalBackend:
 class TestELBackend:
     @classmethod
     def setup_class(cls):
+        # EnsembleLauncher is an optional, HPC-only dependency (not on PyPI
+        # for Python 3.12). Skip the whole class where it isn't installed.
+        pytest.importorskip("ensemble_launcher")
         project_root = str(Path(__file__).resolve().parent.parent)
         existing = os.environ.get("PYTHONPATH", "")
         os.environ["PYTHONPATH"] = (
