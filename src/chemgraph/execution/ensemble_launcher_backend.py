@@ -11,8 +11,10 @@ EnsembleLauncher must be installed separately
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
+import sys
 import time
 import uuid
 from concurrent.futures import Future
@@ -51,6 +53,34 @@ def _require_ensemble_launcher() -> None:
             "EnsembleLauncher is required for the EnsembleLauncherBackend. "
             "Install it with: pip install ensemble-launcher"
         )
+
+
+@contextlib.contextmanager
+def _stdout_to_stderr():
+    """Redirect this process's stdout fd to stderr for the duration.
+
+    EnsembleLauncher prints lifecycle notices (e.g. "Sent SIGTERM to
+    launcher process …") to stdout. Under a stdio MCP server stdout IS the
+    JSON-RPC channel, so those lines corrupt the protocol stream and crash
+    the client's message parser. Redirect at the fd level (not
+    ``contextlib.redirect_stdout``) so library and subprocess writes are
+    caught too, then restore.
+    """
+    try:
+        saved_fd = os.dup(sys.stdout.fileno())
+    except (OSError, ValueError, AttributeError):
+        # stdout is not a real fd (e.g. captured in tests/notebooks) --
+        # nothing to guard.
+        yield
+        return
+    try:
+        sys.stdout.flush()
+        os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+        yield
+    finally:
+        sys.stdout.flush()
+        os.dup2(saved_fd, sys.stdout.fileno())
+        os.close(saved_fd)
 
 
 def get_local_system_config():
@@ -279,28 +309,31 @@ class EnsembleLauncherBackend(ExecutionBackend):
 
     def shutdown(self) -> None:
         self._initialized = False
-        client_ok = True
-        if self._client is not None:
-            try:
-                self._client.teardown()
-                self._client = None
-            except Exception:
-                client_ok = False
-                logger.warning(
-                    "Error tearing down EnsembleLauncher client.", exc_info=True
-                )
+        # EnsembleLauncher prints teardown notices to stdout; guard the
+        # fd so they don't corrupt a stdio MCP server's JSON-RPC channel.
+        with _stdout_to_stderr():
+            client_ok = True
+            if self._client is not None:
+                try:
+                    self._client.teardown()
+                    self._client = None
+                except Exception:
+                    client_ok = False
+                    logger.warning(
+                        "Error tearing down EnsembleLauncher client.", exc_info=True
+                    )
 
-        orchestrator_ok = True
-        if self._orchestrator is not None:
-            try:
-                self._orchestrator.stop()
-                self._orchestrator = None
-            except Exception:
-                orchestrator_ok = False
-                logger.warning(
-                    "Error stopping EnsembleLauncher orchestrator.",
-                    exc_info=True,
-                )
+            orchestrator_ok = True
+            if self._orchestrator is not None:
+                try:
+                    self._orchestrator.stop()
+                    self._orchestrator = None
+                except Exception:
+                    orchestrator_ok = False
+                    logger.warning(
+                        "Error stopping EnsembleLauncher orchestrator.",
+                        exc_info=True,
+                    )
 
         if client_ok and orchestrator_ok:
             logger.info("EnsembleLauncherBackend shut down.")
