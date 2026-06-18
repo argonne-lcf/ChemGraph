@@ -154,6 +154,7 @@ def submit_and_collect(
     output_dir: Path | str,
     inline: bool,
     timeout: float = 6000.0,
+    ppn: int = 1,
 ) -> list[dict]:
     """Submit one MACE thermo job per molecule, gather and summarise.
 
@@ -177,6 +178,7 @@ def submit_and_collect(
             task_type="python",
             callable=_mace_worker,
             kwargs={"job": job},
+            processes_per_node=ppn,
         )
         for name, job in zip(names, jobs)
     ]
@@ -189,12 +191,16 @@ def submit_and_collect(
     results: list[dict] = []
     for name, job, fut in zip(names, jobs, futures):
         print(f"  waiting on {name}...", flush=True)
-        raw = fut.result(timeout=timeout)
-        if not isinstance(raw, dict):
-            raise RuntimeError(f"{name}: non-dict result {type(raw).__name__}: {raw!r}")
-        if raw.get("status") != "success":
-            raise RuntimeError(f"{name}: backend returned status={raw.get('status')!r}: {raw}")
-        results.append(_extract_properties(name, raw, job, inline=inline))
+        try:
+            raw = fut.result(timeout=timeout)
+            if not isinstance(raw, dict):
+                raise RuntimeError(f"{name}: non-dict result {type(raw).__name__}: {raw!r}")
+            if raw.get("status") != "success":
+                raise RuntimeError(f"{name}: backend returned status={raw.get('status')!r}: {raw}")
+            results.append(_extract_properties(name, raw, job, inline=inline))
+        except Exception as e:
+            print(f"collecting results for job {name} failed with error: {e}")
+            results.append(None)
     return results
 
 

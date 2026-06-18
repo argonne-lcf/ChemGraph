@@ -39,26 +39,25 @@ def _abort(msg: str) -> None:
     sys.exit(2)
 
 
-async def amain(model: str, system: str, device: str, query: str, verbose: int) -> None:
+async def amain(model: str, system: str, device: str, query: str, verbose: int,
+                *, ppn: int = 1, ngpus_per_process: int = 0) -> None:
     if verbose:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
         logging.getLogger("chemgraph").setLevel(logging.INFO if verbose == 1 else logging.DEBUG)
 
     python = sys.executable
-    env = {
+    env = os.environ.copy()
+    env.update({
         "CHEMGRAPH_EXECUTION_BACKEND": "ensemble_launcher",
         "COMPUTE_SYSTEM": system,
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", ""),
-        "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", ""),
-        "PBS_NODEFILE": os.environ.get("PBS_NODEFILE", ""),
-        "PBS_O_WORKDIR": os.environ.get("PBS_O_WORKDIR", ""),
-    }
+    })
     server_configs = {
         "ChemGraph MACE (EnsembleLauncher)": {
             "transport": "stdio",
             "command": python,
-            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc"],
+            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc",
+                    "--ppn", str(ppn),
+                    "--ngpus-per-process", str(ngpus_per_process)],
             "env": env,
         },
     }
@@ -78,13 +77,21 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int) 
         tools = await load_mcp_tools(session)
         print(f"Loaded {len(tools)} MCP tools: {[t.name for t in tools]}\n")
 
+        #cg = ChemGraph(
+        #    model_name=model,
+        #    workflow_type="single_agent",
+        #    structured_output=False,
+        #    return_option="state",
+        #    tools=tools,
+        #    )
         cg = ChemGraph(
-            model_name=model,
-            workflow_type="single_agent",
-            structured_output=False,
-            return_option="state",
-            tools=tools,
-        )
+                      model_name="argo:gpt-5.4",
+                      workflow_type="single_agent",
+                      structured_output=False,
+                      return_option="state",
+                      tools=tools,
+                      base_url="http://127.0.0.1:12986/argoapi/v1"
+                    )
 
         print("Running agent...\n" + "=" * 60)
         result = await cg.run(query)
@@ -107,6 +114,10 @@ def main() -> None:
     parser.add_argument("--model", default="gpt-4o-mini")
     parser.add_argument("--system", default=os.environ.get("COMPUTE_SYSTEM"))
     parser.add_argument("--device", default=None)
+    parser.add_argument("--ppn", type=int, default=1,
+                        help="Processes per node for MCP backend tasks")
+    parser.add_argument("--ngpus-per-process", type=int, default=0,
+                        help="GPUs per process for MCP backend tasks")
     parser.add_argument("--query", default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
@@ -116,11 +127,12 @@ def main() -> None:
     if not args.system:
         _abort("COMPUTE_SYSTEM env var not set and --system not given.")
     system = args.system.lower().strip()
-    if system not in ("polaris", "aurora"):
+    if system not in ("polaris", "aurora", "crux"):
         _abort(f"Unsupported --system: {system!r}")
     device = args.device or ("xpu" if system == "aurora" else "cuda")
     query = args.query or agent_prompt(device=device)
-    asyncio.run(amain(args.model, system, device, query, args.verbose))
+    asyncio.run(amain(args.model, system, device, query, args.verbose,
+                      ppn=args.ppn, ngpus_per_process=args.ngpus_per_process))
 
 
 if __name__ == "__main__":
