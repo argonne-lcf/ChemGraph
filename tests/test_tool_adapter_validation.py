@@ -5,6 +5,10 @@ from typing import Any
 
 import pytest
 
+# Skip when the optional 'academy' extra is absent; core.tools imports
+# academy.agent at module level.
+pytest.importorskip("academy")
+
 from chemgraph.academy.core.tools import build_chemgraph_reasoning_tools
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 
