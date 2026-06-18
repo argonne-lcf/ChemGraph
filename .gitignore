@@ -64,3 +64,7 @@ vib*.traj
 
 # Kubernetes secrets (keep secrets.yaml.template, ignore actual secrets)
 k8s/secrets.yaml
+
+# Local private notes / scratchpads — anything matching *.private-local.* stays untracked
+*.private-local.*
+*.private-local
