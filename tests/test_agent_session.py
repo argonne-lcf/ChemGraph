@@ -14,9 +14,11 @@ Covers:
 import os
 
 import pytest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from chemgraph.agent.llm_agent import ChemGraph, serialize_state
+from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.turn import TurnResult, serialize_state
 from chemgraph.memory.store import SessionStore
 
 
@@ -44,16 +46,47 @@ def tmp_db(tmp_path):
     return str(tmp_path / "test_sessions.db")
 
 
+class _GraphStreamCompatibleWorkflow:
+    def __init__(self):
+        self.side_effect = self.default_graph_stream
+        self.last_state = {"messages": []}
+
+    async def default_graph_stream(self, **kwargs):
+        ai_msg = Mock()
+        ai_msg.type = "ai"
+        ai_msg.content = "Test response"
+        return TurnResult(
+            final_text="Test response",
+            state={"messages": [ai_msg]},
+            executed_tool_names=(),
+            terminal_tool=None,
+            thread_id=kwargs["thread_id"],
+            duration_s=0.0,
+        )
+
+    async def astream(self, inputs, *, stream_mode, config):
+        result = await self.side_effect(
+            query=inputs.get("messages"),
+            thread_id=str(config["configurable"]["thread_id"]),
+        )
+        self.last_state = result.state
+        yield self.last_state
+
+    def get_state(self, config):
+        return SimpleNamespace(values=self.last_state)
+
+
 @pytest.fixture
 def mock_agent_patches():
-    """Patch LLM loading and graph construction for fast agent creation."""
+    """Patch LLM loading and graph streaming for fast agent creation."""
     with (
         patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load,
-        patch("chemgraph.agent.llm_agent.construct_single_agent_graph") as mock_graph,
+        patch("chemgraph.agent.llm_agent.construct_single_agent_graph") as mock_constructor,
     ):
         mock_load.return_value = Mock()
-        mock_graph.return_value = Mock()
-        yield mock_load, mock_graph
+        workflow = _GraphStreamCompatibleWorkflow()
+        mock_constructor.return_value = workflow
+        yield mock_load, workflow
 
 
 def _make_agent(clean_env, mock_agent_patches, tmp_db, **kwargs):
@@ -62,6 +95,7 @@ def _make_agent(clean_env, mock_agent_patches, tmp_db, **kwargs):
         "model_name": "gpt-4o-mini",
         "enable_memory": True,
         "memory_db_path": tmp_db,
+        "log_dir": os.path.join(os.path.dirname(tmp_db), "logs"),
     }
     defaults.update(kwargs)
     agent = ChemGraph(**defaults)
@@ -128,7 +162,7 @@ class TestUuidSessionId:
         """uuid must be set even when CHEMGRAPH_LOG_DIR is already in env."""
         os.environ["CHEMGRAPH_LOG_DIR"] = "/tmp/preset_log_dir"
         try:
-            agent = _make_agent(None, mock_agent_patches, tmp_db)
+            agent = _make_agent(None, mock_agent_patches, tmp_db, log_dir=None)
             assert agent.uuid is not None
             assert len(agent.uuid) == 8
             assert agent.log_dir == "/tmp/preset_log_dir"
@@ -350,8 +384,7 @@ class TestWriteStateFileNaming:
     ):
         agent = _make_agent(clean_env, mock_agent_patches, tmp_db)
 
-        # Mock get_state to return something serializable
-        agent.workflow.get_state = Mock(return_value=Mock(values={"messages": []}))
+        agent._last_run_state = {"messages": []}
 
         log_dir = str(tmp_path / "test_logs")
         os.makedirs(log_dir, exist_ok=True)
@@ -382,7 +415,7 @@ class TestWriteStateFileNaming:
             if "CHEMGRAPH_LOG_DIR" in os.environ:
                 del os.environ["CHEMGRAPH_LOG_DIR"]
             a = _make_agent(clean_env, mock_agent_patches, tmp_db)
-            a.workflow.get_state = Mock(return_value=Mock(values={"messages": []}))
+            a._last_run_state = {"messages": []}
             a.log_dir = log_dir
             agents.append(a)
 
@@ -402,23 +435,8 @@ class TestWriteStateFileNaming:
 
 class TestResumeFrom:
     def _make_streamable_agent(self, clean_env, mock_agent_patches, tmp_db):
-        """Create an agent with a mock async workflow."""
-        agent = _make_agent(clean_env, mock_agent_patches, tmp_db)
-
-        # Set up a mock astream that yields one state
-        ai_msg = Mock()
-        ai_msg.type = "ai"
-        ai_msg.content = "Test response"
-        ai_msg.pretty_print = Mock()
-
-        final_state = {"messages": [ai_msg]}
-
-        async def mock_astream(inputs, stream_mode, config):
-            yield final_state
-
-        agent.workflow.astream = mock_astream
-        agent.workflow.get_state = Mock(return_value=Mock(values=final_state))
-        return agent
+        """Create an agent whose run path is mocked through graph stream."""
+        return _make_agent(clean_env, mock_agent_patches, tmp_db)
 
     @pytest.mark.asyncio
     async def test_resume_prepends_context(self, clean_env, mock_agent_patches, tmp_db):
@@ -435,23 +453,24 @@ class TestResumeFrom:
         # Create second agent sharing the same DB
         agent2 = self._make_streamable_agent(clean_env, mock_agent_patches, tmp_db)
 
-        # Track what inputs are passed to astream
+        # Track what query is passed to graph stream.
         captured_inputs = []
 
-        async def tracking_astream(inputs, stream_mode, config):
-            captured_inputs.append(inputs)
+        async def tracking_graph_stream(**kwargs):
+            captured_inputs.append({"messages": kwargs["query"]})
             ai_msg = Mock()
             ai_msg.type = "ai"
             ai_msg.content = "Follow-up response"
-            ai_msg.pretty_print = Mock()
-            yield {"messages": [ai_msg]}
-
-        agent2.workflow.astream = tracking_astream
-        agent2.workflow.get_state = Mock(
-            return_value=Mock(
-                values={"messages": [Mock(type="ai", content="Follow-up")]}
+            return TurnResult(
+                final_text="Follow-up response",
+                state={"messages": [ai_msg]},
+                executed_tool_names=(),
+                terminal_tool=None,
+                thread_id=kwargs["thread_id"],
+                duration_s=0.0,
             )
-        )
+
+        mock_agent_patches[1].side_effect = tracking_graph_stream
 
         await agent2.run("Continue the analysis", resume_from=session_id)
 
@@ -469,18 +488,21 @@ class TestResumeFrom:
 
         captured_inputs = []
 
-        async def tracking_astream(inputs, stream_mode, config):
-            captured_inputs.append(inputs)
+        async def tracking_graph_stream(**kwargs):
+            captured_inputs.append({"messages": kwargs["query"]})
             ai_msg = Mock()
             ai_msg.type = "ai"
             ai_msg.content = "Response"
-            ai_msg.pretty_print = Mock()
-            yield {"messages": [ai_msg]}
+            return TurnResult(
+                final_text="Response",
+                state={"messages": [ai_msg]},
+                executed_tool_names=(),
+                terminal_tool=None,
+                thread_id=kwargs["thread_id"],
+                duration_s=0.0,
+            )
 
-        agent.workflow.astream = tracking_astream
-        agent.workflow.get_state = Mock(
-            return_value=Mock(values={"messages": [Mock(type="ai", content="resp")]})
-        )
+        mock_agent_patches[1].side_effect = tracking_graph_stream
 
         await agent.run("Hello", resume_from="nonexistent_id")
 
@@ -495,21 +517,23 @@ class TestResumeFrom:
     ):
         agent = _make_agent(clean_env, mock_agent_patches, tmp_db, enable_memory=False)
 
-        ai_msg = Mock()
-        ai_msg.type = "ai"
-        ai_msg.content = "Response"
-        ai_msg.pretty_print = Mock()
-
         captured_inputs = []
 
-        async def tracking_astream(inputs, stream_mode, config):
-            captured_inputs.append(inputs)
-            yield {"messages": [ai_msg]}
+        async def tracking_graph_stream(**kwargs):
+            captured_inputs.append({"messages": kwargs["query"]})
+            ai_msg = Mock()
+            ai_msg.type = "ai"
+            ai_msg.content = "Response"
+            return TurnResult(
+                final_text="Response",
+                state={"messages": [ai_msg]},
+                executed_tool_names=(),
+                terminal_tool=None,
+                thread_id=kwargs["thread_id"],
+                duration_s=0.0,
+            )
 
-        agent.workflow.astream = tracking_astream
-        agent.workflow.get_state = Mock(
-            return_value=Mock(values={"messages": [ai_msg]})
-        )
+        mock_agent_patches[1].side_effect = tracking_graph_stream
 
         await agent.run("Hello", resume_from="some_id")
 
@@ -528,7 +552,6 @@ class TestEndToEndSessionLifecycle:
         """init -> run -> messages saved -> load_previous_context -> resume"""
         agent = _make_agent(clean_env, mock_agent_patches, tmp_db)
 
-        # Set up mock workflow
         human_msg = Mock()
         human_msg.type = "human"
         human_msg.content = "Calculate energy of H2"
@@ -540,11 +563,17 @@ class TestEndToEndSessionLifecycle:
 
         final_state = {"messages": [human_msg, ai_msg]}
 
-        async def mock_astream(inputs, stream_mode, config):
-            yield final_state
+        async def mock_graph_stream(**kwargs):
+            return TurnResult(
+                final_text=ai_msg.content,
+                state=final_state,
+                executed_tool_names=(),
+                terminal_tool=None,
+                thread_id=kwargs["thread_id"],
+                duration_s=0.0,
+            )
 
-        agent.workflow.astream = mock_astream
-        agent.workflow.get_state = Mock(return_value=Mock(values=final_state))
+        mock_agent_patches[1].side_effect = mock_graph_stream
 
         # Step 1: Run
         await agent.run("Calculate energy of H2")
@@ -568,8 +597,7 @@ class TestEndToEndSessionLifecycle:
             del os.environ["CHEMGRAPH_LOG_DIR"]
 
         agent2 = _make_agent(clean_env, mock_agent_patches, tmp_db)
-        agent2.workflow.astream = mock_astream
-        agent2.workflow.get_state = Mock(return_value=Mock(values=final_state))
+        mock_agent_patches[1].side_effect = mock_graph_stream
 
         await agent2.run("Now optimize H2", resume_from=agent.uuid)
 

@@ -7,11 +7,30 @@ from chemgraph.tools.cheminformatics_tools import (
     smiles_to_coordinate_file,
 )
 
-from chemgraph.tools.architector_tools import (
-    visualize_molecule,
-    image_to_connection_points,
-    build_metal_complex
-)
+try:
+    from chemgraph.tools.architector_tools import (
+        visualize_molecule,
+        image_to_connection_points,
+        build_metal_complex,
+    )
+except ModuleNotFoundError:
+    def _missing_architector_tool(*_args, **_kwargs):
+        raise ImportError(
+            "single_agent_architector requires chemgraph.tools.architector_tools, "
+            "which is not available in this installation."
+        )
+
+    def visualize_molecule(smiles: str) -> str:
+        """Visualize a molecule for Architector workflows."""
+        return _missing_architector_tool(smiles)
+
+    def image_to_connection_points(image_path: str) -> str:
+        """Extract connection points from an image for Architector workflows."""
+        return _missing_architector_tool(image_path)
+
+    def build_metal_complex(specification: str) -> str:
+        """Build a metal complex for Architector workflows."""
+        return _missing_architector_tool(specification)
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.state.state import State
 

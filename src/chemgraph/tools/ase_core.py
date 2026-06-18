@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -21,6 +22,28 @@ import numpy as np
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_ase_core_file_log() -> None:
+    """Attach a single ``FileHandler`` to the ase_core logger.
+
+    ``run_ase_core`` runs both in the MCP-server process (where
+    ``server_utils`` already configures root logging) and in worker
+    processes (Parsl / EnsembleLauncher / Globus Compute) that never go
+    through that setup, so we add our own file handler here. Idempotent:
+    a second call is a no-op, which avoids accumulating one open file
+    handle per invocation. Honors ``CHEMGRAPH_LOG_DIR`` when set.
+    """
+    if any(isinstance(h, logging.FileHandler) for h in logger.handlers):
+        return
+    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR", os.path.join(os.getcwd(), "cg_logs"))
+    os.makedirs(log_dir, exist_ok=True)
+    fh = logging.FileHandler(os.path.join(log_dir, "ase_core.log"))
+    fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    logger.addHandler(fh)
+    logger.setLevel(logging.DEBUG)
 
 
 # ---------------------------------------------------------------------------
@@ -322,20 +345,11 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     dict
         Minimal result payload (status, message, key numbers).
     """
-    import logging
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
     # ---- file logger (cg_logs/) ----
-    log_dir = os.path.join(os.getcwd(), "cg_logs")
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, "ase_core.log")
-    logger = logging.getLogger(f"chemgraph.ase_core.{id(params)}")
-    logger.setLevel(logging.DEBUG)
-    logger.propagate = False
-    _fh = logging.FileHandler(log_file)
-    _fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-    logger.addHandler(_fh)
+    _ensure_ase_core_file_log()
 
     logger.info("run_ase_core called with params: %s", params.model_dump_json())
 
@@ -380,6 +394,15 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             "error_type": "ValueError",
             "message": f"Output results file must end with '.json', got: {params.output_results_file}",
         }
+
+    # Make sure the destination directory exists before the simulation runs;
+    # otherwise the trailing ``open(output_results_file, "w")`` fails with
+    # FileNotFoundError after the calculation has already burned its
+    # compute time. Callers (LLM agents, scripts) routinely point at a
+    # not-yet-created subdirectory of a shared run dir, so create it now.
+    output_parent = os.path.dirname(os.path.abspath(output_results_file))
+    if output_parent:
+        os.makedirs(output_parent, exist_ok=True)
 
     logger.info("Loading calculator: %s", calculator)
     calc, system_info, calc_model = load_calculator(calculator)
