@@ -157,6 +157,36 @@ def _is_local_http_endpoint(base_url: str | None) -> bool:
     }
 
 
+# Reasoning-model detection. These models (GPT-5*, o1/o3/o4*) reject
+# any non-default ``temperature`` (only 1 is supported) and similarly
+# reject ``top_p`` / ``frequency_penalty`` / ``presence_penalty``.
+# The Argo shim passes these through to OpenAI with the same
+# constraint, so the LLM construction sites must drop the field
+# entirely from the request payload. Match is case-insensitive and
+# covers "GPT-5", "GPT-5-mini", "GPT-5.1" ... "GPT-5.5", "o1", "o3",
+# "o3-mini", "o4-mini", their argo: variants, and the hosted-wire
+# short forms ("gpt5", "gpt5mini", "gpto3mini").
+_REASONING_MODEL_PREFIXES: tuple[str, ...] = ("gpt-5", "o1", "o3", "o4")
+
+
+def is_reasoning_model(model_name: str | None) -> bool:
+    """Return True when ``model_name`` is an OpenAI reasoning model.
+
+    See module-level note above for rationale.
+    """
+    if not model_name:
+        return False
+    name = model_name.strip().lower().removeprefix("argo:")
+    if name.startswith("gpto"):
+        return True  # gpto1, gpto3mini, gpto4mini hosted-wire forms
+    if name.startswith("gpt5"):
+        return True  # gpt5, gpt5mini, gpt5nano hosted-wire forms
+    return any(
+        name == p or name.startswith(p + "-") or name.startswith(p + ".")
+        for p in _REASONING_MODEL_PREFIXES
+    )
+
+
 def load_openai_model(
     model_name: str,
     temperature: float,
@@ -264,15 +294,25 @@ def load_openai_model(
                 logger.info(
                     "Using Argo user from config/ARGO_USER/default: %s", argo_user
                 )
+            if is_reasoning_model(model_name):
+                # Reasoning models (GPT-5*, o-series) reject any non-
+                # default temperature + sampling knobs. Drop them at
+                # construction time so the request payload matches what
+                # the model accepts.
+                for k in ("temperature", "top_p", "frequency_penalty", "presence_penalty"):
+                    llm_kwargs.pop(k, None)
             llm = ChatOpenAI(**llm_kwargs)
         else:
             logger.info(f"Loading OpenAI model: {model_name}")
-            llm = ChatOpenAI(
+            openai_kwargs = dict(
                 model=model_name,
                 temperature=temperature,
                 api_key=api_key,
                 max_tokens=6000,
             )
+            if is_reasoning_model(model_name):
+                openai_kwargs.pop("temperature", None)
+            llm = ChatOpenAI(**openai_kwargs)
         # Authentication happens only during invocation.
         logger.info(f"Requested model: {model_name}")
         logger.info("OpenAI model loaded successfully")

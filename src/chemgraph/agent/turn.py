@@ -161,6 +161,14 @@ def _custom_openai_compatible_kwargs(
     user = argo_user or os.getenv("ARGO_USER")
     if base_url and "argoapi" in base_url and user:
         kwargs["model_kwargs"] = {"user": user}
+    # GPT-5* / o-series reject any non-default temperature + sampling
+    # knobs. Drop them so the request payload matches what the model
+    # accepts. Import is local to avoid an import cycle with
+    # chemgraph.models.openai which itself imports langchain_openai.
+    from chemgraph.models.openai import is_reasoning_model
+    if is_reasoning_model(model_name):
+        for k in ("temperature", "top_p", "frequency_penalty", "presence_penalty"):
+            kwargs.pop(k, None)
     return kwargs
 
 
