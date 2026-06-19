@@ -17,11 +17,11 @@ on UID, which IS preserved across the server round-trip) so a rank
 can wait until its peers have actually registered before proceeding.
 
 Side effect of this scheme: agent names become campaign-scoped. Two
-operators running the SAME ``federated-hello`` campaign concurrently
+operators running the SAME ``federated-chat`` campaign concurrently
 would clash on the same UIDs and crash the registration POST with
 "mailbox already exists". The run-id is part of the UID namespace,
-so as long as operators bump ``--run-id`` (federated-hello-001 vs
-federated-hello-002) the UIDs differ and the campaigns don't see
+so as long as operators bump ``--run-id`` (federated-chat-001 vs
+federated-chat-002) the UIDs differ and the campaigns don't see
 each other.
 """
 from __future__ import annotations

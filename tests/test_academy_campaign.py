@@ -432,7 +432,7 @@ def test_validate_campaign_federated_loosens_cross_site_peer_check() -> None:
     from chemgraph.academy.core.campaign import (
         filter_agents, load_campaign, validate_campaign,
     )
-    campaign = load_campaign("federated-hello")
+    campaign = load_campaign("federated-chat")
     slice_aurora = filter_agents(campaign, ["agent-aurora"])
 
     # Strict validation rejects the cross-site peer reference.
