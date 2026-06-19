@@ -11,7 +11,9 @@ from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
 from chemgraph.academy.runtime.exchange import build_exchange_factory
 from chemgraph.academy.runtime.exchange import exchange_uses_redis
 from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
-from chemgraph.academy.runtime.registration import discover_peer_agent_ids
+from chemgraph.academy.runtime.registration import deterministic_agent_id
+from chemgraph.academy.runtime.registration import deterministic_agent_uid
+from chemgraph.academy.runtime.registration import wait_for_peers_alive
 
 
 def _config(
@@ -118,14 +120,15 @@ def test_http_exchange_factory_honors_custom_url(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# discover_peer_agent_ids (federated peer discovery)
+# Deterministic peer identity + wait_for_peers_alive
 #
-# Real exchange transports require a running broker. We exercise the
-# discovery helper against a fake transport whose ``discover`` returns
-# a sequence we control across successive polls. This keeps the tests
-# fast and deterministic while still pinning the behavior that matters:
-# wait-for-peers, success when all are present, timeout listing the
-# missing ones.
+# The hosted HttpExchange strips AgentId.name from discover() responses
+# (only ``uid`` and ``role`` round-trip). Name-based discovery was
+# silently never finding any peer across sites. The replacement: derive
+# each peer's mailbox UID deterministically from (run_id, agent_name)
+# so every site can construct the same AgentId locally without needing
+# discover() to echo the name back. discover() stays useful as a
+# liveness probe (matching on UID, which IS preserved).
 # ---------------------------------------------------------------------------
 
 
@@ -148,79 +151,110 @@ class _FakeTransport:
         return tuple(self._rounds[index])
 
 
-def _agent_id(name: str) -> AgentId[Any]:
-    return AgentId.new(name)
+def test_deterministic_agent_uid_is_stable() -> None:
+    """Same (run_id, agent_name) inputs must produce the same UID,
+    every call, on every machine. This is the load-bearing invariant
+    of the federated rendezvous: Aurora and Crux compute the same
+    UID locally and addressing works without any shared lookup."""
+    a = deterministic_agent_uid(run_id='r-001', agent_name='worker')
+    b = deterministic_agent_uid(run_id='r-001', agent_name='worker')
+    assert a == b
 
 
-def test_discover_peer_agent_ids_returns_empty_for_empty_peer_list() -> None:
-    """When the local agent has no allowed_peers the helper short-circuits
-    -- it must not poll the exchange unnecessarily (the network round-trip
-    would block daemon startup for nothing)."""
-    transport = _FakeTransport(rounds=[[_agent_id('anyone')]])
-    result = asyncio.run(
-        discover_peer_agent_ids(
+def test_deterministic_agent_uid_differs_by_run_id() -> None:
+    """Different run-ids must yield different UIDs so two operators
+    running the SAME campaign with different --run-ids don't collide
+    on the same mailboxes."""
+    a = deterministic_agent_uid(run_id='r-001', agent_name='worker')
+    b = deterministic_agent_uid(run_id='r-002', agent_name='worker')
+    assert a != b
+
+
+def test_deterministic_agent_uid_differs_by_agent_name() -> None:
+    """Different agent names within the same run must yield different
+    UIDs so per-agent mailboxes don't collide."""
+    a = deterministic_agent_uid(run_id='r-001', agent_name='worker-a')
+    b = deterministic_agent_uid(run_id='r-001', agent_name='worker-b')
+    assert a != b
+
+
+def test_deterministic_agent_id_preserves_name_locally() -> None:
+    """The AgentId we build for our OWN registration carries the
+    name so it shows up in trace events; the name is only stripped
+    when the AgentId is round-tripped through the hosted exchange's
+    discover() response."""
+    aid = deterministic_agent_id(run_id='r-001', agent_name='worker-a')
+    assert aid.name == 'worker-a'
+    assert aid.uid == deterministic_agent_uid(
+        run_id='r-001', agent_name='worker-a',
+    )
+
+
+def test_wait_for_peers_alive_returns_immediately_for_empty_list() -> None:
+    """When the local agent has no allowed_peers the helper short-
+    circuits -- it must not poll the exchange unnecessarily."""
+    transport = _FakeTransport(rounds=[[]])
+    asyncio.run(
+        wait_for_peers_alive(
             transport, [], agent_class=object, timeout_s=0.01,
         ),
     )
-    assert result == {}
     assert transport._calls == 0
 
 
-def test_discover_peer_agent_ids_finds_all_peers_on_first_poll() -> None:
-    """Happy path: every peer is already on the exchange. The helper
-    must return promptly with a name->AgentId mapping in the same
-    direction the daemon will use it (peer name -> AgentId for Handle
-    construction)."""
-    a = _agent_id('worker-a')
-    b = _agent_id('worker-b')
-    c = _agent_id('coordinator')
-    transport = _FakeTransport(rounds=[[a, b, c]])
-    result = asyncio.run(
-        discover_peer_agent_ids(
-            transport, ['worker-a', 'worker-b'],
-            agent_class=object, timeout_s=1.0,
+def test_wait_for_peers_alive_succeeds_when_all_uids_present() -> None:
+    """Happy path: every expected peer's mailbox is on the exchange.
+    Match by UID (the field discover() preserves), not name."""
+    a = deterministic_agent_id(run_id='r-001', agent_name='worker-a')
+    b = deterministic_agent_id(run_id='r-001', agent_name='worker-b')
+    # Simulate what the hosted exchange actually returns: AgentIds
+    # with the right UID but name stripped. Tests would have caught
+    # the original bug if they'd matched this shape.
+    a_seen = AgentId(uid=a.uid, name=None, role='agent')
+    b_seen = AgentId(uid=b.uid, name=None, role='agent')
+    transport = _FakeTransport(rounds=[[a_seen, b_seen]])
+    asyncio.run(
+        wait_for_peers_alive(
+            transport, [a, b], agent_class=object, timeout_s=1.0,
         ),
     )
-    assert result == {'worker-a': a, 'worker-b': b}
-    # Did NOT include the un-requested coordinator -- filtering by name
-    # is what keeps cross-operator agents on the shared hosted exchange
-    # from leaking into each other's peer dicts.
-    assert 'coordinator' not in result
 
 
-def test_discover_peer_agent_ids_waits_for_late_peers() -> None:
-    """The federated convergence story: site A registers at t=0 and
-    polls; site B doesn't register its agent until poll #3; the helper
-    must keep polling and succeed once B is visible. This is the
-    behavior that lets operators bring sites up in any order."""
-    a = _agent_id('worker-a')
-    b = _agent_id('worker-b')
+def test_wait_for_peers_alive_waits_across_polls_for_late_peer() -> None:
+    """The federated convergence story: bring sites up in any order;
+    the wait keeps polling and unblocks the moment all UIDs are seen."""
+    a = deterministic_agent_id(run_id='r-001', agent_name='worker-a')
+    b = deterministic_agent_id(run_id='r-001', agent_name='worker-b')
+    a_seen = AgentId(uid=a.uid, name=None, role='agent')
+    b_seen = AgentId(uid=b.uid, name=None, role='agent')
     rounds = [
-        [a],         # poll 1: only A visible
-        [a],         # poll 2: still waiting for B
-        [a, b],      # poll 3: B comes up
+        [a_seen],          # poll 1: only A visible
+        [a_seen],          # poll 2: still waiting for B
+        [a_seen, b_seen],  # poll 3: B comes up
     ]
     transport = _FakeTransport(rounds=rounds)
-    result = asyncio.run(
-        discover_peer_agent_ids(
-            transport, ['worker-a', 'worker-b'],
+    asyncio.run(
+        wait_for_peers_alive(
+            transport, [a, b],
             agent_class=object,
             timeout_s=2.0,
-            poll_interval_s=0.01,  # keep the test fast
+            poll_interval_s=0.01,
         ),
     )
-    assert result == {'worker-a': a, 'worker-b': b}
 
 
-def test_discover_peer_agent_ids_times_out_naming_missing_peers() -> None:
-    """When a remote site never shows up, the helper must raise with a
-    message that names the missing peers. Operators reading the log
-    should immediately know which site to bring up / debug."""
-    transport = _FakeTransport(rounds=[[_agent_id('worker-a')]])
-    with pytest.raises(TimeoutError, match=r"missing=\['coordinator', 'worker-b'\]"):
+def test_wait_for_peers_alive_times_out_naming_missing_uids() -> None:
+    """When a remote site never registers, raise with a message
+    naming the missing peers (name + uid). Operators reading the
+    log can correlate with the missing site's launch logs."""
+    a = deterministic_agent_id(run_id='r-001', agent_name='worker-a')
+    missing = deterministic_agent_id(run_id='r-001', agent_name='no-such-peer')
+    a_seen = AgentId(uid=a.uid, name=None, role='agent')
+    transport = _FakeTransport(rounds=[[a_seen]])
+    with pytest.raises(TimeoutError, match='no-such-peer'):
         asyncio.run(
-            discover_peer_agent_ids(
-                transport, ['worker-a', 'worker-b', 'coordinator'],
+            wait_for_peers_alive(
+                transport, [a, missing],
                 agent_class=object,
                 timeout_s=0.05,
                 poll_interval_s=0.01,
@@ -228,27 +262,24 @@ def test_discover_peer_agent_ids_times_out_naming_missing_peers() -> None:
         )
 
 
-def test_discover_peer_agent_ids_skips_already_found_peers_on_re_poll() -> None:
-    """If poll N saw peer A, poll N+1 must not overwrite A's AgentId
-    even if discover returns a fresh AgentId object with the same name
-    (which the hosted exchange doesn't actually do, but the helper's
-    behavior shouldn't depend on that). Pin the 'first found wins'
-    invariant explicitly."""
-    a_first = _agent_id('worker-a')
-    a_again = _agent_id('worker-a')  # different uuid, same name
-    b = _agent_id('worker-b')
-    rounds = [
-        [a_first],
-        [a_again, b],
+def test_wait_for_peers_alive_ignores_unrelated_agents_with_same_class() -> None:
+    """The hosted exchange returns every ChemGraphLogicalAgent registered
+    across all operators / campaigns. The wait must filter strictly by
+    UID and not get confused by other operators' agents."""
+    a = deterministic_agent_id(run_id='r-001', agent_name='worker-a')
+    a_seen = AgentId(uid=a.uid, name=None, role='agent')
+    # Lots of noise from other operators / runs:
+    noise = [
+        AgentId.new('stranger-1'),
+        AgentId.new('stranger-2'),
+        AgentId.new('stranger-3'),
     ]
-    transport = _FakeTransport(rounds=rounds)
-    result = asyncio.run(
-        discover_peer_agent_ids(
-            transport, ['worker-a', 'worker-b'],
+    transport = _FakeTransport(rounds=[noise + [a_seen]])
+    asyncio.run(
+        wait_for_peers_alive(
+            transport, [a],
             agent_class=object,
-            timeout_s=2.0,
+            timeout_s=1.0,
             poll_interval_s=0.01,
         ),
     )
-    assert result['worker-a'] is a_first
-    assert result['worker-b'] is b

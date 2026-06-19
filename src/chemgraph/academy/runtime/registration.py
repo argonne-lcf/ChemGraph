@@ -1,35 +1,35 @@
-"""Peer-agent discovery against the Academy exchange.
+"""Peer-agent identity + readiness for federated ChemGraph campaigns.
 
-The runtime used to coordinate per-rank registrations via a
-shared-filesystem JSON file (``<run_dir>/academy_registrations.json``):
-rank 0 registered every agent on the campaign and wrote the resulting
-``AgentRegistration`` objects to disk; other ranks polled the file. That
-mechanism cannot span machines with separate filesystems, which blocks
-the federated ``spawn-site`` flow.
+Cross-site peer rendezvous needs each rank to be able to address every
+other site's agents without a shared filesystem. The first cut polled
+``transport.discover(ChemGraphLogicalAgent)`` and filtered by
+``AgentId.name``, which works on the local/redis/hybrid exchanges but
+breaks on Academy's hosted HTTP exchange: ``discover()`` returns
+``AgentId`` objects with ``name=None`` and ``role='agent'`` only.
+Names round-trip through the server's mailbox state but are not
+echoed back in the discovery response.
 
-The replacement uses the exchange itself as the lookup service. Each
-rank registers ONLY its own local agent (returning an
-``AgentRegistration`` that goes straight into ``Runtime``), and looks
-up the ``AgentId`` of every cross-site peer by polling
-``transport.discover(ChemGraphLogicalAgent)`` until the expected names
-appear. There is no rank-0 special-casing for registration anymore: any
-rank can come up in any order, on any host, as long as eventually
-every peer's mailbox is reachable through the exchange before
-``startup_timeout_s`` elapses.
+The replacement: agree on a **deterministic UID** for every (run-id,
+agent-name) pair. Both sites compute the same UID from the same
+inputs, so each side knows the recipient's UID before either rank
+boots. ``discover()`` is still useful as a liveness probe (matching
+on UID, which IS preserved across the server round-trip) so a rank
+can wait until its peers have actually registered before proceeding.
 
-Name collisions: ``discover()`` returns every agent of the given class
-registered against the exchange, across all operators and campaigns. To
-keep federated campaigns from accidentally seeing each other's
-agents, operators should prefix agent names with a campaign-unique
-run-id (e.g. ``demo-001-coordinator-agent``). Auto-prefixing is a
-future ergonomic improvement; for now it's an operator-runbook
-convention.
+Side effect of this scheme: agent names become campaign-scoped. Two
+operators running the SAME ``federated-hello`` campaign concurrently
+would clash on the same UIDs and crash the registration POST with
+"mailbox already exists". The run-id is part of the UID namespace,
+so as long as operators bump ``--run-id`` (federated-hello-001 vs
+federated-hello-002) the UIDs differ and the campaigns don't see
+each other.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
+import uuid
 from collections.abc import Iterable
 from typing import Any
 
@@ -39,63 +39,105 @@ from academy.identifier import AgentId
 logger = logging.getLogger(__name__)
 
 
-async def discover_peer_agent_ids(
+# Stable namespace UUID used as the seed for uuid5 derivation. The
+# value itself doesn't matter -- only that every site computes the
+# same UID for the same (run_id, agent_name) pair. Bumping this
+# constant would invalidate every running deployment, so don't.
+_PEER_UID_NAMESPACE = uuid.UUID('1e7eda44-1b34-4f5a-b2a1-cf5ca5db8e8b')
+
+
+def deterministic_agent_uid(*, run_id: str, agent_name: str) -> uuid.UUID:
+    """Derive the AgentId.uid that every site will use for ``agent_name``.
+
+    Same inputs on Aurora and Crux ⇒ same UID. The recipient side
+    registers with this UID; the sender side constructs an
+    ``AgentId`` with the same UID locally and uses it to build a
+    ``Handle`` without ever calling ``discover()``.
+    """
+    return uuid.uuid5(_PEER_UID_NAMESPACE, f"{run_id}/{agent_name}")
+
+
+def deterministic_agent_id(*, run_id: str, agent_name: str) -> AgentId[Any]:
+    """Construct the ``AgentId`` peers can reconstruct from name alone."""
+    return AgentId(
+        uid=deterministic_agent_uid(run_id=run_id, agent_name=agent_name),
+        name=agent_name,
+        role='agent',
+    )
+
+
+async def register_agent_with_uid(
     transport: ExchangeTransportT,
-    peer_names: Iterable[str],
+    agent_class: type,
+    agent_id: AgentId[Any],
+) -> AgentId[Any]:
+    """Register ``agent_id`` on the exchange, reusing the supplied UID.
+
+    Bypasses ``transport.register_agent`` (which always calls
+    ``AgentId.new`` and generates a random UID) by POSTing directly
+    to the same mailbox endpoint with our pre-built AgentId. Returns
+    the same AgentId on success so callers can hand it to Runtime.
+    """
+    # Reach into the transport for the same session + URL the SDK uses.
+    # The shape mirrors HttpExchangeTransport.register_agent exactly,
+    # we just swap the auto-generated AgentId for the deterministic one.
+    session = transport._session
+    mailbox_url = transport._mailbox_url
+    payload = {
+        'mailbox': agent_id.model_dump_json(),
+        'agent': ','.join(agent_class._agent_mro()),
+    }
+    async with session.post(mailbox_url, json=payload) as response:
+        # _raise_for_status is what the SDK uses; reach in for it too.
+        from academy.exchange.cloud.client import _raise_for_status
+        _raise_for_status(response, transport.mailbox_id, agent_id)
+    return agent_id
+
+
+async def wait_for_peers_alive(
+    transport: ExchangeTransportT,
+    peer_ids: Iterable[AgentId[Any]],
     *,
     agent_class: type,
     timeout_s: float,
     poll_interval_s: float = 1.0,
-) -> dict[str, AgentId[Any]]:
-    """Poll ``transport.discover()`` until every named peer is found.
+) -> None:
+    """Block until every peer in ``peer_ids`` is visible to ``discover()``.
 
-    Args:
-        transport: An open exchange transport already registered for the
-            local rank's own agent. Discovery is read-only from this
-            rank's perspective -- it does not create or mutate mailboxes.
-        peer_names: Names of agents this rank intends to message. Each
-            name must match the ``AgentId.name`` of an agent previously
-            registered against the same exchange (potentially by a
-            different process on a different host).
-        agent_class: Concrete ``Agent`` subclass to scope the discovery
-            query (``transport.discover`` is class-typed). All ChemGraph
-            agents are ``ChemGraphLogicalAgent``, so callers pass that.
-        timeout_s: Wall-clock budget. On expiry a ``TimeoutError`` is
-            raised whose message lists the peers we never saw, so
-            operators can immediately tell which remote site is missing
-            or whose agent failed to register.
-        poll_interval_s: Backoff between ``discover()`` retries. The
-            default keeps startup snappy without hammering the exchange.
+    UID-based matching: ``discover()`` strips names but preserves
+    UIDs, so we filter the discover response by UID and wait until
+    every expected peer's mailbox shows up. If ``peer_ids`` is empty
+    (single-agent or self-only slice), return immediately.
 
-    Returns:
-        Mapping from peer name to the discovered ``AgentId``. Empty
-        ``peer_names`` short-circuits to an empty dict.
+    Raises ``TimeoutError`` listing the missing peers' UIDs after
+    ``timeout_s`` so the operator can correlate with their other
+    site's launch logs.
     """
-    wanted = set(peer_names)
+    wanted = {peer.uid: peer for peer in peer_ids}
     if not wanted:
-        return {}
-    found: dict[str, AgentId[Any]] = {}
+        return
+    seen: set[uuid.UUID] = set()
     deadline = time.monotonic() + timeout_s
     while True:
         agent_ids = await transport.discover(agent_class)
-        for agent_id in agent_ids:
-            name = getattr(agent_id, 'name', None)
-            if isinstance(name, str) and name in wanted and name not in found:
-                found[name] = agent_id
-        missing = wanted.difference(found)
+        for aid in agent_ids:
+            if aid.uid in wanted:
+                seen.add(aid.uid)
+        missing = set(wanted).difference(seen)
         if not missing:
-            return found
+            return
         if time.monotonic() >= deadline:
+            missing_descs = sorted(f'{wanted[u].name}({u})' for u in missing)
             raise TimeoutError(
-                f'Timed out after {timeout_s:.1f}s waiting to discover '
-                f'peer agents on the exchange: missing={sorted(missing)}. '
-                f'Confirm every site of the federated campaign has '
-                f'started and registered its agents under the expected '
-                f'names (run-id-prefixed names are required when the '
-                f'hosted exchange is shared across operators).',
+                f'Timed out after {timeout_s:.1f}s waiting for peer agents '
+                f'to register on the exchange: missing={missing_descs}. '
+                f'Confirm every site of the federated campaign has started '
+                f'and that all sites are using the same --run-id (the run-id '
+                f'is part of the UID namespace; mismatches make the peers '
+                f'invisible to each other).',
             )
         logger.debug(
-            'discover() missing %d peers (%s); sleeping %.1fs',
+            'wait_for_peers_alive: missing %d (%s); sleeping %.1fs',
             len(missing), sorted(missing), poll_interval_s,
         )
         await asyncio.sleep(poll_interval_s)

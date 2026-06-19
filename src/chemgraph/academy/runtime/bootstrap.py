@@ -36,7 +36,8 @@ from chemgraph.academy.core.campaign import namespace_for_run
 from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.runtime.exchange import build_exchange_factory
 from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
-from chemgraph.academy.runtime.registration import discover_peer_agent_ids
+from chemgraph.academy.runtime.registration import deterministic_agent_id
+from chemgraph.academy.runtime.registration import wait_for_peers_alive
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         '--campaign', required=True,
         help='Campaign config (packaged name or path to campaign.jsonc).',
+    )
+    parser.add_argument(
+        '--run-id', required=True,
+        help=(
+            "The run-id used by the spawn-site invocations. The bootstrap "
+            "recipient's mailbox UID is derived deterministically from "
+            "(run-id, agent-name); the same run-id must be passed here "
+            "and to every spawn-site in the campaign."
+        ),
     )
     parser.add_argument(
         '--recipient',
@@ -89,11 +99,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help='Redis namespace (only used for hybrid; defaults from run-id).',
     )
     parser.add_argument(
-        '--discover-timeout-s', type=float, default=120.0,
+        '--discover-timeout-s', type=float, default=600.0,
         help=(
-            "How long to wait for the recipient agent to appear on the "
-            "exchange. Defaults to 2 minutes; bump it if a federated "
-            "site is slow to come up."
+            "How long to wait for the recipient agent's mailbox to be "
+            "visible on the exchange. Defaults to 10 minutes to match "
+            "spawn-site's startup_timeout_s; bump it higher if a "
+            "federated site is unusually slow to come up."
         ),
     )
     return parser.parse_args(argv)
@@ -134,6 +145,7 @@ def _config_for_factory(args: argparse.Namespace) -> ChemGraphDaemonConfig:
 async def dispatch_bootstrap(
     *,
     campaign: ChemGraphCampaign,
+    run_id: str,
     recipient: str,
     exchange_factory: Any,
     discover_timeout_s: float,
@@ -142,19 +154,31 @@ async def dispatch_bootstrap(
 
     Returns the dispatched message_id so the operator can correlate it
     with what shows up on the recipient site's event log.
+
+    The recipient's AgentId is constructed deterministically from
+    ``(run_id, recipient_name)`` -- same scheme spawn-site uses on
+    the daemon side -- so no name-based discovery is needed (the
+    hosted exchange strips names from discover() responses, which
+    made the old discover-by-name approach silently fail).
     """
     client = await exchange_factory.create_user_client(
         name='chemgraph-bootstrap',
         start_listener=False,
     )
     try:
-        recipient_ids = await discover_peer_agent_ids(
+        recipient_id = deterministic_agent_id(
+            run_id=run_id, agent_name=recipient,
+        )
+        # Liveness probe: wait for the recipient's mailbox to actually
+        # be registered on the exchange before sending. Without this
+        # we'd happily POST a message to a mailbox that doesn't exist
+        # yet -- the exchange would reject it.
+        await wait_for_peers_alive(
             client._transport,
-            [recipient],
+            [recipient_id],
             agent_class=ChemGraphLogicalAgent,
             timeout_s=discover_timeout_s,
         )
-        recipient_id = recipient_ids[recipient]
 
         message = build_message(
             sender='campaign',
@@ -193,6 +217,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         message_id = asyncio.run(
             dispatch_bootstrap(
                 campaign=campaign,
+                run_id=args.run_id,
                 recipient=recipient,
                 exchange_factory=factory,
                 discover_timeout_s=args.discover_timeout_s,

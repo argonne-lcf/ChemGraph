@@ -8,6 +8,7 @@ import pytest
 from academy.identifier import AgentId
 
 from chemgraph.academy.runtime import bootstrap
+from chemgraph.academy.runtime.registration import deterministic_agent_id
 
 
 # ---------------------------------------------------------------------------
@@ -16,21 +17,33 @@ from chemgraph.academy.runtime import bootstrap
 
 
 def test_parse_args_requires_campaign() -> None:
-    """``--campaign`` is the only field that doesn't have a default --
-    bootstrap is useless without knowing which campaign's
-    ``user_task`` to send."""
+    """``--campaign`` is one of the two required fields. Bootstrap is
+    useless without knowing which campaign's user_task to send."""
     with pytest.raises(SystemExit):
-        bootstrap.parse_args([])
+        bootstrap.parse_args(['--run-id', 'r-001'])
+
+
+def test_parse_args_requires_run_id() -> None:
+    """``--run-id`` is required because the recipient's mailbox UID
+    is derived deterministically from (run_id, agent_name). Without
+    it the bootstrap would address a different mailbox than the
+    spawn-site invocations registered."""
+    with pytest.raises(SystemExit):
+        bootstrap.parse_args(['--campaign', 'mace-ensemble-screening-20'])
 
 
 def test_parse_args_defaults_exchange_type_to_http() -> None:
     """Federated bootstrap is the main use case so http is the right
     default. Operators on single-machine runs can override but they
     rarely need this command at all (run-compute auto-bootstraps)."""
-    args = bootstrap.parse_args(['--campaign', 'mace-ensemble-screening-20'])
+    args = bootstrap.parse_args([
+        '--campaign', 'mace-ensemble-screening-20',
+        '--run-id', 'r-001',
+    ])
     assert args.exchange_type == 'http'
     assert args.recipient is None  # defaults to campaign.initial_agent
-    assert args.discover_timeout_s == pytest.approx(120.0)
+    # discover-timeout-s default now matches spawn-site's 600s.
+    assert args.discover_timeout_s == pytest.approx(600.0)
 
 
 def test_parse_args_accepts_recipient_override() -> None:
@@ -38,6 +51,7 @@ def test_parse_args_accepts_recipient_override() -> None:
     e.g. partial re-runs or debugging."""
     args = bootstrap.parse_args([
         '--campaign', 'foo.jsonc',
+        '--run-id', 'r-001',
         '--recipient', 'worker-a',
     ])
     assert args.recipient == 'worker-a'
@@ -45,6 +59,11 @@ def test_parse_args_accepts_recipient_override() -> None:
 
 # ---------------------------------------------------------------------------
 # dispatch_bootstrap -- the core async path
+#
+# The hosted HttpExchange strips AgentId.name from discover() responses,
+# so our fake transport returns UID-only AgentIds to mirror that. The
+# bootstrap path constructs the recipient AgentId deterministically
+# from (run_id, recipient_name) -- no name lookup happens.
 # ---------------------------------------------------------------------------
 
 
@@ -81,14 +100,26 @@ class _FakeCampaign:
         self.resources = {}
 
 
-def test_dispatch_bootstrap_sends_one_message_to_discovered_recipient(
+def _seen_agent_id(name: str, run_id: str) -> AgentId[Any]:
+    """Mirror what the hosted exchange returns from discover():
+    deterministic UID, but with the name stripped to None."""
+    aid = deterministic_agent_id(run_id=run_id, agent_name=name)
+    return AgentId(uid=aid.uid, name=None, role='agent')
+
+
+def test_dispatch_bootstrap_sends_one_message_to_deterministic_recipient(
     monkeypatch,
 ) -> None:
-    """Happy path: recipient is on the exchange, helper discovers them,
-    one Handle.action call gets made, the message_id returned matches
-    what was sent."""
-    target = AgentId.new('coordinator-agent')
-    transport = _FakeTransport(agents=[target, AgentId.new('other-agent')])
+    """Happy path: recipient's mailbox is visible on the exchange,
+    the wait succeeds, one Handle.action call gets made. The
+    recipient AgentId is built deterministically from (run_id,
+    recipient_name), NOT discovered by name."""
+    run_id = 'demo-001'
+    seen = _seen_agent_id('coordinator-agent', run_id)
+    transport = _FakeTransport(agents=[
+        seen,
+        _seen_agent_id('some-other-campaign-agent', 'unrelated'),
+    ])
     client = _FakeClient(transport)
     factory = _FakeFactory(client)
 
@@ -106,6 +137,7 @@ def test_dispatch_bootstrap_sends_one_message_to_discovered_recipient(
     message_id = asyncio.run(
         bootstrap.dispatch_bootstrap(
             campaign=_FakeCampaign(),
+            run_id=run_id,
             recipient='coordinator-agent',
             exchange_factory=factory,
             discover_timeout_s=1.0,
@@ -114,36 +146,46 @@ def test_dispatch_bootstrap_sends_one_message_to_discovered_recipient(
 
     assert len(sent) == 1
     agent_id, action_name, message = sent[0]
-    assert agent_id is target
+    # Handle is built with the DETERMINISTIC AgentId -- same UID as
+    # what the recipient daemon registered, so the message routes to
+    # the right mailbox.
+    expected_uid = deterministic_agent_id(
+        run_id=run_id, agent_name='coordinator-agent',
+    ).uid
+    assert agent_id.uid == expected_uid
     assert action_name == 'receive_message'
     assert message['recipient'] == 'coordinator-agent'
     assert message['sender'] == 'campaign'
     assert message['message_id'] == message_id
-    # The bootstrap content embeds the campaign's user_task; the
-    # recipient agent's first round will parse this content.
     assert 'do the thing' in message['content']
     # Client must be closed on the happy path so we don't leak the
     # aiohttp session that backs the http exchange transport.
     client.close.assert_awaited_once()
 
 
-def test_dispatch_bootstrap_closes_client_on_discover_timeout(
+def test_dispatch_bootstrap_closes_client_on_recipient_timeout(
     monkeypatch,
 ) -> None:
-    """If the recipient never appears on the exchange the helper must
-    raise TimeoutError -- AND the client must still be closed so we
-    don't leak the underlying network resources."""
-    transport = _FakeTransport(agents=[AgentId.new('other-agent')])
+    """If the recipient's mailbox never appears on the exchange the
+    helper must raise TimeoutError -- AND the client must still be
+    closed so we don't leak the underlying network resources."""
+    # Transport returns SOME unrelated agent but not our recipient.
+    transport = _FakeTransport(agents=[
+        _seen_agent_id('not-our-recipient', 'unrelated-run'),
+    ])
     client = _FakeClient(transport)
     factory = _FakeFactory(client)
 
-    monkeypatch.setattr(bootstrap, 'Handle',
-                        lambda agent_id: pytest.fail("Handle must not be built on timeout"))
+    monkeypatch.setattr(
+        bootstrap, 'Handle',
+        lambda agent_id: pytest.fail("Handle must not be built on timeout"),
+    )
 
     with pytest.raises(TimeoutError):
         asyncio.run(
             bootstrap.dispatch_bootstrap(
                 campaign=_FakeCampaign(),
+                run_id='demo-001',
                 recipient='coordinator-agent',
                 exchange_factory=factory,
                 discover_timeout_s=0.05,
@@ -162,9 +204,8 @@ def test_main_returns_2_on_recipient_timeout(monkeypatch, capsys) -> None:
     bootstrap didn't actually happen. The stderr message should be the
     TimeoutError's text (which names the missing recipient)."""
     async def _raise(*args, **kwargs):
-        raise TimeoutError('Timed out ... missing=[\'coordinator-agent\']')
+        raise TimeoutError("Timed out ... missing=['coordinator-agent']")
     monkeypatch.setattr(bootstrap, 'dispatch_bootstrap', _raise)
-    # Bypass the campaign-file load to keep the test offline.
     monkeypatch.setattr(bootstrap, 'load_campaign',
                         lambda path: _FakeCampaign())
     monkeypatch.setattr(bootstrap, 'build_exchange_factory',
@@ -172,6 +213,7 @@ def test_main_returns_2_on_recipient_timeout(monkeypatch, capsys) -> None:
 
     code = bootstrap.main([
         '--campaign', 'mace-ensemble-screening-20',
+        '--run-id', 'demo-001',
         '--exchange-type', 'local',
     ])
     assert code == 2

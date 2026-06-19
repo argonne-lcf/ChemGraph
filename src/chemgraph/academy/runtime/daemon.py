@@ -4,7 +4,9 @@ import argparse
 import asyncio
 import pathlib
 import signal
+from typing import Any
 
+from academy.exchange.cloud.client import HttpAgentRegistration
 from academy.handle import Handle
 from academy.runtime import Runtime
 from academy.runtime import RuntimeConfig
@@ -12,7 +14,9 @@ from academy.runtime import RuntimeConfig
 from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.runtime.exchange import build_exchange_factory
 from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
-from chemgraph.academy.runtime.registration import discover_peer_agent_ids
+from chemgraph.academy.runtime.registration import deterministic_agent_id
+from chemgraph.academy.runtime.registration import register_agent_with_uid
+from chemgraph.academy.runtime.registration import wait_for_peers_alive
 from chemgraph.academy.observability.run_artifacts import initialize_run_files
 from chemgraph.academy.observability.run_artifacts import (
     wait_for_agent_statuses_finished,
@@ -105,44 +109,57 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
             start_listener=False,
         )
         try:
-            registration = await registrar.register_agent(
-                ChemGraphLogicalAgent,
-                name=agent_spec.name,
+            # Register THIS rank's agent with a deterministic UID
+            # derived from (run_id, agent_name). The hosted exchange
+            # strips AgentId.name from discover() responses, so the
+            # name-based filter we used to do never matched on the
+            # public HttpExchange. Deterministic UIDs let every site
+            # construct the same AgentId for the same (run, agent)
+            # without ever needing discover() to echo the name back.
+            my_agent_id = deterministic_agent_id(
+                run_id=config.run_dir.name, agent_name=agent_spec.name,
             )
-            # Operator-visible lifecycle prints. The default INFO
-            # logging is too verbose for these landmark events to be
-            # spottable; use print so they land on stdout regardless
-            # of log level. Each line is a single grep-able phrase
-            # so an operator can ``grep -E '\[daemon\]'`` to follow
-            # progress through the silent stretches.
+            await register_agent_with_uid(
+                registrar._transport, ChemGraphLogicalAgent, my_agent_id,
+            )
+            registration = HttpAgentRegistration(agent_id=my_agent_id)
             print(
                 f"[daemon] rank{config.rank} registered "
-                f"{agent_spec.name!r} on the exchange",
+                f"{agent_spec.name!r} on the exchange "
+                f"(uid={my_agent_id.uid})",
                 flush=True,
             )
+
             wanted_peers = [
                 p for p in agent_spec.allowed_peers if p != agent_spec.name
             ]
+            # Compute peer AgentIds locally -- no discovery polling
+            # needed for the identity itself, since every site agrees
+            # on the deterministic UID. We still poll discover() as a
+            # LIVENESS PROBE so we don't proceed to bootstrap before
+            # the other side's mailbox is actually up.
+            peer_agent_ids: dict[str, Any] = {
+                peer: deterministic_agent_id(
+                    run_id=config.run_dir.name, agent_name=peer,
+                )
+                for peer in wanted_peers
+            }
             if wanted_peers:
                 print(
-                    f"[daemon] rank{config.rank} discovering peers "
-                    f"{wanted_peers} (timeout {config.startup_timeout_s:.0f}s)...",
+                    f"[daemon] rank{config.rank} waiting for peers "
+                    f"{wanted_peers} to come online "
+                    f"(timeout {config.startup_timeout_s:.0f}s)...",
                     flush=True,
                 )
-            peer_agent_ids = await discover_peer_agent_ids(
-                registrar._transport,
-                # Skip self if the campaign mistakenly lists own name
-                # as a peer (validate_campaign rejects this, but
-                # defense-in-depth costs nothing).
-                wanted_peers,
-                agent_class=ChemGraphLogicalAgent,
-                timeout_s=config.startup_timeout_s,
-            )
-            if wanted_peers:
+                await wait_for_peers_alive(
+                    registrar._transport,
+                    peer_agent_ids.values(),
+                    agent_class=ChemGraphLogicalAgent,
+                    timeout_s=config.startup_timeout_s,
+                )
                 print(
-                    f"[daemon] rank{config.rank} discovered "
-                    f"{len(peer_agent_ids)} peer(s): "
-                    f"{sorted(peer_agent_ids.keys())}",
+                    f"[daemon] rank{config.rank} all {len(peer_agent_ids)} "
+                    f"peer(s) are alive: {sorted(peer_agent_ids.keys())}",
                     flush=True,
                 )
         finally:
