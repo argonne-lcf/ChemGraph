@@ -127,6 +127,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "'chemgraph academy bootstrap' subcommand."
         ),
     )
+    parser.add_argument(
+        "--startup-timeout-s",
+        type=float,
+        default=None,
+        help=(
+            "How long the daemon's cross-site peer-discovery loop "
+            "waits before giving up. Default 600s. Bump higher for "
+            "federated launches where HPC queue waits + Python "
+            "imports + cold-cache rsyncs can push one site's startup "
+            "well past the other site's discovery patience."
+        ),
+    )
     parser.add_argument("--no-start-redis", action="store_true")
     return parser.parse_args(argv)
 
@@ -317,7 +329,14 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         max_decisions=max_decisions,
         poll_timeout_s=2.0,
         idle_timeout_s=600.0,
-        startup_timeout_s=120.0,
+        # Default 600s (was 120s). Single-machine runs reach this
+        # codepath in seconds; the realistic worst case is federated
+        # launches where one site's HPC queue wait + Python imports
+        # outpaces the other site's peer-discovery patience. 10 min
+        # comfortably covers debug-scaling / workq scheduling delays
+        # without making single-machine failures slow to surface
+        # (the daemon prints a clear "missing=..." message regardless).
+        startup_timeout_s=(getattr(args, "startup_timeout_s", None) or 600.0),
         completion_timeout_s=60.0,
         status_interval_s=5.0,
         redis_host=socket.getfqdn(),
