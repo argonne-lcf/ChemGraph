@@ -457,6 +457,22 @@ def selected_agent(campaign: ChemGraphCampaign, rank: int) -> ChemGraphAgentSpec
     return campaign.agents[rank]
 
 
+def parse_agents_selection(raw: str | None) -> tuple[str, ...]:
+    """Parse a comma-separated ``--agents`` flag into a name tuple.
+
+    Returns an empty tuple when ``raw`` is None or empty (the
+    single-machine flow where every declared agent is launched).
+    Whitespace around individual names is trimmed; empty segments
+    (e.g. trailing comma) are dropped silently. Duplicate-name
+    detection lives in :func:`filter_agents` so the user-facing
+    error surfaces in one place regardless of where the list
+    originated.
+    """
+    if not raw:
+        return ()
+    return tuple(name.strip() for name in raw.split(',') if name.strip())
+
+
 def filter_agents(
     campaign: ChemGraphCampaign,
     agent_names: Sequence[str],

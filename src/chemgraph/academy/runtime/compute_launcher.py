@@ -15,6 +15,7 @@ from typing import Any
 from chemgraph.academy.campaigns import campaign_launch_defaults
 from chemgraph.academy.campaigns import resolve_campaign
 from chemgraph.academy.campaigns import resolve_lm_config_template
+from chemgraph.academy.core.campaign import parse_agents_selection
 from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
 from chemgraph.academy.runtime.exchange import exchange_uses_redis
 from chemgraph.academy.runtime.profiles import list_builtin_system_profiles
@@ -51,6 +52,12 @@ class AllocationPlan:
     chemgraph_repo_root: Path
     exchange_type: str = "redis"
     http_exchange_url: str | None = None
+    # Federated spawn-site fields. Empty ``agents`` = single-machine
+    # run-compute flow (every agent on the campaign is launched).
+    # Non-empty = this allocation only owns the listed agents; the
+    # other sites are presumed running elsewhere on the same exchange.
+    agents: tuple[str, ...] = ()
+    skip_bootstrap: bool = False
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -98,6 +105,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "Override URL for --exchange-type=http. Omit to use the "
             "Academy-hosted default."
+        ),
+    )
+    parser.add_argument(
+        "--agents",
+        default=None,
+        help=(
+            "Comma-separated subset of agent names this allocation owns "
+            "(federated spawn-site mode). When given, --agent-count is "
+            "derived from the slice length and the daemon receives "
+            "--agents so it filters the campaign down to the slice. "
+            "Omit to launch every declared agent (single-machine mode)."
+        ),
+    )
+    parser.add_argument(
+        "--no-bootstrap",
+        action="store_true",
+        help=(
+            "Skip rank-0's in-process bootstrap dispatch. Set by "
+            "spawn-site so kickoff is deferred to the separate "
+            "'chemgraph academy bootstrap' subcommand."
         ),
     )
     parser.add_argument("--no-start-redis", action="store_true")
@@ -258,7 +285,20 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         max_tokens=args.max_tokens,
     )
     _export_workflow_lm_environment(lm_config)
-    agent_count = args.agent_count or defaults.agent_count
+    # When --agents is given the slice length is authoritative. Otherwise
+    # use the CLI / packaged default. We refuse to mix --agents with an
+    # explicit --agent-count that disagrees, to avoid silent surprises.
+    agents_slice = parse_agents_selection(getattr(args, "agents", None))
+    if agents_slice:
+        derived_count = len(agents_slice)
+        if args.agent_count and args.agent_count != derived_count:
+            raise RuntimeError(
+                f"--agent-count={args.agent_count} contradicts --agents "
+                f"(which implies {derived_count}). Pass --agents alone."
+            )
+        agent_count = derived_count
+    else:
+        agent_count = args.agent_count or defaults.agent_count
     agents_per_node = args.agents_per_node or defaults.agents_per_node
     max_decisions = args.max_decisions or defaults.max_decisions
     redis_port = args.redis_port or profile.redis_port
@@ -290,6 +330,8 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         chemgraph_repo_root=Path(profile.repo_root).resolve(),
         exchange_type=args.exchange_type,
         http_exchange_url=args.http_exchange_url,
+        agents=agents_slice,
+        skip_bootstrap=bool(getattr(args, "no_bootstrap", False)),
     )
 
 
@@ -366,6 +408,13 @@ def run_allocation(plan: AllocationPlan) -> int:
         ]
         if plan.http_exchange_url:
             daemon_args += ["--http-exchange-url", plan.http_exchange_url]
+        # Federated spawn-site forwarding. Both flags are omitted on the
+        # single-machine run-compute flow so the daemon's argparse
+        # defaults (full campaign, bootstrap enabled) keep prior behavior.
+        if plan.agents:
+            daemon_args += ["--agents", ",".join(plan.agents)]
+        if plan.skip_bootstrap:
+            daemon_args += ["--no-bootstrap"]
         # When using the HTTP exchange on HPC compute nodes (e.g. Aurora),
         # ranks must reach exchange.academy-agents.org through the site's
         # outbound HTTP proxy. PALS/MPICH mpiexec strips most parent-shell

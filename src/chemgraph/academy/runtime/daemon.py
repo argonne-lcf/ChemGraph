@@ -25,6 +25,7 @@ from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
 from chemgraph.academy.core.campaign import filter_agents
 from chemgraph.academy.core.campaign import load_campaign
 from chemgraph.academy.core.campaign import namespace_for_run
+from chemgraph.academy.core.campaign import parse_agents_selection
 from chemgraph.academy.core.campaign import resolve_campaign_resources
 from chemgraph.academy.core.campaign import selected_agent
 from chemgraph.academy.core.campaign import validate_campaign
@@ -37,21 +38,6 @@ from chemgraph.academy.core.agent import ChemGraphLogicalAgent
 from chemgraph.academy.core.prompt import load_prompt_profile
 from chemgraph.academy.runtime.mcp_supervisor import MCPServerSupervisor
 from chemgraph.models.settings import load_lm_settings
-
-
-def _parse_agents_arg(raw: str | None) -> tuple[str, ...]:
-    """Parse the comma-separated ``--agents`` flag into a name tuple.
-
-    Returns an empty tuple when the flag is omitted (single-machine
-    ``run-compute`` flow, every agent on the campaign is launched).
-    Whitespace around individual names is trimmed; empty segments
-    (e.g. trailing comma) are dropped silently. Duplicate-name
-    detection lives in ``filter_agents`` so the user-facing error
-    surfaces in one place regardless of where the list came from.
-    """
-    if not raw:
-        return ()
-    return tuple(name.strip() for name in raw.split(',') if name.strip())
 
 
 async def run_daemon(config: ChemGraphDaemonConfig) -> int:
@@ -324,7 +310,7 @@ def config_from_args(args: argparse.Namespace) -> ChemGraphDaemonConfig:
         redis_namespace=args.redis_namespace or namespace_for_run(run_dir),
         exchange_type=args.exchange_type,
         http_exchange_url=args.http_exchange_url,
-        agents=_parse_agents_arg(args.agents),
+        agents=parse_agents_selection(args.agents),
         skip_bootstrap=bool(args.no_bootstrap),
         rank=rank_from_env(),
         local_rank=local_rank_from_env(),

@@ -284,6 +284,24 @@ Examples:
         help="Arguments forwarded to chemgraph.academy.runtime.compute_launcher.",
     )
 
+    spawn_site_parser = academy_sub.add_parser(
+        "spawn-site",
+        help=(
+            "Launch one site of a federated ChemGraph Academy campaign. "
+            "Like run-compute but only spawns the agent slice given via "
+            "--agents and skips internal bootstrap (use the 'bootstrap' "
+            "subcommand once every site is up)."
+        ),
+    )
+    spawn_site_parser.add_argument(
+        "spawn_site_args",
+        nargs=argparse.REMAINDER,
+        help=(
+            "Arguments forwarded to chemgraph.academy.runtime.compute_launcher. "
+            "--agents <comma-list> is required; --no-bootstrap is auto-added."
+        ),
+    )
+
     dashboard_parser = academy_sub.add_parser(
         "dashboard",
         help="Start the local dashboard launcher for a ChemGraph Academy run.",
@@ -625,6 +643,20 @@ def _handle_academy(args: argparse.Namespace) -> None:
         if code:
             sys.exit(code)
         return
+    if command == "spawn-site":
+        from chemgraph.academy.runtime.compute_launcher import main as compute_main
+
+        # spawn-site = run-compute with --no-bootstrap forced on. The
+        # compute_launcher's argparse tolerates a repeated --no-bootstrap,
+        # so we prepend it unconditionally rather than try to detect
+        # whether the operator already passed it.
+        forwarded = _strip_remainder_separator(args.spawn_site_args)
+        if "--no-bootstrap" not in forwarded:
+            forwarded = ["--no-bootstrap", *forwarded]
+        code = compute_main(forwarded)
+        if code:
+            sys.exit(code)
+        return
     if command == "campaigns":
         from chemgraph.academy.campaigns import list_campaigns
 
@@ -633,7 +665,7 @@ def _handle_academy(args: argparse.Namespace) -> None:
         return
     console.print(
         "Usage: chemgraph academy "
-        "{mpi-daemon,run-compute,dashboard,campaigns}.",
+        "{mpi-daemon,run-compute,spawn-site,dashboard,campaigns}.",
     )
 
 
