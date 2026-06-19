@@ -7,15 +7,18 @@ from pathlib import Path
 
 EXAMPLE_002 = 'example-002-mace-ensemble-screening'
 FEDERATED_HELLO = 'federated-hello'
+FEDERATED_CHAT = 'federated-chat'
 
 CAMPAIGNS = {
     'mace-ensemble-screening-20': f'{EXAMPLE_002}/campaign.jsonc',
     'federated-hello': f'{FEDERATED_HELLO}/campaign.jsonc',
+    'federated-chat': f'{FEDERATED_CHAT}/campaign.jsonc',
 }
 
 LM_CONFIG_TEMPLATES = {
     'argo-gpt54-mace-template': f'{EXAMPLE_002}/lm_config.json',
     'argo-gpt5mini-federated-hello': f'{FEDERATED_HELLO}/lm_config.json',
+    'argo-gpt5mini-federated-chat': f'{FEDERATED_CHAT}/lm_config.json',
 }
 
 
@@ -45,6 +48,16 @@ CAMPAIGN_LAUNCH_DEFAULTS = {
         agent_count=2,
         agents_per_node=1,
         max_decisions=4,
+    ),
+    # Multi-turn cross-HPC counter chat. ~10 send/receive round-trips
+    # so the dashboard has actual material to render. Each agent runs
+    # ~6 reasoning rounds (send, receive, send, ..., reach 10,
+    # finish_turn). max_decisions=20 gives slack for retries.
+    'federated-chat': CampaignLaunchDefaults(
+        lm_config_template='argo-gpt5mini-federated-chat',
+        agent_count=2,
+        agents_per_node=1,
+        max_decisions=20,
     ),
 }
 

@@ -1,0 +1,45 @@
+{
+  // ---------------------------------------------------------------------
+  // Federated-chat: a multi-turn cross-HPC conversation. Two agents
+  // bounce a counter back and forth N times, each incrementing it,
+  // until the counter hits a threshold and they finish_turn. Designed
+  // for demos -- produces ~40 events on the dashboard (decisions,
+  // send_message, message_received) so the federated UI (Sites
+  // header, message-flow edge, cross-site Route label) has real
+  // material to render.
+  //
+  // Run as:
+  //   chemgraph academy dashboard -- federated-chat-XXX \
+  //     --system aurora,crux --campaign federated-chat --overwrite-run
+  //   chemgraph academy spawn-site -- --system aurora --run-id ... \
+  //     --campaign federated-chat --agents agent-aurora --exchange-type http
+  //   chemgraph academy spawn-site -- --system crux --run-id ... \
+  //     --campaign federated-chat --agents agent-crux --exchange-type http
+  //   chemgraph academy bootstrap -- --campaign federated-chat \
+  //     --run-id ... --exchange-type http
+  // ---------------------------------------------------------------------
+  "run_id": "federated-chat",
+  "user_task": "Federated counter chat: bounce an integer counter between agent-aurora and agent-crux, each incrementing it by 1, until it reaches 10. Then both finish_turn.",
+  "prompt_profile": "prompt_profiles/default.json",
+  "initial_agent": "agent-aurora",
+  "resources": {},
+  "mcp_servers": [],
+  "agents": [
+    {
+      "name": "agent-aurora",
+      "role": "FederatedCounterInitiator",
+      "mission": "You are agent-aurora, running on the Aurora HPC. You are playing a counter-bouncing game with agent-crux across the HPC boundary. Rules: (1) On the bootstrap round, send EXACTLY ONE message to agent-crux with content 'counter=1' and tldr 'counter=1'. Set reply_requested=true. Then call finish_turn. (2) On every subsequent round where you receive a message from agent-crux containing 'counter=N', if N < 10 then send EXACTLY ONE reply to agent-crux with content 'counter=N+1' (you compute N+1 yourself, e.g. counter=3 if you received counter=2) and tldr 'counter=N+1', reply_requested=true, then finish_turn. If N >= 10, send NOTHING and just call finish_turn -- the game is over. (3) NEVER send more than one message per round. (4) NEVER initiate a new chain; only reply when a peer message arrives.",
+      "allowed_peers": ["agent-crux"],
+      "mcp_servers": [],
+      "resources": []
+    },
+    {
+      "name": "agent-crux",
+      "role": "FederatedCounterResponder",
+      "mission": "You are agent-crux, running on the Crux HPC. You are playing a counter-bouncing game with agent-aurora across the HPC boundary. Rules: (1) You NEVER initiate a message; you only ever reply. (2) On every round where you receive a message from agent-aurora containing 'counter=N', if N < 10 then send EXACTLY ONE reply to agent-aurora with content 'counter=N+1' (you compute N+1 yourself) and tldr 'counter=N+1', reply_requested=true, then finish_turn. If N >= 10, send NOTHING and just call finish_turn -- the game is over. (3) NEVER send more than one message per round.",
+      "allowed_peers": ["agent-aurora"],
+      "mcp_servers": [],
+      "resources": []
+    }
+  ]
+}
