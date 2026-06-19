@@ -190,6 +190,14 @@ async def dispatch_bootstrap(
             confidence=1.0,
         )
         handle: Handle[Any] = Handle(recipient_id)
+        # The Handle reads its outbound exchange from a contextvar that
+        # only gets set when a client is "active" -- either via
+        # ``async with client:`` or via ``client.register_handle()``.
+        # The daemon-side code path uses Runtime which sets the context
+        # for us; the standalone bootstrap command does NOT, so without
+        # this register_handle call the action raises
+        # ``ExchangeClientNotFoundError``.
+        client.register_handle(handle)
         await handle.action('receive_message', message)
         logger.info(
             'Bootstrap message dispatched: recipient=%s message_id=%s',

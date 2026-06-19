@@ -80,6 +80,14 @@ class _FakeClient:
     def __init__(self, transport):
         self._transport = transport
         self.close = AsyncMock()
+        self.registered_handles: list = []
+
+    def register_handle(self, handle):
+        # Real client binds the handle to its exchange contextvar.
+        # The fake just records it so tests can assert the bootstrap
+        # path called register_handle before dispatching the action
+        # (without which Handle.action raises ExchangeClientNotFoundError).
+        self.registered_handles.append(handle)
 
 
 class _FakeFactory:
