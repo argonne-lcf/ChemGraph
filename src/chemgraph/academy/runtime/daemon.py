@@ -11,6 +11,7 @@ from academy.runtime import RuntimeConfig
 
 from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.runtime.exchange import build_exchange_factory
+from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
 from chemgraph.academy.runtime.registration import load_academy_registrations
 from chemgraph.academy.runtime.registration import wait_academy_registrations
 from chemgraph.academy.runtime.registration import write_academy_registrations
@@ -216,8 +217,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--redis-namespace')
     parser.add_argument(
         '--exchange-type',
-        choices=('redis', 'local', 'hybrid'),
+        choices=SUPPORTED_EXCHANGE_TYPES,
         default='redis',
+    )
+    parser.add_argument(
+        '--http-exchange-url',
+        default=None,
+        help=(
+            "Override URL for --exchange-type=http. Omit to use the "
+            "Academy-hosted default. Ignored for other exchange types."
+        ),
     )
     parser.add_argument('--chemgraph-repo-root')
     return parser.parse_args()
@@ -247,6 +256,7 @@ def config_from_args(args: argparse.Namespace) -> ChemGraphDaemonConfig:
         redis_port=args.redis_port,
         redis_namespace=args.redis_namespace or namespace_for_run(run_dir),
         exchange_type=args.exchange_type,
+        http_exchange_url=args.http_exchange_url,
         rank=rank_from_env(),
         local_rank=local_rank_from_env(),
         chemgraph_repo_root=(

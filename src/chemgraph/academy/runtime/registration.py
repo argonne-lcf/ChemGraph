@@ -7,6 +7,7 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
+from academy.exchange.cloud.client import HttpAgentRegistration
 from academy.exchange.hybrid import HybridAgentRegistration
 from academy.exchange.local import LocalAgentRegistration
 from academy.exchange.redis import RedisAgentRegistration
@@ -21,6 +22,7 @@ _REGISTRATION_TYPES: dict[str, type[BaseModel]] = {
     'local': LocalAgentRegistration,
     'hybrid': HybridAgentRegistration,
     'redis': RedisAgentRegistration,
+    'http': HttpAgentRegistration,
 }
 
 

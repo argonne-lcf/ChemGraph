@@ -56,3 +56,101 @@ def test_run_allocation_builds_single_mpiexec_command(tmp_path, monkeypatch) -> 
     assert "--exchange-type" in cmd
     assert "--chemgraph-repo-root" in cmd
     assert (tmp_path / "launch_command.txt").exists()
+
+
+# ---------------------------------------------------------------------------
+# Phase B.1: --exchange-type http + cross-HPC plumbing
+# ---------------------------------------------------------------------------
+
+
+def _plan_http(tmp_path: Path, *, http_exchange_url: str | None = None) -> AllocationPlan:
+    base = _plan(tmp_path)
+    import dataclasses
+    return dataclasses.replace(
+        base,
+        exchange_type="http",
+        http_exchange_url=http_exchange_url,
+    )
+
+
+def test_run_allocation_with_http_exchange_does_not_start_redis(
+    tmp_path, monkeypatch,
+) -> None:
+    """When the exchange doesn't talk to Redis (``http``, ``local``),
+    rank 0 must NOT start a redis-server subprocess. Otherwise compute
+    nodes without redis-server installed fail at launch, and nodes with
+    it pointlessly bind a port we never use."""
+    started_subprocess: list[list[str]] = []
+
+    def fake_popen(cmd, **kwargs):  # pragma: no cover - exercised via assert below
+        started_subprocess.append(list(cmd))
+        raise AssertionError(
+            f"Popen should not be called for http exchange; got {cmd!r}",
+        )
+
+    monkeypatch.setattr(compute_launcher.subprocess, "Popen", fake_popen)
+    # wait_redis is the other Redis-touching site; assert it's not called.
+    def boom(*args, **kwargs):
+        raise AssertionError("wait_redis should not run for http exchange")
+    monkeypatch.setattr(compute_launcher, "wait_redis", boom)
+    monkeypatch.setattr(
+        compute_launcher.subprocess,
+        "call",
+        lambda cmd: 0,
+    )
+
+    plan = _plan_http(tmp_path)
+    # start_redis is True by default; verify the http-exchange code path
+    # still skips Redis. This is the "operator forgot --no-start-redis"
+    # case, which used to fail loudly on nodes without redis-server.
+    import dataclasses
+    plan = dataclasses.replace(plan, start_redis=True)
+    assert compute_launcher.run_allocation(plan) == 0
+    assert started_subprocess == []
+
+
+def test_run_allocation_forwards_http_exchange_url_when_set(
+    tmp_path, monkeypatch,
+) -> None:
+    """``--http-exchange-url`` (operator override for a self-hosted
+    exchange) must flow into the daemon's argv. Otherwise the daemon
+    silently falls back to the hosted default."""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(compute_launcher, "wait_redis", lambda *a, **k: None)
+    monkeypatch.setattr(
+        compute_launcher.subprocess,
+        "call",
+        lambda cmd: calls.append(cmd) or 0,
+    )
+
+    custom = "https://my-private-exchange.example.com/v1"
+    plan = _plan_http(tmp_path, http_exchange_url=custom)
+    assert compute_launcher.run_allocation(plan) == 0
+
+    cmd = calls[0]
+    assert "--http-exchange-url" in cmd
+    assert custom in cmd
+    # Sanity: also confirm --exchange-type http rode along.
+    type_idx = cmd.index("--exchange-type")
+    assert cmd[type_idx + 1] == "http"
+
+
+def test_run_allocation_omits_http_exchange_url_flag_when_unset(
+    tmp_path, monkeypatch,
+) -> None:
+    """When no override is given, the daemon argv must NOT carry an
+    empty ``--http-exchange-url`` (which argparse would happily parse
+    as a literal empty-string URL and pass to HttpExchangeFactory)."""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(compute_launcher, "wait_redis", lambda *a, **k: None)
+    monkeypatch.setattr(
+        compute_launcher.subprocess,
+        "call",
+        lambda cmd: calls.append(cmd) or 0,
+    )
+
+    plan = _plan_http(tmp_path, http_exchange_url=None)
+    assert compute_launcher.run_allocation(plan) == 0
+
+    cmd = calls[0]
+    assert "--http-exchange-url" not in cmd

@@ -153,6 +153,13 @@ class ChemGraphDaemonConfig:
     local_rank: int | None
     chemgraph_repo_root: pathlib.Path
     exchange_type: str = 'redis'
+    # URL of an HTTP exchange server when exchange_type == 'http'.
+    # ``None`` selects the Academy-hosted default
+    # (https://exchange.academy-agents.org/v1), which is gated by
+    # Globus Auth and uses the bearer token cached at
+    # ``$XDG_DATA_HOME/academy/storage.db``. Set this for a
+    # self-hosted ``python -m academy.exchange.cloud`` server.
+    http_exchange_url: str | None = None
 
 
 def namespace_for_run(run_dir: pathlib.Path) -> str:

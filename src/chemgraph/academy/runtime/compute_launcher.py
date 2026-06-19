@@ -15,6 +15,8 @@ from typing import Any
 from chemgraph.academy.campaigns import campaign_launch_defaults
 from chemgraph.academy.campaigns import resolve_campaign
 from chemgraph.academy.campaigns import resolve_lm_config_template
+from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
+from chemgraph.academy.runtime.exchange import exchange_uses_redis
 from chemgraph.academy.runtime.profiles import list_builtin_system_profiles
 from chemgraph.academy.runtime.profiles import load_system_profile
 from chemgraph.academy.runtime.profiles.system import SystemProfile
@@ -48,6 +50,7 @@ class AllocationPlan:
     mpiexec: str
     chemgraph_repo_root: Path
     exchange_type: str = "redis"
+    http_exchange_url: str | None = None
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -79,8 +82,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--redis-port", type=int)
     parser.add_argument(
         "--exchange-type",
-        choices=("redis", "local", "hybrid"),
+        choices=SUPPORTED_EXCHANGE_TYPES,
         default="redis",
+        help=(
+            "Academy exchange backend. 'http' targets an HTTP exchange "
+            "server (Academy-hosted default unless --http-exchange-url "
+            "is given) and reaches across HPC sites; requires a cached "
+            "Globus token (run scripts/academy_login_globus.py once) "
+            "and on Aurora compute nodes the ALCF http(s)_proxy env "
+            "vars must be set before launch."
+        ),
+    )
+    parser.add_argument(
+        "--http-exchange-url",
+        help=(
+            "Override URL for --exchange-type=http. Omit to use the "
+            "Academy-hosted default."
+        ),
     )
     parser.add_argument("--no-start-redis", action="store_true")
     return parser.parse_args(argv)
@@ -94,8 +112,29 @@ def _prepend_path(name: str, entries: list[str]) -> None:
     os.environ[name] = os.pathsep.join(values)
 
 
-def _prepare_environment(profile: SystemProfile) -> None:
+_PROXY_ENV_NAMES = frozenset({
+    "http_proxy", "HTTP_PROXY",
+    "https_proxy", "HTTPS_PROXY",
+    "all_proxy", "ALL_PROXY",
+})
+
+
+def _prepare_environment(
+    profile: SystemProfile,
+    *,
+    exchange_type: str = "redis",
+) -> None:
+    # Aurora's profile lists http(s)_proxy in unset_env so that LM traffic
+    # going through the local UAN relay (127.0.0.1:<relay>) doesn't pick up
+    # a stray site proxy. That's correct for Redis-based campaigns, but for
+    # --exchange-type=http the ranks MUST reach exchange.academy-agents.org
+    # over the public internet, which on Aurora compute nodes only works
+    # through the ALCF HTTP proxy. Keep the proxy vars when the exchange
+    # needs them. The no_proxy list set below still excludes 127.0.0.1 +
+    # .alcf.anl.gov so the LM relay continues to bypass the proxy.
     for name in profile.unset_env:
+        if exchange_type == "http" and name in _PROXY_ENV_NAMES:
+            continue
         os.environ.pop(name, None)
     _prepend_path("PATH", profile.path_entries)
     _prepend_path("PYTHONPATH", profile.pythonpath_entries)
@@ -192,7 +231,7 @@ def _run_token() -> str:
 def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
     """Resolve a system profile and dashboard metadata into an allocation plan."""
     profile = load_system_profile(args.system)
-    _prepare_environment(profile)
+    _prepare_environment(profile, exchange_type=args.exchange_type)
 
     defaults = campaign_launch_defaults(args.campaign)
     run_dir = Path(args.run_dir or Path(profile.run_root) / args.run_id).resolve()
@@ -250,6 +289,7 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         mpiexec=profile.mpiexec,
         chemgraph_repo_root=Path(profile.repo_root).resolve(),
         exchange_type=args.exchange_type,
+        http_exchange_url=args.http_exchange_url,
     )
 
 
@@ -274,7 +314,7 @@ def run_allocation(plan: AllocationPlan) -> int:
     """Start Redis if requested and run per-rank daemons under mpiexec."""
     plan.run_dir.mkdir(parents=True, exist_ok=True)
     redis_proc: subprocess.Popen[bytes] | None = None
-    uses_redis = plan.exchange_type in {"redis", "hybrid"}
+    uses_redis = exchange_uses_redis(plan.exchange_type)
     if plan.start_redis and uses_redis:
         redis_server = shutil.which("redis-server")
         if redis_server is None:
@@ -324,10 +364,30 @@ def run_allocation(plan: AllocationPlan) -> int:
             "--exchange-type", plan.exchange_type,
             "--chemgraph-repo-root", str(plan.chemgraph_repo_root),
         ]
+        if plan.http_exchange_url:
+            daemon_args += ["--http-exchange-url", plan.http_exchange_url]
+        # When using the HTTP exchange on HPC compute nodes (e.g. Aurora),
+        # ranks must reach exchange.academy-agents.org through the site's
+        # outbound HTTP proxy. PALS/MPICH mpiexec strips most parent-shell
+        # env vars from spawned ranks, so http_proxy / https_proxy don't
+        # propagate automatically -- force forwarding via --genvall and
+        # set the proxy vars in our own environ first so they are part
+        # of the parent env that --genvall snapshots.
+        genv_flags: list[str] = []
+        if plan.exchange_type == "http":
+            for name in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+                value = os.environ.get(name)
+                if value:
+                    genv_flags += ["--genv", f"{name}={value}"]
+            # --genvall snapshots the whole parent env as belt-and-braces;
+            # the explicit per-var entries surface in launch_command.txt for
+            # post-hoc debugging when a rank can't reach the exchange.
+            genv_flags = ["--genvall", *genv_flags]
         cmd = [
             plan.mpiexec,
             "-n", str(plan.agent_count),
             "--ppn", str(plan.agents_per_node),
+            *genv_flags,
             sys.executable, "-m", "chemgraph.cli.main", "academy", "mpi-daemon", "--",
             *daemon_args,
         ]
