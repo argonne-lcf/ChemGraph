@@ -99,16 +99,48 @@
         : [];
       nextSnapshot.sitesByAgent = {};
       if (nextSnapshot.federated) {
+        // Merge per-site status/placement/summary up to the top level so
+        // the rest of the app (agents(), renderMetrics(), workflow code)
+        // can read snapshot.status / snapshot.placement exactly like in
+        // single-site mode. Without this merge `snapshot.status?.agents`
+        // is undefined in federated runs and the entire graph + metrics
+        // panel renders empty even though events stream in.
+        const mergedAgents = [];
+        const mergedPlacements = {};
+        const seenAgentIds = new Set();
+        let mergedSchema = null;
+        const mergedStatusExtras = {};
         for (const [siteName, siteData] of Object.entries(nextSnapshot.sites)) {
           const agents = (siteData?.status?.agents) || [];
           agents.forEach(spec => {
             const agentId = spec.agent_id || spec.agent_name || spec.name;
-            if (agentId) nextSnapshot.sitesByAgent[agentId] = siteName;
+            if (agentId) {
+              nextSnapshot.sitesByAgent[agentId] = siteName;
+              if (!seenAgentIds.has(agentId)) {
+                seenAgentIds.add(agentId);
+                mergedAgents.push({...spec, site: siteName});
+              }
+            }
           });
           const placements = (siteData?.placement?.agents) || {};
-          Object.keys(placements).forEach(agentId => {
+          Object.entries(placements).forEach(([agentId, placement]) => {
             if (!(agentId in nextSnapshot.sitesByAgent)) {
               nextSnapshot.sitesByAgent[agentId] = siteName;
+            }
+            if (!(agentId in mergedPlacements)) {
+              mergedPlacements[agentId] = placement;
+            }
+          });
+          // Carry a representative schema + common status scalars so
+          // isWorkflowMode() and "campaign / mode" lookups behave the
+          // same as single-site. Last-write-wins is fine here -- all
+          // sites in a federated run share the same campaign/mode.
+          if (siteData?.schema) mergedSchema = siteData.schema;
+          const siteStatus = siteData?.status || {};
+          ['campaign', 'campaign_kind', 'mode', 'converged', 'query',
+            'workflow_type', 'model_name'].forEach(key => {
+            if (siteStatus[key] !== undefined && mergedStatusExtras[key] === undefined) {
+              mergedStatusExtras[key] = siteStatus[key];
             }
           });
         }
@@ -119,6 +151,14 @@
             nextSnapshot.sitesByAgent[event.agent_id] = event.site;
           }
         });
+        nextSnapshot.status = {
+          ...mergedStatusExtras,
+          agents: mergedAgents,
+        };
+        nextSnapshot.placement = {agents: mergedPlacements};
+        if (mergedSchema && !nextSnapshot.schema) {
+          nextSnapshot.schema = mergedSchema;
+        }
       }
       const nextIdentity = identityForSnapshot(nextSnapshot);
       const previousEventCount = snapshot?.events?.length || 0;
