@@ -52,7 +52,14 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
     # all agree on the same agent ordering.
     if config.agents:
         campaign = filter_agents(campaign, config.agents)
-    validate_campaign(campaign, config.agent_count)
+    # Loosen cross-site peer / initial_agent checks for federated
+    # slices -- those names may legitimately reference agents this
+    # site doesn't own (they're discovered through the exchange).
+    validate_campaign(
+        campaign,
+        config.agent_count,
+        federated=bool(config.agents),
+    )
     agent_spec = selected_agent(campaign, config.rank)
     placement = placement_payload(config, agent_spec.name)
     supervisor = MCPServerSupervisor(

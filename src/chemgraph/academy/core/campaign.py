@@ -401,7 +401,24 @@ def _resolve_campaign_relative_path(
     return path.resolve()
 
 
-def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
+def validate_campaign(
+    campaign: ChemGraphCampaign,
+    agent_count: int,
+    *,
+    federated: bool = False,
+) -> None:
+    """Validate a campaign before the daemon constructs agents from it.
+
+    ``federated=True`` loosens two single-machine assumptions that don't
+    hold for federated spawn-site launches:
+      * ``initial_agent`` may name an agent hosted on another site
+        (this site only has a slice).
+      * each agent's ``allowed_peers`` may reference agents on other
+        sites that aren't in this slice. Those are looked up via the
+        exchange at runtime; the validator can't know about them.
+    The intra-slice checks (no duplicate names, no self-peer, MCP
+    server / resource references all resolvable) still run.
+    """
     if len(campaign.agents) != agent_count:
         raise RuntimeError(
             f'campaign defines {len(campaign.agents)} agents but '
@@ -410,7 +427,7 @@ def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
     names = [agent.name for agent in campaign.agents]
     if len(set(names)) != len(names):
         raise RuntimeError('campaign agent names must be unique')
-    if campaign.initial_agent not in names:
+    if not federated and campaign.initial_agent not in names:
         raise RuntimeError(
             f'initial_agent {campaign.initial_agent!r} is not an agent',
         )
@@ -419,11 +436,12 @@ def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
         raise RuntimeError('campaign MCP server names must be unique')
     declared_servers = set(server_names)
     for agent in campaign.agents:
-        unknown = sorted(set(agent.allowed_peers).difference(names))
-        if unknown:
-            raise RuntimeError(
-                f'{agent.name} has unknown allowed peers: {unknown}',
-            )
+        if not federated:
+            unknown = sorted(set(agent.allowed_peers).difference(names))
+            if unknown:
+                raise RuntimeError(
+                    f'{agent.name} has unknown allowed peers: {unknown}',
+                )
         if agent.name in agent.allowed_peers:
             raise RuntimeError(f'{agent.name} must not list itself as a peer')
         unknown_servers = sorted(set(agent.mcp_servers).difference(declared_servers))

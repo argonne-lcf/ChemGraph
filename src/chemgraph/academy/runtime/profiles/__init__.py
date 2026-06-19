@@ -7,6 +7,7 @@ from pathlib import Path
 BUILTIN_SYSTEM_PROFILES = {
     "aurora": "aurora.template.json",
     "polaris": "polaris.template.json",
+    "crux": "crux.template.json",
 }
 
 

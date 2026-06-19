@@ -414,3 +414,44 @@ def test_filter_agents_rejects_duplicate_names() -> None:
     campaign = load_campaign("mace-ensemble-screening-20")
     with pytest.raises(RuntimeError, match="duplicate agent names"):
         filter_agents(campaign, ["mace-agent", "mace-agent"])
+
+
+def test_validate_campaign_federated_loosens_cross_site_peer_check() -> None:
+    """In a federated spawn-site slice, allowed_peers / initial_agent
+    may legitimately reference agents owned by another site. Strict
+    validation (the default) rejects those; ``federated=True`` lets
+    them through because the daemon will discover those peers via the
+    exchange at runtime instead of from this slice's agent list."""
+    from chemgraph.academy.core.campaign import (
+        filter_agents, load_campaign, validate_campaign,
+    )
+    campaign = load_campaign("federated-hello")
+    slice_aurora = filter_agents(campaign, ["agent-aurora"])
+
+    # Strict validation rejects the cross-site peer reference.
+    with pytest.raises(RuntimeError, match="unknown allowed peers"):
+        validate_campaign(slice_aurora, agent_count=1)
+
+    # federated=True accepts it.
+    validate_campaign(slice_aurora, agent_count=1, federated=True)
+
+
+def test_validate_campaign_federated_still_rejects_self_peer() -> None:
+    """The 'agent must not list itself as a peer' invariant is local
+    to the slice and stays a hard error even in federated mode --
+    self-peering would loop messages back to the sender, regardless
+    of how many sites the campaign spans."""
+    from chemgraph.academy.core.campaign import (
+        ChemGraphAgentSpec, ChemGraphCampaign, validate_campaign,
+    )
+    import pathlib
+    bad = ChemGraphCampaign(
+        run_id="r", user_task="t", initial_agent="a",
+        prompt_profile=pathlib.Path("p"),
+        agents=(ChemGraphAgentSpec(
+            name="a", role="r", mission="m",
+            allowed_peers=("a",),  # <-- self-peer
+        ),),
+    )
+    with pytest.raises(RuntimeError, match="must not list itself as a peer"):
+        validate_campaign(bad, agent_count=1, federated=True)
