@@ -39,7 +39,16 @@ class SystemProfile(BaseModel):
 
 def load_system_profile(path_or_name: str | Path) -> SystemProfile:
     profile_path = resolve_builtin_system_profile(path_or_name)
-    text = os.path.expandvars(profile_path.read_text(encoding="utf-8"))
+    # Default ALCF_SSH_USER to ALCF_USER when unset. This separates the
+    # *SSH login* (used in ``remote_host``) from the *path component*
+    # (used everywhere else), which matters for accounts whose login
+    # differs from their workspace dir name -- e.g. login ``jinchuli``
+    # but workspace under ``/flare/.../jinchu/``. Most users have one
+    # equal to the other and the default keeps their setup unchanged.
+    env = os.environ.copy()
+    if "ALCF_USER" in env and not env.get("ALCF_SSH_USER"):
+        env["ALCF_SSH_USER"] = env["ALCF_USER"]
+    text = _expand_with(profile_path.read_text(encoding="utf-8"), env)
     unresolved = sorted(set(re.findall(r"\$\{([^}]+)\}", text)))
     if unresolved:
         raise ValueError(
@@ -48,3 +57,19 @@ def load_system_profile(path_or_name: str | Path) -> SystemProfile:
         )
     data = json.loads(text)
     return SystemProfile.model_validate(data)
+
+
+def _expand_with(text: str, env: dict[str, str]) -> str:
+    """``os.path.expandvars`` but reading from a caller-supplied env dict.
+
+    The stdlib's ``expandvars`` always reads ``os.environ`` directly,
+    which means ``ALCF_SSH_USER`` defaulted to ``ALCF_USER`` only by
+    mutating the process environment. That'd leak the default into
+    every subsequent caller. Substituting via regex keeps the change
+    local.
+    """
+    return re.sub(
+        r"\$\{([^}]+)\}",
+        lambda m: env.get(m.group(1), m.group(0)),
+        text,
+    )

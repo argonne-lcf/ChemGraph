@@ -1,6 +1,6 @@
 {
   "name": "crux",
-  "remote_host": "${ALCF_USER}@crux.alcf.anl.gov",
+  "remote_host": "${ALCF_SSH_USER}@crux.alcf.anl.gov",
   "remote_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}",
   "repo_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph",
   "run_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/runs",
