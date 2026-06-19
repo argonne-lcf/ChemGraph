@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+# Skip when the optional 'academy' extra is absent.
+pytest.importorskip("academy")
+
 from chemgraph.academy.runtime import dashboard_launcher
 from chemgraph.academy.runtime.profiles.system import SystemProfile
 

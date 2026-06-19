@@ -3,6 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
+# Skip when the optional 'academy' extra is absent; this module
+# imports academy.exchange.* directly at top level.
+pytest.importorskip("academy")
+
 from academy.exchange.hybrid import HybridAgentRegistration
 from academy.exchange.local import LocalAgentRegistration
 from academy.exchange.redis import RedisAgentRegistration

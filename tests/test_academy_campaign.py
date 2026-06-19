@@ -4,6 +4,13 @@ import json
 
 import pytest
 
+# Skip the whole module when the optional 'academy' extra is absent.
+# Even though this file only touches the pure-stdlib parts of
+# chemgraph.academy, the import guard is applied uniformly across the
+# academy test suite so pytest collection stays clean on a CPU-only
+# checkout without per-test bookkeeping.
+pytest.importorskip("academy")
+
 from chemgraph.academy.core.campaign import campaign_bootstrap_text
 from chemgraph.academy.core.campaign import load_campaign
 from chemgraph.academy.core.campaign import MCPServerSpec

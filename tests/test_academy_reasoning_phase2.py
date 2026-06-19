@@ -8,6 +8,9 @@ from typing import Any
 
 import pytest
 
+# Skip when the optional 'academy' extra is absent.
+pytest.importorskip("academy")
+
 from chemgraph.academy.core import agent as agent_module
 from chemgraph.academy.core import turn as turn_module
 from chemgraph.academy.core.agent import ChemGraphLogicalAgent

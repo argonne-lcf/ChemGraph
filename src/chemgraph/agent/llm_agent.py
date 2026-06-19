@@ -24,6 +24,11 @@ from chemgraph.models.supported_models import (
 
 )
 
+from chemgraph.schemas.ase_input import (
+    get_available_calculator_names,
+    get_calculator_selection_context,
+    get_default_calculator_name,
+)
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     get_single_agent_prompt,
@@ -317,6 +322,33 @@ class ChemGraph:
         # LLM is not told to call a tool that is unavailable.
         if not self.human_supervised and self.system_prompt == single_agent_prompt:
             self.system_prompt = get_single_agent_prompt(human_supervised=False)
+
+        self.available_calculators = get_available_calculator_names()
+        self.default_calculator = get_default_calculator_name()
+        self.calculator_selection_context = get_calculator_selection_context()
+
+        def append_calculator_context(prompt: str) -> str:
+            """Append calculator availability guidance to a prompt once.
+
+            Parameters
+            ----------
+            prompt : str
+                Prompt text to augment.
+
+            Returns
+            -------
+            str
+                Prompt with calculator-selection context appended.
+            """
+            if self.calculator_selection_context in prompt:
+                return prompt
+            return f"{prompt}{self.calculator_selection_context}"
+
+        if self.workflow_type in {"single_agent", "mock_agent", "single_agent_mcp"}:
+            self.system_prompt = append_calculator_context(self.system_prompt)
+        elif self.workflow_type == "multi_agent":
+            self.planner_prompt = append_calculator_context(self.planner_prompt)
+            self.executor_prompt = append_calculator_context(self.executor_prompt)
 
         if model_name in supported_argo_models:
             self.support_structured_output = False
