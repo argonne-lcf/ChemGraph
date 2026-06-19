@@ -109,15 +109,42 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
                 ChemGraphLogicalAgent,
                 name=agent_spec.name,
             )
+            # Operator-visible lifecycle prints. The default INFO
+            # logging is too verbose for these landmark events to be
+            # spottable; use print so they land on stdout regardless
+            # of log level. Each line is a single grep-able phrase
+            # so an operator can ``grep -E '\[daemon\]'`` to follow
+            # progress through the silent stretches.
+            print(
+                f"[daemon] rank{config.rank} registered "
+                f"{agent_spec.name!r} on the exchange",
+                flush=True,
+            )
+            wanted_peers = [
+                p for p in agent_spec.allowed_peers if p != agent_spec.name
+            ]
+            if wanted_peers:
+                print(
+                    f"[daemon] rank{config.rank} discovering peers "
+                    f"{wanted_peers} (timeout {config.startup_timeout_s:.0f}s)...",
+                    flush=True,
+                )
             peer_agent_ids = await discover_peer_agent_ids(
                 registrar._transport,
                 # Skip self if the campaign mistakenly lists own name
                 # as a peer (validate_campaign rejects this, but
                 # defense-in-depth costs nothing).
-                [p for p in agent_spec.allowed_peers if p != agent_spec.name],
+                wanted_peers,
                 agent_class=ChemGraphLogicalAgent,
                 timeout_s=config.startup_timeout_s,
             )
+            if wanted_peers:
+                print(
+                    f"[daemon] rank{config.rank} discovered "
+                    f"{len(peer_agent_ids)} peer(s): "
+                    f"{sorted(peer_agent_ids.keys())}",
+                    flush=True,
+                )
         finally:
             await registrar.close()
 
@@ -147,6 +174,11 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
         )
         async with runtime:
             await agent.write_runtime_status()
+            print(
+                f"[daemon] rank{config.rank} agent {agent_spec.name!r} "
+                "is now running inside Academy Runtime",
+                flush=True,
+            )
 
             # Rank 0 normally dispatches the campaign bootstrap message
             # to ``initial_agent``. Two conditions skip it:
@@ -186,6 +218,11 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
                         'via': 'academy_action',
                     },
                 )
+                print(
+                    f"[daemon] rank{config.rank} dispatched inline "
+                    f"bootstrap to {campaign.initial_agent!r}",
+                    flush=True,
+                )
             elif config.rank == 0:
                 # Record the reason for skipping so investigators can
                 # tell "deferred to operator" apart from "silently
@@ -199,6 +236,21 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
                         'initial_is_local': bool(initial_is_local),
                     },
                 )
+                if config.skip_bootstrap:
+                    print(
+                        f"[daemon] rank{config.rank} skipping inline "
+                        f"bootstrap (federated mode); waiting for "
+                        f"'chemgraph academy bootstrap' to deliver "
+                        f"the kickoff message...",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"[daemon] rank{config.rank} initial_agent "
+                        f"{campaign.initial_agent!r} is not on this "
+                        f"site; another site owns the bootstrap",
+                        flush=True,
+                    )
 
             await runtime.wait_shutdown()
 

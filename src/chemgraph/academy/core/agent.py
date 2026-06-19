@@ -90,10 +90,26 @@ class ChemGraphLogicalAgent(Agent):
     @action
     async def receive_message(self, message: dict[str, Any]) -> None:
         validate_message(message)
+        first_message = not self.received_message_history
         self.received_message_history.append(message)
         self._trace('message_received', message)
         if self._wake_event is not None:
             self._wake_event.set()
+        if first_message:
+            # Operator-visible lifecycle landmark: the FIRST message
+            # to land on this agent (almost always the campaign
+            # bootstrap for initial_agent, or a peer's reply on
+            # everyone else) is the canonical "kickoff arrived"
+            # signal. Use print so it surfaces on stdout regardless
+            # of log level configuration on the rank.
+            sender = message.get('sender', '?')
+            kind = message.get('kind', '?')
+            tldr = message.get('tldr') or message.get('content', '')[:60]
+            print(
+                f"[agent {self.spec.name}] first message arrived from "
+                f"{sender!r} (kind={kind}): {tldr}",
+                flush=True,
+            )
 
     @action
     async def get_status(self) -> dict[str, Any]:
