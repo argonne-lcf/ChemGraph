@@ -265,7 +265,6 @@ async def wait_for_agent_statuses_finished(
 
 def clear_run_outputs(run_dir: pathlib.Path) -> None:
     for name in (
-        'academy_registrations.json',
         'messages.jsonl',
         'events.jsonl',
         'placement.json',

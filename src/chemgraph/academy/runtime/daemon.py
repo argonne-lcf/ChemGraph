@@ -12,9 +12,7 @@ from academy.runtime import RuntimeConfig
 from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.runtime.exchange import build_exchange_factory
 from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
-from chemgraph.academy.runtime.registration import load_academy_registrations
-from chemgraph.academy.runtime.registration import wait_academy_registrations
-from chemgraph.academy.runtime.registration import write_academy_registrations
+from chemgraph.academy.runtime.registration import discover_peer_agent_ids
 from chemgraph.academy.observability.run_artifacts import initialize_run_files
 from chemgraph.academy.observability.run_artifacts import (
     wait_for_agent_statuses_finished,
@@ -77,55 +75,44 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
 
         academy_factory = build_exchange_factory(config)
         if config.rank == 0:
+            # Rank 0 still owns the one-shot init-files dance, but it
+            # is NO LONGER special for registration -- every rank
+            # registers its own agent independently and discovers peers
+            # via the exchange.
             initialize_run_files(
                 run_dir=config.run_dir,
                 campaign=campaign,
                 config=config,
                 llm_settings=llm_settings,
             )
-            registrar = await academy_factory.create_user_client(
-                name=f'{config.run_dir.name}-registrar',
-                start_listener=False,
+
+        # Each rank registers ONLY its own agent on the exchange and
+        # discovers cross-rank / cross-site peers by polling
+        # ``transport.discover()``. This works identically whether the
+        # peers are on the same node (LocalExchange), same allocation
+        # (Redis), or a different HPC entirely (HttpExchange against
+        # the hosted Academy server) -- the discovery protocol is the
+        # same. There is no longer a shared-filesystem dependency.
+        registrar = await academy_factory.create_user_client(
+            name=f'{config.run_dir.name}-rank{config.rank}-registrar',
+            start_listener=False,
+        )
+        try:
+            registration = await registrar.register_agent(
+                ChemGraphLogicalAgent,
+                name=agent_spec.name,
             )
-            try:
-                registered = await registrar.register_agents(
-                    [
-                        (ChemGraphLogicalAgent, spec.name)
-                        for spec in campaign.agents
-                    ],
-                )
-            finally:
-                await registrar.close()
-            registrations = dict(
-                zip(
-                    (spec.name for spec in campaign.agents),
-                    registered,
-                    strict=True,
-                ),
-            )
-            write_academy_registrations(
-                run_dir=config.run_dir,
-                run_token=config.run_token,
-                registrations=registrations,
-            )
-        else:
-            registrations = await wait_academy_registrations(
-                config.run_dir,
-                run_token=config.run_token,
+            peer_agent_ids = await discover_peer_agent_ids(
+                registrar._transport,
+                # Skip self if the campaign mistakenly lists own name
+                # as a peer (validate_campaign rejects this, but
+                # defense-in-depth costs nothing).
+                [p for p in agent_spec.allowed_peers if p != agent_spec.name],
+                agent_class=ChemGraphLogicalAgent,
                 timeout_s=config.startup_timeout_s,
             )
-
-        if config.rank == 0:
-            registrations = load_academy_registrations(
-                config.run_dir,
-                run_token=config.run_token,
-            )
-        registration = registrations[agent_spec.name]
-        peer_agent_ids = {
-            peer: registrations[peer].agent_id
-            for peer in agent_spec.allowed_peers
-            if peer in registrations
-        }
+        finally:
+            await registrar.close()
 
         agent = ChemGraphLogicalAgent(
             agent_spec,
@@ -159,11 +146,11 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
             #   * ``--no-bootstrap`` was set (spawn-site flow -- kickoff
             #     happens via the separate ``bootstrap`` subcommand once
             #     every federated site has come up).
-            #   * ``initial_agent`` is not in this site's slice (it
-            #     lives on another site reachable through the exchange;
-            #     a non-owning site must not pretend to deliver the
-            #     bootstrap locally).
-            initial_is_local = campaign.initial_agent in registrations
+            #   * ``initial_agent`` is not this rank's own agent (it
+            #     lives on another rank / site; that owner's rank 0
+            #     handles it, or the operator triggers bootstrap once
+            #     every site is up).
+            initial_is_local = campaign.initial_agent == agent_spec.name
             if (
                 config.rank == 0
                 and not config.skip_bootstrap
@@ -178,9 +165,7 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
                     reason='Initial campaign task dispatch.',
                     confidence=1.0,
                 )
-                initial_handle: Handle[Any] = Handle(
-                    registrations[campaign.initial_agent].agent_id,
-                )
+                initial_handle: Handle[Any] = Handle(registration.agent_id)
                 await initial_handle.action(
                     'receive_message',
                     bootstrap,

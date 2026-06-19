@@ -1,124 +1,101 @@
+"""Peer-agent discovery against the Academy exchange.
+
+The runtime used to coordinate per-rank registrations via a
+shared-filesystem JSON file (``<run_dir>/academy_registrations.json``):
+rank 0 registered every agent on the campaign and wrote the resulting
+``AgentRegistration`` objects to disk; other ranks polled the file. That
+mechanism cannot span machines with separate filesystems, which blocks
+the federated ``spawn-site`` flow.
+
+The replacement uses the exchange itself as the lookup service. Each
+rank registers ONLY its own local agent (returning an
+``AgentRegistration`` that goes straight into ``Runtime``), and looks
+up the ``AgentId`` of every cross-site peer by polling
+``transport.discover(ChemGraphLogicalAgent)`` until the expected names
+appear. There is no rank-0 special-casing for registration anymore: any
+rank can come up in any order, on any host, as long as eventually
+every peer's mailbox is reachable through the exchange before
+``startup_timeout_s`` elapses.
+
+Name collisions: ``discover()`` returns every agent of the given class
+registered against the exchange, across all operators and campaigns. To
+keep federated campaigns from accidentally seeing each other's
+agents, operators should prefix agent names with a campaign-unique
+run-id (e.g. ``demo-001-coordinator-agent``). Auto-prefixing is a
+future ergonomic improvement; for now it's an operator-runbook
+convention.
+"""
 from __future__ import annotations
 
 import asyncio
-import json
-import pathlib
+import logging
 import time
-from collections.abc import Mapping
+from collections.abc import Iterable
 from typing import Any
 
-from academy.exchange.cloud.client import HttpAgentRegistration
-from academy.exchange.hybrid import HybridAgentRegistration
-from academy.exchange.local import LocalAgentRegistration
-from academy.exchange.redis import RedisAgentRegistration
-from academy.exchange.transport import AgentRegistration
+from academy.exchange.transport import ExchangeTransportT
 from academy.identifier import AgentId
-from pydantic import BaseModel
 
-from chemgraph.academy.observability.run_files import write_json_atomic
-
-
-_REGISTRATION_TYPES: dict[str, type[BaseModel]] = {
-    'local': LocalAgentRegistration,
-    'hybrid': HybridAgentRegistration,
-    'redis': RedisAgentRegistration,
-    'http': HttpAgentRegistration,
-}
+logger = logging.getLogger(__name__)
 
 
-def academy_registration_path(run_dir: pathlib.Path) -> pathlib.Path:
-    return run_dir / 'academy_registrations.json'
-
-
-def _exchange_type_of(registration: AgentRegistration[Any]) -> str:
-    value = getattr(registration, 'exchange_type', None)
-    if not isinstance(value, str):
-        raise TypeError(
-            f'Registration {type(registration).__name__} has no string '
-            '`exchange_type` field; cannot persist.',
-        )
-    return value
-
-
-def registration_payload(
+async def discover_peer_agent_ids(
+    transport: ExchangeTransportT,
+    peer_names: Iterable[str],
     *,
-    run_token: str,
-    registrations: Mapping[str, AgentRegistration[Any]],
-) -> dict[str, Any]:
-    if not registrations:
-        raise ValueError('at least one registration is required')
-    exchange_types = {_exchange_type_of(r) for r in registrations.values()}
-    if len(exchange_types) > 1:
-        raise ValueError(
-            f'mixed exchange types in one campaign: {sorted(exchange_types)}',
-        )
-    (exchange_type,) = exchange_types
-    return {
-        'run_token': run_token,
-        'exchange_type': exchange_type,
-        'agents': {
-            name: registration.agent_id.model_dump(mode='json')
-            for name, registration in registrations.items()
-        },
-    }
-
-
-def write_academy_registrations(
-    *,
-    run_dir: pathlib.Path,
-    run_token: str,
-    registrations: Mapping[str, AgentRegistration[Any]],
-) -> None:
-    write_json_atomic(
-        academy_registration_path(run_dir),
-        registration_payload(run_token=run_token, registrations=registrations),
-    )
-
-
-def load_academy_registrations(
-    run_dir: pathlib.Path,
-    *,
-    run_token: str,
-) -> dict[str, AgentRegistration[Any]]:
-    path = academy_registration_path(run_dir)
-    data = json.loads(path.read_text(encoding='utf-8'))
-    if data.get('run_token') != run_token:
-        raise RuntimeError(
-            f'Academy registration file {path} belongs to a different run',
-        )
-    exchange_type = data.get('exchange_type')
-    if exchange_type not in _REGISTRATION_TYPES:
-        raise RuntimeError(
-            f'Academy registration file has unsupported exchange_type '
-            f'{exchange_type!r}; expected one of '
-            f'{sorted(_REGISTRATION_TYPES)}',
-        )
-    cls = _REGISTRATION_TYPES[exchange_type]
-    agents = data.get('agents')
-    if not isinstance(agents, dict):
-        raise RuntimeError(f'Academy registration file is malformed: {path}')
-    return {
-        name: cls(agent_id=AgentId[Any].model_validate(agent_id))
-        for name, agent_id in agents.items()
-    }
-
-
-async def wait_academy_registrations(
-    run_dir: pathlib.Path,
-    *,
-    run_token: str,
+    agent_class: type,
     timeout_s: float,
-) -> dict[str, AgentRegistration[Any]]:
-    path = academy_registration_path(run_dir)
+    poll_interval_s: float = 1.0,
+) -> dict[str, AgentId[Any]]:
+    """Poll ``transport.discover()`` until every named peer is found.
+
+    Args:
+        transport: An open exchange transport already registered for the
+            local rank's own agent. Discovery is read-only from this
+            rank's perspective -- it does not create or mutate mailboxes.
+        peer_names: Names of agents this rank intends to message. Each
+            name must match the ``AgentId.name`` of an agent previously
+            registered against the same exchange (potentially by a
+            different process on a different host).
+        agent_class: Concrete ``Agent`` subclass to scope the discovery
+            query (``transport.discover`` is class-typed). All ChemGraph
+            agents are ``ChemGraphLogicalAgent``, so callers pass that.
+        timeout_s: Wall-clock budget. On expiry a ``TimeoutError`` is
+            raised whose message lists the peers we never saw, so
+            operators can immediately tell which remote site is missing
+            or whose agent failed to register.
+        poll_interval_s: Backoff between ``discover()`` retries. The
+            default keeps startup snappy without hammering the exchange.
+
+    Returns:
+        Mapping from peer name to the discovered ``AgentId``. Empty
+        ``peer_names`` short-circuits to an empty dict.
+    """
+    wanted = set(peer_names)
+    if not wanted:
+        return {}
+    found: dict[str, AgentId[Any]] = {}
     deadline = time.monotonic() + timeout_s
     while True:
-        if path.exists():
-            return load_academy_registrations(
-                run_dir,
-                run_token=run_token,
-            )
-        if time.monotonic() > deadline:
+        agent_ids = await transport.discover(agent_class)
+        for agent_id in agent_ids:
+            name = getattr(agent_id, 'name', None)
+            if isinstance(name, str) and name in wanted and name not in found:
+                found[name] = agent_id
+        missing = wanted.difference(found)
+        if not missing:
+            return found
+        if time.monotonic() >= deadline:
             raise TimeoutError(
-                f'Timed out waiting for Academy registrations at {path}',
+                f'Timed out after {timeout_s:.1f}s waiting to discover '
+                f'peer agents on the exchange: missing={sorted(missing)}. '
+                f'Confirm every site of the federated campaign has '
+                f'started and registered its agents under the expected '
+                f'names (run-id-prefixed names are required when the '
+                f'hosted exchange is shared across operators).',
             )
-        await asyncio.sleep(0.25)
+        logger.debug(
+            'discover() missing %d peers (%s); sleeping %.1fs',
+            len(missing), sorted(missing), poll_interval_s,
+        )
+        await asyncio.sleep(poll_interval_s)

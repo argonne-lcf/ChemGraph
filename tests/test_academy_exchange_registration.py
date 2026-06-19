@@ -1,21 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from typing import Any
 
 import pytest
-from academy.exchange.cloud.client import HttpAgentRegistration
-from academy.exchange.hybrid import HybridAgentRegistration
-from academy.exchange.local import LocalAgentRegistration
-from academy.exchange.redis import RedisAgentRegistration
 from academy.identifier import AgentId
 
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
 from chemgraph.academy.runtime.exchange import build_exchange_factory
 from chemgraph.academy.runtime.exchange import exchange_uses_redis
 from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
-from chemgraph.academy.runtime.registration import load_academy_registrations
-from chemgraph.academy.runtime.registration import registration_payload
-from chemgraph.academy.runtime.registration import write_academy_registrations
+from chemgraph.academy.runtime.registration import discover_peer_agent_ids
 
 
 def _config(
@@ -45,6 +41,11 @@ def _config(
         exchange_type=exchange_type,
         http_exchange_url=http_exchange_url,
     )
+
+
+# ---------------------------------------------------------------------------
+# Exchange factory dispatch
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -116,47 +117,138 @@ def test_http_exchange_factory_honors_custom_url(tmp_path) -> None:
     assert factory._info.url == custom
 
 
-@pytest.mark.parametrize(
-    'registration_cls',
-    [
-        RedisAgentRegistration,
-        LocalAgentRegistration,
-        HybridAgentRegistration,
-        HttpAgentRegistration,
-    ],
-)
-def test_academy_registration_round_trips_by_exchange_type(
-    tmp_path,
-    registration_cls,
-) -> None:
-    registration = registration_cls(agent_id=AgentId.new('agent-a'))
-    write_academy_registrations(
-        run_dir=tmp_path,
-        run_token='token-1',
-        registrations={'agent-a': registration},
+# ---------------------------------------------------------------------------
+# discover_peer_agent_ids (federated peer discovery)
+#
+# Real exchange transports require a running broker. We exercise the
+# discovery helper against a fake transport whose ``discover`` returns
+# a sequence we control across successive polls. This keeps the tests
+# fast and deterministic while still pinning the behavior that matters:
+# wait-for-peers, success when all are present, timeout listing the
+# missing ones.
+# ---------------------------------------------------------------------------
+
+
+class _FakeTransport:
+    """Minimal ``transport.discover()`` stand-in for the discovery tests.
+
+    Configure with a list of "rounds"; each call to ``discover()``
+    returns (and consumes) one round. After the configured rounds run
+    out the last one keeps being returned, so timeout tests can assert
+    'never converged'.
+    """
+
+    def __init__(self, rounds: list[list[AgentId[Any]]]) -> None:
+        self._rounds = rounds
+        self._calls = 0
+
+    async def discover(self, agent_class):  # noqa: ARG002 - sig match only
+        index = min(self._calls, len(self._rounds) - 1)
+        self._calls += 1
+        return tuple(self._rounds[index])
+
+
+def _agent_id(name: str) -> AgentId[Any]:
+    return AgentId.new(name)
+
+
+def test_discover_peer_agent_ids_returns_empty_for_empty_peer_list() -> None:
+    """When the local agent has no allowed_peers the helper short-circuits
+    -- it must not poll the exchange unnecessarily (the network round-trip
+    would block daemon startup for nothing)."""
+    transport = _FakeTransport(rounds=[[_agent_id('anyone')]])
+    result = asyncio.run(
+        discover_peer_agent_ids(
+            transport, [], agent_class=object, timeout_s=0.01,
+        ),
     )
-
-    loaded = load_academy_registrations(tmp_path, run_token='token-1')
-
-    assert isinstance(loaded['agent-a'], registration_cls)
-    assert loaded['agent-a'].agent_id == registration.agent_id
+    assert result == {}
+    assert transport._calls == 0
 
 
-def test_registration_payload_rejects_mixed_exchange_types() -> None:
-    with pytest.raises(ValueError, match='mixed exchange types'):
-        registration_payload(
-            run_token='token-1',
-            registrations={
-                'redis-agent': RedisAgentRegistration(
-                    agent_id=AgentId.new('redis-agent'),
-                ),
-                'local-agent': LocalAgentRegistration(
-                    agent_id=AgentId.new('local-agent'),
-                ),
-            },
+def test_discover_peer_agent_ids_finds_all_peers_on_first_poll() -> None:
+    """Happy path: every peer is already on the exchange. The helper
+    must return promptly with a name->AgentId mapping in the same
+    direction the daemon will use it (peer name -> AgentId for Handle
+    construction)."""
+    a = _agent_id('worker-a')
+    b = _agent_id('worker-b')
+    c = _agent_id('coordinator')
+    transport = _FakeTransport(rounds=[[a, b, c]])
+    result = asyncio.run(
+        discover_peer_agent_ids(
+            transport, ['worker-a', 'worker-b'],
+            agent_class=object, timeout_s=1.0,
+        ),
+    )
+    assert result == {'worker-a': a, 'worker-b': b}
+    # Did NOT include the un-requested coordinator -- filtering by name
+    # is what keeps cross-operator agents on the shared hosted exchange
+    # from leaking into each other's peer dicts.
+    assert 'coordinator' not in result
+
+
+def test_discover_peer_agent_ids_waits_for_late_peers() -> None:
+    """The federated convergence story: site A registers at t=0 and
+    polls; site B doesn't register its agent until poll #3; the helper
+    must keep polling and succeed once B is visible. This is the
+    behavior that lets operators bring sites up in any order."""
+    a = _agent_id('worker-a')
+    b = _agent_id('worker-b')
+    rounds = [
+        [a],         # poll 1: only A visible
+        [a],         # poll 2: still waiting for B
+        [a, b],      # poll 3: B comes up
+    ]
+    transport = _FakeTransport(rounds=rounds)
+    result = asyncio.run(
+        discover_peer_agent_ids(
+            transport, ['worker-a', 'worker-b'],
+            agent_class=object,
+            timeout_s=2.0,
+            poll_interval_s=0.01,  # keep the test fast
+        ),
+    )
+    assert result == {'worker-a': a, 'worker-b': b}
+
+
+def test_discover_peer_agent_ids_times_out_naming_missing_peers() -> None:
+    """When a remote site never shows up, the helper must raise with a
+    message that names the missing peers. Operators reading the log
+    should immediately know which site to bring up / debug."""
+    transport = _FakeTransport(rounds=[[_agent_id('worker-a')]])
+    with pytest.raises(TimeoutError, match=r"missing=\['coordinator', 'worker-b'\]"):
+        asyncio.run(
+            discover_peer_agent_ids(
+                transport, ['worker-a', 'worker-b', 'coordinator'],
+                agent_class=object,
+                timeout_s=0.05,
+                poll_interval_s=0.01,
+            ),
         )
 
 
-def test_registration_payload_rejects_empty_registrations() -> None:
-    with pytest.raises(ValueError, match='at least one registration'):
-        registration_payload(run_token='token-1', registrations={})
+def test_discover_peer_agent_ids_skips_already_found_peers_on_re_poll() -> None:
+    """If poll N saw peer A, poll N+1 must not overwrite A's AgentId
+    even if discover returns a fresh AgentId object with the same name
+    (which the hosted exchange doesn't actually do, but the helper's
+    behavior shouldn't depend on that). Pin the 'first found wins'
+    invariant explicitly."""
+    a_first = _agent_id('worker-a')
+    a_again = _agent_id('worker-a')  # different uuid, same name
+    b = _agent_id('worker-b')
+    rounds = [
+        [a_first],
+        [a_again, b],
+    ]
+    transport = _FakeTransport(rounds=rounds)
+    result = asyncio.run(
+        discover_peer_agent_ids(
+            transport, ['worker-a', 'worker-b'],
+            agent_class=object,
+            timeout_s=2.0,
+            poll_interval_s=0.01,
+        ),
+    )
+    assert result['worker-a'] is a_first
+    assert result['worker-b'] is b
