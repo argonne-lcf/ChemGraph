@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 from academy.identifier import AgentId
@@ -77,17 +76,27 @@ class _FakeTransport:
 
 
 class _FakeClient:
+    """Async-context-manager stand-in for academy's UserExchangeClient.
+
+    The real client's __aenter__ sets a contextvar that Handle.action
+    reads to find the outbound exchange. We don't reproduce that
+    contextvar plumbing in the fake -- the test monkeypatches
+    ``bootstrap.Handle`` with a recording stand-in that bypasses the
+    contextvar lookup entirely -- but we DO support the
+    async-with shape so the bootstrap code path runs unchanged.
+    """
     def __init__(self, transport):
         self._transport = transport
-        self.close = AsyncMock()
-        self.registered_handles: list = []
+        self.enter_count = 0
+        self.exit_count = 0
 
-    def register_handle(self, handle):
-        # Real client binds the handle to its exchange contextvar.
-        # The fake just records it so tests can assert the bootstrap
-        # path called register_handle before dispatching the action
-        # (without which Handle.action raises ExchangeClientNotFoundError).
-        self.registered_handles.append(handle)
+    async def __aenter__(self):
+        self.enter_count += 1
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self.exit_count += 1
+        return False
 
 
 class _FakeFactory:
@@ -166,9 +175,11 @@ def test_dispatch_bootstrap_sends_one_message_to_deterministic_recipient(
     assert message['sender'] == 'campaign'
     assert message['message_id'] == message_id
     assert 'do the thing' in message['content']
-    # Client must be closed on the happy path so we don't leak the
-    # aiohttp session that backs the http exchange transport.
-    client.close.assert_awaited_once()
+    # Client entered as async-context-manager (which sets the exchange
+    # context the Handle needs) and exited cleanly. The __aexit__
+    # closes the aiohttp session backing the http exchange transport.
+    assert client.enter_count == 1
+    assert client.exit_count == 1
 
 
 def test_dispatch_bootstrap_closes_client_on_recipient_timeout(
@@ -199,7 +210,10 @@ def test_dispatch_bootstrap_closes_client_on_recipient_timeout(
                 discover_timeout_s=0.05,
             ),
         )
-    client.close.assert_awaited_once()
+    # async-with __aexit__ runs even on the error path -- the aiohttp
+    # session is released regardless of whether dispatch succeeded.
+    assert client.enter_count == 1
+    assert client.exit_count == 1
 
 
 # ---------------------------------------------------------------------------

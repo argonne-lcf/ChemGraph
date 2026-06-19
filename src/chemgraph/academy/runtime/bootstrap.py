@@ -165,47 +165,49 @@ async def dispatch_bootstrap(
         name='chemgraph-bootstrap',
         start_listener=False,
     )
-    try:
-        recipient_id = deterministic_agent_id(
-            run_id=run_id, agent_name=recipient,
-        )
-        # Liveness probe: wait for the recipient's mailbox to actually
-        # be registered on the exchange before sending. Without this
-        # we'd happily POST a message to a mailbox that doesn't exist
-        # yet -- the exchange would reject it.
-        await wait_for_peers_alive(
-            client._transport,
-            [recipient_id],
-            agent_class=ChemGraphLogicalAgent,
-            timeout_s=discover_timeout_s,
-        )
+    # ``Handle.action`` reads its outbound exchange from a
+    # ``ContextVar`` that ``UserExchangeClient.__aenter__`` sets to
+    # self. Without entering the client as an async-context-manager
+    # the contextvar stays unset and Handle.action raises
+    # ``ExchangeClientNotFoundError``. The daemon-side path gets this
+    # for free because Academy's Runtime enters the client; the
+    # standalone bootstrap command has to do it explicitly.
+    async with client:
+        try:
+            recipient_id = deterministic_agent_id(
+                run_id=run_id, agent_name=recipient,
+            )
+            # Liveness probe: wait for the recipient's mailbox to
+            # actually be registered on the exchange before sending.
+            # Without this we'd happily POST a message to a mailbox
+            # that doesn't exist yet -- the exchange would reject it.
+            await wait_for_peers_alive(
+                client._transport,
+                [recipient_id],
+                agent_class=ChemGraphLogicalAgent,
+                timeout_s=discover_timeout_s,
+            )
 
-        message = build_message(
-            sender='campaign',
-            recipient=recipient,
-            content=campaign_bootstrap_text(campaign),
-            kind='message',
-            tldr='Campaign bootstrap',
-            reason='Initial campaign task dispatch (operator-triggered).',
-            confidence=1.0,
-        )
-        handle: Handle[Any] = Handle(recipient_id)
-        # The Handle reads its outbound exchange from a contextvar that
-        # only gets set when a client is "active" -- either via
-        # ``async with client:`` or via ``client.register_handle()``.
-        # The daemon-side code path uses Runtime which sets the context
-        # for us; the standalone bootstrap command does NOT, so without
-        # this register_handle call the action raises
-        # ``ExchangeClientNotFoundError``.
-        client.register_handle(handle)
-        await handle.action('receive_message', message)
-        logger.info(
-            'Bootstrap message dispatched: recipient=%s message_id=%s',
-            recipient, message['message_id'],
-        )
-        return message['message_id']
-    finally:
-        await client.close()
+            message = build_message(
+                sender='campaign',
+                recipient=recipient,
+                content=campaign_bootstrap_text(campaign),
+                kind='message',
+                tldr='Campaign bootstrap',
+                reason='Initial campaign task dispatch (operator-triggered).',
+                confidence=1.0,
+            )
+            handle: Handle[Any] = Handle(recipient_id)
+            await handle.action('receive_message', message)
+            logger.info(
+                'Bootstrap message dispatched: recipient=%s message_id=%s',
+                recipient, message['message_id'],
+            )
+            return message['message_id']
+        finally:
+            # __aexit__ does close + clear the contextvar; close()
+            # here would double-close. The async with handles it.
+            pass
 
 
 def main(argv: Sequence[str] | None = None) -> int:
