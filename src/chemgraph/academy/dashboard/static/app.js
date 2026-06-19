@@ -88,6 +88,38 @@
       const statusData = await statusRes.json();
       const eventsData = await eventsRes.json();
       const nextSnapshot = {...statusData, events: eventsData.events || []};
+      // Federated detection: server-side B.4c.2 wraps per-site state
+      // under ``sites: {<name>: {status, placement, summary, updated, schema}}``
+      // for multi-site runs and tags every event with ``site``. Build
+      // a flat agent->site index so renderers can ask "which site does
+      // this agent live on?" without re-walking sites every time.
+      nextSnapshot.federated = !!(nextSnapshot.sites && Object.keys(nextSnapshot.sites).length);
+      nextSnapshot.siteNames = nextSnapshot.federated
+        ? Object.keys(nextSnapshot.sites).sort()
+        : [];
+      nextSnapshot.sitesByAgent = {};
+      if (nextSnapshot.federated) {
+        for (const [siteName, siteData] of Object.entries(nextSnapshot.sites)) {
+          const agents = (siteData?.status?.agents) || [];
+          agents.forEach(spec => {
+            const agentId = spec.agent_id || spec.agent_name || spec.name;
+            if (agentId) nextSnapshot.sitesByAgent[agentId] = siteName;
+          });
+          const placements = (siteData?.placement?.agents) || {};
+          Object.keys(placements).forEach(agentId => {
+            if (!(agentId in nextSnapshot.sitesByAgent)) {
+              nextSnapshot.sitesByAgent[agentId] = siteName;
+            }
+          });
+        }
+        // Backfill from events too, since the per-event ``site`` tag
+        // is authoritative for the agent that emitted each event.
+        (nextSnapshot.events || []).forEach(event => {
+          if (event.site && event.agent_id && !(event.agent_id in nextSnapshot.sitesByAgent)) {
+            nextSnapshot.sitesByAgent[event.agent_id] = event.site;
+          }
+        });
+      }
       const nextIdentity = identityForSnapshot(nextSnapshot);
       const previousEventCount = snapshot?.events?.length || 0;
       const nextEventCount = nextSnapshot.events.length;
@@ -304,6 +336,57 @@
       return agent?.placement?.short_hostname || agent?.placement?.hostname || (agent?.started ? 'unknown host' : 'pending');
     }
 
+    function agentSite(agent) {
+      // In federated runs the meaningful grouping is "which HPC"
+      // (aurora vs crux), not individual compute hostnames. The
+      // server tags every event with ``site`` and we built a
+      // sitesByAgent index in load(); fall back to "pending" so
+      // not-yet-registered agents still render.
+      if (!snapshot?.federated) return null;
+      const agentId = agent?.agent_id || agent?.agent_name || agent?.name;
+      return snapshot.sitesByAgent[agentId] || 'pending';
+    }
+
+    function agentGroup(agent) {
+      // Single source of truth for "what bucket does this agent
+      // belong to in the current view": site (federated) or host
+      // (single-machine). Renderers that ask "what color / what
+      // label" go through here so federated vs single-site rendering
+      // diverges in exactly one place.
+      return agentSite(agent) || agentHost(agent);
+    }
+
+    function renderSitesBadge() {
+      // Header-bar federation indicator. Hidden in single-site runs
+      // so the existing single-site UI looks unchanged; in federated
+      // runs it shows e.g. "Sites: aurora · crux (2 agents on aurora,
+      // 1 on crux, 0 events from aurora)" so operators / demo
+      // viewers can confirm at a glance that the campaign really
+      // is spanning multiple HPCs.
+      const badge = document.getElementById('sitesBadge');
+      if (!badge) return;
+      if (!snapshot?.federated || !snapshot.siteNames.length) {
+        badge.style.display = 'none';
+        badge.textContent = '';
+        return;
+      }
+      const eventCounts = {};
+      (snapshot.events || []).forEach(e => {
+        if (e.site) eventCounts[e.site] = (eventCounts[e.site] || 0) + 1;
+      });
+      const agentCounts = {};
+      Object.values(snapshot.sitesByAgent || {}).forEach(site => {
+        agentCounts[site] = (agentCounts[site] || 0) + 1;
+      });
+      const parts = snapshot.siteNames.map(site => {
+        const a = agentCounts[site] || 0;
+        const e = eventCounts[site] || 0;
+        return `${site} (${a}🤖 / ${e}📨)`;
+      });
+      badge.textContent = 'Sites: ' + parts.join(' · ');
+      badge.style.display = '';
+    }
+
     function hostColor(index) {
       const colors = ['#dbeafe', '#dcfce7', '#fef3c7', '#fce7f3', '#e0e7ff', '#ccfbf1', '#fee2e2', '#ede9fe'];
       return colors[index % colors.length];
@@ -318,6 +401,7 @@
       const detailScroll = captureDetailScrollSnapshot();
       document.getElementById('updated').textContent = snapshot.updated ? new Date(snapshot.updated * 1000).toLocaleTimeString() : '';
       document.getElementById('runPath').textContent = snapshot.run_dir || '';
+      renderSitesBadge();
       document.getElementById('graphTitle').textContent = isWorkflowMode() ? 'ChemGraph Workflow' : 'Agent Graph';
       renderTimeline();
       renderMetrics();
@@ -358,8 +442,12 @@
       events.forEach(event => { counts[event.event] = (counts[event.event] || 0) + 1; });
       const currentAgents = agents();
       const startedAgents = currentAgents.filter(agent => agent.started);
-      const hostByAgent = new Map(currentAgents.map(agent => [agent.agent_id, agentHost(agent)]));
-      const hosts = new Set(startedAgents.map(agentHost).filter(host => host && host !== 'pending'));
+      // Group by site in federated mode, by host otherwise. The
+      // "cross-node messages" metric below stays meaningful either
+      // way -- in federated mode it becomes "messages that crossed
+      // the HPC boundary," which is exactly what we want to surface.
+      const hostByAgent = new Map(currentAgents.map(agent => [agent.agent_id, agentGroup(agent)]));
+      const hosts = new Set(startedAgents.map(agentGroup).filter(host => host && host !== 'pending'));
       const finish = latestEventOf('campaign_finished')?.payload || {};
       const messageEvents = events.filter(event => event.event === 'message_sent');
       const crossNodeMessages = messageEvents.filter(event => {
@@ -1251,9 +1339,14 @@
         return;
       }
 
+      // Group by site (federated) or hostname (single-site). The
+      // graph layout is unchanged either way -- only the swimlane
+      // labels and the band per-agent-group differ. In federated
+      // mode you see "aurora" and "crux" swimlanes instead of
+      // "x4708..." and "x1000...". Same nodes, clearer story.
       const byHost = new Map();
       currentAgents.forEach(agent => {
-        const host = agentHost(agent);
+        const host = agentGroup(agent);
         if (!byHost.has(host)) byHost.set(host, []);
         byHost.get(host).push(agent);
       });
@@ -1944,21 +2037,28 @@
       const currentAgents = agents();
       const senderAgent = currentAgents.find(agent => agent.agent_id === sender);
       const recipientAgent = currentAgents.find(agent => agent.agent_id === recipient);
-      const senderHost = agentHost(senderAgent);
-      const recipientHost = agentHost(recipientAgent);
+      // "Group" = site in federated mode, host in single-machine.
+      // Route label becomes "cross-site" or "cross-node" accordingly,
+      // which is what the operator actually wants to see at a glance.
+      const senderGroup = agentGroup(senderAgent);
+      const recipientGroup = agentGroup(recipientAgent);
+      const groupLabel = snapshot?.federated ? 'site' : 'host';
       const messages = eventsOf('message_sent').filter(e => {
         const p = e.payload || {};
         return p.sender === sender && p.recipient === recipient;
       });
       const latest = messages.length ? messages[messages.length - 1] : null;
       const latestPayload = latest?.payload || {};
-      const route = senderHost && recipientHost && senderHost !== recipientHost ? 'cross-node' : 'same-node';
+      const crossGroup = senderGroup && recipientGroup && senderGroup !== recipientGroup;
+      const route = crossGroup
+        ? (snapshot?.federated ? 'cross-site' : 'cross-node')
+        : 'same-' + groupLabel;
       document.getElementById('detailTitle').textContent = `${sender} -> ${recipient}`;
       document.getElementById('detailCards').innerHTML = detailCards([
         ['Route', route],
         ['Messages', messages.length],
-        ['From host', senderHost],
-        ['To host', recipientHost],
+        [`From ${groupLabel}`, senderGroup],
+        [`To ${groupLabel}`, recipientGroup],
       ]);
       setDetailHtmlBlock('detailPrimaryTitle', 'Latest Message', 'detailPrimary', latest
         ? messageDetailHtml(latest)
@@ -2256,16 +2356,20 @@
       const currentAgents = agents();
       const sender = currentAgents.find(agent => agent.agent_id === p.sender);
       const recipient = currentAgents.find(agent => agent.agent_id === p.recipient);
-      const senderHost = agentHost(sender);
-      const recipientHost = agentHost(recipient);
-      const route = senderHost && recipientHost && senderHost !== recipientHost ? 'cross-node' : 'same-node';
+      const senderGroup = agentGroup(sender);
+      const recipientGroup = agentGroup(recipient);
+      const groupLabel = snapshot?.federated ? 'site' : 'host';
+      const crossGroup = senderGroup && recipientGroup && senderGroup !== recipientGroup;
+      const route = crossGroup
+        ? (snapshot?.federated ? 'cross-site' : 'cross-node')
+        : 'same-' + groupLabel;
       return detailRich(
         detailSection('Route', detailKvGrid([
           ['Type', route],
-          ['Sender host', senderHost],
-          ['Recipient host', recipientHost],
+          [`Sender ${groupLabel}`, senderGroup],
+          [`Recipient ${groupLabel}`, recipientGroup],
           ['Message id', p.message_id || '-', 'mono'],
-        ]), route === 'cross-node' ? 'ok' : 'info'),
+        ]), crossGroup ? 'ok' : 'info'),
       );
     }
 
@@ -2510,13 +2614,17 @@
       const currentAgents = agents();
       const sender = currentAgents.find(agent => agent.agent_id === p.sender);
       const recipient = currentAgents.find(agent => agent.agent_id === p.recipient);
-      const senderHost = agentHost(sender);
-      const recipientHost = agentHost(recipient);
-      const route = senderHost && recipientHost && senderHost !== recipientHost ? 'cross-node' : 'same-node';
+      const senderGroup = agentGroup(sender);
+      const recipientGroup = agentGroup(recipient);
+      const groupLabel = snapshot?.federated ? 'site' : 'host';
+      const crossGroup = senderGroup && recipientGroup && senderGroup !== recipientGroup;
+      const route = crossGroup
+        ? (snapshot?.federated ? 'cross-site' : 'cross-node')
+        : 'same-' + groupLabel;
       return [
         `Route: ${route}`,
-        `Sender host: ${senderHost}`,
-        `Recipient host: ${recipientHost}`,
+        `Sender ${groupLabel}: ${senderGroup}`,
+        `Recipient ${groupLabel}: ${recipientGroup}`,
         `Message id: ${p.message_id || '-'}`,
       ].join('\n');
     }

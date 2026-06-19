@@ -590,6 +590,11 @@
   <header>
     <h1>ChemGraph Academy Dashboard</h1>
     <div class="toolbar">
+      <!-- Federated runs populate sitesBadge with "aurora · crux"
+           plus per-site agent counts so it's visible at a glance
+           that the campaign spans multiple HPCs. Hidden in
+           single-site runs. -->
+      <span id="sitesBadge" class="muted" style="display:none"></span>
       <span id="updated" class="muted"></span>
       <button id="refresh">Refresh</button>
     </div>
