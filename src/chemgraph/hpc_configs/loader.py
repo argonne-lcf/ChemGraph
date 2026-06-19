@@ -13,6 +13,43 @@ import os
 logger = logging.getLogger(__name__)
 
 
+def resolve_worker_init(run_dir: str, fallback: str) -> str:
+    """Build a Parsl ``worker_init`` shell snippet with layered precedence.
+
+    Precedence (highest first):
+
+    1. Environment variable ``CHEMGRAPH_WORKER_INIT`` -- if set and non-empty,
+       used verbatim. Lets a user point Parsl workers at any env without
+       editing code.
+    2. Auto-detect the submitting process's Python env and emit an activate
+       line for it (``VIRTUAL_ENV`` then ``CONDA_PREFIX``). The agent / MCP
+       subprocess runs from this env, so workers should too.
+    3. The system-specific *fallback* string passed by the caller (e.g.
+       ``"module load conda; conda activate base"`` on Crux).
+
+    The returned string is always prefixed with ``export TMPDIR=/tmp;
+    cd {run_dir};`` so Parsl workers land in the same directory the
+    submitter chose.
+    """
+    override = os.environ.get("CHEMGRAPH_WORKER_INIT", "").strip()
+    if override:
+        activate = override
+    else:
+        venv = os.environ.get("VIRTUAL_ENV", "").strip()
+        conda_prefix = os.environ.get("CONDA_PREFIX", "").strip()
+        conda_env = os.environ.get("CONDA_DEFAULT_ENV", "").strip()
+        if venv:
+            activate = f"source {venv}/bin/activate"
+        elif conda_prefix and conda_env:
+            activate = (
+                f"source {conda_prefix}/etc/profile.d/conda.sh && "
+                f"conda activate {conda_env}"
+            )
+        else:
+            activate = fallback
+    return f"export TMPDIR=/tmp; cd {run_dir}; {activate}"
+
+
 def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
     """Dynamically import and return a Parsl ``Config`` for the given HPC system.
 
@@ -20,7 +57,7 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
     ----------
     system_name : str
         Target system name.  Supported: ``"local"``, ``"polaris"``,
-        ``"aurora"``.
+        ``"aurora"``, ``"crux"``.
     run_dir : str, optional
         Parsl run directory.  Defaults to the current working directory.
     **kwargs
@@ -58,8 +95,13 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
 
         return get_aurora_config(run_dir=run_dir, **kwargs)
 
+    elif system_name == "crux":
+        from chemgraph.hpc_configs.crux_parsl import get_crux_config
+
+        return get_crux_config(run_dir=run_dir, **kwargs)
+
     else:
         raise ValueError(
             f"Unknown HPC system: '{system_name}'. "
-            f"Supported systems: local, polaris, aurora"
+            f"Supported systems: local, polaris, aurora, crux"
         )

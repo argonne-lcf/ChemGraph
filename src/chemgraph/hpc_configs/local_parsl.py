@@ -15,6 +15,8 @@ from parsl.config import Config
 from parsl.executors import HighThroughputExecutor
 from parsl.providers import LocalProvider
 
+from chemgraph.hpc_configs.loader import resolve_worker_init
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MAX_WORKERS = 4
@@ -23,7 +25,7 @@ _DEFAULT_MAX_WORKERS = 4
 def get_local_config(
     run_dir: str | None = None,
     max_workers: int = _DEFAULT_MAX_WORKERS,
-    worker_init: str = "export TMPDIR=/tmp",
+    worker_init: str | None = None,
 ) -> Config:
     """Generate a Parsl configuration for local execution.
 
@@ -34,10 +36,15 @@ def get_local_config(
     max_workers : int, optional
         Maximum number of concurrent workers.  Default: 4.
     worker_init : str, optional
-        Shell commands executed on each worker before tasks.
+        Explicit shell snippet for worker init. When ``None`` (default),
+        :func:`resolve_worker_init` picks ``CHEMGRAPH_WORKER_INIT`` /
+        ``VIRTUAL_ENV`` / ``CONDA_PREFIX`` over a noop fallback.
     """
     if run_dir is None:
         run_dir = os.getcwd()
+
+    if worker_init is None:
+        worker_init = resolve_worker_init(run_dir, fallback="true")
 
     logger.info("Creating local Parsl config with %d workers", max_workers)
 

@@ -4,6 +4,11 @@ import json
 
 import pytest
 
+# Skip when the optional 'academy' extra is absent. The dashboard
+# module itself is pure stdlib, but the import guard is applied
+# uniformly across the academy test suite.
+pytest.importorskip("academy")
+
 import chemgraph.academy.dashboard as dashboard
 from chemgraph.academy.observability.event_log import EventLog
 

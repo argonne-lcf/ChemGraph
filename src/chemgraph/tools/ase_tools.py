@@ -13,7 +13,6 @@ from langchain_core.tools import tool
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema
-from chemgraph.schemas.calculators.mace_calc import _mace_lock
 from chemgraph.tools.ase_core import (
     _resolve_path,
     atoms_to_atomsdata,
@@ -166,8 +165,6 @@ def run_ase(params: ASEInputSchema) -> dict:
     ValueError
         If the calculator is not supported or if the calculation fails
     """
-    calc_type = params.calculator.calculator_type.lower()
-    if "mace" in calc_type:
-        with _mace_lock:
-            return run_ase_core(params)
+    # MACE thread/process serialization now lives in run_ase_core ->
+    # load_calculator, so this wrapper just delegates.
     return run_ase_core(params)

@@ -52,10 +52,15 @@ class GlobusComputeBackend(ExecutionBackend):
         super().__init__()
         self._executor = None
         self._endpoint_id: str | None = None
+        self._shares_filesystem = False
 
     @property
     def is_async_remote(self) -> bool:
         return True
+
+    @property
+    def shares_filesystem(self) -> bool:
+        return self._shares_filesystem
 
     # ── lifecycle ────────────────────────────────────────────────────────
 
@@ -81,6 +86,10 @@ class GlobusComputeBackend(ExecutionBackend):
         amqp_port = kwargs.get("amqp_port")
         if amqp_port is not None:
             executor_kwargs["amqp_port"] = int(amqp_port)
+
+        # Opt-in: a Globus Compute endpoint that shares an HPC filesystem with
+        # the MCP server can skip inline file embedding and read paths directly.
+        self._shares_filesystem = bool(kwargs.get("shares_filesystem", False))
 
         self._endpoint_id = endpoint_id
         self._executor = Executor(**executor_kwargs)

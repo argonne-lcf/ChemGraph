@@ -5,6 +5,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+# Skip when the optional 'academy' extra is absent; this module
+# imports academy.* directly at top level.
+pytest.importorskip("academy")
+
 from academy.identifier import AgentId
 
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig

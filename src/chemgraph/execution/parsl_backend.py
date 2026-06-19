@@ -91,7 +91,11 @@ class ParslBackend(ExecutionBackend):
                 raise ValueError(
                     f"Task '{task.task_id}': task_type='python' requires a callable."
                 )
-            return self._python_app(task.callable, task.args, task.kwargs)
+            from chemgraph.execution.utils import to_picklable
+
+            return self._python_app(
+                task.callable, to_picklable(task.args), to_picklable(task.kwargs)
+            )
 
         elif task.task_type == "shell":
             if task.command is None:
@@ -115,6 +119,14 @@ class ParslBackend(ExecutionBackend):
             try:
                 import parsl
 
+                # cleanup() stops executors and releases resources;
+                # clear() only removes the DFK from the global registry.
+                # Without cleanup(), Parsl logs
+                # "Python is exiting with a DFK still running" at interpreter exit.
+                try:
+                    parsl.dfk().cleanup()
+                except Exception:
+                    logger.warning("Error during Parsl DFK cleanup.", exc_info=True)
                 parsl.clear()
                 logger.info("ParslBackend shut down.")
             except Exception:

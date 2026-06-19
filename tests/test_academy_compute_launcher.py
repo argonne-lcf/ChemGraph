@@ -2,6 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+# Skip when the optional 'academy' extra is absent; the runtime
+# subpackage imports academy.* at module level.
+pytest.importorskip("academy")
+
 from chemgraph.academy.runtime import compute_launcher
 from chemgraph.academy.runtime.compute_launcher import AllocationPlan
 

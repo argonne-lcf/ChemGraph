@@ -6,6 +6,10 @@ from pathlib import Path
 
 import pytest
 
+# Skip when the optional 'academy' extra is absent; mcp_supervisor
+# imports httpx (also in the extra) at module level.
+pytest.importorskip("academy")
+
 from chemgraph.academy.core.campaign import MCPServerSpec
 from chemgraph.academy.runtime.mcp_supervisor import MCPServerSupervisor
 
