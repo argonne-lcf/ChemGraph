@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import pathlib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from chemgraph.academy.campaigns import resolve_campaign
@@ -160,6 +160,20 @@ class ChemGraphDaemonConfig:
     # ``$XDG_DATA_HOME/academy/storage.db``. Set this for a
     # self-hosted ``python -m academy.exchange.cloud`` server.
     http_exchange_url: str | None = None
+    # Optional explicit agent slice for this launch. Empty tuple
+    # (default) means launch every agent declared on the campaign --
+    # i.e. the single-machine ``run-compute`` flow. Non-empty means
+    # the federated ``spawn-site`` flow: this daemon only owns the
+    # listed agents, the rest are presumed running elsewhere and
+    # reachable through the exchange. Order is preserved so MPI ranks
+    # map to ``agents[rank]`` deterministically.
+    agents: tuple[str, ...] = ()
+    # When True the rank-0 in-process bootstrap dispatch is skipped.
+    # Set by ``spawn-site`` to defer kickoff to the standalone
+    # ``bootstrap`` subcommand the operator runs once all sites are
+    # up. ``run-compute`` keeps the default (False) for backward
+    # compatibility with single-machine campaigns.
+    skip_bootstrap: bool = False
 
 
 def namespace_for_run(run_dir: pathlib.Path) -> str:
@@ -441,6 +455,44 @@ def selected_agent(campaign: ChemGraphCampaign, rank: int) -> ChemGraphAgentSpec
             f'{len(campaign.agents)} ranks for this campaign.',
         )
     return campaign.agents[rank]
+
+
+def filter_agents(
+    campaign: ChemGraphCampaign,
+    agent_names: Sequence[str],
+) -> ChemGraphCampaign:
+    """Return a copy of ``campaign`` with only the named agents.
+
+    Order in the returned ``agents`` tuple matches ``agent_names`` so MPI
+    rank-to-agent mapping stays deterministic across launches.
+
+    Raises:
+        RuntimeError: if any name in ``agent_names`` is not declared on
+            the campaign, or if ``agent_names`` is empty / has duplicates.
+
+    Note:
+        Subsetting deliberately does NOT rewrite ``initial_agent`` -- in
+        the federated ``spawn-site`` flow that name may still refer to an
+        agent hosted on another site. Validation against the subset is
+        loosened accordingly (callers must not pass the subsetted campaign
+        through ``validate_campaign`` with the strict ``initial_agent``
+        check; use it for per-site daemon launch only).
+    """
+    if not agent_names:
+        raise RuntimeError('filter_agents requires at least one agent name')
+    if len(set(agent_names)) != len(agent_names):
+        raise RuntimeError(f'duplicate agent names in selection: {list(agent_names)}')
+
+    by_name = {agent.name: agent for agent in campaign.agents}
+    unknown = sorted(set(agent_names).difference(by_name))
+    if unknown:
+        declared = sorted(by_name)
+        raise RuntimeError(
+            f'agents not declared on campaign: {unknown} (campaign declares {declared})',
+        )
+
+    selected = tuple(by_name[name] for name in agent_names)
+    return dataclasses.replace(campaign, agents=selected)
 
 
 def campaign_bootstrap_text(campaign: ChemGraphCampaign) -> str:

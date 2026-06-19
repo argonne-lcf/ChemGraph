@@ -22,6 +22,7 @@ from chemgraph.academy.observability.run_artifacts import (
 from chemgraph.academy.observability.run_artifacts import write_status_snapshot
 from chemgraph.academy.core.campaign import campaign_bootstrap_text
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
+from chemgraph.academy.core.campaign import filter_agents
 from chemgraph.academy.core.campaign import load_campaign
 from chemgraph.academy.core.campaign import namespace_for_run
 from chemgraph.academy.core.campaign import resolve_campaign_resources
@@ -38,6 +39,21 @@ from chemgraph.academy.runtime.mcp_supervisor import MCPServerSupervisor
 from chemgraph.models.settings import load_lm_settings
 
 
+def _parse_agents_arg(raw: str | None) -> tuple[str, ...]:
+    """Parse the comma-separated ``--agents`` flag into a name tuple.
+
+    Returns an empty tuple when the flag is omitted (single-machine
+    ``run-compute`` flow, every agent on the campaign is launched).
+    Whitespace around individual names is trimmed; empty segments
+    (e.g. trailing comma) are dropped silently. Duplicate-name
+    detection lives in ``filter_agents`` so the user-facing error
+    surfaces in one place regardless of where the list came from.
+    """
+    if not raw:
+        return ()
+    return tuple(name.strip() for name in raw.split(',') if name.strip())
+
+
 async def run_daemon(config: ChemGraphDaemonConfig) -> int:
     config.run_dir.mkdir(parents=True, exist_ok=True)
     llm_settings = load_lm_settings(config.lm_config)
@@ -46,6 +62,12 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
         config.run_dir,
     )
     prompt_profile = load_prompt_profile(campaign.prompt_profile)
+    # When this site only owns a slice (federated spawn-site flow),
+    # filter the campaign down to that slice BEFORE validation so the
+    # daemon's downstream rank-indexing (selected_agent, mpiexec -n)
+    # all agree on the same agent ordering.
+    if config.agents:
+        campaign = filter_agents(campaign, config.agents)
     validate_campaign(campaign, config.agent_count)
     agent_spec = selected_agent(campaign, config.rank)
     placement = placement_payload(config, agent_spec.name)
@@ -146,7 +168,21 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
         async with runtime:
             await agent.write_runtime_status()
 
-            if config.rank == 0:
+            # Rank 0 normally dispatches the campaign bootstrap message
+            # to ``initial_agent``. Two conditions skip it:
+            #   * ``--no-bootstrap`` was set (spawn-site flow -- kickoff
+            #     happens via the separate ``bootstrap`` subcommand once
+            #     every federated site has come up).
+            #   * ``initial_agent`` is not in this site's slice (it
+            #     lives on another site reachable through the exchange;
+            #     a non-owning site must not pretend to deliver the
+            #     bootstrap locally).
+            initial_is_local = campaign.initial_agent in registrations
+            if (
+                config.rank == 0
+                and not config.skip_bootstrap
+                and initial_is_local
+            ):
                 bootstrap = build_message(
                     sender='campaign',
                     recipient=campaign.initial_agent,
@@ -170,6 +206,19 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
                         'agent': campaign.initial_agent,
                         'message_id': bootstrap['message_id'],
                         'via': 'academy_action',
+                    },
+                )
+            elif config.rank == 0:
+                # Record the reason for skipping so investigators can
+                # tell "deferred to operator" apart from "silently
+                # forgot".
+                append_system_trace(
+                    config.run_dir,
+                    'bootstrap_message_skipped',
+                    {
+                        'initial_agent': campaign.initial_agent,
+                        'skip_bootstrap_flag': bool(config.skip_bootstrap),
+                        'initial_is_local': bool(initial_is_local),
                     },
                 )
 
@@ -228,6 +277,24 @@ def parse_args() -> argparse.Namespace:
             "Academy-hosted default. Ignored for other exchange types."
         ),
     )
+    parser.add_argument(
+        '--agents',
+        default=None,
+        help=(
+            "Comma-separated subset of agent names to launch (federated "
+            "spawn-site mode). Omit to launch every agent declared on the "
+            "campaign (single-machine run-compute mode)."
+        ),
+    )
+    parser.add_argument(
+        '--no-bootstrap',
+        action='store_true',
+        help=(
+            "Skip the rank-0 in-process bootstrap dispatch. Used by "
+            "spawn-site so kickoff can be triggered separately via the "
+            "'chemgraph academy bootstrap' subcommand once every site is up."
+        ),
+    )
     parser.add_argument('--chemgraph-repo-root')
     return parser.parse_args()
 
@@ -257,6 +324,8 @@ def config_from_args(args: argparse.Namespace) -> ChemGraphDaemonConfig:
         redis_namespace=args.redis_namespace or namespace_for_run(run_dir),
         exchange_type=args.exchange_type,
         http_exchange_url=args.http_exchange_url,
+        agents=_parse_agents_arg(args.agents),
+        skip_bootstrap=bool(args.no_bootstrap),
         rank=rank_from_env(),
         local_rank=local_rank_from_env(),
         chemgraph_repo_root=(
