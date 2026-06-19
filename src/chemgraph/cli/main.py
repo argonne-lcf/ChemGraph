@@ -302,6 +302,20 @@ Examples:
         ),
     )
 
+    bootstrap_parser = academy_sub.add_parser(
+        "bootstrap",
+        help=(
+            "Dispatch the campaign bootstrap message to the initial agent "
+            "via the exchange. Run after every site of a federated "
+            "campaign is up; the recipient is discovered by name."
+        ),
+    )
+    bootstrap_parser.add_argument(
+        "bootstrap_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to chemgraph.academy.runtime.bootstrap.",
+    )
+
     dashboard_parser = academy_sub.add_parser(
         "dashboard",
         help="Start the local dashboard launcher for a ChemGraph Academy run.",
@@ -657,6 +671,13 @@ def _handle_academy(args: argparse.Namespace) -> None:
         if code:
             sys.exit(code)
         return
+    if command == "bootstrap":
+        from chemgraph.academy.runtime.bootstrap import main as bootstrap_main
+
+        code = bootstrap_main(_strip_remainder_separator(args.bootstrap_args))
+        if code:
+            sys.exit(code)
+        return
     if command == "campaigns":
         from chemgraph.academy.campaigns import list_campaigns
 
@@ -665,7 +686,7 @@ def _handle_academy(args: argparse.Namespace) -> None:
         return
     console.print(
         "Usage: chemgraph academy "
-        "{mpi-daemon,run-compute,spawn-site,dashboard,campaigns}.",
+        "{mpi-daemon,run-compute,spawn-site,bootstrap,dashboard,campaigns}.",
     )
 
 
