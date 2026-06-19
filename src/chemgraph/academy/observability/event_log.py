@@ -45,6 +45,7 @@ EventKind = Literal[
     "daemon_started",
     "daemon_stopped",
     "bootstrap_message_dispatched",
+    "bootstrap_message_skipped",
     "llm_tool_calls",
     "turn_finished_without_external_action",
     "chemgraph_reasoning_turn_started",
