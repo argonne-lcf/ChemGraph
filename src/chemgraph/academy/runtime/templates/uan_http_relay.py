@@ -19,7 +19,9 @@ any Python interpreter without pip-installing anything on the remote.
 from __future__ import annotations
 
 import argparse
+import signal
 import socket
+import sys
 import threading
 
 
@@ -72,17 +74,36 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind((args.listen_host, args.listen_port))
-        server.listen(128)
-        print(
-            f'relay listening on {args.listen_host}:{args.listen_port} '
-            f'-> {args.target_host}:{args.target_port}',
-            flush=True,
-        )
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind((args.listen_host, args.listen_port))
+    server.listen(128)
+    print(
+        f'relay listening on {args.listen_host}:{args.listen_port} '
+        f'-> {args.target_host}:{args.target_port}',
+        flush=True,
+    )
+
+    def shutdown(_signo: int, _frame: object) -> None:
+        # Closing the listen socket inside the handler interrupts
+        # server.accept() with EBADF / OSError, which we catch below
+        # to fall through to a clean exit. Without this the relay
+        # ignores SIGTERM (default action) and orphans the port.
+        try:
+            server.close()
+        except OSError:
+            pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    try:
         while True:
-            client, addr = server.accept()
+            try:
+                client, addr = server.accept()
+            except OSError:
+                break
             print(f'accepted connection from {addr[0]}:{addr[1]}', flush=True)
             thread = threading.Thread(
                 target=handle_client,
@@ -90,6 +111,12 @@ def main() -> int:
                 daemon=True,
             )
             thread.start()
+    finally:
+        try:
+            server.close()
+        except OSError:
+            pass
+    return 0
 
 
 if __name__ == '__main__':
