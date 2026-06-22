@@ -8,7 +8,6 @@ from collections.abc import Mapping
 from typing import Any
 
 from chemgraph.academy.observability.event_log import EventLog
-from chemgraph.academy.observability.run_files import write_json_atomic
 
 MPI_RANK_ENV = (
     'PMI_RANK',
