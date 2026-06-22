@@ -244,6 +244,18 @@ def _write_lm_config(
     if max_tokens is not None:
         data["max_tokens"] = max_tokens
 
+    # Refuse to ship a config whose `user` is still the template
+    # placeholder. Argo rejects requests with an unknown user, but
+    # only at first-call time on the compute node, after the whole
+    # daemon + relay stack is already running -- expensive to debug.
+    # Fail here instead, with a message pointing at the fix.
+    if data.get("user") in (None, "", "<argo-user>"):
+        raise RuntimeError(
+            f"lm_config.json was written with user={data.get('user')!r}. "
+            "Pass --lm-user <your-argo-username> or export ARGO_USER "
+            "before launching spawn-site / run-compute."
+        )
+
     path = run_dir / "lm_config.json"
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return path
@@ -288,12 +300,18 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         profile=profile,
         metadata=metadata,
     )
+    # Default lm-user from $ARGO_USER so HPC users who already export it
+    # for their normal ChemGraph workflow don't have to pass --lm-user
+    # again. The packaged template ships with a literal "<argo-user>"
+    # placeholder so it can't accidentally point at someone else's
+    # Argo account; _write_lm_config refuses to keep that placeholder.
+    lm_user = args.lm_user or os.environ.get("ARGO_USER")
     lm_config = _write_lm_config(
         run_dir=run_dir,
         template_name=defaults.lm_config_template,
         base_url=lm_base_url,
         lm_model=args.lm_model,
-        lm_user=args.lm_user,
+        lm_user=lm_user,
         max_tokens=args.max_tokens,
     )
     _export_workflow_lm_environment(lm_config)

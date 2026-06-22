@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -11,6 +12,7 @@ import pytest
 pytest.importorskip("academy")
 
 from academy.identifier import AgentId
+from academy.exchange.cloud.client import DEFAULT_EXCHANGE_URL
 
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
 from chemgraph.academy.runtime.exchange import build_exchange_factory
@@ -50,6 +52,18 @@ def _config(
     )
 
 
+class HttpExchangeFactory:
+    def __init__(self, url: str = DEFAULT_EXCHANGE_URL, **kwargs: Any) -> None:
+        self._info = SimpleNamespace(url=url)
+        self.kwargs = kwargs
+
+
+def _stub_http_exchange_factory(monkeypatch: pytest.MonkeyPatch) -> None:
+    import academy.exchange.cloud as cloud
+
+    monkeypatch.setattr(cloud, 'HttpExchangeFactory', HttpExchangeFactory)
+
+
 # ---------------------------------------------------------------------------
 # Exchange factory dispatch
 # ---------------------------------------------------------------------------
@@ -68,7 +82,11 @@ def test_build_exchange_factory_dispatches_by_config(
     tmp_path,
     exchange_type,
     expected_class,
+    monkeypatch,
 ) -> None:
+    if exchange_type == 'http':
+        _stub_http_exchange_factory(monkeypatch)
+
     factory = build_exchange_factory(_config(tmp_path, exchange_type))
 
     assert type(factory).__name__ == expected_class
@@ -99,12 +117,13 @@ def test_exchange_uses_redis_helper_matches_dispatch_table() -> None:
 
 def test_http_exchange_factory_uses_hosted_default_when_url_omitted(
     tmp_path,
+    monkeypatch,
 ) -> None:
     """A ``None`` ``http_exchange_url`` must select Academy's hosted
     default (https://exchange.academy-agents.org/v1). This is the path
     every cross-HPC campaign takes unless the operator stands up a
     self-hosted exchange."""
-    from academy.exchange.cloud.client import DEFAULT_EXCHANGE_URL
+    _stub_http_exchange_factory(monkeypatch)
     factory = build_exchange_factory(_config(tmp_path, 'http'))
 
     # Upstream stores connection details on factory._info; reach into
@@ -112,11 +131,12 @@ def test_http_exchange_factory_uses_hosted_default_when_url_omitted(
     assert factory._info.url == DEFAULT_EXCHANGE_URL
 
 
-def test_http_exchange_factory_honors_custom_url(tmp_path) -> None:
+def test_http_exchange_factory_honors_custom_url(tmp_path, monkeypatch) -> None:
     """Operators must be able to point at a self-hosted HTTP exchange
     server (``python -m academy.exchange.cloud``). This is the escape
     hatch when the public Academy server is unavailable or undesired."""
     custom = 'https://my-private-exchange.example.com/v1'
+    _stub_http_exchange_factory(monkeypatch)
     factory = build_exchange_factory(
         _config(tmp_path, 'http', http_exchange_url=custom),
     )
