@@ -48,6 +48,14 @@ class SubmitConfig:
     # the launcher pass through spawn-site flags it doesn't have a
     # dedicated --launcher-flag for (--agents-per-node, etc.).
     extra_spawn_args: tuple[str, ...] = ()
+    # Env vars to export inside the PBS script before invoking
+    # spawn-site. Same purpose as AttachConfig.remote_env: PBS batch
+    # jobs only inherit a tiny default env, so without an explicit
+    # export here, system profiles that substitute ${ALCF_USER},
+    # ${ALCF_PROJECT}, etc. fail to load with "unresolved environment
+    # variables". The launcher populates this from the operator's
+    # local shell.
+    remote_env: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 def render_pbs_script(cfg: SubmitConfig) -> str:
@@ -77,6 +85,19 @@ def render_pbs_script(cfg: SubmitConfig) -> str:
         "",
         "set -e",
         f"mkdir -p {cfg.run_dir}",
+    ]
+    # PBS batch jobs only inherit a tiny default env (no ALCF_USER,
+    # ARGO_USER, http_proxy from the operator's login shell). System
+    # profiles do ${ALCF_USER}/${ALCF_PROJECT} substitution at load
+    # time -- without these exports the daemon dies with
+    # "unresolved environment variables" before anything else runs.
+    # Render BEFORE source so the env_script can also reference them
+    # if it needs to.
+    for k in sorted(cfg.remote_env):
+        v = cfg.remote_env[k]
+        if v:
+            pbs_lines.append(f"export {k}={ssh_quote(v)}")
+    pbs_lines += [
         f"source {cfg.env_script}",
         f"cd {cfg.bundle_root}",
         "",

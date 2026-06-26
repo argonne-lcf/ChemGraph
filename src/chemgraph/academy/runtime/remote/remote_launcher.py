@@ -501,6 +501,7 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
         http_exchange_url=args.http_exchange_url,
         project=args.project,
         extra_spawn_args=tuple(args.spawn_arg),
+        remote_env=remote_env,
     )
     return SubmitSiteBackend(cfg, local_run_dir=local_run_dir)
 

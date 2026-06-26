@@ -272,6 +272,46 @@ def test_submit_backend_wait_ready_constructs_attach_view_with_current_field_nam
     assert result == {"a"}
 
 
+def test_submit_backend_pbs_script_exports_remote_env() -> None:
+    """Regression guard: PBS batch jobs only inherit a tiny default
+    env, so system profiles that do ${ALCF_USER}/${ALCF_PROJECT}
+    substitution fail to load. The rendered PBS script must export
+    forwarded env vars BEFORE `source <env_script>`.
+
+    Symptom without this: spawn-site dies inside the PBS job with
+    'unresolved environment variables: ALCF_PROJECT, ALCF_USER, ...'
+    -- caught live in submit-smoke-004."""
+    from chemgraph.academy.runtime.remote.submit_backend import (
+        SubmitConfig,
+        render_pbs_script,
+    )
+
+    cfg = SubmitConfig(
+        site=SiteSpec(
+            name="aurora", mode="submit", agents=("a",),
+            queue="debug", walltime="01:00:00", project="P",
+        ),
+        run_id="r", campaign="federated-chat",
+        login_host="u@aurora", bundle_root="/flare/cg",
+        env_script="/flare/cg/v/bin/activate",
+        run_dir="/flare/runs/r",
+        remote_env={
+            "ALCF_PROJECT": "ChemGraph",
+            "ALCF_USER": "jinchu",
+            "ARGO_USER": "jinchu.li",
+        },
+    )
+    text = render_pbs_script(cfg)
+    assert "export ALCF_PROJECT=ChemGraph" in text
+    assert "export ALCF_USER=jinchu" in text
+    assert "export ARGO_USER=jinchu.li" in text
+    # Order matters: exports must come BEFORE source so env_script
+    # can reference them (and so spawn-site itself sees them).
+    export_idx = text.index("export ALCF_PROJECT=")
+    source_idx = text.index("source ")
+    assert export_idx < source_idx, "exports must precede source <env_script>"
+
+
 def test_submit_backend_per_site_project_overrides_global() -> None:
     """site.project (from --site flag) wins over SubmitConfig.project
     (from --project CLI). Lets a multi-site invocation use one global
