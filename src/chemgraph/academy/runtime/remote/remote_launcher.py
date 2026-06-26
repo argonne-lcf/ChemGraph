@@ -1,7 +1,7 @@
 """``chemgraph academy launch`` orchestrator.
 
-Phase 2: one --site, attach OR submit. Multi-site, preflight,
-auto-bootstrap, status/stop are phases 3-5.
+Phase 3: multi-site, mixed-mode, auto-bootstrap. Preflight and
+status/stop subcommands are phases 4-5.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Each --site is either attach-mode (ssh straight into a "
             "compute node inside an existing interactive PBS allocation) "
             "or submit-mode (qsub a fresh PBS job via the login node). "
-            "Phase 2 still supports only one --site; multi-site is phase 3."
+            "Pass --site multiple times to bring up several HPCs at once."
         ),
     )
     p.add_argument("--run-id", required=True)
@@ -42,31 +42,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="append",
         required=True,
         help=(
-            "NAME:KEY=VAL;KEY=VAL... e.g. "
-            "aurora:attach=x4505;agents=alpha OR "
-            "aurora:queue=debug;walltime=01:00:00;agents=alpha;project=MYPROJ"
+            "NAME:KEY=VAL;KEY=VAL... Pass multiple --site flags for "
+            "multi-site launches. Examples: "
+            "aurora:attach=x4505;agents=alpha  OR  "
+            "crux:queue=debug;walltime=01:00:00;agents=beta;project=MYPROJ"
         ),
     )
     p.add_argument(
         "--bundle-root",
         required=True,
         help=(
-            "Absolute path on the compute host where this ChemGraph "
-            "checkout lives, e.g. /flare/$ALCF_PROJECT/$USER/ChemGraph."
+            "Absolute path on each compute host where this ChemGraph "
+            "checkout lives, e.g. /flare/$ALCF_PROJECT/$USER/ChemGraph. "
+            "Assumed identical across all --site targets."
         ),
     )
     p.add_argument(
         "--env-script",
         help=(
             "Absolute path on the compute host of the env source script. "
-            "Defaults to {bundle-root}/env.{system}.sh."
+            "Defaults to {bundle-root}/env.{system}.sh per site."
         ),
     )
     p.add_argument(
         "--run-dir",
         help=(
             "Absolute path on the compute host for the run directory. "
-            "Defaults to the system profile's run_root / run-id."
+            "Defaults to the system profile's run_root / run-id per site."
         ),
     )
     p.add_argument(
@@ -95,9 +97,25 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=300.0,
         help=(
-            "How long to wait for agents to register, post-allocation. "
-            "Default 300s. For submit-mode the queue wait gets ~80%% of "
-            "this budget; bump higher when queueing into busy queues."
+            "Per-site: how long to wait for agents to register, post-"
+            "allocation. Default 300s. For submit-mode the queue wait "
+            "gets ~80%% of this budget; bump for busy queues."
+        ),
+    )
+    p.add_argument(
+        "--auto-bootstrap",
+        action="store_true",
+        help=(
+            "After every site reports ready, dispatch the campaign "
+            "bootstrap message to the initial agent. Equivalent to "
+            "running 'chemgraph academy bootstrap' manually."
+        ),
+    )
+    p.add_argument(
+        "--bootstrap-recipient",
+        help=(
+            "Override the bootstrap recipient (defaults to the "
+            "campaign's initial_agent). Ignored without --auto-bootstrap."
         ),
     )
     return p.parse_args(argv)
@@ -116,10 +134,19 @@ def _resolve_env_script(args: argparse.Namespace, site: SiteSpec) -> str:
     return f"{args.bundle_root.rstrip('/')}/env.{site.name}.sh"
 
 
+def _resolve_local_run_dir(
+    args: argparse.Namespace,
+    site: SiteSpec,
+) -> Path:
+    if args.local_run_dir:
+        return Path(args.local_run_dir)
+    return Path(_resolve_run_dir(site, args))
+
+
 def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
     run_dir = _resolve_run_dir(site, args)
     env_script = _resolve_env_script(args, site)
-    local_run_dir = Path(args.local_run_dir) if args.local_run_dir else Path(run_dir)
+    local_run_dir = _resolve_local_run_dir(args, site)
 
     if site.mode == "attach":
         cfg = AttachConfig(
@@ -134,8 +161,6 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
         )
         return AttachSiteBackend(cfg, local_run_dir=local_run_dir)
 
-    # submit-mode: ssh target comes from the system profile's remote_host
-    # (it already encodes $ALCF_SSH_USER@host correctly).
     profile = load_system_profile(site.name)
     cfg = SubmitConfig(
         site=site,
@@ -152,68 +177,142 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
     return SubmitSiteBackend(cfg)
 
 
-async def _launch_one(args: argparse.Namespace) -> int:
-    if len(args.site) != 1:
-        print(
-            "launch: phase 2 supports exactly one --site. Multi-site lands in phase 3.",
-            file=sys.stderr,
-        )
-        return 2
+def build_backends(
+    args: argparse.Namespace,
+) -> list[tuple[SiteSpec, SiteBackend]]:
+    """Parse every --site flag and construct a backend per site.
 
-    site = parse_site(args.site[0])
+    Returns the (spec, backend) pairs so the caller has both the
+    parsed spec (for messaging) and the backend (for lifecycle).
+    """
+    out: list[tuple[SiteSpec, SiteBackend]] = []
+    for raw in args.site:
+        spec = parse_site(raw)
+        out.append((spec, _make_backend(args, spec)))
+    return out
+
+
+async def _stop_all(backends: list[SiteBackend], *, force: bool = False) -> None:
+    """Best-effort tear-down. Each backend swallows its own exceptions
+    inside stop() already; we still wrap with return_exceptions to
+    prevent one failing stop from leaving siblings behind."""
+    await asyncio.gather(
+        *(b.stop(force=force) for b in backends),
+        return_exceptions=True,
+    )
+
+
+def _run_bootstrap(args: argparse.Namespace) -> int:
+    """Invoke bootstrap subcommand in-process (it ships its own
+    argv-based main, so we just hand it the right argv).
+    """
+    from chemgraph.academy.runtime.bootstrap import main as bootstrap_main
+
+    bs_argv = [
+        "--campaign", args.campaign,
+        "--run-id", args.run_id,
+        "--exchange-type", args.exchange_type,
+    ]
+    if args.http_exchange_url:
+        bs_argv += ["--http-exchange-url", args.http_exchange_url]
+    if args.bootstrap_recipient:
+        bs_argv += ["--recipient", args.bootstrap_recipient]
+    return bootstrap_main(bs_argv) or 0
+
+
+async def _launch(args: argparse.Namespace) -> int:
     try:
-        backend = _make_backend(args, site)
-    except ValueError as e:
+        pairs = build_backends(args)
+    except (ValueError, NotImplementedError) as e:
         print(f"launch: {e}", file=sys.stderr)
         return 2
 
-    local_run_dir = (
-        Path(args.local_run_dir)
-        if args.local_run_dir
-        else Path(_resolve_run_dir(site, args))
+    backends = [b for _, b in pairs]
+    site_summary = ", ".join(
+        f"{spec.name}({spec.mode})" for spec, _ in pairs
     )
+    print(f"[launch] sites=[{site_summary}] run-id={args.run_id}", file=sys.stderr)
 
-    print(
-        f"[launch] site={site.name} mode={site.mode} agents={','.join(site.agents)}",
-        file=sys.stderr,
+    # Phase: start every site in parallel. If any fails to start, tear
+    # down whatever did start before propagating.
+    start_results = await asyncio.gather(
+        *(b.start() for b in backends),
+        return_exceptions=True,
     )
-    try:
-        await backend.start()
-        registered = await backend.wait_ready(
-            local_run_dir=local_run_dir,
-            timeout_s=args.ready_timeout_s,
-        )
-        mode_note = (
-            "run is live inside YOUR allocation; exiting will leave it running."
-            if site.mode == "attach"
-            else "PBS job continues running."
-        )
-        print(
-            f"[launch] ready: registered={sorted(registered)}. {mode_note} "
-            f"Use 'chemgraph academy bootstrap' to kick off the campaign.",
-            file=sys.stderr,
-        )
-        return 0
-    except TimeoutError as e:
-        print(f"[launch] {e}", file=sys.stderr)
-        await backend.stop()
+    start_errors = [
+        (spec, exc)
+        for (spec, _), exc in zip(pairs, start_results)
+        if isinstance(exc, BaseException)
+    ]
+    if start_errors:
+        for spec, exc in start_errors:
+            print(f"[launch] start failed for {spec.name}: {exc}", file=sys.stderr)
+        await _stop_all(backends)
         return 1
-    except RuntimeError as e:
-        print(f"[launch] {e}", file=sys.stderr)
-        await backend.stop()
+
+    # Phase: wait for every site to report ready in parallel. asyncio
+    # cancels the in-flight waiters on exception, so the first miss
+    # short-circuits the rest. The wait_ready coroutines own their
+    # own timeouts.
+    try:
+        ready_results = await asyncio.gather(
+            *(
+                b.wait_ready(
+                    local_run_dir=_resolve_local_run_dir(args, spec),
+                    timeout_s=args.ready_timeout_s,
+                )
+                for spec, b in pairs
+            ),
+        )
+    except (TimeoutError, RuntimeError) as e:
+        print(f"[launch] wait_ready failed: {e}", file=sys.stderr)
+        await _stop_all(backends)
         return 1
     except KeyboardInterrupt:
+        print("[launch] interrupted during wait_ready; tearing down", file=sys.stderr)
+        await _stop_all(backends)
+        return 130
+
+    for (spec, _), agents in zip(pairs, ready_results):
         print(
-            f"[launch] interrupted; cancelling {site.mode}-mode work",
+            f"[launch] ready: {spec.name} -> {sorted(agents)}",
             file=sys.stderr,
         )
-        await backend.stop()
-        return 130
+
+    # Phase: auto-bootstrap.
+    if args.auto_bootstrap:
+        print("[launch] all sites ready, dispatching bootstrap...", file=sys.stderr)
+        # bootstrap_main is blocking and runs its own asyncio loop;
+        # offload to a thread so a future operator-side keepalive in
+        # this coroutine doesn't deadlock against it.
+        rc = await asyncio.to_thread(_run_bootstrap, args)
+        if rc:
+            print(f"[launch] bootstrap returned {rc}", file=sys.stderr)
+            # Don't tear down -- agents are still useful, operator can
+            # re-run bootstrap manually after fixing the cause.
+            return rc
+        print("[launch] bootstrap dispatched.", file=sys.stderr)
+
+    # Phase: report and exit. The compute processes keep running --
+    # attach-mode lives inside the operator's allocation, submit-mode
+    # has its own PBS job. Either way, exiting the launcher does not
+    # tear them down.
+    print(
+        "[launch] launch complete. Compute processes continue running.",
+        file=sys.stderr,
+    )
+    for spec, _ in pairs:
+        if spec.mode == "attach":
+            note = "inside YOUR allocation; exiting your interactive shell will end it"
+        else:
+            note = "as a PBS job; qdel manually to cancel"
+        print(f"[launch]   {spec.name}: {spec.mode}-mode -- {note}", file=sys.stderr)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    return asyncio.run(_launch_one(args))
+    return asyncio.run(_launch(args))
 
 
 if __name__ == "__main__":

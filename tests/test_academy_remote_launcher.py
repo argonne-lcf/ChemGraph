@@ -205,6 +205,248 @@ def test_submit_backend_per_site_project_overrides_global() -> None:
     assert "GLOBAL_PROJ" not in text
 
 
+# ---------------------------------------------------------------------------
+# Phase 3: multi-site orchestration
+# ---------------------------------------------------------------------------
+
+
+import asyncio
+import os
+
+
+class _FakeBackend:
+    """Test double implementing the SiteBackend Protocol."""
+
+    def __init__(
+        self,
+        site_name: str,
+        *,
+        start_raises: BaseException | None = None,
+        ready_raises: BaseException | None = None,
+        ready_agents: set[str] | None = None,
+        ready_delay_s: float = 0.0,
+    ) -> None:
+        self.site_name = site_name
+        self.start_called = False
+        self.stop_called = False
+        self.stop_force = False
+        self._start_raises = start_raises
+        self._ready_raises = ready_raises
+        self._ready_agents = ready_agents or {f"{site_name}-agent"}
+        self._ready_delay_s = ready_delay_s
+
+    async def start(self) -> None:
+        self.start_called = True
+        if self._start_raises is not None:
+            raise self._start_raises
+
+    async def wait_ready(self, *, local_run_dir, timeout_s):  # type: ignore[no-untyped-def]
+        if self._ready_delay_s:
+            await asyncio.sleep(self._ready_delay_s)
+        if self._ready_raises is not None:
+            raise self._ready_raises
+        return set(self._ready_agents)
+
+    async def stop(self, *, force: bool = False) -> None:
+        self.stop_called = True
+        self.stop_force = force
+
+
+def _ns(**kw):
+    import argparse
+    defaults = dict(
+        run_id="r1",
+        campaign="federated-chat",
+        site=[],
+        bundle_root="/flare/cg",
+        env_script=None,
+        run_dir="/tmp/r1",
+        local_run_dir="/tmp/r1",
+        exchange_type="http",
+        http_exchange_url=None,
+        project=None,
+        ready_timeout_s=5.0,
+        auto_bootstrap=False,
+        bootstrap_recipient=None,
+    )
+    defaults.update(kw)
+    return argparse.Namespace(**defaults)
+
+
+def test_launch_all_sites_ready_returns_zero(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    backends = [_FakeBackend("aurora"), _FakeBackend("crux")]
+    pairs = [
+        (SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"), backends[0]),
+        (SiteSpec(name="crux",   mode="attach", agents=("b",), compute_host="h"), backends[1]),
+    ]
+    monkeypatch.setattr(remote_launcher, "build_backends", lambda args: pairs)
+
+    args = _ns(site=["aurora:attach=h;agents=a", "crux:attach=h;agents=b"])
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 0
+    assert all(b.start_called for b in backends)
+    assert not any(b.stop_called for b in backends)
+
+
+def test_launch_wait_ready_failure_stops_all_siblings(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    good = _FakeBackend("aurora", ready_delay_s=0.05)
+    bad = _FakeBackend("crux", ready_raises=TimeoutError("no register"))
+    pairs = [
+        (SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"), good),
+        (SiteSpec(name="crux",   mode="attach", agents=("b",), compute_host="h"), bad),
+    ]
+    monkeypatch.setattr(remote_launcher, "build_backends", lambda args: pairs)
+
+    args = _ns(site=["aurora:attach=h;agents=a", "crux:attach=h;agents=b"])
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 1
+    # Both backends should have stop() called even though only one failed.
+    assert good.stop_called
+    assert bad.stop_called
+
+
+def test_launch_start_failure_short_circuits_wait_ready(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    bad = _FakeBackend("aurora", start_raises=RuntimeError("scp failed"))
+    good = _FakeBackend("crux")
+    pairs = [
+        (SiteSpec(name="aurora", mode="submit", agents=("a",), queue="q", walltime="01:00:00"), bad),
+        (SiteSpec(name="crux",   mode="attach", agents=("b",), compute_host="h"), good),
+    ]
+    monkeypatch.setattr(remote_launcher, "build_backends", lambda args: pairs)
+
+    args = _ns(site=["aurora:queue=q;walltime=01:00:00;agents=a", "crux:attach=h;agents=b"])
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 1
+    # Sibling should NOT have wait_ready called; phase 3's gather-start
+    # short-circuits to teardown before wait_ready runs.
+    assert bad.stop_called and good.stop_called
+
+
+def test_launch_auto_bootstrap_runs_when_ready(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    backend = _FakeBackend("aurora")
+    pairs = [
+        (SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"), backend),
+    ]
+    monkeypatch.setattr(remote_launcher, "build_backends", lambda args: pairs)
+
+    captured: list[list[str]] = []
+    def fake_run_bootstrap(args):
+        # Match the signature of _run_bootstrap. Capture for assertion.
+        captured.append([
+            "--campaign", args.campaign,
+            "--run-id", args.run_id,
+            "--exchange-type", args.exchange_type,
+        ])
+        return 0
+    monkeypatch.setattr(remote_launcher, "_run_bootstrap", fake_run_bootstrap)
+
+    args = _ns(
+        site=["aurora:attach=h;agents=a"],
+        auto_bootstrap=True,
+    )
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 0
+    assert captured == [["--campaign", "federated-chat", "--run-id", "r1", "--exchange-type", "http"]]
+
+
+def test_launch_auto_bootstrap_skipped_without_flag(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    backend = _FakeBackend("aurora")
+    pairs = [
+        (SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"), backend),
+    ]
+    monkeypatch.setattr(remote_launcher, "build_backends", lambda args: pairs)
+    called = []
+    monkeypatch.setattr(remote_launcher, "_run_bootstrap", lambda args: called.append(1) or 0)
+
+    args = _ns(site=["aurora:attach=h;agents=a"], auto_bootstrap=False)
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 0
+    assert called == []
+
+
+def test_launch_auto_bootstrap_propagates_recipient_override(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    backend = _FakeBackend("aurora")
+    pairs = [
+        (SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"), backend),
+    ]
+    monkeypatch.setattr(remote_launcher, "build_backends", lambda args: pairs)
+
+    captured_argv: list[list[str]] = []
+    def fake_bootstrap_main(argv):
+        captured_argv.append(list(argv))
+        return 0
+    # Patch bootstrap.main where _run_bootstrap imports it from.
+    import chemgraph.academy.runtime.bootstrap as bs
+    monkeypatch.setattr(bs, "main", fake_bootstrap_main)
+
+    args = _ns(
+        site=["aurora:attach=h;agents=a"],
+        auto_bootstrap=True,
+        bootstrap_recipient="custom-receiver",
+    )
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 0
+    assert captured_argv
+    assert "--recipient" in captured_argv[0]
+    assert "custom-receiver" in captured_argv[0]
+
+
+def test_launch_bootstrap_failure_keeps_agents_running(monkeypatch):
+    """If bootstrap fails, the launcher returns nonzero but does NOT
+    tear down the agents -- operator can re-run bootstrap manually."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    backend = _FakeBackend("aurora")
+    pairs = [
+        (SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"), backend),
+    ]
+    monkeypatch.setattr(remote_launcher, "build_backends", lambda args: pairs)
+    monkeypatch.setattr(remote_launcher, "_run_bootstrap", lambda args: 7)
+
+    args = _ns(site=["aurora:attach=h;agents=a"], auto_bootstrap=True)
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 7
+    assert not backend.stop_called  # agents intentionally left running
+
+
+def test_parse_args_rejects_missing_site():
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    with pytest.raises(SystemExit):
+        remote_launcher.parse_args([
+            "--run-id", "r1",
+            "--campaign", "federated-chat",
+            "--bundle-root", "/flare/cg",
+        ])
+
+
+def test_parse_args_accepts_multiple_sites():
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    args = remote_launcher.parse_args([
+        "--run-id", "r1",
+        "--campaign", "federated-chat",
+        "--bundle-root", "/flare/cg",
+        "--site", "aurora:attach=h1;agents=a",
+        "--site", "crux:queue=debug;walltime=01:00:00;agents=b;project=MYPROJ",
+        "--auto-bootstrap",
+    ])
+    assert len(args.site) == 2
+    assert args.auto_bootstrap is True
+
+
 def test_attach_backend_renders_spawn_site_command() -> None:
     from chemgraph.academy.runtime.remote.attach_backend import (
         AttachConfig,
