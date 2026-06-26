@@ -934,8 +934,10 @@ def test_collect_remote_env_injects_alcf_proxy_for_http(monkeypatch):
     assert env["http_proxy"] == remote_launcher._ALCF_HTTP_PROXY
     assert env["HTTP_PROXY"] == remote_launcher._ALCF_HTTP_PROXY
     assert env["https_proxy"] == remote_launcher._ALCF_HTTP_PROXY
-    assert "no_proxy" in env
-    assert ".alcf.anl.gov" in env["no_proxy"]
+    # NO_PROXY intentionally NOT injected -- see _collect_remote_env
+    # comment about shell-quote escaping across the ssh chain.
+    assert "no_proxy" not in env
+    assert "NO_PROXY" not in env
 
 
 def test_collect_remote_env_skips_proxy_injection_for_redis(monkeypatch):

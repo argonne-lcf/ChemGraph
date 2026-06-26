@@ -237,7 +237,6 @@ _FORWARDED_ENV_VARS = (
 # forwarding from the operator's shell. Hardcoded so federated
 # launches "just work" without operator setup.
 _ALCF_HTTP_PROXY = "http://proxy.alcf.anl.gov:3128"
-_ALCF_NO_PROXY = "127.0.0.1,localhost,.alcf.anl.gov,*.alcf.anl.gov"
 
 
 def _collect_remote_env(*, exchange_type: str) -> dict[str, str]:
@@ -262,8 +261,15 @@ def _collect_remote_env(*, exchange_type: str) -> dict[str, str]:
         env.setdefault("https_proxy", _ALCF_HTTP_PROXY)
         env.setdefault("HTTP_PROXY", _ALCF_HTTP_PROXY)
         env.setdefault("HTTPS_PROXY", _ALCF_HTTP_PROXY)
-        env.setdefault("no_proxy", _ALCF_NO_PROXY)
-        env.setdefault("NO_PROXY", _ALCF_NO_PROXY)
+        # NOTE: don't inject NO_PROXY/no_proxy. The value contains
+        # commas + globs (``*.alcf.anl.gov``) which trigger four
+        # layers of shell-quote escape across laptop->login->compute
+        # ssh chain, producing an unparseable bash -c argument that
+        # silently kills the whole script before mkdir runs (bash
+        # validates the whole -c string before executing anything).
+        # compute_launcher already writes the correct no_proxy from
+        # profile.no_proxy via _prepare_environment, so we don't
+        # need to inject it on the bash side anyway.
     return env
 
 
