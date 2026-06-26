@@ -911,11 +911,60 @@ def test_collect_remote_env_picks_up_alcf_vars(monkeypatch):
     monkeypatch.setenv("ARGO_USER", "jinchu.li")
     monkeypatch.setenv("ALCF_PROJECT", "")  # empty -- must be dropped
 
-    env = remote_launcher._collect_remote_env()
+    env = remote_launcher._collect_remote_env(exchange_type="http")
     assert env["ALCF_USER"] == "jinchu"
     assert env["ALCF_SSH_USER"] == "jinchuli"
     assert env["ARGO_USER"] == "jinchu.li"
     assert "ALCF_PROJECT" not in env  # empty was filtered
+
+
+def test_collect_remote_env_injects_alcf_proxy_for_http(monkeypatch):
+    """When exchange_type=http, the launcher injects the ALCF HTTP
+    proxy + no_proxy list so compute ranks can reach
+    exchange.academy-agents.org. Required because the operator's
+    laptop usually doesn't have http_proxy set, so env forwarding
+    alone leaves the remote shell with nothing to pass to mpiexec's
+    --genv."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    for k in (*remote_launcher._FORWARDED_ENV_VARS,):
+        monkeypatch.delenv(k, raising=False)
+
+    env = remote_launcher._collect_remote_env(exchange_type="http")
+    assert env["http_proxy"] == remote_launcher._ALCF_HTTP_PROXY
+    assert env["HTTP_PROXY"] == remote_launcher._ALCF_HTTP_PROXY
+    assert env["https_proxy"] == remote_launcher._ALCF_HTTP_PROXY
+    assert "no_proxy" in env
+    assert ".alcf.anl.gov" in env["no_proxy"]
+
+
+def test_collect_remote_env_skips_proxy_injection_for_redis(monkeypatch):
+    """Non-http exchange types (redis, local, hybrid) don't need the
+    proxy because compute ranks talk to a local Redis or in-process
+    exchange. Skip the injection to avoid masking operator-set
+    proxy values they intentionally turned off."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    for k in (*remote_launcher._FORWARDED_ENV_VARS,):
+        monkeypatch.delenv(k, raising=False)
+
+    env = remote_launcher._collect_remote_env(exchange_type="redis")
+    assert "http_proxy" not in env
+    assert "HTTP_PROXY" not in env
+
+
+def test_collect_remote_env_operator_proxy_wins(monkeypatch):
+    """If the operator has http_proxy set in their laptop shell
+    (e.g. corporate network), it must NOT be overwritten by the
+    ALCF default. setdefault semantics."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    for k in remote_launcher._FORWARDED_ENV_VARS:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("http_proxy", "http://corp-proxy:8080")
+
+    env = remote_launcher._collect_remote_env(exchange_type="http")
+    assert env["http_proxy"] == "http://corp-proxy:8080"
 
 
 def test_attach_backend_direct_ssh_when_login_host_empty() -> None:

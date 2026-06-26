@@ -229,13 +229,42 @@ _FORWARDED_ENV_VARS = (
 )
 
 
-def _collect_remote_env() -> dict[str, str]:
-    """Snapshot of FORWARDED env vars present in the operator's
-    local shell. Empty values are dropped so the remote bash doesn't
-    end up with ``export ARGO_USER=`` (which would shadow whatever
-    was inherited from the login node).
+# ALCF HTTP proxy on compute nodes. Required for any outbound
+# traffic from compute to the public internet (the hosted Academy
+# exchange). Not parameterised because it's the same value across
+# Aurora/Crux/Polaris -- and crucially, the operator's LAPTOP
+# typically does NOT have http_proxy set, so we cannot rely on env
+# forwarding from the operator's shell. Hardcoded so federated
+# launches "just work" without operator setup.
+_ALCF_HTTP_PROXY = "http://proxy.alcf.anl.gov:3128"
+_ALCF_NO_PROXY = "127.0.0.1,localhost,.alcf.anl.gov,*.alcf.anl.gov"
+
+
+def _collect_remote_env(*, exchange_type: str) -> dict[str, str]:
+    """Snapshot of env vars to forward to the remote bash.
+
+    Two sources:
+    1. FORWARDED env vars present in the operator's local shell
+       (ALCF_*, ARGO_USER, ...). Empty values dropped so the remote
+       bash doesn't end up with ``export ARGO_USER=`` and shadow
+       what was inherited from the login node.
+    2. When exchange_type=http (compute ranks talk to the hosted
+       Academy exchange), inject the ALCF HTTP proxy + no_proxy
+       list. Laptop almost never has these set, so we can't rely on
+       env forwarding -- inject defaults so federated runs work
+       without operator setup.
     """
-    return {k: os.environ[k] for k in _FORWARDED_ENV_VARS if os.environ.get(k)}
+    env = {k: os.environ[k] for k in _FORWARDED_ENV_VARS if os.environ.get(k)}
+    if exchange_type == "http":
+        # Don't overwrite operator-supplied values; the operator
+        # knows their own network. Just fill in the gaps.
+        env.setdefault("http_proxy", _ALCF_HTTP_PROXY)
+        env.setdefault("https_proxy", _ALCF_HTTP_PROXY)
+        env.setdefault("HTTP_PROXY", _ALCF_HTTP_PROXY)
+        env.setdefault("HTTPS_PROXY", _ALCF_HTTP_PROXY)
+        env.setdefault("no_proxy", _ALCF_NO_PROXY)
+        env.setdefault("NO_PROXY", _ALCF_NO_PROXY)
+    return env
 
 
 def _resolve_local_run_dir(
@@ -252,7 +281,7 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
     run_dir = _resolve_run_dir(site, args)
     venv_activate = _resolve_venv_activate(args, site)
     local_run_dir = _resolve_local_run_dir(args, site)
-    remote_env = _collect_remote_env()
+    remote_env = _collect_remote_env(exchange_type=args.exchange_type)
 
     if site.mode == "attach":
         # On ALCF (Aurora, Crux), the laptop can't ssh directly to a
