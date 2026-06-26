@@ -16,6 +16,7 @@ import dataclasses
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -39,7 +40,16 @@ class AttachConfig:
 
 
 def _build_remote_command(cfg: AttachConfig) -> str:
-    """Render the bash one-liner that ssh runs on the compute host."""
+    """Render the bash one-liner that ssh runs on the compute host.
+
+    Logging strategy: the log file is opened FIRST (via exec
+    redirection on the shell itself) so even pre-source failures
+    (bad bundle_root, missing env.sh, mkdir refusing) leave a
+    diagnostic trail in {site}.attach.log. Without this any error
+    before the spawn-site exec produces zero output anywhere
+    visible to the operator -- you only see "ssh exited" with no
+    explanation.
+    """
     inner = [
         "chemgraph", "academy", "spawn-site", "--",
         "--system", cfg.site.name,
@@ -54,17 +64,24 @@ def _build_remote_command(cfg: AttachConfig) -> str:
     inner += list(cfg.extra_args)
     inner_q = " ".join(ssh_quote(s) for s in inner)
 
-    # Wrap in bash that sources env, cds to bundle, redirects the
-    # spawn-site output to a per-attach log, and `exec`s so SIGTERM
-    # from ssh-disconnect propagates to the python process instead of
-    # being caught by the bash wrapper.
     log_path = f"{cfg.run_dir}/{cfg.site.name}.attach.log"
+    # Two-stage script:
+    # 1. mkdir the run_dir up front, swallowing failure (separately
+    #    logged via the ``echo ... || true`` so the operator at least
+    #    sees the symptom). Without an existing run_dir we can't open
+    #    the log file -- chicken-and-egg.
+    # 2. Re-exec self with stdout+stderr redirected to the log so
+    #    every subsequent failure (source, cd, exec) is captured.
+    # 3. ``set -x`` so the log shows what the shell actually tried.
     script = (
-        f"set -e; "
-        f"mkdir -p {ssh_quote(cfg.run_dir)}; "
+        f"mkdir -p {ssh_quote(cfg.run_dir)} 2>&1 || "
+        f'  {{ echo "mkdir failed: cannot create {cfg.run_dir}" >&2; exit 1; }}; '
+        f"exec >> {ssh_quote(log_path)} 2>&1; "
+        f"set -ex; "
+        f"echo \"attach.log opened at $(date -u +%FT%TZ) on $(hostname)\"; "
         f"source {ssh_quote(cfg.env_script)}; "
         f"cd {ssh_quote(cfg.bundle_root)}; "
-        f"exec {inner_q} >> {ssh_quote(log_path)} 2>&1"
+        f"exec {inner_q}"
     )
     return f"bash -lc {ssh_quote(script)}"
 
@@ -80,6 +97,12 @@ def start(cfg: AttachConfig) -> subprocess.Popen[bytes]:
     local ssh but leaves the remote python running inside the
     operator's allocation (the same orphan family as the old UAN
     relay bug, but at the SSH layer rather than the script layer).
+
+    SSH stderr is INHERITED (not DEVNULL'd) so the operator sees
+    auth failures, host-unreachable, etc. directly on the launcher's
+    terminal. The remote bash redirects its own output to the
+    per-site attach.log on the compute host -- this stderr channel
+    only catches ssh-layer problems.
     """
     assert cfg.site.compute_host, "attach mode requires compute_host"
     remote = _build_remote_command(cfg)
@@ -87,7 +110,7 @@ def start(cfg: AttachConfig) -> subprocess.Popen[bytes]:
     return subprocess.Popen(
         argv,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=None,  # inherit
         stdin=subprocess.DEVNULL,
     )
 
@@ -98,6 +121,8 @@ async def wait_ready(
     local_run_dir: Path,
     timeout_s: float = 300.0,
     poll_interval_s: float = 5.0,
+    proc: subprocess.Popen[bytes] | None = None,
+    log_interval_s: float = 30.0,
 ) -> set[str]:
     """Wait until every agent in ``cfg.site.agents`` has registered.
 
@@ -105,14 +130,19 @@ async def wait_ready(
     write_status_snapshot path. Either a local mirror (rsync'd from
     the compute host) or a shared filesystem must populate it.
 
-    For phase 1 we poll a local path because the operator already
-    runs the dashboard launcher which rsync-mirrors. If neither
-    mirror nor shared FS is present, falls back to ssh+cat.
+    Args:
+        proc: the ssh Popen handle returned by start(). If provided,
+            we check whether it has died and short-circuit with a
+            useful error rather than waiting out the full timeout.
+        log_interval_s: print a "still waiting" line at this cadence
+            so the operator sees the launcher isn't hung.
 
     Returns the set of registered agent names on success; raises
-    TimeoutError otherwise.
+    TimeoutError otherwise. Raises RuntimeError if the underlying
+    ssh process exits before agents register.
     """
     deadline = time.monotonic() + timeout_s
+    next_log = time.monotonic() + log_interval_s
     want = set(cfg.site.agents)
     local_placement = local_run_dir / "placement.json"
 
@@ -145,16 +175,54 @@ async def wait_ready(
         agents = data.get("agents") if isinstance(data, dict) else None
         return set(agents.keys()) if isinstance(agents, dict) else set()
 
+    async def _tail_attach_log(n: int = 30) -> str:
+        try:
+            r = ssh_run(
+                cfg.site.compute_host,  # type: ignore[arg-type]
+                f"tail -n {n} {ssh_quote(cfg.run_dir + '/' + cfg.site.name + '.attach.log')} 2>/dev/null || true",
+                timeout_s=10,
+                check=False,
+            )
+        except subprocess.SubprocessError:
+            return ""
+        return r.stdout
+
     while time.monotonic() < deadline:
+        # Early exit if the ssh died -- no point polling for a file
+        # nobody will ever write.
+        if proc is not None and proc.poll() is not None:
+            tail = await _tail_attach_log()
+            raise RuntimeError(
+                f"attach[{cfg.site.name}]: ssh exited with code "
+                f"{proc.returncode} before agents registered. "
+                f"Last lines of {cfg.run_dir}/{cfg.site.name}.attach.log:\n"
+                f"{tail or '  (no log written -- bash failed before opening it)'}",
+            )
+
         registered = await _read_local()
         if not (want & registered):
             registered = await _read_remote()
         if want.issubset(registered):
             return want
+
+        if time.monotonic() >= next_log:
+            missing = sorted(want - registered)
+            print(
+                f"[attach:{cfg.site.name}] waiting for {missing} to register "
+                f"(elapsed {int(time.monotonic() - (deadline - timeout_s))}s "
+                f"of {int(timeout_s)}s)",
+                file=sys.stderr,
+            )
+            next_log = time.monotonic() + log_interval_s
+
         await asyncio.sleep(poll_interval_s)
+
+    tail = await _tail_attach_log()
     raise TimeoutError(
         f"attach[{cfg.site.name}]: agents {sorted(want)} did not register "
-        f"within {timeout_s:.0f}s",
+        f"within {timeout_s:.0f}s. Last lines of "
+        f"{cfg.run_dir}/{cfg.site.name}.attach.log:\n"
+        f"{tail or '  (no log written)'}",
     )
 
 
@@ -193,6 +261,7 @@ class AttachSiteBackend:
             self.cfg,
             local_run_dir=local_run_dir,
             timeout_s=timeout_s,
+            proc=self._proc,
         )
 
     async def stop(self, *, force: bool = False) -> None:

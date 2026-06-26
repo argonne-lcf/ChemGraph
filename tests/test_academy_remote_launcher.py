@@ -560,6 +560,80 @@ def test_resolve_bundle_root_errors_when_neither_set():
         remote_launcher._resolve_bundle_root(site, args)
 
 
+def test_attach_wait_ready_short_circuits_on_ssh_death(monkeypatch, tmp_path):
+    """If the underlying ssh dies before agents register, wait_ready
+    should raise RuntimeError immediately (with the attach.log tail)
+    rather than waiting out the full timeout."""
+    import subprocess as _sp
+    from chemgraph.academy.runtime.remote import attach_backend
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        wait_ready,
+    )
+
+    class _DeadProc:
+        returncode = 255
+        def poll(self): return 255
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora", mode="attach", agents=("alpha",),
+            compute_host="x4505",
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/flare/cg",
+        env_script="/flare/cg/env.aurora.sh",
+        run_dir="/flare/runs/r",
+    )
+
+    # ssh_run is what _tail_attach_log calls; return empty.
+    monkeypatch.setattr(
+        attach_backend,
+        "ssh_run",
+        lambda *a, **kw: _sp.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+    )
+
+    async def _go():
+        await wait_ready(
+            cfg, local_run_dir=tmp_path, timeout_s=5.0,
+            poll_interval_s=0.01, proc=_DeadProc(),
+        )
+
+    with pytest.raises(RuntimeError, match="ssh exited"):
+        asyncio.run(_go())
+
+
+def test_attach_build_remote_command_redirects_log_early():
+    """The remote bash must redirect stdout/stderr to the attach.log
+    BEFORE attempting source/cd, so failures in those steps are
+    captured. Regression guard: previously the log was opened only
+    on the spawn-site exec line, so a missing env_script produced
+    zero visible diagnostic."""
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        _build_remote_command,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora", mode="attach", agents=("alpha",),
+            compute_host="x4505",
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/flare/cg",
+        env_script="/flare/cg/env.aurora.sh",
+        run_dir="/flare/runs/r",
+    )
+    cmd = _build_remote_command(cfg)
+    # The `exec >> ...attach.log` redirect must appear before
+    # `source` and `cd` in the script body so they get captured.
+    log_redirect_idx = cmd.index("aurora.attach.log")
+    source_idx = cmd.index("source")
+    cd_idx = cmd.index("cd ")
+    assert log_redirect_idx < source_idx, "log opened after source -- pre-source failures invisible"
+    assert log_redirect_idx < cd_idx, "log opened after cd -- pre-cd failures invisible"
+
+
 def test_launch_propagates_bundle_root_error_as_exit_2(monkeypatch):
     """If a site has no bundle_root resolution, build_backends raises
     ValueError which the launcher converts to exit code 2."""
