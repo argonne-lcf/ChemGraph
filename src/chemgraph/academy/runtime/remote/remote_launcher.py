@@ -169,6 +169,13 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
     local_run_dir = _resolve_local_run_dir(args, site)
 
     if site.mode == "attach":
+        # On ALCF (Aurora, Crux), the laptop can't ssh directly to a
+        # compute node -- compute nodes accept only login-node-
+        # originated connections (hostbased). Read the login host
+        # from the system profile and nest the ssh: laptop -> login
+        # -> compute. profile.remote_host already encodes
+        # ${ALCF_SSH_USER}@host.
+        profile = load_system_profile(site.name)
         cfg = AttachConfig(
             site=site,
             run_id=args.run_id,
@@ -176,6 +183,7 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
             bundle_root=bundle_root,
             env_script=env_script,
             run_dir=run_dir,
+            login_host=profile.remote_host,
             exchange_type=args.exchange_type,
             http_exchange_url=args.http_exchange_url,
         )

@@ -34,6 +34,13 @@ class AttachConfig:
     bundle_root: str  # remote checkout root, e.g. /flare/ChemGraph/jinchu/ChemGraph
     env_script: str  # absolute path on the compute host, e.g. {bundle_root}/env.aurora.sh
     run_dir: str  # absolute path on the compute host (also visible to the dashboard side)
+    # ssh target for the login node (e.g. "jinchuli@aurora.alcf.anl.gov").
+    # Empty string -> direct ssh to compute_host. ALCF (Aurora, Crux) blocks
+    # direct laptop->compute ssh; the laptop has to ssh into the login node
+    # first, which then ssh's to the compute node using its in-cluster
+    # hostbased trust. Provide this for any HPC where compute nodes aren't
+    # reachable from the public internet.
+    login_host: str = ""
     exchange_type: str = "http"
     http_exchange_url: str | None = None
     extra_args: tuple[str, ...] = ()
@@ -91,12 +98,24 @@ def start(cfg: AttachConfig) -> subprocess.Popen[bytes]:
     handle so the launcher can SIGTERM-cancel later. Does not block
     for readiness -- caller polls placement.json.
 
-    ``-tt`` forces PTY allocation on the remote side so the python
+    Transport selection:
+      login_host set -> nested ssh: laptop -> login -> compute.
+        Required on ALCF where compute nodes only accept
+        connections from inside the cluster (hostbased trust from
+        login node, no laptop-side key option). We verified that
+        ProxyJump ("ssh -J login compute") does NOT work on
+        Aurora because the inner hop attempts publickey/hostbased
+        auth from the laptop's perspective even though the bytes
+        flow through the login node -- the compute's authorized_
+        keys only trust the login node itself.
+      login_host empty -> direct ssh to compute_host. Works on
+        HPCs whose compute nodes are routable + accept laptop
+        keys (e.g. some on-prem clusters).
+
+    ``-tt`` forces PTY allocation on the FINAL hop so the python
     process has a controlling terminal that gets SIGHUP'd when the
-    local ssh dies. Without this, Ctrl-C on the launcher kills the
-    local ssh but leaves the remote python running inside the
-    operator's allocation (the same orphan family as the old UAN
-    relay bug, but at the SSH layer rather than the script layer).
+    SSH chain closes. Without this, Ctrl-C kills the laptop ssh
+    but the remote python survives as an orphan.
 
     SSH stderr is INHERITED (not DEVNULL'd) so the operator sees
     auth failures, host-unreachable, etc. directly on the launcher's
@@ -106,7 +125,16 @@ def start(cfg: AttachConfig) -> subprocess.Popen[bytes]:
     """
     assert cfg.site.compute_host, "attach mode requires compute_host"
     remote = _build_remote_command(cfg)
-    argv = ["ssh", "-tt", cfg.site.compute_host, remote]
+    if cfg.login_host:
+        # Nested: ssh laptop->login, then on the login node run
+        # `ssh -tt compute <remote>`. The inner ssh inherits the
+        # login node's identity / hostbased trust to reach compute.
+        # We quote the inner argv as a single bash command for the
+        # outer ssh to execute.
+        inner = f"ssh -tt {ssh_quote(cfg.site.compute_host)} {ssh_quote(remote)}"
+        argv = ["ssh", "-tt", cfg.login_host, inner]
+    else:
+        argv = ["ssh", "-tt", cfg.site.compute_host, remote]
     return subprocess.Popen(
         argv,
         stdout=subprocess.DEVNULL,
@@ -156,10 +184,18 @@ async def wait_ready(
         agents = data.get("agents") if isinstance(data, dict) else None
         return set(agents.keys()) if isinstance(agents, dict) else set()
 
+    # Use the login node as the ssh target for read-only probes
+    # (cat placement.json, tail attach.log). placement.json lives on
+    # the SHARED home/project FS, which the login node can read
+    # without bouncing through the compute host -- one less hop,
+    # avoids re-prompting agent forwarding, and works regardless of
+    # whether compute->login is reachable bidirectionally.
+    probe_host = cfg.login_host or cfg.site.compute_host
+
     async def _read_remote() -> set[str]:
         try:
             r = ssh_run(
-                cfg.site.compute_host,  # type: ignore[arg-type]
+                probe_host,  # type: ignore[arg-type]
                 f"cat {ssh_quote(cfg.run_dir + '/placement.json')} 2>/dev/null || true",
                 timeout_s=10,
                 check=False,
@@ -178,7 +214,7 @@ async def wait_ready(
     async def _tail_attach_log(n: int = 30) -> str:
         try:
             r = ssh_run(
-                cfg.site.compute_host,  # type: ignore[arg-type]
+                probe_host,  # type: ignore[arg-type]
                 f"tail -n {n} {ssh_quote(cfg.run_dir + '/' + cfg.site.name + '.attach.log')} 2>/dev/null || true",
                 timeout_s=10,
                 check=False,

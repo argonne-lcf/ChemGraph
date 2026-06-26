@@ -688,6 +688,93 @@ def test_attach_backend_renders_spawn_site_command() -> None:
     assert "aurora.attach.log" in cmd
 
 
+def test_attach_backend_nests_through_login_host_when_set() -> None:
+    """Compute nodes on ALCF aren't reachable from outside; the
+    laptop ssh's to the login node, which then ssh's to the compute
+    node using its in-cluster hostbased trust."""
+    import subprocess as _sp
+    from unittest.mock import patch
+
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        start,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora", mode="attach", agents=("alpha",),
+            compute_host="x4610c7s2b0n0",
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/flare/cg",
+        env_script="/flare/cg/env.aurora.sh",
+        run_dir="/flare/runs/r",
+        login_host="jinchuli@aurora.alcf.anl.gov",
+    )
+    captured: list[list[str]] = []
+
+    class _FakePopen:
+        def __init__(self, argv, **kw):
+            captured.append(list(argv))
+        def poll(self): return None
+        def terminate(self): pass
+        def kill(self): pass
+
+    with patch.object(_sp, "Popen", _FakePopen):
+        start(cfg)
+    argv = captured[0]
+    # Outer ssh goes to the login host.
+    assert argv[0] == "ssh"
+    assert argv[1] == "-tt"
+    assert argv[2] == "jinchuli@aurora.alcf.anl.gov"
+    # Body must contain the inner `ssh -tt <compute> <remote>` invocation.
+    body = argv[3]
+    assert "ssh -tt" in body
+    assert "x4610c7s2b0n0" in body
+    # And the deepest level still has the spawn-site invocation.
+    assert "spawn-site" in body
+
+
+def test_attach_backend_direct_ssh_when_login_host_empty() -> None:
+    """Back-compat: with login_host empty (the default), the launcher
+    falls back to a single ssh straight to the compute host. Useful
+    for on-prem clusters where compute nodes are directly reachable."""
+    import subprocess as _sp
+    from unittest.mock import patch
+
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        start,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="local", mode="attach", agents=("alpha",),
+            compute_host="compute01.lab.example",
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/scratch/cg",
+        env_script="/scratch/cg/env.local.sh",
+        run_dir="/scratch/runs/r",
+        login_host="",
+    )
+    captured: list[list[str]] = []
+
+    class _FakePopen:
+        def __init__(self, argv, **kw):
+            captured.append(list(argv))
+        def poll(self): return None
+        def terminate(self): pass
+        def kill(self): pass
+
+    with patch.object(_sp, "Popen", _FakePopen):
+        start(cfg)
+    argv = captured[0]
+    assert argv[:3] == ["ssh", "-tt", "compute01.lab.example"]
+    # The body is the remote bash directly; no inner ssh wrapping.
+    assert "ssh -tt" not in argv[3]
+
+
 def test_attach_backend_uses_tt_for_signal_propagation() -> None:
     """Regression guard: ``ssh -tt`` is required so a Ctrl-C on the
     launcher delivers SIGHUP to the remote python via the SSH
