@@ -316,6 +316,20 @@ Examples:
         help="Arguments forwarded to chemgraph.academy.runtime.bootstrap.",
     )
 
+    launch_parser = academy_sub.add_parser(
+        "launch",
+        help=(
+            "Drive a federated launch from the operator's laptop. "
+            "Phase 1 supports a single attach-mode site (ssh straight "
+            "into the operator's running interactive PBS allocation)."
+        ),
+    )
+    launch_parser.add_argument(
+        "launch_args",
+        nargs=argparse.REMAINDER,
+        help="Arguments forwarded to chemgraph.academy.runtime.remote.remote_launcher.",
+    )
+
     dashboard_parser = academy_sub.add_parser(
         "dashboard",
         help="Start the local dashboard launcher for a ChemGraph Academy run.",
@@ -678,6 +692,15 @@ def _handle_academy(args: argparse.Namespace) -> None:
         if code:
             sys.exit(code)
         return
+    if command == "launch":
+        from chemgraph.academy.runtime.remote.remote_launcher import (
+            main as launch_main,
+        )
+
+        code = launch_main(_strip_remainder_separator(args.launch_args))
+        if code:
+            sys.exit(code)
+        return
     if command == "campaigns":
         from chemgraph.academy.campaigns import list_campaigns
 
@@ -686,7 +709,7 @@ def _handle_academy(args: argparse.Namespace) -> None:
         return
     console.print(
         "Usage: chemgraph academy "
-        "{mpi-daemon,run-compute,spawn-site,bootstrap,dashboard,campaigns}.",
+        "{mpi-daemon,run-compute,spawn-site,bootstrap,launch,dashboard,campaigns}.",
     )
 
 
