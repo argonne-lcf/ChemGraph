@@ -725,13 +725,17 @@ def test_attach_backend_nests_through_login_host_when_set() -> None:
     with patch.object(_sp, "Popen", _FakePopen):
         start(cfg)
     argv = captured[0]
-    # Outer ssh goes to the login host.
+    # Outer ssh goes to the login host with -tt and ServerAlive
+    # keepalive flags (anywhere before the host); login host is the
+    # last positional arg before the body.
     assert argv[0] == "ssh"
-    assert argv[1] == "-tt"
-    assert argv[2] == "jinchuli@aurora.alcf.anl.gov"
-    # Body must contain the inner `ssh -tt <compute> <remote>` invocation.
-    body = argv[3]
+    assert "-tt" in argv
+    assert "jinchuli@aurora.alcf.anl.gov" in argv
+    assert "ServerAliveInterval=30" in argv
+    # Body is the last argv element -- the bash one-liner.
+    body = argv[-1]
     assert "ssh -tt" in body
+    assert "ServerAliveInterval=30" in body  # inner ssh also keepalives
     assert "x4610c7s2b0n0" in body
     # And the deepest level still has the spawn-site invocation.
     assert "spawn-site" in body
@@ -1004,9 +1008,12 @@ def test_attach_backend_direct_ssh_when_login_host_empty() -> None:
     with patch.object(_sp, "Popen", _FakePopen):
         start(cfg)
     argv = captured[0]
-    assert argv[:3] == ["ssh", "-tt", "compute01.lab.example"]
+    # Direct ssh: first two are ssh -tt, target host appears, body is last.
+    assert argv[0] == "ssh"
+    assert "-tt" in argv
+    assert "compute01.lab.example" in argv
     # The body is the remote bash directly; no inner ssh wrapping.
-    assert "ssh -tt" not in argv[3]
+    assert "ssh -tt" not in argv[-1]
 
 
 def test_attach_backend_uses_tt_for_signal_propagation() -> None:

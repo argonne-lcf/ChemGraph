@@ -155,16 +155,34 @@ def start(cfg: AttachConfig) -> subprocess.Popen[bytes]:
     """
     assert cfg.site.compute_host, "attach mode requires compute_host"
     remote = _build_remote_command(cfg)
+    # ServerAliveInterval keeps the SSH connection (and therefore
+    # the controlling PTY allocated by -tt) warm during long stretches
+    # of no output from the remote -- e.g. spawn-site's
+    # wait_for_peers_alive can sit silent for minutes while the other
+    # site's allocation comes up. Without keepalives, the PTY closes,
+    # remote python takes SIGHUP, agent dies as ``signal 1``. The
+    # values mirror what the dashboard launcher uses for its own
+    # long-lived ssh tunnels.
+    keepalive = [
+        "-o", "ServerAliveInterval=30",
+        "-o", "ServerAliveCountMax=999",
+    ]
     if cfg.login_host:
         # Nested: ssh laptop->login, then on the login node run
         # `ssh -tt compute <remote>`. The inner ssh inherits the
         # login node's identity / hostbased trust to reach compute.
         # We quote the inner argv as a single bash command for the
-        # outer ssh to execute.
-        inner = f"ssh -tt {ssh_quote(cfg.site.compute_host)} {ssh_quote(remote)}"
-        argv = ["ssh", "-tt", cfg.login_host, inner]
+        # outer ssh to execute. The keepalive flags need to be on
+        # BOTH ssh invocations -- the inner one is what wraps the
+        # python process's PTY.
+        inner_keepalive = " ".join(keepalive)
+        inner = (
+            f"ssh -tt {inner_keepalive} "
+            f"{ssh_quote(cfg.site.compute_host)} {ssh_quote(remote)}"
+        )
+        argv = ["ssh", "-tt", *keepalive, cfg.login_host, inner]
     else:
-        argv = ["ssh", "-tt", cfg.site.compute_host, remote]
+        argv = ["ssh", "-tt", *keepalive, cfg.site.compute_host, remote]
     return subprocess.Popen(
         argv,
         stdout=subprocess.DEVNULL,
