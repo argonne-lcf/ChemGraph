@@ -316,6 +316,7 @@ def _ns(**kw):
         ready_timeout_s=5.0,
         auto_bootstrap=False,
         bootstrap_recipient=None,
+        spawn_arg=[],
     )
     defaults.update(kw)
     return argparse.Namespace(**defaults)
@@ -776,6 +777,38 @@ def test_attach_backend_emits_remote_env_exports() -> None:
     export_idx = cmd.index("export ALCF_USER=")
     activate_idx = cmd.index("activate")
     assert export_idx < activate_idx, "exports should run before source activate"
+
+
+def test_attach_backend_appends_extra_spawn_args() -> None:
+    """The launcher's --spawn-arg passthrough lets the operator pass
+    spawn-site flags the launcher doesn't have dedicated --flag
+    coverage for (e.g. --agents-per-node, --max-decisions).
+    Repeatable + appended verbatim, preserving argv order."""
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        _build_remote_command,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora", mode="attach", agents=("alpha",),
+            compute_host="x4505",
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/flare/cg",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
+        run_dir="/flare/runs/r",
+        extra_args=("--agents-per-node", "2", "--max-decisions", "100"),
+    )
+    cmd = _build_remote_command(cfg)
+    assert "--agents-per-node 2" in cmd
+    assert "--max-decisions 100" in cmd
+    # They must appear AFTER --exchange-type http (i.e. at the tail of
+    # the spawn-site argv, not before) so the operator's overrides
+    # win against the launcher's defaults.
+    ex_idx = cmd.index("--exchange-type")
+    apn_idx = cmd.index("--agents-per-node")
+    assert ex_idx < apn_idx
 
 
 def test_attach_backend_empty_remote_env_renders_no_export_block() -> None:

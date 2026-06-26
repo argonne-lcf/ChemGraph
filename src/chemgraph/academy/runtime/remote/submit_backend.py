@@ -43,6 +43,11 @@ class SubmitConfig:
     project: str | None = None
     filesystems: str | None = None
     extra_pbs_lines: tuple[str, ...] = ()
+    # Extra argv appended verbatim to the rendered spawn-site
+    # invocation. Same purpose as AttachConfig.extra_args -- lets
+    # the launcher pass through spawn-site flags it doesn't have a
+    # dedicated --launcher-flag for (--agents-per-node, etc.).
+    extra_spawn_args: tuple[str, ...] = ()
 
 
 def render_pbs_script(cfg: SubmitConfig) -> str:
@@ -88,6 +93,7 @@ def render_pbs_script(cfg: SubmitConfig) -> str:
     ]
     if cfg.http_exchange_url:
         spawn_args += ["--http-exchange-url", cfg.http_exchange_url]
+    spawn_args += list(cfg.extra_spawn_args)
     # Shell-safe: the PBS script is a single-quoted bash file, no
     # interpolation, so we can simply join. Don't break the bash
     # tokenizer with values containing spaces, etc -- not expected here.

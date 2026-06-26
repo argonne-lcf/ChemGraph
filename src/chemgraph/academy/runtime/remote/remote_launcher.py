@@ -124,6 +124,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "campaign's initial_agent). Ignored without --auto-bootstrap."
         ),
     )
+    p.add_argument(
+        "--spawn-arg",
+        action="append",
+        default=[],
+        metavar="ARG",
+        help=(
+            "Extra argv passed through to the remote 'chemgraph academy "
+            "spawn-site' invocation. Repeatable; each value is appended "
+            "verbatim. Example: --spawn-arg --agents-per-node --spawn-arg 2. "
+            "Use this to set spawn-site flags the launcher doesn't have "
+            "a dedicated --flag for yet (agents_per_node, max_decisions, "
+            "startup_timeout_s, etc)."
+        ),
+    )
     return p.parse_args(argv)
 
 
@@ -259,6 +273,7 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
             login_host=profile.remote_host,
             exchange_type=args.exchange_type,
             http_exchange_url=args.http_exchange_url,
+            extra_args=tuple(args.spawn_arg),
         )
         return AttachSiteBackend(cfg, local_run_dir=local_run_dir)
 
@@ -274,6 +289,7 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
         exchange_type=args.exchange_type,
         http_exchange_url=args.http_exchange_url,
         project=args.project,
+        extra_spawn_args=tuple(args.spawn_arg),
     )
     return SubmitSiteBackend(cfg, local_run_dir=local_run_dir)
 
