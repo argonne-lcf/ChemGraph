@@ -161,6 +161,37 @@ def stop(proc: subprocess.Popen[bytes], *, force: bool = False) -> None:
     getattr(proc, sig)()
 
 
+class AttachSiteBackend:
+    """SiteBackend implementation for attach-mode."""
+
+    def __init__(self, cfg: AttachConfig, local_run_dir: Path) -> None:
+        self.cfg = cfg
+        self.local_run_dir = local_run_dir
+        self.site_name = cfg.site.name
+        self._proc: subprocess.Popen[bytes] | None = None
+
+    async def start(self) -> None:
+        self._proc = start(self.cfg)
+
+    async def wait_ready(
+        self,
+        *,
+        local_run_dir: Path,
+        timeout_s: float,
+    ) -> set[str]:
+        # ``local_run_dir`` from the orchestrator wins over the one
+        # captured at construction time so the launcher can override.
+        return await wait_ready(
+            self.cfg,
+            local_run_dir=local_run_dir,
+            timeout_s=timeout_s,
+        )
+
+    async def stop(self, *, force: bool = False) -> None:
+        if self._proc is not None:
+            stop(self._proc, force=force)
+
+
 if __name__ == "__main__":  # ponytail: command-rendering only, no live ssh
     cfg = AttachConfig(
         site=SiteSpec(

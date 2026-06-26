@@ -1,36 +1,38 @@
-"""Phase-1 ``chemgraph academy launch`` orchestrator.
+"""``chemgraph academy launch`` orchestrator.
 
-Scope: ONE attach-mode site. No preflight, no auto-bootstrap, no
-multi-site, no ctrl-c affordance beyond default Popen tear-down.
-Those land in phases 2-5.
+Phase 2: one --site, attach OR submit. Multi-site, preflight,
+auto-bootstrap, status/stop are phases 3-5.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import sys
 from pathlib import Path
 
 from chemgraph.academy.runtime.profiles import load_system_profile
 from chemgraph.academy.runtime.remote.attach_backend import (
     AttachConfig,
-    start,
-    stop,
-    wait_ready,
+    AttachSiteBackend,
 )
+from chemgraph.academy.runtime.remote.site_backend import SiteBackend
 from chemgraph.academy.runtime.remote.site_spec import SiteSpec, parse_site
+from chemgraph.academy.runtime.remote.submit_backend import (
+    SubmitConfig,
+    SubmitSiteBackend,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="chemgraph academy launch",
         description=(
-            "Phase 1: attach a single site's spawn-site to the operator's "
-            "existing interactive PBS allocation via ssh. Operator must "
-            "have already qsub -I'd, sourced env, and have the UAN relay "
-            "running. See plan.private-local.md for the broader UX."
+            "Drive a federated launch from the operator's laptop. "
+            "Each --site is either attach-mode (ssh straight into a "
+            "compute node inside an existing interactive PBS allocation) "
+            "or submit-mode (qsub a fresh PBS job via the login node). "
+            "Phase 2 still supports only one --site; multi-site is phase 3."
         ),
     )
     p.add_argument("--run-id", required=True)
@@ -41,7 +43,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help=(
             "NAME:KEY=VAL;KEY=VAL... e.g. "
-            "aurora:attach=x4505c5s0b0n0;agents=alpha,beta"
+            "aurora:attach=x4505;agents=alpha OR "
+            "aurora:queue=debug;walltime=01:00:00;agents=alpha;project=MYPROJ"
         ),
     )
     p.add_argument(
@@ -49,14 +52,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help=(
             "Absolute path on the compute host where this ChemGraph "
-            "checkout lives, e.g. /flare/ChemGraph/$USER/ChemGraph."
+            "checkout lives, e.g. /flare/$ALCF_PROJECT/$USER/ChemGraph."
         ),
     )
     p.add_argument(
         "--env-script",
         help=(
-            "Absolute path on the compute host of the env source script "
-            "(env.{system}.sh). Defaults to {bundle-root}/env.{system}.sh."
+            "Absolute path on the compute host of the env source script. "
+            "Defaults to {bundle-root}/env.{system}.sh."
         ),
     )
     p.add_argument(
@@ -80,10 +83,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("--http-exchange-url")
     p.add_argument(
+        "--project",
+        help=(
+            "PBS -A project for submit-mode. May also be set via "
+            "project=... inside the --site flag (per-site wins). "
+            "Ignored for attach-mode."
+        ),
+    )
+    p.add_argument(
         "--ready-timeout-s",
         type=float,
         default=300.0,
-        help="How long to wait for agents to register (default 300s).",
+        help=(
+            "How long to wait for agents to register, post-allocation. "
+            "Default 300s. For submit-mode the queue wait gets ~80%% of "
+            "this budget; bump higher when queueing into busy queues."
+        ),
     )
     return p.parse_args(argv)
 
@@ -101,66 +116,98 @@ def _resolve_env_script(args: argparse.Namespace, site: SiteSpec) -> str:
     return f"{args.bundle_root.rstrip('/')}/env.{site.name}.sh"
 
 
+def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
+    run_dir = _resolve_run_dir(site, args)
+    env_script = _resolve_env_script(args, site)
+    local_run_dir = Path(args.local_run_dir) if args.local_run_dir else Path(run_dir)
+
+    if site.mode == "attach":
+        cfg = AttachConfig(
+            site=site,
+            run_id=args.run_id,
+            campaign=args.campaign,
+            bundle_root=args.bundle_root,
+            env_script=env_script,
+            run_dir=run_dir,
+            exchange_type=args.exchange_type,
+            http_exchange_url=args.http_exchange_url,
+        )
+        return AttachSiteBackend(cfg, local_run_dir=local_run_dir)
+
+    # submit-mode: ssh target comes from the system profile's remote_host
+    # (it already encodes $ALCF_SSH_USER@host correctly).
+    profile = load_system_profile(site.name)
+    cfg = SubmitConfig(
+        site=site,
+        run_id=args.run_id,
+        campaign=args.campaign,
+        login_host=profile.remote_host,
+        bundle_root=args.bundle_root,
+        env_script=env_script,
+        run_dir=run_dir,
+        exchange_type=args.exchange_type,
+        http_exchange_url=args.http_exchange_url,
+        project=args.project,
+    )
+    return SubmitSiteBackend(cfg)
+
+
 async def _launch_one(args: argparse.Namespace) -> int:
     if len(args.site) != 1:
         print(
-            "launch: phase 1 supports exactly one --site. Multi-site lands in phase 3.",
+            "launch: phase 2 supports exactly one --site. Multi-site lands in phase 3.",
             file=sys.stderr,
         )
         return 2
 
     site = parse_site(args.site[0])
-    if site.mode != "attach":
-        # parse_site already rejects submit-mode with NotImplementedError;
-        # this is defensive in case parse_site loosens later.
-        print(f"launch: phase 1 supports attach-mode only (got {site.mode})", file=sys.stderr)
+    try:
+        backend = _make_backend(args, site)
+    except ValueError as e:
+        print(f"launch: {e}", file=sys.stderr)
         return 2
 
-    cfg = AttachConfig(
-        site=site,
-        run_id=args.run_id,
-        campaign=args.campaign,
-        bundle_root=args.bundle_root,
-        env_script=_resolve_env_script(args, site),
-        run_dir=_resolve_run_dir(site, args),
-        exchange_type=args.exchange_type,
-        http_exchange_url=args.http_exchange_url,
+    local_run_dir = (
+        Path(args.local_run_dir)
+        if args.local_run_dir
+        else Path(_resolve_run_dir(site, args))
     )
-
-    local_run_dir = Path(args.local_run_dir) if args.local_run_dir else Path(cfg.run_dir)
 
     print(
-        f"[launch] site={site.name} mode=attach host={site.compute_host} "
-        f"agents={','.join(site.agents)}",
+        f"[launch] site={site.name} mode={site.mode} agents={','.join(site.agents)}",
         file=sys.stderr,
     )
-    proc = start(cfg)
-    print(f"[launch] spawn-site dispatched (ssh pid {proc.pid})", file=sys.stderr)
     try:
-        registered = await wait_ready(
-            cfg,
+        await backend.start()
+        registered = await backend.wait_ready(
             local_run_dir=local_run_dir,
             timeout_s=args.ready_timeout_s,
         )
+        mode_note = (
+            "run is live inside YOUR allocation; exiting will leave it running."
+            if site.mode == "attach"
+            else "PBS job continues running."
+        )
         print(
-            f"[launch] ready: registered={sorted(registered)}. "
-            f"Run is live inside YOUR allocation; exiting will leave it running. "
+            f"[launch] ready: registered={sorted(registered)}. {mode_note} "
             f"Use 'chemgraph academy bootstrap' to kick off the campaign.",
             file=sys.stderr,
         )
         return 0
     except TimeoutError as e:
         print(f"[launch] {e}", file=sys.stderr)
-        print(
-            f"[launch] check the attach log on the compute host: "
-            f"{cfg.run_dir}/{site.name}.attach.log",
-            file=sys.stderr,
-        )
-        stop(proc)
+        await backend.stop()
+        return 1
+    except RuntimeError as e:
+        print(f"[launch] {e}", file=sys.stderr)
+        await backend.stop()
         return 1
     except KeyboardInterrupt:
-        print("[launch] interrupted; SIGTERM'ing remote spawn-site", file=sys.stderr)
-        stop(proc)
+        print(
+            f"[launch] interrupted; cancelling {site.mode}-mode work",
+            file=sys.stderr,
+        )
+        await backend.stop()
         return 130
 
 

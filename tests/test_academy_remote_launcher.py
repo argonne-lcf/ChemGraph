@@ -50,9 +50,159 @@ def test_parse_site_rejects_bad_input(bad: str) -> None:
         parse_site(bad)
 
 
-def test_parse_site_submit_mode_is_phase_2() -> None:
-    with pytest.raises(NotImplementedError):
-        parse_site("aurora:queue=debug;walltime=01:00:00;agents=alpha")
+def test_parse_site_submit_mode_basic() -> None:
+    s = parse_site("aurora:queue=debug;walltime=01:00:00;agents=alpha")
+    assert s.mode == "submit"
+    assert s.queue == "debug"
+    assert s.walltime == "01:00:00"
+    assert s.nodes == 1
+    assert s.project is None
+    assert s.filesystems is None
+
+
+def test_parse_site_submit_mode_all_keys() -> None:
+    s = parse_site(
+        "aurora:queue=prod;walltime=08:00:00;nodes=16;"
+        "project=ChemGraph;filesystems=home:flare;agents=alpha,beta"
+    )
+    assert s.mode == "submit"
+    assert s.nodes == 16
+    assert s.project == "ChemGraph"
+    assert s.filesystems == "home:flare"
+    assert s.agents == ("alpha", "beta")
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "aurora:queue=debug;agents=a",  # walltime missing
+        "aurora:walltime=01:00:00;agents=a",  # queue missing
+        "aurora:queue=q;walltime=1;nodes=notanint;agents=a",
+    ],
+)
+def test_parse_site_submit_mode_rejects_incomplete(bad: str) -> None:
+    with pytest.raises(ValueError):
+        parse_site(bad)
+
+
+def test_submit_backend_renders_pbs_script() -> None:
+    from chemgraph.academy.runtime.remote.submit_backend import (
+        SubmitConfig,
+        render_pbs_script,
+    )
+
+    cfg = SubmitConfig(
+        site=SiteSpec(
+            name="aurora",
+            mode="submit",
+            agents=("alpha", "beta"),
+            queue="debug",
+            walltime="01:00:00",
+            nodes=2,
+            project="MYPROJ",
+            filesystems="home:flare",
+        ),
+        run_id="run-008",
+        campaign="federated-chat",
+        login_host="user@aurora.alcf.anl.gov",
+        bundle_root="/flare/MYPROJ/u/ChemGraph",
+        env_script="/flare/MYPROJ/u/ChemGraph/env.aurora.sh",
+        run_dir="/flare/MYPROJ/u/runs/run-008",
+        http_exchange_url="https://exchange.academy-agents.org/v1",
+    )
+    text = render_pbs_script(cfg)
+    assert text.startswith("#!/bin/bash")
+    assert "#PBS -A MYPROJ" in text
+    assert "#PBS -q debug" in text
+    assert "#PBS -l select=2,walltime=01:00:00" in text
+    assert "#PBS -l filesystems=home:flare" in text
+    assert "source /flare/MYPROJ/u/ChemGraph/env.aurora.sh" in text
+    assert "chemgraph academy spawn-site" in text
+    assert "--agents alpha,beta" in text
+    assert "--exchange-type http" in text
+    assert "exchange.academy-agents.org" in text
+
+
+def test_submit_backend_omits_filesystems_when_unset() -> None:
+    from chemgraph.academy.runtime.remote.submit_backend import (
+        SubmitConfig,
+        render_pbs_script,
+    )
+
+    cfg = SubmitConfig(
+        site=SiteSpec(
+            name="crux",
+            mode="submit",
+            agents=("alpha",),
+            queue="debug",
+            walltime="00:30:00",
+            project="MYPROJ",
+        ),
+        run_id="r",
+        campaign="federated-chat",
+        login_host="user@crux.alcf.anl.gov",
+        bundle_root="/lus/cg",
+        env_script="/lus/cg/env.crux.sh",
+        run_dir="/lus/runs/r",
+    )
+    text = render_pbs_script(cfg)
+    assert "filesystems=" not in text
+
+
+def test_submit_backend_requires_project() -> None:
+    from chemgraph.academy.runtime.remote.submit_backend import (
+        SubmitConfig,
+        render_pbs_script,
+    )
+
+    cfg = SubmitConfig(
+        site=SiteSpec(
+            name="aurora",
+            mode="submit",
+            agents=("alpha",),
+            queue="debug",
+            walltime="01:00:00",
+        ),
+        run_id="r",
+        campaign="federated-chat",
+        login_host="u@aurora",
+        bundle_root="/flare/cg",
+        env_script="/flare/cg/env.aurora.sh",
+        run_dir="/flare/runs/r",
+    )
+    with pytest.raises(ValueError, match="project"):
+        render_pbs_script(cfg)
+
+
+def test_submit_backend_per_site_project_overrides_global() -> None:
+    """site.project (from --site flag) wins over SubmitConfig.project
+    (from --project CLI). Lets a multi-site invocation use one global
+    project for most sites and override per-site."""
+    from chemgraph.academy.runtime.remote.submit_backend import (
+        SubmitConfig,
+        render_pbs_script,
+    )
+
+    cfg = SubmitConfig(
+        site=SiteSpec(
+            name="aurora",
+            mode="submit",
+            agents=("alpha",),
+            queue="debug",
+            walltime="01:00:00",
+            project="SITE_PROJ",
+        ),
+        run_id="r",
+        campaign="federated-chat",
+        login_host="u@aurora",
+        bundle_root="/flare/cg",
+        env_script="/flare/cg/env.aurora.sh",
+        run_dir="/flare/runs/r",
+        project="GLOBAL_PROJ",
+    )
+    text = render_pbs_script(cfg)
+    assert "#PBS -A SITE_PROJ" in text
+    assert "GLOBAL_PROJ" not in text
 
 
 def test_attach_backend_renders_spawn_site_command() -> None:

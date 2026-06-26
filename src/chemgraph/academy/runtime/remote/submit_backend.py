@@ -1,0 +1,292 @@
+"""Submit-mode backend: render a PBS script, qsub it via ssh to the
+login node, poll qstat for state transitions, and forward to attach-
+mode's placement.json polling once the job goes to R.
+
+Why pbs script rendering lives inline (no separate job_script.py):
+the template is ~20 lines and only one caller renders it. Splitting
+would be theater. Promote if a second caller appears.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import dataclasses
+import json
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from typing import Literal
+
+from chemgraph.academy.runtime.remote.attach_backend import wait_ready as _placement_wait_ready
+from chemgraph.academy.runtime.remote.attach_backend import AttachConfig
+from chemgraph.academy.runtime.remote.site_spec import SiteSpec
+from chemgraph.academy.runtime.remote.ssh_transport import ssh_quote, ssh_run
+
+
+PbsState = Literal["Q", "R", "E", "F", "X", "H", "S", "T", "W", "U"]
+
+
+@dataclasses.dataclass
+class SubmitConfig:
+    site: SiteSpec
+    run_id: str
+    campaign: str
+    login_host: str  # ssh target, e.g. "jinchuli@aurora.alcf.anl.gov"
+    bundle_root: str
+    env_script: str
+    run_dir: str
+    exchange_type: str = "http"
+    http_exchange_url: str | None = None
+    # PBS knobs that don't come from the --site flag.
+    project: str | None = None
+    filesystems: str | None = None
+    extra_pbs_lines: tuple[str, ...] = ()
+
+
+def render_pbs_script(cfg: SubmitConfig) -> str:
+    site = cfg.site
+    assert site.mode == "submit"
+    assert site.queue and site.walltime
+    project = site.project or cfg.project
+    if not project:
+        raise ValueError(
+            f"submit[{site.name}]: PBS -A project is required. "
+            "Pass project=... on --site or set --project.",
+        )
+    filesystems = site.filesystems or cfg.filesystems
+
+    pbs_lines = [
+        "#!/bin/bash",
+        f"#PBS -A {project}",
+        f"#PBS -q {site.queue}",
+        f"#PBS -l select={site.nodes},walltime={site.walltime}",
+    ]
+    if filesystems:
+        pbs_lines.append(f"#PBS -l filesystems={filesystems}")
+    pbs_lines += [
+        "#PBS -j oe",
+        f"#PBS -o {cfg.run_dir}/{site.name}.pbs.log",
+        *cfg.extra_pbs_lines,
+        "",
+        "set -e",
+        f"mkdir -p {cfg.run_dir}",
+        f"source {cfg.env_script}",
+        f"cd {cfg.bundle_root}",
+        "",
+    ]
+
+    spawn_args = [
+        "chemgraph", "academy", "spawn-site", "--",
+        "--system", site.name,
+        "--run-id", cfg.run_id,
+        "--campaign", cfg.campaign,
+        "--run-dir", cfg.run_dir,
+        "--agents", ",".join(site.agents),
+        "--exchange-type", cfg.exchange_type,
+    ]
+    if cfg.http_exchange_url:
+        spawn_args += ["--http-exchange-url", cfg.http_exchange_url]
+    # Shell-safe: the PBS script is a single-quoted bash file, no
+    # interpolation, so we can simply join. Don't break the bash
+    # tokenizer with values containing spaces, etc -- not expected here.
+    pbs_lines.append(" ".join(spawn_args))
+    pbs_lines.append("")
+    return "\n".join(pbs_lines)
+
+
+def submit_job(cfg: SubmitConfig) -> str:
+    """Render the PBS script, scp it to the login node, run qsub.
+    Returns the job id.
+    """
+    text = render_pbs_script(cfg)
+    with tempfile.NamedTemporaryFile(
+        "w",
+        suffix=".pbs",
+        delete=False,
+    ) as f:
+        f.write(text)
+        local_path = f.name
+    remote_path = f"/tmp/chemgraph-{cfg.site.name}-{cfg.run_id}.pbs"
+    try:
+        # scp the script over. ControlMaster keeps this fast.
+        subprocess.run(
+            ["scp", local_path, f"{cfg.login_host}:{remote_path}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        r = ssh_run(
+            cfg.login_host,
+            f"qsub {ssh_quote(remote_path)}",
+            timeout_s=60,
+        )
+    finally:
+        Path(local_path).unlink(missing_ok=True)
+    job_id = r.stdout.strip()
+    if not job_id:
+        raise RuntimeError(f"submit[{cfg.site.name}]: qsub returned no job id")
+    return job_id
+
+
+def qstat_state(cfg: SubmitConfig, job_id: str) -> PbsState | None:
+    """Return the one-letter PBS state, or None if the job isn't listed.
+
+    Uses ``qstat -x -f -F json`` for stable parsing across PBS Pro
+    versions (OpenPBS on Aurora; PBS Pro on Crux/Polaris both honor
+    -F json).
+    """
+    try:
+        r = ssh_run(
+            cfg.login_host,
+            f"qstat -x -f -F json {ssh_quote(job_id)}",
+            timeout_s=30,
+            check=False,
+        )
+    except subprocess.SubprocessError:
+        return None
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    try:
+        data = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return None
+    jobs = data.get("Jobs") if isinstance(data, dict) else None
+    if not isinstance(jobs, dict):
+        return None
+    job = jobs.get(job_id) or next(iter(jobs.values()), None)
+    if not isinstance(job, dict):
+        return None
+    state = job.get("job_state")
+    return state if isinstance(state, str) and state else None
+
+
+async def wait_running(
+    cfg: SubmitConfig,
+    job_id: str,
+    *,
+    timeout_s: float = 1800.0,
+    poll_interval_s: float = 15.0,
+) -> None:
+    """Block until ``job_id`` transitions to R. Raises TimeoutError otherwise.
+
+    Note: queue waits can be long; default 30 min is a placeholder.
+    Operator can bump via --queue-timeout-s (phase 3).
+    """
+    deadline = time.monotonic() + timeout_s
+    last_state: str | None = None
+    while time.monotonic() < deadline:
+        state = qstat_state(cfg, job_id)
+        if state and state != last_state:
+            print(f"[submit:{cfg.site.name}] job {job_id} state -> {state}", file=sys.stderr)
+            last_state = state
+        if state == "R":
+            return
+        if state in ("F", "X", "E") and state == "F":
+            # Finished without ever going to R -- treat as failure.
+            raise RuntimeError(
+                f"submit[{cfg.site.name}]: job {job_id} finished without running",
+            )
+        await asyncio.sleep(poll_interval_s)
+    raise TimeoutError(
+        f"submit[{cfg.site.name}]: job {job_id} did not reach R within {timeout_s:.0f}s",
+    )
+
+
+def qdel_job(cfg: SubmitConfig, job_id: str) -> None:
+    try:
+        ssh_run(
+            cfg.login_host,
+            f"qdel {ssh_quote(job_id)}",
+            timeout_s=30,
+            check=False,
+        )
+    except subprocess.SubprocessError:
+        pass
+
+
+class SubmitSiteBackend:
+    """SiteBackend impl for submit-mode."""
+
+    def __init__(self, cfg: SubmitConfig) -> None:
+        self.cfg = cfg
+        self.site_name = cfg.site.name
+        self.job_id: str | None = None
+
+    async def start(self) -> None:
+        # Run blocking ssh in a thread so the orchestrator's event
+        # loop keeps polling other sites' progress concurrently.
+        self.job_id = await asyncio.to_thread(submit_job, self.cfg)
+        print(
+            f"[submit:{self.cfg.site.name}] qsub -> {self.job_id}",
+            file=sys.stderr,
+        )
+
+    async def wait_ready(
+        self,
+        *,
+        local_run_dir: Path,
+        timeout_s: float,
+    ) -> set[str]:
+        if not self.job_id:
+            raise RuntimeError("submit backend: start() must precede wait_ready()")
+        # Split the timeout between queue-wait and post-R registration
+        # wait. 80/20 is arbitrary but reasonable -- queues are the
+        # long pole.
+        queue_budget = max(60.0, timeout_s * 0.8)
+        registration_budget = max(60.0, timeout_s - queue_budget)
+        await wait_running(self.cfg, self.job_id, timeout_s=queue_budget)
+        # Once R, reuse attach-mode's placement.json polling. Build an
+        # AttachConfig-shaped view of the SubmitConfig so we don't
+        # re-implement the polling loop.
+        as_attach = AttachConfig(
+            site=self.cfg.site,
+            run_id=self.cfg.run_id,
+            campaign=self.cfg.campaign,
+            bundle_root=self.cfg.bundle_root,
+            env_script=self.cfg.env_script,
+            run_dir=self.cfg.run_dir,
+            exchange_type=self.cfg.exchange_type,
+            http_exchange_url=self.cfg.http_exchange_url,
+        )
+        return await _placement_wait_ready(
+            as_attach,
+            local_run_dir=local_run_dir,
+            timeout_s=registration_budget,
+        )
+
+    async def stop(self, *, force: bool = False) -> None:
+        if self.job_id:
+            await asyncio.to_thread(qdel_job, self.cfg, self.job_id)
+
+
+if __name__ == "__main__":  # ponytail: command-rendering self-check
+    cfg = SubmitConfig(
+        site=SiteSpec(
+            name="aurora",
+            mode="submit",
+            agents=("alpha", "beta"),
+            queue="debug",
+            walltime="01:00:00",
+            nodes=1,
+            project="MYPROJ",
+            filesystems="home:flare",
+        ),
+        run_id="run-008",
+        campaign="federated-chat",
+        login_host="jinchuli@aurora.alcf.anl.gov",
+        bundle_root="/flare/MYPROJ/jinchu/ChemGraph",
+        env_script="/flare/MYPROJ/jinchu/ChemGraph/env.aurora.sh",
+        run_dir="/flare/MYPROJ/jinchu/runs/run-008",
+        http_exchange_url=None,
+    )
+    text = render_pbs_script(cfg)
+    assert "#PBS -A MYPROJ" in text
+    assert "#PBS -q debug" in text
+    assert "#PBS -l select=1,walltime=01:00:00" in text
+    assert "#PBS -l filesystems=home:flare" in text
+    assert "spawn-site" in text
+    assert "--agents alpha,beta" in text
+    assert "--exchange-type http" in text
+    print("submit_backend self-check ok")
