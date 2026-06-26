@@ -495,6 +495,87 @@ def test_parse_args_accepts_multiple_sites():
     assert args.auto_bootstrap is True
 
 
+# ---------------------------------------------------------------------------
+# bundle_root per-site override (mixed filesystem HPCs)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_site_accepts_bundle_root_override():
+    """Operator can override the global --bundle-root per site to
+    handle HPCs on different filesystems (e.g. Aurora /flare vs
+    Crux /eagle)."""
+    s = parse_site("crux:attach=h1;agents=a;bundle_root=/eagle/cg")
+    assert s.bundle_root == "/eagle/cg"
+
+
+def test_parse_site_bundle_root_default_none():
+    s = parse_site("aurora:attach=h1;agents=a")
+    assert s.bundle_root is None
+
+
+def test_parse_site_bundle_root_works_in_submit_mode():
+    s = parse_site(
+        "crux:queue=debug;walltime=01:00:00;agents=a;project=P;bundle_root=/eagle/cg"
+    )
+    assert s.mode == "submit"
+    assert s.bundle_root == "/eagle/cg"
+
+
+def test_resolve_bundle_root_per_site_wins(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    args = remote_launcher.parse_args([
+        "--run-id", "r1",
+        "--campaign", "federated-chat",
+        "--bundle-root", "/flare/cg",  # global default
+        "--site", "crux:attach=h;agents=a;bundle_root=/eagle/cg",
+    ])
+    site = parse_site(args.site[0])
+    assert remote_launcher._resolve_bundle_root(site, args) == "/eagle/cg"
+
+
+def test_resolve_bundle_root_falls_back_to_global(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    args = remote_launcher.parse_args([
+        "--run-id", "r1",
+        "--campaign", "federated-chat",
+        "--bundle-root", "/flare/cg",
+        "--site", "aurora:attach=h;agents=a",
+    ])
+    site = parse_site(args.site[0])
+    assert remote_launcher._resolve_bundle_root(site, args) == "/flare/cg"
+
+
+def test_resolve_bundle_root_errors_when_neither_set():
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    args = remote_launcher.parse_args([
+        "--run-id", "r1",
+        "--campaign", "federated-chat",
+        "--site", "aurora:attach=h;agents=a",
+    ])
+    site = parse_site(args.site[0])
+    with pytest.raises(ValueError, match="bundle root"):
+        remote_launcher._resolve_bundle_root(site, args)
+
+
+def test_launch_propagates_bundle_root_error_as_exit_2(monkeypatch):
+    """If a site has no bundle_root resolution, build_backends raises
+    ValueError which the launcher converts to exit code 2."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    # No global --bundle-root, no per-site bundle_root=.
+    monkeypatch.setattr(
+        remote_launcher,
+        "build_backends",
+        lambda args: (_ for _ in ()).throw(ValueError("bundle root missing")),
+    )
+    args = _ns(site=["crux:attach=h;agents=a"], bundle_root=None)
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 2
+
+
 def test_attach_backend_renders_spawn_site_command() -> None:
     from chemgraph.academy.runtime.remote.attach_backend import (
         AttachConfig,

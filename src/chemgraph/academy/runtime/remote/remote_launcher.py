@@ -50,11 +50,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--bundle-root",
-        required=True,
         help=(
-            "Absolute path on each compute host where this ChemGraph "
-            "checkout lives, e.g. /flare/$ALCF_PROJECT/$USER/ChemGraph. "
-            "Assumed identical across all --site targets."
+            "Default absolute path on the compute host where this "
+            "ChemGraph checkout lives, e.g. "
+            "/flare/$ALCF_PROJECT/$USER/ChemGraph. Override per-site "
+            "with bundle_root=... inside --site -- needed when HPCs "
+            "use different filesystems (Aurora /flare vs Crux /eagle). "
+            "Required unless EVERY --site supplies its own bundle_root."
         ),
     )
     p.add_argument(
@@ -128,10 +130,27 @@ def _resolve_run_dir(site: SiteSpec, args: argparse.Namespace) -> str:
     return str(Path(profile.run_root) / args.run_id)
 
 
+def _resolve_bundle_root(site: SiteSpec, args: argparse.Namespace) -> str:
+    """Per-site bundle_root wins over the global --bundle-root.
+
+    Different HPCs may stage onto different filesystems (Aurora /flare,
+    Crux /eagle), so the operator can set the common default with
+    --bundle-root and override per-site inside --site.
+    """
+    if site.bundle_root:
+        return site.bundle_root
+    if args.bundle_root:
+        return args.bundle_root
+    raise ValueError(
+        f"--site {site.name}: no bundle root resolved. Either pass "
+        "--bundle-root globally or bundle_root=... inside --site.",
+    )
+
+
 def _resolve_env_script(args: argparse.Namespace, site: SiteSpec) -> str:
     if args.env_script:
         return args.env_script
-    return f"{args.bundle_root.rstrip('/')}/env.{site.name}.sh"
+    return f"{_resolve_bundle_root(site, args).rstrip('/')}/env.{site.name}.sh"
 
 
 def _resolve_local_run_dir(
@@ -144,6 +163,7 @@ def _resolve_local_run_dir(
 
 
 def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
+    bundle_root = _resolve_bundle_root(site, args)
     run_dir = _resolve_run_dir(site, args)
     env_script = _resolve_env_script(args, site)
     local_run_dir = _resolve_local_run_dir(args, site)
@@ -153,7 +173,7 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
             site=site,
             run_id=args.run_id,
             campaign=args.campaign,
-            bundle_root=args.bundle_root,
+            bundle_root=bundle_root,
             env_script=env_script,
             run_dir=run_dir,
             exchange_type=args.exchange_type,
@@ -167,7 +187,7 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
         run_id=args.run_id,
         campaign=args.campaign,
         login_host=profile.remote_host,
-        bundle_root=args.bundle_root,
+        bundle_root=bundle_root,
         env_script=env_script,
         run_dir=run_dir,
         exchange_type=args.exchange_type,

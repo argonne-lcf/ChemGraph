@@ -11,6 +11,9 @@ class SiteSpec:
     name: str  # system profile name, e.g. "aurora"
     mode: Literal["attach", "submit"]
     agents: tuple[str, ...]
+    # per-site override for the launcher's global --bundle-root; needed
+    # when HPCs use different filesystems (Aurora /flare vs Crux /eagle).
+    bundle_root: str | None = None
     # attach-mode only
     compute_host: str | None = None
     # submit-mode only
@@ -64,12 +67,15 @@ def parse_site(spec: str) -> SiteSpec:
             f"--site {name}: specify attach=<host> OR queue=<q>;walltime=<HH:MM:SS>",
         )
 
+    bundle_root = kv.get("bundle_root")
+
     if has_attach:
         return SiteSpec(
             name=name,
             mode="attach",
             agents=agents,
             compute_host=kv["attach"],
+            bundle_root=bundle_root,
         )
 
     # submit-mode
@@ -91,6 +97,7 @@ def parse_site(spec: str) -> SiteSpec:
         nodes=nodes,
         project=kv.get("project"),
         filesystems=kv.get("filesystems"),
+        bundle_root=bundle_root,
     )
 
 
