@@ -199,6 +199,7 @@ async def wait_ready(
     poll_interval_s: float = 5.0,
     proc: subprocess.Popen[bytes] | None = None,
     log_interval_s: float = 30.0,
+    diagnostic_log_name: str | None = None,
 ) -> set[str]:
     """Wait until every agent in ``cfg.site.agents`` has registered.
 
@@ -212,11 +213,20 @@ async def wait_ready(
             useful error rather than waiting out the full timeout.
         log_interval_s: print a "still waiting" line at this cadence
             so the operator sees the launcher isn't hung.
+        diagnostic_log_name: filename (just the basename, e.g.
+            ``aurora.attach.log`` or ``aurora.pbs.log``) the wait
+            loop tails into error messages when the wait fails.
+            Defaults to ``<site>.attach.log`` so attach-mode callers
+            don't have to pass anything; submit-mode callers must
+            pass ``<site>.pbs.log`` -- otherwise the operator gets
+            ``(no log written)`` for a log file that does exist
+            under a different name.
 
     Returns the set of registered agent names on success; raises
     TimeoutError otherwise. Raises RuntimeError if the underlying
     ssh process exits before agents register.
     """
+    log_name = diagnostic_log_name or f"{cfg.site.name}.attach.log"
     deadline = time.monotonic() + timeout_s
     next_log = time.monotonic() + log_interval_s
     want = set(cfg.site.agents)
@@ -263,7 +273,7 @@ async def wait_ready(
         try:
             r = ssh_run(
                 probe_host,  # type: ignore[arg-type]
-                f"tail -n {n} {ssh_quote(cfg.run_dir + '/' + cfg.site.name + '.attach.log')} 2>/dev/null || true",
+                f"tail -n {n} {ssh_quote(cfg.run_dir + '/' + log_name)} 2>/dev/null || true",
                 timeout_s=10,
                 check=False,
             )
@@ -279,7 +289,7 @@ async def wait_ready(
             raise RuntimeError(
                 f"attach[{cfg.site.name}]: ssh exited with code "
                 f"{proc.returncode} before agents registered. "
-                f"Last lines of {cfg.run_dir}/{cfg.site.name}.attach.log:\n"
+                f"Last lines of {cfg.run_dir}/{log_name}:\n"
                 f"{tail or '  (no log written -- bash failed before opening it)'}",
             )
 
@@ -305,7 +315,7 @@ async def wait_ready(
     raise TimeoutError(
         f"attach[{cfg.site.name}]: agents {sorted(want)} did not register "
         f"within {timeout_s:.0f}s. Last lines of "
-        f"{cfg.run_dir}/{cfg.site.name}.attach.log:\n"
+        f"{cfg.run_dir}/{log_name}:\n"
         f"{tail or '  (no log written)'}",
     )
 

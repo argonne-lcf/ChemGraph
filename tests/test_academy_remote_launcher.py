@@ -1115,6 +1115,137 @@ def test_launch_exits_2_on_preflight_failure(monkeypatch):
     assert called == []  # short-circuited before backend construction
 
 
+def test_preflight_dashboard_passes_when_relay_file_present(monkeypatch):
+    """Dashboard probe sshes the login node and checks profile.relay_host_file.
+    Present + non-empty -> ok. Missing -> error pointing operator at
+    --system dashboard fix."""
+    import io
+    from chemgraph.academy.runtime.remote import remote_launcher
+    from chemgraph.academy.runtime.remote import ssh_transport
+    import subprocess as _sp
+
+    class _FakeProfile:
+        remote_host = "u@aurora"
+        relay_host_file = "/flare/cg/uan-relay-18186.host"
+
+    monkeypatch.setattr(
+        remote_launcher, "load_system_profile",
+        lambda name: _FakeProfile(),
+    )
+    # ssh test+cat returns the relay host -> present.
+    monkeypatch.setattr(
+        ssh_transport, "ssh_run",
+        lambda host, cmd, **kw: _sp.CompletedProcess(
+            args=[], returncode=0, stdout="uan-0003\n", stderr=""),
+    )
+
+    pairs = [(
+        SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"),
+        _FakeBackend("aurora"),
+    )]
+    errs = remote_launcher._preflight_dashboard(pairs, stderr=io.StringIO())
+    assert errs == []
+
+
+def test_preflight_dashboard_fails_when_relay_file_missing(monkeypatch):
+    import io
+    from chemgraph.academy.runtime.remote import remote_launcher
+    from chemgraph.academy.runtime.remote import ssh_transport
+    import subprocess as _sp
+
+    class _FakeProfile:
+        remote_host = "u@crux"
+        relay_host_file = "/eagle/cg/uan-relay-18187-crux.host"
+
+    monkeypatch.setattr(
+        remote_launcher, "load_system_profile",
+        lambda name: _FakeProfile(),
+    )
+    monkeypatch.setattr(
+        ssh_transport, "ssh_run",
+        lambda host, cmd, **kw: _sp.CompletedProcess(
+            args=[], returncode=0, stdout="MISSING\n", stderr=""),
+    )
+
+    pairs = [(
+        SiteSpec(name="crux", mode="attach", agents=("a",), compute_host="h"),
+        _FakeBackend("crux"),
+    )]
+    errs = remote_launcher._preflight_dashboard(pairs, stderr=io.StringIO())
+    assert len(errs) == 1
+    msg = errs[0]
+    assert "crux" in msg
+    assert "dashboard" in msg.lower()
+    # Error must suggest the fix (--system list including crux).
+    assert "--system" in msg
+    assert "crux" in msg
+
+
+def test_preflight_dashboard_lists_all_sites_in_fix_suggestion(monkeypatch):
+    """The 'try this command' suggestion should include EVERY site
+    in the launch invocation, not just the failing one. Operators
+    typically re-run with the full list, not piecemeal."""
+    import io
+    from chemgraph.academy.runtime.remote import remote_launcher
+    from chemgraph.academy.runtime.remote import ssh_transport
+    import subprocess as _sp
+
+    class _FakeAurora:
+        remote_host = "u@aurora"
+        relay_host_file = "/flare/cg/uan-relay-18186.host"
+    class _FakeCrux:
+        remote_host = "u@crux"
+        relay_host_file = "/eagle/cg/uan-relay-18187-crux.host"
+
+    profiles = {"aurora": _FakeAurora(), "crux": _FakeCrux()}
+    monkeypatch.setattr(
+        remote_launcher, "load_system_profile",
+        lambda name: profiles[name],
+    )
+
+    # Aurora OK, Crux MISSING.
+    def ssh_run(host, cmd, **kw):
+        out = "uan-0003\n" if "uan-relay-18186" in cmd else "MISSING\n"
+        return _sp.CompletedProcess(args=[], returncode=0, stdout=out, stderr="")
+    monkeypatch.setattr(ssh_transport, "ssh_run", ssh_run)
+
+    pairs = [
+        (SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"), _FakeBackend("aurora")),
+        (SiteSpec(name="crux",   mode="attach", agents=("b",), compute_host="h"), _FakeBackend("crux")),
+    ]
+    errs = remote_launcher._preflight_dashboard(pairs, stderr=io.StringIO())
+    assert len(errs) == 1
+    assert "aurora,crux" in errs[0]  # suggestion includes both
+
+
+def test_preflight_dashboard_warns_but_continues_on_ssh_failure(monkeypatch):
+    """If ssh itself fails (timeout, host unreachable) -- don't block;
+    the launcher will give a clearer error later when it tries to
+    use the unreachable host."""
+    import io
+    from chemgraph.academy.runtime.remote import remote_launcher
+    from chemgraph.academy.runtime.remote import ssh_transport
+
+    class _FakeProfile:
+        remote_host = "u@aurora"
+        relay_host_file = "/flare/cg/uan-relay-18186.host"
+    monkeypatch.setattr(
+        remote_launcher, "load_system_profile",
+        lambda name: _FakeProfile(),
+    )
+
+    def raises(host, cmd, **kw):
+        raise OSError("connection refused")
+    monkeypatch.setattr(ssh_transport, "ssh_run", raises)
+
+    pairs = [(
+        SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"),
+        _FakeBackend("aurora"),
+    )]
+    errs = remote_launcher._preflight_dashboard(pairs, stderr=io.StringIO())
+    assert errs == []  # warn, don't fail
+
+
 def test_launch_skip_preflight_bypasses_check(monkeypatch):
     """--skip-preflight lets the operator proceed even when env
     vars are missing -- escape hatch for the edge case where the

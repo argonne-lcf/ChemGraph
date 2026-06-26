@@ -327,6 +327,12 @@ class SubmitSiteBackend:
             as_attach,
             local_run_dir=local_run_dir,
             timeout_s=registration_budget,
+            # submit-mode writes spawn-site stdout/stderr to the PBS
+            # job's -o destination (<site>.pbs.log), not attach.log.
+            # Without this the error message would point at a
+            # nonexistent file and claim "(no log written)" even
+            # though the real log exists under a different name.
+            diagnostic_log_name=f"{self.cfg.site.name}.pbs.log",
         )
 
     async def stop(self, *, force: bool = False) -> None:

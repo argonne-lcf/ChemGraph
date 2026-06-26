@@ -389,6 +389,75 @@ def _preflight_env(*, stderr) -> list[str]:
     return errors
 
 
+def _preflight_dashboard(
+    pairs: "list[tuple[SiteSpec, SiteBackend]]",
+    *,
+    stderr,
+) -> list[str]:
+    """Per-site check: does the UAN relay-host file exist on the HPC?
+
+    The dashboard launcher writes ``profile.relay_host_file`` after
+    it stages and starts the UAN relay. The daemon reads that same
+    file at startup to wire LM traffic. If the operator forgot to
+    include this site in the dashboard's ``--system`` list, the
+    daemon will crash at startup with ``Could not determine UAN
+    relay host`` -- and submit-mode in particular makes this
+    invisible (the launcher's wait_ready just times out polling
+    placement.json that the dead daemon never wrote).
+
+    Probe via ssh to the login node so we don't depend on the
+    compute node being reachable (Crux compute isn't from outside).
+    """
+    from chemgraph.academy.runtime.remote.ssh_transport import (
+        ssh_quote,
+        ssh_run,
+    )
+
+    errors: list[str] = []
+    for spec, _ in pairs:
+        profile = load_system_profile(spec.name)
+        login_host = profile.remote_host
+        relay_file = profile.relay_host_file
+        try:
+            r = ssh_run(
+                login_host,
+                f"test -s {ssh_quote(relay_file)} && cat {ssh_quote(relay_file)} || echo MISSING",
+                timeout_s=15,
+                check=False,
+            )
+        except Exception as e:
+            print(
+                f"[preflight] {_yellow('warn')}  dashboard probe ssh "
+                f"{spec.name} failed: {e}",
+                file=stderr,
+            )
+            # Don't block on ssh failure -- might be temporary; let
+            # the launcher fail later with a clearer message.
+            continue
+        stdout = (r.stdout or "").strip()
+        if stdout and stdout != "MISSING":
+            print(
+                f"[preflight] {_green('ok')}    "
+                f"dashboard {_bold(spec.name)} relay={_cyan(stdout)}",
+                file=stderr,
+            )
+        else:
+            print(
+                f"[preflight] {_red('MISS')}  "
+                f"dashboard {_bold(spec.name)} "
+                f"(no relay-host file at {relay_file})",
+                file=stderr,
+            )
+            errors.append(
+                f"site {spec.name!r}: no UAN relay running. Did you start "
+                f"the dashboard with --system including {spec.name!r}? "
+                f"Try: chemgraph academy dashboard -- <run-id> --system "
+                f"{','.join(sorted({s.name for s, _ in pairs}))} "
+                f"--campaign <campaign>"
+            )
+    return errors
+
+
 def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
     bundle_root = _resolve_bundle_root(site, args)
     run_dir = _resolve_run_dir(site, args)
@@ -503,6 +572,22 @@ async def _launch(args: argparse.Namespace) -> int:
     except (ValueError, NotImplementedError) as e:
         print(f"launch: {e}", file=sys.stderr)
         return 2
+
+    # Per-site dashboard-presence probe. Cheap (one ssh per site) and
+    # catches the "operator forgot --system on dashboard" failure
+    # mode that otherwise surfaces as a silent timeout deep in the
+    # daemon. Same --skip-preflight escape hatch as the env check.
+    if not args.skip_preflight:
+        dash_errors = _preflight_dashboard(pairs, stderr=sys.stderr)
+        if dash_errors:
+            print(
+                f"[preflight] {_red('FAIL')} -- dashboard isn't set "
+                "up for one or more sites:",
+                file=sys.stderr,
+            )
+            for msg in dash_errors:
+                print(f"  - {msg}", file=sys.stderr)
+            return 2
 
     backends = [b for _, b in pairs]
     site_summary = ", ".join(
