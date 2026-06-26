@@ -283,14 +283,21 @@ class SubmitSiteBackend:
         await wait_running(self.cfg, self.job_id, timeout_s=queue_budget)
         # Once R, reuse attach-mode's placement.json polling. Build an
         # AttachConfig-shaped view of the SubmitConfig so we don't
-        # re-implement the polling loop.
+        # re-implement the polling loop. AttachConfig's ``venv_activate``
+        # is what we'd source on the bash side -- in submit-mode that
+        # role is filled by the PBS script's own ``source``, so this
+        # value isn't actually used by wait_ready (only the run_dir
+        # and login_host matter for the read-only probes). Pass the
+        # SubmitConfig.env_script forward to keep the structural
+        # shape consistent.
         as_attach = AttachConfig(
             site=self.cfg.site,
             run_id=self.cfg.run_id,
             campaign=self.cfg.campaign,
             bundle_root=self.cfg.bundle_root,
-            env_script=self.cfg.env_script,
+            venv_activate=self.cfg.env_script,
             run_dir=self.cfg.run_dir,
+            login_host=self.cfg.login_host,
             exchange_type=self.cfg.exchange_type,
             http_exchange_url=self.cfg.http_exchange_url,
         )

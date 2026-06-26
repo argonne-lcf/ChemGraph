@@ -6,6 +6,8 @@ rendering is tested without any ssh.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 # The site_spec module is stdlib-only and can import even without the
@@ -220,6 +222,54 @@ def test_submit_backend_persists_job_id_on_disk(tmp_path, monkeypatch) -> None:
     persisted = tmp_path / "aurora.job_id"
     assert persisted.exists(), "expected job_id to be persisted before return"
     assert persisted.read_text().strip() == "12345.aurora-pbs"
+
+
+def test_submit_backend_wait_ready_constructs_attach_view_with_current_field_names() -> None:
+    """Regression guard: SubmitSiteBackend.wait_ready() constructs
+    an AttachConfig from its SubmitConfig to reuse attach-mode's
+    placement.json polling. The field names need to track AttachConfig
+    -- this was missed during the env_script -> venv_activate
+    rename and only surfaced at runtime (TypeError after a real
+    qsub had already landed)."""
+    from unittest.mock import patch
+    from chemgraph.academy.runtime.remote.submit_backend import (
+        SubmitConfig,
+        SubmitSiteBackend,
+    )
+
+    cfg = SubmitConfig(
+        site=SiteSpec(
+            name="aurora", mode="submit", agents=("a",),
+            queue="debug", walltime="00:15:00", project="P",
+        ),
+        run_id="r", campaign="federated-chat",
+        login_host="u@aurora", bundle_root="/flare/cg",
+        env_script="/flare/cg/v/bin/activate",
+        run_dir="/flare/runs/r",
+    )
+    backend = SubmitSiteBackend(cfg)
+    backend.job_id = "fake-1"
+
+    # Intercept wait_running so we don't actually poll qstat; bypass
+    # straight to the placement.json polling path that builds the
+    # AttachConfig.
+    from chemgraph.academy.runtime.remote import submit_backend
+    async def fake_wait_running(*a, **kw): return None
+    async def fake_wait_ready(as_attach, **kw):
+        # Touch each field that wait_ready actually reads, so a future
+        # AttachConfig rename surfaces here instead of in production.
+        _ = as_attach.site
+        _ = as_attach.run_dir
+        _ = as_attach.login_host
+        return {"a"}
+
+    import asyncio
+    with patch.object(submit_backend, "wait_running", fake_wait_running), \
+         patch.object(submit_backend, "_placement_wait_ready", fake_wait_ready):
+        result = asyncio.run(
+            backend.wait_ready(local_run_dir=Path("/tmp"), timeout_s=10.0)
+        )
+    assert result == {"a"}
 
 
 def test_submit_backend_per_site_project_overrides_global() -> None:
