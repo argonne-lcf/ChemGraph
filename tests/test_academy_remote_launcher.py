@@ -174,6 +174,54 @@ def test_submit_backend_requires_project() -> None:
         render_pbs_script(cfg)
 
 
+def test_submit_backend_persists_job_id_on_disk(tmp_path, monkeypatch) -> None:
+    """Regression guard: submit_job writes the job_id to
+    <local_run_dir>/<site>.job_id BEFORE returning, so a Ctrl-C
+    arriving immediately after qsub (but before the launcher records
+    self.job_id) doesn't strand a PBS job with no traceable id."""
+    import subprocess as _sp
+    from unittest.mock import patch
+
+    from chemgraph.academy.runtime.remote.submit_backend import (
+        SubmitConfig,
+        submit_job,
+    )
+
+    cfg = SubmitConfig(
+        site=SiteSpec(
+            name="aurora",
+            mode="submit",
+            agents=("alpha",),
+            queue="debug",
+            walltime="01:00:00",
+            project="MYPROJ",
+        ),
+        run_id="run-008",
+        campaign="federated-chat",
+        login_host="u@aurora",
+        bundle_root="/flare/cg",
+        env_script="/flare/cg/env.aurora.sh",
+        run_dir="/flare/runs/run-008",
+    )
+
+    class _FakeCompleted:
+        def __init__(self, stdout): self.stdout = stdout
+
+    def fake_run(argv, **kw):
+        if argv[0] == "scp":
+            return _FakeCompleted("")
+        # ssh_transport -> ssh ... qsub
+        return _FakeCompleted("12345.aurora-pbs\n")
+
+    monkeypatch.setattr(_sp, "run", fake_run)
+
+    job_id = submit_job(cfg, local_run_dir=tmp_path)
+    assert job_id == "12345.aurora-pbs"
+    persisted = tmp_path / "aurora.job_id"
+    assert persisted.exists(), "expected job_id to be persisted before return"
+    assert persisted.read_text().strip() == "12345.aurora-pbs"
+
+
 def test_submit_backend_per_site_project_overrides_global() -> None:
     """site.project (from --site flag) wins over SubmitConfig.project
     (from --project CLI). Lets a multi-site invocation use one global
@@ -483,6 +531,50 @@ def test_attach_backend_renders_spawn_site_command() -> None:
     # Log redirection to per-site attach.log so the launcher can tail
     # it after a boot timeout.
     assert "aurora.attach.log" in cmd
+
+
+def test_attach_backend_uses_tt_for_signal_propagation() -> None:
+    """Regression guard: ``ssh -tt`` is required so a Ctrl-C on the
+    launcher delivers SIGHUP to the remote python via the SSH
+    channel closing. Without -tt, the remote python keeps running
+    after local ssh dies (orphan inside the operator's allocation).
+    """
+    import subprocess as _sp
+    from unittest.mock import patch
+
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        start,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora",
+            mode="attach",
+            agents=("alpha",),
+            compute_host="x4505",
+        ),
+        run_id="r",
+        campaign="federated-chat",
+        bundle_root="/flare/cg",
+        env_script="/flare/cg/env.aurora.sh",
+        run_dir="/flare/runs/r",
+    )
+    captured_argv: list[list[str]] = []
+
+    class _FakePopen:
+        def __init__(self, argv, **kw):
+            captured_argv.append(list(argv))
+        def poll(self): return None
+        def terminate(self): pass
+        def kill(self): pass
+
+    with patch.object(_sp, "Popen", _FakePopen):
+        start(cfg)
+    assert captured_argv
+    argv = captured_argv[0]
+    assert argv[0] == "ssh"
+    assert "-tt" in argv[:3], f"expected -tt early in ssh argv, got {argv[:5]}"
 
 
 def test_attach_backend_omits_http_url_when_none() -> None:

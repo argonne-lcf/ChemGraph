@@ -96,9 +96,35 @@ def render_pbs_script(cfg: SubmitConfig) -> str:
     return "\n".join(pbs_lines)
 
 
-def submit_job(cfg: SubmitConfig) -> str:
+def _job_id_path(cfg: SubmitConfig, local_run_dir: Path | None = None) -> Path | None:
+    """Where to persist the qsub'd job id locally so a stop subcommand
+    (or operator manual qdel) can find it after a Ctrl-C.
+
+    Returns None if no usable local directory is available. We don't
+    write to ``cfg.run_dir`` directly because that path lives on the
+    compute host, not the operator's laptop.
+    """
+    if local_run_dir is None:
+        return None
+    try:
+        local_run_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    return local_run_dir / f"{cfg.site.name}.job_id"
+
+
+def submit_job(
+    cfg: SubmitConfig,
+    *,
+    local_run_dir: Path | None = None,
+) -> str:
     """Render the PBS script, scp it to the login node, run qsub.
-    Returns the job id.
+
+    Persists the returned job_id to ``<local_run_dir>/<site>.job_id``
+    BEFORE returning so a Ctrl-C between qsub and the launcher's
+    next await can't lose the id. Without this, an orphan PBS job
+    could end up running on the HPC with no record of its id on
+    the laptop.
     """
     text = render_pbs_script(cfg)
     with tempfile.NamedTemporaryFile(
@@ -127,6 +153,13 @@ def submit_job(cfg: SubmitConfig) -> str:
     job_id = r.stdout.strip()
     if not job_id:
         raise RuntimeError(f"submit[{cfg.site.name}]: qsub returned no job id")
+    # Persist BEFORE returning so the value survives a launcher Ctrl-C.
+    record = _job_id_path(cfg, local_run_dir)
+    if record is not None:
+        try:
+            record.write_text(job_id + "\n", encoding="utf-8")
+        except OSError:
+            pass  # not fatal -- the operator still sees it on stderr
     return job_id
 
 
@@ -209,15 +242,20 @@ def qdel_job(cfg: SubmitConfig, job_id: str) -> None:
 class SubmitSiteBackend:
     """SiteBackend impl for submit-mode."""
 
-    def __init__(self, cfg: SubmitConfig) -> None:
+    def __init__(self, cfg: SubmitConfig, local_run_dir: Path | None = None) -> None:
         self.cfg = cfg
         self.site_name = cfg.site.name
+        self.local_run_dir = local_run_dir
         self.job_id: str | None = None
 
     async def start(self) -> None:
         # Run blocking ssh in a thread so the orchestrator's event
-        # loop keeps polling other sites' progress concurrently.
-        self.job_id = await asyncio.to_thread(submit_job, self.cfg)
+        # loop keeps polling other sites' progress concurrently. The
+        # thread persists job_id to disk before returning, so a Ctrl-C
+        # arriving here can't strand a PBS job with no traceable id.
+        self.job_id = await asyncio.to_thread(
+            submit_job, self.cfg, local_run_dir=self.local_run_dir,
+        )
         print(
             f"[submit:{self.cfg.site.name}] qsub -> {self.job_id}",
             file=sys.stderr,

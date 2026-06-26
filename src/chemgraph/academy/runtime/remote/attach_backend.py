@@ -72,10 +72,18 @@ def _build_remote_command(cfg: AttachConfig) -> str:
 def start(cfg: AttachConfig) -> subprocess.Popen[bytes]:
     """Fire off the remote spawn-site. Returns the local ssh Popen
     handle so the launcher can SIGTERM-cancel later. Does not block
-    for readiness -- caller polls placement.json."""
+    for readiness -- caller polls placement.json.
+
+    ``-tt`` forces PTY allocation on the remote side so the python
+    process has a controlling terminal that gets SIGHUP'd when the
+    local ssh dies. Without this, Ctrl-C on the launcher kills the
+    local ssh but leaves the remote python running inside the
+    operator's allocation (the same orphan family as the old UAN
+    relay bug, but at the SSH layer rather than the script layer).
+    """
     assert cfg.site.compute_host, "attach mode requires compute_host"
     remote = _build_remote_command(cfg)
-    argv = ["ssh", cfg.site.compute_host, remote]
+    argv = ["ssh", "-tt", cfg.site.compute_host, remote]
     return subprocess.Popen(
         argv,
         stdout=subprocess.DEVNULL,
