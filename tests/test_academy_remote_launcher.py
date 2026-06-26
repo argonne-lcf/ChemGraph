@@ -1010,6 +1010,26 @@ def test_collect_remote_env_skips_proxy_injection_for_redis(monkeypatch):
     assert "HTTP_PROXY" not in env
 
 
+def test_ansi_helpers_noop_when_color_disabled(monkeypatch):
+    """When stderr isn't a TTY OR NO_COLOR is set, ANSI helpers
+    pass text through unchanged. Otherwise piping launcher output
+    to a log file dumps escape codes everywhere."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+    monkeypatch.setattr(remote_launcher, "_USE_COLOR", False)
+    assert remote_launcher._green("ok") == "ok"
+    assert remote_launcher._red("fail") == "fail"
+    assert remote_launcher._bold("name") == "name"
+
+
+def test_ansi_helpers_emit_codes_when_enabled(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+    monkeypatch.setattr(remote_launcher, "_USE_COLOR", True)
+    out = remote_launcher._green("ok")
+    assert out.startswith("\033[")
+    assert "ok" in out
+    assert out.endswith("\033[0m")
+
+
 def test_preflight_env_passes_when_all_required_set(monkeypatch):
     from chemgraph.academy.runtime.remote import remote_launcher
     import io

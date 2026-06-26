@@ -12,6 +12,30 @@ import os
 import sys
 from pathlib import Path
 
+
+# ---------------------------------------------------------------------------
+# Minimal ANSI helpers
+# ---------------------------------------------------------------------------
+# No dependency on rich (would pull in a lot at import time for a few
+# colored lines of stderr). Auto-disable when stderr isn't a TTY OR when
+# NO_COLOR is set (https://no-color.org). Operators piping to a log
+# file get plain text.
+
+_USE_COLOR = sys.stderr.isatty() and not os.environ.get("NO_COLOR")
+
+
+def _ansi(code: str, text: str) -> str:
+    if not _USE_COLOR:
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+def _green(text: str) -> str: return _ansi("32", text)
+def _red(text: str) -> str: return _ansi("31", text)
+def _yellow(text: str) -> str: return _ansi("33", text)
+def _cyan(text: str) -> str: return _ansi("36", text)
+def _bold(text: str) -> str: return _ansi("1", text)
+
 from chemgraph.academy.runtime.profiles import load_system_profile
 from chemgraph.academy.runtime.remote.attach_backend import (
     AttachConfig,
@@ -342,16 +366,24 @@ def _preflight_env(*, stderr) -> list[str]:
     for name, required, explanation, example in _REQUIRED_ENV_HELP:
         value = os.environ.get(name, "")
         if value:
-            print(f"[preflight] ok    {name}={value}", file=stderr)
+            print(
+                f"[preflight] {_green('ok')}    "
+                f"{_bold(name)}={_cyan(value)}",
+                file=stderr,
+            )
         elif required:
-            print(f"[preflight] MISS  {name}  ({explanation})", file=stderr)
+            print(
+                f"[preflight] {_red('MISS')}  {_bold(name)}  "
+                f"({explanation})",
+                file=stderr,
+            )
             errors.append(
                 f"{name} not set -- {explanation} Example: export {name}={example}"
             )
         else:
             print(
-                f"[preflight] skip  {name}  (optional; falls back to "
-                f"ALCF_USER if you don't set it)",
+                f"[preflight] {_yellow('skip')}  {_bold(name)}  "
+                f"(optional; falls back to ALCF_USER if you don't set it)",
                 file=stderr,
             )
     return errors
@@ -457,8 +489,9 @@ async def _launch(args: argparse.Namespace) -> int:
         errors = _preflight_env(stderr=sys.stderr)
         if errors:
             print(
-                "[preflight] FAIL -- fix the missing env vars (or pass "
-                "--skip-preflight if you know what you're doing):",
+                f"[preflight] {_red('FAIL')} -- fix the missing env "
+                "vars (or pass --skip-preflight if you know what you're "
+                "doing):",
                 file=sys.stderr,
             )
             for msg in errors:
@@ -519,23 +552,33 @@ async def _launch(args: argparse.Namespace) -> int:
 
     for (spec, _), agents in zip(pairs, ready_results):
         print(
-            f"[launch] ready: {spec.name} -> {sorted(agents)}",
+            f"[launch] {_green('ready')}: {_bold(spec.name)} -> "
+            f"{sorted(agents)}",
             file=sys.stderr,
         )
 
     # Phase: auto-bootstrap.
     if args.auto_bootstrap:
-        print("[launch] all sites ready, dispatching bootstrap...", file=sys.stderr)
+        print(
+            f"[launch] all sites {_green('ready')}, dispatching bootstrap...",
+            file=sys.stderr,
+        )
         # bootstrap_main is blocking and runs its own asyncio loop;
         # offload to a thread so a future operator-side keepalive in
         # this coroutine doesn't deadlock against it.
         rc = await asyncio.to_thread(_run_bootstrap, args)
         if rc:
-            print(f"[launch] bootstrap returned {rc}", file=sys.stderr)
+            print(
+                f"[launch] {_red('bootstrap failed')} (exit {rc})",
+                file=sys.stderr,
+            )
             # Don't tear down -- agents are still useful, operator can
             # re-run bootstrap manually after fixing the cause.
             return rc
-        print("[launch] bootstrap dispatched.", file=sys.stderr)
+        print(
+            f"[launch] {_green('bootstrap dispatched')}.",
+            file=sys.stderr,
+        )
 
     # Phase: report and exit. The compute processes keep running --
     # attach-mode lives inside the operator's allocation, submit-mode

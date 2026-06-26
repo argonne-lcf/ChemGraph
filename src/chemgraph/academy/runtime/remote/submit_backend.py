@@ -201,6 +201,23 @@ def qstat_state(cfg: SubmitConfig, job_id: str) -> PbsState | None:
     return state if isinstance(state, str) and state else None
 
 
+def _color_state(state: str | None) -> str:
+    """Color a PBS job-state letter for human eyes. Defers to the
+    launcher's ANSI helpers via a lazy import (avoids circular)."""
+    from chemgraph.academy.runtime.remote.remote_launcher import (
+        _green, _yellow, _red, _bold,
+    )
+    if state == "R":
+        return _green(_bold(state))
+    if state == "Q":
+        return _yellow(state)
+    if state in ("H", "S", "T", "W", "U"):
+        return _yellow(state)
+    if state in ("F", "E", "X"):
+        return _red(_bold(state))
+    return _bold(str(state))
+
+
 async def wait_running(
     cfg: SubmitConfig,
     job_id: str,
@@ -218,7 +235,11 @@ async def wait_running(
     while time.monotonic() < deadline:
         state = qstat_state(cfg, job_id)
         if state and state != last_state:
-            print(f"[submit:{cfg.site.name}] job {job_id} state -> {state}", file=sys.stderr)
+            print(
+                f"[submit:{cfg.site.name}] job {job_id} state -> "
+                f"{_color_state(state)}",
+                file=sys.stderr,
+            )
             last_state = state
         if state == "R":
             return
@@ -262,8 +283,9 @@ class SubmitSiteBackend:
         self.job_id = await asyncio.to_thread(
             submit_job, self.cfg, local_run_dir=self.local_run_dir,
         )
+        from chemgraph.academy.runtime.remote.remote_launcher import _cyan, _bold
         print(
-            f"[submit:{self.cfg.site.name}] qsub -> {self.job_id}",
+            f"[submit:{self.cfg.site.name}] qsub -> {_cyan(_bold(self.job_id))}",
             file=sys.stderr,
         )
 
