@@ -779,6 +779,68 @@ def test_attach_backend_emits_remote_env_exports() -> None:
     assert export_idx < activate_idx, "exports should run before source activate"
 
 
+def test_parse_site_accepts_pbs_jobid_override() -> None:
+    """Operator can supply PBS_JOBID from inside their qsub -I
+    shell so the launcher can reconstruct PBS_NODEFILE remotely.
+    Nested ssh strips PBS env, which would otherwise make mpiexec
+    inside spawn-site refuse multi-node placements."""
+    s = parse_site("aurora:attach=x4505;agents=a;pbs_jobid=8568282.aurora")
+    assert s.pbs_jobid == "8568282.aurora"
+
+
+def test_attach_backend_exports_pbs_jobid_and_nodefile_when_provided() -> None:
+    """When pbs_jobid is set, the remote bash must export both
+    PBS_JOBID and the deterministic PBS_NODEFILE path before
+    invoking spawn-site -- otherwise mpiexec can't see the
+    multi-node allocation."""
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        _build_remote_command,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora", mode="attach", agents=("a",),
+            compute_host="x4505",
+            pbs_jobid="8568282.aurora-pbs",
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/flare/cg",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
+        run_dir="/flare/runs/r",
+    )
+    cmd = _build_remote_command(cfg)
+    assert "export PBS_JOBID=8568282.aurora-pbs" in cmd
+    # ssh_quote may wrap the path; assert both PBS_NODEFILE name + path appear
+    assert "PBS_NODEFILE=" in cmd
+    assert "/var/spool/pbs/aux/8568282.aurora-pbs" in cmd
+
+
+def test_attach_backend_skips_pbs_exports_when_jobid_unset() -> None:
+    """No pbs_jobid -> no PBS_* exports at all. Single-node attach
+    runs don't need them; only multi-node runs that depend on
+    mpiexec reading the nodefile."""
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        _build_remote_command,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora", mode="attach", agents=("a",),
+            compute_host="x4505",
+            pbs_jobid=None,
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/flare/cg",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
+        run_dir="/flare/runs/r",
+    )
+    cmd = _build_remote_command(cfg)
+    assert "PBS_JOBID" not in cmd
+    assert "PBS_NODEFILE" not in cmd
+
+
 def test_attach_backend_appends_extra_spawn_args() -> None:
     """The launcher's --spawn-arg passthrough lets the operator pass
     spawn-site flags the launcher doesn't have dedicated --flag

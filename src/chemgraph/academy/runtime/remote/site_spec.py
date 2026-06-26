@@ -16,6 +16,15 @@ class SiteSpec:
     bundle_root: str | None = None
     # attach-mode only
     compute_host: str | None = None
+    # PBS_JOBID from the operator's qsub -I shell. Optional but
+    # strongly recommended for multi-node attach runs: nested ssh
+    # into a compute node inherits no PBS env, so mpiexec inside
+    # spawn-site only sees the current host. With pbs_jobid set,
+    # the remote bash reconstructs PBS_JOBID + PBS_NODEFILE from
+    # the deterministic path ``/var/spool/pbs/aux/$PBS_JOBID``, and
+    # mpiexec sees the full allocation. Get it via ``echo
+    # $PBS_JOBID`` from inside the qsub -I shell.
+    pbs_jobid: str | None = None
     # submit-mode only
     queue: str | None = None
     walltime: str | None = None
@@ -76,6 +85,7 @@ def parse_site(spec: str) -> SiteSpec:
             agents=agents,
             compute_host=kv["attach"],
             bundle_root=bundle_root,
+            pbs_jobid=kv.get("pbs_jobid"),
         )
 
     # submit-mode
@@ -108,6 +118,9 @@ if __name__ == "__main__":  # ponytail: assert-based self-check, no pytest
 
     s = parse_site("aurora:agents=alpha,beta;attach=x4505")
     assert s.agents == ("alpha", "beta"), s.agents
+
+    s = parse_site("aurora:attach=x4505;agents=a;pbs_jobid=12345.aurora")
+    assert s.pbs_jobid == "12345.aurora"
 
     for bad in (
         "noseparator",

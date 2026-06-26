@@ -85,9 +85,20 @@ def _build_remote_command(cfg: AttachConfig) -> str:
     log_path = f"{cfg.run_dir}/{cfg.site.name}.attach.log"
     # Render the env-var exports the operator would type manually
     # (ALCF_*, ARGO_USER, http_proxy, etc). Each value is shell-quoted.
+    env_pairs = list(cfg.remote_env.items())
+    # PBS env reconstruction: nested ssh into a compute node does
+    # NOT inherit PBS_* from the operator's qsub -I shell, so
+    # mpiexec defaults to "this host only" and refuses multi-rank
+    # launches. With pbs_jobid in hand we reconstruct PBS_JOBID and
+    # PBS_NODEFILE from the deterministic path
+    # ``/var/spool/pbs/aux/$PBS_JOBID`` (any process inside the
+    # allocation can read it).
+    if cfg.site.pbs_jobid:
+        env_pairs.append(("PBS_JOBID", cfg.site.pbs_jobid))
+        env_pairs.append(("PBS_NODEFILE", f"/var/spool/pbs/aux/{cfg.site.pbs_jobid}"))
     env_exports = "; ".join(
         f"export {k}={ssh_quote(v)}"
-        for k, v in sorted(cfg.remote_env.items())
+        for k, v in sorted(env_pairs)
         if v
     )
     env_block = (env_exports + "; ") if env_exports else ""
