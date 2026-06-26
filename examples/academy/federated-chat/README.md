@@ -21,5 +21,14 @@ The campaign assets are packaged under:
 src/chemgraph/academy/campaigns/federated-chat/
 ```
 
-See [`e2e_guide.md`](e2e_guide.md) for the full four-terminal walkthrough
-(dashboard + Aurora compute + Crux compute + bootstrap kickoff).
+Two operator walkthroughs:
+
+- [`e2e_guide.md`](e2e_guide.md) -- four-terminal manual flow
+  (dashboard + Aurora compute + Crux compute + bootstrap
+  kickoff). Works on both Aurora and Crux. Use this for true
+  cross-HPC runs today.
+- [`launcher_guide.md`](launcher_guide.md) -- single local
+  `chemgraph academy launch` command that ssh's into your
+  existing interactive PBS allocations. **Aurora-only for now**
+  (Crux compute nodes block laptop-side ssh-to-compute; see
+  guide's Crux Limitation section).
