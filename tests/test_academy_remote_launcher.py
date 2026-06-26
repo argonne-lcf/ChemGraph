@@ -317,6 +317,7 @@ def _ns(**kw):
         auto_bootstrap=False,
         bootstrap_recipient=None,
         spawn_arg=[],
+        skip_preflight=True,  # tests don't care about operator env
     )
     defaults.update(kw)
     return argparse.Namespace(**defaults)
@@ -957,6 +958,111 @@ def test_collect_remote_env_skips_proxy_injection_for_redis(monkeypatch):
     env = remote_launcher._collect_remote_env(exchange_type="redis")
     assert "http_proxy" not in env
     assert "HTTP_PROXY" not in env
+
+
+def test_preflight_env_passes_when_all_required_set(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+    import io
+
+    for k in remote_launcher._FORWARDED_ENV_VARS:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("ALCF_PROJECT", "ChemGraph")
+    monkeypatch.setenv("ALCF_USER", "jinchu")
+    monkeypatch.setenv("ARGO_USER", "jinchu.li")
+
+    errs = remote_launcher._preflight_env(stderr=io.StringIO())
+    assert errs == []
+
+
+def test_preflight_env_reports_each_missing_required(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+    import io
+
+    for k in remote_launcher._FORWARDED_ENV_VARS:
+        monkeypatch.delenv(k, raising=False)
+
+    errs = remote_launcher._preflight_env(stderr=io.StringIO())
+    # Three required vars: ALCF_PROJECT, ALCF_USER, ARGO_USER.
+    assert len(errs) == 3
+    joined = "\n".join(errs)
+    assert "ALCF_PROJECT" in joined
+    assert "ALCF_USER" in joined
+    assert "ARGO_USER" in joined
+    # Optional ALCF_SSH_USER is not in the error list.
+    assert all("ALCF_SSH_USER" not in e for e in errs)
+
+
+def test_preflight_env_optional_ssh_user_not_required(monkeypatch):
+    from chemgraph.academy.runtime.remote import remote_launcher
+    import io
+
+    for k in remote_launcher._FORWARDED_ENV_VARS:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("ALCF_PROJECT", "ChemGraph")
+    monkeypatch.setenv("ALCF_USER", "jinchu")
+    monkeypatch.setenv("ARGO_USER", "jinchu.li")
+    # ALCF_SSH_USER intentionally NOT set -- should be fine.
+
+    errs = remote_launcher._preflight_env(stderr=io.StringIO())
+    assert errs == []
+
+
+def test_preflight_error_messages_include_example(monkeypatch):
+    """Error message should show the operator HOW to fix it, not
+    just that it's missing. Regression guard: 'ARGO_USER not set'
+    is useless; 'export ARGO_USER=jinchu.li' is actionable."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+    import io
+
+    for k in remote_launcher._FORWARDED_ENV_VARS:
+        monkeypatch.delenv(k, raising=False)
+
+    errs = remote_launcher._preflight_env(stderr=io.StringIO())
+    for msg in errs:
+        assert "export " in msg, f"missing fix-it suggestion: {msg}"
+
+
+def test_launch_exits_2_on_preflight_failure(monkeypatch):
+    """When preflight finds missing required env vars and the
+    operator hasn't passed --skip-preflight, _launch returns 2
+    BEFORE attempting any ssh or backend construction."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    for k in remote_launcher._FORWARDED_ENV_VARS:
+        monkeypatch.delenv(k, raising=False)
+
+    # build_backends should NOT be reached.
+    called = []
+    monkeypatch.setattr(
+        remote_launcher,
+        "build_backends",
+        lambda args: called.append(1) or [],
+    )
+
+    args = _ns(site=["aurora:attach=h;agents=a"], skip_preflight=False)
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 2
+    assert called == []  # short-circuited before backend construction
+
+
+def test_launch_skip_preflight_bypasses_check(monkeypatch):
+    """--skip-preflight lets the operator proceed even when env
+    vars are missing -- escape hatch for the edge case where the
+    remote bash inherits env from elsewhere."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    for k in remote_launcher._FORWARDED_ENV_VARS:
+        monkeypatch.delenv(k, raising=False)
+
+    backend = _FakeBackend("aurora")
+    pairs = [
+        (SiteSpec(name="aurora", mode="attach", agents=("a",), compute_host="h"), backend),
+    ]
+    monkeypatch.setattr(remote_launcher, "build_backends", lambda args: pairs)
+
+    args = _ns(site=["aurora:attach=h;agents=a"], skip_preflight=True)
+    rc = asyncio.run(remote_launcher._launch(args))
+    assert rc == 0
 
 
 def test_collect_remote_env_operator_proxy_wins(monkeypatch):

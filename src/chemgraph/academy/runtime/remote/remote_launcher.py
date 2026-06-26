@@ -138,6 +138,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "startup_timeout_s, etc)."
         ),
     )
+    p.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        help=(
+            "Skip the env-var preflight check. Use only when you've "
+            "deliberately arranged for the remote bash to inherit env "
+            "from elsewhere (e.g. login-node defaults set in /etc/profile.d)."
+        ),
+    )
     return p.parse_args(argv)
 
 
@@ -206,12 +215,12 @@ _FORWARDED_ENV_VARS = (
     # Example: "jinchuli".
     "ALCF_SSH_USER",
     # Argo (ALCF's gateway to internal LLM endpoints) username.
-    # Goes into the body of LM API calls as ``"user": "<value>"``.
+    # The part before @anl.gov in the operator's ANL email address.
+    # Goes into the body of LM API calls as ``"user": "<value>"`` --
     # Argo rejects requests whose user isn't on its allowlist; this
-    # is what gets put into lm_config.json's ``user`` field. Usually
-    # the prefix of the operator's email address ("first.last").
+    # is what gets put into lm_config.json's ``user`` field.
     # NOT the SSH login, NOT the workspace path component.
-    # Example: "jinchu.li".
+    # Example: "jinchu.li" (from jinchu.li@anl.gov).
     "ARGO_USER",
     # ALCF site HTTP proxy. Required on compute nodes for any
     # outbound traffic to the public internet (the hosted Academy
@@ -280,6 +289,72 @@ def _resolve_local_run_dir(
     if args.local_run_dir:
         return Path(args.local_run_dir)
     return Path(_resolve_run_dir(site, args))
+
+
+# ---------------------------------------------------------------------------
+# Preflight
+# ---------------------------------------------------------------------------
+
+# (var name, required?, concrete description, example value)
+_REQUIRED_ENV_HELP = (
+    (
+        "ALCF_PROJECT", True,
+        "Your ALCF allocation/project. The directory name right after the "
+        "filesystem mount: /flare/<this>/..., /eagle/<this>/.... Check with "
+        "`ls /flare` or your allocation confirmation email.",
+        "ChemGraph",
+    ),
+    (
+        "ALCF_USER", True,
+        "Your folder name UNDER the project root: "
+        "/flare/${ALCF_PROJECT}/<this>/... -- this is where your venv, "
+        "ChemGraph checkout, and runs live. Check with "
+        "`ls /flare/$ALCF_PROJECT/` from an ALCF login node.",
+        "jinchu",
+    ),
+    (
+        "ARGO_USER", True,
+        "Your ANL username -- the part before @anl.gov in your "
+        "ANL email address (e.g. jinchu.li@anl.gov -> ARGO_USER=jinchu.li). "
+        "Goes into LM API calls as the `user` field; Argo rejects "
+        "requests whose user isn't on its allowlist. NOT the ALCF SSH "
+        "login, NOT the workspace folder name.",
+        "jinchu.li",
+    ),
+    (
+        "ALCF_SSH_USER", False,
+        "The username before @ when you `ssh ...alcf.anl.gov` -- your "
+        "ALCF SSH login. Defaults to ALCF_USER if unset; only set this "
+        "explicitly when your SSH login differs from your workspace "
+        "folder name (e.g. login `jinchuli` vs workspace `jinchu`).",
+        "jinchuli",
+    ),
+)
+
+
+def _preflight_env(*, stderr) -> list[str]:
+    """Check operator's env for required forwarded vars. Returns a list
+    of error messages (empty list = ok). Prints a per-var status
+    line to stderr regardless of result so the operator can see what
+    the launcher will forward.
+    """
+    errors: list[str] = []
+    for name, required, explanation, example in _REQUIRED_ENV_HELP:
+        value = os.environ.get(name, "")
+        if value:
+            print(f"[preflight] ok    {name}={value}", file=stderr)
+        elif required:
+            print(f"[preflight] MISS  {name}  ({explanation})", file=stderr)
+            errors.append(
+                f"{name} not set -- {explanation} Example: export {name}={example}"
+            )
+        else:
+            print(
+                f"[preflight] skip  {name}  (optional; falls back to "
+                f"ALCF_USER if you don't set it)",
+                file=stderr,
+            )
+    return errors
 
 
 def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
@@ -373,6 +448,23 @@ def _run_bootstrap(args: argparse.Namespace) -> int:
 
 
 async def _launch(args: argparse.Namespace) -> int:
+    # Preflight: catch missing operator env vars (ALCF_USER, ARGO_USER,
+    # ...) at launch time instead of letting them surface as cryptic
+    # daemon-side failures 30s into the run. Skip via --skip-preflight
+    # for the edge case where the operator deliberately wants to defer
+    # to login-node defaults.
+    if not args.skip_preflight:
+        errors = _preflight_env(stderr=sys.stderr)
+        if errors:
+            print(
+                "[preflight] FAIL -- fix the missing env vars (or pass "
+                "--skip-preflight if you know what you're doing):",
+                file=sys.stderr,
+            )
+            for msg in errors:
+                print(f"  - {msg}", file=sys.stderr)
+            return 2
+
     try:
         pairs = build_backends(args)
     except (ValueError, NotImplementedError) as e:
