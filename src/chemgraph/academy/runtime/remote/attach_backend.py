@@ -32,8 +32,19 @@ class AttachConfig:
     run_id: str
     campaign: str  # campaign id or path passed to spawn-site
     bundle_root: str  # remote checkout root, e.g. /flare/ChemGraph/jinchu/ChemGraph
-    env_script: str  # absolute path on the compute host, e.g. {bundle_root}/env.aurora.sh
+    # Venv activate script absolute path. We source this rather than a
+    # made-up env.{system}.sh; the existing manual workflow does
+    # `source /flare/.../venvs/academy-swarm/bin/activate` to put
+    # ``chemgraph`` on PATH. Caller usually derives this from
+    # system_profile.venv_python.
+    venv_activate: str
     run_dir: str  # absolute path on the compute host (also visible to the dashboard side)
+    # Env vars to export inside the remote bash before invoking
+    # spawn-site. Operators type these manually today (ALCF_PROJECT,
+    # ALCF_USER, ALCF_SSH_USER, ARGO_USER, http_proxy, no_proxy, ...).
+    # The launcher forwards them from the operator's local environment
+    # so the remote shell sees the same values.
+    remote_env: dict[str, str] = dataclasses.field(default_factory=dict)
     # ssh target for the login node (e.g. "jinchuli@aurora.alcf.anl.gov").
     # Empty string -> direct ssh to compute_host. ALCF (Aurora, Crux) blocks
     # direct laptop->compute ssh; the laptop has to ssh into the login node
@@ -72,11 +83,18 @@ def _build_remote_command(cfg: AttachConfig) -> str:
     inner_q = " ".join(ssh_quote(s) for s in inner)
 
     log_path = f"{cfg.run_dir}/{cfg.site.name}.attach.log"
-    # Two-stage script:
-    # 1. mkdir the run_dir up front, swallowing failure (separately
-    #    logged via the ``echo ... || true`` so the operator at least
-    #    sees the symptom). Without an existing run_dir we can't open
-    #    the log file -- chicken-and-egg.
+    # Render the env-var exports the operator would type manually
+    # (ALCF_*, ARGO_USER, http_proxy, etc). Each value is shell-quoted.
+    env_exports = "; ".join(
+        f"export {k}={ssh_quote(v)}"
+        for k, v in sorted(cfg.remote_env.items())
+        if v
+    )
+    env_block = (env_exports + "; ") if env_exports else ""
+
+    # Three-stage script:
+    # 1. mkdir the run_dir up front. Without an existing run_dir we
+    #    can't open the log file -- chicken-and-egg.
     # 2. Re-exec self with stdout+stderr redirected to the log so
     #    every subsequent failure (source, cd, exec) is captured.
     # 3. ``set -x`` so the log shows what the shell actually tried.
@@ -86,7 +104,8 @@ def _build_remote_command(cfg: AttachConfig) -> str:
         f"exec >> {ssh_quote(log_path)} 2>&1; "
         f"set -ex; "
         f"echo \"attach.log opened at $(date -u +%FT%TZ) on $(hostname)\"; "
-        f"source {ssh_quote(cfg.env_script)}; "
+        f"{env_block}"
+        f"source {ssh_quote(cfg.venv_activate)}; "
         f"cd {ssh_quote(cfg.bundle_root)}; "
         f"exec {inner_q}"
     )
@@ -316,8 +335,9 @@ if __name__ == "__main__":  # ponytail: command-rendering only, no live ssh
         run_id="run-008",
         campaign="federated-chat",
         bundle_root="/flare/ChemGraph/jinchu/ChemGraph",
-        env_script="/flare/ChemGraph/jinchu/ChemGraph/env.aurora.sh",
+        venv_activate="/flare/ChemGraph/jinchu/venvs/academy-swarm/bin/activate",
         run_dir="/flare/ChemGraph/jinchu/runs/run-008",
+        remote_env={"ARGO_USER": "jinchu.li", "http_proxy": "http://proxy.alcf.anl.gov:3128"},
         http_exchange_url=None,
     )
     cmd = _build_remote_command(cfg)
@@ -326,5 +346,7 @@ if __name__ == "__main__":  # ponytail: command-rendering only, no live ssh
     assert "--exchange-type http" in cmd
     assert "exec" in cmd
     assert "attach.log" in cmd
+    assert "source" in cmd and "activate" in cmd
+    assert "export ARGO_USER=" in cmd
     print("attach_backend self-check ok")
     print(cmd)

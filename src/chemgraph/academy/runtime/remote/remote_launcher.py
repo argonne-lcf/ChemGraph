@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -60,10 +61,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     p.add_argument(
-        "--env-script",
+        "--venv-activate",
         help=(
-            "Absolute path on the compute host of the env source script. "
-            "Defaults to {bundle-root}/env.{system}.sh per site."
+            "Absolute path on the compute host of the venv 'activate' "
+            "script the remote bash should source so 'chemgraph' is on "
+            "PATH. Defaults to "
+            "$(dirname system_profile.venv_python)/activate, which "
+            "matches the existing manual runbook."
         ),
     )
     p.add_argument(
@@ -147,10 +151,77 @@ def _resolve_bundle_root(site: SiteSpec, args: argparse.Namespace) -> str:
     )
 
 
-def _resolve_env_script(args: argparse.Namespace, site: SiteSpec) -> str:
-    if args.env_script:
-        return args.env_script
-    return f"{_resolve_bundle_root(site, args).rstrip('/')}/env.{site.name}.sh"
+def _resolve_venv_activate(args: argparse.Namespace, site: SiteSpec) -> str:
+    """Path to the venv `activate` script the remote bash should
+    source. Defaults to ``$(dirname profile.venv_python)/activate``
+    which matches the existing manual runbook (operator types
+    ``source .../venvs/academy-swarm/bin/activate`` before
+    ``chemgraph academy spawn-site``).
+    """
+    if args.venv_activate:
+        return args.venv_activate
+    profile = load_system_profile(site.name)
+    return str(Path(profile.venv_python).parent / "activate")
+
+
+# Env vars the operator used to type manually inside the qsub -I
+# shell before running ``chemgraph academy spawn-site``. The launcher
+# now reads them from the operator's local shell and forwards them
+# to the remote bash. Names are intentionally cryptic for historical
+# reasons -- ALCF's account model has THREE separate identifiers for
+# what looks like one user, and confusing them looks identical at a
+# glance (`jinchu`, `jinchuli`, `jinchu.li` could all be the same
+# person but ARE different identifiers). Comments explain each.
+_FORWARDED_ENV_VARS = (
+    # ALCF "project" / allocation name. Path component on /flare,
+    # /eagle, /lus. Different from the OS group of the same name.
+    # Example: "ChemGraph".
+    "ALCF_PROJECT",
+    # Workspace path username -- the directory name under the
+    # project root. Compute nodes store user data under
+    # ``/flare/$ALCF_PROJECT/$ALCF_USER/...``. NOT the SSH login.
+    # For accounts where SSH login != path component (e.g. SSH as
+    # ``jinchuli`` but workspace at ``/flare/.../jinchu/``) this is
+    # the SHORTER one without the trailing characters.
+    # Example: "jinchu".
+    "ALCF_USER",
+    # SSH login username. Used by the launcher to build the ssh
+    # target (``${ALCF_SSH_USER}@aurora.alcf.anl.gov``). Defaults to
+    # ALCF_USER when unset -- safe for accounts where the two match.
+    # Often LONGER than ALCF_USER for accounts where they differ.
+    # Example: "jinchuli".
+    "ALCF_SSH_USER",
+    # Argo (ALCF's gateway to internal LLM endpoints) username.
+    # Goes into the body of LM API calls as ``"user": "<value>"``.
+    # Argo rejects requests whose user isn't on its allowlist; this
+    # is what gets put into lm_config.json's ``user`` field. Usually
+    # the prefix of the operator's email address ("first.last").
+    # NOT the SSH login, NOT the workspace path component.
+    # Example: "jinchu.li".
+    "ARGO_USER",
+    # ALCF site HTTP proxy. Required on compute nodes for any
+    # outbound traffic to the public internet (the hosted Academy
+    # exchange at exchange.academy-agents.org). UPPERCASE variants
+    # exist because some libraries read one form and not the other;
+    # we propagate both to be safe. The compute_launcher's no_proxy
+    # list still excludes 127.0.0.1 + .alcf.anl.gov so the local UAN
+    # relay (LM traffic) keeps bypassing the proxy.
+    "http_proxy",
+    "HTTP_PROXY",
+    "https_proxy",
+    "HTTPS_PROXY",
+    "no_proxy",
+    "NO_PROXY",
+)
+
+
+def _collect_remote_env() -> dict[str, str]:
+    """Snapshot of FORWARDED env vars present in the operator's
+    local shell. Empty values are dropped so the remote bash doesn't
+    end up with ``export ARGO_USER=`` (which would shadow whatever
+    was inherited from the login node).
+    """
+    return {k: os.environ[k] for k in _FORWARDED_ENV_VARS if os.environ.get(k)}
 
 
 def _resolve_local_run_dir(
@@ -165,8 +236,9 @@ def _resolve_local_run_dir(
 def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
     bundle_root = _resolve_bundle_root(site, args)
     run_dir = _resolve_run_dir(site, args)
-    env_script = _resolve_env_script(args, site)
+    venv_activate = _resolve_venv_activate(args, site)
     local_run_dir = _resolve_local_run_dir(args, site)
+    remote_env = _collect_remote_env()
 
     if site.mode == "attach":
         # On ALCF (Aurora, Crux), the laptop can't ssh directly to a
@@ -181,8 +253,9 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
             run_id=args.run_id,
             campaign=args.campaign,
             bundle_root=bundle_root,
-            env_script=env_script,
+            venv_activate=venv_activate,
             run_dir=run_dir,
+            remote_env=remote_env,
             login_host=profile.remote_host,
             exchange_type=args.exchange_type,
             http_exchange_url=args.http_exchange_url,
@@ -196,7 +269,7 @@ def _make_backend(args: argparse.Namespace, site: SiteSpec) -> SiteBackend:
         campaign=args.campaign,
         login_host=profile.remote_host,
         bundle_root=bundle_root,
-        env_script=env_script,
+        env_script=venv_activate,  # submit-mode still sources whatever this points at
         run_dir=run_dir,
         exchange_type=args.exchange_type,
         http_exchange_url=args.http_exchange_url,

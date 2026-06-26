@@ -307,7 +307,7 @@ def _ns(**kw):
         campaign="federated-chat",
         site=[],
         bundle_root="/flare/cg",
-        env_script=None,
+        venv_activate=None,
         run_dir="/tmp/r1",
         local_run_dir="/tmp/r1",
         exchange_type="http",
@@ -582,7 +582,7 @@ def test_attach_wait_ready_short_circuits_on_ssh_death(monkeypatch, tmp_path):
         ),
         run_id="r", campaign="federated-chat",
         bundle_root="/flare/cg",
-        env_script="/flare/cg/env.aurora.sh",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
         run_dir="/flare/runs/r",
     )
 
@@ -621,7 +621,7 @@ def test_attach_build_remote_command_redirects_log_early():
         ),
         run_id="r", campaign="federated-chat",
         bundle_root="/flare/cg",
-        env_script="/flare/cg/env.aurora.sh",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
         run_dir="/flare/runs/r",
     )
     cmd = _build_remote_command(cfg)
@@ -666,13 +666,14 @@ def test_attach_backend_renders_spawn_site_command() -> None:
         run_id="run-008",
         campaign="federated-chat",
         bundle_root="/flare/ChemGraph/jinchu/ChemGraph",
-        env_script="/flare/ChemGraph/jinchu/ChemGraph/env.aurora.sh",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
         run_dir="/flare/ChemGraph/jinchu/runs/run-008",
         http_exchange_url="https://exchange.academy-agents.org/v1",
     )
     cmd = _build_remote_command(cfg)
-    # Sources env, cds, execs the right CLI with the right args.
-    assert "env.aurora.sh" in cmd
+    # Sources the venv activate (puts chemgraph on PATH), cds, execs
+    # the right CLI with the right args.
+    assert "venvs/academy-swarm/bin/activate" in cmd
     assert "spawn-site" in cmd
     assert "--system aurora" in cmd
     assert "--run-id run-008" in cmd
@@ -707,7 +708,7 @@ def test_attach_backend_nests_through_login_host_when_set() -> None:
         ),
         run_id="r", campaign="federated-chat",
         bundle_root="/flare/cg",
-        env_script="/flare/cg/env.aurora.sh",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
         run_dir="/flare/runs/r",
         login_host="jinchuli@aurora.alcf.anl.gov",
     )
@@ -735,6 +736,93 @@ def test_attach_backend_nests_through_login_host_when_set() -> None:
     assert "spawn-site" in body
 
 
+def test_attach_backend_emits_remote_env_exports() -> None:
+    """The launcher used to require operators to manually export
+    ALCF_USER, ARGO_USER, http_proxy etc inside the qsub -I shell
+    before running spawn-site. Now we forward them from the
+    operator's laptop shell so the remote bash sees the same
+    values. Regression: bare invocation without exports causes
+    spawn-site to fail at lm_config rejection of <argo-user>
+    placeholder or with no proxy / wrong path components.
+    """
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        _build_remote_command,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora", mode="attach", agents=("alpha",),
+            compute_host="x4505",
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/flare/cg",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
+        run_dir="/flare/runs/r",
+        remote_env={
+            "ARGO_USER": "jinchu.li",
+            "ALCF_USER": "jinchu",
+            "http_proxy": "http://proxy.alcf.anl.gov:3128",
+        },
+    )
+    cmd = _build_remote_command(cfg)
+    assert "export ALCF_USER=jinchu" in cmd
+    assert "export ARGO_USER=jinchu.li" in cmd
+    assert "export http_proxy=" in cmd
+    # Env exports must come BEFORE source activate (so that PATH
+    # doesn't shadow them). The whole script is wrapped as a
+    # quoted bash -lc payload so textual index() ordering only
+    # works between events inside that same payload.
+    export_idx = cmd.index("export ALCF_USER=")
+    activate_idx = cmd.index("activate")
+    assert export_idx < activate_idx, "exports should run before source activate"
+
+
+def test_attach_backend_empty_remote_env_renders_no_export_block() -> None:
+    """When the operator forgot to set env vars, we should not
+    emit ``export = ;`` which is a syntax error. Empty remote_env
+    is harmless (the operator just gets the usual failure from
+    spawn-site about missing ARGO_USER)."""
+    from chemgraph.academy.runtime.remote.attach_backend import (
+        AttachConfig,
+        _build_remote_command,
+    )
+
+    cfg = AttachConfig(
+        site=SiteSpec(
+            name="aurora", mode="attach", agents=("alpha",),
+            compute_host="x4505",
+        ),
+        run_id="r", campaign="federated-chat",
+        bundle_root="/flare/cg",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
+        run_dir="/flare/runs/r",
+        remote_env={},
+    )
+    cmd = _build_remote_command(cfg)
+    assert "export =" not in cmd  # no malformed export
+
+
+def test_collect_remote_env_picks_up_alcf_vars(monkeypatch):
+    """The launcher reads forwarded env vars from os.environ at
+    launch time. Confirms the right names are in the list and
+    empty values are filtered out."""
+    from chemgraph.academy.runtime.remote import remote_launcher
+
+    for k in remote_launcher._FORWARDED_ENV_VARS:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("ALCF_USER", "jinchu")
+    monkeypatch.setenv("ALCF_SSH_USER", "jinchuli")
+    monkeypatch.setenv("ARGO_USER", "jinchu.li")
+    monkeypatch.setenv("ALCF_PROJECT", "")  # empty -- must be dropped
+
+    env = remote_launcher._collect_remote_env()
+    assert env["ALCF_USER"] == "jinchu"
+    assert env["ALCF_SSH_USER"] == "jinchuli"
+    assert env["ARGO_USER"] == "jinchu.li"
+    assert "ALCF_PROJECT" not in env  # empty was filtered
+
+
 def test_attach_backend_direct_ssh_when_login_host_empty() -> None:
     """Back-compat: with login_host empty (the default), the launcher
     falls back to a single ssh straight to the compute host. Useful
@@ -754,7 +842,7 @@ def test_attach_backend_direct_ssh_when_login_host_empty() -> None:
         ),
         run_id="r", campaign="federated-chat",
         bundle_root="/scratch/cg",
-        env_script="/scratch/cg/env.local.sh",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
         run_dir="/scratch/runs/r",
         login_host="",
     )
@@ -799,7 +887,7 @@ def test_attach_backend_uses_tt_for_signal_propagation() -> None:
         run_id="r",
         campaign="federated-chat",
         bundle_root="/flare/cg",
-        env_script="/flare/cg/env.aurora.sh",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
         run_dir="/flare/runs/r",
     )
     captured_argv: list[list[str]] = []
@@ -835,7 +923,7 @@ def test_attach_backend_omits_http_url_when_none() -> None:
         run_id="r",
         campaign="federated-chat",
         bundle_root="/flare/cg",
-        env_script="/flare/cg/env.aurora.sh",
+        venv_activate="/flare/cg/venvs/academy-swarm/bin/activate",
         run_dir="/flare/runs/r",
         http_exchange_url=None,
     )
