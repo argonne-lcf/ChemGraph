@@ -783,10 +783,13 @@ def _result_to_structured_output(entry: dict, final_result) -> dict | None:
             }
 
     elif last_tool == "extract_output_json":
-        # Full output JSON — the driver determines which field to
-        # extract.  This mirrors the ``run_ase`` handler above because
-        # ``extract_output_json`` returns the same result structure
-        # (just read from file instead of returned inline).
+        # Full output JSON — the driver determines which field to extract.
+        # Unlike the ``run_ase`` handler above, ``extract_output_json``
+        # returns the *flat* ``ASEOutputSchema`` read from file, where
+        # ``thermochemistry``, ``vibrational_frequencies`` and ``ir_data``
+        # live at the **top level** (not nested under a ``"result"`` key).
+        # Keep these branches reading top-level fields — do not "unify"
+        # them with the run_ase branch, which has a genuinely different shape.
         if not isinstance(final_result, dict):
             return None
         driver = _get_last_driver(tool_calls)
@@ -802,8 +805,7 @@ def _result_to_structured_output(entry: dict, final_result) -> dict | None:
                     "unit": final_result.get("energy_unit", "eV"),
                 }
         elif driver == "thermo":
-            nested = final_result.get("result", {})
-            thermo = nested.get("thermochemistry", {})
+            thermo = final_result.get("thermochemistry", {})
             gfe = thermo.get("gibbs_free_energy")
             if gfe is not None:
                 structured["scalar_answer"] = {
@@ -812,23 +814,26 @@ def _result_to_structured_output(entry: dict, final_result) -> dict | None:
                     "unit": thermo.get("unit", "eV"),
                 }
         elif driver == "vib":
-            nested = final_result.get("result", {})
-            vib_data = nested.get("vibrational_frequencies", {})
+            vib_data = final_result.get("vibrational_frequencies", {})
             freqs = vib_data.get("frequencies", [])
             if freqs:
                 structured["vibrational_answer"] = {
                     "frequency_cm1": [str(f) for f in freqs],
                 }
         elif driver == "dipole":
-            dipole_moment = final_result.get("dipole_moment")
+            # NOTE: the flat ASEOutputSchema stores the dipole under
+            # ``dipole_value`` (see schemas/ase_input.py); ``dipole_moment``
+            # is the run_ase return key. Accept both for robustness.
+            dipole_moment = final_result.get(
+                "dipole_value", final_result.get("dipole_moment")
+            )
             if dipole_moment is not None:
                 structured["dipole"] = {
                     "value": dipole_moment,
-                    "unit": "e * Angstrom",
+                    "unit": final_result.get("dipole_unit", "e * Angstrom"),
                 }
         elif driver == "ir":
-            nested = final_result.get("result", {})
-            ir_data = nested.get("ir_data", nested.get("ir", {}))
+            ir_data = final_result.get("ir_data", {})
             freqs = ir_data.get("frequencies", [])
             intensities = ir_data.get("intensities", [])
             if freqs:

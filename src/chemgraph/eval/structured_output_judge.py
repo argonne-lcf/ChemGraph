@@ -148,6 +148,39 @@ def _canonicalise_smiles(smiles: str) -> Optional[str]:
     return None
 
 
+def _property_category(prop: Optional[str]) -> str:
+    """Normalise a scalar ``property`` label to a comparison category.
+
+    Agents and ground truth describe the same quantity with varied
+    phrasing (e.g. "Gibbs free energy" vs "gibbs energy",
+    "single-point energy" vs "potential energy"). Collapsing to a
+    keyword-based category lets the judge tolerate wording differences
+    while still distinguishing physically different quantities (energy
+    vs Gibbs vs enthalpy ...).
+
+    Parameters
+    ----------
+    prop : str or None
+        The ``property`` field of a scalar result.
+
+    Returns
+    -------
+    str
+        A coarse category key; defaults to ``"energy"`` for
+        single-point/optimized/potential/generic energy labels.
+    """
+    p = (prop or "").lower()
+    if "gibbs" in p:
+        return "gibbs"
+    if "enthalpy" in p:
+        return "enthalpy"
+    if "entropy" in p:
+        return "entropy"
+    if "dipole" in p:
+        return "dipole"
+    return "energy"
+
+
 # ---------------------------------------------------------------------------
 # Per-field comparison functions
 # ---------------------------------------------------------------------------
@@ -198,6 +231,18 @@ def _compare_scalar(
         reasons.append(
             f"unit mismatch: expected '{expected.get('unit')}', "
             f"got '{actual.get('unit')}'"
+        )
+
+    # Property comparison (normalised category match). Catches cases where
+    # a numerically-close value is reported for the wrong quantity, e.g.
+    # single-point energy in place of Gibbs free energy.
+    exp_prop = expected.get("property")
+    act_prop = actual.get("property")
+    if exp_prop and act_prop and _property_category(exp_prop) != _property_category(
+        act_prop
+    ):
+        reasons.append(
+            f"property mismatch: expected '{exp_prop}', got '{act_prop}'"
         )
 
     if reasons:
@@ -630,11 +675,16 @@ def judge_structured_output(
         reasons.append(f"{field}: {reason}")
 
     if fields_checked == 0:
+        # No non-null expected fields means the ground truth itself is
+        # broken (e.g. a generation bug that produced an empty structured
+        # output). Flag it as a failure rather than a trivial pass so it
+        # surfaces in aggregation instead of inflating scores.
+        msg = "invalid ground truth: no non-null expected fields to compare"
         return {
-            "score": 1,
+            "score": 0,
             "field_scores": field_scores,
-            "rationale": "No non-null expected fields to compare; trivially correct.",
-            "parse_error": None,
+            "rationale": msg,
+            "parse_error": msg,
         }
 
     all_pass = all(field_scores.values())
