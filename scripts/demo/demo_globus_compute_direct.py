@@ -30,7 +30,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _demo_chemistry import (
     MOLECULE_NAMES,
+    abort_if_graspa_unsupported,
+    add_workload_args,
     print_summary,
+    resolve_items,
     submit_and_collect,
     write_csv,
 )
@@ -43,7 +46,7 @@ def main() -> None:
     parser.add_argument(
         "--device",
         default=os.environ.get("CG_DEMO_DEVICE", "cuda"),
-        help="MACE device on the remote endpoint (default: cuda; use xpu on Aurora)",
+        help="MACE/ASE device on the remote endpoint (default: cuda; use xpu on Aurora)",
     )
     parser.add_argument(
         "--amqp-port",
@@ -57,11 +60,18 @@ def main() -> None:
         default=6000.0,
         help="Per-task timeout in seconds (default 6000)",
     )
+    add_workload_args(parser)
     args = parser.parse_args()
 
     if not os.environ.get("GLOBUS_COMPUTE_ENDPOINT_ID"):
         print("ERROR: export GLOBUS_COMPUTE_ENDPOINT_ID=<uuid> first.")
         sys.exit(2)
+
+    abort_if_graspa_unsupported(args.workload, "globus_compute")
+    items = resolve_items(args.workload, molecules=args.molecules, cifs=args.graspa_cifs)
+    # MACE/ASE embed structures inline (no shared FS on the endpoint); gRASPA
+    # reads pre-staged CIFs from the remote filesystem, so it is not inline.
+    inline = args.workload != "graspa"
 
     from chemgraph.execution.config import get_backend
 
@@ -73,10 +83,14 @@ def main() -> None:
     try:
         results = submit_and_collect(
             backend,
-            molecule_names=args.molecules,
+            items=items,
             device=args.device,
             output_dir=args.output_dir,
-            inline=True,
+            inline=inline,
+            workload=args.workload,
+            calculator=args.calculator,
+            driver=args.driver,
+            adsorbate=args.adsorbate,
             timeout=args.timeout,
         )
     finally:
@@ -86,9 +100,10 @@ def main() -> None:
     print_summary(
         results,
         title=(
-            f"Globus Compute thermo screen "
+            f"Globus Compute {args.workload} screen "
             f"(system={os.environ.get('COMPUTE_SYSTEM', '?')}, device={args.device})"
         ),
+        workload=args.workload,
     )
     print(f"CSV written to: {csv_path}")
 

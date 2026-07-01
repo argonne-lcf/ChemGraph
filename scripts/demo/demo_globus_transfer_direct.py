@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _demo_chemistry import (
     MOLECULE_NAMES,
+    _calculator_dict,
     _extract_properties,
     molecule_xyz_path,
     print_summary,
@@ -48,6 +49,23 @@ def main() -> None:
     parser.add_argument("--output-dir", default="demo_globus_transfer_out")
     parser.add_argument("--molecules", nargs="+", default=MOLECULE_NAMES)
     parser.add_argument("--device", default=os.environ.get("CG_DEMO_DEVICE", "cuda"))
+    parser.add_argument(
+        "--workload",
+        choices=["thermo", "ase"],
+        default="thermo",
+        help="thermo = MACE server; ase = general ASE server (selectable calculator). "
+        "gRASPA is not covered here (it needs MOF CIFs, not these .xyz fixtures).",
+    )
+    parser.add_argument(
+        "--calculator",
+        default="mace_mp",
+        help="ASE calculator for --workload ase (e.g. mace_mp, emt, tblite).",
+    )
+    parser.add_argument(
+        "--driver",
+        default="thermo",
+        help="ASE driver for --workload ase (energy/opt/vib/thermo).",
+    )
     parser.add_argument(
         "--amqp-port",
         type=int,
@@ -63,7 +81,7 @@ def main() -> None:
         "--compute-timeout",
         type=float,
         default=6000.0,
-        help="Seconds to wait for each MACE thermo task (default 6000).",
+        help="Seconds to wait for each compute task (default 6000).",
     )
     args = parser.parse_args()
 
@@ -80,7 +98,13 @@ def main() -> None:
 
     from chemgraph.execution.base import TaskSpec
     from chemgraph.execution.config import get_backend, get_transfer_manager
-    from chemgraph.mcp.mace_mcp_hpc import _mace_worker
+
+    if args.workload == "ase":
+        from chemgraph.mcp.ase_mcp_hpc import _ase_worker as _worker
+        _out_key = "output_results_file"
+    else:
+        from chemgraph.mcp.mace_mcp_hpc import _mace_worker as _worker
+        _out_key = "output_result_file"
 
     # ── 1. Stage all 5 .xyz files to the remote HPC collection ─────────
     print("\n[1/3] Submitting Globus Transfer for fixtures...")
@@ -108,8 +132,11 @@ def main() -> None:
         f"{status['bytes_transferred']} bytes"
     )
 
-    # ── 2. Submit one MACE thermo task per pre-staged file ─────────────
-    print(f"\n[2/3] Dispatching {len(args.molecules)} MACE thermo jobs via Globus Compute...")
+    # ── 2. Submit one compute task per pre-staged file ─────────────────
+    print(
+        f"\n[2/3] Dispatching {len(args.molecules)} {args.workload} jobs "
+        f"via Globus Compute..."
+    )
     backend_kwargs = {}
     if args.amqp_port:
         backend_kwargs["amqp_port"] = args.amqp_port
@@ -124,25 +151,28 @@ def main() -> None:
         remote_xyz = f"{transfer.remote_directory}/{name}.xyz"
         job = {
             # input_structure_file is ignored when remote_structure_file is set
-            # (mace_mcp_hpc._mace_worker:92-99 overrides it). Pass a sentinel.
+            # (the worker's remote-path branch overrides it). Pass a sentinel.
             "input_structure_file": f"remote::{name}",
             "remote_structure_file": remote_xyz,
-            "output_result_file": f"{name}_thermo.json",
-            "driver": "thermo",
-            "model": "medium-mpa-0",
-            "device": args.device,
+            _out_key: f"{name}_{args.workload}.json",
+            "driver": args.driver if args.workload == "ase" else "thermo",
             "temperature": 298.15,
             "pressure": 101325.0,
             "fmax": 0.01,
             "steps": 200,
             "optimizer": "lbfgs",
         }
+        if args.workload == "ase":
+            job["calculator"] = _calculator_dict(args.calculator, args.device)
+        else:
+            job["model"] = "medium-mpa-0"
+            job["device"] = args.device
         jobs.append(job)
         tasks.append(
             TaskSpec(
                 task_id=f"demo-tr-{name}",
                 task_type="python",
-                callable=_mace_worker,
+                callable=_worker,
                 kwargs={"job": job},
             )
         )
@@ -167,7 +197,8 @@ def main() -> None:
     print(f"\n[3/3] Results (remote-path mode -- full JSON stays on the HPC):")
     print_summary(
         results,
-        title=f"Globus Transfer + Compute thermo screen (device={args.device})",
+        title=f"Globus Transfer + Compute {args.workload} screen (device={args.device})",
+        workload=args.workload,
     )
     csv_path = write_csv(results, output_dir / "demo_globus_transfer.csv")
     print(f"CSV (per-call status; thermo values blank in remote-path mode): {csv_path}")

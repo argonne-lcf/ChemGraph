@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _demo_chemistry import agent_prompt
+from _demo_chemistry import agent_prompt_graspa, mcp_server_for, prompt_for
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -41,10 +41,15 @@ def _abort(msg: str) -> None:
     sys.exit(2)
 
 
-async def amain(model: str, system: str, device: str, query: str, verbose: int) -> None:
+async def amain(
+    model: str, system: str, device: str, query: str, workload: str, verbose: int
+) -> None:
     if verbose:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
         logging.getLogger("chemgraph").setLevel(logging.INFO if verbose == 1 else logging.DEBUG)
+
+    server = mcp_server_for(workload)
+    server_label = f"{server['label']} (Parsl)"
 
     python = sys.executable
     env = {
@@ -60,15 +65,17 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int) 
         "PBS_O_WORKDIR": os.environ.get("PBS_O_WORKDIR", ""),
     }
     server_configs = {
-        "ChemGraph MACE (Parsl)": {
+        server_label: {
             "transport": "stdio",
             "command": python,
-            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc"],
+            "args": ["-u", "-m", server["module"]],
             "env": env,
         },
     }
 
     print(f"LLM model: {model}")
+    print(f"MCP server: {server['module']}")
+    print(f"Workload:  {workload}")
     print(f"System:    {system}")
     print(f"Device:    {device}\n")
     print("Query:\n" + "-" * 60)
@@ -77,7 +84,7 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int) 
 
     client = MultiServerMCPClient(server_configs)
     async with contextlib.AsyncExitStack() as stack:
-        session = await stack.enter_async_context(client.session("ChemGraph MACE (Parsl)"))
+        session = await stack.enter_async_context(client.session(server_label))
         tools = await load_mcp_tools(session)
         print(f"Loaded {len(tools)} MCP tools: {[t.name for t in tools]}\n")
 
@@ -110,6 +117,16 @@ def main() -> None:
     parser.add_argument("--model", default="gpt-4o-mini")
     parser.add_argument("--system", default=os.environ.get("COMPUTE_SYSTEM"))
     parser.add_argument("--device", default=None)
+    parser.add_argument(
+        "--workload",
+        choices=["thermo", "ase", "graspa"],
+        default="thermo",
+        help="thermo = MACE; ase = general ASE; graspa = GCMC (needs --graspa-cifs).",
+    )
+    parser.add_argument("--calculator", default="mace_mp",
+                        help="ASE calculator for --workload ase.")
+    parser.add_argument("--graspa-cifs", nargs="+", default=None,
+                        help="CIF paths (node-reachable) for --workload graspa.")
     parser.add_argument("--query", default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
@@ -129,8 +146,17 @@ def main() -> None:
         device = "cpu"
     else:
         device = "cuda"
-    query = args.query or agent_prompt(device=device)
-    asyncio.run(amain(args.model, system, device, query, args.verbose))
+
+    if args.query:
+        query = args.query
+    elif args.workload == "graspa":
+        if not args.graspa_cifs:
+            _abort("--workload graspa requires --graspa-cifs <CIF> [<CIF> ...].")
+        query = agent_prompt_graspa(args.graspa_cifs)
+    else:
+        query = prompt_for(args.workload, device=device, calculator=args.calculator)
+
+    asyncio.run(amain(args.model, system, device, query, args.workload, args.verbose))
 
 
 if __name__ == "__main__":

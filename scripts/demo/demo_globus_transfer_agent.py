@@ -34,13 +34,32 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _demo_chemistry import MOLECULE_NAMES, structures_dir
+from _demo_chemistry import MOLECULE_NAMES, mcp_server_for, structures_dir
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 
 from chemgraph.agent.llm_agent import ChemGraph
 
+
+_MACE_STEP3 = """\
+3. Call `run_mace_ensemble` with:
+     - remote_structure_directory = <remote_directory from step 2>
+     - driver = "thermo"
+     - model = "medium-mpa-0"
+     - device = "{device}"
+     - temperature = 298.15
+     - pressure = 101325
+   This dispatches one MACE thermo job per file via Globus Compute."""
+
+_ASE_STEP3 = """\
+3. Call `run_ase_ensemble` with:
+     - remote_structure_directory = <remote_directory from step 2>
+     - driver = "thermo"
+     - calculator = {{"calculator_type": "{calculator}", "device": "{device}"}}
+     - temperature = 298.15
+     - pressure = 101325
+   This dispatches one ASE thermo job per file via Globus Compute."""
 
 _TRANSFER_AGENT_PROMPT_TMPL = """\
 The following five molecule structure files live on the local filesystem:
@@ -51,15 +70,8 @@ Workflow:
    paths (you may pass them as one batch) to stage them on the remote
    HPC endpoint. Use `wait=true` so the call blocks until SUCCEEDED.
 2. From the transfer result, take the `remote_directory` value.
-3. Call `run_mace_ensemble` with:
-     - remote_structure_directory = <remote_directory from step 2>
-     - driver = "thermo"
-     - model = "medium-mpa-0"
-     - device = "{device}"
-     - temperature = 298.15
-     - pressure = 101325
-   This dispatches one MACE thermo job per file via Globus Compute.
-4. If `run_mace_ensemble` returns a `batch_id`, poll `check_job_status`
+{step3}
+4. If the ensemble tool returns a `batch_id`, poll `check_job_status`
    until completed, then call `get_job_results` to retrieve the per-file
    energies and thermochemistry.
 5. Report a markdown table with columns: molecule | electronic energy (eV) |
@@ -68,16 +80,24 @@ Workflow:
 """
 
 
-def _agent_prompt(device: str) -> str:
+def _agent_prompt(device: str, workload: str, calculator: str) -> str:
     paths = [str(structures_dir() / f"{n}.xyz") for n in MOLECULE_NAMES]
     listing = "\n".join(f"  - {p}" for p in paths)
-    return _TRANSFER_AGENT_PROMPT_TMPL.format(listing=listing, device=device)
+    step3 = (
+        _ASE_STEP3.format(device=device, calculator=calculator)
+        if workload == "ase"
+        else _MACE_STEP3.format(device=device)
+    )
+    return _TRANSFER_AGENT_PROMPT_TMPL.format(listing=listing, step3=step3)
 
 
-async def amain(model: str, device: str, query: str, verbose: int) -> None:
+async def amain(model: str, device: str, query: str, workload: str, verbose: int) -> None:
     if verbose:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
         logging.getLogger("chemgraph").setLevel(logging.INFO if verbose == 1 else logging.DEBUG)
+
+    server = mcp_server_for(workload)
+    server_label = f"{server['label']}+Transfer"
 
     python = sys.executable
     forwarded = {
@@ -91,15 +111,17 @@ async def amain(model: str, device: str, query: str, verbose: int) -> None:
         "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", ""),
     }
     server_configs = {
-        "ChemGraph MACE+Transfer": {
+        server_label: {
             "transport": "stdio",
             "command": python,
-            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc"],
+            "args": ["-u", "-m", server["module"]],
             "env": forwarded,
         },
     }
 
     print(f"LLM model: {model}")
+    print(f"MCP server: {server['module']}")
+    print(f"Workload:  {workload}")
     print(f"Device:    {device}\n")
     print("Query:\n" + "-" * 60)
     print(query)
@@ -107,7 +129,7 @@ async def amain(model: str, device: str, query: str, verbose: int) -> None:
 
     client = MultiServerMCPClient(server_configs)
     async with contextlib.AsyncExitStack() as stack:
-        session = await stack.enter_async_context(client.session("ChemGraph MACE+Transfer"))
+        session = await stack.enter_async_context(client.session(server_label))
         tools = await load_mcp_tools(session)
         names = [t.name for t in tools]
         print(f"Loaded {len(tools)} MCP tools: {names}\n")
@@ -146,6 +168,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default="gpt-4o-mini")
     parser.add_argument("--device", default=os.environ.get("CG_DEMO_DEVICE", "cuda"))
+    parser.add_argument(
+        "--workload",
+        choices=["thermo", "ase"],
+        default="thermo",
+        help="thermo = MACE ensemble; ase = general ASE ensemble. gRASPA needs "
+        "MOF CIFs, not these .xyz fixtures, so it is not covered here.",
+    )
+    parser.add_argument("--calculator", default="mace_mp",
+                        help="ASE calculator for --workload ase.")
     parser.add_argument("--query", default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
@@ -161,8 +192,8 @@ def main() -> None:
         print(f"ERROR: missing env vars: {', '.join(missing)}")
         sys.exit(2)
 
-    query = args.query or _agent_prompt(args.device)
-    asyncio.run(amain(args.model, args.device, query, args.verbose))
+    query = args.query or _agent_prompt(args.device, args.workload, args.calculator)
+    asyncio.run(amain(args.model, args.device, query, args.workload, args.verbose))
 
 
 if __name__ == "__main__":

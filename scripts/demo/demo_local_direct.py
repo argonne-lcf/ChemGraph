@@ -22,7 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _demo_chemistry import (
     MOLECULE_NAMES,
+    abort_if_graspa_unsupported,
+    add_workload_args,
     print_summary,
+    resolve_items,
     submit_and_collect,
     write_csv,
 )
@@ -44,9 +47,13 @@ def main() -> None:
     parser.add_argument(
         "--device",
         default="cpu",
-        help="MACE device (default: cpu; local Mac/CPU)",
+        help="MACE/ASE device (default: cpu; local Mac/CPU)",
     )
+    add_workload_args(parser)
     args = parser.parse_args()
+
+    abort_if_graspa_unsupported(args.workload, "local")
+    items = resolve_items(args.workload, molecules=args.molecules, cifs=args.graspa_cifs)
 
     from chemgraph.execution.config import get_backend
 
@@ -54,19 +61,27 @@ def main() -> None:
     try:
         results = submit_and_collect(
             backend,
-            molecule_names=args.molecules,
+            items=items,
             device=args.device,
             output_dir=args.output_dir,
             inline=False,
+            workload=args.workload,
+            calculator=args.calculator,
+            driver=args.driver,
+            adsorbate=args.adsorbate,
             timeout=1200,
         )
     finally:
         backend.shutdown()
 
     csv_path = write_csv(results, Path(args.output_dir) / "demo_local.csv")
-    print_summary(results, title=f"Local backend thermo screen ({args.device})")
+    print_summary(
+        results,
+        title=f"Local backend {args.workload} screen ({args.device})",
+        workload=args.workload,
+    )
     print(f"CSV written to: {csv_path}")
-    print(f"Per-molecule JSON written under: {Path(args.output_dir).resolve()}")
+    print(f"Per-item output written under: {Path(args.output_dir).resolve()}")
 
 
 if __name__ == "__main__":

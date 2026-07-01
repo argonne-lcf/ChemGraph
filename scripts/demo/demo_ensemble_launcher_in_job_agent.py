@@ -26,7 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _demo_chemistry import agent_prompt
+from _demo_chemistry import agent_prompt_graspa, mcp_server_for, prompt_for
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -39,11 +39,14 @@ def _abort(msg: str) -> None:
     sys.exit(2)
 
 
-async def amain(model: str, system: str, device: str, query: str, verbose: int,
-                *, ppn: int = 1, ngpus_per_process: int = 0) -> None:
+async def amain(model: str, system: str, device: str, query: str, workload: str,
+                verbose: int, *, ppn: int = 1, ngpus_per_process: int = 0) -> None:
     if verbose:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
         logging.getLogger("chemgraph").setLevel(logging.INFO if verbose == 1 else logging.DEBUG)
+
+    server = mcp_server_for(workload)
+    server_label = f"{server['label']} (EnsembleLauncher)"
 
     python = sys.executable
     env = os.environ.copy()
@@ -52,10 +55,10 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int,
         "COMPUTE_SYSTEM": system,
     })
     server_configs = {
-        "ChemGraph MACE (EnsembleLauncher)": {
+        server_label: {
             "transport": "stdio",
             "command": python,
-            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc",
+            "args": ["-u", "-m", server["module"],
                     "--ppn", str(ppn),
                     "--ngpus-per-process", str(ngpus_per_process)],
             "env": env,
@@ -63,6 +66,8 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int,
     }
 
     print(f"LLM model: {model}")
+    print(f"MCP server: {server['module']}")
+    print(f"Workload:  {workload}")
     print(f"System:    {system}")
     print(f"Device:    {device}\n")
     print("Query:\n" + "-" * 60)
@@ -72,7 +77,7 @@ async def amain(model: str, system: str, device: str, query: str, verbose: int,
     client = MultiServerMCPClient(server_configs)
     async with contextlib.AsyncExitStack() as stack:
         session = await stack.enter_async_context(
-            client.session("ChemGraph MACE (EnsembleLauncher)")
+            client.session(server_label)
         )
         tools = await load_mcp_tools(session)
         print(f"Loaded {len(tools)} MCP tools: {[t.name for t in tools]}\n")
@@ -110,6 +115,16 @@ def main() -> None:
                         help="Processes per node for MCP backend tasks")
     parser.add_argument("--ngpus-per-process", type=int, default=0,
                         help="GPUs per process for MCP backend tasks")
+    parser.add_argument(
+        "--workload",
+        choices=["thermo", "ase", "graspa"],
+        default="thermo",
+        help="thermo = MACE; ase = general ASE; graspa = GCMC (needs --graspa-cifs).",
+    )
+    parser.add_argument("--calculator", default="mace_mp",
+                        help="ASE calculator for --workload ase.")
+    parser.add_argument("--graspa-cifs", nargs="+", default=None,
+                        help="CIF paths (node-reachable) for --workload graspa.")
     parser.add_argument("--query", default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
@@ -122,8 +137,17 @@ def main() -> None:
     if system not in ("polaris", "aurora", "crux"):
         _abort(f"Unsupported --system: {system!r}")
     device = args.device or ("xpu" if system == "aurora" else "cuda")
-    query = args.query or agent_prompt(device=device)
-    asyncio.run(amain(args.model, system, device, query, args.verbose,
+
+    if args.query:
+        query = args.query
+    elif args.workload == "graspa":
+        if not args.graspa_cifs:
+            _abort("--workload graspa requires --graspa-cifs <CIF> [<CIF> ...].")
+        query = agent_prompt_graspa(args.graspa_cifs)
+    else:
+        query = prompt_for(args.workload, device=device, calculator=args.calculator)
+
+    asyncio.run(amain(args.model, system, device, query, args.workload, args.verbose,
                       ppn=args.ppn, ngpus_per_process=args.ngpus_per_process))
 
 

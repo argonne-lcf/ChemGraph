@@ -30,7 +30,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _demo_chemistry import agent_prompt
+from _demo_chemistry import mcp_server_for, prompt_for
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -38,34 +38,33 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 from chemgraph.agent.llm_agent import ChemGraph
 
 
-async def amain(model: str, device: str, query: str, verbose: int) -> None:
+async def amain(model: str, device: str, query: str, workload: str, verbose: int) -> None:
     if verbose:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
         logging.getLogger("chemgraph").setLevel(logging.INFO if verbose == 1 else logging.DEBUG)
 
     endpoint = os.environ["GLOBUS_COMPUTE_ENDPOINT_ID"]
-    os.environ["CHEMGRAPH_EXECUTION_BACKEND"] = "globus_compute"
+    env = os.environ.copy()
+    env.update({
+        "CHEMGRAPH_EXECUTION_BACKEND": "globus_compute",
+    })
+
+    server = mcp_server_for(workload)
+    server_label = f"{server['label']} (Globus Compute)"
 
     python = sys.executable
     server_configs = {
-        "ChemGraph MACE (Globus Compute)": {
+        server_label: {
             "transport": "stdio",
             "command": python,
-            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc"],
-            "env": {
-                "CHEMGRAPH_EXECUTION_BACKEND": "globus_compute",
-                "GLOBUS_COMPUTE_ENDPOINT_ID": endpoint,
-                # Forward optional knobs if set.
-                **({"CG_AMQP_PORT": os.environ["CG_AMQP_PORT"]} if "CG_AMQP_PORT" in os.environ else {}),
-                **({"COMPUTE_SYSTEM": os.environ["COMPUTE_SYSTEM"]} if "COMPUTE_SYSTEM" in os.environ else {}),
-                "PATH": os.environ.get("PATH", ""),
-                "HOME": os.environ.get("HOME", ""),
-                "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", ""),
-            },
+            "args": ["-u", "-m", server["module"]],
+            "env": env
         },
     }
 
     print(f"LLM model:    {model}")
+    print(f"MCP server:   {server['module']}")
+    print(f"Workload:     {workload}")
     print(f"GC endpoint:  {endpoint[:8]}... ({os.environ.get('COMPUTE_SYSTEM', '?')})")
     print(f"Device:       {device}\n")
     print("Query:\n" + "-" * 60)
@@ -76,7 +75,7 @@ async def amain(model: str, device: str, query: str, verbose: int) -> None:
 
     async with contextlib.AsyncExitStack() as stack:
         session = await stack.enter_async_context(
-            client.session("ChemGraph MACE (Globus Compute)")
+            client.session(server_label)
         )
         tools = await load_mcp_tools(session)
         print(f"Loaded {len(tools)} MCP tools: {[t.name for t in tools]}\n")
@@ -109,13 +108,30 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--model",
-        default="gpt-4o-mini",
+        default="argo:gpt-4o",
         help="LLM model name (default: gpt-4o-mini)",
     )
     parser.add_argument(
         "--device",
         default=os.environ.get("CG_DEMO_DEVICE", "cuda"),
-        help="MACE device on the remote endpoint (default: cuda; use xpu on Aurora)",
+        help="MACE/ASE device on the remote endpoint (default: cuda; use xpu on Aurora)",
+    )
+    parser.add_argument(
+        "--workload",
+        choices=["thermo", "ase", "graspa"],
+        default="thermo",
+        help="thermo = MACE; ase = general ASE; graspa = GCMC (needs --graspa-cifs).",
+    )
+    parser.add_argument(
+        "--calculator",
+        default="mace_mp",
+        help="ASE calculator for --workload ase (e.g. mace_mp, emt, tblite).",
+    )
+    parser.add_argument(
+        "--graspa-cifs",
+        nargs="+",
+        default=None,
+        help="Remote-reachable CIF paths for --workload graspa.",
     )
     parser.add_argument("--query", default=None, help="Override the default query")
     parser.add_argument("-v", "--verbose", action="count", default=0)
@@ -125,8 +141,19 @@ def main() -> None:
         print("ERROR: export GLOBUS_COMPUTE_ENDPOINT_ID=<uuid> first.")
         sys.exit(2)
 
-    query = args.query or agent_prompt(device=args.device)
-    asyncio.run(amain(args.model, args.device, query, args.verbose))
+    if args.query:
+        query = args.query
+    elif args.workload == "graspa":
+        from _demo_chemistry import agent_prompt_graspa
+
+        if not args.graspa_cifs:
+            print("ERROR: --workload graspa requires --graspa-cifs <CIF> [<CIF> ...].")
+            sys.exit(2)
+        query = agent_prompt_graspa(args.graspa_cifs)
+    else:
+        query = prompt_for(args.workload, device=args.device, calculator=args.calculator)
+
+    asyncio.run(amain(args.model, args.device, query, args.workload, args.verbose))
 
 
 if __name__ == "__main__":

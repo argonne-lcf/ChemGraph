@@ -25,7 +25,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _demo_chemistry import (
     MOLECULE_NAMES,
+    abort_if_graspa_unsupported,
+    add_workload_args,
     print_summary,
+    resolve_items,
     submit_and_collect,
     write_csv,
 )
@@ -45,7 +48,10 @@ def main() -> None:
     parser.add_argument("--ppn", type=int, default=16,
                         help="Processes (cores) per node for each task")
     parser.add_argument("--timeout", type=float, default=6000.0)
+    add_workload_args(parser)
     args = parser.parse_args()
+
+    abort_if_graspa_unsupported(args.workload, "ensemble_launcher")
 
     if not os.environ.get("PBS_NODEFILE"):
         _abort("PBS_NODEFILE not set. Run inside `qsub -I`.")
@@ -75,14 +81,20 @@ def main() -> None:
 
     from chemgraph.execution.config import get_backend
 
+    items = resolve_items(args.workload, molecules=args.molecules, cifs=args.graspa_cifs)
+
     backend = get_backend(backend_name="ensemble_launcher", system=system)
     try:
         results = submit_and_collect(
             backend,
-            molecule_names=args.molecules,
+            items=items,
             device=device,
             output_dir=args.output_dir,
             inline=False,
+            workload=args.workload,
+            calculator=args.calculator,
+            driver=args.driver,
+            adsorbate=args.adsorbate,
             timeout=args.timeout,
             ppn=args.ppn,
         )
@@ -92,7 +104,8 @@ def main() -> None:
     csv_path = write_csv(results, Path(args.output_dir) / "demo_el.csv")
     print_summary(
         results,
-        title=f"EnsembleLauncher thermo screen (system={system}, device={device})",
+        title=f"EnsembleLauncher {args.workload} screen (system={system}, device={device})",
+        workload=args.workload,
     )
     print(f"CSV: {csv_path}")
 

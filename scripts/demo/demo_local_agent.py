@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _demo_chemistry import agent_prompt
+from _demo_chemistry import mcp_server_for, prompt_for
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -37,7 +37,7 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 from chemgraph.agent.llm_agent import ChemGraph
 
 
-async def amain(model: str, device: str, query: str, verbose: int) -> None:
+async def amain(model: str, device: str, query: str, workload: str, verbose: int) -> None:
     if verbose:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(message)s")
         logging.getLogger("chemgraph").setLevel(logging.INFO if verbose == 1 else logging.DEBUG)
@@ -45,12 +45,15 @@ async def amain(model: str, device: str, query: str, verbose: int) -> None:
     # Make sure the spawned MCP subprocess uses LocalBackend.
     os.environ["CHEMGRAPH_EXECUTION_BACKEND"] = "local"
 
+    server = mcp_server_for(workload)
+    server_label = server["label"]
+
     python = sys.executable
     server_configs = {
-        "ChemGraph MACE": {
+        server_label: {
             "transport": "stdio",
             "command": python,
-            "args": ["-u", "-m", "chemgraph.mcp.mace_mcp_hpc"],
+            "args": ["-u", "-m", server["module"]],
             "env": {
                 "CHEMGRAPH_EXECUTION_BACKEND": "local",
                 # Forward the user's PATH/HOME so the subprocess can resolve
@@ -63,7 +66,11 @@ async def amain(model: str, device: str, query: str, verbose: int) -> None:
     }
 
     print(f"LLM model:   {model}")
-    print(f"MCP server:  mace_mcp_hpc (stdio subprocess, CHEMGRAPH_EXECUTION_BACKEND=local)")
+    print(
+        f"MCP server:  {server['module']} (stdio subprocess, "
+        f"CHEMGRAPH_EXECUTION_BACKEND=local)"
+    )
+    print(f"Workload:    {workload}")
     print(f"Device:      {device}\n")
     print("Query:\n" + "-" * 60)
     print(query)
@@ -72,7 +79,7 @@ async def amain(model: str, device: str, query: str, verbose: int) -> None:
     client = MultiServerMCPClient(server_configs)
 
     async with contextlib.AsyncExitStack() as stack:
-        session = await stack.enter_async_context(client.session("ChemGraph MACE"))
+        session = await stack.enter_async_context(client.session(server_label))
         tools = await load_mcp_tools(session)
         tool_names = [t.name for t in tools]
         print(f"Loaded {len(tools)} MCP tools: {tool_names}\n")
@@ -111,12 +118,24 @@ def main() -> None:
     parser.add_argument(
         "--device",
         default="cpu",
-        help="MACE device passed to the agent prompt (default: cpu)",
+        help="MACE/ASE device passed to the agent prompt (default: cpu)",
+    )
+    parser.add_argument(
+        "--workload",
+        choices=["thermo", "ase"],
+        default="thermo",
+        help="thermo = MACE server; ase = general ASE server. gRASPA is HPC-only "
+        "(use the HPC agent demos).",
+    )
+    parser.add_argument(
+        "--calculator",
+        default="mace_mp",
+        help="ASE calculator for --workload ase (e.g. mace_mp, emt, tblite).",
     )
     parser.add_argument(
         "--query",
         default=None,
-        help="Override the natural-language query (default: 5-molecule thermo screen)",
+        help="Override the natural-language query (default: 5-molecule screen)",
     )
     parser.add_argument(
         "-v",
@@ -127,8 +146,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    query = args.query or agent_prompt(device=args.device)
-    asyncio.run(amain(args.model, args.device, query, args.verbose))
+    query = args.query or prompt_for(
+        args.workload, device=args.device, calculator=args.calculator
+    )
+    asyncio.run(amain(args.model, args.device, query, args.workload, args.verbose))
 
 
 if __name__ == "__main__":

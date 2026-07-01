@@ -29,7 +29,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _demo_chemistry import (
     MOLECULE_NAMES,
+    abort_if_graspa_unsupported,
+    add_workload_args,
     print_summary,
+    resolve_items,
     submit_and_collect,
     write_csv,
 )
@@ -56,7 +59,10 @@ def main() -> None:
         help="Parsl run_dir (default: $PBS_O_WORKDIR/parsl_demo_runs or ./parsl_demo_runs).",
     )
     parser.add_argument("--timeout", type=float, default=6000.0)
+    add_workload_args(parser)
     args = parser.parse_args()
+
+    abort_if_graspa_unsupported(args.workload, "parsl")
 
     pbs_nodefile = os.environ.get("PBS_NODEFILE")
     if not pbs_nodefile or not Path(pbs_nodefile).is_file():
@@ -86,21 +92,31 @@ def main() -> None:
 
     from chemgraph.execution.config import get_backend
 
+    items = resolve_items(args.workload, molecules=args.molecules, cifs=args.graspa_cifs)
+
     backend = get_backend(backend_name="parsl", system=system, run_dir=run_dir)
     try:
         results = submit_and_collect(
             backend,
-            molecule_names=args.molecules,
+            items=items,
             device=device,
             output_dir=args.output_dir,
             inline=False,
+            workload=args.workload,
+            calculator=args.calculator,
+            driver=args.driver,
+            adsorbate=args.adsorbate,
             timeout=args.timeout,
         )
     finally:
         backend.shutdown()
 
     csv_path = write_csv(results, Path(args.output_dir) / "demo_parsl.csv")
-    print_summary(results, title=f"Parsl thermo screen (system={system}, device={device})")
+    print_summary(
+        results,
+        title=f"Parsl {args.workload} screen (system={system}, device={device})",
+        workload=args.workload,
+    )
     print(f"CSV: {csv_path}")
 
 
