@@ -67,6 +67,17 @@ ui = [
 parsl = [
     "parsl",
 ]
+ensemble_launcher = [
+    "ensemble-launcher",
+]
+globus_compute = [
+    "globus-compute-sdk",
+]
+academy = [
+    "academy-py",
+    "httpx",
+    "redis",
+]
 xanes = [
     "mp-api; python_version >= '3.11'",
     "parsl"
@@ -92,6 +103,16 @@ where = ["src/"]
 
 [tool.setuptools.package-data]
 "chemgraph.eval" = ["data/*.json"]
+"chemgraph.academy.campaigns" = [
+    "example-*/*.json",
+    "example-*/*.jsonc",
+    "example-*/data/*.json",
+    "example-*/models/*",
+    "example-*/prompt_profiles/*.json",
+]
+"chemgraph.academy.runtime.profiles" = ["*.json"]
+"chemgraph.academy.runtime.templates" = ["*"]
+"chemgraph.academy.dashboard" = ["static/*"]
 "ui" = ["assets/*.png"]
 
 [tool.ruff]
@@ -108,6 +129,10 @@ skip-magic-trailing-comma = false  # Ensure Black-style formatting
 testpaths = ["tests"]
 markers = [
     "llm: marks tests as requiring LLM API access (run with --run-llm)",
+    "globus_compute: marks tests requiring a live Globus Compute endpoint (run with --run-globus-compute)",
+    "parsl: marks tests requiring a live Parsl deployment (run with --run-parsl)",
+    "ensemble_launcher: marks tests requiring a live EnsembleLauncher deployment (run with --run-ensemble-launcher)",
+    "academy: marks tests requiring Academy agent infrastructure (run with --run-academy)",
     "asyncio: marks async tests",
 ]
 filterwarnings = [

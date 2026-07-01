@@ -46,7 +46,16 @@ class graspa_input_schema(BaseModel):
 
 class graspa_input_schema_ensemble(BaseModel):
     input_structures: Union[str, list[str]] = Field(
-        description="Path to a directory of CIF files OR a specific list of file paths."
+        default="",
+        description="Path to a directory of CIF files OR a specific list of file paths. Required unless remote_structure_directory is provided.",
+    )
+    remote_structure_directory: str | None = Field(
+        default=None,
+        description=(
+            "Path to pre-staged CIF files on the remote HPC filesystem. "
+            "When provided, workers read structures directly from this path. "
+            "Use the transfer_files tool to stage files first."
+        ),
     )
     output_result_file: str = Field(
         default="raspa.log",

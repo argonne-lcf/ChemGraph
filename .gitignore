@@ -51,6 +51,8 @@ opencode.json
 chemgraph_mcp_logs/
 vllm/
 logs/
+runs/
+**/*.model
 error_log.txt
 .env
 test.csv
