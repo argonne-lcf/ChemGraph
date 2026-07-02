@@ -45,6 +45,7 @@ from langgraph.types import Command
 from langgraph.errors import GraphInterrupt
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
+from chemgraph.agent.turn import serialize_state
 
 
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
@@ -64,31 +65,6 @@ from chemgraph.prompt.xanes_prompt import (
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def serialize_state(state):
-    """Convert non-serializable objects in state to a JSON-friendly format.
-
-    Parameters
-    ----------
-    state : Any
-        The state object to be serialized. Can be a list, dict, or object with __dict__
-
-    Returns
-    -------
-    Any
-        A JSON-serializable version of the input state
-    """
-    if isinstance(state, (int, float, bool)) or state is None:
-        return state
-    elif isinstance(state, list):
-        return [serialize_state(item) for item in state]
-    elif isinstance(state, dict):
-        return {key: serialize_state(value) for key, value in state.items()}
-    elif hasattr(state, "__dict__"):
-        return {key: serialize_state(value) for key, value in state.__dict__.items()}
-    else:
-        return str(state)
 
 
 class ChemGraph:
