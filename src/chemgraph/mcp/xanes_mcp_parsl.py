@@ -4,16 +4,6 @@ import os
 import warnings
 from pathlib import Path
 
-warnings.warn(
-    "chemgraph.mcp.xanes_mcp_parsl is deprecated; use "
-    "chemgraph.mcp.xanes_mcp_hpc, which dispatches via the "
-    "chemgraph.execution backend abstraction (Parsl, EnsembleLauncher, "
-    "Globus Compute, or local). This module will be removed in a future "
-    "release.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-
 from mcp.server.fastmcp import FastMCP
 
 import parsl
@@ -24,6 +14,16 @@ from chemgraph.schemas.xanes_schema import (
     xanes_input_schema,
     xanes_input_schema_ensemble,
     mp_query_schema,
+)
+
+warnings.warn(
+    "chemgraph.mcp.xanes_mcp_parsl is deprecated; use "
+    "chemgraph.mcp.xanes_mcp_hpc, which dispatches via the "
+    "chemgraph.execution backend abstraction (Parsl, EnsembleLauncher, "
+    "Globus Compute, or local). This module will be removed in a future "
+    "release.",
+    DeprecationWarning,
+    stacklevel=2,
 )
 
 

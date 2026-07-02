@@ -8,7 +8,6 @@ Tests cover:
 - Shared utilities: resolve_structure_files, gather_futures, write_results_jsonl
 """
 
-import asyncio
 import json
 import os
 import sys
@@ -789,8 +788,6 @@ class TestMakePerStructureOutput:
 class TestGatherFutures:
     @pytest.mark.asyncio
     async def test_successful_futures(self):
-        loop = asyncio.get_event_loop()
-
         def _make_resolved(val):
             f = Future()
             f.set_result(val)

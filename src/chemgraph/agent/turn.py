@@ -8,6 +8,7 @@ import time
 import uuid
 from typing import Any, Collection
 
+from chemgraph.agent.events import EventCallback, _TurnEventCallback
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.models.loader import load_chat_model
 from chemgraph.models.settings import LLMSettings
@@ -345,9 +346,6 @@ def _load_turn_llm(
             argo_user=argo_user,
         ),
     )
-
-
-from chemgraph.agent.events import EventCallback, _TurnEventCallback
 
 
 async def run_turn(

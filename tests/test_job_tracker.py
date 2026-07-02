@@ -297,7 +297,7 @@ class TestGatherFuturesTimeout:
             ({"i": 0}, _make_done_future({"val": 1})),
             ({"i": 1}, _make_done_future({"val": 2})),
         ]
-        results = asyncio.get_event_loop().run_until_complete(
+        results = asyncio.run(
             gather_futures(pending, timeout=5.0)
         )
         assert len(results) == 2
@@ -305,13 +305,13 @@ class TestGatherFuturesTimeout:
     def test_timeout_raises(self):
         pending = [({"i": 0}, _make_pending_future())]
         with pytest.raises(asyncio.TimeoutError):
-            asyncio.get_event_loop().run_until_complete(
+            asyncio.run(
                 gather_futures(pending, timeout=0.1)
             )
 
     def test_no_timeout_default(self):
         pending = [({"i": 0}, _make_done_future(42))]
-        results = asyncio.get_event_loop().run_until_complete(
+        results = asyncio.run(
             gather_futures(pending)
         )
         assert len(results) == 1
@@ -328,7 +328,7 @@ class TestSubmitOrGather:
         tracker = JobTracker()
         pending = [({"i": 0}, _make_done_future({"val": 10}))]
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             submit_or_gather(backend, pending, tracker, "test_tool")
         )
         assert result["status"] == "completed"
@@ -342,7 +342,7 @@ class TestSubmitOrGather:
         tracker = JobTracker()
         pending = [({"i": 0}, _make_pending_future())]
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             submit_or_gather(backend, pending, tracker, "test_tool")
         )
         assert result["status"] == "submitted"
@@ -358,7 +358,7 @@ class TestSubmitOrGather:
         fut = _make_done_future({"val": 99})
         pending = [({"i": 0}, fut)]
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             submit_or_gather(backend, pending, tracker, "test_tool")
         )
         batch_id = result["batch_id"]
@@ -383,7 +383,7 @@ class TestSubmitOrGather:
         fut = _make_done_future({"raw": 1})
         pending = [({"i": 0}, fut)]
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             submit_or_gather(
                 backend, pending, tracker, "test_tool", post_fn=post_fn,
             )

@@ -4,6 +4,15 @@ import os
 import warnings
 from pathlib import Path
 
+from mcp.server.fastmcp import FastMCP
+
+import parsl
+from chemgraph.mcp.server_utils import load_parsl_config, run_mcp_server
+from chemgraph.schemas.graspa_schema import (
+    graspa_input_schema_ensemble,
+)
+from parsl import python_app
+
 warnings.warn(
     "chemgraph.mcp.graspa_mcp_parsl is deprecated; use "
     "chemgraph.mcp.graspa_mcp_hpc, which dispatches via the "
@@ -13,15 +22,6 @@ warnings.warn(
     DeprecationWarning,
     stacklevel=2,
 )
-
-from mcp.server.fastmcp import FastMCP
-
-import parsl
-from chemgraph.mcp.server_utils import load_parsl_config, run_mcp_server
-from chemgraph.schemas.graspa_schema import (
-    graspa_input_schema_ensemble,
-)
-from parsl import python_app
 
 
 @python_app

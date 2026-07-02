@@ -194,7 +194,7 @@ def main() -> None:
         backend.shutdown()
 
     # ── 3. Report ──────────────────────────────────────────────────────
-    print(f"\n[3/3] Results (remote-path mode -- full JSON stays on the HPC):")
+    print("\n[3/3] Results (remote-path mode -- full JSON stays on the HPC):")
     print_summary(
         results,
         title=f"Globus Transfer + Compute {args.workload} screen (device={args.device})",

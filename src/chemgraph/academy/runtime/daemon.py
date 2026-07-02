@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import pathlib
 import signal
+from typing import Any
 
 from academy.handle import Handle
 from academy.runtime import Runtime

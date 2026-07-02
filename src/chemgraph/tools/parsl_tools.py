@@ -88,6 +88,6 @@ def extract_output_json(json_file: str) -> dict:
     try:
         with open(json_file, "r") as f:
             ret = json.load(f)
-    except Exception as e:
+    except Exception:
         ret = {}
     return ret

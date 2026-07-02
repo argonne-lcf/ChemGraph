@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os, shlex, shutil, signal, subprocess, threading
+import os
+import shlex
+import shutil
+import signal
+import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request

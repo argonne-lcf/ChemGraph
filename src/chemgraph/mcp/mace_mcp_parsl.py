@@ -2,16 +2,6 @@ import os
 import warnings
 from pathlib import Path
 
-warnings.warn(
-    "chemgraph.mcp.mace_mcp_parsl is deprecated; use "
-    "chemgraph.mcp.mace_mcp_hpc, which dispatches via the "
-    "chemgraph.execution backend abstraction (Parsl, EnsembleLauncher, "
-    "Globus Compute, or local). This module will be removed in a future "
-    "release.",
-    DeprecationWarning,
-    stacklevel=2,
-)
-
 from mcp.server.fastmcp import FastMCP
 from parsl.config import Config
 from parsl.executors import HighThroughputExecutor
@@ -28,6 +18,16 @@ from chemgraph.schemas.mace_parsl_schema import (
 )
 from chemgraph.tools.parsl_tools import run_mace_core
 from parsl import python_app
+
+warnings.warn(
+    "chemgraph.mcp.mace_mcp_parsl is deprecated; use "
+    "chemgraph.mcp.mace_mcp_hpc, which dispatches via the "
+    "chemgraph.execution backend abstraction (Parsl, EnsembleLauncher, "
+    "Globus Compute, or local). This module will be removed in a future "
+    "release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 @python_app

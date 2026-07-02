@@ -317,6 +317,12 @@ class ChemGraph:
         self.terminal_tool_names = tuple(terminal_tool_names)
         self.on_event = on_event
 
+        # Record whether the caller relied on the default system prompt before
+        # any mutation below rewrites it (e.g. stripping ask_human when
+        # unsupervised). Downstream workflow branches use this to decide whether
+        # to substitute their own default prompt.
+        prompt_is_default = system_prompt == single_agent_prompt
+
         # When human supervision is disabled and the caller is using the
         # default system prompt, strip the ask_human instructions so the
         # LLM is not told to call a tool that is unavailable.
@@ -428,7 +434,7 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 system_prompt=self.system_prompt
-                if self.system_prompt != single_agent_prompt
+                if not prompt_is_default
                 else rag_agent_prompt,
                 tools=self.tools,
             )
@@ -436,7 +442,7 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 system_prompt=self.system_prompt
-                if self.system_prompt != single_agent_prompt
+                if not prompt_is_default
                 else default_xanes_single_agent_prompt,
                 structured_output=self.structured_output,
                 formatter_prompt=self.formatter_prompt
