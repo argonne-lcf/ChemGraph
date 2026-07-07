@@ -40,6 +40,7 @@ from chemgraph.prompt.multi_agent_prompt import (
     formatter_multi_prompt as default_formatter_multi_prompt,
     aggregator_prompt as default_aggregator_prompt,
     planner_prompt as default_planner_prompt,
+    get_planner_prompt,
 )
 from langgraph.types import Command
 from langgraph.errors import GraphInterrupt
@@ -304,6 +305,8 @@ class ChemGraph:
         # LLM is not told to call a tool that is unavailable.
         if not self.human_supervised and self.system_prompt == single_agent_prompt:
             self.system_prompt = get_single_agent_prompt(human_supervised=False)
+        if not self.human_supervised and self.planner_prompt == default_planner_prompt:
+            self.planner_prompt = get_planner_prompt(human_supervised=False)
 
         self.available_calculators = get_available_calculator_names()
         self.default_calculator = get_default_calculator_name()
@@ -376,6 +379,7 @@ class ChemGraph:
                 structured_output=self.structured_output,
                 formatter_prompt=self.formatter_multi_prompt,
                 max_retries=self.max_retries,
+                human_supervised=self.human_supervised,
             )
         elif self.workflow_type == "python_relp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](

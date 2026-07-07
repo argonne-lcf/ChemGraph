@@ -76,6 +76,60 @@ When finishing (all data gathered, final answer ready):
 Return ONLY this JSON object. Do not wrap it in markdown fences. Do not include any text outside the JSON.
 """
 
+
+_ASK_HUMAN_PLANNER_BLOCK = """\
+**PHASE 1b: Ask Human for Clarification**
+- **Trigger:** The user query is missing critical information needed to generate tasks, or is ambiguous.
+- **Action:** Set `next_step` to `"ask_human"` and provide a `clarification` string with a clear question.
+- **When to ask:**
+  1. Required simulation parameters are missing (e.g., no calculator specified, no temperature for thermochemistry, no molecule identified).
+  2. The query is vague or could be interpreted in multiple ways (e.g., "calculate properties of water" — which properties?).
+  3. An executor task failed and you need the user to decide how to proceed (e.g., retry with different parameters, use a different method, or skip).
+- **Never guess or assume defaults** for critical parameters — always ask the human when in doubt.
+
+"""
+
+_ASK_HUMAN_REPLAN_LINE = (
+    '  - Set `next_step` to `"ask_human"` with a `clarification` if you need '
+    "further guidance from the user.\n"
+)
+
+_ASK_HUMAN_OUTPUT_BLOCK = """\
+When asking the human for clarification:
+{
+  "thought_process": "<your reasoning for why clarification is needed>",
+  "next_step": "ask_human",
+  "clarification": "<clear, specific question for the human user>"
+}
+
+"""
+
+
+def get_planner_prompt(human_supervised: bool = True) -> str:
+    """Return the multi-agent planner prompt.
+
+    When *human_supervised* is ``False``, remove the instructions that
+    encourage routing to the human-review interrupt node.
+
+    Parameters
+    ----------
+    human_supervised : bool, optional
+        Whether the planner may request human clarification, by default True.
+
+    Returns
+    -------
+    str
+        The planner prompt string.
+    """
+    if human_supervised:
+        return planner_prompt
+    return (
+        planner_prompt.replace(_ASK_HUMAN_PLANNER_BLOCK, "")
+        .replace(_ASK_HUMAN_REPLAN_LINE, "")
+        .replace(_ASK_HUMAN_OUTPUT_BLOCK, "")
+    )
+
+
 # Legacy alias kept for backward compatibility with older configs.
 planner_prompt_json = planner_prompt
 
