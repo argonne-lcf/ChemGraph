@@ -4,11 +4,19 @@ Configuration management for ChemGraph Streamlit app.
 
 import toml
 import os
-from typing import Dict, Any
+from pathlib import Path
+from typing import Dict, Any, Optional
 from chemgraph.utils.config_utils import flatten_config as _flatten_config
 
+# Anchor the default config to the repository root (the directory the app is
+# meant to be launched from per the README) rather than the current working
+# directory.  With a bare ``"config.toml"`` the file resolved relative to the
+# launch directory, so starting Streamlit from anywhere else silently created
+# and used a throw-away default config instead of the real one.
+_DEFAULT_CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "config.toml")
 
-def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
+
+def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """Load configuration from a TOML file.
 
     Parameters
@@ -21,6 +29,8 @@ def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
     dict[str, Any]
         Nested configuration dictionary with defaults filled in.
     """
+    if config_path is None:
+        config_path = _DEFAULT_CONFIG_PATH
     try:
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
@@ -57,7 +67,7 @@ def load_config(config_path: str = "config.toml") -> Dict[str, Any]:
         return get_default_config()
 
 
-def save_config(config: Dict[str, Any], config_path: str = "config.toml") -> bool:
+def save_config(config: Dict[str, Any], config_path: Optional[str] = None) -> bool:
     """Save configuration to a TOML file.
 
     Parameters
@@ -72,6 +82,8 @@ def save_config(config: Dict[str, Any], config_path: str = "config.toml") -> boo
     bool
         ``True`` if the file was written successfully.
     """
+    if config_path is None:
+        config_path = _DEFAULT_CONFIG_PATH
     try:
         with open(config_path, "w") as f:
             toml.dump(config, f)

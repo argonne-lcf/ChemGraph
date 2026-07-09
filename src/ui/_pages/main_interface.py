@@ -921,6 +921,65 @@ def _resolve_artifact_path(filename: str, directory: Optional[str]) -> str:
     return filename
 
 
+def _is_linear_geometry(atoms) -> bool:
+    """Return whether an ASE ``Atoms`` object is (near-)linear.
+
+    A linear molecule has one vanishing principal moment of inertia.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms
+        Structure to inspect.
+
+    Returns
+    -------
+    bool
+        ``True`` when the geometry is linear.
+    """
+    try:
+        moments = sorted(abs(float(m)) for m in atoms.get_moments_of_inertia())
+    except Exception:
+        return False
+    if len(moments) < 3 or moments[-1] <= 0:
+        return False
+    return moments[0] < 1e-3 * moments[-1]
+
+
+def _num_nonvibrational_modes(total_modes: int, log_dir: Optional[str]) -> int:
+    """Return how many leading translational/rotational modes to skip.
+
+    Non-linear molecules have 6 (3 translations + 3 rotations); linear
+    molecules have only 5.  Hardcoding 6 silently dropped a genuine
+    vibration for linear species (CO2, HCN, diatomics).
+
+    Parameters
+    ----------
+    total_modes : int
+        Total number of rows in the frequency table (``3N``).
+    log_dir : str, optional
+        Directory to search for a structure file used to test linearity.
+
+    Returns
+    -------
+    int
+        Number of leading modes to discard.
+    """
+    n_atoms = total_modes // 3
+    if n_atoms <= 2:
+        # Single atom -> no vibrations; diatomic -> always linear (5 modes).
+        return min(total_modes, 5)
+    if log_dir:
+        xyz = find_latest_xyz_file_in_dir(log_dir)
+        if xyz:
+            try:
+                atoms = ase_read(xyz)
+                if _is_linear_geometry(atoms):
+                    return 5
+            except Exception:
+                pass
+    return 6
+
+
 def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
     """Render IR spectrum plot, frequency table, and trajectory viewer.
 
@@ -960,7 +1019,8 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
                 index_col=False,
                 names=["filename", "frequency"],
             )
-            modes = df.iloc[6:] if len(df) > 6 else df
+            n_skip = _num_nonvibrational_modes(len(df), log_dir)
+            modes = df.iloc[n_skip:] if len(df) > n_skip else df
 
             if modes.empty:
                 st.warning("No vibrational frequencies found.")

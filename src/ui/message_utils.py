@@ -230,7 +230,15 @@ def _convert_parenthetical_inline_math(text: str) -> str:
             continue
 
         body = text[index + 1 : close_index].strip()
-        has_latex = bool(re.search(r"\\[A-Za-z]+|\\\s|[_^{}]", body))
+        # A parenthetical is treated as inline math only on a strong signal:
+        # a LaTeX command (``\alpha``, ``\,``) or grouping braces, or a
+        # sub/superscript that appears alongside an ``=`` (an actual equation).
+        # A bare ``_``/``^`` is left alone so prose like "(a_1 symmetry)" or
+        # "(k_B T)" is not mangled into broken KaTeX.
+        has_command = bool(re.search(r"\\[A-Za-z]+|\\[\s,;:!]", body))
+        has_grouping = "{" in body or "}" in body
+        has_script_equation = bool(re.search(r"[_^]", body)) and "=" in body
+        has_latex = has_command or has_grouping or has_script_equation
         if body and has_latex:
             chunks.append(f"${body}$")
         else:
@@ -360,38 +368,32 @@ def extract_molecular_structure(message_content: str) -> Optional[dict]:
 
     # Try JSON first
     try:
-        if message_content.strip().startswith("{") and message_content.strip().endswith(
-            "}"
-        ):
+        stripped = message_content.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
             json_data = json.loads(message_content)
 
+            # Only dict payloads can carry structure data. Note ``answer`` is
+            # frequently a plain text string (or list) that merely *mentions*
+            # the words "numbers"/"positions" -- treating it as a mapping there
+            # raised an uncaught TypeError and crashed the whole chat render.
             structure_data = None
-            if "answer" in json_data:
-                structure_data = json_data["answer"]
-            elif "numbers" in json_data and "positions" in json_data:
-                structure_data = json_data
-            elif "atomic_numbers" in json_data and "positions" in json_data:
-                structure_data = json_data
+            if isinstance(json_data, dict):
+                answer = json_data.get("answer")
+                if isinstance(answer, dict):
+                    structure_data = answer
+                elif "positions" in json_data and (
+                    "numbers" in json_data or "atomic_numbers" in json_data
+                ):
+                    structure_data = json_data
 
-            if (
-                structure_data
-                and "numbers" in structure_data
-                and "positions" in structure_data
-            ):
-                return {
-                    "atomic_numbers": structure_data["numbers"],
-                    "positions": structure_data["positions"],
-                }
-            elif (
-                structure_data
-                and "atomic_numbers" in structure_data
-                and "positions" in structure_data
-            ):
-                return {
-                    "atomic_numbers": structure_data["atomic_numbers"],
-                    "positions": structure_data["positions"],
-                }
-    except (json.JSONDecodeError, KeyError):
+            if isinstance(structure_data, dict):
+                numbers = structure_data.get("numbers")
+                if numbers is None:
+                    numbers = structure_data.get("atomic_numbers")
+                positions = structure_data.get("positions")
+                if isinstance(numbers, list) and isinstance(positions, list):
+                    return {"atomic_numbers": numbers, "positions": positions}
+    except (json.JSONDecodeError, KeyError, TypeError):
         pass
 
     # Plain-text format fallback

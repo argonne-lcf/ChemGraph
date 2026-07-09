@@ -2,7 +2,7 @@ from contextlib import nullcontext
 import os
 
 from ui._pages import main_interface as main_ui
-from ui.message_utils import normalize_latex_delimiters
+from ui.message_utils import extract_molecular_structure, normalize_latex_delimiters
 
 
 class _SessionState(dict):
@@ -136,6 +136,71 @@ def test_available_calculators_sidebar_replaces_quick_settings(monkeypatch):
     assert "Mace (default)" in rendered_text
     assert "TBLite (xTB, GFN1-xTB, GFN2-xTB)" in rendered_text
     assert "Quick Settings" not in rendered_text
+
+
+def test_extract_structure_ignores_non_dict_answer_without_crashing():
+    # A JSON message whose "answer" is prose/list that merely mentions the
+    # words numbers/positions must not raise (previously TypeError).
+    assert (
+        extract_molecular_structure(
+            '{"answer": "the numbers and positions are unknown"}'
+        )
+        is None
+    )
+    assert (
+        extract_molecular_structure('{"answer": ["numbers", "positions"]}') is None
+    )
+    # Null structure fields should not be reported as a structure.
+    assert extract_molecular_structure('{"numbers": null, "positions": null}') is None
+
+
+def test_extract_structure_parses_valid_payloads():
+    flat = extract_molecular_structure(
+        '{"numbers": [1, 8, 1], "positions": [[0,0,0],[0,0,1],[0,1,0]]}'
+    )
+    assert flat == {
+        "atomic_numbers": [1, 8, 1],
+        "positions": [[0, 0, 0], [0, 0, 1], [0, 1, 0]],
+    }
+    nested = extract_molecular_structure(
+        '{"answer": {"atomic_numbers": [8, 1, 1], '
+        '"positions": [[0,0,0],[0,0,1],[0,1,0]]}}'
+    )
+    assert nested == {
+        "atomic_numbers": [8, 1, 1],
+        "positions": [[0, 0, 0], [0, 0, 1], [0, 1, 0]],
+    }
+
+
+def test_parenthetical_prose_is_not_mangled_into_math():
+    # Prose with a bare subscript must stay untouched...
+    assert (
+        normalize_latex_delimiters("The energy is -76.4 eV (a_1 symmetry).")
+        == "The energy is -76.4 eV (a_1 symmetry)."
+    )
+    assert normalize_latex_delimiters("Rate (k_B T) term.") == "Rate (k_B T) term."
+    # ...while genuine equations still convert to inline math.
+    assert normalize_latex_delimiters("Momentum (E = mc^2) here.") == (
+        "Momentum $E = mc^2$ here."
+    )
+
+
+def test_num_nonvibrational_modes_handles_linear_and_small_systems():
+    # No geometry available -> conservative default of 6 for polyatomics.
+    assert main_ui._num_nonvibrational_modes(9, None) == 6
+    # Diatomic is always linear (5 non-vibrational modes).
+    assert main_ui._num_nonvibrational_modes(6, None) == 5
+    # Single atom has no vibrations.
+    assert main_ui._num_nonvibrational_modes(3, None) == 3
+
+
+def test_is_linear_geometry_detects_linear_molecules():
+    from ase import Atoms
+
+    co2 = Atoms("CO2", positions=[[0, 0, 0], [0, 0, 1.16], [0, 0, -1.16]])
+    h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0.76, 0.59], [0, -0.76, 0.59]])
+    assert main_ui._is_linear_geometry(co2) is True
+    assert main_ui._is_linear_geometry(h2o) is False
 
 
 def test_latex_delimiters_are_normalized_for_streamlit_markdown():
