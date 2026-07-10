@@ -21,6 +21,12 @@ from chemgraph.prompt.single_agent_prompt import (
 )
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.utils.parsing import parse_response_formatter
+from chemgraph.utils.tool_validation import (
+    build_tool_validation_messages,
+    latest_user_query,
+    message_tool_calls,
+    validate_target_scoped_tool_calls,
+)
 from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
@@ -153,16 +159,41 @@ def route_tools(state: State):
         Either 'tools' or 'done' based on the state conditions
     """
     if isinstance(state, list):
+        messages = state
         ai_message = state[-1]
     elif messages := state.get("messages", []):
         ai_message = messages[-1]
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
-    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+    tool_calls = message_tool_calls(ai_message)
+    if tool_calls:
+        if not isinstance(state, list):
+            validation = validate_target_scoped_tool_calls(
+                latest_user_query(messages[:-1]),
+                messages[:-1],
+                tool_calls,
+            )
+            if not validation.get("allowed", True):
+                return "validate"
         if not isinstance(state, list) and _is_repeated_tool_cycle(messages):
             return "done"
         return "tools"
     return "done"
+
+
+def ToolValidationFeedback(state: State):
+    """Return tool-call feedback when deterministic validation blocks a call."""
+    messages = state if isinstance(state, list) else state.get("messages", [])
+    if not messages:
+        return {}
+    tool_calls = message_tool_calls(messages[-1])
+    validation = validate_target_scoped_tool_calls(
+        latest_user_query(messages[:-1]),
+        messages[:-1],
+        tool_calls,
+    )
+    feedback = build_tool_validation_messages(tool_calls, validation)
+    return {"messages": feedback} if feedback else {}
 
 
 def route_report_tools(state: State):
@@ -474,6 +505,7 @@ def construct_single_agent_graph(
                 ),
             )
             graph_builder.add_node("tools", tool_node)
+            graph_builder.add_node("tool_validation_feedback", ToolValidationFeedback)
             graph_builder.add_edge(START, "ChemGraphAgent")
 
             if generate_report:
@@ -489,9 +521,14 @@ def construct_single_agent_graph(
                 graph_builder.add_conditional_edges(
                     "ChemGraphAgent",
                     route_tools,
-                    {"tools": "tools", "done": "ReportAgent"},
+                    {
+                        "tools": "tools",
+                        "validate": "tool_validation_feedback",
+                        "done": "ReportAgent",
+                    },
                 )
                 graph_builder.add_edge("tools", "ChemGraphAgent")
+                graph_builder.add_edge("tool_validation_feedback", "ChemGraphAgent")
                 graph_builder.add_conditional_edges(
                     "ReportAgent",
                     route_report_tools,
@@ -506,9 +543,14 @@ def construct_single_agent_graph(
                 graph_builder.add_conditional_edges(
                     "ChemGraphAgent",
                     route_tools,
-                    {"tools": "tools", "done": END},
+                    {
+                        "tools": "tools",
+                        "validate": "tool_validation_feedback",
+                        "done": END,
+                    },
                 )
                 graph_builder.add_edge("tools", "ChemGraphAgent")
+                graph_builder.add_edge("tool_validation_feedback", "ChemGraphAgent")
 
             graph = graph_builder.compile(checkpointer=checkpointer)
             logger.info("Graph construction completed")
@@ -525,6 +567,7 @@ def construct_single_agent_graph(
                 ),
             )
             graph_builder.add_node("tools", tool_node)
+            graph_builder.add_node("tool_validation_feedback", ToolValidationFeedback)
             graph_builder.add_node(
                 "ResponseAgent",
                 lambda state: ResponseAgent(
@@ -537,9 +580,14 @@ def construct_single_agent_graph(
             graph_builder.add_conditional_edges(
                 "ChemGraphAgent",
                 route_tools,
-                {"tools": "tools", "done": "ResponseAgent"},
+                {
+                    "tools": "tools",
+                    "validate": "tool_validation_feedback",
+                    "done": "ResponseAgent",
+                },
             )
             graph_builder.add_edge("tools", "ChemGraphAgent")
+            graph_builder.add_edge("tool_validation_feedback", "ChemGraphAgent")
             graph_builder.add_edge(START, "ChemGraphAgent")
             graph_builder.add_edge("ResponseAgent", END)
 

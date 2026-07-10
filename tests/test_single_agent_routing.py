@@ -1,6 +1,10 @@
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
-from chemgraph.graphs.single_agent import route_report_tools, route_tools
+from chemgraph.graphs.single_agent import (
+    ToolValidationFeedback,
+    route_report_tools,
+    route_tools,
+)
 
 
 def test_route_report_tools_routes_to_tool_before_report_exists():
@@ -110,6 +114,74 @@ def test_route_tools_continues_on_new_tool_args():
                     {
                         "name": "molecule_name_to_smiles",
                         "args": {"name": "caffeine"},
+                        "id": "call_2",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+        ]
+    }
+
+    assert route_tools(state) == "tools"
+
+
+def test_route_tools_blocks_stale_target_coordinate_reuse():
+    state = {
+        "messages": [
+            HumanMessage(content="What is the IR spectrum of methane?"),
+            {
+                "name": "smiles_to_coordinate_file",
+                "content": '{"path": "/tmp/methane.xyz"}',
+            },
+            HumanMessage(content="glucose dipolemoment"),
+            AIMessage(
+                content="calling stale coordinate",
+                tool_calls=[
+                    {
+                        "name": "run_ase",
+                        "args": {
+                            "params": {
+                                "input_structure_file": "/tmp/methane.xyz",
+                                "driver": "dipole",
+                            }
+                        },
+                        "id": "call_1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+        ]
+    }
+
+    assert route_tools(state) == "validate"
+
+    update = ToolValidationFeedback(state)
+    feedback = update["messages"][0]
+    assert feedback.tool_call_id == "call_1"
+    assert "glucose" in feedback.content
+    assert "methane" in feedback.content
+    assert "coordinate file" in feedback.content
+
+
+def test_route_tools_allows_current_target_coordinate_file():
+    state = {
+        "messages": [
+            HumanMessage(content="glucose dipolemoment"),
+            {
+                "name": "smiles_to_coordinate_file",
+                "content": '{"path": "/tmp/glucose.xyz"}',
+            },
+            AIMessage(
+                content="calling current coordinate",
+                tool_calls=[
+                    {
+                        "name": "run_ase",
+                        "args": {
+                            "params": {
+                                "input_structure_file": "/tmp/glucose.xyz",
+                                "driver": "dipole",
+                            }
+                        },
                         "id": "call_2",
                         "type": "tool_call",
                     }
