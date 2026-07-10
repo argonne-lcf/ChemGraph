@@ -1,0 +1,61 @@
+{
+  "run_id": "academy-sim-demo2",
+  "task": "Coordinate a planner graph and a remote execution graph over Globus exchange.",
+  "initial_graph": "planner",
+  "bootstrap_mode": "manual",
+  "exchange": {
+    "type": "http",
+    "registration": "exchange",
+    "url": "https://exchange.academy-agents.org/v1",
+    "namespace": "academy-sim-demo2"
+  },
+  "artifacts": {
+    "run_dir": "./runs"
+  },
+  "model": {
+    "config_file": "lm_config.json"
+  },
+  "graphs": {
+    "planner": {
+      "site": "aurora-or-local",
+      "workflow_type": "single_agent",
+      "startup_prompt": "Send executor one concrete chemistry task and wait for its reply.",
+      "system_prompt": "You are the planner graph. Your only external capability is graph-to-graph communication.",
+      "allowed_peers": [
+        "executor"
+      ],
+      "science_tools": [],
+      "peer_tools": {
+        "enabled": true
+      },
+      "idle_timeout_s": 60.0
+    },
+    "executor": {
+      "site": "crux-or-aurora",
+      "workflow_type": "single_agent",
+      "startup_prompt": null,
+      "system_prompt": "You are the remote executor graph. Use ChemGraph MCP tools for chemistry work requested by planner.",
+      "allowed_peers": [
+        "planner"
+      ],
+      "science_tools": [
+        {
+          "source": "mcp",
+          "name": "chemgraph-general",
+          "transport": "streamable_http",
+          "url": "http://127.0.0.1:9003/mcp/",
+          "allowed_tools": [
+            "molecule_name_to_smiles",
+            "smiles_to_coordinate_file",
+            "run_ase",
+            "extract_output_json"
+          ]
+        }
+      ],
+      "peer_tools": {
+        "enabled": true
+      },
+      "idle_timeout_s": 60.0
+    }
+  }
+}

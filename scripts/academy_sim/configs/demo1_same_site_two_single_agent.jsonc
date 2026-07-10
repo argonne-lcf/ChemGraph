@@ -1,0 +1,61 @@
+{
+  "run_id": "academy-sim-demo1",
+  "task": "Run geometry optimization for water, methanol and methane. Study one molecule at a time.",
+  "initial_graph": "planner",
+  "bootstrap_mode": "inline",
+  "exchange": {
+    "type": "http",
+    "registration": "exchange",
+    "url": "https://exchange.academy-agents.org/v1",
+    "namespace": "academy-sim-demo1"
+  },
+  "artifacts": {
+    "run_dir": "./runs"
+  },
+  "model": {
+    "config_file": "lm_config.json"
+  },
+  "graphs": {
+    "planner": {
+      "site": "local",
+      "workflow_type": "single_agent",
+      "startup_prompt": "Run geometry optimization for water, methanol and methane using MaceCalc. Send one molecule at a time to executor for analysis.",
+      "system_prompt": "You are the planning graph. Do not run chemistry tools yourself. Send actionable work to executor and summarize replies.",
+      "allowed_peers": [
+        "executor"
+      ],
+      "science_tools": [],
+      "peer_tools": {
+        "enabled": true
+      },
+      "idle_timeout_s": 60.0
+    },
+    "executor": {
+      "site": "local",
+      "workflow_type": "single_agent",
+      "startup_prompt": null,
+      "system_prompt": "You are the execution graph. Use available ChemGraph chemistry tools to complete peer requests and send concise results back.",
+      "allowed_peers": [
+        "planner"
+      ],
+      "science_tools": [
+        {
+          "source": "mcp",
+          "name": "chemgraph-general",
+          "transport": "streamable_http",
+          "url": "http://127.0.0.1:9003/mcp/",
+          "allowed_tools": [
+            "molecule_name_to_smiles",
+            "smiles_to_coordinate_file",
+            "run_ase",
+            "extract_output_json"
+          ]
+        }
+      ],
+      "peer_tools": {
+        "enabled": true
+      },
+      "idle_timeout_s": 60.0
+    }
+  }
+}

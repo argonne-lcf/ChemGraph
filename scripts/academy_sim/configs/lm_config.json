@@ -1,0 +1,5 @@
+{
+  "base_url": "https://apps.inside.anl.gov/argoapi/v1",
+  "model": "argo:gpt-5.4",
+  "argo_user": "YOUR_ARGO_USER"
+}
