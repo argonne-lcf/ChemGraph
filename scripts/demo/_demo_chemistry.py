@@ -407,6 +407,7 @@ def _build_jobs(
     adsorbate: str = "H2O",
     temperature: float = 298.15,
     pressure: float = 101325.0,
+    n_cycles: int = 10000,
 ) -> list[dict]:
     """Build the per-item job dicts for *workload*."""
     if workload == "thermo":
@@ -439,6 +440,7 @@ def _build_jobs(
                 adsorbate=adsorbate,
                 temperature=temperature,
                 pressure=pressure,
+                n_cycles=n_cycles,
             )
             for cif in items
         ]
@@ -464,6 +466,7 @@ def submit_and_collect(
     adsorbate: str = "H2O",
     temperature: float = 298.15,
     pressure: float = 101325.0,
+    n_cycles: int = 10000,
     timeout: float = 6000.0,
     ppn: int = 1,
 ) -> list[dict]:
@@ -507,6 +510,7 @@ def submit_and_collect(
         adsorbate=adsorbate,
         temperature=temperature,
         pressure=pressure,
+        n_cycles=n_cycles,
     )
 
     # Inline transport (Globus Compute): the worker writes results to a path
