@@ -7,6 +7,23 @@ vibrational frequencies + ideal-gas thermo at 298.15 K). Each script
 writes a CSV of electronic energy, enthalpy, entropy, Gibbs free
 energy per molecule and prints a fixed-width summary table.
 
+## Workloads (`--workload`)
+
+The harness is registry-driven (`_demo_chemistry.py`); pick the tool with
+`--workload`:
+
+| Workload | Tool | Items | Extra needed | Notes |
+|----------|------|-------|--------------|-------|
+| `thermo` (default) | MACE-MP | molecule fixtures | (base) | original 5-molecule screen |
+| `ase` | general ASE | molecule fixtures | (base) | selectable `--calculator` |
+| `fairchem` | FairChem/UMA | molecule fixtures | `.[uma]` | `--model-name` (uma-s-1p1); GPU preferred |
+| `graspa` | gRASPA GCMC | CIF paths (`--graspa-cifs`) | (HPC binary) | shared-FS / HPC only |
+| `pacmof2` | PACMOF2 charges | CIF paths (`--pacmof2-cifs`) | `.[pacmof2]` + source install | `--net-charge`; CPU-only; shared-FS / HPC only |
+
+`fairchem` reuses the molecular thermo table; `pacmof2` prints a per-element
+charge summary. `graspa` and `pacmof2` take CIF paths reachable on the compute
+node, not the molecule fixtures.
+
 These complement `scripts/smoke/`:
 
 | Directory | Purpose | Pass criterion |
@@ -159,6 +176,31 @@ bash scripts/demo/run_crux_demo.sh --el-only
 The wrapper activates `.cg_crux_hpc/`, exports `COMPUTE_SYSTEM=crux`, and runs
 `demo_parsl_in_job_direct.py` then `demo_ensemble_launcher_in_job_direct.py`
 with `--device cpu`. CSVs land in `$PBS_O_WORKDIR/demo_{parsl,el}_out_crux/`.
+
+### FairChem/UMA and PACMOF2 in-job
+
+The in-job Parsl/EL demos accept the new workloads (both direct and agent
+variants). Install the extras first (`sync_env.sh --extras ...,uma,pacmof2` and,
+for PACMOF2, the from-source install — see `scripts/hpc_setup/README.md`).
+
+```bash
+# FairChem/UMA thermo screen (GPU)
+python scripts/demo/demo_parsl_in_job_direct.py --workload fairchem --device cuda      # Polaris
+python scripts/demo/demo_parsl_in_job_direct.py --workload fairchem --device xpu       # Aurora
+
+# PACMOF2 charges on CIFs reachable from the compute node (CPU-only, Crux-friendly)
+python scripts/demo/demo_ensemble_launcher_in_job_direct.py \
+    --workload pacmof2 --pacmof2-cifs /lus/.../mof1.cif /lus/.../mof2.cif --net-charge 0
+
+# Crux wrapper passthrough
+bash scripts/demo/run_crux_demo.sh --workload fairchem
+bash scripts/demo/run_crux_demo.sh --workload pacmof2 --pacmof2-cifs /lus/.../mof.cif
+
+# Agent (LLM) variants
+python scripts/demo/demo_parsl_in_job_agent.py --workload fairchem --model argo:gpt-4o
+python scripts/demo/demo_parsl_in_job_agent.py \
+    --workload pacmof2 --pacmof2-cifs /lus/.../mof.cif --model argo:gpt-4o
+```
 
 Agent variants on either system require an LLM key and follow the
 same pattern as `demo_local_agent.py`.
