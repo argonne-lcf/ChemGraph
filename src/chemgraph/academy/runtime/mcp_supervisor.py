@@ -24,15 +24,63 @@ from chemgraph.academy.core.campaign import MCPServerSpec
 
 logger = logging.getLogger(__name__)
 
-_READINESS_TIMEOUT_S = 30.0
-_READINESS_POLL_INTERVAL_S = 0.25
+# MCP servers can take minutes to import on cold NFS venvs (Crux's
+# chemgraph.mcp.mcp_tools cold-import chain: scipy, ase, rdkit,
+# langchain, langgraph, mace-torch — routinely 60-180s). Default is
+# generous to survive that; operators on fast local venvs can crank
+# it down via SWARM_MCP_READINESS_TIMEOUT_S if the wait becomes
+# annoying.
+_READINESS_TIMEOUT_S = float(os.environ.get("SWARM_MCP_READINESS_TIMEOUT_S", "300"))
+# Per-tool-call HTTP timeouts. MCP defaults (30s connect, 300s SSE read) are
+# too short for long-running science tools like UMA/MACE optimization, which
+# can run for tens of minutes on CPU. Bump both to 1h by default; override
+# via env for pipelines that need longer.
+_MCP_HTTP_TIMEOUT_S = float(os.environ.get("SWARM_MCP_HTTP_TIMEOUT_S", "3600"))
+_MCP_SSE_READ_TIMEOUT_S = float(os.environ.get("SWARM_MCP_SSE_READ_TIMEOUT_S", "3600"))
+_READINESS_POLL_INTERVAL_S = 0.5
 _SHUTDOWN_TIMEOUT_S = 5.0
+
+
+# ALCF login/compute nodes set http_proxy/https_proxy to
+# proxy.alcf.anl.gov. Every httpx/urllib3 client we use for local MCP
+# handshakes silently routes 127.0.0.1 through that proxy and drops
+# the request. Ensure loopback is in NO_PROXY at module import so
+# every downstream HTTP client picks it up. Idempotent when already set.
+def _ensure_loopback_in_no_proxy() -> None:
+    loopback_hosts = "127.0.0.1,localhost,0.0.0.0"
+    for var in ("NO_PROXY", "no_proxy"):
+        current = os.environ.get(var, "")
+        parts = {p.strip() for p in current.split(",") if p.strip()}
+        parts.update({"127.0.0.1", "localhost", "0.0.0.0"})
+        os.environ[var] = ",".join(sorted(parts))
+
+
+_ensure_loopback_in_no_proxy()
 
 
 def _pick_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+def _wrap_with_torch_patch(cmd: list[str]) -> list[str]:
+    """Rewrite ``python -m foo.mcp.server`` into a launcher that imports
+    swarm.runtime.torch_patch first (restores torch.load's pre-2.6
+    weights_only=False default for pickled MLIP checkpoints), then
+    execs the original module. No-op for non ``python -m ...`` commands
+    (e.g. bespoke MCP scripts) -- those can import the patch themselves.
+    """
+    if len(cmd) < 3 or cmd[1] != "-m":
+        return cmd
+    interpreter, _, module, *rest = cmd
+    preamble = (
+        "import chemgraph.academy.runtime.torch_patch;"
+        "import sys, runpy;"
+        f"sys.argv=['{module}',*sys.argv[1:]];"
+        f"runpy.run_module('{module}', run_name='__main__', alter_sys=True)"
+    )
+    return [interpreter, "-c", preamble, *rest]
 
 
 class MCPServerSupervisor:
@@ -57,7 +105,7 @@ class MCPServerSupervisor:
         for spec in self._specs:
             port = _pick_free_port()
             url = f"http://127.0.0.1:{port}/mcp/"
-            cmd = shlex.split(spec.command) + [
+            cmd = _wrap_with_torch_patch(shlex.split(spec.command)) + [
                 "--transport",
                 "streamable_http",
                 "--host",
@@ -65,7 +113,21 @@ class MCPServerSupervisor:
                 "--port",
                 str(port),
             ]
-            env = {**os.environ, **spec.env}
+            # ALCF login/compute nodes ship http_proxy/https_proxy set to
+            # proxy.alcf.anl.gov, which intercepts loopback readiness probes
+            # from the langchain MCP client and (silently) drops them. Force
+            # loopback + local hosts into NO_PROXY so the readiness handshake
+            # actually reaches our own subprocess. Preserve any operator-set
+            # NO_PROXY by appending to it.
+            base_no_proxy = os.environ.get("NO_PROXY") or os.environ.get("no_proxy") or ""
+            loopback = "127.0.0.1,localhost,0.0.0.0"
+            merged_no_proxy = f"{base_no_proxy},{loopback}" if base_no_proxy else loopback
+            env = {
+                **os.environ,
+                "NO_PROXY": merged_no_proxy,
+                "no_proxy": merged_no_proxy,
+                **spec.env,
+            }
             log_path = self._log_dir / f"{spec.name}.log"
             log_handle = log_path.open("ab")
             logger.info(
@@ -187,7 +249,14 @@ class MCPServerSupervisor:
     async def _await_all_ready(self) -> None:
         deadline = time.monotonic() + _READINESS_TIMEOUT_S
         pending = dict(self._urls)
-        async with httpx.AsyncClient(timeout=2.0) as client:
+        started_at = time.monotonic()
+        next_log = started_at + 15.0
+        # trust_env=False bypasses HTTP_PROXY/HTTPS_PROXY. ALCF login and
+        # compute nodes ship these set to proxy.alcf.anl.gov, and httpx
+        # otherwise routes even 127.0.0.1 traffic through the proxy --
+        # which silently drops it, so the readiness probe never sees the
+        # server come up despite Uvicorn listening the whole time.
+        async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
             while pending and time.monotonic() < deadline:
                 ready_now: list[str] = []
                 for name, url in pending.items():
@@ -209,6 +278,17 @@ class MCPServerSupervisor:
                     logger.info("MCP server %s ready at %s", name, pending[name])
                     pending.pop(name)
                 if pending:
+                    if time.monotonic() >= next_log:
+                        elapsed = int(time.monotonic() - started_at)
+                        logger.info(
+                            "MCP supervisor: still waiting for %s to become "
+                            "ready (elapsed %ds / %ds ceiling; cold-import "
+                            "of chemgraph tool packages on NFS venvs can be "
+                            "slow -- bump SWARM_MCP_READINESS_TIMEOUT_S if "
+                            "this keeps timing out)",
+                            sorted(pending), elapsed, int(_READINESS_TIMEOUT_S),
+                        )
+                        next_log = time.monotonic() + 30.0
                     await asyncio.sleep(_READINESS_POLL_INTERVAL_S)
             if pending:
                 stuck = sorted(pending)
@@ -230,6 +310,45 @@ class MCPServerSupervisor:
         except OSError:
             return "(log unreadable)"
         return "\n".join(text.splitlines()[-n:])
+
+
+async def discover_mcp_tools(
+    *,
+    name: str,
+    command: str,
+    run_dir: Path,
+    timeout_s: float = _READINESS_TIMEOUT_S,
+) -> list[dict[str, Any]]:
+    """Spawn one MCP server, list its tools, kill it. Standalone.
+
+    Returns ``[{"name": ..., "description": ...}, ...]``. Used by the
+    dashboard authoring endpoint so the operator picks tools from a
+    dropdown rather than typing names by hand.
+
+    A thin one-shot wrapper around MCPServerSupervisor to keep the
+    dashboard endpoint free of subprocess/asyncio bookkeeping.
+    """
+    spec = MCPServerSpec(name=name, command=command)
+    supervisor = MCPServerSupervisor(specs=[spec], run_dir=run_dir)
+    try:
+        # start_all applies its own readiness deadline; override only if
+        # the caller wants faster failure than the module default.
+        await asyncio.wait_for(supervisor.start_all(), timeout=timeout_s)
+        # Bypass the whitelist path -- we want the full advertised set.
+        url = supervisor.urls[name]
+        async with streamablehttp_client(url) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                listed = await session.list_tools()
+                return [
+                    {
+                        "name": t.name,
+                        "description": (t.description or "").strip(),
+                    }
+                    for t in listed.tools
+                ]
+    finally:
+        await supervisor.shutdown()
 
 
 def _langchain_tool(
@@ -266,7 +385,11 @@ async def _call_mcp_tool(
     tool_name: str,
     arguments: dict[str, Any],
 ) -> Any:
-    async with streamablehttp_client(server_url) as (read, write, _):
+    async with streamablehttp_client(
+        server_url,
+        timeout=_MCP_HTTP_TIMEOUT_S,
+        sse_read_timeout=_MCP_SSE_READ_TIMEOUT_S,
+    ) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(tool_name, arguments)
