@@ -2,13 +2,13 @@
 set -euo pipefail
 
 log() {
-  printf '[chemgraph-academy-run] %s\n' "$*" >&2
+  printf '[swarm-run] %s\n' "$*" >&2
 }
 
 export PATH="%{path_prefix}%:${PATH}"
 export PYTHONPATH="%{pythonpath}%:${PYTHONPATH:-}"
 
-PYTHON_BIN="${CHEMGRAPH_ACADEMY_PYTHON:-python}"
+PYTHON_BIN="${SWARM_PYTHON:-${CHEMGRAPH_ACADEMY_PYTHON:-python}}"
 if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
   log "Python command not found: ${PYTHON_BIN}"
   log "Load your site module and activate the ChemGraph/Academy environment first."
@@ -27,5 +27,5 @@ if ! "${PYTHON_BIN}" -c 'import chemgraph.academy.runtime.compute_launcher' >/de
   exit 1
 fi
 
-log "starting ChemGraph Academy compute launcher"
-exec "${PYTHON_BIN}" -m chemgraph.academy.runtime.compute_launcher "$@"
+log "starting swarm compute launcher"
+exec "${PYTHON_BIN}" -m swarm.runtime.compute_launcher "$@"

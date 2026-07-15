@@ -104,11 +104,11 @@ where = ["src/"]
 [tool.setuptools.package-data]
 "chemgraph.eval" = ["data/*.json"]
 "chemgraph.academy.campaigns" = [
-    "example-*/*.json",
-    "example-*/*.jsonc",
-    "example-*/data/*.json",
-    "example-*/models/*",
-    "example-*/prompt_profiles/*.json",
+    "mof-crux-aurora/*.json",
+    "mof-crux-aurora/*.jsonc",
+    "mof-crux-aurora/prompt_profiles/*.json",
+    "mof-crux-aurora-mock/*.jsonc",
+    "mof-crux-aurora-mock/prompt_profiles/*.json",
 ]
 "chemgraph.academy.runtime.profiles" = ["*.json"]
 "chemgraph.academy.runtime.templates" = ["*"]
