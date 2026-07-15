@@ -118,13 +118,16 @@ async def run_xanes_ensemble(params: xanes_input_schema_ensemble):
         write_fdmnes_input,
         extract_conv,
     )
+    from chemgraph.tools.ase_core import _resolve_existing_path
 
     input_source = params.input_structures
     structure_files: list[Path] = []
     output_dir: Path = Path.cwd()
 
     if isinstance(input_source, list):
-        structure_files = [Path(p) for p in input_source]
+        # Resolve bare names against CHEMGRAPH_LOG_DIR so a file a sibling tool
+        # wrote there still resolves; absolute/cwd paths are unchanged.
+        structure_files = [Path(_resolve_existing_path(str(p))) for p in input_source]
         missing = [p for p in structure_files if not p.exists()]
         if missing:
             raise ValueError(f"The following input files are missing: {missing}")

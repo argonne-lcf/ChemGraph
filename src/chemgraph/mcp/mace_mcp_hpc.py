@@ -149,14 +149,23 @@ def _embed_inline_if_local(job: dict) -> None:
     if job.get("remote_structure_file") or job.get("inline_structure"):
         return
     input_file = job.get("input_structure_file")
-    if not input_file or not os.path.isfile(input_file):
-        return  # remote path -- worker will read it directly
+    if not input_file:
+        return
 
     from ase.io import read as ase_read
 
-    from chemgraph.tools.ase_core import atoms_to_atomsdata
+    from chemgraph.tools.ase_core import _resolve_existing_path, atoms_to_atomsdata
 
-    atoms = ase_read(input_file)
+    # A small model may echo back a bare name ("water.xyz") for a file a
+    # sibling tool wrote into CHEMGRAPH_LOG_DIR. Resolve it here, on the
+    # submitting host where the log dir lives, before deciding whether the
+    # input is local. Absolute/cwd paths are returned unchanged.
+    resolved = _resolve_existing_path(input_file)
+    if not os.path.isfile(resolved):
+        return  # remote path -- worker will read it directly
+
+    job["input_structure_file"] = resolved
+    atoms = ase_read(resolved)
     job["inline_structure"] = atoms_to_atomsdata(atoms).model_dump()
 
 
