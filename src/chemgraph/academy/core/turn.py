@@ -1,6 +1,7 @@
 """Run one Academy logical-agent wakeup through ChemGraph."""
 
 from __future__ import annotations
+import dataclasses
 import json
 import time
 from collections.abc import Callable
@@ -10,10 +11,9 @@ from typing import Any
 from langchain_core.tools import BaseTool
 from chemgraph.academy.core.campaign import ChemGraphAgentSpec, ChemGraphCampaign
 from chemgraph.academy.core.campaign import visible_resources_payload
+from chemgraph.academy.core.llm import LLMSettings
 from chemgraph.academy.core.prompt import PromptProfile
 from chemgraph.academy.observability.run_files import read_json_file
-from chemgraph.agent.turn import run_turn
-from chemgraph.models.settings import LLMSettings
 
 TraceFn = Callable[[str, dict[str, Any]], None]
 ACTION_TOOL_NAMES = frozenset({"send_message", "ask_peer", "submit_result", "finish_turn"})
@@ -44,11 +44,44 @@ async def run_academy_turn(
     get_final_result: Callable[[], dict[str, Any] | None],
     get_round_index: Callable[[], int],
     trace: TraceFn,
+    turn_runner: Callable[..., Any],
     peer_names: tuple[str, ...] = (),
+    system_prompt_override: str | None = None,
+    mission_override: str | None = None,
+    model_override: str | None = None,
+    allowed_tools: tuple[str, ...] | None = None,
+    node_id: str | None = None,
 ) -> ReasoningTurnResult:
+    """Drive one academy reasoning turn through ``turn_runner``.
+
+    ``turn_runner`` is injected (rather than imported) so this module
+    has no hard dependency on any specific reasoning-loop implementation.
+    See ``swarm.core.runner.TurnRunner`` for the contract.
+    ChemGraphLogicalAgent passes ``chemgraph.agent.turn.run_turn``;
+    a future ReActRuntime would pass its own callable.
+    """
     round_index = get_round_index()
-    thread_id = f"{spec.name}-round-{round_index}"
-    trace("chemgraph_reasoning_turn_started", {"round": round_index, "thread_id": thread_id, "tool_names": [t.name for t in tools]})
+    node_suffix = f"-{node_id}" if node_id else ""
+    # ponytail: thread_id stable across wakes (dropped round-N suffix) so
+    # engines with MemorySaver (chemgraph.multi_agent) resume the same
+    # checkpoint each academy wake instead of restarting the planner
+    # from scratch. Upgrade path: if we ever need per-turn isolation
+    # (e.g. adversarial replay), key on correlation_id from ctx.
+    thread_id = f"{spec.name}{node_suffix}"
+
+    # Per-node overrides (Phase F, plan-and-execute). None means "inherit
+    # agent-level default." allowed_tools filters the tool set the LLM
+    # sees this turn (action tools are always kept).
+    effective_system_prompt = system_prompt_override or prompt_profile.system_prompt
+    effective_model = model_override or llm_settings.model
+    if allowed_tools:
+        allowed_set = set(allowed_tools) | ACTION_TOOL_NAMES
+        tools = [t for t in tools if t.name in allowed_set]
+    trace("chemgraph_reasoning_turn_started", {
+        "round": round_index, "thread_id": thread_id,
+        "tool_names": [t.name for t in tools],
+        "node_id": node_id, "model": effective_model,
+    })
 
     def on_event(event: str, payload: dict) -> None:
         trace(event, {"round": round_index, **payload})
@@ -56,14 +89,15 @@ async def run_academy_turn(
     available_tool_names = tuple(
         tool.name for tool in tools if tool.name not in ACTION_TOOL_NAMES
     )
-    result = await run_turn(
-        query=json.dumps(_state(campaign, spec, prompt_profile, run_dir, max_decisions, round_index, received_message_history, outbox, tool_results, get_final_result, peer_names, available_tool_names), sort_keys=True),
+    effective_spec = spec if not mission_override else dataclasses.replace(spec, mission=mission_override)
+    result = await turn_runner(
+        query=json.dumps(_state(campaign, effective_spec, prompt_profile, run_dir, max_decisions, round_index, received_message_history, outbox, tool_results, get_final_result, peer_names, available_tool_names), sort_keys=True),
         tools=tools,
-        model_name=llm_settings.model,
+        model_name=effective_model,
         base_url=llm_settings.base_url,
         api_key=llm_settings.api_key,
         argo_user=llm_settings.user,
-        system_prompt=prompt_profile.system_prompt,
+        system_prompt=effective_system_prompt,
         recursion_limit=prompt_profile.langchain_recursion_limit,
         thread_id=thread_id,
         terminal_tool_names=TERMINAL_TOOL_NAMES,

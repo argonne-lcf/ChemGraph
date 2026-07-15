@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import pathlib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from chemgraph.academy.campaigns import resolve_campaign
@@ -120,6 +120,12 @@ class ChemGraphAgentSpec:
     behavior), so the whitelist does not introduce new ambiguity.
     """
     resources: tuple[str, ...] = ()
+    # Reasoning engine (post-behavior-graph removal). Each wake:
+    # the agent calls this engine once. Engine sees the mission +
+    # message history + tools, decides what to do. Registry:
+    # swarm.runtime.engines. Defaults to chemgraph.single_agent
+    # (ReAct); chemgraph.multi_agent is the planner+executor shape.
+    engine: str = "chemgraph.single_agent"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -153,6 +159,21 @@ class ChemGraphDaemonConfig:
     local_rank: int | None
     chemgraph_repo_root: pathlib.Path
     exchange_type: str = 'redis'
+    # URL of an HTTP exchange server when exchange_type == 'http'.
+    # ``None`` selects the Academy-hosted default
+    # (https://exchange.academy-agents.org/v1), which is gated by
+    # Globus Auth and uses the bearer token cached at
+    # ``$XDG_DATA_HOME/academy/storage.db``. Set this for a
+    # self-hosted ``python -m academy.exchange.cloud`` server.
+    http_exchange_url: str | None = None
+    # Optional explicit agent slice for this launch. Empty tuple
+    # (default) means launch every agent declared on the campaign --
+    # i.e. the single-machine ``run-compute`` flow. Non-empty means
+    # the federated ``spawn-site`` flow: this daemon only owns the
+    # listed agents, the rest are presumed running elsewhere and
+    # reachable through the exchange. Order is preserved so MPI ranks
+    # map to ``agents[rank]`` deterministically.
+    agents: tuple[str, ...] = ()
 
 
 def namespace_for_run(run_dir: pathlib.Path) -> str:
@@ -267,6 +288,16 @@ def load_campaign(path: str | pathlib.Path) -> ChemGraphCampaign:
     }
     agents = []
     for item in data['agents']:
+        # Back-compat shim: legacy campaigns nested engine under
+        # behavior_graph.nodes.<decide-node>.params.engine. Pull that
+        # up to the flat `engine` field if the operator hasn't set it.
+        engine = item.get('engine')
+        if not engine and isinstance(item.get('behavior_graph'), dict):
+            for node in (item['behavior_graph'].get('nodes') or {}).values():
+                params = (node or {}).get('params') or {}
+                if params.get('engine'):
+                    engine = params['engine']
+                    break
         agents.append(
             ChemGraphAgentSpec(
                 name=item['name'],
@@ -276,6 +307,7 @@ def load_campaign(path: str | pathlib.Path) -> ChemGraphCampaign:
                 mcp_servers=tuple(item.get('mcp_servers', ())),
                 allowed_tools=tuple(item.get('allowed_tools', ())),
                 resources=tuple(item.get('resources', ())),
+                engine=engine or "chemgraph.single_agent",
             ),
         )
     return ChemGraphCampaign(
@@ -377,10 +409,60 @@ def _resolve_campaign_relative_path(
     path = pathlib.Path(raw.strip())
     if not path.is_absolute():
         path = campaign_path.parent / path
-    return path.resolve()
+    resolved = path.resolve()
+    # Canvas-created user-copy campaigns don't ship a
+    # prompt_profiles/ subdir, and their skeleton points at the
+    # shipped default. Fall back to the packaged copy so those
+    # campaigns are launchable without the operator having to
+    # manually populate the file. Only applies to prompt_profile
+    # today; other fields keep the strict behaviour.
+    if field_name == 'prompt_profile' and not resolved.exists():
+        fallback = _packaged_prompt_profile(pathlib.Path(raw.strip()).name)
+        if fallback is not None:
+            return fallback
+    return resolved
 
 
-def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
+def _packaged_prompt_profile(basename: str) -> pathlib.Path | None:
+    """Return the packaged prompt profile matching ``basename`` (e.g.
+    ``default.json``), or None if not shipped.
+
+    Uses importlib.resources so it works whether swarm is installed
+    editable, from wheel, or zipped.
+    """
+    from importlib import resources
+    try:
+        anchor = resources.files('chemgraph.academy.core.prompt_profiles')
+    except (ModuleNotFoundError, FileNotFoundError):
+        return None
+    candidate = anchor / basename
+    if not candidate.is_file():
+        return None
+    # importlib.resources handles both filesystem and zip cases; for
+    # editable installs the returned Traversable is filesystem-backed
+    # so we can cast to Path. This is the same pattern the campaigns
+    # module uses for lm_config templates.
+    return pathlib.Path(str(candidate))
+
+
+def validate_campaign(
+    campaign: ChemGraphCampaign,
+    agent_count: int,
+    *,
+    federated: bool = False,
+) -> None:
+    """Validate a campaign before the daemon constructs agents from it.
+
+    ``federated=True`` loosens two single-machine assumptions that don't
+    hold for federated spawn-site launches:
+      * ``initial_agent`` may name an agent hosted on another site
+        (this site only has a slice).
+      * each agent's ``allowed_peers`` may reference agents on other
+        sites that aren't in this slice. Those are looked up via the
+        exchange at runtime; the validator can't know about them.
+    The intra-slice checks (no duplicate names, no self-peer, MCP
+    server / resource references all resolvable) still run.
+    """
     if len(campaign.agents) != agent_count:
         raise RuntimeError(
             f'campaign defines {len(campaign.agents)} agents but '
@@ -389,7 +471,7 @@ def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
     names = [agent.name for agent in campaign.agents]
     if len(set(names)) != len(names):
         raise RuntimeError('campaign agent names must be unique')
-    if campaign.initial_agent not in names:
+    if not federated and campaign.initial_agent not in names:
         raise RuntimeError(
             f'initial_agent {campaign.initial_agent!r} is not an agent',
         )
@@ -398,11 +480,12 @@ def validate_campaign(campaign: ChemGraphCampaign, agent_count: int) -> None:
         raise RuntimeError('campaign MCP server names must be unique')
     declared_servers = set(server_names)
     for agent in campaign.agents:
-        unknown = sorted(set(agent.allowed_peers).difference(names))
-        if unknown:
-            raise RuntimeError(
-                f'{agent.name} has unknown allowed peers: {unknown}',
-            )
+        if not federated:
+            unknown = sorted(set(agent.allowed_peers).difference(names))
+            if unknown:
+                raise RuntimeError(
+                    f'{agent.name} has unknown allowed peers: {unknown}',
+                )
         if agent.name in agent.allowed_peers:
             raise RuntimeError(f'{agent.name} must not list itself as a peer')
         unknown_servers = sorted(set(agent.mcp_servers).difference(declared_servers))
@@ -434,6 +517,60 @@ def selected_agent(campaign: ChemGraphCampaign, rank: int) -> ChemGraphAgentSpec
             f'{len(campaign.agents)} ranks for this campaign.',
         )
     return campaign.agents[rank]
+
+
+def parse_agents_selection(raw: str | None) -> tuple[str, ...]:
+    """Parse a comma-separated ``--agents`` flag into a name tuple.
+
+    Returns an empty tuple when ``raw`` is None or empty (the
+    single-machine flow where every declared agent is launched).
+    Whitespace around individual names is trimmed; empty segments
+    (e.g. trailing comma) are dropped silently. Duplicate-name
+    detection lives in :func:`filter_agents` so the user-facing
+    error surfaces in one place regardless of where the list
+    originated.
+    """
+    if not raw:
+        return ()
+    return tuple(name.strip() for name in raw.split(',') if name.strip())
+
+
+def filter_agents(
+    campaign: ChemGraphCampaign,
+    agent_names: Sequence[str],
+) -> ChemGraphCampaign:
+    """Return a copy of ``campaign`` with only the named agents.
+
+    Order in the returned ``agents`` tuple matches ``agent_names`` so MPI
+    rank-to-agent mapping stays deterministic across launches.
+
+    Raises:
+        RuntimeError: if any name in ``agent_names`` is not declared on
+            the campaign, or if ``agent_names`` is empty / has duplicates.
+
+    Note:
+        Subsetting deliberately does NOT rewrite ``initial_agent`` -- in
+        the federated ``spawn-site`` flow that name may still refer to an
+        agent hosted on another site. Validation against the subset is
+        loosened accordingly (callers must not pass the subsetted campaign
+        through ``validate_campaign`` with the strict ``initial_agent``
+        check; use it for per-site daemon launch only).
+    """
+    if not agent_names:
+        raise RuntimeError('filter_agents requires at least one agent name')
+    if len(set(agent_names)) != len(agent_names):
+        raise RuntimeError(f'duplicate agent names in selection: {list(agent_names)}')
+
+    by_name = {agent.name: agent for agent in campaign.agents}
+    unknown = sorted(set(agent_names).difference(by_name))
+    if unknown:
+        declared = sorted(by_name)
+        raise RuntimeError(
+            f'agents not declared on campaign: {unknown} (campaign declares {declared})',
+        )
+
+    selected = tuple(by_name[name] for name in agent_names)
+    return dataclasses.replace(campaign, agents=selected)
 
 
 def campaign_bootstrap_text(campaign: ChemGraphCampaign) -> str:
