@@ -40,7 +40,7 @@ class FAIRChemCalc(BaseModel):
         default="FAIRChem", description="Calculator identifier. Must be 'FAIRChem'."
     )
     task_name: Optional[str] = Field(
-        default=None,
+        default="omat",
         description="Prediction task. Options are 'omol', 'omat', 'oc20', 'odac', or 'omc",
     )
     seed: int = Field(default=42, description="Random seed for inference reproducibility.")

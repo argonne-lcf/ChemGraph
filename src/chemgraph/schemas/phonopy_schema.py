@@ -23,6 +23,22 @@ class PhonopyInputSchema(BaseModel):
         default=False,
         description="Set to true if the material is 2D. This forces the supercell matrix in the Z-direction to be 1.",
     )
+    minimize_structure: bool = Field(
+        default=True,
+        description="Whether to minimize (relax) the atomic structure before performing the phonon calculation.",
+    )
+    relaxation_mode: str = Field(
+        default="full",
+        description="Relaxation mode to use if minimize_structure is True. Options are 'full' (relax both atoms and cell), 'atoms' (relax only atomic positions), or 'cell' (relax only cell parameters).",
+    )
+
+    @field_validator("relaxation_mode")
+    @classmethod
+    def _validate_relaxation_mode(cls, v: str) -> str:
+        v = v.lower()
+        if v not in ("full", "atoms", "cell"):
+            raise ValueError("relaxation_mode must be one of 'full', 'atoms', or 'cell'")
+        return v
     calculator: CalculatorUnion = Field(
         default_factory=default_calculator,
         description="The ASE calculator to be used for force evaluations.",
@@ -36,8 +52,8 @@ class PhonopyInputSchema(BaseModel):
         description="Whether to calculate and plot the Total Density of States (DOS).",
     )
     calculate_thermal_properties: bool = Field(
-        default=True,
-        description="Whether to calculate and plot Thermal Properties (Free energy, Entropy, Heat Capacity).",
+        default=False,
+        description="Whether to calculate and plot Thermal Properties (Free energy, Entropy, Heat Capacity). Set to True only if explicitly requested.",
     )
     calculate_band_structure: bool = Field(
         default=True,
@@ -123,10 +139,15 @@ class PhonopyOutputSchema(BaseModel):
     dos_plot: Optional[str] = Field(default=None, description="Path to the saved DOS plot.")
     band_structure_plot: Optional[str] = Field(default=None, description="Path to the saved band structure plot.")
     band_yaml: Optional[str] = Field(default=None, description="Path to the saved band.yaml file containing frequencies and k-points.")
+    band_dat: Optional[str] = Field(default=None, description="Path to the saved band.dat file containing frequencies and kspace data in gnuplot format.")
+    calculation_info_file: Optional[str] = Field(default=None, description="Path to the saved Phonon_Calculation_Info.md report file in English.")
     phonopy_yaml: Optional[str] = Field(default=None, description="Path to the generated phonopy.yaml file containing force constants.")
     force_constants_file: Optional[str] = Field(default=None, description="Path to the saved FORCE_CONSTANTS file.")
     poscar_files: Optional[List[str]] = Field(default=None, description="List of paths to the saved POSCAR-* supercell files.")
+    minimized_structure_file: Optional[str] = Field(default=None, description="Path to the saved minimized structure file.")
+    minimization_log_file: Optional[str] = Field(default=None, description="Path to the saved structural minimization log file.")
     wall_time: float = Field(default=None, description="Total wall time (in seconds) taken to complete the simulation.")
+
 
     @field_validator("error", mode="before")
     @classmethod
