@@ -28,4 +28,4 @@ if ! "${PYTHON_BIN}" -c 'import chemgraph.academy.runtime.compute_launcher' >/de
 fi
 
 log "starting swarm compute launcher"
-exec "${PYTHON_BIN}" -m swarm.runtime.compute_launcher "$@"
+exec "${PYTHON_BIN}" -m chemgraph.academy.runtime.compute_launcher "$@"

@@ -97,6 +97,7 @@ rag = [
 [project.scripts]
 chemgraph = "chemgraph.cli:main"
 chemgraph-eval = "chemgraph.eval.cli:main"
+swarm = "chemgraph.academy.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src/"]
