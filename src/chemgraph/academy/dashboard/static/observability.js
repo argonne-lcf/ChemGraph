@@ -1173,7 +1173,16 @@
       if (event.event === 'run_started' || event.event === 'workflow_started') return 'workflow-query';
       if (event.event === 'workflow_output' || event.event === 'workflow_finished' || event.event === 'run_finished') return 'workflow-output';
       if (event.event.startsWith('tool_call_')) {
-        return p.tool_call_id ? `workflow-tool-${p.tool_call_id}` : (p.span_id || eventKey(event));
+        // Prefer tool_call_id; then span_id; then fall back to a
+        // (round, tool_name) composite so tool_call_started and
+        // tool_call_finished collapse onto the same node when neither
+        // id is emitted. Without this fallback each phase gets a fresh
+        // eventKey() id and renders as a duplicate lane in the graph.
+        if (p.tool_call_id) return `workflow-tool-${p.tool_call_id}`;
+        if (p.span_id) return p.span_id;
+        const name = p.tool_name || p.name;
+        if (name) return `workflow-tool-name-${p.round ?? 'x'}-${name}`;
+        return eventKey(event);
       }
       return p.span_id || eventKey(event);
     }
