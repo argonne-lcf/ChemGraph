@@ -1136,6 +1136,16 @@
             addEdges(currentLmId ? [currentLmId] : lastNodeIds, node.id);
             updateCurrentToolBatchLanes();
           }
+          // A failed tool call is a terminal event for its batch: any
+          // subsequent tool_call_started is a retry, not a sibling in a
+          // parallel dispatch. Advance so retries render in a new column
+          // instead of stacking as fake parallel lanes.
+          if (event.event === 'tool_call_failed' || node.failed) {
+            lastColumn = node.column;
+            lastNodeIds = currentToolBatchIds.slice();
+            currentToolBatchIds = [];
+            currentToolBatchColumn = null;
+          }
         }
       });
 
