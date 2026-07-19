@@ -214,18 +214,27 @@ def _response_tool_calls(response: Any) -> list[dict[str, str | None]]:
         return []
 
 
+_TOOL_ROLES = {"tool", "tool_message", "toolmessage"}
+
+
 def _tool_message_name(message: Any) -> str | None:
+    """Return the tool name for a *tool result* message, else None.
+
+    Only messages that are themselves tool results are considered executed
+    tools. A non-tool message that merely carries a ``name`` (e.g. a named
+    ``AIMessage``/``HumanMessage`` in a multi-agent flow) must NOT be counted,
+    otherwise it pollutes ``executed_tool_names``.
+    """
     if isinstance(message, dict):
-        name = message.get("name")
         role = message.get("role") or message.get("type")
-        if name and role in {"tool", "tool_message", "ToolMessage"}:
-            return str(name)
-        return str(name) if name and not _message_tool_calls(message) else None
+        if str(role or "").lower() not in _TOOL_ROLES:
+            return None
+        name = message.get("name")
+        return str(name) if name else None
+    if getattr(message, "type", None) != "tool":
+        return None
     name = getattr(message, "name", None)
-    message_type = getattr(message, "type", None)
-    if name and message_type == "tool":
-        return str(name)
-    return str(name) if name and not _message_tool_calls(message) else None
+    return str(name) if name else None
 
 
 def _call_name(call: Any) -> str | None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -186,6 +187,14 @@ async def test_valid_send_message_still_delivers(tmp_path) -> None:
     assert result["recipient"] == "agent-b"
     assert len(env["outbox"]) == 1
     assert env["outbox"][0]["reply_requested"] is False
+
+    # Delivery to the peer is queued as a background task ("delivery": "queued"),
+    # so drain the event loop until it completes before asserting delivery.
+    for _ in range(100):
+        if env["peer_handle"].calls:
+            break
+        await asyncio.sleep(0.01)
+
     assert env["peer_handle"].calls[0][0] == "receive_message"
     assert env["peer_handle"].calls[0][1]["message_id"] == result["message_id"]
     assert [event for event, _ in env["traces"]] == [

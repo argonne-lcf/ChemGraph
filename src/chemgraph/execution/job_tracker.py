@@ -66,7 +66,9 @@ class JobTracker:
 
     def __init__(self, persist_file: Optional[Path | str] = None) -> None:
         self._batches: dict[str, TrackedBatch] = {}
-        self._lock = threading.Lock()
+        # Re-entrant so a lock-holding method (e.g. get_status) can call
+        # _save(), which re-acquires the same lock, without deadlocking.
+        self._lock = threading.RLock()
         self._gc_lock = threading.Lock()
         self._persist_file = Path(persist_file) if persist_file else None
         self._gc_client = None  # lazily initialised Globus Compute Client
@@ -120,9 +122,24 @@ class JobTracker:
 
         self._persist_file.parent.mkdir(parents=True, exist_ok=True)
         tmp = self._persist_file.with_suffix(".tmp")
-        with open(tmp, "w") as f:
-            json.dump(data, f, indent=2)
-        tmp.replace(self._persist_file)
+        try:
+            with open(tmp, "w") as f:
+                # default=str keeps non-JSON-serializable results (numpy
+                # arrays, ASE Atoms, pydantic models, ...) from crashing the
+                # caller; persistence is best-effort metadata, not the result
+                # of record.
+                json.dump(data, f, indent=2, default=str)
+            tmp.replace(self._persist_file)
+        except (TypeError, ValueError, OSError) as exc:
+            logger.warning(
+                "Failed to persist job tracker state to %s: %s",
+                self._persist_file,
+                exc,
+            )
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
 
     def _load(self) -> None:
         """Load batch metadata from *persist_file* (if it exists)."""
@@ -240,7 +257,16 @@ class JobTracker:
         """Wait up to *timeout* seconds for Globus ``task_id`` to appear
         on each ComputeFuture, then store them for persistence."""
         deadline = time.monotonic() + timeout
-        pending = [t for t in tasks if t.future is not None and t.globus_task_id is None]
+        # Only Globus ComputeFutures carry a ``task_id`` attribute (initially
+        # None). Plain ``concurrent.futures.Future`` objects never grow one, so
+        # waiting on them would block for the full timeout for nothing.
+        pending = [
+            t
+            for t in tasks
+            if t.future is not None
+            and t.globus_task_id is None
+            and hasattr(t.future, "task_id")
+        ]
 
         while pending and time.monotonic() < deadline:
             still_pending = []
@@ -299,90 +325,90 @@ class JobTracker:
             if batch is None:
                 return {"error": f"Unknown batch_id: '{batch_id}'"}
 
-        total = len(batch.tasks)
-        done = 0
-        failed = 0
-        # Lazily capture Globus Compute task UUIDs (set asynchronously
-        # by the Executor background thread after submission).
-        dirty = self._try_capture_globus_task_ids(batch.tasks)
+            total = len(batch.tasks)
+            done = 0
+            failed = 0
+            # Lazily capture Globus Compute task UUIDs (set asynchronously
+            # by the Executor background thread after submission).
+            dirty = self._try_capture_globus_task_ids(batch.tasks)
 
-        for t in batch.tasks:
-            task_done = False
+            for t in batch.tasks:
+                task_done = False
 
-            # --- live future path ---
-            if t.future is not None and t.future.done():
-                task_done = True
-                if t.result is None:
-                    try:
-                        raw = t.future.result(timeout=0)
-                        if batch.post_fn is not None:
-                            t.result = batch.post_fn(t.meta, raw)
-                        elif isinstance(raw, dict):
-                            merged = {**t.meta, **raw}
-                            merged.setdefault("status", "success")
-                            t.result = merged
-                        else:
-                            t.result = {
-                                **t.meta,
-                                "result": raw,
-                                "status": "success",
-                            }
-                    except Exception as e:
-                        t.result = {
-                            **t.meta,
-                            "status": "failure",
-                            "error_type": type(e).__name__,
-                            "message": str(e),
-                        }
-                    dirty = True
-
-            # --- loaded-from-disk path (no future, use Globus client) ---
-            elif t.future is None and t.result is None and t.globus_task_id:
-                gc = self._get_gc_client()
-                if gc is not None:
-                    try:
-                        task_info = gc.get_task(t.globus_task_id)
-                        if not task_info.get("pending", True):
-                            task_done = True
-                            if "result" in task_info:
-                                raw = task_info["result"]
-                                if isinstance(raw, dict):
-                                    merged = {**t.meta, **raw}
-                                    merged.setdefault("status", "success")
-                                    t.result = merged
-                                else:
-                                    t.result = {
-                                        **t.meta,
-                                        "result": raw,
-                                        "status": "success",
-                                    }
-                            elif "exception" in task_info:
+                # --- live future path ---
+                if t.future is not None and t.future.done():
+                    task_done = True
+                    if t.result is None:
+                        try:
+                            raw = t.future.result(timeout=0)
+                            if batch.post_fn is not None:
+                                t.result = batch.post_fn(t.meta, raw)
+                            elif isinstance(raw, dict):
+                                merged = {**t.meta, **raw}
+                                merged.setdefault("status", "success")
+                                t.result = merged
+                            else:
                                 t.result = {
                                     **t.meta,
-                                    "status": "failure",
-                                    "error_type": "RemoteException",
-                                    "message": str(task_info["exception"]),
+                                    "result": raw,
+                                    "status": "success",
                                 }
-                            dirty = True
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to query Globus task %s: %s",
-                            t.globus_task_id,
-                            e,
-                            exc_info=True,
-                        )
+                        except Exception as e:
+                            t.result = {
+                                **t.meta,
+                                "status": "failure",
+                                "error_type": type(e).__name__,
+                                "message": str(e),
+                            }
+                        dirty = True
 
-            # --- already have a cached result ---
-            elif t.result is not None:
-                task_done = True
+                # --- loaded-from-disk path (no future, use Globus client) ---
+                elif t.future is None and t.result is None and t.globus_task_id:
+                    gc = self._get_gc_client()
+                    if gc is not None:
+                        try:
+                            task_info = gc.get_task(t.globus_task_id)
+                            if not task_info.get("pending", True):
+                                task_done = True
+                                if "result" in task_info:
+                                    raw = task_info["result"]
+                                    if isinstance(raw, dict):
+                                        merged = {**t.meta, **raw}
+                                        merged.setdefault("status", "success")
+                                        t.result = merged
+                                    else:
+                                        t.result = {
+                                            **t.meta,
+                                            "result": raw,
+                                            "status": "success",
+                                        }
+                                elif "exception" in task_info:
+                                    t.result = {
+                                        **t.meta,
+                                        "status": "failure",
+                                        "error_type": "RemoteException",
+                                        "message": str(task_info["exception"]),
+                                    }
+                                dirty = True
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to query Globus task %s: %s",
+                                t.globus_task_id,
+                                e,
+                                exc_info=True,
+                            )
 
-            if task_done:
-                done += 1
-            if t.result is not None and t.result.get("status") == "failure":
-                failed += 1
+                # --- already have a cached result ---
+                elif t.result is not None:
+                    task_done = True
 
-        if dirty:
-            self._save()
+                if task_done:
+                    done += 1
+                if t.result is not None and t.result.get("status") == "failure":
+                    failed += 1
+
+            if dirty:
+                self._save()
 
         pending = total - done
         if pending == total:
