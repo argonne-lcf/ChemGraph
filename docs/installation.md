@@ -4,7 +4,7 @@
 ## Install from PyPI (recommended)
 
 ```bash
-pip install chemgraphagent
+pip install chemgraph
 ```
 
 Default installation does not require `tblite`.
@@ -12,7 +12,7 @@ Default installation does not require `tblite`.
 To include optional calculator extras (including `tblite`):
 
 ```bash
-pip install "chemgraphagent[calculators]"
+pip install "chemgraph[calculators]"
 ```
 
 !!! warning
@@ -57,7 +57,7 @@ Use separate environments if you need both MACE and UMA.
 PyPI attempt:
 
 ```bash
-pip install "chemgraphagent[uma]"
+pip install "chemgraph[uma]"
 ```
 
 From source:

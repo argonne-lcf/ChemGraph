@@ -3,9 +3,10 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "chemgraphagent"
+name = "chemgraph"
 version = "0.6.0"
 description = "A computational chemistry agent for molecular simulation tasks."
+readme = "README.md"
 authors = [
     { name = "Thang Pham", email = "tpham@anl.gov" },
     { name = "Murat Keçeli", email = "keceli@anl.gov" },

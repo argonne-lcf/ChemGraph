@@ -10,7 +10,7 @@ metadata:
 
 ## What is ChemGraph
 
-ChemGraph is a Python framework (package name `chemgraphagent`) built at Argonne National Laboratory that automates computational chemistry workflows using LLMs. It connects natural language queries to molecular simulations via an agent architecture built on LangGraph/LangChain, ASE (Atomic Simulation Environment), RDKit, and MCP (Model Context Protocol) servers.
+ChemGraph is a Python framework (package name `chemgraph`) built at Argonne National Laboratory that automates computational chemistry workflows using LLMs. It connects natural language queries to molecular simulations via an agent architecture built on LangGraph/LangChain, ASE (Atomic Simulation Environment), RDKit, and MCP (Model Context Protocol) servers.
 
 Key capabilities: molecule lookup (PubChem), 3D structure generation (RDKit), geometry optimization, vibrational analysis, thermochemistry, IR spectra, and HPC-scale ensemble simulations via Parsl.
 

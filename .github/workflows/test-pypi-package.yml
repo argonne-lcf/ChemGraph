@@ -26,9 +26,9 @@ jobs:
       run: |
         python -m pip install --upgrade pip
 
-    - name: Install chemgraphagent from PyPI
+    - name: Install chemgraph from PyPI
       run: |
-        pip install --no-cache-dir --upgrade "chemgraphagent==${{ inputs.version }}"
+        pip install --no-cache-dir --upgrade "chemgraph==${{ inputs.version }}"
 
     - name: Verify package installation
       run: |
@@ -47,5 +47,5 @@ jobs:
 
     - name: Check package version
       run: |
-        pip show chemgraphagent
-        python -c "from importlib.metadata import version; v=version('chemgraphagent'); print('Installed:', v); assert v=='${{ inputs.version }}', f'Expected ${{ inputs.version }}, got {v}'"
+        pip show chemgraph
+        python -c "from importlib.metadata import version; v=version('chemgraph'); print('Installed:', v); assert v=='${{ inputs.version }}', f'Expected ${{ inputs.version }}, got {v}'"

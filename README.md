@@ -82,7 +82,7 @@ For `config.toml` options and provider/base URL settings, see [`docs/configurati
 The easiest way to install ChemGraph is from PyPI:
 
 ```bash
-pip install chemgraphagent
+pip install chemgraph
 ```
 
 > Default installation does **not** require `tblite`.
@@ -90,7 +90,7 @@ pip install chemgraphagent
 
 To install with calculator extras (includes `tblite`):
 ```bash
-pip install chemgraphagent[calculators]
+pip install chemgraph[calculators]
 ```
 
 > Note: On some platforms/Python combinations (especially where no prebuilt `tblite`
@@ -175,7 +175,7 @@ If you need to install from source for the latest version:
 > 
 > **For PyPI installations**, you can try:
 > ```bash
-> pip install chemgraphagent[uma]
+> pip install chemgraph[uma]
 > ```
 > However, this may fail due to the e3nn version conflict. If it does, you'll need to install from source using the workaround below.
 >

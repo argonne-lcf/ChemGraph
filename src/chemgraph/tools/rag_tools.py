@@ -99,7 +99,7 @@ def _extract_text_from_pdf(file_path: str) -> str:
     except ImportError as exc:
         raise ImportError(
             "PyMuPDF is required for PDF support. "
-            "Install the 'rag' extra: pip install chemgraphagent[rag]"
+            "Install the 'rag' extra: pip install chemgraph[rag]"
         ) from exc
 
     pages: list[str] = []
@@ -169,7 +169,7 @@ def _get_embeddings(provider: str = "openai"):
     except ImportError as exc:
         raise ImportError(
             "Neither langchain-openai nor langchain-huggingface is installed. "
-            "Install the 'rag' extra: pip install chemgraphagent[rag]"
+            "Install the 'rag' extra: pip install chemgraph[rag]"
         ) from exc
 
 
