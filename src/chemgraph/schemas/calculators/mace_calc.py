@@ -1,12 +1,18 @@
 """MACE foundation models parameters for ChemGraph
 Reference: https://github.com/ACEsuit/mace/blob/main/mace/calculators/foundations_models.py"""
 
+import functools
+import logging
 import os
+import tempfile
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional, Union
 from pydantic import BaseModel, Field
 import torch
+
+_logger = logging.getLogger(__name__)
 
 # Process-wide lock for MACE operations.
 # MACE model deserialization (torch.load) triggers torch.fx.symbolic_trace
@@ -16,6 +22,78 @@ import torch
 # causing "NameError: module is not installed as a submodule".
 # See: https://github.com/argonne-lcf/ChemGraph/issues/110
 _mace_lock = threading.Lock()
+
+
+@functools.lru_cache(maxsize=1)
+def _mace_lockfile_path() -> Optional[str]:
+    """Return the path of the per-node MACE init lock file, or ``None`` if
+    no writable directory is available. Memoised so we only resolve once."""
+    candidates = [
+        os.environ.get("CHEMGRAPH_MACE_LOCK_DIR"),
+        os.environ.get("TMPDIR"),
+        tempfile.gettempdir(),
+        str(Path.home() / ".cache" / "chemgraph"),
+    ]
+    uid = os.getuid() if hasattr(os, "getuid") else "unknown"
+    for d in candidates:
+        if not d:
+            continue
+        try:
+            Path(d).mkdir(parents=True, exist_ok=True)
+            path = str(Path(d) / f"chemgraph_mace_init.{uid}.lock")
+            # Touch to confirm we can write.
+            with open(path, "a"):
+                pass
+            return path
+        except OSError:
+            continue
+    return None
+
+
+@contextmanager
+def mace_loading_lock():
+    """Serialize MACE model loads across both threads and processes on one node.
+
+    EnsembleLauncher's ``AsyncProcessPool`` spawns multiple Python workers in
+    parallel; a per-process :data:`_mace_lock` is not enough because torch's
+    ``symbolic_trace`` patches ``torch.nn.Module.__call__`` at the class level
+    during MACE deserialization, and concurrent loads in sibling processes
+    racing on the same node can deadlock or trip the same NameError that #110
+    describes. We add an ``fcntl.flock``-based file lock on top so that
+    siblings on the same node take turns.
+
+    Degrades to thread-only locking when ``fcntl`` is unavailable (e.g.
+    Windows) or no writable lock directory exists.
+    """
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None  # type: ignore[assignment]
+
+    path = _mace_lockfile_path() if fcntl is not None else None
+    fh = None
+    try:
+        with _mace_lock:
+            if path is not None:
+                fh = open(path, "w")
+                try:
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                except OSError as exc:
+                    _logger.warning(
+                        "fcntl.flock on %s failed (%s); proceeding without "
+                        "inter-process MACE serialization.",
+                        path,
+                        exc,
+                    )
+                    fh.close()
+                    fh = None
+            yield
+    finally:
+        if fh is not None:
+            try:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            finally:
+                fh.close()
 
 
 class MaceCalc(BaseModel):

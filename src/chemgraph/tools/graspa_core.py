@@ -279,7 +279,11 @@ def run_graspa_core(params: graspa_input_schema) -> dict:
 
         return [uc_x, uc_y, uc_z]
 
-    cif_path = Path(params.input_structure_file).resolve()
+    # Resolve a bare relative name against CHEMGRAPH_LOG_DIR (where a sibling
+    # tool wrote the file) before falling back to a cwd-relative absolute path.
+    from chemgraph.tools.ase_core import _resolve_existing_path
+
+    cif_path = Path(_resolve_existing_path(params.input_structure_file)).resolve()
     if not cif_path.exists():
         raise FileNotFoundError(f"CIF file does not exist: {cif_path}")
 

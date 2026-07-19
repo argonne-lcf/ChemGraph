@@ -13,9 +13,9 @@ from langchain_core.tools import tool
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema
-from chemgraph.schemas.calculators.mace_calc import _mace_lock
 from chemgraph.tools.ase_core import (
     _resolve_path,
+    _resolve_existing_path,
     atoms_to_atomsdata,
     extract_output_json_core,
     run_ase_core,
@@ -64,6 +64,9 @@ def file_to_atomsdata(fname: str) -> AtomsData:
     """
     from ase.io import read
 
+    # A coordinate file written by smiles_to_coordinate_file/save_atomsdata_to_file
+    # via _resolve_path lands in CHEMGRAPH_LOG_DIR; resolve a bare name to match.
+    fname = _resolve_existing_path(fname)
     try:
         atoms = read(fname)
         return atoms_to_atomsdata(atoms)
@@ -166,8 +169,6 @@ def run_ase(params: ASEInputSchema) -> dict:
     ValueError
         If the calculator is not supported or if the calculation fails
     """
-    calc_type = params.calculator.calculator_type.lower()
-    if "mace" in calc_type:
-        with _mace_lock:
-            return run_ase_core(params)
+    # MACE thread/process serialization now lives in run_ase_core ->
+    # load_calculator, so this wrapper just delegates.
     return run_ase_core(params)

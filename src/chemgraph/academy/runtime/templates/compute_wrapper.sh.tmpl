@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euo pipefail
+
+log() {
+  printf '[chemgraph-academy-run] %s\n' "$*" >&2
+}
+
+export PATH="%{path_prefix}%:${PATH}"
+export PYTHONPATH="%{pythonpath}%:${PYTHONPATH:-}"
+
+PYTHON_BIN="${CHEMGRAPH_ACADEMY_PYTHON:-python}"
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  log "Python command not found: ${PYTHON_BIN}"
+  log "Load your site module and activate the ChemGraph/Academy environment first."
+  log "Profile Python, if you want to use it explicitly: %{venv_python}%"
+  exit 1
+fi
+
+ACTIVE_PYTHON="$("${PYTHON_BIN}" -c 'import sys; print(sys.executable)')"
+log "using active Python: ${ACTIVE_PYTHON}"
+log "not loading modules or activating a venv inside this wrapper"
+
+if ! "${PYTHON_BIN}" -c 'import chemgraph.academy.runtime.compute_launcher' >/dev/null 2>&1; then
+  log "active Python cannot import chemgraph.academy.runtime.compute_launcher"
+  log "Load the proper site module and venv before running this command."
+  log "Profile Python, if you want to use it explicitly: %{venv_python}%"
+  exit 1
+fi
+
+log "starting ChemGraph Academy compute launcher"
+exec "${PYTHON_BIN}" -m chemgraph.academy.runtime.compute_launcher "$@"

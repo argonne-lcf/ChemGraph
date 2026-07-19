@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import warnings
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -11,6 +12,16 @@ from chemgraph.schemas.graspa_schema import (
     graspa_input_schema_ensemble,
 )
 from parsl import python_app
+
+warnings.warn(
+    "chemgraph.mcp.graspa_mcp_parsl is deprecated; use "
+    "chemgraph.mcp.graspa_mcp_hpc, which dispatches via the "
+    "chemgraph.execution backend abstraction (Parsl, EnsembleLauncher, "
+    "Globus Compute, or local). This module will be removed in a future "
+    "release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 @python_app
@@ -88,12 +99,16 @@ async def run_graspa_ensemble(
     params : graspa_input_schema_ensemble
         Input parameters for the ensemble of gRASPA calculations.
     """
+    from chemgraph.tools.ase_core import _resolve_existing_path
+
     input_source = params.input_structures
     structure_files: list[Path] = []
     output_dir: Path = Path.cwd()  # Default fallback
 
     if isinstance(input_source, list):
-        structure_files = [Path(p) for p in input_source]
+        # Resolve bare names against CHEMGRAPH_LOG_DIR so a file a sibling tool
+        # wrote there still resolves; absolute/cwd paths are unchanged.
+        structure_files = [Path(_resolve_existing_path(str(p))) for p in input_source]
         missing = [p for p in structure_files if not p.exists()]
         if missing:
             raise ValueError(f"The following input files are missing: {missing}")

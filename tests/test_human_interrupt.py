@@ -120,7 +120,9 @@ def test_unified_planner_router_ask_human():
         "planner_iterations": 0,
         "clarification": "Which calculator?",
     }
-    result = unified_planner_router(state, structured_output=False)
+    result = unified_planner_router(
+        state, structured_output=False, human_supervised=True
+    )
     assert result == "human_review"
 
 
@@ -135,7 +137,9 @@ def test_unified_planner_router_ask_human_with_structured_output():
         "planner_iterations": 0,
         "clarification": "Which method?",
     }
-    result = unified_planner_router(state, structured_output=True)
+    result = unified_planner_router(
+        state, structured_output=True, human_supervised=True
+    )
     assert result == "human_review"
 
 
@@ -327,7 +331,7 @@ def test_multi_agent_graph_includes_human_review(monkeypatch):
             return AIMessage(content="done")
 
     graph = construct_multi_agent_graph(
-        llm=FakeLLM(), executor_tools=[calculator]
+        llm=FakeLLM(), executor_tools=[calculator], human_supervised=True
     )
     node_names = list(graph.get_graph().nodes.keys())
     assert "Planner" in node_names

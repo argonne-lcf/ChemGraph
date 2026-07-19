@@ -1,0 +1,36 @@
+{
+  "name": "aurora",
+  "remote_host": "${ALCF_USER}@aurora.alcf.anl.gov",
+  "remote_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}",
+  "repo_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph",
+  "run_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/runs",
+  "relay_host_file": "/flare/${ALCF_PROJECT}/${ALCF_USER}/uan-relay-18186.host",
+  "relay_port": 18186,
+  "venv_python": "/flare/${ALCF_PROJECT}/${ALCF_USER}/venvs/academy-swarm/bin/python",
+  "redis_bin_dir": "/flare/${ALCF_PROJECT}/${ALCF_USER}/tools/redis/bin",
+  "redis_port": 6392,
+  "redis_bind": "0.0.0.0",
+  "redis_protected_mode": "no",
+  "mpiexec": "mpiexec",
+  "pythonpath_entries": [
+    "/flare/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph/src"
+  ],
+  "path_entries": [
+    "/flare/${ALCF_PROJECT}/${ALCF_USER}/tools/redis/bin",
+    "/flare/${ALCF_PROJECT}/${ALCF_USER}/bin"
+  ],
+  "env": {
+    "NUMEXPR_MAX_THREADS": "256",
+    "NUMEXPR_NUM_THREADS": "64",
+    "SETUPTOOLS_SCM_PRETEND_VERSION_FOR_ACADEMY_PY": "0.0.0+aurora"
+  },
+  "unset_env": [
+    "http_proxy",
+    "HTTP_PROXY",
+    "https_proxy",
+    "HTTPS_PROXY",
+    "all_proxy",
+    "ALL_PROXY"
+  ],
+  "no_proxy": "127.0.0.1,localhost,.alcf.anl.gov,*.alcf.anl.gov"
+}

@@ -324,6 +324,7 @@ def unified_planner_router(
     structured_output: bool = False,
     max_planner_iterations: int = 3,
     max_task_retries: int = 2,
+    human_supervised: bool = False,
 ) -> Union[str, list[Send]]:
     """Route based on the planner's ``next_step`` decision.
 
@@ -358,6 +359,14 @@ def unified_planner_router(
     iterations = state.get("planner_iterations", 0)
 
     if next_step == "ask_human":
+        if not human_supervised:
+            logger.warning(
+                "Planner requested human clarification, but human supervision "
+                "is disabled; ending workflow."
+            )
+            if structured_output:
+                return "ResponseAgent"
+            return END
         return "human_review"
 
     if next_step == "executor_subgraph":
@@ -772,6 +781,7 @@ def construct_multi_agent_graph(
     formatter_prompt: str = default_formatter_prompt,
     max_retries: int = 1,
     max_task_retries: int = 2,
+    human_supervised: bool = False,
 ):
     """Construct the planner-executor graph using the Send() pattern.
 
@@ -799,6 +809,9 @@ def construct_multi_agent_graph(
         Maximum number of times a single executor task may be retried
         after failure.  Once a task reaches this limit, the router skips
         it and the planner must finish without it, by default 2.
+    human_supervised : bool, optional
+        Whether to include the ``human_review`` interrupt node so the
+        planner can request clarification, by default False.
 
     Returns
     -------
@@ -839,10 +852,13 @@ def construct_multi_agent_graph(
         ),
     )
     graph_builder.add_node("executor_subgraph", executor_subgraph)
-    graph_builder.add_node("human_review", human_review_node)
 
     # Conditional destinations list for the planner router
-    conditional_targets = ["executor_subgraph", "human_review", END]
+    conditional_targets = ["executor_subgraph", END]
+
+    if human_supervised:
+        graph_builder.add_node("human_review", human_review_node)
+        conditional_targets.append("human_review")
 
     if structured_output:
         graph_builder.add_node(
@@ -865,6 +881,7 @@ def construct_multi_agent_graph(
             unified_planner_router,
             structured_output=structured_output,
             max_task_retries=max_task_retries,
+            human_supervised=human_supervised,
         ),
         conditional_targets,
     )
@@ -872,8 +889,9 @@ def construct_multi_agent_graph(
     # Executors feed results back to the planner
     graph_builder.add_edge("executor_subgraph", "Planner")
 
-    # After human clarification, return to the planner for re-planning
-    graph_builder.add_edge("human_review", "Planner")
+    if human_supervised:
+        # After human clarification, return to the planner for re-planning.
+        graph_builder.add_edge("human_review", "Planner")
 
     if structured_output:
         graph_builder.add_edge("ResponseAgent", END)

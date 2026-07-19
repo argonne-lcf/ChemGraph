@@ -10,25 +10,6 @@ from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
-# Path to the bundled default ground-truth dataset.
-_DEFAULT_DATASET = Path(__file__).parent / "data" / "ground_truth.json"
-
-
-def default_dataset_path() -> str:
-    """Return the absolute path to the bundled default ground-truth dataset.
-
-    The dataset ships with the ``chemgraph`` package under
-    ``chemgraph/eval/data/ground_truth.json`` and contains 14
-    evaluation queries covering single-tool, multi-step, and
-    reaction-energy calculations.
-
-    Returns
-    -------
-    str
-        Absolute path to the default ``ground_truth.json``.
-    """
-    return str(_DEFAULT_DATASET.resolve())
-
 
 class GroundTruthItem(BaseModel):
     """A single evaluation query with its expected tool-call sequence"""
@@ -62,7 +43,7 @@ def load_dataset(path: str) -> List[GroundTruthItem]:
     Automatically detects the two formats used in ChemGraph:
 
     1. **List format** -- a JSON array of ``{id, query, answer}`` objects
-       (used by the bundled ``data/ground_truth.json``).
+       (produced by ``scripts/evaluations/generate_ground_truth.py``).
     2. **Dict format** -- a JSON object keyed by query/name, each
        containing ``manual_workflow`` with ``tool_calls`` and ``result``
        (used by legacy ``run_manual/`` baselines).

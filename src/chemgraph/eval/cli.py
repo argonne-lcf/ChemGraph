@@ -8,13 +8,10 @@ Usage::
     # Standard evaluation with LLM judge
     chemgraph eval --profile standard --models gpt-4o-mini gemini-2.5-flash
 
-    # Minimal invocation (uses bundled default dataset)
-    chemgraph-eval --models gpt-4o-mini --judge-model gpt-4o
-
-    # Explicit dataset override
+    # Explicit dataset (required outside of --profile)
     chemgraph-eval \\
         --models gpt-4o-mini gemini-2.5-flash \\
-        --dataset path/to/custom_ground_truth.json \\
+        --dataset path/to/ground_truth.json \\
         --judge-model gpt-4o \\
         --workflows single_agent \\
         --output-dir eval_results
@@ -74,8 +71,9 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         default=None,
         help=(
-            "Path to ground-truth JSON file. "
-            "Defaults to the bundled dataset shipped with the package."
+            "Path to ground-truth JSON file. Required unless supplied by "
+            "a --profile. Generate one with "
+            "scripts/evaluations/generate_ground_truth.py."
         ),
     )
     parser.add_argument(
@@ -247,8 +245,14 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             **overrides,
         )
     else:
-        # Explicit mode: dataset defaults to the bundled ground truth
-        # when --dataset is not provided.
+        # Explicit mode: a dataset must be provided (no bundled default).
+        if args.dataset is None:
+            print(
+                "Error: --dataset is required (no bundled default dataset). "
+                "Generate one with scripts/evaluations/generate_ground_truth.py.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         kwargs: dict = {
             "models": args.models,
             "workflow_types": args.workflows or ["single_agent"],

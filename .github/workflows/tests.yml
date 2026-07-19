@@ -52,3 +52,33 @@ jobs:
     - name: Run tests
       run: |
         python -m pytest tests/ -v -k "not tblite"
+
+  # Exercises the distributed/HPC feature set: the Academy multi-agent module
+  # and the parsl / globus-compute execution backends. These tests use mocks and
+  # local subprocesses (no real HPC cluster, Globus endpoint, or LLM), so they
+  # run in CI. Live tests remain gated behind --run-globus-compute / --run-llm
+  # and are not enabled here.
+  test-extras:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies (academy + execution backends)
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[academy,parsl,globus_compute]"
+
+    - name: Run academy + backend tests
+      run: |
+        python -m pytest tests/ -v -k "not tblite"

@@ -6,23 +6,25 @@
 
 from __future__ import annotations
 
-from chemgraph.tools.ase_core import run_ase_core
+import logging
+
 from chemgraph.schemas.ase_input import ASEInputSchema
 from chemgraph.schemas.mace_parsl_schema import (
     mace_input_schema,
-    mace_input_schema_ensemble,
     mace_output_schema,
 )
+from chemgraph.tools.ase_core import run_ase_core, _resolve_existing_path
 
 # Re-export schemas so existing ``from chemgraph.tools.parsl_tools import …``
 # statements continue to work.
 __all__ = [
     "mace_input_schema",
-    "mace_input_schema_ensemble",
     "mace_output_schema",
     "run_mace_core",
+    "extract_output_json",
 ]
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Core execution — delegates to the unified implementation
@@ -77,3 +79,17 @@ def run_mace_core(params: mace_input_schema) -> dict:
     """
     ase_params = _mace_input_to_ase_input(params)
     return run_ase_core(ase_params)
+
+
+def extract_output_json(json_file: str) -> dict:
+    """Load simulation results from a JSON file produced by run_ase."""
+    import json
+
+    # Match run_ase's _resolve_path write location for bare relative names.
+    json_file = _resolve_existing_path(json_file)
+    try:
+        with open(json_file, "r") as f:
+            ret = json.load(f)
+    except Exception:
+        ret = {}
+    return ret

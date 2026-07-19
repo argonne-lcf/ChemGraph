@@ -15,8 +15,8 @@ datasets.  Two judge strategies are available:
 The ``judge_type`` config option controls which judge(s) run:
 ``"llm"``, ``"structured"``, or ``"both"``.
 
-A default ground-truth dataset (14 queries) is bundled with the
-package and used automatically when no explicit dataset is provided.
+A ground-truth dataset is required; generate one with
+``scripts/evaluations/generate_ground_truth.py``.
 
 Quick start::
 
@@ -25,6 +25,7 @@ Quick start::
 
     config = BenchmarkConfig(
         models=["gpt-4o-mini", "gemini-2.5-flash"],
+        dataset="path/to/ground_truth.json",
         judge_model="gpt-4o",
         judge_type="both",  # run both LLM and structured judges
     )
@@ -34,7 +35,7 @@ Quick start::
 """
 
 from chemgraph.eval.config import BenchmarkConfig
-from chemgraph.eval.datasets import GroundTruthItem, default_dataset_path, load_dataset
+from chemgraph.eval.datasets import GroundTruthItem, load_dataset
 from chemgraph.eval.llm_judge import (
     JudgeScore,
     aggregate_judge_results,
@@ -61,7 +62,6 @@ __all__ = [
     "StructuredOutputScore",
     "aggregate_judge_results",
     "aggregate_structured_results",
-    "default_dataset_path",
     "generate_markdown_report",
     "judge_single_query",
     "judge_structured_output",

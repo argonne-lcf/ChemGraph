@@ -81,9 +81,19 @@ def run_mcp_server(
         )
         # FastMCP.streamable_http_app() returns a Starlette/FastAPI-compatible app
         app = mcp.streamable_http_app()
-        uvicorn.run(app, host=args.host, port=args.port)
+        # ws="none": the streamable-HTTP transport does not use WebSockets, and
+        # loading uvicorn's ws protocol pulls in a websockets version that is
+        # incompatible with the one pinned transitively by pyppeteer
+        # (websockets<11, which lacks ServerProtocol). Disabling it avoids that
+        # import error without affecting the HTTP transport.
+        uvicorn.run(app, host=args.host, port=args.port, ws="none")
     else:
         logging.info("Starting %s via stdio transport...", mcp.name)
+        # Under stdio, the server's stdout IS the JSON-RPC channel. Any
+        # unguarded print from a worker (e.g. mace's "cuequivariance ...
+        # will be disabled" notice) would corrupt it. setdefault so the
+        # user can override with CHEMGRAPH_LOCAL_SILENCE_STDOUT=0.
+        os.environ.setdefault("CHEMGRAPH_LOCAL_SILENCE_STDOUT", "1")
         # FastMCP.run(transport='stdio') handles the stdio loop
         mcp.run(transport="stdio")
 

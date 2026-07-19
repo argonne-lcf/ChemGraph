@@ -14,29 +14,31 @@ from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
 from chemgraph.models.local_model import load_ollama_model
 from chemgraph.models.openai import load_openai_model
+from chemgraph.models.settings import LLMSettings
 from chemgraph.models.supported_models import (
     supported_alcf_models,
     supported_anthropic_models,
     supported_argo_models,
     supported_gemini_models,
-
     supported_ollama_models,
     supported_openai_models,
 )
 
 
 def load_chat_model(
-    model_name: str,
+    model_name: str | None = None,
     temperature: float = 0.0,
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
     argo_user: Optional[str] = None,
+    *,
+    settings: LLMSettings | None = None,
 ):
     """Load a LangChain chat model by provider auto-detection.
 
     Parameters
     ----------
-    model_name : str
+    model_name : str, optional
         Model name from any supported provider list.
     temperature : float
         Sampling temperature (default 0.0 for deterministic output).
@@ -46,6 +48,9 @@ def load_chat_model(
         API key override (falls back to environment variables).
     argo_user : str, optional
         Argo user identifier.
+    settings : LLMSettings, optional
+        Canonical endpoint settings. When provided, this overrides
+        model_name/base_url/api_key/argo_user.
 
     Returns
     -------
@@ -57,12 +62,25 @@ def load_chat_model(
     ValueError
         If the model name is not found in any supported provider list.
     """
+    if settings is not None:
+        model_name = settings.model
+        base_url = settings.base_url
+        api_key = settings.api_key
+        argo_user = settings.argo_user
+        if settings.temperature is not None:
+            temperature = settings.temperature
+
+    if model_name is None:
+        raise ValueError("load_chat_model requires model_name or settings")
+
     if model_name in supported_openai_models or model_name in supported_argo_models:
         kwargs = {
             "model_name": model_name,
             "temperature": temperature,
             "base_url": base_url,
         }
+        if api_key is not None:
+            kwargs["api_key"] = api_key
         if argo_user is not None:
             kwargs["argo_user"] = argo_user
         return load_openai_model(**kwargs)
@@ -87,5 +105,6 @@ def load_chat_model(
     else:
         raise ValueError(
             f"Model '{model_name}' not found in any supported model list. "
-            f"Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, argo:<model>, ALCF, or Ollama."
+            "Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, "
+            "argo:<model>, ALCF, or Ollama."
         )

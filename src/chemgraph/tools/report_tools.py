@@ -7,6 +7,7 @@ from langchain_core.tools import tool
 from ase.data import chemical_symbols as _chemical_symbols
 
 from chemgraph.schemas.ase_input import ASEOutputSchema
+from chemgraph.tools.ase_core import _resolve_existing_path
 from chemgraph.tools.ase_tools import is_linear_molecule
 
 
@@ -341,6 +342,13 @@ def generate_html(
     str
         Path to the generated HTML file
     """
+    # run_ase and the coordinate writers emit relative paths into
+    # CHEMGRAPH_LOG_DIR via _resolve_path; resolve bare names to match so a
+    # report can be built from files produced earlier in the same session.
+    results_json_path = _resolve_existing_path(results_json_path)
+    if xyz_path is not None:
+        xyz_path = _resolve_existing_path(xyz_path)
+
     # Validate results_json_path exists
     if not os.path.isfile(results_json_path):
         return (

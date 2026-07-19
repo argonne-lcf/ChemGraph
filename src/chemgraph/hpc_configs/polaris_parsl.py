@@ -4,10 +4,12 @@ from parsl.providers import LocalProvider
 from parsl.executors import HighThroughputExecutor
 from parsl.launchers import MpiExecLauncher
 
+from chemgraph.hpc_configs.loader import resolve_worker_init
+
 
 def get_polaris_config(
     run_dir=None,
-    worker_init: str = "export TMPDIR=/tmp",
+    worker_init: str | None = None,
 ):
     """Generate the Parsl configuration for the Polaris supercomputer.
 
@@ -16,7 +18,10 @@ def get_polaris_config(
     run_dir : str, optional
         Directory used as Parsl's run directory.
     worker_init : str, optional
-        Shell initialization snippet run by each Parsl worker.
+        Explicit shell snippet for worker init. When ``None`` (default),
+        :func:`resolve_worker_init` picks ``CHEMGRAPH_WORKER_INIT`` /
+        ``VIRTUAL_ENV`` / ``CONDA_PREFIX`` over a bare ``export TMPDIR=/tmp``
+        fallback.
 
     Returns
     -------
@@ -25,6 +30,9 @@ def get_polaris_config(
     """
     if run_dir is None:
         run_dir = os.getcwd()
+
+    if worker_init is None:
+        worker_init = resolve_worker_init(run_dir, fallback="true")
 
     # Get the number of nodes from the PBS environment
     node_file = os.getenv("PBS_NODEFILE")

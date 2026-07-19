@@ -2,7 +2,10 @@
 
 import os
 from getpass import getpass
+from urllib.parse import urlparse
+
 from langchain_openai import ChatOpenAI
+
 from chemgraph.models.supported_models import (
     ARGO_DEFAULT_BASE_URL,
     supported_openai_models,
@@ -60,13 +63,20 @@ ARGO_MODEL_MAP = {
 }
 
 
+ARGO_LOCAL_OPENAI_MODEL_MAP = {
+    # argo-shim advertises GPT-5.4 with this casing. Lowercase gpt-5.4 is
+    # rejected by the upstream Argo API behind the shim.
+    "argo:gpt-5.4": "GPT-5.4",
+}
+
+
 def _normalize_argo_model(model_name: str, base_url: str) -> str:
     """Normalize an ``argo:``-prefixed model name for the target endpoint.
 
-    * Argo API (base_url contains ``argoapi``): map to internal wire
-      names via ``ARGO_MODEL_MAP`` (e.g. ``argo:gpt-4o`` -> ``gpt4o``).
-    * Other endpoints (ArgoProxy, custom): strip the ``argo:`` prefix
-      and send the remainder as-is (e.g. ``argo:gpt-4o`` -> ``gpt-4o``).
+    * Hosted Argo API endpoints use internal wire names via
+      ``ARGO_MODEL_MAP``.
+    * Argo shim, ArgoProxy, and custom OpenAI-compatible endpoints strip the
+      ``argo:`` prefix and keep the OpenAI-style name.
 
     Parameters
     ----------
@@ -83,23 +93,68 @@ def _normalize_argo_model(model_name: str, base_url: str) -> str:
     if not model_name.startswith("argo:"):
         return model_name
 
-    if base_url and "argoapi" in base_url:
-        # Argo API endpoint -- use the wire-name map
-        normalized = ARGO_MODEL_MAP.get(model_name)
-        if normalized:
-            logger.info("Normalized Argo model '%s' -> '%s'", model_name, normalized)
-            return normalized
-        # Fallback: strip prefix and remove punctuation
-        fallback = model_name.removeprefix("argo:").replace("-", "").replace(".", "")
+    model_format = os.getenv("CHEMGRAPH_ARGO_MODEL_FORMAT", "").lower()
+    if model_format == "shim":
+        return _normalize_argo_local_openai_model(model_name)
+    if model_format in {"openai", "openai-compatible"}:
+        stripped = model_name.removeprefix("argo:")
+        logger.info("Stripped argo: prefix '%s' -> '%s'", model_name, stripped)
+        return stripped
+    if model_format in {"wire", "argo"}:
+        return _normalize_argo_wire_model(model_name)
+
+    if _is_local_http_endpoint(base_url):
+        stripped = _normalize_argo_local_openai_model(model_name)
         logger.info(
-            "Normalized Argo model '%s' -> '%s' (fallback)", model_name, fallback
+            "Using OpenAI-style Argo model for local endpoint '%s': '%s' -> '%s'",
+            base_url,
+            model_name,
+            stripped,
         )
-        return fallback
+        return stripped
+
+    if base_url and "argoapi" in base_url:
+        return _normalize_argo_wire_model(model_name)
     else:
         # Non-Argo-API endpoint -- strip prefix only
         stripped = model_name.removeprefix("argo:")
         logger.info("Stripped argo: prefix '%s' -> '%s'", model_name, stripped)
         return stripped
+
+
+def _normalize_argo_local_openai_model(model_name: str) -> str:
+    """Return the model name expected by local OpenAI-compatible Argo shims."""
+    return ARGO_LOCAL_OPENAI_MODEL_MAP.get(
+        model_name,
+        model_name.removeprefix("argo:"),
+    )
+
+
+def _normalize_argo_wire_model(model_name: str) -> str:
+    """Return the hosted-Argo wire model for an ``argo:`` model name."""
+    normalized = ARGO_MODEL_MAP.get(model_name)
+    if normalized:
+        logger.info("Normalized Argo model '%s' -> '%s'", model_name, normalized)
+        return normalized
+
+    fallback = model_name.removeprefix("argo:").replace("-", "").replace(".", "")
+    logger.info(
+        "Normalized Argo model '%s' -> '%s' (fallback)", model_name, fallback
+    )
+    return fallback
+
+
+def _is_local_http_endpoint(base_url: str | None) -> bool:
+    """Return True for local HTTP endpoints such as ``argo-shim``."""
+    if not base_url:
+        return False
+    parsed = urlparse(base_url)
+    return parsed.scheme == "http" and parsed.hostname in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "0.0.0.0",
+    }
 
 
 def load_openai_model(
@@ -173,9 +228,13 @@ def load_openai_model(
                 api_key = getpass("OpenAI API key: ")
                 os.environ["OPENAI_API_KEY"] = api_key
 
-    if model_name not in supported_openai_models and model_name not in supported_argo_models:
+    if (
+        model_name not in supported_openai_models
+        and model_name not in supported_argo_models
+    ):
         raise ValueError(
-            f"Unsupported model '{model_name}'. Supported models are: {supported_openai_models}."
+            f"Unsupported model '{model_name}'. "
+            f"Supported models are: {supported_openai_models}."
         )
 
     is_argo_endpoint = bool(base_url and "argoapi" in base_url)
@@ -214,7 +273,7 @@ def load_openai_model(
                 api_key=api_key,
                 max_tokens=6000,
             )
-        # No guarantee that api_key is valid, authentication happens only during invocation
+        # Authentication happens only during invocation.
         logger.info(f"Requested model: {model_name}")
         logger.info("OpenAI model loaded successfully")
         return llm

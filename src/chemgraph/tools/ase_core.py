@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import glob
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -21,6 +22,28 @@ import numpy as np
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_ase_core_file_log() -> None:
+    """Attach a single ``FileHandler`` to the ase_core logger.
+
+    ``run_ase_core`` runs both in the MCP-server process (where
+    ``server_utils`` already configures root logging) and in worker
+    processes (Parsl / EnsembleLauncher / Globus Compute) that never go
+    through that setup, so we add our own file handler here. Idempotent:
+    a second call is a no-op, which avoids accumulating one open file
+    handle per invocation. Honors ``CHEMGRAPH_LOG_DIR`` when set.
+    """
+    if any(isinstance(h, logging.FileHandler) for h in logger.handlers):
+        return
+    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR", os.path.join(os.getcwd(), "cg_logs"))
+    os.makedirs(log_dir, exist_ok=True)
+    fh = logging.FileHandler(os.path.join(log_dir, "ase_core.log"))
+    fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    logger.addHandler(fh)
+    logger.setLevel(logging.DEBUG)
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +67,41 @@ def _resolve_path(path: str) -> str:
     if log_dir and not os.path.isabs(path):
         os.makedirs(log_dir, exist_ok=True)
         return os.path.join(log_dir, path)
+    return path
+
+
+def _resolve_existing_path(path: str) -> str:
+    """Resolve a path to read that a sibling tool may have written to the log dir.
+
+    Tools that *write* files (``smiles_to_coordinate_file``, ``run_ase``'s
+    result JSON, ``save_atomsdata_to_file`` ...) send relative paths through
+    :func:`_resolve_path`, so a bare ``"water.xyz"`` lands in
+    ``CHEMGRAPH_LOG_DIR`` rather than the caller's cwd. A tool that later
+    *reads* that bare name must look in the same place, otherwise it raises
+    ``FileNotFoundError`` even though the file exists.
+
+    This helper returns ``path`` unchanged when it already points at an
+    existing file (absolute paths and genuine cwd-relative paths keep working);
+    only when the raw path is missing does it fall back to the
+    ``CHEMGRAPH_LOG_DIR``-resolved location. The raw path is returned when
+    neither exists, so callers still surface a meaningful "not found" error.
+
+    Parameters
+    ----------
+    path : str
+        Absolute or relative file path to read.
+
+    Returns
+    -------
+    str
+        The raw path if it exists, else the log-dir-resolved path if that
+        exists, else the raw path unchanged.
+    """
+    if os.path.isfile(path):
+        return path
+    resolved = _resolve_path(path)
+    if resolved != path and os.path.isfile(resolved):
+        return resolved
     return path
 
 
@@ -202,7 +260,18 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     if hasattr(calc, "get_atoms_properties"):
         extra_info = calc.get_atoms_properties()
 
-    return calc.get_calculator(), extra_info, calc
+    if "mace" in calc_type:
+        # MACE's torch.load + symbolic_trace is unsafe under concurrent loads,
+        # whether the concurrency is threads in one process or sibling processes
+        # spawned by the EnsembleLauncher process pool. See mace_calc._mace_lock.
+        from chemgraph.schemas.calculators.mace_calc import mace_loading_lock
+
+        with mace_loading_lock():
+            ase_calculator = calc.get_calculator()
+    else:
+        ase_calculator = calc.get_calculator()
+
+    return ase_calculator, extra_info, calc
 
 
 # ---------------------------------------------------------------------------
@@ -314,10 +383,16 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
+    # ---- file logger (cg_logs/) ----
+    _ensure_ase_core_file_log()
+
+    logger.info("run_ase_core called with params: %s", params.model_dump_json())
+
     # ---- unpack params ----
     try:
         calculator = params.calculator.model_dump()
     except Exception as e:
+        logger.error("Calculator validation failed: %s", e)
         return {
             "status": "failure",
             "error_type": "ValidationError",
@@ -326,7 +401,11 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
     start_time = time.time()
 
-    input_structure_file = params.input_structure_file
+    # Resolve a relative input path against CHEMGRAPH_LOG_DIR, matching how
+    # smiles_to_coordinate_file writes it. Without this, a tool that writes
+    # water.xyz into the session log dir and a later run_ase that reads
+    # "water.xyz" from cwd disagree -> FileNotFoundError.
+    input_structure_file = _resolve_existing_path(params.input_structure_file)
     output_results_file = _resolve_path(params.output_results_file)
     optimizer = params.optimizer
     fmax = params.fmax
@@ -336,7 +415,11 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     pressure = params.pressure
 
     # ---- input validation ----
+    logger.info("driver=%s, input=%s, output=%s, optimizer=%s, fmax=%s, steps=%s",
+                driver, input_structure_file, output_results_file, optimizer, fmax, steps)
+
     if not os.path.isfile(input_structure_file):
+        logger.error("Input file not found: %s", input_structure_file)
         return {
             "status": "failure",
             "error_type": "FileNotFoundError",
@@ -344,15 +427,27 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         }
 
     if not output_results_file.endswith(".json"):
+        logger.error("Invalid output file extension: %s", output_results_file)
         return {
             "status": "failure",
             "error_type": "ValueError",
             "message": f"Output results file must end with '.json', got: {params.output_results_file}",
         }
 
+    # Make sure the destination directory exists before the simulation runs;
+    # otherwise the trailing ``open(output_results_file, "w")`` fails with
+    # FileNotFoundError after the calculation has already burned its
+    # compute time. Callers (LLM agents, scripts) routinely point at a
+    # not-yet-created subdirectory of a shared run dir, so create it now.
+    output_parent = os.path.dirname(os.path.abspath(output_results_file))
+    if output_parent:
+        os.makedirs(output_parent, exist_ok=True)
+
+    logger.info("Loading calculator: %s", calculator)
     calc, system_info, calc_model = load_calculator(calculator)
 
     if calc is None:
+        logger.error("Unsupported calculator: %s", calculator)
         return {
             "status": "failure",
             "error_type": "ValueError",
@@ -361,16 +456,19 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 "MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
             ),
         }
+    logger.info("Calculator loaded successfully: %s", type(calc).__name__)
 
     try:
         atoms = read(input_structure_file)
     except Exception as e:
+        logger.error("Failed to read input structure: %s", e)
         return {
             "status": "failure",
             "error_type": type(e).__name__,
             "message": f"Cannot read {input_structure_file} using ASE. Exception from ASE: {e}",
         }
 
+    logger.info("Read %d atoms from %s", len(atoms), input_structure_file)
     atoms.info.update(system_info)
     atoms.calc = calc
 
@@ -378,7 +476,9 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     # Driver: energy / dipole  (single-point, no optimization)
     # ------------------------------------------------------------------
     if driver in ("energy", "dipole"):
+        logger.info("Running single-point %s calculation", driver)
         energy = atoms.get_potential_energy()
+        logger.info("Single-point energy: %s eV", energy)
         final_structure = atoms_to_atomsdata(atoms)
 
         dipole: List[Optional[float]] = [None, None, None]
@@ -403,6 +503,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         )
         with open(output_results_file, "w", encoding="utf-8") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
+        logger.info("Results saved to %s (wall_time=%.2fs)", output_results_file, wall_time)
 
         if driver == "energy":
             return {
@@ -434,13 +535,16 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         if optimizer_class is None:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
 
+        logger.info("Running optimization with %s (fmax=%s, steps=%s)", optimizer, fmax, steps)
         if len(atoms) > 1:
             dyn = optimizer_class(atoms)
             converged = dyn.run(fmax=fmax, steps=steps)
         else:
             converged = True
+        logger.info("Optimization converged=%s", converged)
 
         single_point_energy = float(atoms.get_potential_energy())
+        logger.info("Post-optimization energy: %s eV", single_point_energy)
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=atoms.positions,
@@ -455,6 +559,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         # Vibrational / thermo / IR analysis
         # --------------------------------------------------------------
         if driver in {"vib", "thermo", "ir"}:
+            logger.info("Starting vibrational analysis (driver=%s)", driver)
             from ase.vibrations import Vibrations
             from ase import units
 
@@ -470,6 +575,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 vib = Vibrations(atoms, name=vib_name)
                 vib.clean()
                 vib.run()
+                logger.info("Vibrational analysis complete")
 
                 vib_data = {
                     "energies": [],
@@ -516,6 +622,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
                 # ---- IR ----
                 if driver == "ir":
+                    logger.info("Running IR calculation")
                     from ase.vibrations import Infrared
                     import matplotlib
 
@@ -547,6 +654,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     fig.savefig(ir_plot_path, format="png", dpi=300)
                     plt.close(fig)
 
+                    logger.info("IR spectrum plot saved to %s", ir_plot_path)
                     ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
                     ir_data["Normal mode data"] = (
                         f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
@@ -554,6 +662,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
                 # ---- Thermochemistry ----
                 if driver == "thermo":
+                    logger.info("Computing thermochemistry (T=%s K, P=%s Pa)", temperature, pressure)
                     if len(atoms) == 1:
                         thermo_data = {
                             "enthalpy": single_point_energy,
@@ -604,6 +713,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         # ---- serialise full output ----
         end_time = time.time()
         wall_time = end_time - start_time
+        logger.info("Simulation finished (driver=%s, wall_time=%.2fs, converged=%s)", driver, wall_time, converged)
 
         simulation_output = ASEOutputSchema(
             input_structure_file=input_structure_file,
@@ -660,6 +770,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             }
 
     except Exception as e:
+        logger.exception("run_ase_core failed with %s: %s", type(e).__name__, e)
         return {
             "status": "failure",
             "error_type": type(e).__name__,
@@ -692,6 +803,9 @@ def extract_output_json_core(json_file: str) -> dict:
     json.JSONDecodeError
         If the file is not valid JSON.
     """
+    # run_ase writes its result JSON via _resolve_path (into CHEMGRAPH_LOG_DIR),
+    # so a bare relative name passed here must resolve to the same place.
+    json_file = _resolve_existing_path(json_file)
     with open(json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data

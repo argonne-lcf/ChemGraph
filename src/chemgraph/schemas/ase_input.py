@@ -142,6 +142,56 @@ def get_default_calculator_name() -> str:
     return default_calculator.__name__
 
 
+def _coerce_calculator_payload(data: Any) -> Any:
+    """Coerce a ``calculator`` payload into an available calculator model.
+
+    Shared by :class:`ASEInputSchema` and :class:`ase_input_schema_ensemble`.
+    Accepts a ``{"calculator_type": ..., ...}`` dict (instantiating the
+    matching model) or a pre-built calculator instance, validating in both
+    cases that the calculator is installed/available in this environment.
+    """
+    if not isinstance(data, dict):
+        return data
+
+    calc = data.get("calculator")
+    if calc is None:
+        calc = default_calculator()
+        data["calculator"] = calc
+
+    available_calcs = {
+        _calculator_key(c.__name__.removesuffix("Calc")): c
+        for c in available_calculator_classes
+    }
+    available_calc_names = [c.__name__ for c in available_calculator_classes]
+
+    if isinstance(calc, dict):
+        calc_name = calc.get("calculator_type")
+        if not calc_name:
+            raise ValueError("Calculator dictionary must have a 'calculator_type' key.")
+
+        calc_key = _calculator_key(calc_name)
+        if calc_key not in available_calcs:
+            raise ValueError(
+                f"Calculator {calc_name} is not an allowed or available calculator. "
+                f"Available calculators are: {available_calc_names}"
+            )
+
+        init_args = calc.copy()
+        init_args.pop("calculator_type", None)
+        data["calculator"] = available_calcs[calc_key](**init_args)
+        return data
+
+    elif hasattr(calc, "__class__"):
+        calc_type_name = calc.__class__.__name__
+        calc_key = _calculator_key(calc_type_name.removesuffix("Calc"))
+        if calc_key not in available_calcs:
+            raise ValueError(
+                f"Calculator {calc_type_name} is not an allowed or available calculator. "
+                f"Available calculators are: {available_calc_names}"
+            )
+    return data
+
+
 def get_calculator_selection_context() -> str:
     """Return prompt text describing available calculators and default choice."""
     return (
@@ -244,46 +294,70 @@ class ASEInputSchema(BaseModel):
         Any
             Payload with calculator converted to an available calculator model.
         """
-        if not isinstance(data, dict):
-            return data
+        return _coerce_calculator_payload(data)
 
-        calc = data.get("calculator")
-        if calc is None:
-            calc = default_calculator()
-            data["calculator"] = calc
 
-        available_calcs = {
-            _calculator_key(c.__name__.removesuffix("Calc")): c
-            for c in available_calculator_classes
-        }
-        available_calc_names = [c.__name__ for c in available_calculator_classes]
+class ase_input_schema_ensemble(BaseModel):
+    """Schema for running ASE calculations over a directory of structures.
 
-        if isinstance(calc, dict):
-            calc_name = calc.get("calculator_type")
-            if not calc_name:
-                raise ValueError("Calculator dictionary must have a 'calculator_type' key.")
+    Mirrors :class:`ASEInputSchema` for the per-structure parameters but
+    takes a directory (local or pre-staged remote) instead of a single
+    file, so one tool call fans out to every structure in the directory.
+    The ``calculator`` selection applies to every structure in the batch.
+    """
 
-            calc_key = _calculator_key(calc_name)
-            if calc_key not in available_calcs:
-                raise ValueError(
-                    f"Calculator {calc_name} is not an allowed or available calculator. "
-                    f"Available calculators are: {available_calc_names}"
-                )
+    input_structure_directory: str = Field(
+        default="",
+        description="Path to a local folder of input structures. Required unless remote_structure_directory is provided.",
+    )
+    remote_structure_directory: str | None = Field(
+        default=None,
+        description=(
+            "Path to pre-staged structure files on the remote HPC filesystem. "
+            "When provided, workers read structures directly from this path "
+            "instead of using inline structure embedding. Use the "
+            "transfer_files tool to stage files first, then pass the "
+            "remote directory here."
+        ),
+    )
+    output_results_file: str = Field(
+        default="output.json",
+        description="Path to a JSON file where simulation results will be saved.",
+    )
+    driver: str = Field(
+        default=None,
+        description="Specifies the type of simulation to run. Options: 'energy' for electronic energy calculations, 'dipole' for dipole moment calculation, 'opt' for geometry optimization, 'vib' for vibrational frequency analysis, 'ir' for calculating infrared spectrum, and 'thermo' for thermochemical properties (including enthalpy, entropy, and Gibbs free energy). Use 'thermo' when the query involves enthalpy, entropy, or Gibbs free energy calculations.",
+    )
+    optimizer: str = Field(
+        default="bfgs",
+        description="The optimization algorithm used for geometry optimization. Options are 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'",
+    )
+    calculator: CalculatorUnion = Field(
+        default_factory=default_calculator,
+        description=f"The ASE calculator to be used. Support {_calculator_names}. Use {default_calculator.__name__} if not specified.",
+    )
+    fmax: float = Field(
+        default=0.01,
+        description="The convergence criterion for forces (in eV/Å). Optimization stops when all force components are smaller than this value.",
+    )
+    steps: int = Field(
+        default=1000,
+        description="Maximum number of optimization steps. Internally 'vib', 'thermo' and 'ir' run geometry optimization before performing their respective calculations.",
+    )
+    temperature: Optional[float] = Field(
+        default=None,
+        description="Temperature for thermochemistry calculations in Kelvin (K).",
+    )
+    pressure: float = Field(
+        default=101325.0,
+        description="Pressure for thermochemistry calculations in Pascal (Pa).",
+    )
 
-            init_args = calc.copy()
-            init_args.pop("calculator_type", None)
-            data["calculator"] = available_calcs[calc_key](**init_args)
-            return data
-
-        elif hasattr(calc, "__class__"):
-            calc_type_name = calc.__class__.__name__
-            calc_key = _calculator_key(calc_type_name.removesuffix("Calc"))
-            if calc_key not in available_calcs:
-                raise ValueError(
-                    f"Calculator {calc_type_name} is not an allowed or available calculator. "
-                    f"Available calculators are: {available_calc_names}"
-                )
-        return data
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_calculator_type(cls, data: Any):
+        """Coerce/validate the calculator payload (shared with ASEInputSchema)."""
+        return _coerce_calculator_payload(data)
 
 
 class ASEOutputSchema(BaseModel):
