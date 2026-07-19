@@ -1306,6 +1306,15 @@ discussions on AIOps.
 </details>
 
 <details>
+  <summary><strong>Contributing</strong></summary>
+Contributions are welcome! ChemGraph uses a trunk-based workflow: `main` is
+always releasable, and changes land in small, frequent pull requests from
+short-lived branches (there is no long-lived `dev` branch). Before opening a PR,
+run `ruff check .` and `pytest tests/ -k "not tblite"`. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
+</details>
+
+<details>
   <summary><strong>License</strong></summary>
 This project is licensed under the Apache 2.0 License.
 </details>
