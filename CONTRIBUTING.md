@@ -50,6 +50,25 @@ Small PRs get reviewed faster, are safer to merge, and are easier to revert.
   can merge safely behind tests instead of waiting on one giant branch.
 - Keep unrelated changes (refactors, formatting, renames) in separate PRs.
 
+## Using AI assistants
+
+AI coding assistants (Claude Code, Cursor, Copilot, etc.) are welcome, and this
+repo ships an [`AGENTS.md`](AGENTS.md) with repo-specific commands and
+conventions for them. If you use one, please:
+
+- **You are responsible for the code you submit.** Review and understand every
+  AI-generated line as if you wrote it — the same review bar applies.
+- **Make sure it actually works:** run `ruff check .` and the test suite, and
+  add tests for new behavior. Don't submit unverified generated code.
+- **Never paste secrets or non-public data** (API keys, tokens, credentials,
+  unpublished research) into a prompt.
+- **Watch licensing and attribution** — don't submit code the assistant may have
+  reproduced from an incompatible license.
+- Keep AI-assisted PRs **small and focused**, like any other PR. Large,
+  loosely-reviewed generated diffs are the main risk we want to avoid.
+- A brief note in the PR that AI assistance was used is appreciated (not
+  required).
+
 ## Development setup
 
 ```bash

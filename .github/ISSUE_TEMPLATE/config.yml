@@ -1,8 +1,0 @@
-blank_issues_enabled: true
-contact_links:
-  - name: Contributing guide
-    url: https://github.com/argonne-lcf/ChemGraph/blob/main/CONTRIBUTING.md
-    about: How to set up a dev environment, branch, and open a pull request.
-  - name: Question / usage help
-    url: https://github.com/argonne-lcf/ChemGraph/issues
-    about: For usage questions, please search existing issues before opening a new one.
