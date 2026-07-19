@@ -120,5 +120,6 @@ privately to the maintainers rather than filed as public issues.
 
 ## Code of conduct
 
-Be respectful and constructive. We want ChemGraph to be a welcoming project for
-contributors from many backgrounds.
+This project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By
+participating, you are expected to uphold it. Please report unacceptable
+behavior to the contact listed there.
