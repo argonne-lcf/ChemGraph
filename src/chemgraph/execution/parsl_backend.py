@@ -4,7 +4,7 @@ Wraps `Parsl <https://parsl-project.org/>`_ to conform to the
 :class:`ExecutionBackend` interface.  Python tasks are dispatched via
 ``@python_app`` and shell tasks via ``@bash_app``.
 
-Parsl must be installed separately (``pip install chemgraphagent[parsl]``).
+Parsl must be installed separately (``pip install chemgraph[parsl]``).
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ class ParslBackend(ExecutionBackend):
         except ImportError as exc:
             raise ImportError(
                 "Parsl is required for the ParslBackend. "
-                "Install it with: pip install chemgraphagent[parsl]"
+                "Install it with: pip install chemgraph[parsl]"
             ) from exc
 
         from chemgraph.hpc_configs.loader import load_parsl_config

@@ -12,7 +12,7 @@ automatically provisions and manages batch jobs as tasks arrive.
 
 **Prerequisites**
 
-1. Install the SDK: ``pip install chemgraphagent[globus_compute]``
+1. Install the SDK: ``pip install chemgraph[globus_compute]``
 2. On the HPC system, configure and start an endpoint::
 
        globus-compute-endpoint configure chemgraph-polaris
@@ -70,7 +70,7 @@ class GlobusComputeBackend(ExecutionBackend):
         except ImportError as exc:
             raise ImportError(
                 "globus-compute-sdk is required for the GlobusComputeBackend. "
-                "Install it with: pip install chemgraphagent[globus_compute]"
+                "Install it with: pip install chemgraph[globus_compute]"
             ) from exc
 
         endpoint_id = kwargs.get("endpoint_id")

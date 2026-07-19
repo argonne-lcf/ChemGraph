@@ -6,7 +6,7 @@ cluster-mode API (``EnsembleLauncher.start()`` + ``ClusterClient``) so
 that tasks can be submitted dynamically.
 
 EnsembleLauncher must be installed separately
-(``pip install chemgraphagent[ensemble_launcher]``).
+(``pip install chemgraph[ensemble_launcher]``).
 """
 
 from __future__ import annotations
