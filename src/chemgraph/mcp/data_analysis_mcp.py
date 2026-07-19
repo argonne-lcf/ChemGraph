@@ -112,11 +112,18 @@ def aggregate_simulation_results(
     str
         Human-readable success or error message.
     """
+    from chemgraph.tools.ase_core import _resolve_existing_path
+
     all_data = []
 
     for file_path in file_paths:
         if not file_path or not isinstance(file_path, str):
             continue
+
+        # A small model may pass a bare name for a result file a sibling tool
+        # wrote into CHEMGRAPH_LOG_DIR. Resolve it against the log dir; an
+        # absolute or cwd-relative path is returned unchanged.
+        file_path = _resolve_existing_path(file_path)
 
         try:
             with open(file_path, 'r', encoding='utf-8') as f:

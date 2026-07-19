@@ -70,6 +70,41 @@ def _resolve_path(path: str) -> str:
     return path
 
 
+def _resolve_existing_path(path: str) -> str:
+    """Resolve a path to read that a sibling tool may have written to the log dir.
+
+    Tools that *write* files (``smiles_to_coordinate_file``, ``run_ase``'s
+    result JSON, ``save_atomsdata_to_file`` ...) send relative paths through
+    :func:`_resolve_path`, so a bare ``"water.xyz"`` lands in
+    ``CHEMGRAPH_LOG_DIR`` rather than the caller's cwd. A tool that later
+    *reads* that bare name must look in the same place, otherwise it raises
+    ``FileNotFoundError`` even though the file exists.
+
+    This helper returns ``path`` unchanged when it already points at an
+    existing file (absolute paths and genuine cwd-relative paths keep working);
+    only when the raw path is missing does it fall back to the
+    ``CHEMGRAPH_LOG_DIR``-resolved location. The raw path is returned when
+    neither exists, so callers still surface a meaningful "not found" error.
+
+    Parameters
+    ----------
+    path : str
+        Absolute or relative file path to read.
+
+    Returns
+    -------
+    str
+        The raw path if it exists, else the log-dir-resolved path if that
+        exists, else the raw path unchanged.
+    """
+    if os.path.isfile(path):
+        return path
+    resolved = _resolve_path(path)
+    if resolved != path and os.path.isfile(resolved):
+        return resolved
+    return path
+
+
 # ---------------------------------------------------------------------------
 # AtomsData <-> ASE Atoms conversions
 # ---------------------------------------------------------------------------
@@ -366,7 +401,11 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
     start_time = time.time()
 
-    input_structure_file = params.input_structure_file
+    # Resolve a relative input path against CHEMGRAPH_LOG_DIR, matching how
+    # smiles_to_coordinate_file writes it. Without this, a tool that writes
+    # water.xyz into the session log dir and a later run_ase that reads
+    # "water.xyz" from cwd disagree -> FileNotFoundError.
+    input_structure_file = _resolve_existing_path(params.input_structure_file)
     output_results_file = _resolve_path(params.output_results_file)
     optimizer = params.optimizer
     fmax = params.fmax
@@ -764,6 +803,9 @@ def extract_output_json_core(json_file: str) -> dict:
     json.JSONDecodeError
         If the file is not valid JSON.
     """
+    # run_ase writes its result JSON via _resolve_path (into CHEMGRAPH_LOG_DIR),
+    # so a bare relative name passed here must resolve to the same place.
+    json_file = _resolve_existing_path(json_file)
     with open(json_file, "r", encoding="utf-8") as f:
         data = json.load(f)
     return data

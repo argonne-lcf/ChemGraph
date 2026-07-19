@@ -36,6 +36,15 @@ def inspect_json(
 ) -> dict[str, Any]:
     """Inspect JSON artifacts without assuming one fixed output-file layout."""
     target = Path(path).expanduser()
+    # A small model may pass a bare name for a JSON file a sibling tool wrote
+    # into CHEMGRAPH_LOG_DIR. If the raw path is not a file, resolve it against
+    # the log dir before falling back to the directory / nearby-files logic.
+    if not target.is_file():
+        from chemgraph.tools.ase_core import _resolve_existing_path
+
+        resolved = Path(_resolve_existing_path(str(target))).expanduser()
+        if resolved.is_file():
+            target = resolved
     if target.is_file():
         return {
             "status": "ok",

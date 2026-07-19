@@ -78,11 +78,20 @@ def resolve_structure_files(
     ValueError
         If no files are found or if listed files do not exist.
     """
+    # A bare relative filename (e.g. "water.cif") from a small model refers to
+    # a file a sibling tool wrote into CHEMGRAPH_LOG_DIR, not the cwd. Resolve
+    # each listed name against the log dir before checking existence so those
+    # inputs still resolve; absolute/cwd paths are returned unchanged. The
+    # directory branch is intentionally left untouched: writer tools emit
+    # files (not directories) into the log dir, so there is no sibling-written
+    # directory to fall back to.
+    from chemgraph.tools.ase_core import _resolve_existing_path
+
     structure_files: list[Path] = []
     output_dir: Path = Path.cwd()
 
     if isinstance(input_source, list):
-        structure_files = [Path(p) for p in input_source]
+        structure_files = [Path(_resolve_existing_path(str(p))) for p in input_source]
         missing = [p for p in structure_files if not p.exists()]
         if missing:
             raise ValueError(f"The following input files are missing: {missing}")

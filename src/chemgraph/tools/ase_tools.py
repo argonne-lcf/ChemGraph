@@ -15,6 +15,7 @@ from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema
 from chemgraph.tools.ase_core import (
     _resolve_path,
+    _resolve_existing_path,
     atoms_to_atomsdata,
     extract_output_json_core,
     run_ase_core,
@@ -63,6 +64,9 @@ def file_to_atomsdata(fname: str) -> AtomsData:
     """
     from ase.io import read
 
+    # A coordinate file written by smiles_to_coordinate_file/save_atomsdata_to_file
+    # via _resolve_path lands in CHEMGRAPH_LOG_DIR; resolve a bare name to match.
+    fname = _resolve_existing_path(fname)
     try:
         atoms = read(fname)
         return atoms_to_atomsdata(atoms)

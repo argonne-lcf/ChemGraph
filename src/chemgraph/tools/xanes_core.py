@@ -238,7 +238,11 @@ def run_xanes_core(params: xanes_input_schema) -> dict:
             "Set it to the path of the FDMNES executable."
         )
 
-    input_path = Path(params.input_structure_file).resolve()
+    # Resolve a bare relative name against CHEMGRAPH_LOG_DIR (where a sibling
+    # tool wrote the file) before falling back to a cwd-relative absolute path.
+    from chemgraph.tools.ase_core import _resolve_existing_path
+
+    input_path = Path(_resolve_existing_path(params.input_structure_file)).resolve()
     if not input_path.exists():
         raise FileNotFoundError(f"Input structure file not found: {input_path}")
 

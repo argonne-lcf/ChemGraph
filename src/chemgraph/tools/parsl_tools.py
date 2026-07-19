@@ -13,7 +13,7 @@ from chemgraph.schemas.mace_parsl_schema import (
     mace_input_schema,
     mace_output_schema,
 )
-from chemgraph.tools.ase_core import run_ase_core
+from chemgraph.tools.ase_core import run_ase_core, _resolve_existing_path
 
 # Re-export schemas so existing ``from chemgraph.tools.parsl_tools import …``
 # statements continue to work.
@@ -85,6 +85,8 @@ def extract_output_json(json_file: str) -> dict:
     """Load simulation results from a JSON file produced by run_ase."""
     import json
 
+    # Match run_ase's _resolve_path write location for bare relative names.
+    json_file = _resolve_existing_path(json_file)
     try:
         with open(json_file, "r") as f:
             ret = json.load(f)
