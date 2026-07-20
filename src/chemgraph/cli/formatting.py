@@ -214,18 +214,34 @@ def format_response(result: Any, verbose: bool = False) -> None:
     # Find the final AI response
     final_answer = ""
     for message in reversed(messages):
+        is_ai = False
+        raw_content = ""
         if hasattr(message, "content") and hasattr(message, "type"):
-            if message.type == "ai" and message.content.strip():
-                content = message.content.strip()
-                if not _is_atomic_json(content):
-                    final_answer = content
-                    break
+            raw_content = message.content
+            is_ai = (message.type == "ai")
         elif isinstance(message, dict):
-            if message.get("type") == "ai" and message.get("content", "").strip():
-                content = message["content"].strip()
-                if not _is_atomic_json(content):
-                    final_answer = content
-                    break
+            raw_content = message.get("content", "")
+            is_ai = (message.get("type") == "ai")
+            
+        if isinstance(raw_content, list):
+            text_parts = []
+            for item in raw_content:
+                if isinstance(item, str):
+                    text_parts.append(item)
+                elif isinstance(item, dict) and "text" in item:
+                    text_parts.append(item["text"])
+                elif isinstance(item, dict) and "image_url" in item:
+                    # Depending on structure, image_url might be a string or dict
+                    url = item["image_url"] if isinstance(item["image_url"], str) else item["image_url"].get("url", "")
+                    text_parts.append(f"![image]({url})")
+            content = "\n".join(text_parts).strip()
+        else:
+            content = str(raw_content).strip()
+
+        if is_ai and content:
+            if not _is_atomic_json(content):
+                final_answer = content
+                break
 
     if final_answer:
         console.print(
@@ -239,16 +255,26 @@ def format_response(result: Any, verbose: bool = False) -> None:
 
     # Check for structure data (valid JSON with atomic keys)
     for message in messages:
-        content = ""
+        raw_content = ""
         if hasattr(message, "content"):
-            content = message.content
+            raw_content = message.content
         elif isinstance(message, dict):
-            content = message.get("content", "")
+            raw_content = message.get("content", "")
 
-        if content and _is_atomic_json(content):
+        content_str = ""
+        if isinstance(raw_content, list):
+            for item in raw_content:
+                text = item if isinstance(item, str) else item.get("text", "") if isinstance(item, dict) else ""
+                if text and _is_atomic_json(text):
+                    content_str = text
+                    break
+        else:
+            content_str = str(raw_content)
+
+        if content_str and _is_atomic_json(content_str):
             console.print(
                 Panel(
-                    Syntax(content, "json", theme="monokai"),
+                    Syntax(content_str, "json", theme="monokai"),
                     title="Molecular Structure Data",
                     style="cyan",
                 )

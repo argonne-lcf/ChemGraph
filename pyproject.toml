@@ -37,7 +37,7 @@ dependencies = [
     "ase",
     "rdkit",
     "pymatgen",
-    "mace-torch",
+    "mace-torch",  # disabled for UMA-only CPU environment
     "globus_sdk",
     "streamlit==1.48.1",
     "stmol==0.0.9",
@@ -48,7 +48,6 @@ dependencies = [
     "mcp",
     "fastmcp",
     "pytest-asyncio",
-    "grandalf==0.8"
     ]
 
 [project.optional-dependencies]
@@ -89,7 +88,11 @@ rag = [
     "sentence-transformers>=2.2.2",
     "pymupdf>=1.24.0",
 ]
-
+phonon = [
+    "grandalf==0.8",
+    "phonopy>=2.33.0",
+    "seekpath>=2.2.1"
+]
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
 "Repository" = "https://github.com/argonne-lcf/ChemGraph"
