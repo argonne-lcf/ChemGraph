@@ -139,6 +139,7 @@ privately to the maintainers rather than filed as public issues.
 
 ## Code of conduct
 
-This project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By
+This project is governed by our [Code of Conduct](CODE_OF_CONDUCT.md) (the
+[Contributor Covenant](https://www.contributor-covenant.org) v2.1). By
 participating, you are expected to uphold it. Please report unacceptable
-behavior to the contact listed there.
+behavior as described there.
