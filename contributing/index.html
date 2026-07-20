@@ -9,10 +9,10 @@
       
       
       
-        <link rel="prev" href="../citation/">
+        <link rel="prev" href="../code_formatting_and_linting/">
       
       
-        <link rel="next" href="../license/">
+        <link rel="next" href="../citation/">
       
       
         
@@ -23,7 +23,7 @@
     
     
       
-        <title>Acknowledgements - ChemGraph Docs</title>
+        <title>Contributing - ChemGraph Docs</title>
       
     
     
@@ -75,6 +75,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#contributing" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -105,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Acknowledgements
+              Contributing
             
           </span>
         </div>
@@ -435,9 +440,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../contributing/" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -473,11 +480,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../acknowledgements/" class="md-tabs__link">
         
   
   
@@ -855,10 +860,19 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -874,6 +888,7 @@
   
 
       </a>
+      
     </li>
   
 
@@ -909,17 +924,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../acknowledgements/" class="md-nav__link">
         
   
   
@@ -935,7 +943,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -984,6 +991,8 @@
   
   
   
+    
+  
   
 </nav>
                   </div>
@@ -1003,19 +1012,25 @@
   
 
 
-  <h1>Acknowledgements</h1>
-
-<div class="admonition info">
-<p class="admonition-title">Info</p>
-<p>This research used resources of the Argonne Leadership Computing Facility, a U.S.
-Department of Energy (DOE) Office of Science user facility at Argonne National
-Laboratory and is based on research supported by the U.S. DOE Office of Science-
-Advanced Scientific Computing Research Program, under Contract No. DE-AC02-
-06CH11357. Our work leverages ALCF Inference Endpoints, which provide a robust API
-for LLM inference on ALCF HPC clusters via Globus Compute. We are thankful to Serkan
-Altuntaş for his contributions to the user interface of ChemGraph and for insightful
-discussions on AIOps.</p>
-</div>
+<h1 id="contributing">Contributing</h1>
+<p>ChemGraph uses a <strong>trunk-based</strong> workflow: <code>main</code> is always releasable, and work
+lands in <strong>small, frequent PRs</strong> from short-lived branches. There is no
+long-lived <code>dev</code> branch.</p>
+<p>At a glance:</p>
+<ul>
+<li>Branch off the latest <code>main</code> (<code>feature/…</code>, <code>fix/…</code>, <code>docs/…</code>, <code>chore/…</code>).</li>
+<li>Keep each PR to one logical change (roughly ≤ ~400 lines where practical);
+  split large features into incremental PRs.</li>
+<li>Before opening a PR, run <code>ruff check .</code> and <code>pytest tests/ -k "not tblite"</code>.</li>
+<li>A PR merges once <strong>CI is green</strong> and it has <strong>at least one approval</strong>; merges
+  use a merge commit and the branch is deleted afterward.</li>
+<li>Releases are cut from <code>main</code>: bump <code>version</code> in <code>pyproject.toml</code>, then publish
+  a <code>vX.Y.Z</code> GitHub Release (which triggers the PyPI publish workflow).</li>
+</ul>
+<p>The full guide, including development setup and the release process, lives in
+<a href="https://github.com/argonne-lcf/ChemGraph/blob/main/CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a>
+at the repository root. See also
+<a href="../code_formatting_and_linting/">Code Formatting &amp; Linting</a>.</p>
 
 
 
@@ -1045,7 +1060,7 @@ discussions on AIOps.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../citation/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Citation">
+          <a href="../code_formatting_and_linting/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Code Formatting &amp; Linting">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1055,20 +1070,20 @@ discussions on AIOps.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Citation
+                Code Formatting & Linting
               </div>
             </div>
           </a>
         
         
           
-          <a href="../license/" class="md-footer__link md-footer__link--next" aria-label="Next: License">
+          <a href="../citation/" class="md-footer__link md-footer__link--next" aria-label="Next: Citation">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                License
+                Citation
               </div>
             </div>
             <div class="md-footer__button md-icon">
