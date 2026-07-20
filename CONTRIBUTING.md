@@ -58,6 +58,10 @@ conventions for them. If you use one, please:
 
 - **You are responsible for the code you submit.** Review and understand every
   AI-generated line as if you wrote it — the same review bar applies.
+- **Keep generated changes simple and on-plan.** Review agent-generated code
+  carefully to ensure it follows the proposed plan, stays focused on the
+  intended change, and does not add unnecessary code or complexity that turns a
+  simple fix into a large, difficult-to-review contribution.
 - **Make sure it actually works:** run `ruff check .` and the test suite, and
   add tests for new behavior. Don't submit unverified generated code.
 - **Never paste secrets or non-public data** (API keys, tokens, credentials,
