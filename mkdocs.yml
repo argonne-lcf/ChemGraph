@@ -59,6 +59,7 @@ nav:
   - Running Local Models with vLLM: running_local_models.md
   - Docker Support: docker_support.md
   - Code Formatting & Linting: code_formatting_and_linting.md
+  - Contributing: contributing.md
   - Citation: citation.md
   - Acknowledgements: acknowledgements.md
   - License: license.md
