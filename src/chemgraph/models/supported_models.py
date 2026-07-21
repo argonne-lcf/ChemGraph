@@ -107,6 +107,7 @@ supported_argo_models = [
     "argo:gpt-5.1",
     "argo:gpt-5.2",
     "argo:gpt-5.4",
+    "argo:gpt-5.5",
     # Reasoning / o-series
     "argo:o1-preview",
     "argo:o1-mini",
@@ -118,6 +119,8 @@ supported_argo_models = [
     "argo:gemini-2.5-pro",
     "argo:gemini-2.5-flash",
     # Claude via Argo
+    "argo:claude-opus-4.8",
+    "argo:claude-opus-4.7",
     "argo:claude-opus-4.6",
     "argo:claude-opus-4.5",
     "argo:claude-opus-4.1",
