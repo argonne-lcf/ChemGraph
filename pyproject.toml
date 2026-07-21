@@ -104,14 +104,9 @@ where = ["src/"]
 
 [tool.setuptools.package-data]
 "chemgraph.eval" = ["data/*.json"]
-"chemgraph.academy.campaigns" = [
-    "mof-crux-aurora/*.json",
-    "mof-crux-aurora/*.jsonc",
-    "mof-crux-aurora/prompt_profiles/*.json",
-    "mof-crux-aurora-mock/*.jsonc",
-    "mof-crux-aurora-mock/prompt_profiles/*.json",
-]
-"chemgraph.academy.runtime.profiles" = ["*.json"]
+# Campaign specs and system profiles live under ``examples/`` in the
+# repo, not inside the package. See chemgraph.academy.campaigns and
+# chemgraph.academy.runtime.profiles for the resolvers.
 "chemgraph.academy.runtime.templates" = ["*"]
 "chemgraph.academy.dashboard" = ["static/*"]
 "ui" = ["assets/*.png"]

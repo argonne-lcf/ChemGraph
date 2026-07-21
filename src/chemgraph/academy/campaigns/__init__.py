@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 import os
-from importlib import resources
 from pathlib import Path
 
 # When set, resolve_campaign checks ``<root>/<name>/campaign.jsonc``
@@ -13,6 +12,12 @@ from pathlib import Path
 # it up. On the laptop the same var routes to
 # ``~/.chemgraph-academy/user-campaigns/``.
 USER_CAMPAIGNS_ROOT_ENV = 'CHEMGRAPH_USER_CAMPAIGNS_ROOT'
+
+# Points at the repo's ``examples/campaigns/`` directory. Set to
+# override the auto-detected repo location -- useful when the package
+# is pip-installed from a wheel (no repo checkout in the venv) and the
+# operator has the example files somewhere else.
+EXAMPLES_ROOT_ENV = 'CHEMGRAPH_EXAMPLES_ROOT'
 
 
 MOF_CRUX_AURORA = 'mof-crux-aurora'
@@ -26,6 +31,26 @@ CAMPAIGNS = {
 LM_CONFIG_TEMPLATES = {
     'argo-gpt5mini-federated-chat': f'{MOF_CRUX_AURORA}/lm_config.json',
 }
+
+
+def _examples_campaigns_root() -> Path:
+    """Return the directory that holds the shipped example campaigns.
+
+    Order of resolution:
+      1. ``$CHEMGRAPH_EXAMPLES_ROOT/campaigns`` if the env var is set.
+      2. ``<repo_root>/examples/campaigns`` walking up from this file.
+         Works both for editable installs (``pip install -e .``) and
+         directly running against a checkout.
+      3. Falls back to option 2's computed path even if it doesn't
+         exist -- the caller's file-not-found error is more useful than
+         a resolver-side one.
+    """
+    env_root = os.environ.get(EXAMPLES_ROOT_ENV)
+    if env_root:
+        return Path(env_root) / 'campaigns'
+    # This file is src/chemgraph/academy/campaigns/__init__.py.
+    # parents[4] == repo root (../../../../../).
+    return Path(__file__).resolve().parents[4] / 'examples' / 'campaigns'
 
 
 @dataclasses.dataclass(frozen=True)
@@ -62,7 +87,12 @@ def _resolve_campaign_asset(
     relative = known_assets.get(value)
     if relative is None:
         return path
-    return Path(str(resources.files(__package__).joinpath(relative)))
+    # ponytail: campaigns and lm-config templates now live under
+    # ``<repo>/examples/campaigns/`` instead of inside the package.
+    # Site-specific JSON belongs next to the docs it references, not
+    # bundled as importable resources. Env var override for wheel
+    # installs where no repo checkout is around.
+    return (_examples_campaigns_root() / relative).resolve()
 
 
 def resolve_campaign(path_or_name: str | Path) -> Path:
