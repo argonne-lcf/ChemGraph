@@ -237,6 +237,7 @@ def load_openai_model(
             f"Supported models are: {supported_openai_models}."
         )
 
+    is_argo_claude_model = model_name.startswith("argo:claude-")
     is_argo_endpoint = bool(base_url and "argoapi" in base_url)
     argo_user = (
         argo_user or os.getenv("ARGO_USER", "chemgraph")
@@ -258,6 +259,11 @@ def load_openai_model(
                 frequency_penalty=0.0,
                 presence_penalty=0.0,
             )
+            # Anthropic requires streaming for requests that may exceed its
+            # non-streaming duration limit. LangChain still aggregates the
+            # chunks into one response for callers using ``invoke``.
+            if is_argo_claude_model:
+                llm_kwargs["streaming"] = True
             # Argo gateways may require an explicit "user" field in payload.
             if is_argo_endpoint and argo_user:
                 llm_kwargs["model_kwargs"] = {"user": argo_user}
