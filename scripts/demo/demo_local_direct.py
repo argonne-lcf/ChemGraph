@@ -53,7 +53,8 @@ def main() -> None:
     args = parser.parse_args()
 
     abort_if_graspa_unsupported(args.workload, "local")
-    items = resolve_items(args.workload, molecules=args.molecules, cifs=args.graspa_cifs)
+    cifs = args.pacmof2_cifs if args.workload == "pacmof2" else args.graspa_cifs
+    items = resolve_items(args.workload, molecules=args.molecules, cifs=cifs)
 
     from chemgraph.execution.config import get_backend
 
@@ -69,6 +70,8 @@ def main() -> None:
             calculator=args.calculator,
             driver=args.driver,
             adsorbate=args.adsorbate,
+            model_name=args.model_name,
+            net_charge=args.net_charge,
             timeout=1200,
         )
     finally:

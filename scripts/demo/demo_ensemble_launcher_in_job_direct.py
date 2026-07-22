@@ -81,7 +81,8 @@ def main() -> None:
 
     from chemgraph.execution.config import get_backend
 
-    items = resolve_items(args.workload, molecules=args.molecules, cifs=args.graspa_cifs)
+    cifs = args.pacmof2_cifs if args.workload == "pacmof2" else args.graspa_cifs
+    items = resolve_items(args.workload, molecules=args.molecules, cifs=cifs)
 
     backend = get_backend(backend_name="ensemble_launcher", system=system)
     try:
@@ -95,6 +96,8 @@ def main() -> None:
             calculator=args.calculator,
             driver=args.driver,
             adsorbate=args.adsorbate,
+            model_name=args.model_name,
+            net_charge=args.net_charge,
             timeout=args.timeout,
             ppn=args.ppn,
         )
