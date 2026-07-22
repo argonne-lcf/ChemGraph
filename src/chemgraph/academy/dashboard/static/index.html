@@ -40,6 +40,15 @@
       grid-template-columns: minmax(620px, 1fr) 8px var(--detail-width);
       gap: 10px;
       padding: 14px;
+      /* Cap main at viewport minus header so the two columns can scroll
+         independently instead of the whole page scrolling as a unit. */
+      height: calc(100vh - 56px);
+      overflow: hidden;
+    }
+    main > div {
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 0;
     }
     .detail-resizer {
       cursor: col-resize;
@@ -565,7 +574,8 @@
     }
     .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     @media (max-width: 980px) {
-      main { grid-template-columns: 1fr; }
+      main { grid-template-columns: 1fr; height: auto; overflow: visible; }
+      main > div { overflow: visible; }
       .detail-resizer { display: none; }
       .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .workflow-floating-panel {
@@ -590,11 +600,144 @@
   <header>
     <h1>ChemGraph Academy Dashboard</h1>
     <div class="toolbar">
+      <!-- Federated runs populate sitesBadge with "aurora · crux"
+           plus per-site agent counts so it's visible at a glance
+           that the campaign spans multiple HPCs. Hidden in
+           single-site runs. -->
+      <span id="sitesBadge" class="muted" style="display:none"></span>
       <span id="updated" class="muted"></span>
       <button id="refresh">Refresh</button>
     </div>
   </header>
-  <main>
+  <!--
+    Launch panel: visible only when dashboard was started with
+    --enable-launch-buttons. Populated by app.js from /api/launch-config
+    on first paint; updates from /api/launch-status polling thereafter.
+    Operator gets per-site Launch buttons + a Bootstrap button + a
+    log tail of whatever the launcher subprocess is printing.
+  -->
+  <section id="launchPanel" style="display:none; padding:12px 20px; border-bottom:1px solid var(--line); background:#f0f4f8;">
+    <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <strong style="font-size:13px; letter-spacing:.03em; text-transform:uppercase; color:var(--muted);">Launch</strong>
+      <div id="launchSites" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+      <button id="launchAllBtn">Launch all</button>
+      <button id="qdelAllBtn" title="qdel all known PBS jobs for this run" style="margin-left:auto; background:#fee; border:1px solid #b42318; color:#b42318;">qdel jobs</button>
+      <span id="launchOverallStatus" style="font-size:12px; color:var(--muted);"></span>
+    </div>
+    <details id="launchLogDetails" style="margin-top:8px;">
+      <summary style="font-size:12px; cursor:pointer; color:var(--muted); display:flex; align-items:center; gap:8px;">
+        <span>launcher log</span>
+        <button id="launchLogCopyBtn" style="font-size:10px; padding:1px 6px;" onclick="event.preventDefault(); event.stopPropagation();">copy</button>
+      </summary>
+      <pre id="launchLog" style="font-size:11px; line-height:1.4; max-height:240px; overflow:auto; background:#0e1116; color:#cde6ff; padding:8px; border-radius:4px; margin:6px 0 0;"></pre>
+    </details>
+    <!--
+      Per-site PBS-log panel. Hidden until the operator clicks a
+      site's [pbs log] link, which fetches /api/site-log/<site> via
+      ssh-to-login-node + tail. The launcher's own log buffer above
+      only shows what the launcher printed to stderr; this panel
+      shows what spawn-site / mpiexec / the daemon wrote inside the
+      PBS job. The two together = full diagnostic picture.
+    -->
+    <div id="siteLogPanel" style="display:none; margin-top:8px; border:1px solid var(--line); border-radius:4px; background:#fff;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-bottom:1px solid var(--line); background:#f0f4f8;">
+        <span id="siteLogTitle" style="font-size:12px; color:var(--text); font-weight:600;"></span>
+        <div>
+          <button id="siteLogCopyBtn" style="font-size:11px; margin-right:4px;">copy</button>
+          <button onclick="document.getElementById('siteLogPanel').style.display='none'" style="font-size:11px;">close</button>
+        </div>
+      </div>
+      <pre id="siteLogBody" style="font-size:11px; line-height:1.4; max-height:480px; overflow:auto; background:#0e1116; color:#cde6ff; padding:8px; margin:0; white-space:pre-wrap; word-wrap:break-word;"></pre>
+    </div>
+  </section>
+  <!-- View switcher: Observability (existing runtime graph + timeline)
+       vs Canvas (author campaign: agents, edges, tools, placement). -->
+  <div id="viewTabs" style="display:flex; gap:0; padding:0 20px; border-bottom:1px solid var(--line); background:#fafbfc;">
+    <button class="viewTab active" data-view="observability" style="padding:8px 14px; border:none; background:none; border-bottom:2px solid #2563eb; font-size:13px; cursor:pointer;">Observability</button>
+    <button class="viewTab" data-view="canvas" style="padding:8px 14px; border:none; background:none; border-bottom:2px solid transparent; font-size:13px; cursor:pointer; color:var(--muted);">Canvas (author)</button>
+  </div>
+  <section id="canvasView" style="display:none; padding:14px 20px; background:#fbfcfd; min-height:70vh;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <label style="font-size:12px; color:var(--muted);">Campaign:</label>
+      <select id="canvasCampaignSel" style="font-size:12px; padding:3px 6px;"></select>
+      <button id="canvasNewBtn" style="font-size:12px;">New...</button>
+      <span id="canvasIsUserCopy" style="font-size:11px; color:var(--muted);"></span>
+      <button id="canvasLaunchSettingsBtn" style="font-size:12px; margin-left:16px;" title="Edit launcher argv and per-site PBS scripts">Launch settings...</button>
+      <span id="canvasSaveStatus" style="font-size:11px; color:var(--muted); margin-left:auto;"></span>
+    </div>
+    <!-- Launch settings modal: shows what the next Launch would fire
+         (read-only) alongside editable overrides. Autosaves per-
+         campaign to launch_defaults on every edit. Refresh button
+         re-runs the /api/launch-preview dry-run against the current
+         canvas placement so the read-only side stays in sync. -->
+    <div id="canvasLaunchSettingsModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.45); z-index:50; align-items:center; justify-content:center;">
+      <div style="background:#fff; border-radius:8px; width:min(1100px, 96vw); max-height:92vh; overflow:auto; padding:18px 22px; box-shadow:0 20px 40px rgba(15,23,42,0.25);">
+        <div style="display:flex; align-items:center; margin-bottom:10px;">
+          <strong style="font-size:14px;">Launch settings</strong>
+          <span id="canvasLaunchSettingsHint" style="font-size:11px; color:var(--muted); margin-left:12px;"></span>
+          <button id="canvasLaunchSettingsRefresh" style="font-size:11px; margin-left:auto;" title="Re-run dry-run against current canvas placement">Refresh preview</button>
+          <button id="canvasLaunchSettingsClose" style="font-size:12px; margin-left:8px;">Close</button>
+        </div>
+        <div style="font-size:11px; color:var(--muted); margin-bottom:12px;">
+          Each site has its own PBS script — the bash file the dashboard <code>qsub</code>s on the login node. Edit walltime, queue, module loads, whatever. Diff-based save: if your edit matches the built-in default, nothing is persisted; canvas placement / profile changes keep flowing through.
+        </div>
+        <!-- Hidden shells kept so canvas.js can still populate them
+             without changing shape. The launcher-command section is
+             retired from the UI (it was inventing complexity that
+             99% of users never needed); operators who genuinely need
+             extra launcher flags can set launch_defaults.extra_launcher_argv
+             in the campaign JSON directly. -->
+        <textarea id="edLaunchArgvPreview" style="display:none;"></textarea>
+        <input id="edLaunchExtraArgv" style="display:none;"/>
+        <a href="#" id="edLaunchFlagsHelp" style="display:none;"></a>
+        <section>
+          <div style="font-size:12px; font-weight:600; margin-bottom:4px;">
+            Per-site PBS scripts
+            <span style="font-size:11px; font-weight:normal; color:var(--muted);">
+              — the bash file that gets qsub'd on each HPC
+            </span>
+          </div>
+          <div style="font-size:11px; color:var(--muted); margin-bottom:8px;">
+            One per site. Each block shows the exact PBS script the dashboard would qsub. Edit walltime, add <code>module load</code>, change the spawn-site line, whatever. If you leave it identical to the built-in default (left side), nothing gets saved. Save behavior is diff-based so canvas changes still flow through until you actually edit.
+            <a href="#" id="edLaunchVarsHelp">supported ${'$'}{'{'}VARS{'}'}</a>
+          </div>
+          <div id="edLaunchPerSite"></div>
+        </section>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns: 220px 1fr 300px; gap:12px;">
+      <!-- Left: agent list + add -->
+      <div style="border:1px solid var(--line); border-radius:6px; background:#fff; padding:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <strong style="font-size:12px; color:var(--muted); text-transform:uppercase;">Agents</strong>
+          <button id="canvasAddAgentBtn" style="font-size:11px;">+ add</button>
+        </div>
+        <ul id="canvasAgentList" style="list-style:none; padding:0; margin:0; font-size:12px;"></ul>
+      </div>
+      <!-- Middle: SVG canvas above, palette drawer below (both scroll with the column). -->
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="border:1px solid var(--line); border-radius:6px; background:#fff; overflow:auto; flex:1; min-height:50vh;">
+          <svg id="canvasSvg" style="width:100%; height:55vh; display:block; user-select:none; -webkit-user-select:none;" viewBox="0 0 900 500" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <!-- Bottom drawer: MCP servers + tool checklist. Always visible
+             while the operator is working on the canvas above; drag path
+             is a short vertical stroke onto any agent node. -->
+        <div id="canvasPaletteDrawer" style="border:1px solid var(--line); border-radius:6px; background:#fff; padding:8px 10px; max-height:32vh; overflow:auto;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+            <strong style="font-size:12px; color:var(--muted); text-transform:uppercase;">Tools</strong>
+            <button id="canvasAddMcpBtn" style="font-size:11px;">+ Add MCP server</button>
+            <span id="canvasPaletteHint" style="font-size:11px; color:var(--muted);"></span>
+          </div>
+          <div id="canvasToolPalette" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;"></div>
+        </div>
+      </div>
+      <!-- Right: selected-agent editor (mission / inject / built-in actions legend). -->
+      <div id="canvasAgentEditor" style="border:1px solid var(--line); border-radius:6px; background:#fff; padding:10px; font-size:12px; align-self:start;">
+        <div class="muted" style="color:var(--muted);">Select an agent to edit.</div>
+      </div>
+    </div>
+  </section>
+  <main id="observabilityView">
     <div>
       <section>
         <div class="section-head">
@@ -603,6 +746,7 @@
         </div>
         <div class="content">
           <div class="grid" id="metrics"></div>
+          <div id="correlations" style="margin-top:10px;"></div>
         </div>
       </section>
       <section style="margin-top:14px">
@@ -698,6 +842,14 @@
       <div id="workflowPanelResize" class="workflow-panel-resize" title="Resize ChemGraph panel"></div>
     </div>
   </div>
-  <script src="/static/app.js"></script>
+  <!-- Load order matters: observability owns the top-level render
+       loop; canvas.js publishes window.__initCanvas which view_tabs
+       calls on first Canvas-tab click; launch.js has its own IIFE
+       polling /api/launch-status. Each file is a script-scoped
+       island (no top-level `let` collisions between files). -->
+  <script src="/static/observability.js"></script>
+  <script src="/static/canvas.js"></script>
+  <script src="/static/launch.js"></script>
+  <script src="/static/view_tabs.js"></script>
 </body>
 </html>

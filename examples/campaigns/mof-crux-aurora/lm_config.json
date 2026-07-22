@@ -1,7 +1,7 @@
 {
   "provider": "openai_compatible_tools",
   "base_url": "http://<uan-relay-host>:18186/argoapi/v1",
-  "model": "GPT-5.4",
+  "model": "argo:gpt-4.1-mini",
   "api_key": "dummy",
   "user": "<argo-user>",
   "timeout_s": 180,

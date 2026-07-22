@@ -1,0 +1,40 @@
+{
+  "name": "crux",
+  "remote_host": "${ALCF_SSH_USER}@crux.alcf.anl.gov",
+  "remote_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}",
+  "repo_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph",
+  "run_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/runs",
+  "relay_host_file": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/uan-relay-18187-crux.host",
+  "relay_port": 18187,
+  "venv_python": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/venvs/academy-swarm/bin/python",
+  "redis_bin_dir": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/tools/redis-crux/bin",
+  "redis_port": 6392,
+  "redis_bind": "0.0.0.0",
+  "redis_protected_mode": "no",
+  "mpiexec": "mpiexec",
+  "pythonpath_entries": [
+    "/eagle/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph-argonne/src"
+  ],
+  "path_entries": [
+    "/eagle/${ALCF_PROJECT}/${ALCF_USER}/tools/redis-crux/bin",
+    "/eagle/${ALCF_PROJECT}/${ALCF_USER}/bin"
+  ],
+  "env": {
+    "NUMEXPR_MAX_THREADS": "256",
+    "NUMEXPR_NUM_THREADS": "64",
+    "SETUPTOOLS_SCM_PRETEND_VERSION_FOR_ACADEMY_PY": "0.0.0+crux",
+    "http_proxy": "http://proxy.alcf.anl.gov:3128",
+    "https_proxy": "http://proxy.alcf.anl.gov:3128",
+    "HTTP_PROXY": "http://proxy.alcf.anl.gov:3128",
+    "HTTPS_PROXY": "http://proxy.alcf.anl.gov:3128"
+  },
+  "unset_env": [],
+  "no_proxy": "127.0.0.1,localhost,.alcf.anl.gov,*.alcf.anl.gov",
+  "submit_defaults": {
+    "queue": "workq-route",
+    "walltime": "01:00:00",
+    "nodes": 2,
+    "filesystems": "home:eagle",
+    "bundle_root_override": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph"
+  }
+}

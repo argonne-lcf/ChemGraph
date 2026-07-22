@@ -36,6 +36,10 @@ class SendMessageArgs(BaseModel):
     )
     reason: str = Field(min_length=1, max_length=600, description="Why this peer needs the message now.")
     confidence: float = Field(ge=0, le=1, description="Numeric confidence from 0 to 1.")
+    correlation_id: str | None = Field(
+        default=None,
+        description="Optional: propagate the correlation_id of the incoming message (workflow/reflex use this to keep replies on the same logical task).",
+    )
 
 
 class SubmitResultArgs(BaseModel):
@@ -111,6 +115,9 @@ async def build_chemgraph_reasoning_tools(
     get_round_index: Callable[[], int],
     set_final_result: SetFinalResultFn,
     trace: TraceFn,
+    received_message_history: list[dict[str, Any]] | None = None,
+    wake_event: asyncio.Event | None = None,
+    agent_state: dict[str, dict[str, Any]] | None = None,
 ) -> list[BaseTool]:
     """Build explicit tools for one ChemGraph-backed reasoning turn."""
 
@@ -124,6 +131,7 @@ async def build_chemgraph_reasoning_tools(
         reply_requested: bool,
         reason: str,
         confidence: float,
+        correlation_id: str | None = None,
     ) -> dict[str, Any]:
         if recipient not in peer_names:
             raise ValueError(
@@ -142,6 +150,7 @@ async def build_chemgraph_reasoning_tools(
             reply_requested=reply_requested,
             reason=reason,
             confidence=confidence,
+            correlation_id=correlation_id,
         )
         outbox.append(message)
         append_jsonl(run_dir / "messages.jsonl", message)
@@ -210,6 +219,12 @@ async def build_chemgraph_reasoning_tools(
                 peer_names,
                 trace,
             )
+        # Auto-inherit correlation from the last received message when
+        # the caller didn't specify one. Keeps replies on the same
+        # logical thread without every LLM prompt having to remember.
+        effective_corr = args.correlation_id
+        if effective_corr is None and received_message_history:
+            effective_corr = received_message_history[-1].get("correlation_id")
         return await _send_message_impl(
             recipient=args.recipient,
             tldr=args.tldr,
@@ -219,6 +234,7 @@ async def build_chemgraph_reasoning_tools(
             reply_requested=args.reply_requested,
             reason=args.reason,
             confidence=args.confidence,
+            correlation_id=effective_corr,
         )
 
     async def submit_result(**kwargs: Any) -> dict[str, Any]:
