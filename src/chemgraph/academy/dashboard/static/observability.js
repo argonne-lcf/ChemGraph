@@ -88,6 +88,85 @@
       const statusData = await statusRes.json();
       const eventsData = await eventsRes.json();
       const nextSnapshot = {...statusData, events: eventsData.events || []};
+      // Federated detection: server-side B.4c.2 wraps per-site state
+      // under ``sites: {<name>: {status, placement, summary, updated, schema}}``
+      // for multi-site runs and tags every event with ``site``. Build
+      // a flat agent->site index so renderers can ask "which site does
+      // this agent live on?" without re-walking sites every time.
+      nextSnapshot.federated = !!(nextSnapshot.sites && Object.keys(nextSnapshot.sites).length);
+      nextSnapshot.siteNames = nextSnapshot.federated
+        ? Object.keys(nextSnapshot.sites).sort()
+        : [];
+      nextSnapshot.sitesByAgent = {};
+      // Per-launch placement, seeded from window.__lastLaunchPlacement
+      // which the canvas sets when POST /api/launch fires. Without a
+      // launch yet, agent->site mapping falls through to the per-event
+      // ``site`` backfill below.
+      if (window.__lastLaunchPlacement) {
+        for (const [siteName, agentList] of Object.entries(window.__lastLaunchPlacement)) {
+          (agentList || []).forEach(a => { nextSnapshot.sitesByAgent[a] = siteName; });
+        }
+      }
+      if (nextSnapshot.federated) {
+        // Merge per-site status/placement/summary up to the top level so
+        // the rest of the app (agents(), renderMetrics(), workflow code)
+        // can read snapshot.status / snapshot.placement exactly like in
+        // single-site mode. Without this merge `snapshot.status?.agents`
+        // is undefined in federated runs and the entire graph + metrics
+        // panel renders empty even though events stream in.
+        const mergedAgents = [];
+        const mergedPlacements = {};
+        const seenAgentIds = new Set();
+        let mergedSchema = null;
+        const mergedStatusExtras = {};
+        for (const [siteName, siteData] of Object.entries(nextSnapshot.sites)) {
+          const agents = (siteData?.status?.agents) || [];
+          agents.forEach(spec => {
+            const agentId = spec.agent_id || spec.agent_name || spec.name;
+            if (agentId && !seenAgentIds.has(agentId)) {
+              seenAgentIds.add(agentId);
+              mergedAgents.push({...spec, site: siteName});
+            }
+          });
+          // Note: not using siteData.local_agents because /eagle is
+          // mounted on every ALCF site, so the per-site rsync mirrors
+          // of agent_status/ end up identical. The launch-cfg mapping
+          // above is the authoritative source.
+          const placements = (siteData?.placement?.agents) || {};
+          Object.entries(placements).forEach(([agentId, placement]) => {
+            if (!(agentId in mergedPlacements)) {
+              mergedPlacements[agentId] = placement;
+            }
+          });
+          // Carry a representative schema + common status scalars so
+          // isWorkflowMode() and "campaign / mode" lookups behave the
+          // same as single-site. Last-write-wins is fine here -- all
+          // sites in a federated run share the same campaign/mode.
+          if (siteData?.schema) mergedSchema = siteData.schema;
+          const siteStatus = siteData?.status || {};
+          ['campaign', 'campaign_kind', 'mode', 'converged', 'query',
+            'workflow_type', 'model_name'].forEach(key => {
+            if (siteStatus[key] !== undefined && mergedStatusExtras[key] === undefined) {
+              mergedStatusExtras[key] = siteStatus[key];
+            }
+          });
+        }
+        // Backfill from events too, since the per-event ``site`` tag
+        // is authoritative for the agent that emitted each event.
+        (nextSnapshot.events || []).forEach(event => {
+          if (event.site && event.agent_id && !(event.agent_id in nextSnapshot.sitesByAgent)) {
+            nextSnapshot.sitesByAgent[event.agent_id] = event.site;
+          }
+        });
+        nextSnapshot.status = {
+          ...mergedStatusExtras,
+          agents: mergedAgents,
+        };
+        nextSnapshot.placement = {agents: mergedPlacements};
+        if (mergedSchema && !nextSnapshot.schema) {
+          nextSnapshot.schema = mergedSchema;
+        }
+      }
       const nextIdentity = identityForSnapshot(nextSnapshot);
       const previousEventCount = snapshot?.events?.length || 0;
       const nextEventCount = nextSnapshot.events.length;
@@ -304,6 +383,57 @@
       return agent?.placement?.short_hostname || agent?.placement?.hostname || (agent?.started ? 'unknown host' : 'pending');
     }
 
+    function agentSite(agent) {
+      // In federated runs the meaningful grouping is "which HPC"
+      // (aurora vs crux), not individual compute hostnames. The
+      // server tags every event with ``site`` and we built a
+      // sitesByAgent index in load(); fall back to "pending" so
+      // not-yet-registered agents still render.
+      if (!snapshot?.federated) return null;
+      const agentId = agent?.agent_id || agent?.agent_name || agent?.name;
+      return snapshot.sitesByAgent[agentId] || 'pending';
+    }
+
+    function agentGroup(agent) {
+      // Single source of truth for "what bucket does this agent
+      // belong to in the current view": site (federated) or host
+      // (single-machine). Renderers that ask "what color / what
+      // label" go through here so federated vs single-site rendering
+      // diverges in exactly one place.
+      return agentSite(agent) || agentHost(agent);
+    }
+
+    function renderSitesBadge() {
+      // Header-bar federation indicator. Hidden in single-site runs
+      // so the existing single-site UI looks unchanged; in federated
+      // runs it shows e.g. "Sites: aurora · crux (2 agents on aurora,
+      // 1 on crux, 0 events from aurora)" so operators / demo
+      // viewers can confirm at a glance that the campaign really
+      // is spanning multiple HPCs.
+      const badge = document.getElementById('sitesBadge');
+      if (!badge) return;
+      if (!snapshot?.federated || !snapshot.siteNames.length) {
+        badge.style.display = 'none';
+        badge.textContent = '';
+        return;
+      }
+      const eventCounts = {};
+      (snapshot.events || []).forEach(e => {
+        if (e.site) eventCounts[e.site] = (eventCounts[e.site] || 0) + 1;
+      });
+      const agentCounts = {};
+      Object.values(snapshot.sitesByAgent || {}).forEach(site => {
+        agentCounts[site] = (agentCounts[site] || 0) + 1;
+      });
+      const parts = snapshot.siteNames.map(site => {
+        const a = agentCounts[site] || 0;
+        const e = eventCounts[site] || 0;
+        return `${site} (${a}🤖 / ${e}📨)`;
+      });
+      badge.textContent = 'Sites: ' + parts.join(' · ');
+      badge.style.display = '';
+    }
+
     function hostColor(index) {
       const colors = ['#dbeafe', '#dcfce7', '#fef3c7', '#fce7f3', '#e0e7ff', '#ccfbf1', '#fee2e2', '#ede9fe'];
       return colors[index % colors.length];
@@ -318,6 +448,7 @@
       const detailScroll = captureDetailScrollSnapshot();
       document.getElementById('updated').textContent = snapshot.updated ? new Date(snapshot.updated * 1000).toLocaleTimeString() : '';
       document.getElementById('runPath').textContent = snapshot.run_dir || '';
+      renderSitesBadge();
       document.getElementById('graphTitle').textContent = isWorkflowMode() ? 'ChemGraph Workflow' : 'Agent Graph';
       renderTimeline();
       renderMetrics();
@@ -358,9 +489,14 @@
       events.forEach(event => { counts[event.event] = (counts[event.event] || 0) + 1; });
       const currentAgents = agents();
       const startedAgents = currentAgents.filter(agent => agent.started);
-      const hostByAgent = new Map(currentAgents.map(agent => [agent.agent_id, agentHost(agent)]));
-      const hosts = new Set(startedAgents.map(agentHost).filter(host => host && host !== 'pending'));
-      const finish = latestEventOf('campaign_finished')?.payload || {};
+      // Group by site in federated mode, by host otherwise. The
+      // "cross-node messages" metric below stays meaningful either
+      // way -- in federated mode it becomes "messages that crossed
+      // the HPC boundary," which is exactly what we want to surface.
+      const hostByAgent = new Map(currentAgents.map(agent => [agent.agent_id, agentGroup(agent)]));
+      const hosts = new Set(startedAgents.map(agentGroup).filter(host => host && host !== 'pending'));
+      const finishEvent = latestEventOf('campaign_finished');
+      const finish = finishEvent?.payload || {};
       const messageEvents = events.filter(event => event.event === 'message_sent');
       const crossNodeMessages = messageEvents.filter(event => {
         const p = event.payload || {};
@@ -373,7 +509,9 @@
         && event.payload?.tool_name === 'run_mace_ensemble'
       ));
       const values = [
-        ['Finish', finish.reason || 'running'],
+        ['Finish', finishEvent
+          ? (finish.all_agents_done ? 'done' : 'stopped')
+          : (startedAgents.length ? 'running' : 'idle')],
         ['Decisions', counts.agent_decision || 0],
         ['Agents / Hosts', `${startedAgents.length} / ${hosts.size}`],
         ['Errors', counts.agent_error || 0],
@@ -381,6 +519,8 @@
         ['Cross-node', crossNodeMessages.length],
         ['Tool calls', counts.tool_call_started || 0],
         ['Workflows', counts.workflow_started || 0],
+        ['Graph transitions', (counts.graph_transition || 0)],
+        ['Graph terminals', (counts.graph_terminal || 0)],
       ];
       document.getElementById('metrics').innerHTML = values.map(([k,v]) => `
         <div class="metric"><div class="label">${esc(k)}</div><div class="value">${esc(v)}</div></div>
@@ -388,6 +528,16 @@
       document.getElementById('proof').innerHTML = crossNodeMessages.length
         ? `<span class="pill ok">cross-node messages=${crossNodeMessages.length}</span>`
         : '';
+      renderCorrelations(events);
+    }
+
+    // ponytail: correlation panel was tied to graph_round_finished events
+    // from the removed behavior_graph runner. Keep the no-op so callers
+    // don't have to change; delete the DOM anchor from index.html if we
+    // reclaim the space later.
+    function renderCorrelations(_events) {
+      const container = document.getElementById('correlations');
+      if (container) container.innerHTML = '';
     }
 
     function renderWorkflowMetrics() {
@@ -986,6 +1136,16 @@
             addEdges(currentLmId ? [currentLmId] : lastNodeIds, node.id);
             updateCurrentToolBatchLanes();
           }
+          // A failed tool call is a terminal event for its batch: any
+          // subsequent tool_call_started is a retry, not a sibling in a
+          // parallel dispatch. Advance so retries render in a new column
+          // instead of stacking as fake parallel lanes.
+          if (event.event === 'tool_call_failed' || node.failed) {
+            lastColumn = node.column;
+            lastNodeIds = currentToolBatchIds.slice();
+            currentToolBatchIds = [];
+            currentToolBatchColumn = null;
+          }
         }
       });
 
@@ -1013,7 +1173,16 @@
       if (event.event === 'run_started' || event.event === 'workflow_started') return 'workflow-query';
       if (event.event === 'workflow_output' || event.event === 'workflow_finished' || event.event === 'run_finished') return 'workflow-output';
       if (event.event.startsWith('tool_call_')) {
-        return p.tool_call_id ? `workflow-tool-${p.tool_call_id}` : (p.span_id || eventKey(event));
+        // Prefer tool_call_id; then span_id; then fall back to a
+        // (round, tool_name) composite so tool_call_started and
+        // tool_call_finished collapse onto the same node when neither
+        // id is emitted. Without this fallback each phase gets a fresh
+        // eventKey() id and renders as a duplicate lane in the graph.
+        if (p.tool_call_id) return `workflow-tool-${p.tool_call_id}`;
+        if (p.span_id) return p.span_id;
+        const name = p.tool_name || p.name;
+        if (name) return `workflow-tool-name-${p.round ?? 'x'}-${name}`;
+        return eventKey(event);
       }
       return p.span_id || eventKey(event);
     }
@@ -1215,12 +1384,17 @@
       if (event.event.startsWith('tool_call_')) {
         const failed = event.event === 'tool_call_failed' || p.status === 'failed';
         const kind = workflowToolKind(event);
+        // ponytail: prefix title with a serial ("#N ") once the batch
+        // has more than one lane so operators don't misread stacked
+        // tool nodes as parallel invocations. Multi_agent's executor
+        // calls tools sequentially within one LM turn but the graph
+        // draws them side-by-side in lanes; the number restores order.
         return {
           id: workflowFlowNodeId(event),
           type: 'tool',
           toolClass: kind,
           title: toolDisplayName(event),
-          meta: `${workflowToolKindLabel(event)} · ${failed ? 'failed' : event.event === 'tool_call_started' ? 'running' : 'finished'}`,
+          meta: `${workflowToolKindLabel(event)} · ${failed ? 'failed' : event.event === 'tool_call_started' ? 'running' : 'finished'} · serial (not parallel)`,
           event,
           eventKey: key,
           failed,
@@ -1251,9 +1425,14 @@
         return;
       }
 
+      // Group by site (federated) or hostname (single-site). The
+      // graph layout is unchanged either way -- only the swimlane
+      // labels and the band per-agent-group differ. In federated
+      // mode you see "aurora" and "crux" swimlanes instead of
+      // "x4708..." and "x1000...". Same nodes, clearer story.
       const byHost = new Map();
       currentAgents.forEach(agent => {
-        const host = agentHost(agent);
+        const host = agentGroup(agent);
         if (!byHost.has(host)) byHost.set(host, []);
         byHost.get(host).push(agent);
       });
@@ -1883,14 +2062,98 @@
       selectedAgent = agent.agent_id;
       document.getElementById('agentSelect').value = selectedAgent;
       document.getElementById('detailTitle').textContent = agent.agent_id;
-      document.getElementById('detailCards').innerHTML = detailCards([
-        ['Role', agent.role || '-'],
+      // Look up the campaign-config entry for this agent (if loaded).
+      // Static fields (mission, allowed_peers, mcp_servers, allowed_tools)
+      // live there rather than in the runtime status -- surfacing them
+      // is the first read-only slice of authoring-mode. Step 6 turns
+      // these into editable inputs.
+      const campaignAgentSpec = (window.__campaignDoc?.agents || [])
+        .find(a => a?.name === agent.agent_id) || null;
+      const cards = [
+        ['Role', agent.role || campaignAgentSpec?.role || '-'],
         ['Host', agentHost(agent)],
         ['Decisions', agent.decision_count || 0],
         ['Received / Sent', `${agent.received_message_count || 0} / ${agent.outbox_count || 0}`],
         ['Tools', `${agent.tool_finished_count || 0} / ${agent.tool_started_count || 0}`],
         ['State', agent.last_error ? 'error' : agent.started ? 'active' : 'pending'],
-      ]);
+      ];
+      if (campaignAgentSpec) {
+        const peers = campaignAgentSpec.allowed_peers || [];
+        const mcps = campaignAgentSpec.mcp_servers || [];
+        const tools = campaignAgentSpec.allowed_tools || [];
+        cards.push(['Allowed peers', peers.length ? peers.join(', ') : '(any)']);
+        cards.push(['MCP servers', mcps.length ? mcps.join(', ') : '(none)']);
+        if (tools.length) cards.push(['Allowed tools', tools.join(', ')]);
+      }
+      document.getElementById('detailCards').innerHTML = detailCards(cards);
+      // Mission field: editable textarea + Save button. First slice
+      // of authoring-mode; expanded per slice as A2 feedback lands.
+      // Save is disabled when a launcher subprocess is running --
+      // mid-run edits would race with rank-0 reading the campaign
+      // config at spawn time.
+      if (campaignAgentSpec) {
+        const missionHost = document.createElement('div');
+        missionHost.style.cssText = 'margin-top:14px;';
+        const initialText = campaignAgentSpec.mission || '';
+        missionHost.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+            <strong style="font-size:12px; color:var(--muted); letter-spacing:.05em; text-transform:uppercase;">Mission</strong>
+            <div>
+              <span id="missionStatus-${esc(agent.agent_id)}" style="font-size:11px; color:var(--muted); margin-right:6px;"></span>
+              <button id="missionSave-${esc(agent.agent_id)}" style="font-size:11px; padding:2px 8px;">Save</button>
+            </div>
+          </div>
+          <textarea id="missionInput-${esc(agent.agent_id)}"
+                    style="width:100%; min-height:140px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; padding:8px; box-sizing:border-box; border:1px solid var(--line); border-radius:4px; resize:vertical; background:#fbfcfd;"
+          >${esc(initialText)}</textarea>
+        `;
+        document.getElementById('detailCards').appendChild(missionHost);
+        const btn = missionHost.querySelector('button');
+        const input = missionHost.querySelector('textarea');
+        const status = missionHost.querySelector('span');
+        // Reflect launcher state (disable during runs)
+        const launcherBusy = !!window.__launcherRunning;
+        btn.disabled = launcherBusy;
+        if (launcherBusy) status.textContent = 'launcher running';
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          status.textContent = 'saving...';
+          try {
+            const r = await fetch('/api/campaign', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                action: 'edit_agent_field',
+                params: {
+                  agent: agent.agent_id,
+                  field: 'mission',
+                  value: input.value,
+                },
+              }),
+            });
+            const data = await r.json();
+            if (!data.ok) {
+              status.textContent = `error: ${data.error || 'unknown'}`;
+              return;
+            }
+            // Update the client-side cache so the panel keeps showing
+            // the edited value on the next re-render.
+            const cd = window.__campaignDoc;
+            if (cd && Array.isArray(cd.agents)) {
+              const entry = cd.agents.find(a => a?.name === agent.agent_id);
+              if (entry) entry.mission = input.value;
+            }
+            const failed = (data.rsync || []).filter(x => !x.ok);
+            status.textContent = failed.length
+              ? `saved local, rsync failed: ${failed.map(x => x.site).join(', ')}`
+              : `saved (rsync: ${(data.rsync || []).map(x => x.site).join(', ') || 'no sites'})`;
+          } catch (e) {
+            status.textContent = `error: ${String(e)}`;
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      }
       const current = currentEvent();
       if (current?.event === 'agent_decision' && current.agent_id === agent.agent_id) {
         setDetailBlock('detailPrimaryTitle', 'Current Decision', 'detailPrimary', formatDecisionEvent(current));
@@ -1944,21 +2207,28 @@
       const currentAgents = agents();
       const senderAgent = currentAgents.find(agent => agent.agent_id === sender);
       const recipientAgent = currentAgents.find(agent => agent.agent_id === recipient);
-      const senderHost = agentHost(senderAgent);
-      const recipientHost = agentHost(recipientAgent);
+      // "Group" = site in federated mode, host in single-machine.
+      // Route label becomes "cross-site" or "cross-node" accordingly,
+      // which is what the operator actually wants to see at a glance.
+      const senderGroup = agentGroup(senderAgent);
+      const recipientGroup = agentGroup(recipientAgent);
+      const groupLabel = snapshot?.federated ? 'site' : 'host';
       const messages = eventsOf('message_sent').filter(e => {
         const p = e.payload || {};
         return p.sender === sender && p.recipient === recipient;
       });
       const latest = messages.length ? messages[messages.length - 1] : null;
       const latestPayload = latest?.payload || {};
-      const route = senderHost && recipientHost && senderHost !== recipientHost ? 'cross-node' : 'same-node';
+      const crossGroup = senderGroup && recipientGroup && senderGroup !== recipientGroup;
+      const route = crossGroup
+        ? (snapshot?.federated ? 'cross-site' : 'cross-node')
+        : 'same-' + groupLabel;
       document.getElementById('detailTitle').textContent = `${sender} -> ${recipient}`;
       document.getElementById('detailCards').innerHTML = detailCards([
         ['Route', route],
         ['Messages', messages.length],
-        ['From host', senderHost],
-        ['To host', recipientHost],
+        [`From ${groupLabel}`, senderGroup],
+        [`To ${groupLabel}`, recipientGroup],
       ]);
       setDetailHtmlBlock('detailPrimaryTitle', 'Latest Message', 'detailPrimary', latest
         ? messageDetailHtml(latest)
@@ -2240,12 +2510,25 @@
       return detailRich(messages.map(event => {
         const p = event.payload || {};
         const title = `${p.sender || event.agent_id || '-'} -> ${p.recipient || '-'}`;
+        // Always show content when present. If the tldr differs from
+        // the content (as it does for operator injects, where tldr =
+        // "operator-injected" and content is the real payload), show
+        // tldr as a small header AND the content underneath. Previously
+        // the tldr suppressed the content field entirely, which hid
+        // what the operator actually sent.
+        const contentText = trunc(p.content || '', 360);
+        const tldrText = p.tldr || '';
+        const showBoth = tldrText && contentText && tldrText !== contentText;
         const body = [
           detailKvGrid([
             ['Time', formatTime(event.timestamp)],
             ['Message id', p.message_id || '-', 'mono'],
           ]),
-          p.tldr ? paragraphsHtml(p.tldr) : paragraphsHtml(trunc(p.content || '', 360)),
+          showBoth
+            ? `<div class="muted" style="font-size:11px;">${esc(tldrText)}</div>${paragraphsHtml(contentText)}`
+            : (contentText
+                ? paragraphsHtml(contentText)
+                : paragraphsHtml(tldrText || '(no content)')),
         ].join('');
         return detailSection(title, body, '');
       }).join(''));
@@ -2256,16 +2539,20 @@
       const currentAgents = agents();
       const sender = currentAgents.find(agent => agent.agent_id === p.sender);
       const recipient = currentAgents.find(agent => agent.agent_id === p.recipient);
-      const senderHost = agentHost(sender);
-      const recipientHost = agentHost(recipient);
-      const route = senderHost && recipientHost && senderHost !== recipientHost ? 'cross-node' : 'same-node';
+      const senderGroup = agentGroup(sender);
+      const recipientGroup = agentGroup(recipient);
+      const groupLabel = snapshot?.federated ? 'site' : 'host';
+      const crossGroup = senderGroup && recipientGroup && senderGroup !== recipientGroup;
+      const route = crossGroup
+        ? (snapshot?.federated ? 'cross-site' : 'cross-node')
+        : 'same-' + groupLabel;
       return detailRich(
         detailSection('Route', detailKvGrid([
           ['Type', route],
-          ['Sender host', senderHost],
-          ['Recipient host', recipientHost],
+          [`Sender ${groupLabel}`, senderGroup],
+          [`Recipient ${groupLabel}`, recipientGroup],
           ['Message id', p.message_id || '-', 'mono'],
-        ]), route === 'cross-node' ? 'ok' : 'info'),
+        ]), crossGroup ? 'ok' : 'info'),
       );
     }
 
@@ -2510,13 +2797,17 @@
       const currentAgents = agents();
       const sender = currentAgents.find(agent => agent.agent_id === p.sender);
       const recipient = currentAgents.find(agent => agent.agent_id === p.recipient);
-      const senderHost = agentHost(sender);
-      const recipientHost = agentHost(recipient);
-      const route = senderHost && recipientHost && senderHost !== recipientHost ? 'cross-node' : 'same-node';
+      const senderGroup = agentGroup(sender);
+      const recipientGroup = agentGroup(recipient);
+      const groupLabel = snapshot?.federated ? 'site' : 'host';
+      const crossGroup = senderGroup && recipientGroup && senderGroup !== recipientGroup;
+      const route = crossGroup
+        ? (snapshot?.federated ? 'cross-site' : 'cross-node')
+        : 'same-' + groupLabel;
       return [
         `Route: ${route}`,
-        `Sender host: ${senderHost}`,
-        `Recipient host: ${recipientHost}`,
+        `Sender ${groupLabel}: ${senderGroup}`,
+        `Recipient ${groupLabel}: ${recipientGroup}`,
         `Message id: ${p.message_id || '-'}`,
       ].join('\n');
     }
@@ -3070,3 +3361,9 @@
     });
     load();
     setInterval(load, 2000);
+
+// window.__campaignDoc used to be prefetched from /api/campaign so
+// the Observability detail panel could show static agent spec fields
+// (mission etc). That endpoint is gone -- campaign selection is now
+// canvas-only. The observability detail panel keeps its runtime-only
+// view; use the canvas for spec.

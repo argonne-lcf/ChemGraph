@@ -6,24 +6,30 @@ import pathlib
 import signal
 from typing import Any
 
+
+import chemgraph.academy.runtime.torch_patch  # noqa: F401  -- patches torch.load if torch present
+
+from academy.exchange.cloud.client import HttpAgentRegistration
 from academy.handle import Handle
 from academy.runtime import Runtime
 from academy.runtime import RuntimeConfig
 
 from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.runtime.exchange import build_exchange_factory
-from chemgraph.academy.runtime.registration import load_academy_registrations
-from chemgraph.academy.runtime.registration import wait_academy_registrations
-from chemgraph.academy.runtime.registration import write_academy_registrations
+from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
+from chemgraph.academy.runtime.registration import deterministic_agent_id
+from chemgraph.academy.runtime.registration import register_agent_with_uid
+from chemgraph.academy.runtime.registration import wait_for_peers_alive
 from chemgraph.academy.observability.run_artifacts import initialize_run_files
 from chemgraph.academy.observability.run_artifacts import (
     wait_for_agent_statuses_finished,
 )
 from chemgraph.academy.observability.run_artifacts import write_status_snapshot
-from chemgraph.academy.core.campaign import campaign_bootstrap_text
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
+from chemgraph.academy.core.campaign import filter_agents
 from chemgraph.academy.core.campaign import load_campaign
 from chemgraph.academy.core.campaign import namespace_for_run
+from chemgraph.academy.core.campaign import parse_agents_selection
 from chemgraph.academy.core.campaign import resolve_campaign_resources
 from chemgraph.academy.core.campaign import selected_agent
 from chemgraph.academy.core.campaign import validate_campaign
@@ -35,7 +41,7 @@ from chemgraph.academy.runtime.mpi import rank_from_env
 from chemgraph.academy.core.agent import ChemGraphLogicalAgent
 from chemgraph.academy.core.prompt import load_prompt_profile
 from chemgraph.academy.runtime.mcp_supervisor import MCPServerSupervisor
-from chemgraph.models.settings import load_lm_settings
+from chemgraph.academy.core.llm import load_lm_settings
 
 
 async def run_daemon(config: ChemGraphDaemonConfig) -> int:
@@ -46,7 +52,20 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
         config.run_dir,
     )
     prompt_profile = load_prompt_profile(campaign.prompt_profile)
-    validate_campaign(campaign, config.agent_count)
+    # When this site only owns a slice (federated spawn-site flow),
+    # filter the campaign down to that slice BEFORE validation so the
+    # daemon's downstream rank-indexing (selected_agent, mpiexec -n)
+    # all agree on the same agent ordering.
+    if config.agents:
+        campaign = filter_agents(campaign, config.agents)
+    # Loosen cross-site peer / initial_agent checks for federated
+    # slices -- those names may legitimately reference agents this
+    # site doesn't own (they're discovered through the exchange).
+    validate_campaign(
+        campaign,
+        config.agent_count,
+        federated=bool(config.agents),
+    )
     agent_spec = selected_agent(campaign, config.rank)
     placement = placement_payload(config, agent_spec.name)
     supervisor = MCPServerSupervisor(
@@ -69,55 +88,84 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
 
         academy_factory = build_exchange_factory(config)
         if config.rank == 0:
+            # Rank 0 still owns the one-shot init-files dance, but it
+            # is NO LONGER special for registration -- every rank
+            # registers its own agent independently and discovers peers
+            # via the exchange.
             initialize_run_files(
                 run_dir=config.run_dir,
                 campaign=campaign,
                 config=config,
                 llm_settings=llm_settings,
             )
-            registrar = await academy_factory.create_user_client(
-                name=f'{config.run_dir.name}-registrar',
-                start_listener=False,
+
+        # Each rank registers ONLY its own agent on the exchange and
+        # discovers cross-rank / cross-site peers by polling
+        # ``transport.discover()``. This works identically whether the
+        # peers are on the same node (LocalExchange), same allocation
+        # (Redis), or a different HPC entirely (HttpExchange against
+        # the hosted Academy server) -- the discovery protocol is the
+        # same. There is no longer a shared-filesystem dependency.
+        registrar = await academy_factory.create_user_client(
+            name=f'{config.run_dir.name}-rank{config.rank}-registrar',
+            start_listener=False,
+        )
+        try:
+            # Register THIS rank's agent with a deterministic UID
+            # derived from (run_id, agent_name). The hosted exchange
+            # strips AgentId.name from discover() responses, so the
+            # name-based filter we used to do never matched on the
+            # public HttpExchange. Deterministic UIDs let every site
+            # construct the same AgentId for the same (run, agent)
+            # without ever needing discover() to echo the name back.
+            my_agent_id = deterministic_agent_id(
+                run_id=config.run_dir.name, agent_name=agent_spec.name,
             )
-            try:
-                registered = await registrar.register_agents(
-                    [
-                        (ChemGraphLogicalAgent, spec.name)
-                        for spec in campaign.agents
-                    ],
-                )
-            finally:
-                await registrar.close()
-            registrations = dict(
-                zip(
-                    (spec.name for spec in campaign.agents),
-                    registered,
-                    strict=True,
-                ),
+            await register_agent_with_uid(
+                registrar._transport, ChemGraphLogicalAgent, my_agent_id,
             )
-            write_academy_registrations(
-                run_dir=config.run_dir,
-                run_token=config.run_token,
-                registrations=registrations,
-            )
-        else:
-            registrations = await wait_academy_registrations(
-                config.run_dir,
-                run_token=config.run_token,
-                timeout_s=config.startup_timeout_s,
+            registration = HttpAgentRegistration(agent_id=my_agent_id)
+            print(
+                f"[daemon] rank{config.rank} registered "
+                f"{agent_spec.name!r} on the exchange "
+                f"(uid={my_agent_id.uid})",
+                flush=True,
             )
 
-        if config.rank == 0:
-            registrations = load_academy_registrations(
-                config.run_dir,
-                run_token=config.run_token,
-            )
-        registration = registrations[agent_spec.name]
-        peer_agent_ids = {
-            peer: registrations[peer].agent_id
-            for peer in agent_spec.allowed_peers
-            if peer in registrations
-        }
+            wanted_peers = [
+                p for p in agent_spec.allowed_peers if p != agent_spec.name
+            ]
+            # Compute peer AgentIds locally -- no discovery polling
+            # needed for the identity itself, since every site agrees
+            # on the deterministic UID. We still poll discover() as a
+            # LIVENESS PROBE so we don't proceed to bootstrap before
+            # the other side's mailbox is actually up.
+            peer_agent_ids: dict[str, Any] = {
+                peer: deterministic_agent_id(
+                    run_id=config.run_dir.name, agent_name=peer,
+                )
+                for peer in wanted_peers
+            }
+            if wanted_peers:
+                print(
+                    f"[daemon] rank{config.rank} waiting for peers "
+                    f"{wanted_peers} to come online "
+                    f"(timeout {config.startup_timeout_s:.0f}s)...",
+                    flush=True,
+                )
+                await wait_for_peers_alive(
+                    registrar._transport,
+                    peer_agent_ids.values(),
+                    agent_class=ChemGraphLogicalAgent,
+                    timeout_s=config.startup_timeout_s,
+                )
+                print(
+                    f"[daemon] rank{config.rank} all {len(peer_agent_ids)} "
+                    f"peer(s) are alive: {sorted(peer_agent_ids.keys())}",
+                    flush=True,
+                )
+        finally:
+            await registrar.close()
 
         agent = ChemGraphLogicalAgent(
             agent_spec,
@@ -145,32 +193,22 @@ async def run_daemon(config: ChemGraphDaemonConfig) -> int:
         )
         async with runtime:
             await agent.write_runtime_status()
+            print(
+                f"[daemon] rank{config.rank} agent {agent_spec.name!r} "
+                "is now running inside Academy Runtime",
+                flush=True,
+            )
 
+            # No in-daemon bootstrap. Every agent starts idle and
+            # waits for its first message via ``receive_message``. The
+            # operator sends the kickoff message from the dashboard
+            # inject panel (or ``swarm inject`` CLI), same primitive
+            # as any mid-run nudge.
             if config.rank == 0:
-                bootstrap = build_message(
-                    sender='campaign',
-                    recipient=campaign.initial_agent,
-                    content=campaign_bootstrap_text(campaign),
-                    kind='message',
-                    tldr='Campaign bootstrap',
-                    reason='Initial campaign task dispatch.',
-                    confidence=1.0,
-                )
-                initial_handle: Handle[Any] = Handle(
-                    registrations[campaign.initial_agent].agent_id,
-                )
-                await initial_handle.action(
-                    'receive_message',
-                    bootstrap,
-                )
-                append_system_trace(
-                    config.run_dir,
-                    'bootstrap_message_dispatched',
-                    {
-                        'agent': campaign.initial_agent,
-                        'message_id': bootstrap['message_id'],
-                        'via': 'academy_action',
-                    },
+                print(
+                    f"[daemon] rank{config.rank} agents up; "
+                    f"waiting for operator to inject the kickoff message.",
+                    flush=True,
                 )
 
             await runtime.wait_shutdown()
@@ -217,9 +255,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--redis-namespace')
     parser.add_argument(
         '--exchange-type',
-        choices=('redis', 'local', 'hybrid'),
+        choices=SUPPORTED_EXCHANGE_TYPES,
         default='redis',
     )
+    parser.add_argument(
+        '--http-exchange-url',
+        default=None,
+        help=(
+            "Override URL for --exchange-type=http. Omit to use the "
+            "Academy-hosted default. Ignored for other exchange types."
+        ),
+    )
+    parser.add_argument(
+        '--agents',
+        default=None,
+        help=(
+            "Comma-separated subset of agent names to launch (federated "
+            "spawn-site mode). Omit to launch every agent declared on the "
+            "campaign (single-machine run-compute mode)."
+        ),
+    )
+    # --no-bootstrap retired 2026-07-07: bootstrap is now always
+    # operator-triggered via swarm inject (or dashboard inject panel).
+    # Daemons start idle regardless.
     parser.add_argument('--chemgraph-repo-root')
     return parser.parse_args()
 
@@ -248,6 +306,8 @@ def config_from_args(args: argparse.Namespace) -> ChemGraphDaemonConfig:
         redis_port=args.redis_port,
         redis_namespace=args.redis_namespace or namespace_for_run(run_dir),
         exchange_type=args.exchange_type,
+        http_exchange_url=args.http_exchange_url,
+        agents=parse_agents_selection(args.agents),
         rank=rank_from_env(),
         local_rank=local_rank_from_env(),
         chemgraph_repo_root=(

@@ -17,7 +17,7 @@ from chemgraph.academy.core.campaign import ChemGraphAgentSpec
 from chemgraph.academy.core.campaign import ChemGraphCampaign
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
 from chemgraph.academy.runtime.mpi import append_system_trace
-from chemgraph.models.settings import LLMSettings
+from chemgraph.academy.core.llm import LLMSettings
 
 
 def write_run_artifacts(run_dir: str | pathlib.Path) -> dict[str, Any]:
@@ -265,7 +265,6 @@ async def wait_for_agent_statuses_finished(
 
 def clear_run_outputs(run_dir: pathlib.Path) -> None:
     for name in (
-        'academy_registrations.json',
         'messages.jsonl',
         'events.jsonl',
         'placement.json',
@@ -290,7 +289,19 @@ def initialize_run_files(
     llm_settings: LLMSettings,
 ) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
-    clear_run_outputs(run_dir)
+    # In federated runs every site's rank-0 daemon calls
+    # initialize_run_files against the SAME shared run_dir (Eagle is
+    # mounted everywhere). If both call clear_run_outputs, the second
+    # call wipes the first daemon's freshly-written agent_status entry
+    # -- and worse, racing with the first daemon's writes throws
+    # "Directory not empty" from rmtree, killing one of the daemons.
+    # The dashboard's /api/launch wipes the run_dir from the laptop
+    # BEFORE any daemon starts, so federated runs don't need to clear
+    # again here. config.agents is the federated-mode marker
+    # (spawn-site passes an explicit agent slice; single-machine
+    # run-compute leaves it empty).
+    if not config.agents:
+        clear_run_outputs(run_dir)
     write_json(
         run_dir / 'manifest.json',
         {

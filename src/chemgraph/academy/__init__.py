@@ -1,27 +1,19 @@
-"""Academy Agents integration for ChemGraph.
+"""swarm: federated multi-agent operating + authoring surface.
 
-Public re-exports come in two tiers so the package honours the
-``[academy]`` optional-dep contract:
+Split out of ChemGraph on 2026-07-07. See README.md for the layout.
+
+Public re-exports come in two tiers:
 
 * **Eager** (pure stdlib + pydantic, always importable):
   ``ChemGraphAgentSpec``, ``ChemGraphCampaign``,
   ``ChemGraphDaemonConfig``, ``MCPServerSpec``, ``ResourceSpec``,
   ``load_campaign``, ``resolve_campaign_resources``,
   ``PromptProfile``, ``load_prompt_profile``, ``CampaignEvent``,
-  ``EventLog``. These let the dashboard, ``--trace-dir``, and the
-  observability tooling work on a checkout without ``academy-py``
-  installed.
+  ``EventLog``. Usable without ``academy-py``.
 * **Lazy** (resolved via ``__getattr__`` on first access; requires
-  the ``[academy]`` extra): ``ChemGraphLogicalAgent``. Importing it
-  pulls in ``academy.agent``; without the extra installed, access
-  raises ``ImportError`` with a hint instead of crashing the package
-  import.
-
-This split exists because ``chemgraph.cli.trace`` (single-agent
-``--trace-dir`` flow) and the test collector both touch
-``chemgraph.academy`` via leaf submodules; eager-importing the
-academy-py-dependent ``ChemGraphLogicalAgent`` here broke those code
-paths for users without the optional extra.
+  ``academy-py``): ``ChemGraphLogicalAgent``. Access raises
+  ``ImportError`` with an actionable install hint if the dependency
+  is missing.
 """
 
 from __future__ import annotations
@@ -68,14 +60,13 @@ def __getattr__(name: str) -> Any:
             module = import_module(module_path)
         except ImportError as exc:
             raise ImportError(
-                f"Importing {name!r} from chemgraph.academy requires "
-                f"the 'academy' optional extra: "
-                f"`pip install 'chemgraph[academy]'`. "
+                f"Importing {name!r} from swarm requires the "
+                f"academy-py package: `pip install academy-py`. "
                 f"Underlying error: {exc}"
             ) from exc
         return getattr(module, attr)
     raise AttributeError(
-        f"module 'chemgraph.academy' has no attribute {name!r}"
+        f"module 'swarm' has no attribute {name!r}"
     )
 
 

@@ -1,11 +1,11 @@
 {
   "name": "aurora",
-  "remote_host": "${ALCF_USER}@aurora.alcf.anl.gov",
+  "remote_host": "${ALCF_SSH_USER}@aurora.alcf.anl.gov",
   "remote_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}",
   "repo_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph",
   "run_root": "/flare/${ALCF_PROJECT}/${ALCF_USER}/runs",
-  "relay_host_file": "/flare/${ALCF_PROJECT}/${ALCF_USER}/uan-relay-18186.host",
-  "relay_port": 18186,
+  "relay_host_file": "/flare/${ALCF_PROJECT}/${ALCF_USER}/uan-relay-18197.host",
+  "relay_port": 18197,
   "venv_python": "/flare/${ALCF_PROJECT}/${ALCF_USER}/venvs/academy-swarm/bin/python",
   "redis_bin_dir": "/flare/${ALCF_PROJECT}/${ALCF_USER}/tools/redis/bin",
   "redis_port": 6392,
@@ -32,5 +32,12 @@
     "all_proxy",
     "ALL_PROXY"
   ],
-  "no_proxy": "127.0.0.1,localhost,.alcf.anl.gov,*.alcf.anl.gov"
+  "no_proxy": "127.0.0.1,localhost,.alcf.anl.gov,*.alcf.anl.gov",
+  "submit_defaults": {
+    "queue": "debug",
+    "walltime": "00:15:00",
+    "nodes": 1,
+    "filesystems": "home:flare",
+    "bundle_root_override": "/flare/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph"
+  }
 }

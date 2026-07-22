@@ -1,0 +1,125 @@
+{
+  // ---------------------------------------------------------------------
+  // mof-crux-aurora: real cross-HPC MOF pipeline.
+  //
+  // Same shape as mof-crux-polaris but the sim peer runs on Aurora
+  // with the REAL gRASPA MCP tool (Thang's chemgraph.mcp.graspa_mcp_hpc
+  // on the dev-graspa branch). No dummy.
+  //
+  // Crux planner_executor  (chemgraph.multi_agent, CPU)
+  //   mofforge_build -> run_ase[UMA opt] -> pacmof2_assign_charges
+  //   -> transfer_file (eagle -> flare) -> send_message(polaris_sim)
+  //   [rename below] -> wait for reply -> finish_turn.
+  //
+  // Aurora aurora_sim      (chemgraph.single_agent, XPU/SYCL)
+  //   wait_for_message -> run_graspa -> transfer_file (flare -> eagle)
+  //   -> send_message(planner_executor) -> finish_turn.
+  //
+  // Endpoint UUIDs:
+  //   CRUX/EAGLE:  05d2c76a-e867-4f67-aa57-76edeb0beda0  (alcf#dtn_eagle)
+  //   AURORA/FLARE: f39a7a0f-5bfc-46ce-9615-ba9f8592814f  (alcf#dtn_flare)
+  //
+  // Prereqs on the operator side (one-time):
+  //   1. mkdir /flare/ChemGraph/jinchu/inbox-aurora on aurora login.
+  //   2. mkdir /eagle/ChemGraph/jinchu/inbox-crux on crux login (already
+  //      done for mof-crux-polaris).
+  //   3. gRASPA binary compiled + on PATH inside the aurora venv, or
+  //      graspa_core.py updated to point at the binary path.
+  //   4. dev-graspa branch checked out at
+  //      /flare/ChemGraph/jinchu/ChemGraph-argonne on aurora, and
+  //      chemgraph installed editable into the aurora venv.
+  //
+  // Kickoff (recipient = planner_executor):
+  //   {"spec":{"topology":"pcu","backend":"pormake",
+  //     "node_files":["<pormake bbs dir>/N59.xyz"],
+  //     "edge_files":["<pormake bbs dir>/E32.xyz"],
+  //     "output_dir":"/lus/eagle/projects/ChemGraph/jinchu/mof-out/build"},
+  //    "opt_output_json":"/lus/eagle/projects/ChemGraph/jinchu/mof-out/opt.json",
+  //    "charges_output_dir":"/lus/eagle/projects/ChemGraph/jinchu/mof-out/charges",
+  //    "adsorbate":"H2O","temperature_k":298.15,"pressure_pa":101325.0}
+  // ---------------------------------------------------------------------
+  "run_id": "mof-crux-aurora",
+  "user_task": "Build a MOF on Crux, optimize + charge it, hand off to Aurora for gRASPA GCMC uptake, report result.",
+  "prompt_profile": "prompt_profiles/default.json",
+  "initial_agent": "planner_executor",
+  "launch_defaults": {
+    "lm_config_template": "argo-gpt5mini-federated-chat",
+    "agent_count": 2,
+    "agents_per_node": 1,
+    "max_decisions": 24
+  },
+  "resources": {},
+  "mcp_servers": [
+    {
+      "name": "mofforge",
+      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m mofforge.mcp.server"
+    },
+    {
+      "name": "chemgraph",
+      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m chemgraph.mcp.mcp_tools"
+    },
+    {
+      "name": "pacmof2",
+      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m swarm.tools.pacmof2_mcp"
+    },
+    {
+      "name": "globus",
+      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m swarm.tools.globus_flex_mcp"
+    },
+    {
+      "name": "graspa",
+      // Real gRASPA MCP (Thang's dev-graspa). Aurora venv Python path.
+      "command": "/flare/ChemGraph/jinchu/venvs/academy-swarm-aurora/bin/python -m chemgraph.mcp.graspa_mcp_hpc"
+    }
+  ],
+  "agents": [
+    {
+      "name": "planner_executor",
+      "role": "MOFPlannerExecutor",
+      "mission": "Do EXACTLY these steps in order, one tool call each. Never repeat a step. Copy paths and args from the inject message verbatim; do NOT invent paths. Every step uses the previous step's output as input.\n\nStep 1: mofforge_build with ALL of these args from the inject: topology, backend, node_files, edge_files, output_dir. The 'backend' arg is REQUIRED and MUST be exactly the value from the inject (e.g. 'pormake'). Response gives output_paths[0] -- call this BUILT_CIF.\n\nStep 2: run_ase with params={input_structure_file: BUILT_CIF, output_results_file: <opt_output_json from inject>, driver: 'opt', optimizer: 'fire', fmax: 0.05, steps: 200, calculator: {calculator_type: 'FAIRChem', model_name: 'uma-s-1p1', task_name: 'omat', device: 'cpu'}}. The 'task_name' and 'model_name' are REQUIRED. Response confirms opt done -- the OPT_CIF is BUILT_CIF (opt writes back in place).\n\nStep 3: pacmof2_assign_charges with cif_path=OPT_CIF and output_dir=<charges_output_dir from inject>. Response gives charges_cif -- call this CHARGED_CIF.\n\nStep 4: transfer_file with source_endpoint='05d2c76a-e867-4f67-aa57-76edeb0beda0', source_path=CHARGED_CIF, dest_endpoint='f39a7a0f-5bfc-46ce-9615-ba9f8592814f', dest_path='/ChemGraph/jinchu/inbox-aurora/' + basename(CHARGED_CIF), wait=true. Response confirms upload.\n\nStep 5: send_message(recipient='aurora_sim', content=JSON with dest_path, adsorbate, temperature_k, pressure_pa from inject, reply_requested=true).\n\nStep 6: wait for aurora_sim's reply, then finish_turn with a one-line summary including the reported uptake numbers.",
+      "allowed_peers": ["aurora_sim"],
+      "mcp_servers": ["mofforge", "chemgraph", "pacmof2", "globus"],
+      "allowed_tools": [
+        "mofforge_build",
+        "run_ase",
+        "pacmof2_assign_charges",
+        "transfer_file",
+        "check_transfer_status",
+        "list_files"
+      ],
+      "behavior_graph": {
+        "entry": "decide",
+        "nodes": {
+          "decide": {
+            "type": "llm_decide",
+            "params": {"engine": "chemgraph.multi_agent"},
+            "next": "decide"
+          }
+        }
+      }
+    },
+    {
+      "name": "aurora_sim",
+      "role": "GRASPASimulator",
+      "mission": "You are the adsorption-simulation specialist on Aurora (XPU/SYCL). You receive messages from planner_executor with a CIF path (already staged on YOUR endpoint) and adsorbate conditions (temperature K, pressure Pa, adsorbate name). Your job: (1) run_graspa with input_structure_file=<cif path from message>, adsorbate=<from message>, temperature=<from message>, pressure=<from message>, n_cycles=10000. Response gives uptake numbers + an output_result_file path. (2) transfer_file the result JSON back to planner_executor with source_endpoint='f39a7a0f-5bfc-46ce-9615-ba9f8592814f' (Aurora/flare), source_path=<output_result_file>, dest_endpoint='05d2c76a-e867-4f67-aa57-76edeb0beda0' (Crux/eagle), dest_path='/ChemGraph/jinchu/inbox-crux/' + basename(output_result_file), wait=true. (3) send_message(recipient='planner_executor', reply_requested=false) with a JSON containing the uptake numbers and the remote result path. (4) finish_turn. Do NOT initiate contact -- respond to messages only.",
+      "allowed_peers": ["planner_executor"],
+      "mcp_servers": ["graspa", "globus"],
+      "allowed_tools": [
+        "run_graspa",
+        "transfer_file",
+        "check_transfer_status",
+        "list_files"
+      ],
+      "behavior_graph": {
+        "entry": "decide",
+        "nodes": {
+          "decide": {
+            "type": "llm_decide",
+            "params": {"engine": "chemgraph.single_agent"},
+            "next": "decide"
+          }
+        }
+      }
+    }
+  ]
+}

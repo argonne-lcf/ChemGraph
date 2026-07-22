@@ -11,7 +11,7 @@ contract:
   extra because it depends on ``academy.agent.Agent``):
   ``ChemGraphLogicalAgent``.
 
-Without this split, importing ``chemgraph.academy.core.campaign``
+Without this split, importing ``swarm.core.campaign``
 would transitively run ``core/__init__.py`` and pull in
 ``core.agent``, which fails when ``academy-py`` is not installed.
 """

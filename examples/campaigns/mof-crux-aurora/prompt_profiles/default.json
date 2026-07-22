@@ -1,0 +1,12 @@
+{
+  "prompt_version": "mof-crux-pipeline-v1",
+  "prompt_style": "json_state",
+  "system_prompt": "Not used; workflow-only campaign, no llm_decide nodes.",
+  "protocol_prompt": "Not used.",
+  "langchain_recursion_limit": 8,
+  "state_limits": {
+    "received_messages_last_n": 2,
+    "tool_results_last_n": 4,
+    "actions_last_n": 4
+  }
+}

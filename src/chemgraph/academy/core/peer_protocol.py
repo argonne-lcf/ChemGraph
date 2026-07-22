@@ -19,6 +19,10 @@ def validate_message(message: dict[str, Any]) -> None:
         raise ValueError(f'message missing keys: {sorted(missing)}')
 
 
+def new_correlation_id() -> str:
+    return f'corr-{uuid.uuid4()}'
+
+
 def build_message(
     *,
     sender: str,
@@ -32,8 +36,14 @@ def build_message(
     reply_requested: bool = False,
     reason: str | None = None,
     confidence: float | None = None,
+    correlation_id: str | None = None,
 ) -> dict[str, Any]:
-    """Create the structured message payload sent through Academy handles."""
+    """Create the structured message payload sent through Academy handles.
+
+    correlation_id groups messages that belong to the same logical task
+    (e.g. one MOF's whole pipeline). Auto-generated when not supplied.
+    Reply paths should propagate the incoming message's correlation_id.
+    """
     payload: dict[str, Any] = {
         'message_id': f'msg-{uuid.uuid4()}',
         'timestamp': time.time(),
@@ -44,6 +54,7 @@ def build_message(
         'reply_requested': reply_requested,
         'artifact_refs': artifact_refs or [],
         'tool_result_ids': tool_result_ids or [],
+        'correlation_id': correlation_id or new_correlation_id(),
     }
     if round_index is not None:
         payload['round'] = round_index

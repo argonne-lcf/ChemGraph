@@ -15,6 +15,9 @@ from typing import Any
 from chemgraph.academy.campaigns import campaign_launch_defaults
 from chemgraph.academy.campaigns import resolve_campaign
 from chemgraph.academy.campaigns import resolve_lm_config_template
+from chemgraph.academy.core.campaign import parse_agents_selection
+from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
+from chemgraph.academy.runtime.exchange import exchange_uses_redis
 from chemgraph.academy.runtime.profiles import list_builtin_system_profiles
 from chemgraph.academy.runtime.profiles import load_system_profile
 from chemgraph.academy.runtime.profiles.system import SystemProfile
@@ -48,6 +51,12 @@ class AllocationPlan:
     mpiexec: str
     chemgraph_repo_root: Path
     exchange_type: str = "redis"
+    http_exchange_url: str | None = None
+    # Federated spawn-site fields. Empty ``agents`` = single-machine
+    # run-compute flow (every agent on the campaign is launched).
+    # Non-empty = this allocation only owns the listed agents; the
+    # other sites are presumed running elsewhere on the same exchange.
+    agents: tuple[str, ...] = ()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -79,8 +88,48 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--redis-port", type=int)
     parser.add_argument(
         "--exchange-type",
-        choices=("redis", "local", "hybrid"),
+        choices=SUPPORTED_EXCHANGE_TYPES,
         default="redis",
+        help=(
+            "Academy exchange backend. 'http' targets an HTTP exchange "
+            "server (Academy-hosted default unless --http-exchange-url "
+            "is given) and reaches across HPC sites; requires a cached "
+            "Globus token (run scripts/academy_login_globus.py once) "
+            "and on Aurora compute nodes the ALCF http(s)_proxy env "
+            "vars must be set before launch."
+        ),
+    )
+    parser.add_argument(
+        "--http-exchange-url",
+        help=(
+            "Override URL for --exchange-type=http. Omit to use the "
+            "Academy-hosted default."
+        ),
+    )
+    parser.add_argument(
+        "--agents",
+        default=None,
+        help=(
+            "Comma-separated subset of agent names this allocation owns "
+            "(federated spawn-site mode). When given, --agent-count is "
+            "derived from the slice length and the daemon receives "
+            "--agents so it filters the campaign down to the slice. "
+            "Omit to launch every declared agent (single-machine mode)."
+        ),
+    )
+    # --no-bootstrap retired 2026-07-07: in-daemon bootstrap is gone,
+    # kickoff is always operator-triggered via swarm inject.
+    parser.add_argument(
+        "--startup-timeout-s",
+        type=float,
+        default=None,
+        help=(
+            "How long the daemon's cross-site peer-discovery loop "
+            "waits before giving up. Default 600s. Bump higher for "
+            "federated launches where HPC queue waits + Python "
+            "imports + cold-cache rsyncs can push one site's startup "
+            "well past the other site's discovery patience."
+        ),
     )
     parser.add_argument("--no-start-redis", action="store_true")
     return parser.parse_args(argv)
@@ -94,8 +143,29 @@ def _prepend_path(name: str, entries: list[str]) -> None:
     os.environ[name] = os.pathsep.join(values)
 
 
-def _prepare_environment(profile: SystemProfile) -> None:
+_PROXY_ENV_NAMES = frozenset({
+    "http_proxy", "HTTP_PROXY",
+    "https_proxy", "HTTPS_PROXY",
+    "all_proxy", "ALL_PROXY",
+})
+
+
+def _prepare_environment(
+    profile: SystemProfile,
+    *,
+    exchange_type: str = "redis",
+) -> None:
+    # Aurora's profile lists http(s)_proxy in unset_env so that LM traffic
+    # going through the local UAN relay (127.0.0.1:<relay>) doesn't pick up
+    # a stray site proxy. That's correct for Redis-based campaigns, but for
+    # --exchange-type=http the ranks MUST reach exchange.academy-agents.org
+    # over the public internet, which on Aurora compute nodes only works
+    # through the ALCF HTTP proxy. Keep the proxy vars when the exchange
+    # needs them. The no_proxy list set below still excludes 127.0.0.1 +
+    # .alcf.anl.gov so the LM relay continues to bypass the proxy.
     for name in profile.unset_env:
+        if exchange_type == "http" and name in _PROXY_ENV_NAMES:
+            continue
         os.environ.pop(name, None)
     _prepend_path("PATH", profile.path_entries)
     _prepend_path("PYTHONPATH", profile.pythonpath_entries)
@@ -105,14 +175,24 @@ def _prepare_environment(profile: SystemProfile) -> None:
     os.environ["NO_PROXY"] = profile.no_proxy
 
 
-def _load_dashboard_metadata(run_dir: Path) -> dict[str, Any]:
-    path = run_dir / DASHBOARD_METADATA_FILE
-    if not path.exists():
-        return {}
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise RuntimeError(f"{path} must contain a JSON object")
-    return data
+def _load_dashboard_metadata(run_dir: Path, *, site: str | None = None) -> dict[str, Any]:
+    # Prefer the per-site metadata if it exists; fall back to the legacy
+    # shared name. Federated runs share run_dir across sites (Eagle is
+    # mounted on every ALCF site), so a single dashboard_metadata.json
+    # races between sites at write time AND gives every site whichever
+    # site wrote last when read -- including lm_base_url, which routes
+    # the agent's LM calls to the WRONG UAN relay.
+    candidates: list[Path] = []
+    if site:
+        candidates.append(run_dir / f"dashboard_metadata.{site}.json")
+    candidates.append(run_dir / DASHBOARD_METADATA_FILE)
+    for path in candidates:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise RuntimeError(f"{path} must contain a JSON object")
+            return data
+    return {}
 
 
 def _relay_host_from_profile(profile: SystemProfile) -> str:
@@ -153,8 +233,20 @@ def _write_lm_config(
     lm_model: str | None,
     lm_user: str | None,
     max_tokens: int | None,
+    site: str | None = None,
+    profile: SystemProfile | None = None,
 ) -> Path:
+    if not template_name:
+        raise RuntimeError(
+            "campaign.launch_defaults.lm_config_template is required "
+            "(e.g. 'argo-gpt5mini-federated-chat')."
+        )
     template_path = resolve_lm_config_template(template_name)
+    if template_path.is_dir() or not template_path.exists():
+        raise RuntimeError(
+            f"LM template {template_name!r} did not resolve to a "
+            f"readable file (got {template_path})."
+        )
     data = json.loads(template_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise RuntimeError(f"LM template must contain a JSON object: {template_path}")
@@ -166,7 +258,27 @@ def _write_lm_config(
     if max_tokens is not None:
         data["max_tokens"] = max_tokens
 
-    path = run_dir / "lm_config.json"
+    # Refuse to ship a config whose `user` is still the template
+    # placeholder. Argo rejects requests with an unknown user, but
+    # only at first-call time on the compute node, after the whole
+    # daemon + relay stack is already running -- expensive to debug.
+    # Fail here instead, with a message pointing at the fix.
+    if data.get("user") in (None, "", "<argo-user>"):
+        raise RuntimeError(
+            f"lm_config.json was written with user={data.get('user')!r}. "
+            "Pass --lm-user <your-argo-username> or export ARGO_USER "
+            "before launching spawn-site / run-compute."
+        )
+
+    # In federated runs, run_dir is SHARED across sites (via dashboard
+    # metadata pointing at the same /eagle path). Each site's compute
+    # daemon must point at its OWN UAN relay URL, but they all write
+    # into the same dir -- so "lm_config.json" (no suffix) would race,
+    # and whichever site wrote last wins. Other sites then dial that
+    # one's relay, which isn't reachable from their compute network.
+    # Per-site name prevents the race.
+    name = f"lm_config.{site}.json" if site else "lm_config.json"
+    path = run_dir / name
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -192,34 +304,57 @@ def _run_token() -> str:
 def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
     """Resolve a system profile and dashboard metadata into an allocation plan."""
     profile = load_system_profile(args.system)
-    _prepare_environment(profile)
+    _prepare_environment(profile, exchange_type=args.exchange_type)
 
     defaults = campaign_launch_defaults(args.campaign)
     run_dir = Path(args.run_dir or Path(profile.run_root) / args.run_id).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    metadata = _load_dashboard_metadata(run_dir)
-    metadata_campaign = metadata.get("campaign")
-    if metadata_campaign and metadata_campaign != args.campaign:
-        raise RuntimeError(
-            f"Run metadata campaign {metadata_campaign!r} does not match "
-            f"--campaign {args.campaign!r}",
-        )
+    metadata = _load_dashboard_metadata(run_dir, site=profile.name)
+    # dashboard_metadata.<site>.json no longer carries a "campaign"
+    # field (dashboard startup is campaign-agnostic; campaign is
+    # canvas-time). The old sanity-check comparing metadata_campaign
+    # against args.campaign was dead as of commit 1714fff.
 
     lm_base_url = _resolve_lm_base_url(
         args=args,
         profile=profile,
         metadata=metadata,
     )
+    # Default lm-user from $ARGO_USER so HPC users who already export it
+    # for their normal ChemGraph workflow don't have to pass --lm-user
+    # again. The packaged template ships with a literal "<argo-user>"
+    # placeholder so it can't accidentally point at someone else's
+    # Argo account; _write_lm_config refuses to keep that placeholder.
+    lm_user = args.lm_user or os.environ.get("ARGO_USER")
+    # Site-suffix only when this is a federated launch (spawn-site
+    # passes --agents). Single-machine run-compute keeps the legacy
+    # "lm_config.json" name so no existing tooling moves.
+    site_suffix = profile.name if getattr(args, "agents", None) else None
     lm_config = _write_lm_config(
         run_dir=run_dir,
         template_name=defaults.lm_config_template,
         base_url=lm_base_url,
         lm_model=args.lm_model,
-        lm_user=args.lm_user,
+        lm_user=lm_user,
         max_tokens=args.max_tokens,
+        site=site_suffix,
+        profile=profile,
     )
     _export_workflow_lm_environment(lm_config)
-    agent_count = args.agent_count or defaults.agent_count
+    # When --agents is given the slice length is authoritative. Otherwise
+    # use the CLI / packaged default. We refuse to mix --agents with an
+    # explicit --agent-count that disagrees, to avoid silent surprises.
+    agents_slice = parse_agents_selection(getattr(args, "agents", None))
+    if agents_slice:
+        derived_count = len(agents_slice)
+        if args.agent_count and args.agent_count != derived_count:
+            raise RuntimeError(
+                f"--agent-count={args.agent_count} contradicts --agents "
+                f"(which implies {derived_count}). Pass --agents alone."
+            )
+        agent_count = derived_count
+    else:
+        agent_count = args.agent_count or defaults.agent_count
     agents_per_node = args.agents_per_node or defaults.agents_per_node
     max_decisions = args.max_decisions or defaults.max_decisions
     redis_port = args.redis_port or profile.redis_port
@@ -237,8 +372,17 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         lm_config=lm_config,
         max_decisions=max_decisions,
         poll_timeout_s=2.0,
-        idle_timeout_s=600.0,
-        startup_timeout_s=120.0,
+        idle_timeout_s=3600.0,
+        # Default 3600s. This governs how long a passive peer will wait
+        # between rounds before shutting itself down. In cross-HPC MOF
+        # runs the sim peer may sit idle for ~20-30min while the
+        # planner peer runs UMA optimization + PACMOF2 before sending
+        # the first message. Anything shorter causes the sim peer to
+        # time out and the campaign to auto-finalize with the planner
+        # orphaned. If a single-machine run truly hangs, PBS walltime
+        # is the final ceiling.
+        # (the daemon prints a clear "missing=..." message regardless).
+        startup_timeout_s=(getattr(args, "startup_timeout_s", None) or 600.0),
         completion_timeout_s=60.0,
         status_interval_s=5.0,
         redis_host=socket.getfqdn(),
@@ -250,6 +394,8 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         mpiexec=profile.mpiexec,
         chemgraph_repo_root=Path(profile.repo_root).resolve(),
         exchange_type=args.exchange_type,
+        http_exchange_url=args.http_exchange_url,
+        agents=agents_slice,
     )
 
 
@@ -274,7 +420,7 @@ def run_allocation(plan: AllocationPlan) -> int:
     """Start Redis if requested and run per-rank daemons under mpiexec."""
     plan.run_dir.mkdir(parents=True, exist_ok=True)
     redis_proc: subprocess.Popen[bytes] | None = None
-    uses_redis = plan.exchange_type in {"redis", "hybrid"}
+    uses_redis = exchange_uses_redis(plan.exchange_type)
     if plan.start_redis and uses_redis:
         redis_server = shutil.which("redis-server")
         if redis_server is None:
@@ -324,11 +470,43 @@ def run_allocation(plan: AllocationPlan) -> int:
             "--exchange-type", plan.exchange_type,
             "--chemgraph-repo-root", str(plan.chemgraph_repo_root),
         ]
+        if plan.http_exchange_url:
+            daemon_args += ["--http-exchange-url", plan.http_exchange_url]
+        # Federated spawn-site forwarding. Both flags are omitted on the
+        # single-machine run-compute flow so the daemon's argparse
+        # defaults (full campaign, bootstrap enabled) keep prior behavior.
+        if plan.agents:
+            daemon_args += ["--agents", ",".join(plan.agents)]
+        # When using the HTTP exchange on HPC compute nodes (e.g. Aurora),
+        # ranks must reach exchange.academy-agents.org through the site's
+        # outbound HTTP proxy. PALS/MPICH mpiexec strips most parent-shell
+        # env vars from spawned ranks, so http_proxy / https_proxy don't
+        # propagate automatically -- force forwarding via --genvall and
+        # set the proxy vars in our own environ first so they are part
+        # of the parent env that --genvall snapshots.
+        genv_flags: list[str] = []
+        if plan.exchange_type == "http":
+            for name in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"):
+                value = os.environ.get(name)
+                if value:
+                    genv_flags += ["--genv", f"{name}={value}"]
+            # --genvall snapshots the whole parent env as belt-and-braces;
+            # the explicit per-var entries surface in launch_command.txt for
+            # post-hoc debugging when a rank can't reach the exchange.
+            genv_flags = ["--genvall", *genv_flags]
+        # Point mpiexec directly at the daemon module. Going through
+        # ``swarm.cli mpi-daemon --`` would re-import the entire CLI
+        # dispatch (argparse, subcommand wiring) on every rank before
+        # dispatching to the daemon -- unnecessary since the daemon
+        # module already exposes matching argparse and a main()
+        # entrypoint. Direct import also matters on Crux where
+        # compute-node NFS makes cold python imports slow.
         cmd = [
             plan.mpiexec,
             "-n", str(plan.agent_count),
             "--ppn", str(plan.agents_per_node),
-            sys.executable, "-m", "chemgraph.cli.main", "academy", "mpi-daemon", "--",
+            *genv_flags,
+            sys.executable, "-m", "chemgraph.academy.runtime.daemon",
             *daemon_args,
         ]
         (plan.run_dir / "launch_command.txt").write_text(
