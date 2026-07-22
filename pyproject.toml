@@ -90,6 +90,15 @@ rag = [
     "sentence-transformers>=2.2.2",
     "pymupdf>=1.24.0",
 ]
+pacmof2 = [
+    # PACMOF2 is NOT on PyPI -- install it from source:
+    #   pip install -e .   (from github.com/snurr-group/pacmof2)
+    # scikit-learn is HARD PINNED by PACMOF2 and may conflict with other
+    # packages; prefer an isolated venv / globus_compute endpoint for the
+    # PACMOF2 worker. ase and pymatgen are already core dependencies.
+    "scikit-learn==1.3.2",
+    "huggingface-hub",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"

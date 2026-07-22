@@ -26,7 +26,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _demo_chemistry import agent_prompt_graspa, mcp_server_for, prompt_for
+from _demo_chemistry import (
+    agent_prompt_graspa,
+    agent_prompt_pacmof2,
+    mcp_server_for,
+    prompt_for,
+)
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
@@ -117,14 +122,22 @@ def main() -> None:
                         help="GPUs per process for MCP backend tasks")
     parser.add_argument(
         "--workload",
-        choices=["thermo", "ase", "graspa"],
+        choices=["thermo", "ase", "graspa", "fairchem", "pacmof2"],
         default="thermo",
-        help="thermo = MACE; ase = general ASE; graspa = GCMC (needs --graspa-cifs).",
+        help="thermo = MACE; ase = general ASE; graspa = GCMC (needs "
+             "--graspa-cifs); fairchem = FairChem/UMA; pacmof2 = MOF charges "
+             "(needs --pacmof2-cifs).",
     )
     parser.add_argument("--calculator", default="mace_mp",
                         help="ASE calculator for --workload ase.")
     parser.add_argument("--graspa-cifs", nargs="+", default=None,
                         help="CIF paths (node-reachable) for --workload graspa.")
+    parser.add_argument("--model-name", default="uma-s-1p1",
+                        help="FairChem/UMA model for --workload fairchem.")
+    parser.add_argument("--pacmof2-cifs", nargs="+", default=None,
+                        help="CIF paths (node-reachable) for --workload pacmof2.")
+    parser.add_argument("--net-charge", type=float, default=0,
+                        help="Target net charge for --workload pacmof2.")
     parser.add_argument("--query", default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
@@ -144,6 +157,10 @@ def main() -> None:
         if not args.graspa_cifs:
             _abort("--workload graspa requires --graspa-cifs <CIF> [<CIF> ...].")
         query = agent_prompt_graspa(args.graspa_cifs)
+    elif args.workload == "pacmof2":
+        if not args.pacmof2_cifs:
+            _abort("--workload pacmof2 requires --pacmof2-cifs <CIF> [<CIF> ...].")
+        query = agent_prompt_pacmof2(args.pacmof2_cifs, net_charge=args.net_charge)
     else:
         query = prompt_for(args.workload, device=device, calculator=args.calculator)
 

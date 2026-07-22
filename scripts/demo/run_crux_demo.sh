@@ -5,10 +5,12 @@
 # Must be executed INSIDE an interactive PBS allocation on Crux:
 #   qsub -I -A <proj> -l select=1 -l walltime=01:00:00 -q debug
 #   cd /lus/eagle/projects/ChemGraph/thang/ChemGraph
-#   bash scripts/demo/run_crux_demo.sh                  # both backends
+#   bash scripts/demo/run_crux_demo.sh                  # both backends (MACE thermo)
 #   bash scripts/demo/run_crux_demo.sh --parsl-only
 #   bash scripts/demo/run_crux_demo.sh --el-only
 #   bash scripts/demo/run_crux_demo.sh --molecules water methane
+#   bash scripts/demo/run_crux_demo.sh --workload fairchem
+#   bash scripts/demo/run_crux_demo.sh --workload pacmof2 --pacmof2-cifs a.cif b.cif
 
 set -euo pipefail
 
@@ -26,9 +28,13 @@ while (( $# )); do
     case "$1" in
         --parsl-only) RUN_EL=0; shift ;;
         --el-only) RUN_PARSL=0; shift ;;
-        --molecules) shift; while (( $# )) && [[ "$1" != --* ]]; do PASSTHROUGH+=("$1"); shift; done; PASSTHROUGH=(--molecules "${PASSTHROUGH[@]}") ;;
+        --molecules) shift; MOLS=(); while (( $# )) && [[ "$1" != --* ]]; do MOLS+=("$1"); shift; done; PASSTHROUGH+=(--molecules "${MOLS[@]}") ;;
+        --pacmof2-cifs) shift; CIFS=(); while (( $# )) && [[ "$1" != --* ]]; do CIFS+=("$1"); shift; done; PASSTHROUGH+=(--pacmof2-cifs "${CIFS[@]}") ;;
+        --workload) PASSTHROUGH+=("$1" "$2"); shift 2 ;;
+        --model-name) PASSTHROUGH+=("$1" "$2"); shift 2 ;;
+        --net-charge) PASSTHROUGH+=("$1" "$2"); shift 2 ;;
         --timeout) PASSTHROUGH+=("$1" "$2"); shift 2 ;;
-        -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help) sed -n '2,14p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) abort "Unknown argument: $1" ;;
     esac
 done

@@ -177,6 +177,61 @@ def build_ase_job(
     return job
 
 
+def build_fairchem_job(
+    name: str,
+    *,
+    device: str,
+    output_dir: Path,
+    inline: bool,
+    model_name: str = "uma-s-1p1",
+    task_name: str | None = "omol",
+    driver: str = "thermo",
+    temperature: float = 298.15,
+    pressure: float = 101325.0,
+    fmax: float = 0.01,
+    steps: int = 200,
+    optimizer: str = "lbfgs",
+) -> dict:
+    """Build the job dict consumed by ``_fairchem_worker`` for one molecule.
+
+    Mirrors :func:`build_thermo_job` but targets the FairChem/UMA server.
+    Job keys match :class:`fairchem_input_schema`; the output key is
+    ``output_result_file`` (as in the FairChem server). For ``inline=True``
+    the structure is embedded and ``_workload="fairchem"`` is set so the
+    inline read-back wrapper picks the FairChem worker.
+    """
+    xyz = molecule_xyz_path(name)
+    job: dict[str, Any] = {
+        "input_structure_file": str(xyz),
+        "driver": driver,
+        "model_name": model_name,
+        "task_name": task_name,
+        "device": device,
+        "temperature": temperature,
+        "pressure": pressure,
+        "fmax": fmax,
+        "steps": steps,
+        "optimizer": optimizer,
+    }
+    if inline:
+        # Relative name only -- resolved into a worker-side tmpdir by
+        # _fairchem_worker. Never bake a laptop path into a remote job.
+        job["output_result_file"] = f"{name}_fairchem.json"
+        job["_workload"] = "fairchem"  # consumed by the inline wrapper
+        from ase.io import read as ase_read
+
+        from chemgraph.tools.ase_core import atoms_to_atomsdata
+
+        atoms = ase_read(str(xyz))
+        job["inline_structure"] = atoms_to_atomsdata(atoms).model_dump()
+    else:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        job["output_result_file"] = str(
+            (Path(output_dir) / f"{name}_fairchem.json").resolve()
+        )
+    return job
+
+
 def build_graspa_job(
     cif_path: str | Path,
     *,
@@ -204,6 +259,31 @@ def build_graspa_job(
         "temperature": temperature,
         "pressure": pressure,
         "n_cycles": n_cycles,
+    }
+
+
+def build_pacmof2_job(
+    cif_path: str | Path,
+    *,
+    output_dir: Path,
+    identifier: str = "_pacmof",
+    adjust_charge_method: str = "mean",
+    net_charge: int | float | dict = 0,
+) -> dict:
+    """Build the job dict consumed by ``_pacmof2_worker`` for one CIF.
+
+    PACMOF2 mirrors gRASPA: CIF-in, shared/remote filesystem only (no
+    inline transport). It writes the charged CIF next to its input, so
+    ``output_dir`` is only used to keep the harness signature uniform.
+    """
+    cif_path = Path(cif_path)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    return {
+        "_structure_name": cif_path.stem,
+        "input_structure_file": str(cif_path),
+        "identifier": identifier,
+        "adjust_charge_method": adjust_charge_method,
+        "net_charge": net_charge,
     }
 
 
@@ -270,6 +350,24 @@ def _extract_graspa_properties(name: str, raw: dict, job: dict, *, inline: bool)
     }
 
 
+def _extract_pacmof2_properties(name: str, raw: dict, job: dict, *, inline: bool) -> dict:
+    """Pull the charge summary out of one PACMOF2 job's result.
+
+    ``_pacmof2_worker`` already returns the parsed summary dict (output
+    CIF path, per-element mean charges, sum of charges), so we read
+    directly from ``raw`` -- no output-file round-trip (mirrors gRASPA).
+    """
+    return {
+        "structure": raw.get("structure") or name,
+        "status": raw.get("status", "?"),
+        "n_atoms": raw.get("n_atoms"),
+        "sum_of_charges": raw.get("sum_of_charges"),
+        "charge_range": raw.get("charge_range"),
+        "per_element_mean_charge": raw.get("per_element_mean_charge"),
+        "output_cif_path": raw.get("output_cif_path"),
+    }
+
+
 def _make_worker_with_full_output():
     """Return a backend-side wrapper that runs the per-workload worker, then
     reads its output JSON back in-process and attaches it as ``full_output``.
@@ -317,6 +415,10 @@ def _make_worker_with_full_output():
             from chemgraph.mcp.ase_mcp_hpc import _ase_worker as _worker
             from chemgraph.tools.ase_core import extract_output_json_core as _extract
             out_key = "output_results_file"
+        elif workload == "fairchem":
+            from chemgraph.mcp.fairchem_mcp_hpc import _fairchem_worker as _worker
+            from chemgraph.tools.fairchem_tools import extract_output_json as _extract
+            out_key = "output_result_file"
         else:
             from chemgraph.mcp.mace_mcp_hpc import _mace_worker as _worker
             from chemgraph.tools.parsl_tools import extract_output_json as _extract
@@ -370,6 +472,18 @@ def _graspa_package_worker():
     return _graspa_worker
 
 
+def _fairchem_package_worker():
+    from chemgraph.mcp.fairchem_mcp_hpc import _fairchem_worker
+
+    return _fairchem_worker
+
+
+def _pacmof2_package_worker():
+    from chemgraph.mcp.pacmof2_mcp_hpc import _pacmof2_worker
+
+    return _pacmof2_worker
+
+
 # Registry mapping a --workload value to how the shared harness runs it.
 # ``inline_ok`` marks workloads that support Globus-Compute inline transport
 # (structure embedded in the payload); gRASPA is HPC/shared-FS only.
@@ -392,6 +506,18 @@ WORKLOADS: dict[str, dict[str, Any]] = {
         "extractor": _extract_graspa_properties,
         "inline_ok": False,
     },
+    "fairchem": {
+        "label": "FairChem/UMA",
+        "package_worker": _fairchem_package_worker,
+        "extractor": _extract_properties,
+        "inline_ok": True,
+    },
+    "pacmof2": {
+        "label": "PACMOF2 charges",
+        "package_worker": _pacmof2_package_worker,
+        "extractor": _extract_pacmof2_properties,
+        "inline_ok": False,
+    },
 }
 
 
@@ -407,6 +533,11 @@ def _build_jobs(
     adsorbate: str = "H2O",
     temperature: float = 298.15,
     pressure: float = 101325.0,
+    model_name: str = "uma-s-1p1",
+    task_name: str | None = "omol",
+    net_charge: int | float | dict = 0,
+    identifier: str = "_pacmof",
+    adjust_charge_method: str = "mean",
 ) -> list[dict]:
     """Build the per-item job dicts for *workload*."""
     if workload == "thermo":
@@ -431,6 +562,21 @@ def _build_jobs(
                 job["_workload"] = "ase"  # consumed by the inline wrapper
             jobs.append(job)
         return jobs
+    if workload == "fairchem":
+        return [
+            build_fairchem_job(
+                name,
+                device=device,
+                output_dir=output_dir,
+                inline=inline,
+                model_name=model_name,
+                task_name=task_name,
+                driver=driver,
+                temperature=temperature,
+                pressure=pressure,
+            )
+            for name in items
+        ]
     if workload == "graspa":
         return [
             build_graspa_job(
@@ -442,12 +588,27 @@ def _build_jobs(
             )
             for cif in items
         ]
+    if workload == "pacmof2":
+        return [
+            build_pacmof2_job(
+                cif,
+                output_dir=output_dir,
+                identifier=identifier,
+                adjust_charge_method=adjust_charge_method,
+                net_charge=net_charge,
+            )
+            for cif in items
+        ]
     raise ValueError(f"Unknown workload: {workload!r}")
+
+
+# Workloads whose work items are CIF paths (vs. molecule fixture names).
+_CIF_WORKLOADS = frozenset({"graspa", "pacmof2"})
 
 
 def _item_label(workload: str, item: str) -> str:
     """Short display name for one work item."""
-    return Path(item).stem if workload == "graspa" else item
+    return Path(item).stem if workload in _CIF_WORKLOADS else item
 
 
 def submit_and_collect(
@@ -464,6 +625,11 @@ def submit_and_collect(
     adsorbate: str = "H2O",
     temperature: float = 298.15,
     pressure: float = 101325.0,
+    model_name: str = "uma-s-1p1",
+    task_name: str | None = "omol",
+    net_charge: int | float | dict = 0,
+    identifier: str = "_pacmof",
+    adjust_charge_method: str = "mean",
     timeout: float = 6000.0,
     ppn: int = 1,
 ) -> list[dict]:
@@ -507,6 +673,11 @@ def submit_and_collect(
         adsorbate=adsorbate,
         temperature=temperature,
         pressure=pressure,
+        model_name=model_name,
+        task_name=task_name,
+        net_charge=net_charge,
+        identifier=identifier,
+        adjust_charge_method=adjust_charge_method,
     )
 
     # Inline transport (Globus Compute): the worker writes results to a path
@@ -550,17 +721,23 @@ def submit_and_collect(
 
 
 def write_csv(results: list[dict], csv_path: Path | str) -> Path:
-    """Write the property table to *csv_path*. Returns the path."""
+    """Write the property table to *csv_path*. Returns the path.
+
+    Failed jobs appear as ``None`` in *results*; they are skipped so a
+    batch where every job failed still writes a valid (empty) CSV instead
+    of crashing.
+    """
     csv_path = Path(csv_path)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    if not results:
+    rows = [r for r in results if r]
+    if not rows:
         csv_path.write_text("")
         return csv_path
-    fieldnames = list(results[0].keys())
+    fieldnames = list(rows[0].keys())
     with open(csv_path, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(results)
+        writer.writerows(rows)
     return csv_path
 
 
@@ -616,11 +793,40 @@ def _print_graspa_summary(results: list[dict]) -> None:
     print()
 
 
+def _print_pacmof2_summary(results: list[dict]) -> None:
+    header = (
+        f"{'structure':<16}  {'status':>8}  {'#atoms':>7}  {'sum(q)':>10}  "
+        f"{'q range':>18}  {'output CIF':<40}"
+    )
+    print(header)
+    print("-" * len(header))
+    for r in results:
+        if not r:
+            continue
+        crange = r.get("charge_range")
+        crange_str = (
+            f"[{crange[0]:.3f}, {crange[1]:.3f}]"
+            if isinstance(crange, (list, tuple)) and len(crange) == 2
+            else "-"
+        )
+        cif = r.get("output_cif_path") or "-"
+        print(
+            f"{r.get('structure', '?'):<16}  "
+            f"{_fmt(r.get('status'), 8)}  "
+            f"{_fmt(r.get('n_atoms'), 7, 0)}  "
+            f"{_fmt(r.get('sum_of_charges'), 10, 4)}  "
+            f"{crange_str:>18}  "
+            f"{cif:<40}"
+        )
+    print()
+
+
 def print_summary(results: list[dict], title: str = "", workload: str = "thermo") -> None:
     """Print a fixed-width table of the screening results.
 
-    ``thermo`` and ``ase`` share the molecular-property table; ``graspa``
-    uses a GCMC uptake table.
+    ``thermo``, ``ase`` and ``fairchem`` share the molecular-property
+    table; ``graspa`` uses a GCMC uptake table; ``pacmof2`` uses a charge
+    summary table.
     """
     if title:
         print(f"\n=== {title} ===")
@@ -629,6 +835,8 @@ def print_summary(results: list[dict], title: str = "", workload: str = "thermo"
         return
     if workload == "graspa":
         _print_graspa_summary(results)
+    elif workload == "pacmof2":
+        _print_pacmof2_summary(results)
     else:
         _print_thermo_summary(results)
 
@@ -683,6 +891,29 @@ def agent_prompt_ase(device: str = "cpu", calculator: str = "mace_mp") -> str:
     )
 
 
+def agent_prompt_fairchem(device: str = "cpu", model_name: str = "uma-s-1p1") -> str:
+    """Prompt for the FairChem/UMA (``run_fairchem_single``) agent demos."""
+    files = ", ".join(str(molecule_xyz_path(n)) for n in MOLECULE_NAMES)
+    return (
+        f"Using the FairChem tool (run_fairchem_single) with driver='thermo', "
+        f"model_name='{model_name}', task_name='omol', device='{device}', "
+        f"temperature=298.15 K, pressure=101325 Pa, compute thermochemistry for "
+        f"each of these five molecules:\n"
+        f"  - water:    {molecule_xyz_path('water')}\n"
+        f"  - methane:  {molecule_xyz_path('methane')}\n"
+        f"  - ammonia:  {molecule_xyz_path('ammonia')}\n"
+        f"  - CO2:      {molecule_xyz_path('co2')}\n"
+        f"  - ethanol:  {molecule_xyz_path('ethanol')}\n"
+        f"Call run_fairchem_single once per molecule (do not batch them yourself). "
+        f"For each result, retrieve the optimized electronic energy, enthalpy, "
+        f"entropy and Gibbs free energy by reading the output JSON via "
+        f"extract_output_json. After all five complete, report a markdown table "
+        f"with columns: molecule, energy (eV), H (eV), G (eV), and wall-time then "
+        f"a one-line observation about which molecule has the lowest Gibbs free "
+        f"energy.\n\n(Structure paths for reference: {files})"
+    )
+
+
 def agent_prompt_graspa(
     cif_paths: list[str],
     *,
@@ -706,13 +937,41 @@ def agent_prompt_graspa(
     )
 
 
+def agent_prompt_pacmof2(cif_paths: list[str], *, net_charge: int | float = 0) -> str:
+    """Prompt for the PACMOF2 (``run_pacmof2_ensemble``) agent demos.
+
+    PACMOF2 is shared-FS/HPC-only; ``cif_paths`` should point at CIFs
+    reachable on the remote (shared or pre-staged) filesystem.
+    """
+    listing = "\n".join(f"  - {p}" for p in cif_paths)
+    return (
+        f"Using the PACMOF2 tool (run_pacmof2_ensemble) with net_charge="
+        f"{net_charge}, assign machine-learned partial atomic charges to the "
+        f"following MOF CIF structures:\n"
+        f"{listing}\n"
+        f"After the runs complete, report a markdown table with columns: "
+        f"structure, sum of charges, output CIF path. Report tool errors exactly "
+        f"as they occur."
+    )
+
+
 def prompt_for(workload: str, *, device: str = "cpu", calculator: str = "mace_mp") -> str:
-    """Return the agent prompt for *workload* (thermo/ase; graspa needs CIFs)."""
+    """Return the agent prompt for *workload*.
+
+    ``thermo``/``ase``/``fairchem`` build molecule prompts here; ``graspa``
+    and ``pacmof2`` need explicit CIF paths (call their dedicated builders).
+    """
     if workload == "ase":
         return agent_prompt_ase(device=device, calculator=calculator)
+    if workload == "fairchem":
+        return agent_prompt_fairchem(device=device)
     if workload == "graspa":
         raise ValueError(
             "gRASPA prompts need explicit CIF paths; call agent_prompt_graspa()."
+        )
+    if workload == "pacmof2":
+        raise ValueError(
+            "PACMOF2 prompts need explicit CIF paths; call agent_prompt_pacmof2()."
         )
     return agent_prompt(device=device)
 
@@ -743,6 +1002,18 @@ MCP_SERVER_BY_WORKLOAD: dict[str, dict[str, Any]] = {
         "port": 9001,
         "label": "ChemGraph gRASPA",
         "single_tool": "run_graspa_ensemble",
+    },
+    "fairchem": {
+        "module": "chemgraph.mcp.fairchem_mcp_hpc",
+        "port": 9008,
+        "label": "ChemGraph FairChem",
+        "single_tool": "run_fairchem_single",
+    },
+    "pacmof2": {
+        "module": "chemgraph.mcp.pacmof2_mcp_hpc",
+        "port": 9009,
+        "label": "ChemGraph PACMOF2",
+        "single_tool": "run_pacmof2_ensemble",
     },
 }
 
@@ -787,6 +1058,23 @@ def add_workload_args(parser) -> None:
         default=None,
         help="CIF paths (remote-reachable) for --workload graspa.",
     )
+    parser.add_argument(
+        "--model-name",
+        default="uma-s-1p1",
+        help="FairChem/UMA model for --workload fairchem (e.g. uma-s-1p1, uma-m-1).",
+    )
+    parser.add_argument(
+        "--pacmof2-cifs",
+        nargs="+",
+        default=None,
+        help="CIF paths (remote-reachable) for --workload pacmof2.",
+    )
+    parser.add_argument(
+        "--net-charge",
+        type=float,
+        default=0,
+        help="Target net charge for --workload pacmof2 (default: 0).",
+    )
 
 
 def abort_if_graspa_unsupported(workload: str, backend_name: str) -> None:
@@ -802,10 +1090,15 @@ def abort_if_graspa_unsupported(workload: str, backend_name: str) -> None:
 
 
 def resolve_items(workload: str, *, molecules: list[str], cifs: list[str] | None) -> list[str]:
-    """Return the per-item list for *workload* (molecules or CIF paths)."""
-    if workload == "graspa":
+    """Return the per-item list for *workload* (molecules or CIF paths).
+
+    ``graspa`` and ``pacmof2`` are CIF-based; the caller passes the workload's
+    ``--graspa-cifs`` / ``--pacmof2-cifs`` value as *cifs*.
+    """
+    if workload in _CIF_WORKLOADS:
         if not cifs:
-            print("ERROR: --workload graspa requires --graspa-cifs <CIF> [<CIF> ...].")
+            flag = "--pacmof2-cifs" if workload == "pacmof2" else "--graspa-cifs"
+            print(f"ERROR: --workload {workload} requires {flag} <CIF> [<CIF> ...].")
             sys.exit(2)
         return list(cifs)
     return list(molecules)
