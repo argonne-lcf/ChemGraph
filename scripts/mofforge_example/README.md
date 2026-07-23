@@ -99,6 +99,18 @@ ChemGraph `single_agent` workflow:
 3. PACMOF2 for partial-charge assignment; and
 4. gRASPA for adsorption simulations.
 
+The script does not define another agent, graph, or system prompt. After
+loading the MCP tools it delegates directly to ChemGraph:
+
+```python
+agent = ChemGraph(
+    model_name=model,
+    workflow_type="single_agent",
+    tools=tools,
+)
+result = await agent.run(query)
+```
+
 First verify server startup and inspect the complete tool inventory without
 using an LLM:
 
@@ -146,6 +158,11 @@ The same values can be supplied with `--mofforge-python`,
 execution layer with `--backend`; the default is `local`, while `parsl`,
 `ensemble_launcher`, and `globus_compute` use the existing ChemGraph backend
 configuration.
+
+All prompting, reasoning, LangGraph routing, tool invocation, and final
+response generation come from ChemGraph's standard `single_agent` workflow.
+The example manages persistent MCP sessions only because stdio-backed job
+trackers must remain alive between submission and result polling.
 
 The demo leaves the already-prefixed `mofforge_*` names unchanged. FairChem,
 PACMOF2, and gRASPA tools receive server prefixes so their common

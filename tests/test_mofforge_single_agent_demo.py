@@ -1,4 +1,4 @@
-"""Hermetic tests for the four-server mofforge single-agent demo."""
+"""Tests for the thin ChemGraph + four MCP servers example."""
 
 from __future__ import annotations
 
@@ -9,126 +9,90 @@ from types import SimpleNamespace
 
 import pytest
 
-SCRIPT_PATH = (
+SCRIPT = (
     Path(__file__).parents[1]
     / "scripts"
     / "mofforge_example"
     / "demo_single_agent_all_mcp.py"
 )
-SPEC = importlib.util.spec_from_file_location(
-    "demo_single_agent_all_mcp",
-    SCRIPT_PATH,
-)
+SPEC = importlib.util.spec_from_file_location("mofforge_agent_demo", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 demo = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(demo)
 
 
-def _args(**overrides):
-    values = {
-        "backend": "local",
-        "compute_system": "local",
-        "mofforge_python": sys.executable,
-        "fairchem_python": sys.executable,
-        "pacmof2_python": sys.executable,
-        "graspa_python": sys.executable,
-        "fairchem_ppn": 2,
-        "fairchem_ngpus_per_process": 1,
-    }
-    values.update(overrides)
-    return SimpleNamespace(**values)
-
-
-def _tool(name: str):
-    return SimpleNamespace(name=name)
-
-
-def test_build_server_configs_uses_expected_modules_and_resource_flags():
-    configs = demo.build_server_configs(_args())
-
-    assert set(configs) == {"mofforge", "fairchem", "pacmof2", "graspa"}
-    for server_name, module in demo.SERVER_MODULES.items():
-        config = configs[server_name]
-        assert config["transport"] == "stdio"
-        assert config["command"] == str(Path(sys.executable).resolve())
-        assert config["args"][:3] == ["-u", "-m", module]
-        assert config["args"][-2:] == ["--transport", "stdio"]
-
-    fairchem_args = configs["fairchem"]["args"]
-    assert fairchem_args[fairchem_args.index("--ppn") + 1] == "2"
-    assert (
-        fairchem_args[fairchem_args.index("--ngpus-per-process") + 1]
-        == "1"
+def _args():
+    return SimpleNamespace(
+        backend="local",
+        compute_system="local",
+        mofforge_python=sys.executable,
+        fairchem_python=sys.executable,
+        pacmof2_python=sys.executable,
+        graspa_python=sys.executable,
     )
 
 
-def test_forwarded_environment_keeps_runtime_config_but_not_llm_keys(
-    monkeypatch,
-):
-    monkeypatch.setenv("MOFFORGE_LOG_DIR", "/tmp/mofforge-output")
-    monkeypatch.setenv("GLOBUS_COMPUTE_ENDPOINT_ID", "endpoint-id")
-    monkeypatch.setenv("OPENAI_API_KEY", "must-not-reach-tool-server")
+def test_server_configs_start_the_expected_mcp_modules():
+    configs = demo.build_server_configs(_args())
 
-    env = demo._forwarded_environment("globus_compute", "polaris")
+    assert set(configs) == set(demo.SERVER_MODULES)
+    for name, module in demo.SERVER_MODULES.items():
+        assert configs[name]["command"] == str(Path(sys.executable).resolve())
+        assert configs[name]["args"] == [
+            "-u",
+            "-m",
+            module,
+            "--transport",
+            "stdio",
+        ]
 
-    assert env["MOFFORGE_LOG_DIR"] == "/tmp/mofforge-output"
-    assert env["GLOBUS_COMPUTE_ENDPOINT_ID"] == "endpoint-id"
-    assert env["CHEMGRAPH_EXECUTION_BACKEND"] == "globus_compute"
-    assert env["COMPUTE_SYSTEM"] == "polaris"
+
+def test_only_generic_hpc_tools_are_prefixed():
+    assert demo._prefix_tools("mofforge") is False
+    assert demo._prefix_tools("fairchem") is True
+    assert demo._prefix_tools("pacmof2") is True
+    assert demo._prefix_tools("graspa") is True
+
+
+def test_server_environment_excludes_llm_credentials(monkeypatch):
+    monkeypatch.setenv("MOFFORGE_LOG_DIR", "/tmp/mofforge")
+    monkeypatch.setenv("OPENAI_API_KEY", "not-for-mcp-servers")
+
+    env = demo._server_environment("local", "local")
+
+    assert env["MOFFORGE_LOG_DIR"] == "/tmp/mofforge"
+    assert env["CHEMGRAPH_EXECUTION_BACKEND"] == "local"
     assert "OPENAI_API_KEY" not in env
 
 
-def test_only_mofforge_tools_remain_unprefixed():
-    assert demo._tool_prefix_enabled("mofforge") is False
-    assert demo._tool_prefix_enabled("fairchem") is True
-    assert demo._tool_prefix_enabled("pacmof2") is True
-    assert demo._tool_prefix_enabled("graspa") is True
+@pytest.mark.asyncio
+async def test_run_chemgraph_uses_standard_single_agent(monkeypatch):
+    calls = {}
 
+    class FakeChemGraph:
+        def __init__(self, **kwargs):
+            calls["kwargs"] = kwargs
 
-def test_validate_tool_inventory_accepts_required_names():
-    grouped = {
-        server_name: [_tool(name) for name in sorted(required)]
-        for server_name, required in demo.REQUIRED_TOOLS.items()
-    }
+        async def run(self, query):
+            calls["query"] = query
+            return "standard-agent-result"
 
-    demo.validate_tool_inventory(grouped)
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.ChemGraph",
+        FakeChemGraph,
+    )
+    tools = [SimpleNamespace(name="mofforge_validate")]
 
+    result = await demo.run_chemgraph(
+        tools,
+        model="test-model",
+        query="test query",
+        recursion_limit=12,
+    )
 
-def test_validate_tool_inventory_reports_missing_tool():
-    grouped = {
-        server_name: [_tool(name) for name in sorted(required)]
-        for server_name, required in demo.REQUIRED_TOOLS.items()
-    }
-    grouped["graspa"] = []
-
-    with pytest.raises(RuntimeError, match="graspa.*run_graspa_ensemble"):
-        demo.validate_tool_inventory(grouped)
-
-
-def test_validate_tool_inventory_rejects_duplicate_names():
-    grouped = {
-        server_name: [_tool(name) for name in sorted(required)]
-        for server_name, required in demo.REQUIRED_TOOLS.items()
-    }
-    grouped["mofforge"].append(_tool("shared_name"))
-    grouped["fairchem"].append(_tool("shared_name"))
-
-    with pytest.raises(RuntimeError, match="Duplicate MCP tool names"):
-        demo.validate_tool_inventory(grouped)
-
-
-def test_resolve_python_honors_server_environment(monkeypatch):
-    monkeypatch.setenv("DEMO_TEST_PYTHON", sys.executable)
-    resolved = demo._resolve_python(None, "DEMO_TEST_PYTHON")
-    assert resolved == str(Path(sys.executable).resolve())
-
-
-def test_parser_defaults_to_async_inventory_capable_cli(monkeypatch):
-    monkeypatch.delenv("CHEMGRAPH_EXECUTION_BACKEND", raising=False)
-    parser = demo.build_parser()
-    args = parser.parse_args(["--list-tools-only"])
-
-    assert args.list_tools_only is True
-    assert args.backend == "local"
-    assert args.query == demo.DEFAULT_QUERY
-    assert args.model
+    assert result == "standard-agent-result"
+    assert calls["query"] == "test query"
+    assert calls["kwargs"]["workflow_type"] == "single_agent"
+    assert calls["kwargs"]["tools"] is tools
+    assert calls["kwargs"]["return_option"] == "last_message"
+    assert "system_prompt" not in calls["kwargs"]
