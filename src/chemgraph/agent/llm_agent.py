@@ -52,6 +52,7 @@ from chemgraph.agent.turn import serialize_state
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
+from chemgraph.graphs.docking_agent import construct_docking_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
@@ -345,6 +346,7 @@ class ChemGraph:
             "multi_agent": {"constructor": construct_multi_agent_graph},
             "python_relp": {"constructor": construct_relp_graph},
             "graspa": {"constructor": construct_graspa_graph},
+            "docking": {"constructor": construct_docking_graph},
             "mock_agent": {"constructor": construct_mock_agent_graph},
             "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
