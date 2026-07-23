@@ -1,6 +1,5 @@
 """Input schema for the molecular docking tool."""
 
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -25,14 +24,14 @@ class docking_input_schema(BaseModel):
         default=10,
         description="Number of docked poses to generate.",
     )
-    center: Optional[list[float]] = Field(
+    center: list[float] | None = Field(
         default=None,
         description=(
             "Search-box center [x, y, z] in Angstrom. Required for a custom "
             "receptor; ignored for the bundled 'vancomycin' target."
         ),
     )
-    box_size: Optional[list[float]] = Field(
+    box_size: list[float] | None = Field(
         default=None,
         description=(
             "Search-box size [x, y, z] in Angstrom. Required for a custom "

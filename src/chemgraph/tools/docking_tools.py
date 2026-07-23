@@ -19,8 +19,8 @@ from chemgraph.tools.docking_core import (
 __all__ = [
     "mock_docking",
     "resolve_candidate_smiles",
-    "run_docking_core",
     "run_docking",
+    "run_docking_core",
 ]
 
 

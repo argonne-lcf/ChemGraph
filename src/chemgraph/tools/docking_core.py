@@ -92,10 +92,8 @@ def _prepare_ligand_pdbqt(smiles: str, out_pdbqt: str, seed: int = 2025) -> str:
     mol = Chem.AddHs(mol)
     if AllChem.EmbedMolecule(mol, randomSeed=seed) != 0:
         raise ValueError("Failed to generate 3D coordinates for the candidate.")
-    try:
-        AllChem.MMFFOptimizeMolecule(mol)
-    except Exception:
-        pass
+    # MMFF optimization is best-effort; a nonzero return just means "not converged".
+    AllChem.MMFFOptimizeMolecule(mol)
 
     setups = MoleculePreparation().prepare(mol)
     if not setups:

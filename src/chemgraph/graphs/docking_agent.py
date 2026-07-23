@@ -1,16 +1,16 @@
-from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from chemgraph.tools.docking_tools import run_docking
-from chemgraph.schemas.agent_response import ResponseFormatter
 from chemgraph.prompt.single_agent_prompt import (
-    single_agent_prompt,
     formatter_prompt,
+    single_agent_prompt,
 )
-from chemgraph.utils.logging_config import setup_logger
+from chemgraph.schemas.agent_response import ResponseFormatter
 from chemgraph.state.state import State
+from chemgraph.tools.docking_tools import run_docking
+from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -100,7 +100,7 @@ def construct_docking_graph(
     system_prompt: str = single_agent_prompt,
     structured_output: bool = False,
     formatter_prompt: str = formatter_prompt,
-    tools: list = None,
+    tools: list | None = None,
 ):
     """Construct a molecular-docking agent graph.
 
@@ -176,5 +176,5 @@ def construct_docking_graph(
             return graph
 
     except Exception as e:
-        logger.error(f"Error constructing graph: {str(e)}")
+        logger.error(f"Error constructing graph: {e!s}")
         raise
