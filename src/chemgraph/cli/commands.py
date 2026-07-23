@@ -43,6 +43,7 @@ ALL_WORKFLOW_TYPES = [
     "multi_agent",
     "python_relp",
     "graspa",
+    "docking",
     "mock_agent",
     "single_agent_mcp",
     "graspa_mcp",
