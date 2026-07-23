@@ -90,6 +90,12 @@ rag = [
     "sentence-transformers>=2.2.2",
     "pymupdf>=1.24.0",
 ]
+docking = [
+    "meeko",
+    # AutoDock Vina is required at runtime but is NOT pip-installable in practice
+    # (the PyPI 'vina' builds from source and needs SWIG + Open Babel + Boost).
+    # Install it from conda-forge:  conda install -c conda-forge vina
+]
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
