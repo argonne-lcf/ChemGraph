@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-"""Run ChemGraph's standard single agent with four MCP tool servers.
+"""Connect ChemGraph's standard single agent to four HTTP MCP servers.
 
-This example only handles MCP connection setup. ChemGraph owns the agent
-prompt, LangGraph workflow, tool routing, and response generation.
+Start the servers separately with ``start_mcp_servers.py``. This example only
+handles MCP connection setup; ChemGraph owns the agent prompt, LangGraph
+workflow, tool routing, and response generation.
 """
 
 from __future__ import annotations
@@ -11,21 +12,14 @@ import argparse
 import asyncio
 import contextlib
 import os
-import shutil
-import sys
 from collections.abc import AsyncIterator
-from pathlib import Path
 from typing import Any
 
-SERVER_MODULES = {
-    "mofforge": "mofforge.mcp.server",
-    "fairchem": "chemgraph.mcp.fairchem_mcp_hpc",
-    "pacmof2": "chemgraph.mcp.pacmof2_mcp_hpc",
-    "graspa": "chemgraph.mcp.graspa_mcp_hpc",
-}
-
-PYTHON_ENV_VARS = {
-    name: f"{name.upper()}_PYTHON" for name in SERVER_MODULES
+DEFAULT_SERVER_URLS = {
+    "mofforge": "http://127.0.0.1:9010/mcp/",
+    "fairchem": "http://127.0.0.1:9008/mcp/",
+    "pacmof2": "http://127.0.0.1:9009/mcp/",
+    "graspa": "http://127.0.0.1:9001/mcp/",
 }
 
 DEFAULT_QUERY = (
@@ -34,72 +28,13 @@ DEFAULT_QUERY = (
     "a MOF simulation workflow. Do not launch a simulation."
 )
 
-_ENV_NAMES = {
-    "PATH",
-    "HOME",
-    "USER",
-    "TMPDIR",
-    "LANG",
-    "LC_ALL",
-    "VIRTUAL_ENV",
-    "CONDA_PREFIX",
-    "PYTHONPATH",
-    "XDG_CACHE_HOME",
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "NO_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "no_proxy",
-}
-_ENV_PREFIXES = (
-    "CHEMGRAPH_",
-    "GLOBUS_",
-    "MOFFORGE_",
-    "HF_",
-    "CUDA_",
-    "ZE_",
-    "OMP_",
-)
-
-
-def _resolve_python(value: str | None, env_name: str) -> str:
-    candidate = value or os.environ.get(env_name) or sys.executable
-    resolved = shutil.which(candidate)
-    if resolved is None:
-        path = Path(candidate).expanduser()
-        if path.is_file() and os.access(path, os.X_OK):
-            resolved = str(path)
-    if resolved is None:
-        raise ValueError(f"Python executable not found: {candidate!r}")
-    return str(Path(resolved).resolve())
-
-
-def _server_environment(backend: str, compute_system: str) -> dict[str, str]:
-    env = {
-        name: value
-        for name, value in os.environ.items()
-        if name in _ENV_NAMES or name.startswith(_ENV_PREFIXES)
-    }
-    env["CHEMGRAPH_EXECUTION_BACKEND"] = backend
-    env["COMPUTE_SYSTEM"] = compute_system
-    return env
-
-
 def build_server_configs(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
-    """Build stdio definitions for the four MCP servers."""
-    env = _server_environment(args.backend, args.compute_system)
-    configs = {}
-    for name, module in SERVER_MODULES.items():
-        python = _resolve_python(
-            getattr(args, f"{name}_python"),
-            PYTHON_ENV_VARS[name],
-        )
+    """Build streamable-HTTP definitions for already-running MCP servers."""
+    configs: dict[str, dict[str, Any]] = {}
+    for name in DEFAULT_SERVER_URLS:
         configs[name] = {
-            "transport": "stdio",
-            "command": python,
-            "args": ["-u", "-m", module, "--transport", "stdio"],
-            "env": dict(env),
+            "transport": "streamable_http",
+            "url": getattr(args, f"{name}_url"),
         }
     return configs
 
@@ -109,12 +44,20 @@ def _prefix_tools(server_name: str) -> bool:
     return server_name != "mofforge"
 
 
+def _namespace_tools(server_name: str, tools: list[Any]) -> list[Any]:
+    """Prefix LangChain-facing names without changing MCP call targets."""
+    if _prefix_tools(server_name):
+        for tool in tools:
+            tool.name = f"{server_name}_{tool.name}"
+    return tools
+
+
 @contextlib.asynccontextmanager
 async def persistent_tools(
     client: Any,
     server_names: list[str],
 ) -> AsyncIterator[list[Any]]:
-    """Load tools while keeping their stdio server processes alive."""
+    """Load tools while keeping the HTTP client sessions open."""
     from langchain_mcp_adapters.tools import load_mcp_tools
 
     tools: list[Any] = []
@@ -124,10 +67,9 @@ async def persistent_tools(
                 client.session(server_name)
             )
             tools.extend(
-                await load_mcp_tools(
-                    session,
-                    server_name=server_name,
-                    tool_name_prefix=_prefix_tools(server_name),
+                _namespace_tools(
+                    server_name,
+                    await load_mcp_tools(session),
                 )
             )
 
@@ -187,20 +129,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.environ.get("CHEMGRAPH_MODEL", "argo:gpt-4o"),
     )
     parser.add_argument("--query", default=DEFAULT_QUERY)
-    parser.add_argument(
-        "--backend",
-        choices=["local", "parsl", "ensemble_launcher", "globus_compute"],
-        default=os.environ.get("CHEMGRAPH_EXECUTION_BACKEND", "local"),
-    )
-    parser.add_argument(
-        "--compute-system",
-        default=os.environ.get("COMPUTE_SYSTEM", "local"),
-    )
-    for name in SERVER_MODULES:
+    for name, default_url in DEFAULT_SERVER_URLS.items():
         parser.add_argument(
-            f"--{name}-python",
-            default=None,
-            help=f"Default: {PYTHON_ENV_VARS[name]} or current Python.",
+            f"--{name}-url",
+            default=default_url,
+            help=f"Streamable-HTTP MCP endpoint (default: {default_url}).",
         )
     parser.add_argument("--recursion-limit", type=int, default=50)
     parser.add_argument("--list-tools-only", action="store_true")
