@@ -23,6 +23,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e .
         pip install ruff
+        python -m pip check
 
     - name: Run ruff
       run: |
@@ -48,10 +49,38 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e .
+        python -m pip check
             
     - name: Run tests
       run: |
         python -m pytest tests/ -v -k "not tblite"
+
+  wheel-install:
+    needs: lint
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.13"]
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Build distributions
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install build
+        python -m build
+
+    - name: Install and verify wheel
+      run: |
+        python -m pip install dist/*.whl
+        python -c "import chemgraph; print(f'ChemGraph {chemgraph.__version__}')"
+        python -m pip check
 
   # Exercises the distributed/HPC feature set: the Academy multi-agent module
   # and the parsl / globus-compute execution backends. These tests use mocks and
@@ -78,6 +107,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[academy,parsl,globus_compute]"
+        python -m pip check
 
     - name: Run academy + backend tests
       run: |
