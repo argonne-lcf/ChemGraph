@@ -22,23 +22,17 @@ from chemgraph.graphs.multi_agent import (
 
 
 def test_langgraph_interrupt_stream_and_resume():
-    """A real graph should stream, checkpoint, and resume an interrupt."""
-    from typing import TypedDict
-
+    """The human-review node should stream and resume on supported Python."""
     from langgraph.checkpoint.memory import MemorySaver
     from langgraph.graph import END, START, StateGraph
-    from langgraph.types import Command, interrupt
+    from langgraph.types import Command
 
-    class InterruptState(TypedDict):
-        answer: str
+    from chemgraph.state.multi_agent_state import PlannerState
 
-    def ask_for_input(_state):
-        return {"answer": interrupt({"question": "Which calculator?"})}
-
-    builder = StateGraph(InterruptState)
-    builder.add_node("ask_for_input", ask_for_input)
-    builder.add_edge(START, "ask_for_input")
-    builder.add_edge("ask_for_input", END)
+    builder = StateGraph(PlannerState)
+    builder.add_node("human_review", human_review_node)
+    builder.add_edge(START, "human_review")
+    builder.add_edge("human_review", END)
     workflow = builder.compile(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "interrupt-test"}}
 
@@ -52,7 +46,14 @@ def test_langgraph_interrupt_stream_and_resume():
             )
         ]
 
-    interrupted_states = asyncio.run(collect({"answer": ""}))
+    interrupted_states = asyncio.run(
+        collect(
+            {
+                "messages": [],
+                "clarification": "Which calculator?",
+            }
+        )
+    )
     interrupt_state = next(
         state for state in interrupted_states if "__interrupt__" in state
     )
@@ -62,7 +63,7 @@ def test_langgraph_interrupt_stream_and_resume():
     assert workflow.get_state(config).tasks[0].interrupts
 
     resumed_states = asyncio.run(collect(Command(resume="EMT")))
-    assert resumed_states[-1]["answer"] == "EMT"
+    assert "Answer: EMT" in resumed_states[-1]["messages"][-1].content
 
 
 # ---------------------------------------------------------------------------
