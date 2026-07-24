@@ -431,45 +431,9 @@ class ChemGraph:
                 tools=self.tools,
             )
 
-    def visualize(self, method: str = "ascii"):
-        """Visualize the LangGraph graph structure.
-
-        This method creates and displays a visual representation of the workflow graph
-        using Mermaid diagrams. The visualization is shown in Jupyter notebooks.
-
-        Notes
-        -----
-        Requires IPython and nest_asyncio to be installed.
-        The visualization uses Mermaid diagrams with custom styling.
-        """
-        import nest_asyncio
-        from IPython.display import Image, display
-        from langchain_core.runnables.graph import (
-            CurveStyle,
-            MermaidDrawMethod,
-            NodeStyles,
-        )
-
-        if method == "ascii":
-            return self.workflow.get_graph().draw_ascii()
-        else:
-            nest_asyncio.apply()  # Required for Jupyter Notebook to run async functions
-
-            display(
-                Image(
-                    self.workflow.get_graph().draw_mermaid_png(
-                        curve_style=CurveStyle.LINEAR,
-                        node_colors=NodeStyles(
-                            first="#ffdfba", last="#baffc9", default="#fad7de"
-                        ),
-                        wrap_label_n_words=9,
-                        output_file_path=None,
-                        draw_method=MermaidDrawMethod.PYPPETEER,
-                        background_color="white",
-                        padding=6,
-                    )
-                )
-            )
+    def visualize(self):
+        """Return an ASCII representation of the LangGraph workflow."""
+        return self.workflow.get_graph().draw_ascii()
 
     def get_state(self, config={"configurable": {"thread_id": "1"}}):
         """Get the current state of the workflow.

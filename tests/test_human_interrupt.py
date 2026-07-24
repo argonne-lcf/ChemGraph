@@ -8,6 +8,7 @@ Tests cover:
 - Single-agent and multi-agent graph construction with interrupt support
 """
 
+import asyncio
 import json
 
 from langchain_core.messages import AIMessage
@@ -18,6 +19,50 @@ from chemgraph.graphs.multi_agent import (
     human_review_node,
     unified_planner_router,
 )
+
+
+def test_langgraph_interrupt_stream_and_resume():
+    """A real graph should stream, checkpoint, and resume an interrupt."""
+    from typing import TypedDict
+
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, StateGraph
+    from langgraph.types import Command, interrupt
+
+    class InterruptState(TypedDict):
+        answer: str
+
+    def ask_for_input(_state):
+        return {"answer": interrupt({"question": "Which calculator?"})}
+
+    builder = StateGraph(InterruptState)
+    builder.add_node("ask_for_input", ask_for_input)
+    builder.add_edge(START, "ask_for_input")
+    builder.add_edge("ask_for_input", END)
+    workflow = builder.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "interrupt-test"}}
+
+    async def collect(stream_input):
+        return [
+            state
+            async for state in workflow.astream(
+                stream_input,
+                stream_mode="values",
+                config=config,
+            )
+        ]
+
+    interrupted_states = asyncio.run(collect({"answer": ""}))
+    interrupt_state = next(
+        state for state in interrupted_states if "__interrupt__" in state
+    )
+    assert interrupt_state["__interrupt__"][0].value == {
+        "question": "Which calculator?"
+    }
+    assert workflow.get_state(config).tasks[0].interrupts
+
+    resumed_states = asyncio.run(collect(Command(resume="EMT")))
+    assert resumed_states[-1]["answer"] == "EMT"
 
 
 # ---------------------------------------------------------------------------

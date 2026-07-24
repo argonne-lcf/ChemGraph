@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . /app
 
-# System packages required by scientific Python stack and headless browser deps
+# System packages required by the scientific Python stack
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gfortran \
@@ -14,10 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     liblapack-dev \
     libblas-dev \
-    # Dependencies for headless Chrome (pyppeteer)
-    libx11-xcb1 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 \
-    libxrandr2 libxrender1 libxss1 libxtst6 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
-    libcups2 libdrm2 libgbm1 libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Use conda for packages that are typically more reliable from conda-forge
