@@ -35,9 +35,11 @@ jobs:
           echo "💥 Forcefully removing mace-torch and e3nn for UMA compatibility..."
           pip uninstall -y mace-torch e3nn
           
-          # 3. MANUALLY install the UMA dependencies 
+          # 3. MANUALLY install the UMA dependencies.
+          # torchtnt 0.2.4 (via fairchem-core) imports pkg_resources, which was
+          # removed in setuptools 82.
           # (We cannot use pip install .[uma] because it would trigger the resolution error)
-          pip install "fairchem-core==2.13.0" "e3nn>=0.5"
+          pip install "setuptools<82" "fairchem-core==2.13.0" "e3nn>=0.5"
           
         elif [ "${{ matrix.install_extras }}" == "core" ]; then
           pip install .
