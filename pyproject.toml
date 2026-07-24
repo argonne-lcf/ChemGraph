@@ -121,6 +121,9 @@ line-length = 88  # Match Black's default (adjust as needed)
 target-version = "py310"  # Adjust based on your Python version
 exclude = ["notebooks/"]  # Add files/folders to ignore
 
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
 [tool.ruff.format]
 quote-style = "preserve"  # Keep existing quote style
 indent-style = "space"  # Use spaces for indentation

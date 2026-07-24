@@ -2,9 +2,9 @@ name: Dependency Tests
 
 on:
   push:
-    branches: [ toml_dev ]
+    branches: [ main ]
   pull_request:
-    branches: [ toml_dev ]
+    branches: [ main ]
 
 jobs:
   test_install:
@@ -35,15 +35,25 @@ jobs:
           echo "💥 Forcefully removing mace-torch and e3nn for UMA compatibility..."
           pip uninstall -y mace-torch e3nn
           
-          # 3. MANUALLY install the UMA dependencies 
+          # 3. MANUALLY install the UMA dependencies.
+          # torchtnt 0.2.4 (via fairchem-core) imports pkg_resources, which was
+          # removed in setuptools 82.
           # (We cannot use pip install .[uma] because it would trigger the resolution error)
-          pip install "fairchem-core==2.13.0" "e3nn>=0.5"
+          pip install "setuptools<82" "fairchem-core==2.13.0" "e3nn>=0.5"
           
         elif [ "${{ matrix.install_extras }}" == "core" ]; then
           pip install .
         else
           pip install ".[${{ matrix.install_extras }}]"
         fi
+
+    # The UMA job intentionally removes the core MACE dependency to work
+    # around their incompatible e3nn requirements. Dependency consistency for
+    # that environment will be enabled when the extras are separated.
+    - name: Verify Dependency Consistency
+      if: matrix.install_extras != 'uma'
+      run: python -m pip check
+
     - name: Verify Imports
       run: |
         python -c "
