@@ -81,11 +81,9 @@ def run_mcp_server(
         )
         # FastMCP.streamable_http_app() returns a Starlette/FastAPI-compatible app
         app = mcp.streamable_http_app()
-        # ws="none": the streamable-HTTP transport does not use WebSockets, and
-        # loading uvicorn's ws protocol pulls in a websockets version that is
-        # incompatible with the one pinned transitively by pyppeteer
-        # (websockets<11, which lacks ServerProtocol). Disabling it avoids that
-        # import error without affecting the HTTP transport.
+        # The streamable-HTTP transport does not use WebSockets. Keep the
+        # optional WebSocket protocol disabled to avoid loading an unused
+        # protocol stack.
         uvicorn.run(app, host=args.host, port=args.port, ws="none")
     else:
         logging.info("Starting %s via stdio transport...", mcp.name)

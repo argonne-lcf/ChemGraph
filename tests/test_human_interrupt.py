@@ -8,6 +8,7 @@ Tests cover:
 - Single-agent and multi-agent graph construction with interrupt support
 """
 
+import asyncio
 import json
 
 from langchain_core.messages import AIMessage
@@ -18,6 +19,51 @@ from chemgraph.graphs.multi_agent import (
     human_review_node,
     unified_planner_router,
 )
+
+
+def test_langgraph_interrupt_stream_and_resume():
+    """The human-review node should stream and resume on supported Python."""
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, StateGraph
+    from langgraph.types import Command
+
+    from chemgraph.state.multi_agent_state import PlannerState
+
+    builder = StateGraph(PlannerState)
+    builder.add_node("human_review", human_review_node)
+    builder.add_edge(START, "human_review")
+    builder.add_edge("human_review", END)
+    workflow = builder.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "interrupt-test"}}
+
+    async def collect(stream_input):
+        return [
+            state
+            async for state in workflow.astream(
+                stream_input,
+                stream_mode="values",
+                config=config,
+            )
+        ]
+
+    interrupted_states = asyncio.run(
+        collect(
+            {
+                "messages": [],
+                "clarification": "Which calculator?",
+            }
+        )
+    )
+    interrupt_state = next(
+        state for state in interrupted_states if "__interrupt__" in state
+    )
+    assert interrupt_state["__interrupt__"][0].value == {
+        "question": "Which calculator?"
+    }
+    assert workflow.get_state(config).tasks[0].interrupts
+
+    resumed_states = asyncio.run(collect(Command(resume="EMT")))
+    assert "Answer: EMT" in resumed_states[-1]["messages"][-1].content
 
 
 # ---------------------------------------------------------------------------

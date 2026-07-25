@@ -156,7 +156,7 @@ def test_file_to_atomsdata_resolves_bare_name(log_dir, tmp_path, monkeypatch):
     other = tmp_path / "elsewhere3"
     other.mkdir()
     monkeypatch.chdir(other)
-    atoms = file_to_atomsdata("mol.xyz")  # bare name; before fix -> FileNotFoundError
+    atoms = file_to_atomsdata.invoke("mol.xyz")
     assert atoms is not None
     # water has 3 atoms
     assert len(atoms.numbers) == 3

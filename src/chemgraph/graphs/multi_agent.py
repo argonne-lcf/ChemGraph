@@ -15,10 +15,12 @@ Executor subgraph (``ExecutorState``)::
 """
 
 import json
-from typing import Any, Union
+from typing import Any, Optional, Union
 from functools import partial
 
 from pydantic import BaseModel
+from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.config import set_config_context
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
@@ -268,7 +270,9 @@ def planner_agent(
 # ---------------------------------------------------------------------------
 
 
-def human_review_node(state: PlannerState):
+def human_review_node(
+    state: PlannerState, config: Optional[RunnableConfig] = None
+):
     """Pause the graph and ask the human for clarification.
 
     This node calls ``interrupt()`` with the planner's clarification
@@ -290,7 +294,14 @@ def human_review_node(state: PlannerState):
     question = state.get("clarification", "Could you please provide more details?")
     logger.info("HUMAN_REVIEW: interrupting with question: %s", question)
 
-    human_response = interrupt({"question": question})
+    if config is None:
+        human_response = interrupt({"question": question})
+    else:
+        # LangGraph cannot propagate its runnable context into async graph
+        # nodes on Python 3.10. Restore it explicitly so interrupt() works
+        # when this synchronous node is driven through astream().
+        with set_config_context(config) as context:
+            human_response = context.run(interrupt, {"question": question})
 
     # Normalise the response to a plain string.
     if isinstance(human_response, dict):

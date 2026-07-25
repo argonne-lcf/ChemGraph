@@ -91,9 +91,9 @@ docs/           # mkdocs site
 
 ## Gotchas
 
-- The core dependency `pyppeteer` pins `websockets<11`; MCP HTTP servers run
-  uvicorn with `ws="none"` to avoid the resulting protocol import error. Keep
-  that when touching `mcp/server_utils.py`.
+- MCP streamable-HTTP servers run uvicorn with `ws="none"` because that
+  transport does not use WebSockets. Keep that when touching
+  `mcp/server_utils.py`.
 - A stale `chemgraph`/`chemgraphagent` install in site-packages can shadow the
   editable checkout; run tests in a venv with `-e .` installed (or
   `PYTHONNOUSERSITE=1`) to be sure you're testing the working tree.

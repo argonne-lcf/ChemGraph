@@ -47,6 +47,18 @@ def test_agent_query(mock_llm, tmp_path):
         mock_chain.invoke.assert_called_once()
 
 
+def test_visualize_returns_ascii_graph():
+    graph = Mock()
+    graph.draw_ascii.return_value = "ASCII GRAPH"
+    workflow = Mock()
+    workflow.get_graph.return_value = graph
+    agent = object.__new__(ChemGraph)
+    agent.workflow = workflow
+
+    assert agent.visualize() == "ASCII GRAPH"
+    graph.draw_ascii.assert_called_once_with()
+
+
 def test_turn_event_callback_emits_llm_decision_for_tool_calls():
     events = []
     callback = _TurnEventCallback(
