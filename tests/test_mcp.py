@@ -1,18 +1,22 @@
 """Test suite for MCP servers."""
 
+from concurrent.futures import Future
 import inspect
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 import pytest
 
 try:
-    from mcp.types import TextContent
-    from fastmcp import Client
+    from fastmcp import Client, FastMCP as StandaloneFastMCP
+    from mcp.server.fastmcp import FastMCP as SDKFastMCP
+    from mcp.types import TextContent, ToolAnnotations
+
     from chemgraph.mcp.cg_fastmcp import CGFastMCP
-    from chemgraph.mcp.mcp_tools import mcp
     from chemgraph.mcp.data_analysis_mcp import mcp as data_mcp
+    from chemgraph.mcp.mcp_tools import mcp
 except ModuleNotFoundError:
     pytest.skip("MCP test dependencies are not installed", allow_module_level=True)
 
@@ -21,6 +25,19 @@ TEST_DIR = Path(__file__).parent
 
 def _fanout_worker(item: dict) -> dict:
     return item
+
+
+class _ImmediateBackend:
+    is_async_remote = False
+
+    def __init__(self):
+        self.submitted = []
+
+    def submit(self, task):
+        self.submitted.append(task)
+        future = Future()
+        future.set_result(task.callable(**task.kwargs))
+        return future
 
 
 def test_schema_fanout_tool_advertises_batch_result_signature(monkeypatch):
@@ -45,14 +62,100 @@ def test_schema_fanout_tool_advertises_batch_result_signature(monkeypatch):
     assert sig.return_annotation == dict[str, Any]
 
 
-def test_mace_worker_creates_inline_output_parent(monkeypatch):
+@pytest.mark.asyncio
+async def test_cg_fastmcp_preserves_sdk_schema_and_backend_contract():
+    """CGFastMCP stays on the SDK server while FastMCP Client drives it."""
+    local_mcp = CGFastMCP(name="test")
+    backend = _ImmediateBackend()
+    local_mcp._backend = backend
+
+    @local_mcp.tool(
+        name="increment",
+        title="Increment",
+        annotations=ToolAnnotations(readOnlyHint=True),
+        structured_output=True,
+    )
+    def increment(value: int) -> dict[str, int]:
+        return {"result": value + 1}
+
+    assert isinstance(local_mcp, SDKFastMCP)
+    assert not isinstance(local_mcp, StandaloneFastMCP)
+
+    async with Client(local_mcp) as client:
+        listed = await client.list_tools()
+        tool = next(item for item in listed if item.name == "increment")
+        result = await client.call_tool("increment", {"value": 4})
+
+    assert tool.title == "Increment"
+    assert tool.inputSchema["properties"]["value"]["type"] == "integer"
+    assert tool.outputSchema["additionalProperties"]["type"] == "integer"
+    assert tool.annotations.readOnlyHint is True
+    assert result.data == {"result": 5}
+    assert result.structured_content == {"result": 5}
+    assert len(backend.submitted) == 1
+    assert backend.submitted[0].task_type == "python"
+    assert backend.submitted[0].kwargs == {"value": 4}
+
+
+def test_streamable_http_server_disables_websockets(monkeypatch):
+    """The HTTP transport keeps Uvicorn's unused WebSocket stack disabled."""
+    from chemgraph.mcp import server_utils
+
+    local_mcp = SDKFastMCP("test")
+    app = object()
+    captured = {}
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["mcp-server", "--transport", "streamable_http"],
+    )
+    monkeypatch.setattr(local_mcp, "streamable_http_app", lambda: app)
+
+    def capture_run(actual_app, **kwargs):
+        captured["app"] = actual_app
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(server_utils.uvicorn, "run", capture_run)
+
+    server_utils.run_mcp_server(
+        local_mcp,
+        default_host="127.0.0.1",
+        default_port=8765,
+    )
+
+    assert captured == {
+        "app": app,
+        "kwargs": {"host": "127.0.0.1", "port": 8765, "ws": "none"},
+    }
+
+
+def test_cli_mcp_adapter_loads_stdio_tools(monkeypatch, tmp_path):
+    """The LangChain MCP adapter loads the general server over stdio."""
+    from chemgraph.cli.mcp_utils import load_mcp_tools_from_config
+
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
+    tools = load_mcp_tools_from_config(
+        command=f"{sys.executable} -m chemgraph.mcp.mcp_tools",
+    )
+
+    assert tools is not None
+    assert {tool.name for tool in tools} == {
+        "extract_output_json",
+        "molecule_name_to_smiles",
+        "run_ase",
+        "smiles_to_coordinate_file",
+    }
+
+
+def test_mace_worker_creates_inline_output_parent(monkeypatch, tmp_path):
     from ase import Atoms
 
     from chemgraph.mcp import mace_mcp_hpc
     from chemgraph.tools.ase_core import atoms_to_atomsdata
 
     atoms = Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 0.74]])
-    output_file = "nested/family/output.json"
+    output_file = str(tmp_path / "nested" / "family" / "output.json")
 
     def fake_run_mace_core(params):
         output_path = Path(params.output_result_file)
@@ -157,14 +260,14 @@ async def test_split_cif_dataset(tmp_path):
 
 
 @pytest.fixture(name="base_ase_input_dict")
-def fixture_base_ase_input_dict():
+def fixture_base_ase_input_dict(tmp_path):
     """Fixture providing base ASE input parameters."""
     return {
         "input_structure_file": str(TEST_DIR / "water.xyz"),
-        "output_results_file": str(TEST_DIR / "water_output.json"),
+        "output_results_file": str(tmp_path / "water_output.json"),
         "optimizer": "bfgs",
         "calculator": {
-            "calculator_type": "mace_mp",
+            "calculator_type": "emt",
         },
     }
 

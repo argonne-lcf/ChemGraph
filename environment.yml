@@ -26,7 +26,7 @@ dependencies:
     - langchain-anthropic==1.5.2
     - langchain-google-genai==4.3.1
     - langchain-groq==1.1.3
-    - langchain-mcp-adapters
+    - langchain-mcp-adapters==0.3.0
     - pydantic==2.13.4
     - pubchempy==1.0.5
     - numexpr==2.11.0
@@ -38,7 +38,7 @@ dependencies:
     - stmol==0.0.9
     - ipython-genutils==0.2.0
     - langsmith==0.10.10
-    - mcp
-    - fastmcp
+    - mcp==1.28.1
+    - fastmcp==3.4.4
     - pytest-asyncio
     - grandalf==0.8

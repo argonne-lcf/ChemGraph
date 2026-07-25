@@ -17,7 +17,7 @@ import httpx
 from langchain_core.tools import BaseTool
 from langchain_core.tools import StructuredTool
 from mcp.client.session import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.types import CallToolResult
 
 from chemgraph.academy.core.campaign import MCPServerSpec
@@ -122,7 +122,7 @@ class MCPServerSupervisor:
         tool_names: set[str] = set()
         matched_whitelist: set[str] = set()
         for server_name, url in connections.items():
-            async with streamablehttp_client(url) as (read, write, _):
+            async with streamable_http_client(url) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     listed = await session.list_tools()
@@ -266,7 +266,7 @@ async def _call_mcp_tool(
     tool_name: str,
     arguments: dict[str, Any],
 ) -> Any:
-    async with streamablehttp_client(server_url) as (read, write, _):
+    async with streamable_http_client(server_url) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(tool_name, arguments)
