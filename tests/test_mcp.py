@@ -136,7 +136,7 @@ def test_cli_mcp_adapter_loads_stdio_tools(monkeypatch, tmp_path):
 
     monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
     tools = load_mcp_tools_from_config(
-        command=f"{sys.executable} -m chemgraph.mcp.mcp_tools",
+        command=f'"{sys.executable}" -m chemgraph.mcp.mcp_tools',
     )
 
     assert tools is not None
