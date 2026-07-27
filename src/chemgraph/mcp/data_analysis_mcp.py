@@ -263,7 +263,9 @@ def rank_mofs_performance(
             ]
 
             if not p_matches.empty:
-                return p_matches['uptake_in_mol_kg'].mean()
+                uptake = p_matches['uptake_in_mol_kg'].mean()
+                if not pd.isna(uptake):
+                    return uptake
             return None
 
         val_ads = get_uptake(ads_pressure, ads_temp)

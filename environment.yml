@@ -6,7 +6,7 @@ dependencies:
   - python=3.10
   - pip
   - numpy=2.2.6
-  - pandas=2.2.3
+  - pandas=2.3.3
   - pytest=8.4.1
   - rich=14.1.0
   - toml=0.10.2
@@ -29,7 +29,7 @@ dependencies:
     - langchain-mcp-adapters==0.3.0
     - pydantic==2.13.4
     - pubchempy==1.0.5
-    - numexpr==2.11.0
+    - numexpr==2.14.1
     - deepdiff==8.5.0
     - pymatgen==2025.3.10
     - mace-torch==0.3.13

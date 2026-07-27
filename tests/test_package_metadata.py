@@ -44,3 +44,15 @@ def test_pyproject_version_fallback_matches_project_metadata() -> None:
     project_version = _load_toml(pyproject)["project"]["version"]
 
     assert chemgraph._version_from_pyproject() == project_version
+
+
+def test_data_dependencies_use_bounded_compatible_ranges() -> None:
+    """Published data dependencies should allow compatible 2.x releases."""
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    dependencies = set(_load_toml(pyproject)["project"]["dependencies"])
+
+    assert {
+        "numpy>=2.2.6,<3",
+        "pandas>=2.2.3,<3",
+        "numexpr>=2.11.0,<3",
+    }.issubset(dependencies)
