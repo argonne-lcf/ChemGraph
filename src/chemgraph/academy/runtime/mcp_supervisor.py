@@ -384,15 +384,22 @@ async def _call_mcp_tool(
     tool_name: str,
     arguments: dict[str, Any],
 ) -> Any:
-    async with streamable_http_client(
-        server_url,
-        timeout=_MCP_HTTP_TIMEOUT_S,
-        sse_read_timeout=_MCP_SSE_READ_TIMEOUT_S,
-    ) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool(tool_name, arguments)
-            return _serialize_call_tool_result(result)
+    timeout = httpx.Timeout(
+        _MCP_HTTP_TIMEOUT_S,
+        read=_MCP_SSE_READ_TIMEOUT_S,
+    )
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=True,
+    ) as http_client:
+        async with streamable_http_client(
+            server_url,
+            http_client=http_client,
+        ) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(tool_name, arguments)
+                return _serialize_call_tool_result(result)
 
 
 def _serialize_call_tool_result(result: CallToolResult) -> dict[str, Any]:
