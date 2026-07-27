@@ -17,30 +17,24 @@ from chemgraph.academy.core.campaign import MCPServerSpec
 from chemgraph.academy.core.campaign import validate_campaign
 
 
-def test_builtin_mace_campaign_uses_star_coordinator_without_routing_policy() -> None:
-    campaign = load_campaign("mace-ensemble-screening-20")
+def test_builtin_mock_campaign_uses_two_site_peer_topology() -> None:
+    campaign = load_campaign("mof-crux-aurora-mock")
 
     validate_campaign(campaign, len(campaign.agents))
 
-    assert campaign.initial_agent == "coordinator-agent"
+    assert campaign.initial_agent == "planner_executor"
     assert [agent.name for agent in campaign.agents] == [
-        "coordinator-agent",
-        "structure-agent-a",
-        "structure-agent-b",
-        "mace-agent",
-        "assessment-agent",
+        "planner_executor",
+        "aurora_sim",
     ]
     peers = {agent.name: set(agent.allowed_peers) for agent in campaign.agents}
-    assert peers["coordinator-agent"] == {
-        "structure-agent-a",
-        "structure-agent-b",
-        "mace-agent",
-        "assessment-agent",
+    assert peers["planner_executor"] == {"aurora_sim"}
+    assert peers["aurora_sim"] == {"planner_executor"}
+    engines = {agent.name: agent.engine for agent in campaign.agents}
+    assert engines == {
+        "planner_executor": "chemgraph.multi_agent",
+        "aurora_sim": "chemgraph.single_agent",
     }
-    assert peers["structure-agent-a"] == {"coordinator-agent"}
-    assert peers["structure-agent-b"] == {"coordinator-agent"}
-    assert peers["mace-agent"] == {"coordinator-agent"}
-    assert peers["assessment-agent"] == {"coordinator-agent"}
 
     bootstrap = json.loads(campaign_bootstrap_text(campaign))
     assert "parameters" not in bootstrap

@@ -108,6 +108,7 @@ def test_status_payload_builds_summary_from_events(tmp_path) -> None:
     payload = dashboard.status_payload(handler)
 
     assert set(payload) == {
+        "local_agents",
         "placement",
         "run_dir",
         "schema",
@@ -115,6 +116,7 @@ def test_status_payload_builds_summary_from_events(tmp_path) -> None:
         "summary",
         "updated",
     }
+    assert payload["local_agents"] == []
     assert payload["summary"]["message_count"] == 1
     assert payload["summary"]["final_reports"] == [
         {

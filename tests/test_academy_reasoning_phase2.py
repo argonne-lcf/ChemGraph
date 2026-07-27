@@ -157,7 +157,7 @@ async def test_send_message_does_not_block_on_busy_peer(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_academy_turn_maps_action_and_science_tools(monkeypatch, tmp_path) -> None:
+async def test_run_academy_turn_maps_action_and_science_tools(tmp_path) -> None:
     async def fake_run_turn(**kwargs: Any) -> TurnResult:
         payload = json.loads(kwargs["query"])
         assert payload["received_messages"] == [{"message_id": "new"}]
@@ -172,7 +172,6 @@ async def test_run_academy_turn_maps_action_and_science_tools(monkeypatch, tmp_p
             duration_s=0.1,
         )
 
-    monkeypatch.setattr(turn_module, "run_turn", fake_run_turn)
     traces: list[tuple[str, dict]] = []
     result = await turn_module.run_academy_turn(
         campaign=_campaign(_agent_spec()),
@@ -188,6 +187,7 @@ async def test_run_academy_turn_maps_action_and_science_tools(monkeypatch, tmp_p
         get_final_result=lambda: {"summary": "current"},
         get_round_index=lambda: 2,
         trace=lambda event, payload: traces.append((event, payload)),
+        turn_runner=fake_run_turn,
     )
 
     assert result.action_tools_called == ("finish_turn",)
@@ -241,8 +241,8 @@ async def test_logical_agent_reasoning_round_calls_turn_runner(monkeypatch, tmp_
     assert events == [
         "round_started",
         "agent_decision",
-        "round_finished",
         "self_wake_scheduled",
+        "round_finished",
     ]
 
 

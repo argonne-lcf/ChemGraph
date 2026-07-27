@@ -55,8 +55,9 @@ def test_run_allocation_builds_single_mpiexec_command(tmp_path, monkeypatch) -> 
     assert len(calls) == 1
     cmd = calls[0]
     assert cmd[:4] == ["mpiexec", "-n", "3", "--ppn"]
-    assert "chemgraph.cli.main" in cmd
-    assert "mpi-daemon" in cmd
+    assert "chemgraph.academy.runtime.daemon" in cmd
+    assert "chemgraph.cli.main" not in cmd
+    assert "mpi-daemon" not in cmd
     assert "--campaign-config" in cmd
     assert "--lm-config" in cmd
     assert "--exchange-type" in cmd
