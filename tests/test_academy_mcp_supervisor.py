@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from langchain_mcp_adapters.client import MultiServerMCPClient
 
 # Skip when the optional 'academy' extra is absent; mcp_supervisor
 # imports httpx (also in the extra) at module level.
@@ -12,6 +13,10 @@ pytest.importorskip("academy")
 
 from chemgraph.academy.core.campaign import MCPServerSpec
 from chemgraph.academy.runtime.mcp_supervisor import MCPServerSupervisor
+
+pytestmark = pytest.mark.filterwarnings(
+    "error:Use `streamable_http_client` instead.:DeprecationWarning"
+)
 
 
 def _pythonpath(tmp_path: Path) -> str:
@@ -89,6 +94,19 @@ async def test_mcp_supervisor_starts_server_and_gets_tools(tmp_path) -> None:
         tools = await supervisor.get_tools(("tiny",))
         echo = next(tool for tool in tools if tool.name == "echo")
         result = await echo.ainvoke({"text": "hello"})
+        adapter = MultiServerMCPClient(
+            {
+                "tiny": {
+                    "transport": "streamable_http",
+                    "url": urls["tiny"],
+                }
+            }
+        )
+        adapter_tools = await adapter.get_tools()
+        adapter_echo = next(
+            tool for tool in adapter_tools if tool.name == "echo"
+        )
+        adapter_result = await adapter_echo.ainvoke({"text": "adapter"})
     finally:
         await supervisor.shutdown()
 
@@ -96,6 +114,7 @@ async def test_mcp_supervisor_starts_server_and_gets_tools(tmp_path) -> None:
     assert "echo" in {tool.name for tool in tools}
     assert result["status"] == "ok"
     assert "hello" in repr(result)
+    assert "adapter" in repr(adapter_result)
 
 
 @pytest.mark.asyncio
