@@ -336,7 +336,7 @@ async def discover_mcp_tools(
         await asyncio.wait_for(supervisor.start_all(), timeout=timeout_s)
         # Bypass the whitelist path -- we want the full advertised set.
         url = supervisor.urls[name]
-        async with streamablehttp_client(url) as (read, write, _):
+        async with streamable_http_client(url) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 listed = await session.list_tools()

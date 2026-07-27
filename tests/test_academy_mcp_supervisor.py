@@ -12,7 +12,10 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 pytest.importorskip("academy")
 
 from chemgraph.academy.core.campaign import MCPServerSpec
-from chemgraph.academy.runtime.mcp_supervisor import MCPServerSupervisor
+from chemgraph.academy.runtime.mcp_supervisor import (
+    MCPServerSupervisor,
+    discover_mcp_tools,
+)
 
 pytestmark = pytest.mark.filterwarnings(
     "error:Use `streamable_http_client` instead.:DeprecationWarning"
@@ -115,6 +118,22 @@ async def test_mcp_supervisor_starts_server_and_gets_tools(tmp_path) -> None:
     assert result["status"] == "ok"
     assert "hello" in repr(result)
     assert "adapter" in repr(adapter_result)
+
+
+@pytest.mark.asyncio
+async def test_discover_mcp_tools_lists_server_tools(
+    tmp_path, monkeypatch
+) -> None:
+    _write_tiny_server(tmp_path)
+    monkeypatch.setenv("PYTHONPATH", _pythonpath(tmp_path))
+
+    tools = await discover_mcp_tools(
+        name="tiny",
+        command=f"{sys.executable} -m tiny_mcp",
+        run_dir=tmp_path / "run",
+    )
+
+    assert tools == [{"name": "echo", "description": "Echo one string."}]
 
 
 @pytest.mark.asyncio
