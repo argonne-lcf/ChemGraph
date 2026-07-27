@@ -25,8 +25,8 @@ ChemGraphAgent uses today. Future runtimes pass their own callable.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Collection
-from typing import Any, Protocol
+from collections.abc import Awaitable, Callable
+from typing import Protocol
 
 
 class TurnRunResult(Protocol):

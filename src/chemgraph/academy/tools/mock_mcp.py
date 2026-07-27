@@ -54,8 +54,8 @@ def _write_stub_cif(path: Path, source: str, atoms: int = 98) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     body = (
-        f"data_mock\n_cell_length_a  20.000\n_cell_length_b  20.000\n"
-        f"_cell_length_c  20.000\n_atom_site_label\n"
+        "data_mock\n_cell_length_a  20.000\n_cell_length_b  20.000\n"
+        "_cell_length_c  20.000\n_atom_site_label\n"
         + "".join(f"C{i}\n" for i in range(atoms))
         + f"# derived_from: {source}\n"
     )

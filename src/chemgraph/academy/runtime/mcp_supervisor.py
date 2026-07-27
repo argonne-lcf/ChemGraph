@@ -47,7 +47,6 @@ _SHUTDOWN_TIMEOUT_S = 5.0
 # the request. Ensure loopback is in NO_PROXY at module import so
 # every downstream HTTP client picks it up. Idempotent when already set.
 def _ensure_loopback_in_no_proxy() -> None:
-    loopback_hosts = "127.0.0.1,localhost,0.0.0.0"
     for var in ("NO_PROXY", "no_proxy"):
         current = os.environ.get(var, "")
         parts = {p.strip() for p in current.split(",") if p.strip()}

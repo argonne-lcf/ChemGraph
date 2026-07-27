@@ -911,7 +911,6 @@ def _launch_preview_payload(
     # Rebuild per-site SubmitConfigs from the argv we just generated
     # so the rendered PBS matches what qsub would receive verbatim.
     # Parse --site tokens back out to feed SubmitConfig.
-    site_specs: dict[str, dict[str, str]] = {}
     launch_defaults = _read_campaign_launch_defaults(body.get('campaign') or '')
     per_site_overrides = launch_defaults.get('per_site_overrides') or {}
 

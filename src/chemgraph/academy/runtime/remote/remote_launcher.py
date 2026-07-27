@@ -12,6 +12,14 @@ import os
 import sys
 from pathlib import Path
 
+from chemgraph.academy.runtime.profiles import load_system_profile
+from chemgraph.academy.runtime.remote.site_backend import SiteBackend
+from chemgraph.academy.runtime.remote.site_spec import SiteSpec, parse_site
+from chemgraph.academy.runtime.remote.submit_backend import (
+    SubmitConfig,
+    SubmitSiteBackend,
+)
+
 
 # ---------------------------------------------------------------------------
 # Minimal ANSI helpers
@@ -35,14 +43,6 @@ def _red(text: str) -> str: return _ansi("31", text)
 def _yellow(text: str) -> str: return _ansi("33", text)
 def _cyan(text: str) -> str: return _ansi("36", text)
 def _bold(text: str) -> str: return _ansi("1", text)
-
-from chemgraph.academy.runtime.profiles import load_system_profile
-from chemgraph.academy.runtime.remote.site_backend import SiteBackend
-from chemgraph.academy.runtime.remote.site_spec import SiteSpec, parse_site
-from chemgraph.academy.runtime.remote.submit_backend import (
-    SubmitConfig,
-    SubmitSiteBackend,
-)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

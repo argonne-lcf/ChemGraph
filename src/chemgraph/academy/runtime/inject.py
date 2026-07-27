@@ -23,7 +23,6 @@ from academy.handle import Handle
 
 from chemgraph.academy.campaigns import resolve_campaign
 from chemgraph.academy.core.agent import ChemGraphLogicalAgent
-from chemgraph.academy.core.campaign import ChemGraphCampaign
 from chemgraph.academy.core.campaign import ChemGraphDaemonConfig
 from chemgraph.academy.core.campaign import load_campaign
 from chemgraph.academy.core.campaign import namespace_for_run
