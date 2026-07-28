@@ -4,25 +4,18 @@ Docks a small-molecule candidate into a receptor with AutoDock Vina and returns
 the predicted binding affinity and poses. Used by the LangChain ``@tool`` wrapper
 in :mod:`chemgraph.tools.docking_tools`.
 
-Heavy/optional dependencies (``vina``, ``meeko``) are imported lazily inside the
-functions that need them, so the core package installs and collects tests without
-the ``docking`` extra. A :func:`mock_docking` helper provides deterministic output
-for hermetic tests.
+Heavy/optional dependencies (``vina``, ``meeko``, fpocket) are used lazily so the
+core package installs and collects tests without the ``docking`` extra. A
+:func:`mock_docking` helper provides deterministic output for hermetic tests.
 """
 
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from chemgraph.schemas.docking_schema import docking_input_schema
 
-# Bundled, ready-to-dock vancomycin receptor and its known binding-site box
-# (validated by redocking the native D-Ala-D-Ala ligand from PDB 1FVM).
-_FILES = Path(__file__).parent / "files" / "docking"
-_VANCOMYCIN_RECEPTOR = _FILES / "vancomycin_receptor.pdbqt"
-_VANCOMYCIN_CENTER = [-3.436, 5.510, 22.100]
-_VANCOMYCIN_SIZE = [18.0, 16.0, 22.0]
+_BOX_PADDING = 8.0  # Angstrom added around detected/blind boxes
 
 
 # ---------------------------------------------------------------------------
@@ -33,8 +26,8 @@ _VANCOMYCIN_SIZE = [18.0, 16.0, 22.0]
 def resolve_candidate_smiles(candidate: str) -> str:
     """Resolve a SMILES, molecule name, or PubChem CID to a canonical SMILES.
 
-    A valid SMILES is canonicalized and returned; an all-digit string is treated
-    as a PubChem CID; anything else is looked up by name on PubChem (reusing
+    A valid SMILES is canonicalized; an all-digit string is treated as a PubChem
+    CID; anything else is looked up by name on PubChem (reusing
     :func:`chemgraph.tools.cheminformatics_core.molecule_name_to_smiles_core`).
 
     Parameters
@@ -46,19 +39,12 @@ def resolve_candidate_smiles(candidate: str) -> str:
     -------
     str
         Canonical SMILES string.
-
-    Raises
-    ------
-    ValueError
-        If the candidate cannot be resolved.
     """
     from rdkit import Chem
     from rdkit.rdBase import BlockLogs
 
     s = str(candidate).strip()
-    # A name or CID is not valid SMILES; suppress the expected parse-error log
-    # from this probe (scoped, so other RDKit warnings are unaffected).
-    with BlockLogs():
+    with BlockLogs():  # a name/CID is not valid SMILES; suppress the expected probe error
         mol = Chem.MolFromSmiles(s)
     if mol is not None:
         return Chem.MolToSmiles(mol)
@@ -80,9 +66,8 @@ def resolve_candidate_smiles(candidate: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _prepare_ligand_pdbqt(smiles: str, out_pdbqt: str, seed: int = 2025) -> str:
-    """Build a 3D structure from SMILES (RDKit) and write a docking-ready PDBQT (Meeko)."""
-    from meeko import MoleculePreparation, PDBQTWriterLegacy
+def _mol_from_smiles_3d(smiles: str, seed: int = 2025):
+    """Build a 3D, H-added RDKit mol from a SMILES string."""
     from rdkit import Chem
     from rdkit.Chem import AllChem
 
@@ -91,38 +76,138 @@ def _prepare_ligand_pdbqt(smiles: str, out_pdbqt: str, seed: int = 2025) -> str:
         raise ValueError(f"Invalid SMILES: {smiles!r}")
     mol = Chem.AddHs(mol)
     if AllChem.EmbedMolecule(mol, randomSeed=seed) != 0:
-        raise ValueError("Failed to generate 3D coordinates for the candidate.")
+        raise ValueError("Failed to generate 3D coordinates.")
     # MMFF optimization is best-effort; a nonzero return just means "not converged".
     AllChem.MMFFOptimizeMolecule(mol)
+    return mol
+
+
+def _meeko_pdbqt(mol) -> str:
+    """Prepare a molecule with Meeko and return its PDBQT string."""
+    from meeko import MoleculePreparation, PDBQTWriterLegacy
 
     setups = MoleculePreparation().prepare(mol)
     if not setups:
-        raise RuntimeError("Meeko could not prepare the candidate ligand.")
+        raise RuntimeError("Meeko could not prepare the molecule.")
     written = PDBQTWriterLegacy.write_string(setups[0])
     pdbqt = written[0] if isinstance(written, tuple) else written
     if not pdbqt or not str(pdbqt).strip():
-        raise RuntimeError("Meeko produced an empty ligand PDBQT.")
+        raise RuntimeError("Meeko produced an empty PDBQT.")
+    return pdbqt
+
+
+def _prepare_ligand_pdbqt(smiles: str, out_pdbqt: str, seed: int = 2025) -> str:
+    """SMILES -> 3D (RDKit) -> flexible ligand PDBQT (Meeko)."""
     with open(out_pdbqt, "w") as fh:
-        fh.write(pdbqt)
+        fh.write(_meeko_pdbqt(_mol_from_smiles_3d(smiles, seed=seed)))
     return out_pdbqt
 
 
-def _resolve_receptor(params: docking_input_schema):
-    """Return ``(receptor_pdbqt, center, box_size)`` for the requested receptor."""
-    r = str(params.receptor).strip()
-    if r.lower() in ("vancomycin", "1fvm"):
-        return str(_VANCOMYCIN_RECEPTOR), _VANCOMYCIN_CENTER, _VANCOMYCIN_SIZE
+def _prepare_receptor_pdbqt(receptor: str, out_pdbqt: str) -> str:
+    """Return a rigid-receptor PDBQT path.
 
+    A ``.pdbqt`` path is used as-is; a SMILES/name/CID is built to 3D and written
+    as a rigid receptor (Meeko PDBQT with the torsion tree stripped). A raw
+    ``.pdb``/``.mol2``/``.sdf`` is rejected with guidance to pre-prepare it.
+    """
     from chemgraph.tools.ase_core import _resolve_existing_path
 
-    receptor_pdbqt = _resolve_existing_path(r)
-    if not os.path.exists(receptor_pdbqt):
-        raise FileNotFoundError(f"Receptor file not found: {r}")
-    if params.center is None or params.box_size is None:
+    r = str(receptor).strip()
+    if r.lower().endswith(".pdbqt"):
+        path = _resolve_existing_path(r)
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Receptor file not found: {r}")
+        return path
+    if r.lower().endswith((".pdb", ".mol2", ".sdf")):
         raise ValueError(
-            "A custom receptor requires both 'center' and 'box_size'."
+            f"Unsupported receptor format for {r!r}. Provide a prepared '.pdbqt', "
+            "or a SMILES/name for a small-molecule receptor."
         )
-    return receptor_pdbqt, list(params.center), list(params.box_size)
+
+    # SMILES / name / CID -> rigid small-molecule receptor
+    smiles = resolve_candidate_smiles(r)
+    pdbqt = _meeko_pdbqt(_mol_from_smiles_3d(smiles))
+    atom_lines = [ln for ln in pdbqt.splitlines() if ln[:6].strip() in ("ATOM", "HETATM")]
+    with open(out_pdbqt, "w") as fh:
+        fh.write("\n".join(atom_lines) + "\n")
+    return out_pdbqt
+
+
+# ---------------------------------------------------------------------------
+# Search box
+# ---------------------------------------------------------------------------
+
+
+def _heavy_coords(structure_path: str):
+    """Heavy-atom coordinates (Nx3) from a PDB/PDBQT/PQR file."""
+    import numpy as np
+
+    pts = []
+    with open(structure_path, errors="ignore") as fh:
+        for line in fh:
+            if line[:6].strip() in ("ATOM", "HETATM"):
+                elem = line[76:78].strip() if len(line) >= 78 else ""
+                if elem.upper() not in ("H", "HD"):
+                    pts.append(
+                        [float(line[30:38]), float(line[38:46]), float(line[46:54])]
+                    )
+    return np.array(pts)
+
+
+def _box_from_points(pts, pad: float):
+    return pts.mean(0).tolist(), ((pts.max(0) - pts.min(0)) + pad).tolist()
+
+
+def _fpocket_box(receptor_pdbqt: str, pad: float):
+    """Top-ranked fpocket pocket as (center, size), or None if unavailable."""
+    import glob
+    import shutil
+    import subprocess
+    import tempfile
+
+    if shutil.which("fpocket") is None or shutil.which("obabel") is None:
+        return None
+    tmp = tempfile.mkdtemp(prefix="fpocket_")
+    pdb = os.path.join(tmp, "rec.pdb")
+    subprocess.run(
+        f"obabel {receptor_pdbqt} -O {pdb}", shell=True, capture_output=True, check=False
+    )
+    subprocess.run(f"fpocket -f {pdb}", shell=True, capture_output=True, check=False)
+    vert = sorted(glob.glob(os.path.join(tmp, "rec_out", "pockets", "pocket*_vert.pqr")))
+    if not vert:
+        return None
+    pts = _heavy_coords(vert[0])
+    return _box_from_points(pts, pad) if len(pts) else None
+
+
+def _determine_box(receptor_pdbqt: str, params: docking_input_schema):
+    """Return ``(center, box_size)`` honoring explicit override, else auto-detect."""
+    if params.center is not None and params.box_size is not None:
+        return list(params.center), list(params.box_size)
+
+    order = {
+        "auto": ["reference", "fpocket", "blind"],
+        "reference": ["reference"],
+        "fpocket": ["fpocket"],
+        "blind": ["blind"],
+    }[params.site_detection]
+
+    for mode in order:
+        if mode == "reference" and params.reference_ligand:
+            from chemgraph.tools.ase_core import _resolve_existing_path
+
+            pts = _heavy_coords(_resolve_existing_path(params.reference_ligand))
+            if len(pts):
+                return _box_from_points(pts, _BOX_PADDING)
+        elif mode == "fpocket":
+            res = _fpocket_box(receptor_pdbqt, _BOX_PADDING)
+            if res:
+                return res
+        elif mode == "blind":
+            return _box_from_points(_heavy_coords(receptor_pdbqt), _BOX_PADDING)
+
+    # requested reference/fpocket was unavailable -> always-works blind fallback
+    return _box_from_points(_heavy_coords(receptor_pdbqt), _BOX_PADDING)
 
 
 # ---------------------------------------------------------------------------
@@ -131,18 +216,7 @@ def _resolve_receptor(params: docking_input_schema):
 
 
 def mock_docking(params: docking_input_schema) -> dict:
-    """Return deterministic mock docking results for testing without Vina.
-
-    Parameters
-    ----------
-    params : docking_input_schema
-        Docking input; only ``candidate``, ``receptor`` and ``n_poses`` are used.
-
-    Returns
-    -------
-    dict
-        A result dict with the same shape as :func:`run_docking_core`.
-    """
+    """Return deterministic mock docking results for testing without Vina."""
     scores = [round(-5.0 + 0.3 * i, 2) for i in range(params.n_poses)]
     return {
         "candidate": {"input": params.candidate, "smiles": params.candidate},
@@ -163,20 +237,7 @@ def mock_docking(params: docking_input_schema) -> dict:
 
 
 def run_docking_core(params: docking_input_schema) -> dict:
-    """Dock a candidate into a receptor with AutoDock Vina.
-
-    Parameters
-    ----------
-    params : docking_input_schema
-        Candidate, receptor, number of poses, optional box, and exhaustiveness.
-
-    Returns
-    -------
-    dict
-        Result including the resolved candidate SMILES, receptor, engine, best
-        binding affinity in kcal/mol (more negative = stronger), a per-pose list,
-        and the path to the written poses PDBQT.
-    """
+    """Dock a candidate into a receptor with AutoDock Vina and return a result dict."""
     try:
         from vina import Vina
     except ImportError as e:
@@ -188,10 +249,11 @@ def run_docking_core(params: docking_input_schema) -> dict:
     from chemgraph.tools.ase_core import _resolve_path
 
     smiles = resolve_candidate_smiles(params.candidate)
-    ligand_pdbqt = _resolve_path("candidate_ligand.pdbqt")
-    _prepare_ligand_pdbqt(smiles, ligand_pdbqt)
-
-    receptor_pdbqt, center, box_size = _resolve_receptor(params)
+    ligand_pdbqt = _prepare_ligand_pdbqt(smiles, _resolve_path("candidate_ligand.pdbqt"))
+    receptor_pdbqt = _prepare_receptor_pdbqt(
+        params.receptor, _resolve_path("receptor.pdbqt")
+    )
+    center, box_size = _determine_box(receptor_pdbqt, params)
 
     v = Vina(sf_name="vina", verbosity=0)
     v.set_receptor(receptor_pdbqt)
@@ -209,6 +271,11 @@ def run_docking_core(params: docking_input_schema) -> dict:
         "candidate": {"input": params.candidate, "smiles": smiles},
         "receptor": params.receptor,
         "engine": "vina",
+        "site_detection": params.site_detection,
+        "box": {
+            "center": [round(float(c), 3) for c in center],
+            "size": [round(float(s), 1) for s in box_size],
+        },
         "best_affinity_kcal_mol": min(scores) if scores else None,
         "n_poses": len(scores),
         "poses": [

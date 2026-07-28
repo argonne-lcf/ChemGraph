@@ -10,7 +10,6 @@ from langchain_core.tools import tool
 
 from chemgraph.schemas.docking_schema import docking_input_schema
 from chemgraph.tools.docking_core import (
-    # Re-export core helpers for convenience / parity with other tool modules.
     mock_docking,
     resolve_candidate_smiles,
     run_docking_core,
@@ -30,21 +29,24 @@ def run_docking(docking_input: docking_input_schema) -> dict:
 
     Use this to estimate how strongly a small molecule binds a target and to obtain
     its best pose. The candidate may be a SMILES string, a molecule name, or a
-    PubChem CID (it is resolved automatically). The receptor defaults to
-    ``"vancomycin"`` (a bundled target) or may be a path to a prepared rigid
-    receptor ``.pdbqt`` file, in which case ``center`` and ``box_size`` are required.
+    PubChem CID. The receptor is either a path to a prepared rigid receptor
+    ``.pdbqt`` file, or a SMILES/name/CID for a small-molecule receptor.
 
-    If the user has not specified ``n_poses``, ask them or use the default (10).
+    The search box is chosen automatically (``site_detection='auto'``: a supplied
+    reference ligand, else fpocket if installed, else the whole receptor); the user
+    may override it with ``center``/``box_size``. If the candidate, receptor, or
+    ``n_poses`` are unspecified or ambiguous, ask the user rather than guessing.
 
     Parameters
     ----------
     docking_input : docking_input_schema
-        Candidate, receptor, number of poses, optional search box, and exhaustiveness.
+        Candidate, receptor, number of poses, site-detection method, and optional
+        box override / reference ligand.
 
     Returns
     -------
     dict
-        Resolved candidate, receptor, engine, best binding affinity in kcal/mol
-        (more negative = stronger), a per-pose list, and the poses file path.
+        Resolved candidate, receptor, engine, chosen box, best binding affinity in
+        kcal/mol (more negative = stronger), a per-pose list, and the poses file path.
     """
     return run_docking_core(docking_input)
