@@ -12,9 +12,7 @@
   "redis_bind": "0.0.0.0",
   "redis_protected_mode": "no",
   "mpiexec": "mpiexec",
-  "pythonpath_entries": [
-    "/eagle/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph-argonne/src"
-  ],
+  "pythonpath_entries": [],
   "path_entries": [
     "/eagle/${ALCF_PROJECT}/${ALCF_USER}/tools/redis-crux/bin",
     "/eagle/${ALCF_PROJECT}/${ALCF_USER}/bin"

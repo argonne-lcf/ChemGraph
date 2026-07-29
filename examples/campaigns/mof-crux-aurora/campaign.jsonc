@@ -60,11 +60,11 @@
     },
     {
       "name": "pacmof2",
-      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m swarm.tools.pacmof2_mcp"
+      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m chemgraph.academy.tools.pacmof2_mcp"
     },
     {
       "name": "globus",
-      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m swarm.tools.globus_flex_mcp"
+      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m chemgraph.academy.tools.globus_flex_mcp"
     },
     {
       "name": "graspa",
