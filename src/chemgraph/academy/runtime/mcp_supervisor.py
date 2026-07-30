@@ -9,6 +9,7 @@ import os
 import shlex
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ import httpx
 from langchain_core.tools import BaseTool
 from langchain_core.tools import StructuredTool
 from mcp.client.session import ClientSession
-from mcp.client.streamable_http import streamable_http_client
+from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import CallToolResult
 
 from chemgraph.academy.core.campaign import MCPServerSpec
@@ -47,6 +48,7 @@ _SHUTDOWN_TIMEOUT_S = 5.0
 # the request. Ensure loopback is in NO_PROXY at module import so
 # every downstream HTTP client picks it up. Idempotent when already set.
 def _ensure_loopback_in_no_proxy() -> None:
+    loopback_hosts = "127.0.0.1,localhost,0.0.0.0"
     for var in ("NO_PROXY", "no_proxy"):
         current = os.environ.get(var, "")
         parts = {p.strip() for p in current.split(",") if p.strip()}
@@ -104,7 +106,17 @@ class MCPServerSupervisor:
         for spec in self._specs:
             port = _pick_free_port()
             url = f"http://127.0.0.1:{port}/mcp/"
-            cmd = _wrap_with_torch_patch(shlex.split(spec.command)) + [
+            # Expand ${VAR} so campaign JSON can use $VIRTUAL_ENV
+            # (resolvable to the daemon's own venv) instead of hardcoding
+            # a per-site absolute Python path. The compute-node wrapper
+            # runs the daemon by absolute path without `source activate`,
+            # so VIRTUAL_ENV isn't set in the inherited environment --
+            # synthesize it from sys.executable's grandparent so the same
+            # shared campaign works on every site.
+            venv_root = str(Path(sys.executable).resolve().parent.parent)
+            expanded = spec.command.replace("$VIRTUAL_ENV", venv_root)
+            expanded = os.path.expandvars(expanded)
+            cmd = _wrap_with_torch_patch(shlex.split(expanded)) + [
                 "--transport",
                 "streamable_http",
                 "--host",
@@ -183,7 +195,7 @@ class MCPServerSupervisor:
         tool_names: set[str] = set()
         matched_whitelist: set[str] = set()
         for server_name, url in connections.items():
-            async with streamable_http_client(url) as (read, write, _):
+            async with streamablehttp_client(url) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     listed = await session.list_tools()
@@ -335,7 +347,7 @@ async def discover_mcp_tools(
         await asyncio.wait_for(supervisor.start_all(), timeout=timeout_s)
         # Bypass the whitelist path -- we want the full advertised set.
         url = supervisor.urls[name]
-        async with streamable_http_client(url) as (read, write, _):
+        async with streamablehttp_client(url) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 listed = await session.list_tools()
@@ -384,22 +396,15 @@ async def _call_mcp_tool(
     tool_name: str,
     arguments: dict[str, Any],
 ) -> Any:
-    timeout = httpx.Timeout(
-        _MCP_HTTP_TIMEOUT_S,
-        read=_MCP_SSE_READ_TIMEOUT_S,
-    )
-    async with httpx.AsyncClient(
-        timeout=timeout,
-        follow_redirects=True,
-    ) as http_client:
-        async with streamable_http_client(
-            server_url,
-            http_client=http_client,
-        ) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool_name, arguments)
-                return _serialize_call_tool_result(result)
+    async with streamablehttp_client(
+        server_url,
+        timeout=_MCP_HTTP_TIMEOUT_S,
+        sse_read_timeout=_MCP_SSE_READ_TIMEOUT_S,
+    ) as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(tool_name, arguments)
+            return _serialize_call_tool_result(result)
 
 
 def _serialize_call_tool_result(result: CallToolResult) -> dict[str, Any]:
