@@ -382,7 +382,7 @@ def prepare_compute_launch(args: argparse.Namespace) -> AllocationPlan:
         # orphaned. If a single-machine run truly hangs, PBS walltime
         # is the final ceiling.
         # (the daemon prints a clear "missing=..." message regardless).
-        startup_timeout_s=(getattr(args, "startup_timeout_s", None) or 600.0),
+        startup_timeout_s=(getattr(args, "startup_timeout_s", None) or 1800.0),
         completion_timeout_s=60.0,
         status_interval_s=5.0,
         redis_host=socket.getfqdn(),
