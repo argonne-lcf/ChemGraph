@@ -113,7 +113,10 @@ class MCPServerSupervisor:
             # so VIRTUAL_ENV isn't set in the inherited environment --
             # synthesize it from sys.executable's grandparent so the same
             # shared campaign works on every site.
-            venv_root = str(Path(sys.executable).resolve().parent.parent)
+            # Do NOT resolve() -- Cray venvs symlink bin/python at the
+            # system Python (/opt/cray/...), and following the symlink
+            # points venv_root away from the venv root.
+            venv_root = str(Path(sys.executable).parent.parent)
             expanded = spec.command.replace("$VIRTUAL_ENV", venv_root)
             expanded = os.path.expandvars(expanded)
             cmd = _wrap_with_torch_patch(shlex.split(expanded)) + [
