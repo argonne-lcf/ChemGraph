@@ -25,9 +25,13 @@
   //      done for mof-crux-polaris).
   //   3. gRASPA binary compiled + on PATH inside the aurora venv, or
   //      graspa_core.py updated to point at the binary path.
-  //   4. dev-graspa branch checked out at
-  //      /flare/ChemGraph/jinchu/ChemGraph-argonne on aurora, and
-  //      chemgraph installed editable into the aurora venv.
+  //   4. dev-graspa branch checked out and chemgraph installed editable
+  //      into the aurora venv.
+  //   5. Replace /path/to/crux-venv/bin/python and
+  //      /path/to/aurora-venv/bin/python in the mcp_servers[].command
+  //      entries below with the absolute Python path for the venv you
+  //      created on each HPC. (Config-driven venv resolution is planned;
+  //      until it lands, edit these paths per site.)
   //
   // Kickoff (recipient = planner_executor):
   //   {"spec":{"topology":"pcu","backend":"pormake",
@@ -52,24 +56,24 @@
   "mcp_servers": [
     {
       "name": "mofforge",
-      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m mofforge.mcp.server"
+      "command": "/path/to/crux-venv/bin/python -m mofforge.mcp.server"
     },
     {
       "name": "chemgraph",
-      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m chemgraph.mcp.mcp_tools"
+      "command": "/path/to/crux-venv/bin/python -m chemgraph.mcp.mcp_tools"
     },
     {
       "name": "pacmof2",
-      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m chemgraph.academy.tools.pacmof2_mcp"
+      "command": "/path/to/crux-venv/bin/python -m chemgraph.academy.tools.pacmof2_mcp"
     },
     {
       "name": "globus",
-      "command": "/lus/eagle/projects/ChemGraph/jinchu/venvs/academy-swarm-crux/bin/python -m chemgraph.academy.tools.globus_flex_mcp"
+      "command": "/path/to/crux-venv/bin/python -m chemgraph.academy.tools.globus_flex_mcp"
     },
     {
       "name": "graspa",
       // Real gRASPA MCP (Thang's dev-graspa). Aurora venv Python path.
-      "command": "/flare/ChemGraph/jinchu/venvs/academy-swarm-aurora/bin/python -m chemgraph.mcp.graspa_mcp_hpc"
+      "command": "/path/to/aurora-venv/bin/python -m chemgraph.mcp.graspa_mcp_hpc"
     }
   ],
   "agents": [
