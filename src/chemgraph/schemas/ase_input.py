@@ -13,6 +13,8 @@ from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
 from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
 from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
+from chemgraph.schemas.calculators.vasp_calc import VaspCalc
+from chemgraph.schemas.calculators.espresso_calc import EspressoCalc
 
 # Gate optional calculators on whether their engine package is installed.
 # Schema classes are always importable (internal to ChemGraph), so we must
@@ -75,11 +77,38 @@ if not _command_available("nwchem", "ASE_NWCHEM_COMMAND"):
 if not _command_available("orca", "ASE_ORCA_COMMAND"):
     OrcaCalc = None
 
+# VASP needs a licensed binary AND a pseudopotential library at VASP_PP_PATH,
+# both present. ASE accepts several launch mechanisms: ASE_VASP_COMMAND /
+# VASP_COMMAND / VASP_SCRIPT env vars, or a vasp_std/vasp_gam binary on PATH.
+_vasp_binary = (
+    _command_available("vasp_std", "ASE_VASP_COMMAND")
+    or shutil.which("vasp_gam") is not None
+    or bool(os.environ.get("VASP_COMMAND"))
+    or bool(os.environ.get("VASP_SCRIPT"))
+)
+if not (_vasp_binary and bool(os.environ.get("VASP_PP_PATH"))):
+    VaspCalc = None
+
+# Quantum ESPRESSO needs pw.x (or ASE_ESPRESSO_COMMAND) AND a pseudopotential
+# directory. The gate checks ESPRESSO_PSEUDO only: it deliberately ignores the
+# per-call ``pseudo_dir`` field so registration proves pseudos exist somewhere on
+# this host before offering the calculator (mirroring the VASP_PP_PATH gate).
+# Export ESPRESSO_PSEUDO to register even when you pass pseudo_dir per call.
+if not (
+    _command_available("pw.x", "ASE_ESPRESSO_COMMAND")
+    and bool(os.environ.get("ESPRESSO_PSEUDO"))
+):
+    EspressoCalc = None
+
 
 _CALCULATOR_ALIASES = {
     "xtb": "tbli",
     "gfn1xtb": "tbli",
     "gfn2xtb": "tbli",
+    "qe": "espr",
+    "quantumespresso": "espr",
+    "pwscf": "espr",
+    "pw": "espr",
 }
 
 
@@ -109,6 +138,8 @@ _all_calculator_classes: List[Optional[Type[BaseModel]]] = [
     EMTCalc,
     NWChemCalc,
     OrcaCalc,
+    VaspCalc,
+    EspressoCalc,
 ]
 
 # Filter out unavailable calculators
@@ -228,10 +259,12 @@ class ASEInputSchema(BaseModel):
     optimizer : str
         Optimization algorithm for geometry optimization. Options:
         - 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'.
-    calculator : Union[FAIRChemCalc, MaceCalc, NWChemCalc, OrcaCalc, TBLiteCalc, EMTCalc, AIMNET2Calc]
+    calculator : Union[FAIRChemCalc, MaceCalc, NWChemCalc, OrcaCalc, TBLiteCalc, EMTCalc, AIMNET2Calc, VaspCalc, EspressoCalc]
         ASE-compatible calculator used for the simulation. Supported types are determined
         by installed packages and may include:
-        - FAIRChem, MACE, NWChem, Orca, TBLite and EMT. The order determines the priority of the calculators.
+        - FAIRChem, MACE, NWChem, Orca, TBLite, EMT, AIMNet2, and the plane-wave
+          DFT calculators VASP and Quantum ESPRESSO. The order determines the
+          priority of the calculators.
         - Use MACE or FAIRChem if the calculator is not specified.
     fmax : float
         Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
