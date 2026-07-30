@@ -252,3 +252,19 @@ Aurora-specific. To run it elsewhere, edit the marked sections of the PBS script
   drop it. To use a different model or endpoint, change `QE_LLM_MODEL` and the auth
   the driver loads (for example `OPENAI_API_KEY` plus an `api.openai.com` model in
   place of the ALCF token).
+
+## Future direction: unattended auto-resubmit
+
+Within one allocation (one `qsub` window), resume is already automatic: when the
+cap fires, the agent continues from the saved partial on its own, and the example
+PBS scripts also show resume as a fresh process in the same allocation. The step
+that is still manual is starting the *next* allocation: once a `qsub` window is
+exhausted the compute node is released, and ChemGraph does not submit scheduler
+jobs, so continuing across a fresh allocation means running `qsub` again by hand.
+A later layer would submit that next allocation automatically, so a calculation
+longer than any single allocation runs to completion across many allocations with
+no human in the loop. The design for that layer, built on the DOE IRI Facility
+API, is written up in [`IRI_INTEGRATION.md`](IRI_INTEGRATION.md), including the
+endpoint and field mapping, why it is additive on top of the current manifest (no
+schema break), and what live-facility access it would need. It is a design note;
+none of it is implemented here.
