@@ -265,6 +265,7 @@ def _expand_mace_ensemble(params: mace_input_schema_ensemble) -> list[dict]:
         "pressure": params.pressure,
         "fmax": params.fmax,
         "steps": params.steps,
+        "max_wall_seconds": params.max_wall_seconds,
         "optimizer": params.optimizer,
     }
     base_output = Path(params.output_result_file)

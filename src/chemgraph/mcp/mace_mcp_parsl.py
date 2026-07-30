@@ -153,6 +153,7 @@ def run_mace_ensemble(params: mace_input_schema_ensemble):
             "pressure": params.pressure,
             "fmax": params.fmax,
             "steps": params.steps,
+            "max_wall_seconds": params.max_wall_seconds,
             "optimizer": params.optimizer,
         }
 

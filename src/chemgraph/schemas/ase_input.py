@@ -270,6 +270,16 @@ class ASEInputSchema(BaseModel):
         default=1000,
         description="Maximum number of optimization steps. Internally 'vib', 'thermo' and 'ir' run geometry optimization before performing their respective calculations.",
     )
+    max_wall_seconds: Optional[float] = Field(
+        default=None,
+        description=(
+            "Soft wall-clock budget for this calculation in seconds. When set, "
+            "geometry optimization checks the clock after each optimizer step and "
+            "returns a resumable partial result (converged=False, restart_file "
+            "set), stopping short of completion. None (default) = no cap, "
+            "current behavior."
+        ),
+    )
     temperature: Optional[float] = Field(
         default=None,
         description="Temperature for thermochemistry calculations in Kelvin (K).",
@@ -406,6 +416,14 @@ class ASEOutputSchema(BaseModel):
     wall_time: float = Field(
         default=None,
         description="Total wall time (in seconds) taken to complete the simulation.",
+    )
+    wall_time_capped: bool = Field(
+        default=False,
+        description="True if the run stopped early due to max_wall_seconds.",
+    )
+    restart_file: Optional[str] = Field(
+        default=None,
+        description="Optimizer restart-state path for resuming a capped run.",
     )
 
     @field_validator("vibrational_frequencies", "ir_data", "thermochemistry", mode="before")

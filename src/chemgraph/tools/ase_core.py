@@ -8,9 +8,11 @@ simply delegate to these functions.
 
 from __future__ import annotations
 
+import contextlib
 import glob
 import json
 import logging
+import math
 import os
 import shutil
 import tempfile
@@ -24,6 +26,154 @@ from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
 
 logger = logging.getLogger(__name__)
+
+# Reference point for CHEMGRAPH_ALLOCATION_SECONDS: the moment this module is
+# imported, which is ~the moment the agent process (and thus the useful part of
+# the PBS allocation) begins. CHEMGRAPH_ALLOCATION_DEADLINE (absolute epoch) is
+# exact and takes precedence when both are set.
+_PROCESS_START = time.time()
+
+# Default seconds reserved before the allocation deadline for a clean stop:
+# the cap trips at a step boundary, then the partial state must be flushed and
+# the result file written before PBS sends SIGKILL. Overridable per run via
+# CHEMGRAPH_ALLOCATION_MARGIN.
+_DEFAULT_ALLOCATION_MARGIN = 60.0
+
+
+def _allocation_deadline() -> Optional[float]:
+    """Absolute wall-clock time (epoch seconds) when the PBS allocation ends.
+
+    Read from the environment so a batch script can advertise the allocation's
+    walltime to every calculation in the run without any per-call plumbing:
+
+    * ``CHEMGRAPH_ALLOCATION_DEADLINE`` -- absolute epoch seconds of the kill.
+      Exact, and the recommended form for real PBS jobs; e.g.
+      ``export CHEMGRAPH_ALLOCATION_DEADLINE=$(date -d "+${WALL}sec" +%s)``.
+    * ``CHEMGRAPH_ALLOCATION_SECONDS`` -- total budget in seconds, measured from
+      this process's start (module import). Convenient when a script only knows a
+      duration, but under-protects if a long setup (conda activation, model
+      downloads) runs between the PBS walltime clock starting and this module
+      being imported -- that gap is not counted, so prefer the DEADLINE form for
+      production.
+
+    Returns None when neither is set (no allocation cap; an explicit
+    ``max_wall_seconds`` still applies on its own). Non-finite values (nan/inf)
+    are rejected like non-numeric ones, so a garbage env var can never silently
+    disable the cap.
+    """
+    raw_deadline = os.environ.get("CHEMGRAPH_ALLOCATION_DEADLINE")
+    if raw_deadline:
+        try:
+            value = float(raw_deadline)
+        except ValueError:
+            logger.warning(
+                "Ignoring non-numeric CHEMGRAPH_ALLOCATION_DEADLINE=%r", raw_deadline
+            )
+        else:
+            if math.isfinite(value):
+                # A deadline already in the past when THIS process started cannot
+                # belong to the current allocation -- it is a leftover
+                # CHEMGRAPH_ALLOCATION_DEADLINE from a prior run still in the
+                # environment. Honoring it would clamp every calc to 0.001 s and
+                # cap immediately, forever (same no-progress failure class as a
+                # stale restart). Ignore it and fall through to SECONDS; a
+                # deadline after _PROCESS_START that is merely spent mid-run is
+                # still honored (and clamps in _effective_wall_seconds).
+                if value < _PROCESS_START:
+                    logger.warning(
+                        "Ignoring stale CHEMGRAPH_ALLOCATION_DEADLINE=%r (before "
+                        "this process started; leftover from a prior allocation)",
+                        raw_deadline,
+                    )
+                else:
+                    return value
+            else:
+                logger.warning(
+                    "Ignoring non-finite CHEMGRAPH_ALLOCATION_DEADLINE=%r",
+                    raw_deadline,
+                )
+    raw_seconds = os.environ.get("CHEMGRAPH_ALLOCATION_SECONDS")
+    if raw_seconds:
+        try:
+            value = float(raw_seconds)
+        except ValueError:
+            logger.warning(
+                "Ignoring non-numeric CHEMGRAPH_ALLOCATION_SECONDS=%r", raw_seconds
+            )
+        else:
+            if math.isfinite(value):
+                return _PROCESS_START + value
+            logger.warning(
+                "Ignoring non-finite CHEMGRAPH_ALLOCATION_SECONDS=%r", raw_seconds
+            )
+    return None
+
+
+def _allocation_margin() -> float:
+    """Seconds to reserve before the allocation deadline for a clean stop.
+
+    Overridable via ``CHEMGRAPH_ALLOCATION_MARGIN`` (seconds); defaults to
+    ``_DEFAULT_ALLOCATION_MARGIN``. A larger margin also absorbs one in-flight
+    step that is already running when the deadline check fires.
+    """
+    raw = os.environ.get("CHEMGRAPH_ALLOCATION_MARGIN")
+    if raw:
+        try:
+            value = float(raw)
+        except ValueError:
+            logger.warning(
+                "Ignoring non-numeric CHEMGRAPH_ALLOCATION_MARGIN=%r", raw
+            )
+        else:
+            if math.isfinite(value):
+                return max(0.0, value)
+            logger.warning(
+                "Ignoring non-finite CHEMGRAPH_ALLOCATION_MARGIN=%r", raw
+            )
+    return _DEFAULT_ALLOCATION_MARGIN
+
+
+def _effective_wall_seconds(
+    explicit: Optional[float], start_time: float
+) -> Optional[float]:
+    """Combine an explicit ``max_wall_seconds`` with the PBS allocation budget.
+
+    The effective cap is the *tighter* of:
+
+    * the user's explicit ``max_wall_seconds`` (if any), and
+    * the allocation's remaining time minus a safety margin (if the allocation
+      env vars are set).
+
+    This is the enforcement side of the Layer-2 auto-continue gate: even with no
+    explicit cap, a calculation inside a PBS allocation self-terminates with a
+    resumable partial before walltime kills it, while a short calculation
+    finishes well within the budget and is never capped. The cap is *soft* -- it
+    fires only at ASE step boundaries, so the margin must exceed one step's wall
+    time (the 60 s default suits fast engines; DFT should raise it).
+
+    Returns None when neither bound is set (uncapped -- original behavior), or a
+    small positive (``0.001``) when the allocation is already spent ("cap
+    immediately").
+    """
+    bounds: list[float] = []
+    if explicit and explicit > 0:
+        bounds.append(float(explicit))
+
+    deadline = _allocation_deadline()
+    if deadline is not None:
+        alloc_remaining = deadline - _allocation_margin() - start_time
+        # Clamp to a small positive: a value <= 0 would be falsy at the gate
+        # (disabling the cap -- the opposite of intended) when we are in fact out
+        # of time. A tiny positive makes an already-exhausted allocation cap as
+        # early as possible -- typically before step 1, in which case no restart
+        # file is written and the result is a no-progress partial (see the opt/
+        # vib cap sites, which advertise restart_file only when a step actually
+        # persisted state).
+        bounds.append(max(alloc_remaining, 0.001))
+
+    if not bounds:
+        return None
+    return min(bounds)
 
 
 def _ensure_ase_core_file_log() -> None:
@@ -360,6 +510,75 @@ def create_xyz_string(atomic_numbers, positions) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Vibrational-analysis wall-clock cap
+# ---------------------------------------------------------------------------
+
+def _run_vibrations_capped(vib, deadline: Optional[float]) -> tuple[bool, int, int]:
+    """Run an ASE ``Vibrations``/``Infrared`` calculation with an optional cap.
+
+    This mirrors ``ase.vibrations.Vibrations.run`` (iterate displacements, take a
+    per-displacement exclusive-create lock, compute forces, save), but adds two
+    things the stock ``run()`` lacks:
+
+    * a wall-clock deadline checked *between* displacements, so the calculation
+      stops cleanly before the scheduler SIGKILLs it mid-run;
+    * durability: because the caller uses a persistent cache directory (not a
+      ``TemporaryDirectory``), a capped run leaves its completed displacements on
+      disk and a later re-run skips them (the lock returns ``None`` for a
+      displacement whose ``cache.<name>.json`` already exists).
+
+    The deadline is checked *before* acquiring the lock, never inside it: the lock
+    exclusively creates the cache file up front, so breaking mid-lock would leave
+    an empty file that ASE would later mistake for a completed displacement. A
+    displacement already present in the cache is skipped for free (no deadline
+    check), so a complete-but-expired cache is *not* reported as capped.
+
+    Parameters
+    ----------
+    vib : ase.vibrations.Vibrations
+        A ``Vibrations`` (or ``Infrared``) instance bound to a persistent cache.
+    deadline : Optional[float]
+        Absolute ``time.time()`` value after which no new displacement starts.
+        ``None`` disables the cap (all displacements run to completion).
+
+    Returns
+    -------
+    tuple[bool, int, int]
+        ``(capped, n_done, n_total)`` where ``capped`` is True iff the run
+        stopped early with displacements still outstanding.
+    """
+    from ase.parallel import world
+
+    # An earlier interrupted run (e.g. a hard kill mid-lock) can leave empty
+    # cache files; drop them so those displacements are recomputed, not trusted.
+    with contextlib.suppress(Exception):
+        vib.cache.strip_empties()
+
+    n_total = vib.ndof * vib.nfree + 1  # 6N+1 for nfree=2
+    n_done = 0
+    capped = False
+    for disp, disp_atoms in vib.iterdisplace(inplace=False):
+        if disp.name in vib.cache:
+            # Already computed on a previous allocation -> free skip.
+            n_done += 1
+            continue
+        if deadline is not None and time.time() >= deadline:
+            capped = True
+            break
+        with vib.cache.lock(disp.name) as handle:
+            if handle is None:
+                # Won by another worker between the membership check and the
+                # lock; count it as done.
+                n_done += 1
+                continue
+            result = vib.calculate(disp_atoms, disp)
+            if world.rank == 0:
+                handle.save(result)
+            n_done += 1
+    return capped, n_done, n_total
+
+
+# ---------------------------------------------------------------------------
 # Unified ASE simulation core
 # ---------------------------------------------------------------------------
 
@@ -400,6 +619,23 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         }
 
     start_time = time.time()
+
+    # Effective wall-clock cap: the tighter of the user's explicit
+    # max_wall_seconds and the remaining PBS allocation budget (minus a safety
+    # margin), so a calculation self-terminates with a resumable partial before
+    # walltime kills it -- even when no explicit cap was requested. None =
+    # uncapped (neither an explicit cap nor an allocation deadline is set).
+    effective_wall_seconds = _effective_wall_seconds(params.max_wall_seconds, start_time)
+    if (
+        effective_wall_seconds is not None
+        and effective_wall_seconds != params.max_wall_seconds
+    ):
+        logger.info(
+            "Effective wall-clock cap: %.3fs (explicit max_wall_seconds=%s, "
+            "allocation-bounded).",
+            effective_wall_seconds,
+            params.max_wall_seconds,
+        )
 
     # Resolve a relative input path against CHEMGRAPH_LOG_DIR, matching how
     # smiles_to_coordinate_file writes it. Without this, a tool that writes
@@ -511,6 +747,9 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
                 "single_point_energy": energy,
                 "unit": "eV",
+                "result_file": os.path.abspath(output_results_file),
+                "wall_time": wall_time,
+                "wall_time_capped": False,
             }
         else:  # dipole
             return {
@@ -518,6 +757,9 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
                 "dipole_moment": dipole,
                 "dipole_unit": "e * Angstrom",
+                "result_file": os.path.abspath(output_results_file),
+                "wall_time": wall_time,
+                "wall_time_capped": False,
             }
 
     # ------------------------------------------------------------------
@@ -536,12 +778,67 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
 
         logger.info("Running optimization with %s (fmax=%s, steps=%s)", optimizer, fmax, steps)
+        mol_stem = Path(input_structure_file).stem if input_structure_file else "mol"
+        opt_capped = False
+        restart_path = None
+        resume_input_file = None
         if len(atoms) > 1:
-            dyn = optimizer_class(atoms)
-            converged = dyn.run(fmax=fmax, steps=steps)
+            # Soft wall-clock cap: when an effective cap is in force (an explicit
+            # max_wall_seconds and/or a PBS allocation budget), step the optimizer
+            # via irun() and stop cleanly at the deadline, leaving a resumable
+            # partial (BFGS dumps its Hessian to restart_path and the trajectory
+            # each step). When neither is set, the path below is byte-for-byte the
+            # original dyn.run() behavior.
+            if effective_wall_seconds:
+                deadline = start_time + effective_wall_seconds
+                restart_target = _resolve_path(f"{mol_stem}_opt.restart.json")
+                traj_path = _resolve_path(f"{mol_stem}_opt.traj")
+                dyn = optimizer_class(
+                    atoms, restart=restart_target, trajectory=traj_path
+                )
+                converged = False
+                # irun() yields is_converged at each point, and BFGS dumps its
+                # restart state inside each completed step. When a step completes
+                # within the budget, the capped run has a restart file on disk and
+                # we advertise it. irun() also yields once before step 1, so a cap
+                # that fires there leaves 0 steps and no partial to resume; that
+                # case advertises no restart_file, handled by the n_done check below.
+                for converged in dyn.irun(fmax=fmax, steps=steps):
+                    # Convergence wins over the deadline: a step that reports a
+                    # converged geometry is finished, so break without capping
+                    # even when the deadline has already passed.
+                    if converged:
+                        break
+                    if time.time() >= deadline:
+                        opt_capped = True
+                        break
+                if opt_capped:
+                    n_done = dyn.get_number_of_steps()
+                    # Only claim a restart file if a step actually wrote one.
+                    if n_done > 0 and os.path.isfile(restart_target):
+                        restart_path = restart_target
+                        # Persist the moved geometry as a standalone, ASE-readable
+                        # structure so a resume continues from the partial instead
+                        # of re-reading the original input. restart_target is the
+                        # BFGS Hessian JSON (not a structure); this xyz is what a
+                        # resumed run feeds back as input_structure_file.
+                        from ase.io import write
+
+                        resume_input_file = _resolve_path(f"{mol_stem}_opt.partial.xyz")
+                        write(resume_input_file, atoms)
+                    logger.warning(
+                        "Optimization capped at effective wall-clock=%.3fs after "
+                        "%d steps (not converged); partial geometry%s saved.",
+                        effective_wall_seconds,
+                        n_done,
+                        " + restart" if restart_path else "",
+                    )
+            else:
+                dyn = optimizer_class(atoms)
+                converged = dyn.run(fmax=fmax, steps=steps)
         else:
             converged = True
-        logger.info("Optimization converged=%s", converged)
+        logger.info("Optimization converged=%s (capped=%s)", converged, opt_capped)
 
         single_point_energy = float(atoms.get_potential_energy())
         logger.info("Post-optimization energy: %s eV", single_point_energy)
@@ -554,114 +851,175 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         thermo_data: dict = {}
         vib_data: dict = {}
         ir_data: dict = {}
+        vib_capped = False
+        vib_cache_path: Optional[str] = None
+        ir_plot_path: Optional[str] = None
 
         # --------------------------------------------------------------
         # Vibrational / thermo / IR analysis
         # --------------------------------------------------------------
-        if driver in {"vib", "thermo", "ir"}:
+        # A capped optimization leaves a half-optimized geometry; running
+        # vibrations on it would produce meaningless (often imaginary) modes, so
+        # hand off for resume and skip the analysis on this non-stationary structure.
+        if driver in {"vib", "thermo", "ir"} and opt_capped:
+            logger.warning(
+                "Optimization was capped before convergence; skipping %s "
+                "analysis (needs a converged geometry). Resume to finish opt "
+                "first.",
+                driver,
+            )
+        elif driver in {"vib", "thermo", "ir"}:
             logger.info("Starting vibrational analysis (driver=%s)", driver)
             from ase.vibrations import Vibrations
             from ase import units
 
-            ir_plot_path: Optional[str] = None
             mol_stem = (
                 Path(input_structure_file).stem if input_structure_file else "mol"
             )
 
-            with tempfile.TemporaryDirectory(
-                prefix=f"chemgraph_vib_{mol_stem}_"
-            ) as tmpdir:
+            # Wall-clock cap for the 6N+1 displacement evaluations. When set, use
+            # a persistent, deterministic cache dir so a capped run is resumable:
+            # a re-run with more budget skips already-computed displacements. When
+            # unset, keep the original ephemeral TemporaryDirectory (byte-for-byte
+            # the previous behavior: no cache to leave behind, no stale reuse).
+            deadline = (
+                start_time + effective_wall_seconds
+                if effective_wall_seconds
+                else None
+            )
+            if deadline is not None:
+                vib_cache_dir = _resolve_path(f"{mol_stem}_vibcache")
+                os.makedirs(vib_cache_dir, exist_ok=True)
+                cache_ctx: object = contextlib.nullcontext(vib_cache_dir)
+            else:
+                cache_ctx = tempfile.TemporaryDirectory(
+                    prefix=f"chemgraph_vib_{mol_stem}_"
+                )
+
+            with cache_ctx as tmpdir:
                 vib_name = os.path.join(tmpdir, "vib")
                 vib = Vibrations(atoms, name=vib_name)
-                vib.clean()
-                vib.run()
-                logger.info("Vibrational analysis complete")
+                if deadline is None:
+                    # Fresh cache each uncapped run (matches original behavior).
+                    vib.clean()
+                vib_capped, n_done, n_total = _run_vibrations_capped(vib, deadline)
 
-                vib_data = {
-                    "energies": [],
-                    "energy_unit": "meV",
-                    "frequencies": [],
-                    "frequency_unit": "cm-1",
-                }
-
-                energies = vib.get_energies()
-
-                for _idx, e in enumerate(energies):
-                    is_imag = abs(e.imag) > 1e-8
-                    e_val = e.imag if is_imag else e.real
-                    energy_meV = 1e3 * e_val
-                    freq_cm1 = e_val / units.invcm
-                    suffix = "i" if is_imag else ""
-                    vib_data["energies"].append(f"{energy_meV}{suffix}")
-                    vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
-
-                # Write frequencies CSV
-                freq_file_path = _resolve_path(f"frequencies_{mol_stem}.csv")
-                freq_file = Path(freq_file_path)
-                if freq_file.exists():
-                    freq_file.unlink()
-                with freq_file.open("w", encoding="utf-8") as f:
-                    for i, freq in enumerate(vib_data["frequencies"], start=0):
-                        f.write(f"{mol_stem}_vib.{i}.traj,{freq}\n")
-
-                # Write normal-mode .traj files, then copy out of tmpdir
-                for i in range(len(energies)):
-                    vib.write_mode(n=i, kT=units.kB * 300, nimages=30)
-
-                traj_dest_dir = _resolve_path("")
-                if traj_dest_dir:
-                    os.makedirs(traj_dest_dir, exist_ok=True)
-                for traj_file in glob.glob(os.path.join(tmpdir, "vib.*.traj")):
-                    dest_name = f"{mol_stem}_{Path(traj_file).name}"
-                    dest_path = (
-                        os.path.join(traj_dest_dir, dest_name)
-                        if traj_dest_dir
-                        else dest_name
+                if vib_capped:
+                    # Partial displacements are on disk in the persistent cache;
+                    # frequencies cannot be computed until all are done, so hand
+                    # off. Point restart_file at the cache dir for resume.
+                    vib_cache_path = os.path.abspath(tmpdir)
+                    logger.warning(
+                        "Vibrational analysis CAPPED at effective wall-clock=%.3fs "
+                        "after %d/%d displacements; cache kept at %s for resume.",
+                        effective_wall_seconds,
+                        n_done,
+                        n_total,
+                        vib_cache_path,
                     )
-                    shutil.copy2(traj_file, dest_path)
+                else:
+                    logger.info("Vibrational analysis complete")
 
-                # ---- IR ----
-                if driver == "ir":
-                    logger.info("Running IR calculation")
-                    from ase.vibrations import Infrared
-                    import matplotlib
+                    vib_data = {
+                        "energies": [],
+                        "energy_unit": "meV",
+                        "frequencies": [],
+                        "frequency_unit": "cm-1",
+                    }
 
-                    matplotlib.use("Agg")
-                    import matplotlib.pyplot as plt
+                    energies = vib.get_energies()
 
-                    ir_data["spectrum_frequencies"] = []
-                    ir_data["spectrum_frequencies_units"] = "cm-1"
-                    ir_data["spectrum_intensities"] = []
-                    ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
+                    for _idx, e in enumerate(energies):
+                        is_imag = abs(e.imag) > 1e-8
+                        e_val = e.imag if is_imag else e.real
+                        energy_meV = 1e3 * e_val
+                        freq_cm1 = e_val / units.invcm
+                        suffix = "i" if is_imag else ""
+                        vib_data["energies"].append(f"{energy_meV}{suffix}")
+                        vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
-                    ir_name = os.path.join(tmpdir, "ir")
-                    ir = Infrared(atoms, name=ir_name)
-                    ir.clean()
-                    ir.run()
+                    # Write frequencies CSV
+                    freq_file_path = _resolve_path(f"frequencies_{mol_stem}.csv")
+                    freq_file = Path(freq_file_path)
+                    if freq_file.exists():
+                        freq_file.unlink()
+                    with freq_file.open("w", encoding="utf-8") as f:
+                        for i, freq in enumerate(vib_data["frequencies"], start=0):
+                            f.write(f"{mol_stem}_vib.{i}.traj,{freq}\n")
 
-                    IR_SPECTRUM_START = 500
-                    IR_SPECTRUM_END = 4000
-                    freq_intensity = ir.get_spectrum(
-                        start=IR_SPECTRUM_START, end=IR_SPECTRUM_END
-                    )
-                    fig, ax = plt.subplots()
-                    ax.plot(freq_intensity[0], freq_intensity[1])
-                    ax.set_xlabel("Frequency (cm⁻¹)")
-                    ax.set_ylabel("Intensity (a.u.)")
-                    ax.set_title("Infrared Spectrum")
-                    ax.grid(True)
-                    ir_plot_path = _resolve_path(f"ir_spectrum_{mol_stem}.png")
-                    fig.savefig(ir_plot_path, format="png", dpi=300)
-                    plt.close(fig)
+                    # Write normal-mode .traj files, then copy out of tmpdir
+                    for i in range(len(energies)):
+                        vib.write_mode(n=i, kT=units.kB * 300, nimages=30)
 
-                    logger.info("IR spectrum plot saved to %s", ir_plot_path)
-                    ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
-                    ir_data["Normal mode data"] = (
-                        f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
-                    )
+                    traj_dest_dir = _resolve_path("")
+                    if traj_dest_dir:
+                        os.makedirs(traj_dest_dir, exist_ok=True)
+                    for traj_file in glob.glob(os.path.join(tmpdir, "vib.*.traj")):
+                        dest_name = f"{mol_stem}_{Path(traj_file).name}"
+                        dest_path = (
+                            os.path.join(traj_dest_dir, dest_name)
+                            if traj_dest_dir
+                            else dest_name
+                        )
+                        shutil.copy2(traj_file, dest_path)
+
+                    # ---- IR ----
+                    if driver == "ir":
+                        logger.info("Running IR calculation")
+                        from ase.vibrations import Infrared
+                        import matplotlib
+
+                        matplotlib.use("Agg")
+                        import matplotlib.pyplot as plt
+
+                        ir_data["spectrum_frequencies"] = []
+                        ir_data["spectrum_frequencies_units"] = "cm-1"
+                        ir_data["spectrum_intensities"] = []
+                        ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
+
+                        ir_name = os.path.join(tmpdir, "ir")
+                        ir = Infrared(atoms, name=ir_name)
+                        if deadline is None:
+                            ir.clean()
+                        ir_capped, _ir_done, _ir_total = _run_vibrations_capped(
+                            ir, deadline
+                        )
+                        if ir_capped:
+                            vib_capped = True
+                            vib_cache_path = os.path.abspath(tmpdir)
+                            logger.warning(
+                                "IR analysis CAPPED at effective wall-clock=%.3fs; "
+                                "cache kept at %s for resume.",
+                                effective_wall_seconds,
+                                vib_cache_path,
+                            )
+
+                    if driver == "ir" and not vib_capped:
+                        IR_SPECTRUM_START = 500
+                        IR_SPECTRUM_END = 4000
+                        freq_intensity = ir.get_spectrum(
+                            start=IR_SPECTRUM_START, end=IR_SPECTRUM_END
+                        )
+                        fig, ax = plt.subplots()
+                        ax.plot(freq_intensity[0], freq_intensity[1])
+                        ax.set_xlabel("Frequency (cm⁻¹)")
+                        ax.set_ylabel("Intensity (a.u.)")
+                        ax.set_title("Infrared Spectrum")
+                        ax.grid(True)
+                        ir_plot_path = _resolve_path(f"ir_spectrum_{mol_stem}.png")
+                        fig.savefig(ir_plot_path, format="png", dpi=300)
+                        plt.close(fig)
+
+                        logger.info("IR spectrum plot saved to %s", ir_plot_path)
+                        ir_data["IR Plot"] = (
+                            f"Saved to {os.path.abspath(ir_plot_path)}"
+                        )
+                        ir_data["Normal mode data"] = (
+                            f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
+                        )
 
                 # ---- Thermochemistry ----
-                if driver == "thermo":
+                if driver == "thermo" and not vib_capped:
                     logger.info("Computing thermochemistry (T=%s K, P=%s Pa)", temperature, pressure)
                     if len(atoms) == 1:
                         thermo_data = {
@@ -726,6 +1084,10 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             ir_data=ir_data,
             single_point_energy=single_point_energy,
             wall_time=wall_time,
+            wall_time_capped=opt_capped or vib_capped,
+            restart_file=(
+                restart_path if opt_capped else vib_cache_path if vib_capped else None
+            ),
         )
         with open(output_results_file, "w", encoding="utf-8") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
@@ -733,13 +1095,69 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         # ---- minimal return payload ----
         abs_output = os.path.abspath(output_results_file)
         if driver == "opt":
+            if opt_capped:
+                if restart_path:
+                    msg = (
+                        "Optimization CAPPED at the wall-clock limit (not "
+                        f"converged). Partial geometry saved to {resume_input_file}. "
+                        "Resume by re-running opt with input_structure_file set to "
+                        "that partial geometry."
+                    )
+                else:
+                    # Capped before completing step 1 (e.g. an already-spent
+                    # allocation): no restart state was written, so there is no
+                    # partial to resume from -- rerun with more budget.
+                    msg = (
+                        "Optimization CAPPED at the wall-clock limit before any "
+                        "step completed; no restart file was written. Rerun with "
+                        f"more wall-clock budget. Results saved to {abs_output}."
+                    )
+            else:
+                msg = f"Simulation completed. Results saved to {abs_output}"
             return {
                 "status": "success",
-                "message": f"Simulation completed. Results saved to {abs_output}",
+                "message": msg,
                 "single_point_energy": single_point_energy,
                 "unit": "eV",
+                "wall_time_capped": opt_capped,
+                "result_file": abs_output,
+                "wall_time": wall_time,
+                "restart_file": restart_path,
+                "resume_input_file": resume_input_file,
             }
-        elif driver == "vib":
+
+        # vib/thermo/ir that could not finish within the wall-clock budget (the
+        # optimization capped, or the displacement sweep did): no frequencies to
+        # report, but progress is durable. Re-running the same driver on the same
+        # structure with more budget resumes from the saved cache.
+        if driver in {"vib", "thermo", "ir"} and (opt_capped or vib_capped):
+            if opt_capped:
+                reason = (
+                    "the pre-analysis optimization hit the wall-clock limit "
+                    "before converging"
+                )
+            else:
+                reason = "the displacement sweep hit the wall-clock limit"
+            return {
+                "status": "success",
+                "message": (
+                    f"{driver} analysis CAPPED: {reason}. No frequencies yet; "
+                    f"partial progress saved to {abs_output}. Resume the same "
+                    f"'{driver}' run with more wall-clock budget (a larger "
+                    "max_wall_seconds, or a fresh allocation) to continue."
+                ),
+                "wall_time_capped": True,
+                "result_file": abs_output,
+                "wall_time": wall_time,
+                # vib/thermo/ir resume from the durable cache dir by re-running the
+                # same driver on the same input; restart_file carries the cache dir
+                # (opt cap, if that is what tripped, carries its Hessian JSON). No
+                # separate partial-geometry file for the analysis sweep.
+                "restart_file": restart_path if opt_capped else vib_cache_path,
+                "resume_input_file": resume_input_file,
+            }
+
+        if driver == "vib":
             return {
                 "status": "success",
                 "result": {"vibrational_frequencies": vib_data},
@@ -747,6 +1165,9 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     "Vibrational analysis completed; frequencies returned. "
                     f"Full results (structure, vibrations and metadata) saved to {abs_output}."
                 ),
+                "result_file": abs_output,
+                "wall_time": wall_time,
+                "wall_time_capped": False,
             }
         elif driver == "thermo":
             return {
@@ -756,6 +1177,9 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     "Thermochemistry computed and returned. "
                     f"Full results (structure, vibrations, thermochemistry and metadata) saved to {abs_output}"
                 ),
+                "result_file": abs_output,
+                "wall_time": wall_time,
+                "wall_time_capped": False,
             }
         elif driver == "ir":
             return {
@@ -767,6 +1191,9 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     f"IR plot saved to {os.path.abspath(ir_plot_path) if ir_plot_path else 'N/A'}. "
                     "Normal modes saved as individual .traj files"
                 ),
+                "result_file": abs_output,
+                "wall_time": wall_time,
+                "wall_time_capped": False,
             }
 
     except Exception as e:

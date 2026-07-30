@@ -56,6 +56,7 @@ def _mace_input_to_ase_input(params: mace_input_schema) -> ASEInputSchema:
         },
         fmax=params.fmax,
         steps=params.steps,
+        max_wall_seconds=params.max_wall_seconds,
         temperature=params.temperature,
         pressure=params.pressure,
     )
