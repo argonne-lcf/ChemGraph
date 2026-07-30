@@ -8,11 +8,14 @@ from typing import Any
 
 
 import chemgraph.academy.runtime.torch_patch  # noqa: F401  -- patches torch.load if torch present
+import chemgraph.academy.runtime.academy_patch  # noqa: F401  -- makes hosted-exchange listener resilient to truncated long-polls
 
 from academy.exchange.cloud.client import HttpAgentRegistration
+from academy.handle import Handle
 from academy.runtime import Runtime
 from academy.runtime import RuntimeConfig
 
+from chemgraph.academy.core.peer_protocol import build_message
 from chemgraph.academy.runtime.exchange import build_exchange_factory
 from chemgraph.academy.runtime.exchange import SUPPORTED_EXCHANGE_TYPES
 from chemgraph.academy.runtime.registration import deterministic_agent_id
