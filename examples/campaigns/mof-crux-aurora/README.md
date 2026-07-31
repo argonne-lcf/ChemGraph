@@ -20,12 +20,38 @@ Do these once per operator per HPC.
 
 ### Both HPCs
 
-- `~/.globus/chemgraph_transfer_tokens.json` present on both. Mint on
+- `~/.globus/chemgraph_transfer_tokens.json` — for ChemGraph's Globus
+  Transfer MCP (moves CIFs between eagle and flare DTNs). Mint on
   laptop with the ChemGraph `GlobusTransferManager` (any endpoint pair
   triggers the browser flow), then `scp` to both HPCs. Consent scopes:
   `data_access` on both `alcf#dtn_eagle` and `alcf#dtn_flare`.
   Refresh every ~48 h — the refresh flow runs automatically on first
   MCP call but only if the file has a valid `refresh_token`.
+- `~/local/share/academy/storage.db` — **separate** Globus tokens for
+  Academy's hosted exchange (`exchange.academy-agents.org`, where
+  agents register + discover peers + receive inject messages). Do the
+  one-time interactive login on **each** of laptop, Crux, and Aurora
+  (tokens are per-user-per-HPC; `$HOME` isn't shared across sites):
+
+  ```bash
+  # in the same venv you'll run swarm dashboard / the daemons from:
+  python -c "
+  from academy.exchange.cloud.client import HttpExchangeFactory
+  import asyncio
+  async def main():
+      f = HttpExchangeFactory()
+      c = await f.create_user_client(name='login-probe', start_listener=False)
+      await c.close()
+  asyncio.run(main())
+  "
+  ```
+
+  Opens a browser URL, paste the auth code back into the terminal.
+  Refresh-token backed → normally a one-time-per-HPC step. Without
+  this the daemon aborts with `click.exceptions.Abort` on startup
+  (PBS jobs have no TTY for the interactive prompt), and the laptop's
+  `swarm inject` subprocess hangs on the browser prompt (which the
+  dashboard captures + hides, presenting as "inject in flight forever").
 - Inbox + output dirs:
 
   ```bash
