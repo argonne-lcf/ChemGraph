@@ -65,25 +65,6 @@ def _pick_free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _wrap_with_torch_patch(cmd: list[str]) -> list[str]:
-    """Rewrite ``python -m foo.mcp.server`` into a launcher that imports
-    swarm.runtime.torch_patch first (restores torch.load's pre-2.6
-    weights_only=False default for pickled MLIP checkpoints), then
-    execs the original module. No-op for non ``python -m ...`` commands
-    (e.g. bespoke MCP scripts) -- those can import the patch themselves.
-    """
-    if len(cmd) < 3 or cmd[1] != "-m":
-        return cmd
-    interpreter, _, module, *rest = cmd
-    preamble = (
-        "import chemgraph.academy.runtime.torch_patch;"
-        "import sys, runpy;"
-        f"sys.argv=['{module}',*sys.argv[1:]];"
-        f"runpy.run_module('{module}', run_name='__main__', alter_sys=True)"
-    )
-    return [interpreter, "-c", preamble, *rest]
-
-
 class MCPServerSupervisor:
     """Per-rank MCP subprocess lifecycle and client wiring."""
 
@@ -119,7 +100,7 @@ class MCPServerSupervisor:
             venv_root = str(Path(sys.executable).parent.parent)
             expanded = spec.command.replace("$VIRTUAL_ENV", venv_root)
             expanded = os.path.expandvars(expanded)
-            cmd = _wrap_with_torch_patch(shlex.split(expanded)) + [
+            cmd = shlex.split(expanded) + [
                 "--transport",
                 "streamable_http",
                 "--host",
