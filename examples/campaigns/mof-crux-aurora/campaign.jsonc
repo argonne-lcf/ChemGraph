@@ -25,6 +25,29 @@
   //   4. ChemGraph dev editable-installed in academy-dev venvs on both.
   //   5. fairchem-core + pacmof2 installed via pip --no-deps in venvs.
   //
+  // MCP servers: library, not per-site inventory
+  // --------------------------------------------
+  // The `mcp_servers` block below is a shared library of MCP server
+  // definitions. There is no per-site list. Each site's daemon reads
+  // the whole library, then only spawns the subset the running agent
+  // whitelists via `agent.mcp_servers` (see daemon.py:72-77 --
+  // `[spec for spec in campaign.mcp_servers if spec.name in
+  // agent_spec.mcp_servers]`). Nothing idles: an MCP that isn't in
+  // the running agent's whitelist is never started on that site.
+  //
+  // Site -> MCP for this campaign:
+  //   Crux    (planner_executor) -> mofforge, chemgraph, pacmof2, globus
+  //   Aurora  (aurora_sim)       -> graspa, globus
+  //
+  // The site->MCP mapping is implicit through which agent runs where,
+  // set by the launcher's --agents slice (federated spawn-site flow).
+  //
+  // $VIRTUAL_ENV in each command is expanded at spawn time from the
+  // daemon's own sys.executable (mcp_supervisor.py), so one shared
+  // library entry resolves to /eagle/.../academy-dev/bin/python on
+  // Crux and /flare/.../academy-dev/bin/python on Aurora without
+  // editing the JSON per site.
+  //
   // Kickoff (recipient = planner_executor):
   //   {"spec":{"topology":"pcu","backend":"pormake",
   //     "node_files":["<pormake bbs dir>/N59.xyz"],
