@@ -13,19 +13,25 @@ Run:
 
 Override defaults via env vars if needed:
   ARGO_USER   -- your CELS login (e.g. jane.doe)
-  ARGO_MODEL  -- lowercase argo model name (default: argo:gpt-4.1-mini)
+  ARGO_MODEL  -- argo model name (default: argo:gpt-4.1-mini)
   ARGO_BASE   -- shim URL (default: http://127.0.0.1:18085/argoapi/v1)
   ARGO_PROMPT -- override the prompt
 
 Expected: LLM answers the query, possibly by calling `run_ase` or
-`molecule_name_to_smiles` first. Any 500 error usually means the
-model name isn't lowercase (see README's Common failure modes).
+`molecule_name_to_smiles` first.
 """
 from __future__ import annotations
 
 import asyncio
 import os
 import sys
+
+# argo-shim rejects the stripped lowercase-hyphenated form (e.g.
+# "gpt-4.1-mini") with 400 Invalid model. Tell ChemGraph's normalizer
+# to send the wire form (e.g. "gpt41mini"), which the shim also
+# accepts, so we don't need a per-model display-case map. Set BEFORE
+# importing chemgraph so the normalizer picks it up.
+os.environ.setdefault("CHEMGRAPH_ARGO_MODEL_FORMAT", "wire")
 
 
 def main() -> int:
@@ -54,13 +60,6 @@ def main() -> int:
             "WARNING: model_name should start with 'argo:' for the shim "
             "path. Got:",
             model,
-            file=sys.stderr,
-        )
-    if any(c.isupper() for c in model.removeprefix("argo:")):
-        print(
-            "WARNING: use lowercase model names (e.g. argo:gpt-4.1-mini). "
-            "Mixed case falls into the vLLM branch and does not wire "
-            "argo_user, which makes Argo return 500.",
             file=sys.stderr,
         )
 

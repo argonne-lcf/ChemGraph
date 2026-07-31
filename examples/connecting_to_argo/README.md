@@ -191,7 +191,7 @@ opened by `--tunnel` (Pattern 1) or `--relay` (Pattern 2).
 |---|---|
 | `ERR_CONNECT_FAIL` HTML response | `no_proxy` doesn't exempt the UAN hostname → Squid intercepts. Re-check `echo $no_proxy` on the compute node. |
 | `openai.InternalServerError: 500` on ChemGraph but plain `curl` works | Model name is mixed-case (`argo:GPT-4.1-mini`). Use lowercase (`argo:gpt-4.1-mini`) so `supported_argo_models` matches and `argo_user` gets wired. |
-| `openai.BadRequestError: 400 - Invalid model: gpt-4.1-mini` | `ARGO_LOCAL_OPENAI_MODEL_MAP` in `chemgraph/models/openai.py` needs an entry mapping `argo:gpt-4.1-mini` to the display name Argo expects (`GPT-4.1-mini`). This PR ships the map. |
+| `openai.BadRequestError: 400 - Invalid model: gpt-4.1-mini` | The stripped lowercase-hyphenated form isn't in the shim's model list. Set `export CHEMGRAPH_ARGO_MODEL_FORMAT=wire` so ChemGraph sends the wire form (`gpt41mini`), which the shim accepts. `test_run.py` sets this automatically. |
 | Connection refused on `nc -zv <UAN> 18084` | Login-node tunnel died. Restart Step 1a (`argo-shim --tunnel`). Duo push again. |
 | Duo push works but SSH says `Permission denied (publickey, password, ...)` | Aurora → CELS auth chain is broken. Confirm `ssh homes.cels.anl.gov` works from the login node manually (`ssh -o BatchMode=yes` for a zero-risk probe). |
 | SSH `Too many authentication failures` | Your ssh-agent is offering too many keys. Add `-o IdentitiesOnly=yes -i ~/.ssh/cels_key` to the login-node SSH config for `homes.cels.anl.gov`. |
