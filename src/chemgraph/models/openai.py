@@ -64,23 +64,9 @@ ARGO_MODEL_MAP = {
 
 
 ARGO_LOCAL_OPENAI_MODEL_MAP = {
-    # argo-shim advertises GPT-* models with mixed case (e.g. "GPT-4.1-mini").
-    # ChemGraph model names are lowercase-hyphenated by convention
-    # ("argo:gpt-4.1-mini"), so the normalizer needs an explicit
-    # lowercase->display mapping for every model the local shim exposes.
-    # Without a map entry Argo returns 400 "Invalid model" when
-    # ``load_openai_model`` sends the stripped lowercase name.
-    "argo:gpt-4o": "GPT-4o",
-    "argo:gpt-4.1": "GPT-4.1",
-    "argo:gpt-4.1-mini": "GPT-4.1-mini",
-    "argo:gpt-4.1-nano": "GPT-4.1-nano",
-    "argo:gpt-5": "GPT-5",
-    "argo:gpt-5-mini": "GPT-5-mini",
-    "argo:gpt-5-nano": "GPT-5-nano",
-    "argo:gpt-5.1": "GPT-5.1",
-    "argo:gpt-5.2": "GPT-5.2",
+    # argo-shim advertises GPT-5.4 with this casing. Lowercase gpt-5.4 is
+    # rejected by the upstream Argo API behind the shim.
     "argo:gpt-5.4": "GPT-5.4",
-    "argo:gpt-5.5": "GPT-5.5",
 }
 
 
