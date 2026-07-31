@@ -63,13 +63,6 @@ ARGO_MODEL_MAP = {
 }
 
 
-ARGO_LOCAL_OPENAI_MODEL_MAP = {
-    # argo-shim advertises GPT-5.4 with this casing. Lowercase gpt-5.4 is
-    # rejected by the upstream Argo API behind the shim.
-    "argo:gpt-5.4": "GPT-5.4",
-}
-
-
 def _normalize_argo_model(model_name: str, base_url: str) -> str:
     """Normalize an ``argo:``-prefixed model name for the target endpoint.
 
@@ -94,8 +87,6 @@ def _normalize_argo_model(model_name: str, base_url: str) -> str:
         return model_name
 
     model_format = os.getenv("CHEMGRAPH_ARGO_MODEL_FORMAT", "").lower()
-    if model_format == "shim":
-        return _normalize_argo_local_openai_model(model_name)
     if model_format in {"openai", "openai-compatible"}:
         stripped = model_name.removeprefix("argo:")
         logger.info("Stripped argo: prefix '%s' -> '%s'", model_name, stripped)
@@ -103,31 +94,15 @@ def _normalize_argo_model(model_name: str, base_url: str) -> str:
     if model_format in {"wire", "argo"}:
         return _normalize_argo_wire_model(model_name)
 
-    if _is_local_http_endpoint(base_url):
-        stripped = _normalize_argo_local_openai_model(model_name)
-        logger.info(
-            "Using OpenAI-style Argo model for local endpoint '%s': '%s' -> '%s'",
-            base_url,
-            model_name,
-            stripped,
-        )
-        return stripped
-
-    if base_url and "argoapi" in base_url:
+    # Auto-detect: local argo-shim + hosted argoapi both accept the wire
+    # form (e.g. "gpt5mini"), so use the wire normalizer for both.
+    if _is_local_http_endpoint(base_url) or (base_url and "argoapi" in base_url):
         return _normalize_argo_wire_model(model_name)
-    else:
-        # Non-Argo-API endpoint -- strip prefix only
-        stripped = model_name.removeprefix("argo:")
-        logger.info("Stripped argo: prefix '%s' -> '%s'", model_name, stripped)
-        return stripped
 
-
-def _normalize_argo_local_openai_model(model_name: str) -> str:
-    """Return the model name expected by local OpenAI-compatible Argo shims."""
-    return ARGO_LOCAL_OPENAI_MODEL_MAP.get(
-        model_name,
-        model_name.removeprefix("argo:"),
-    )
+    # Non-Argo-API endpoint -- strip prefix only.
+    stripped = model_name.removeprefix("argo:")
+    logger.info("Stripped argo: prefix '%s' -> '%s'", model_name, stripped)
+    return stripped
 
 
 def _normalize_argo_wire_model(model_name: str) -> str:

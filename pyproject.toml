@@ -48,7 +48,7 @@ dependencies = [
     "mcp==1.28.1",
     "fastmcp==3.4.4",
     "pytest-asyncio",
-    "grandalf==0.8"
+    "grandalf==0.8",
     ]
 
 [project.optional-dependencies]
@@ -75,7 +75,8 @@ globus_compute = [
 ]
 academy = [
     "academy-py",
-    "httpx",
+    # Redis is only needed for the `redis` and `hybrid` exchange types.
+    # The default `http` exchange does not require it.
     "redis",
 ]
 xanes = [
