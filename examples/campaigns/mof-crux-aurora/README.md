@@ -133,14 +133,29 @@ Point the MCP wrapper at it via profile env:
 ### Argo-shim (laptop)
 
 `swarm dashboard` needs a local `argo-shim` on your laptop at
-`http://127.0.0.1:18085`. Start it once before launching:
+`http://127.0.0.1:18085`. Start it in its own terminal before launching
+(runs in the foreground, Duo prompt, then stays running):
 
 ```bash
-CELS_USERNAME=<your.cels.login> argo-shim --no-auth --no-update-settings --port 18085 --tunnel
+CELS_USERNAME=<your.cels.login> argo-shim --no-auth --no-update-settings --port 18085
 ```
 
-See `examples/connecting_to_argo/README.md` for the Duo/tunnel setup
-and the compute-node-relay variant.
+Do NOT pass `--tunnel` — that flag is for the compute-node-relay
+architecture (SSH tunnel bound to `0.0.0.0` for another host to reach),
+not for the laptop-dashboard case. Plain `argo-shim --port 18085`
+does both the SSH tunnel and the HTTP shim in one process.
+
+Verify:
+
+```bash
+curl -s http://127.0.0.1:18085/v1/models | python -m json.tool | head
+```
+
+Should return the model list. If yes, `swarm dashboard` preflight
+will pass.
+
+See `examples/connecting_to_argo/README.md` for the compute-node
+relay variant (where `--tunnel` IS needed).
 
 ## Launch
 
