@@ -24,6 +24,57 @@ def test_chemgraph_initialization(tmp_path):
         )
         assert hasattr(agent, "workflow")
 
+
+@pytest.mark.parametrize(
+    ("model_name", "reasoning_effort", "expected_effort"),
+    [
+        ("argo:gpt-5.6-luna", None, "none"),
+        ("argo:gpt-5.6-sol", "high", "high"),
+        ("argo:gpt-5.6-terra", None, "none"),
+    ],
+)
+def test_gpt56_reasoning_effort_is_passed_to_loader(
+    tmp_path, model_name, reasoning_effort, expected_effort
+):
+    with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
+        mock_load.return_value = Mock()
+        agent = ChemGraph(
+            model_name=model_name,
+            reasoning_effort=reasoning_effort,
+            enable_memory=False,
+            log_dir=str(tmp_path / "logs"),
+        )
+
+    assert mock_load.call_args.kwargs["reasoning_effort"] == expected_effort
+    assert agent.reasoning_effort == expected_effort
+
+
+def test_reasoning_effort_is_not_passed_to_sonnet5(tmp_path):
+    with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
+        mock_load.return_value = Mock()
+        agent = ChemGraph(
+            model_name="argo:claude-sonnet-5",
+            enable_memory=False,
+            log_dir=str(tmp_path / "logs"),
+        )
+
+    assert "reasoning_effort" not in mock_load.call_args.kwargs
+    assert agent.reasoning_effort is None
+
+
+def test_reasoning_effort_rejects_unverified_model():
+    with pytest.raises(ValueError, match="does not have verified"):
+        ChemGraph(model_name="argo:gpt-5.4", reasoning_effort="none")
+
+
+@pytest.mark.parametrize("reasoning_effort", ["fast", ""])
+def test_reasoning_effort_rejects_invalid_value(reasoning_effort):
+    with pytest.raises(ValueError, match="Unsupported reasoning effort"):
+        ChemGraph(
+            model_name="argo:gpt-5.6-sol", reasoning_effort=reasoning_effort
+        )
+
+
 def test_agent_query(mock_llm, tmp_path):
     with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_init_load, patch(
         "chemgraph.models.loader.load_openai_model"

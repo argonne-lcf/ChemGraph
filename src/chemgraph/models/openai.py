@@ -8,6 +8,9 @@ from langchain_openai import ChatOpenAI
 
 from chemgraph.models.supported_models import (
     ARGO_DEFAULT_BASE_URL,
+    MODELS_WITHOUT_TEMPERATURE,
+    MODELS_WITH_REASONING_EFFORT,
+    SUPPORTED_REASONING_EFFORTS,
     supported_openai_models,
     supported_argo_models,
 )
@@ -22,14 +25,7 @@ logger = setup_logger(__name__)
 # prefix is stripped instead and the remainder is sent as-is.
 ARGO_MODEL_MAP = {
     # GPT family
-    "argo:gpt-3.5-turbo": "gpt35",
-    "argo:gpt-3.5-turbo-16k": "gpt35turbo16k",
-    "argo:gpt-4": "gpt4",
-    "argo:gpt-4-32k": "gpt432k",
-    "argo:gpt-4-turbo": "gpt4turbo",
     "argo:gpt-4o": "gpt4o",
-    "argo:gpt-4o-latest": "gpt4olatest",
-    "argo:gpt-4o-mini": "gpt4omini",
     "argo:gpt-4.1": "gpt41",
     "argo:gpt-4.1-mini": "gpt41mini",
     "argo:gpt-4.1-nano": "gpt41nano",
@@ -39,10 +35,14 @@ ARGO_MODEL_MAP = {
     "argo:gpt-5.1": "gpt51",
     "argo:gpt-5.2": "gpt52",
     "argo:gpt-5.4": "gpt54",
+    "argo:gpt-5.4-mini": "gpt54mini",
+    "argo:gpt-5.4-nano": "gpt54nano",
+    "argo:gpt-5.5": "gpt55",
+    "argo:gpt-5.6-luna": "gpt56luna",
+    "argo:gpt-5.6-sol": "gpt56sol",
+    "argo:gpt-5.6-terra": "gpt56terra",
 
     # Reasoning / o-series
-    "argo:o1-preview": "gpto1preview",
-    "argo:o1-mini": "gpto1mini",
     "argo:o1": "gpto1",
     "argo:o3-mini": "gpto3mini",
     "argo:o3": "gpto3",
@@ -50,16 +50,16 @@ ARGO_MODEL_MAP = {
     # Gemini via Argo
     "argo:gemini-2.5-pro": "gemini25pro",
     "argo:gemini-2.5-flash": "gemini25flash",
+    "argo:gemini-3.1-flash-lite": "gemini31flashlite",
+    "argo:gemini-3.5-flash": "gemini35flash",
     # Claude via Argo
     "argo:claude-opus-4.6": "claudeopus46",
     "argo:claude-opus-4.5": "claudeopus45",
     "argo:claude-opus-4.1": "claudeopus41",
-    "argo:claude-opus-4": "claudeopus4",
     "argo:claude-haiku-4.5": "claudehaiku45",
+    "argo:claude-sonnet-5": "claudesonnet5",
+    "argo:claude-sonnet-4.6": "claudesonnet46",
     "argo:claude-sonnet-4.5": "claudesonnet45",
-    "argo:claude-sonnet-4": "claudesonnet4",
-    "argo:claude-sonnet-3.5-v2": "claudesonnet35v2",
-    "argo:claude-haiku-3.5": "claudehaiku35",
 }
 
 
@@ -164,6 +164,7 @@ def load_openai_model(
     prompt: str = None,
     base_url: str = None,
     argo_user: str = None,
+    reasoning_effort: str = None,
 ) -> ChatOpenAI:
     """Load an OpenAI chat model into LangChain.
 
@@ -185,6 +186,8 @@ def load_openai_model(
         from the environment variable `OPENAI_API_KEY`.
     prompt : str, optional
         Custom prompt to use when requesting the API key from the user.
+    reasoning_effort : str, optional
+        Reasoning effort for manually verified models that support it.
 
     Returns
     -------
@@ -208,7 +211,21 @@ def load_openai_model(
     5. Handle any authentication errors by prompting for a new key
     """
 
+    requested_model_name = model_name
     base_url = normalize_openai_base_url(base_url)
+
+    if reasoning_effort is not None:
+        if requested_model_name not in MODELS_WITH_REASONING_EFFORT:
+            raise ValueError(
+                f"Model '{requested_model_name}' does not have verified "
+                "reasoning-effort support."
+            )
+        if reasoning_effort not in SUPPORTED_REASONING_EFFORTS:
+            supported = ", ".join(sorted(SUPPORTED_REASONING_EFFORTS))
+            raise ValueError(
+                f"Unsupported reasoning effort '{reasoning_effort}'. "
+                f"Choose one of: {supported}."
+            )
 
     # Apply default Argo base URL for argo: models when none is specified.
     if model_name.startswith("argo:") and not base_url:
@@ -251,14 +268,24 @@ def load_openai_model(
             model_name = _normalize_argo_model(model_name, base_url)
             llm_kwargs = dict(
                 model=model_name,
-                temperature=temperature,
                 api_key=api_key,
                 base_url=base_url,
                 max_tokens=4000,
-                top_p=1.0,
-                frequency_penalty=0.0,
-                presence_penalty=0.0,
             )
+            if requested_model_name in MODELS_WITHOUT_TEMPERATURE:
+                logger.info(
+                    "Using minimal request parameters for model '%s'",
+                    requested_model_name,
+                )
+            else:
+                llm_kwargs.update(
+                    temperature=temperature,
+                    top_p=1.0,
+                    frequency_penalty=0.0,
+                    presence_penalty=0.0,
+                )
+            if reasoning_effort is not None:
+                llm_kwargs["reasoning_effort"] = reasoning_effort
             # Anthropic requires streaming for requests that may exceed its
             # non-streaming duration limit. LangChain still aggregates the
             # chunks into one response for callers using ``invoke``.
@@ -273,12 +300,21 @@ def load_openai_model(
             llm = ChatOpenAI(**llm_kwargs)
         else:
             logger.info(f"Loading OpenAI model: {model_name}")
-            llm = ChatOpenAI(
+            openai_kwargs = dict(
                 model=model_name,
-                temperature=temperature,
                 api_key=api_key,
                 max_tokens=6000,
             )
+            if requested_model_name in MODELS_WITHOUT_TEMPERATURE:
+                logger.info(
+                    "Using minimal request parameters for model '%s'",
+                    requested_model_name,
+                )
+            else:
+                openai_kwargs["temperature"] = temperature
+            if reasoning_effort is not None:
+                openai_kwargs["reasoning_effort"] = reasoning_effort
+            llm = ChatOpenAI(**openai_kwargs)
         # Authentication happens only during invocation.
         logger.info(f"Requested model: {model_name}")
         logger.info("OpenAI model loaded successfully")
@@ -292,7 +328,13 @@ def load_openai_model(
             os.environ["OPENAI_API_KEY"] = api_key
             # Retry with new API key
             return load_openai_model(
-                model_name, temperature, api_key, prompt, base_url, argo_user
+                requested_model_name,
+                temperature,
+                api_key,
+                prompt,
+                base_url,
+                argo_user,
+                reasoning_effort,
             )
         else:
             logger.error(f"Error loading OpenAI model: {str(e)}")
