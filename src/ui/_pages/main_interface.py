@@ -946,16 +946,16 @@ def _is_linear_geometry(atoms) -> bool:
 
 
 def _num_nonvibrational_modes(total_modes: int, log_dir: Optional[str]) -> int:
-    """Return how many leading translational/rotational modes to skip.
+    """Return how many legacy translational/rotational rows to skip.
 
-    Non-linear molecules have 6 (3 translations + 3 rotations); linear
-    molecules have only 5.  Hardcoding 6 silently dropped a genuine
-    vibration for linear species (CO2, HCN, diatomics).
+    Current frequency CSV files contain only molecular vibrations.  Legacy
+    files contain all ``3N`` modes, so their leading translation/rotation rows
+    are removed when the corresponding structure is available.
 
     Parameters
     ----------
     total_modes : int
-        Total number of rows in the frequency table (``3N``).
+        Total number of rows in the frequency table.
     log_dir : str, optional
         Directory to search for a structure file used to test linearity.
 
@@ -964,20 +964,34 @@ def _num_nonvibrational_modes(total_modes: int, log_dir: Optional[str]) -> int:
     int
         Number of leading modes to discard.
     """
-    n_atoms = total_modes // 3
-    if n_atoms <= 2:
-        # Single atom -> no vibrations; diatomic -> always linear (5 modes).
-        return min(total_modes, 5)
-    if log_dir:
-        xyz = find_latest_xyz_file_in_dir(log_dir)
-        if xyz:
-            try:
-                atoms = ase_read(xyz)
-                if _is_linear_geometry(atoms):
-                    return 5
-            except Exception:
-                pass
+    if not log_dir:
+        return 0
+
+    xyz = find_latest_xyz_file_in_dir(log_dir)
+    if not xyz:
+        return 0
+
+    try:
+        atoms = ase_read(xyz)
+    except Exception:
+        return 0
+
+    n_atoms = len(atoms)
+    if total_modes != 3 * n_atoms:
+        return 0
+    if n_atoms == 1:
+        return 3
+    if n_atoms == 2 or _is_linear_geometry(atoms):
+        return 5
     return 6
+
+
+def _trajectory_mode_index(filename: str, fallback: int) -> int:
+    """Return the original ASE mode index encoded in a trajectory filename."""
+    try:
+        return int(Path(filename).stem.rsplit(".", 1)[1])
+    except (IndexError, ValueError):
+        return fallback
 
 
 def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
@@ -1030,12 +1044,17 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
             freq_options = {}
             for mode_idx, row in modes.iterrows():
                 freq_text = str(row["frequency"]).strip()
+                ase_mode_idx = _trajectory_mode_index(
+                    str(row["filename"]), mode_idx
+                )
                 suffix = "i" if freq_text.endswith("i") else ""
                 try:
                     freq_value = float(freq_text.rstrip("i"))
-                    label = f"Mode {mode_idx}: {freq_value:.2f}{suffix} cm\u207b\u00b9"
+                    label = (
+                        f"Mode {ase_mode_idx}: {freq_value:.2f}{suffix} cm\u207b\u00b9"
+                    )
                 except ValueError:
-                    label = f"Mode {mode_idx}: {freq_text} cm\u207b\u00b9"
+                    label = f"Mode {ase_mode_idx}: {freq_text} cm\u207b\u00b9"
                 freq_options[label] = mode_idx
 
             selected_freq = st.selectbox(

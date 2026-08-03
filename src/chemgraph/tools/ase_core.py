@@ -177,6 +177,40 @@ def is_linear_molecule(atomsdata: AtomsData, tol: float = 1e-3) -> bool:
     return (s[1] / s[0]) < tol
 
 
+def _vibrational_mode_indices(atomsdata: AtomsData, total_modes: int) -> list[int]:
+    """Return ASE mode indices corresponding to molecular vibrations.
+
+    ASE returns all ``3N`` normal modes in ascending order.  The leading
+    translational and rotational modes are excluded from reported vibration
+    data: five modes for a linear molecule and six for a nonlinear molecule.
+
+    Parameters
+    ----------
+    atomsdata : AtomsData
+        Optimized molecular structure.
+    total_modes : int
+        Number of modes returned by ASE.
+
+    Returns
+    -------
+    list[int]
+        Indices of the modes to report.
+    """
+    num_atoms = len(atomsdata.numbers)
+    expected_modes = 3 * num_atoms
+    if total_modes != expected_modes:
+        raise ValueError(
+            f"Expected {expected_modes} normal modes for {num_atoms} atoms, "
+            f"got {total_modes}."
+        )
+
+    if num_atoms == 1:
+        return []
+
+    num_nonvibrational = 5 if is_linear_molecule(atomsdata) else 6
+    return list(range(num_nonvibrational, total_modes))
+
+
 def get_symmetry_number(atomsdata: AtomsData) -> int:
     """Return the rotational symmetry number using Pymatgen.
 
@@ -584,9 +618,13 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     "frequency_unit": "cm-1",
                 }
 
-                energies = vib.get_energies()
+                all_energies = vib.get_energies()
+                mode_indices = _vibrational_mode_indices(
+                    final_structure, len(all_energies)
+                )
 
-                for _idx, e in enumerate(energies):
+                for mode_index in mode_indices:
+                    e = all_energies[mode_index]
                     is_imag = abs(e.imag) > 1e-8
                     e_val = e.imag if is_imag else e.real
                     energy_meV = 1e3 * e_val
@@ -601,17 +639,27 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 if freq_file.exists():
                     freq_file.unlink()
                 with freq_file.open("w", encoding="utf-8") as f:
-                    for i, freq in enumerate(vib_data["frequencies"], start=0):
-                        f.write(f"{mol_stem}_vib.{i}.traj,{freq}\n")
+                    for mode_index, freq in zip(
+                        mode_indices, vib_data["frequencies"]
+                    ):
+                        f.write(f"{mol_stem}_vib.{mode_index}.traj,{freq}\n")
 
                 # Write normal-mode .traj files, then copy out of tmpdir
-                for i in range(len(energies)):
-                    vib.write_mode(n=i, kT=units.kB * 300, nimages=30)
+                for mode_index in mode_indices:
+                    vib.write_mode(
+                        n=mode_index, kT=units.kB * 300, nimages=30
+                    )
 
                 traj_dest_dir = _resolve_path("")
                 if traj_dest_dir:
                     os.makedirs(traj_dest_dir, exist_ok=True)
-                for traj_file in glob.glob(os.path.join(tmpdir, "vib.*.traj")):
+                stale_traj_pattern = os.path.join(
+                    traj_dest_dir, f"{mol_stem}_vib.*.traj"
+                )
+                for stale_traj_file in glob.glob(stale_traj_pattern):
+                    os.unlink(stale_traj_file)
+                for mode_index in mode_indices:
+                    traj_file = os.path.join(tmpdir, f"vib.{mode_index}.traj")
                     dest_name = f"{mol_stem}_{Path(traj_file).name}"
                     dest_path = (
                         os.path.join(traj_dest_dir, dest_name)
@@ -686,7 +734,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                         spin_S = (multiplicity - 1) / 2.0
 
                         thermo = IdealGasThermo(
-                            vib_energies=energies,
+                            vib_energies=all_energies,
                             potentialenergy=single_point_energy,
                             atoms=atoms,
                             geometry=geometry,
