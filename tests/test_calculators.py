@@ -708,6 +708,194 @@ def test_espresso_molecule_drops_kspacing():
     assert "kpts" not in ase_calc.parameters
 
 
+# ---------------------------------------------------------------------------
+# run_qe / run_vasp: calculator-pinned wrappers over run_ase.
+#
+# These are hermetic: they exercise the pinned schemas + the dispatch parity
+# with run_ase, never invoking a pw.x / VASP binary. The pinned schemas
+# deliberately skip the availability gate so they construct on this machine.
+# ---------------------------------------------------------------------------
+
+
+def test_qe_input_schema_pins_espresso_calculator():
+    """QEInputSchema coerces a bare dict into EspressoCalc (canonical type),
+    constructible even though pw.x is not installed here."""
+    from chemgraph.schemas.plane_wave_input import QEInputSchema
+
+    params = QEInputSchema(
+        input_structure_file="si.cif",
+        calculator={"ecutwfc": 40.0, "kpts": [2, 2, 2]},
+    )
+    assert type(params.calculator).__name__ == "EspressoCalc"
+    assert params.calculator.calculator_type == "espresso"
+    assert params.calculator.ecutwfc == 40.0
+
+
+def test_qe_input_schema_default_calculator():
+    """With no calculator payload QEInputSchema defaults to a plain EspressoCalc."""
+    from chemgraph.schemas.plane_wave_input import QEInputSchema
+
+    params = QEInputSchema(input_structure_file="si.cif")
+    assert type(params.calculator).__name__ == "EspressoCalc"
+    assert params.calculator.calculator_type == "espresso"
+
+
+def test_qe_input_schema_accepts_qe_alias():
+    """A QE alias in calculator_type is dropped in favor of the canonical tag,
+    so ase_core dispatch always sees 'espresso'."""
+    from chemgraph.schemas.plane_wave_input import QEInputSchema
+
+    params = QEInputSchema(
+        input_structure_file="si.cif",
+        calculator={"calculator_type": "qe", "ecutwfc": 30.0},
+    )
+    assert params.calculator.calculator_type == "espresso"
+
+
+def test_vasp_input_schema_pins_vasp_calculator():
+    """VaspInputSchema coerces a bare dict into VaspCalc (canonical type)."""
+    from chemgraph.schemas.plane_wave_input import VaspInputSchema
+
+    params = VaspInputSchema(
+        input_structure_file="si.cif",
+        calculator={"encut": 400.0, "kpts": [2, 2, 2]},
+    )
+    assert type(params.calculator).__name__ == "VaspCalc"
+    assert params.calculator.calculator_type == "vasp"
+    assert params.calculator.encut == 400.0
+
+
+def test_vasp_input_schema_rejects_wrong_instance():
+    """A pre-built calculator of the wrong type is a caller error."""
+    from chemgraph.schemas.plane_wave_input import VaspInputSchema
+
+    with pytest.raises(ValueError):
+        VaspInputSchema(
+            input_structure_file="si.cif", calculator=EspressoCalc()
+        )
+
+
+def test_qe_input_schema_rejects_wrong_instance():
+    """The mirror of the VASP case: a VaspCalc handed to QEInputSchema raises."""
+    from chemgraph.schemas.plane_wave_input import QEInputSchema
+
+    with pytest.raises(ValueError):
+        QEInputSchema(input_structure_file="si.cif", calculator=VaspCalc())
+
+
+def test_run_qe_tool_schema_excludes_vasp_fields():
+    """run_qe's tool schema exposes only QE parameters, not the full calculator
+    union -- the whole point of the pinned tool (smaller per-call prompt)."""
+    import json
+
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+
+    from chemgraph.tools.ase_tools import run_qe
+
+    blob = json.dumps(convert_to_openai_tool(run_qe))
+    assert "ecutwfc" in blob  # QE field present
+    assert "encut" not in blob  # VASP-only field absent
+
+
+def test_run_vasp_tool_schema_excludes_qe_fields():
+    """The mirror of the QE case: run_vasp's schema exposes only VASP
+    parameters, not QE-only fields."""
+    import json
+
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+
+    from chemgraph.tools.ase_tools import run_vasp
+
+    blob = json.dumps(convert_to_openai_tool(run_vasp))
+    assert "encut" in blob  # VASP field present
+    assert "ecutwfc" not in blob  # QE-only field absent
+
+
+def test_run_qe_delegates_espresso_payload_to_core(tmp_path, monkeypatch):
+    """run_qe hands run_ase_core an EspressoCalc payload with calculator_type
+    'espresso', the same shape run_ase produces for an espresso calculator on a
+    host where QE is installed. We stub run_ase_core (no pw.x) and inspect the
+    params it receives. Dispatch routing of that payload is covered separately by
+    test_espresso_aliases_route_to_espresso_calc."""
+    import chemgraph.tools.ase_tools as ase_tools
+
+    captured = {}
+
+    def _capture(params):
+        captured["type"] = type(params).__name__
+        captured["calc"] = params.calculator.model_dump()
+        captured["driver"] = params.driver
+        return {"success": True}
+
+    monkeypatch.setattr(ase_tools, "run_ase_core", _capture)
+
+    ase_tools.run_qe.func(
+        ase_tools.QEInputSchema(
+            input_structure_file=str(tmp_path / "si.cif"),
+            driver="energy",
+            calculator={"ecutwfc": 35.0},
+        )
+    )
+
+    assert captured["type"] == "QEInputSchema"
+    assert captured["calc"]["calculator_type"] == "espresso"
+    assert captured["calc"]["ecutwfc"] == 35.0
+    assert captured["driver"] == "energy"
+
+
+def test_run_vasp_delegates_vasp_payload_to_core(tmp_path, monkeypatch):
+    """run_vasp hands run_ase_core a VaspCalc payload with calculator_type
+    'vasp' (stubbed core, no VASP binary). Dispatch routing is covered by
+    test_vasp_aliases_route_to_vasp_calc."""
+    import chemgraph.tools.ase_tools as ase_tools
+
+    captured = {}
+
+    def _capture(params):
+        captured["type"] = type(params).__name__
+        captured["calc"] = params.calculator.model_dump()
+        captured["driver"] = params.driver
+        return {"success": True}
+
+    monkeypatch.setattr(ase_tools, "run_ase_core", _capture)
+
+    ase_tools.run_vasp.func(
+        ase_tools.VaspInputSchema(
+            input_structure_file=str(tmp_path / "si.cif"),
+            driver="energy",
+            calculator={"encut": 500.0},
+        )
+    )
+
+    assert captured["type"] == "VaspInputSchema"
+    assert captured["calc"]["calculator_type"] == "vasp"
+    assert captured["calc"]["encut"] == 500.0
+    assert captured["driver"] == "energy"
+
+
+def test_plane_wave_tools_registered_only_when_engine_available(monkeypatch):
+    """_plane_wave_tools offers run_qe/run_vasp only for detected engines, so an
+    uninstalled engine is never bound into the agent (nor its token cost paid)."""
+    import chemgraph.graphs.single_agent as sa
+
+    monkeypatch.setattr(
+        sa, "get_available_calculator_names", lambda: ["EMTCalc", "EspressoCalc"]
+    )
+    names = {t.name for t in sa._plane_wave_tools()}
+    assert names == {"run_qe"}
+
+    monkeypatch.setattr(
+        sa,
+        "get_available_calculator_names",
+        lambda: ["EMTCalc", "EspressoCalc", "VaspCalc"],
+    )
+    names = {t.name for t in sa._plane_wave_tools()}
+    assert names == {"run_qe", "run_vasp"}
+
+    monkeypatch.setattr(sa, "get_available_calculator_names", lambda: ["EMTCalc"])
+    assert sa._plane_wave_tools() == []
+
+
 # --- Fix follow-ups: sanitizer edge branches ---------------------------------
 
 

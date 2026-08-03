@@ -7,8 +7,11 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from chemgraph.tools.ase_tools import (
     run_ase,
+    run_qe,
+    run_vasp,
     extract_output_json,
 )
+from chemgraph.schemas.ase_input import get_available_calculator_names
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_coordinate_file,
@@ -25,6 +28,30 @@ from chemgraph.utils.parsing import parse_response_formatter
 from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
+
+
+def _plane_wave_tools() -> list:
+    """Return the plane-wave DFT tools whose engine is detected on this host.
+
+    ``run_qe`` / ``run_vasp`` are calculator-pinned wrappers over ``run_ase``.
+    Each is only useful when its engine (pw.x / VASP binary + pseudopotentials)
+    is installed, so we offer it only when the corresponding calculator survived
+    the availability gate in ``chemgraph.schemas.ase_input`` -- mirroring how the
+    ``CalculatorUnion`` itself is filtered. This keeps them out of the prompt on
+    hosts that cannot run them (and off the token budget there).
+
+    Returns
+    -------
+    list
+        The subset of ``[run_qe, run_vasp]`` whose engine is available.
+    """
+    available = set(get_available_calculator_names())
+    tools = []
+    if "EspressoCalc" in available:
+        tools.append(run_qe)
+    if "VaspCalc" in available:
+        tools.append(run_vasp)
+    return tools
 
 
 def _tool_call_signature(tool_calls) -> tuple:
@@ -307,6 +334,7 @@ def ChemGraphAgent(
             extract_output_json,
             calculator,
         ]
+        tools.extend(_plane_wave_tools())
         if human_supervised:
             tools.append(ask_human)
     elif human_supervised and ask_human not in tools:
@@ -499,6 +527,7 @@ def construct_single_agent_graph(
                 extract_output_json,
                 calculator,
             ]
+            tools.extend(_plane_wave_tools())
             if human_supervised:
                 tools.append(ask_human)
         elif human_supervised and ask_human not in tools:
