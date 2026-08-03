@@ -145,6 +145,11 @@ MODELS_WITHOUT_TEMPERATURE = frozenset(
         "argo:gpt-5.6-luna",
         "argo:gpt-5.6-sol",
         "argo:gpt-5.6-terra",
+        "argo:gpt-5.5",
+        "argo:gpt-5",
+        "argo:gpt-5-mini",
+        "argo:gpt-5-nano",
+
     }
 )
 MODELS_WITH_REASONING_EFFORT = frozenset(
