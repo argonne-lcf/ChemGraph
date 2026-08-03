@@ -90,14 +90,7 @@ ARGO_DEFAULT_BASE_URL = "https://apps.inside.anl.gov/argoapi/v1"
 # Default: ARGO_DEFAULT_BASE_URL (Argo API).
 supported_argo_models = [
     # GPT family
-    "argo:gpt-3.5-turbo",
-    "argo:gpt-3.5-turbo-16k",
-    "argo:gpt-4",
-    "argo:gpt-4-32k",
-    "argo:gpt-4-turbo",
     "argo:gpt-4o",
-    "argo:gpt-4o-latest",
-    "argo:gpt-4o-mini",
     "argo:gpt-4.1",
     "argo:gpt-4.1-mini",
     "argo:gpt-4.1-nano",
@@ -107,13 +100,13 @@ supported_argo_models = [
     "argo:gpt-5.1",
     "argo:gpt-5.2",
     "argo:gpt-5.4",
+    "argo:gpt-5.4-mini",
+    "argo:gpt-5.4-nano",  
     "argo:gpt-5.5",
     "argo:gpt-5.6-sol",
     "argo:gpt-5.6-terra",
     "argo:gpt-5.6-luna",
     # Reasoning / o-series
-    "argo:o1-preview",
-    "argo:o1-mini",
     "argo:o1",
     "argo:o3-mini",
     "argo:o3",
@@ -121,19 +114,18 @@ supported_argo_models = [
     # Gemini via Argo
     "argo:gemini-2.5-pro",
     "argo:gemini-2.5-flash",
+    "argo:gemini-3.1-flash-lite",
+    "argo:gemini-3.5-flash",
     # Claude via Argo
     "argo:claude-opus-4.8",
     "argo:claude-opus-4.7",
     "argo:claude-opus-4.6",
     "argo:claude-opus-4.5",
     "argo:claude-opus-4.1",
-    "argo:claude-opus-4",
     "argo:claude-haiku-4.5",
     "argo:claude-sonnet-5",
+    "argo:claude-sonnet-4.6",
     "argo:claude-sonnet-4.5",
-    "argo:claude-sonnet-4",
-    "argo:claude-sonnet-3.5-v2",
-    "argo:claude-haiku-3.5",
 ]
 
 # Exact Argo model routes that require minimal ChatOpenAI construction.

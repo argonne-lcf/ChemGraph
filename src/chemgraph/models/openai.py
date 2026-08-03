@@ -25,14 +25,7 @@ logger = setup_logger(__name__)
 # prefix is stripped instead and the remainder is sent as-is.
 ARGO_MODEL_MAP = {
     # GPT family
-    "argo:gpt-3.5-turbo": "gpt35",
-    "argo:gpt-3.5-turbo-16k": "gpt35turbo16k",
-    "argo:gpt-4": "gpt4",
-    "argo:gpt-4-32k": "gpt432k",
-    "argo:gpt-4-turbo": "gpt4turbo",
     "argo:gpt-4o": "gpt4o",
-    "argo:gpt-4o-latest": "gpt4olatest",
-    "argo:gpt-4o-mini": "gpt4omini",
     "argo:gpt-4.1": "gpt41",
     "argo:gpt-4.1-mini": "gpt41mini",
     "argo:gpt-4.1-nano": "gpt41nano",
@@ -42,13 +35,14 @@ ARGO_MODEL_MAP = {
     "argo:gpt-5.1": "gpt51",
     "argo:gpt-5.2": "gpt52",
     "argo:gpt-5.4": "gpt54",
+    "argo:gpt-5.4-mini": "gpt54mini",
+    "argo:gpt-5.4-nano": "gpt54nano",
+    "argo:gpt-5.5": "gpt55",
     "argo:gpt-5.6-luna": "gpt56luna",
     "argo:gpt-5.6-sol": "gpt56sol",
     "argo:gpt-5.6-terra": "gpt56terra",
 
     # Reasoning / o-series
-    "argo:o1-preview": "gpto1preview",
-    "argo:o1-mini": "gpto1mini",
     "argo:o1": "gpto1",
     "argo:o3-mini": "gpto3mini",
     "argo:o3": "gpto3",
@@ -56,17 +50,16 @@ ARGO_MODEL_MAP = {
     # Gemini via Argo
     "argo:gemini-2.5-pro": "gemini25pro",
     "argo:gemini-2.5-flash": "gemini25flash",
+    "argo:gemini-3.1-flash-lite": "gemini31flashlite",
+    "argo:gemini-3.5-flash": "gemini35flash",
     # Claude via Argo
     "argo:claude-opus-4.6": "claudeopus46",
     "argo:claude-opus-4.5": "claudeopus45",
     "argo:claude-opus-4.1": "claudeopus41",
-    "argo:claude-opus-4": "claudeopus4",
     "argo:claude-haiku-4.5": "claudehaiku45",
     "argo:claude-sonnet-5": "claudesonnet5",
+    "argo:claude-sonnet-4.6": "claudesonnet46",
     "argo:claude-sonnet-4.5": "claudesonnet45",
-    "argo:claude-sonnet-4": "claudesonnet4",
-    "argo:claude-sonnet-3.5-v2": "claudesonnet35v2",
-    "argo:claude-haiku-3.5": "claudehaiku35",
 }
 
 
