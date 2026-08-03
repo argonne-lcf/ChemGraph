@@ -185,13 +185,33 @@ def test_parenthetical_prose_is_not_mangled_into_math():
     )
 
 
-def test_num_nonvibrational_modes_handles_linear_and_small_systems():
-    # No geometry available -> conservative default of 6 for polyatomics.
-    assert main_ui._num_nonvibrational_modes(9, None) == 6
-    # Diatomic is always linear (5 non-vibrational modes).
-    assert main_ui._num_nonvibrational_modes(6, None) == 5
-    # Single atom has no vibrations.
-    assert main_ui._num_nonvibrational_modes(3, None) == 3
+def test_num_nonvibrational_modes_handles_filtered_and_legacy_data(monkeypatch):
+    from ase import Atoms
+
+    water = Atoms(
+        "H2O", positions=[[0, 0.76, 0.59], [0, -0.76, 0.59], [0, 0, 0]]
+    )
+    monkeypatch.setattr(main_ui, "find_latest_xyz_file_in_dir", lambda _path: "x")
+    monkeypatch.setattr(main_ui, "ase_read", lambda _path: water)
+
+    assert main_ui._num_nonvibrational_modes(9, "/logs") == 6
+    assert main_ui._num_nonvibrational_modes(3, "/logs") == 0
+    assert main_ui._num_nonvibrational_modes(9, None) == 0
+
+    co2 = Atoms("CO2", positions=[[0, 0, 0], [0, 0, 1.16], [0, 0, -1.16]])
+    monkeypatch.setattr(main_ui, "ase_read", lambda _path: co2)
+    assert main_ui._num_nonvibrational_modes(9, "/logs") == 5
+    assert main_ui._num_nonvibrational_modes(4, "/logs") == 0
+
+    hydrogen = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]])
+    monkeypatch.setattr(main_ui, "ase_read", lambda _path: hydrogen)
+    assert main_ui._num_nonvibrational_modes(6, "/logs") == 5
+    assert main_ui._num_nonvibrational_modes(1, "/logs") == 0
+
+    atom = Atoms("He", positions=[[0, 0, 0]])
+    monkeypatch.setattr(main_ui, "ase_read", lambda _path: atom)
+    assert main_ui._num_nonvibrational_modes(3, "/logs") == 3
+    assert main_ui._num_nonvibrational_modes(0, "/logs") == 0
 
 
 def test_is_linear_geometry_detects_linear_molecules():
@@ -201,6 +221,11 @@ def test_is_linear_geometry_detects_linear_molecules():
     h2o = Atoms("H2O", positions=[[0, 0, 0], [0, 0.76, 0.59], [0, -0.76, 0.59]])
     assert main_ui._is_linear_geometry(co2) is True
     assert main_ui._is_linear_geometry(h2o) is False
+
+
+def test_trajectory_mode_index_uses_exported_ase_index():
+    assert main_ui._trajectory_mode_index("water_vib.6.traj", 0) == 6
+    assert main_ui._trajectory_mode_index("legacy-name.traj", 4) == 4
 
 
 def test_latex_delimiters_are_normalized_for_streamlit_markdown():

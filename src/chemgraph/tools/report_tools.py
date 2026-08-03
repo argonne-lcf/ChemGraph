@@ -505,10 +505,20 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         freq_unit = ase_output.vibrational_frequencies.get("frequency_unit", "cm-1")
         energy_unit = ase_output.vibrational_frequencies.get("energy_unit", "meV")
 
-        # Check if molecule is linear
-        is_linear = is_linear_molecule.invoke({"atomsdata": ase_output.final_structure})
         num_atoms = len(ase_output.final_structure.numbers)
-        trans_rot_modes = 5 if is_linear else 6  # Number of translation/rotation modes
+        if num_atoms == 1:
+            molecule_type = "Monatomic"
+            trans_rot_modes = 3
+        else:
+            is_linear = is_linear_molecule.invoke(
+                {"atomsdata": ase_output.final_structure}
+            )
+            molecule_type = "Linear" if is_linear else "Non-linear"
+            trans_rot_modes = 5 if is_linear else 6
+
+        frequencies = ase_output.vibrational_frequencies["frequencies"]
+        includes_nonvibrational_modes = len(frequencies) == 3 * num_atoms
+        num_vibrational_modes = max(3 * num_atoms - trans_rot_modes, 0)
 
         # Create table header
         freq_table = f"""
@@ -533,11 +543,15 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             ),
             1,
         ):
-            # First 5 (linear) or 6 (non-linear) modes are translation/rotation
-            mode_type = (
-                "Translation/Rotation" if i <= trans_rot_modes else "Vibrational"
+            is_nonvibrational = (
+                includes_nonvibrational_modes and i <= trans_rot_modes
             )
-            row_class = "trans-rot-mode" if i <= trans_rot_modes else "vibrational-mode"
+            mode_type = (
+                "Translation/Rotation" if is_nonvibrational else "Vibrational"
+            )
+            row_class = (
+                "trans-rot-mode" if is_nonvibrational else "vibrational-mode"
+            )
 
             freq_table += f"""
                     <tr class="{row_class}">
@@ -554,12 +568,22 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         </div>
         """
 
-        # Add explanation about the modes
+        if includes_nonvibrational_modes:
+            mode_note = (
+                f"This legacy result includes the first {trans_rot_modes} "
+                "translation/rotation modes."
+            )
+        else:
+            mode_note = (
+                f"The {trans_rot_modes} translation/rotation modes are excluded "
+                "from the reported frequencies."
+            )
+
         mode_explanation = f"""
         <div class="mode-explanation">
-            <p><strong>Molecule Type:</strong> {'Linear' if is_linear else 'Non-linear'}</p>
-            <p><strong>Mode Breakdown:</strong> {trans_rot_modes} translation/rotation modes + {3 * num_atoms - trans_rot_modes} vibrational modes</p>
-            <p><em>Note: The first {trans_rot_modes} modes (highlighted in orange) are translation/rotation modes. The remaining modes (highlighted in green) are vibrational modes.</em></p>
+            <p><strong>Molecule Type:</strong> {molecule_type}</p>
+            <p><strong>Mode Breakdown:</strong> {trans_rot_modes} translation/rotation modes + {num_vibrational_modes} vibrational modes</p>
+            <p><em>Note: {mode_note}</em></p>
         </div>
         """
 

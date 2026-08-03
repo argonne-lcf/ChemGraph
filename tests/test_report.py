@@ -29,14 +29,8 @@ sample_ase_output = {
         "driver": "thermo",
         "optimizer": "bfgs",
         "calculator": {
-            "calculator_type": "mace_mp",
-            "model": None,
-            "device": "cpu",
-            "default_dtype": "float64",
-            "dispersion": False,
-            "damping": "bj",
-            "dispersion_xc": "pbe",
-            "dispersion_cutoff": 21.167088422553647,
+            "calculator_type": "emt",
+            "asap_cutoff": False,
         },
         "fmax": 0.01,
         "steps": 1000,
@@ -104,6 +98,40 @@ def create_xyz_content_from_final_structure(final_structure):
 def sample_ase_output_schema():
     """Create a valid ASEOutputSchema object from the sample data."""
     return ASEOutputSchema(**sample_ase_output)
+
+
+def test_generate_html_distinguishes_filtered_and_legacy_modes(tmp_path):
+    filtered_output = json.loads(json.dumps(sample_ase_output))
+    vibration_data = filtered_output["vibrational_frequencies"]
+    vibration_data["energies"] = vibration_data["energies"][-3:]
+    vibration_data["frequencies"] = vibration_data["frequencies"][-3:]
+
+    filtered_json = tmp_path / "filtered.json"
+    filtered_html = tmp_path / "filtered.html"
+    filtered_json.write_text(json.dumps(filtered_output), encoding="utf-8")
+    generate_html.invoke(
+        {
+            "results_json_path": str(filtered_json),
+            "output_path": str(filtered_html),
+        }
+    )
+    filtered_content = filtered_html.read_text(encoding="utf-8")
+    assert filtered_content.count("<td>Vibrational</td>") == 3
+    assert "<td>Translation/Rotation</td>" not in filtered_content
+    assert "6 translation/rotation modes are excluded" in filtered_content
+
+    legacy_json = tmp_path / "legacy.json"
+    legacy_html = tmp_path / "legacy.html"
+    legacy_json.write_text(json.dumps(sample_ase_output), encoding="utf-8")
+    generate_html.invoke(
+        {
+            "results_json_path": str(legacy_json),
+            "output_path": str(legacy_html),
+        }
+    )
+    legacy_content = legacy_html.read_text(encoding="utf-8")
+    assert legacy_content.count("<td>Translation/Rotation</td>") == 6
+    assert "This legacy result includes the first 6" in legacy_content
 
 
 @pytest.fixture(scope="session")
