@@ -15,6 +15,8 @@ from chemgraph.models.anthropic import load_anthropic_model
 from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
 from chemgraph.models.supported_models import (
+    MODELS_WITH_REASONING_EFFORT,
+    SUPPORTED_REASONING_EFFORTS,
     supported_openai_models,
     supported_ollama_models,
     supported_anthropic_models,
@@ -68,6 +70,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _resolve_reasoning_effort(
+    model_name: str, reasoning_effort: Optional[str]
+) -> Optional[str]:
+    """Validate and resolve reasoning effort for manually verified models."""
+    if model_name not in MODELS_WITH_REASONING_EFFORT:
+        if reasoning_effort is not None:
+            supported_models = ", ".join(sorted(MODELS_WITH_REASONING_EFFORT))
+            raise ValueError(
+                f"Model '{model_name}' does not have verified reasoning-effort "
+                f"support. Supported models: {supported_models}."
+            )
+        return None
+
+    effective_effort = "none" if reasoning_effort is None else reasoning_effort
+    if effective_effort not in SUPPORTED_REASONING_EFFORTS:
+        supported_efforts = ", ".join(sorted(SUPPORTED_REASONING_EFFORTS))
+        raise ValueError(
+            f"Unsupported reasoning effort '{effective_effort}'. "
+            f"Choose one of: {supported_efforts}."
+        )
+    return effective_effort
+
+
 class ChemGraph:
     """A graph-based workflow for LLM-powered computational chemistry tasks.
 
@@ -89,6 +114,10 @@ class ChemGraph:
         Base URL for API calls, by default None
     api_key : str, optional
         API key for authentication, by default None
+    reasoning_effort : str, optional
+        Reasoning effort for manually verified GPT-5.6 models, which default to
+        ``"none"``. Supported values are ``none``, ``low``, ``medium``,
+        ``high``, ``xhigh``, and ``max``.
     system_prompt : str, optional
         System prompt for the language model, by default single_agent_prompt
     formatter_prompt : str, optional
@@ -161,7 +190,10 @@ class ChemGraph:
         human_supervised: bool = False,
         terminal_tool_names: Collection[str] = (),
         on_event: Optional[EventCallback] = None,
+        reasoning_effort: Optional[str] = None,
     ):
+        reasoning_effort = _resolve_reasoning_effort(model_name, reasoning_effort)
+
         # Always generate a unique identifier for this instance
         self.uuid = str(uuid.uuid4())[:8]
 
@@ -211,6 +243,8 @@ class ChemGraph:
                 }
                 if argo_user is not None:
                     openai_load_kwargs["argo_user"] = argo_user
+                if reasoning_effort is not None:
+                    openai_load_kwargs["reasoning_effort"] = reasoning_effort
                 llm = load_openai_model(
                     **openai_load_kwargs,
                 )
@@ -275,6 +309,7 @@ class ChemGraph:
 
         self.workflow_type = workflow_type
         self.model_name = model_name
+        self.reasoning_effort = reasoning_effort
         self.system_prompt = system_prompt
         self.formatter_prompt = formatter_prompt
         self.structured_output = structured_output
