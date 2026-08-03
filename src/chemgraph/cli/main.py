@@ -246,6 +246,42 @@ Examples:
     # ---- "models" subcommand ---------------------------------------------
     subparsers.add_parser("models", help="List all available LLM models.")
 
+    # ---- "resume" subcommand ---------------------------------------------
+    # Sugar over the working `--resume` flag: a positional session id plus an
+    # optional query (prompted when omitted). Reuses every run option so a
+    # resumed run is configured exactly like a fresh one.
+    resume_parser = subparsers.add_parser(
+        "resume",
+        help="Resume a previous session with a follow-up query.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    resume_parser.add_argument(
+        "session_id",
+        help="Session ID to resume (prefix matching supported).",
+    )
+    _add_run_args(resume_parser)
+
+    # ---- "jobs" subcommand ----------------------------------------------
+    jobs_parser = subparsers.add_parser(
+        "jobs",
+        help="Inspect HPC job batches submitted via MCP-HPC backends.",
+    )
+    jobs_sub = jobs_parser.add_subparsers(dest="jobs_command")
+    jobs_sub.add_parser("list", help="List all tracked job batches.")
+    jobs_status_parser = jobs_sub.add_parser(
+        "status", help="Show detailed status of one batch."
+    )
+    jobs_status_parser.add_argument("batch_id", help="Batch ID to query.")
+    jobs_results_parser = jobs_sub.add_parser(
+        "results", help="Show results for a completed batch."
+    )
+    jobs_results_parser.add_argument("batch_id", help="Batch ID to query.")
+    jobs_results_parser.add_argument(
+        "--partial",
+        action="store_true",
+        help="Include results from finished tasks even if some are pending.",
+    )
+
     # ---- "dashboard" subcommands ----------------------------------------
     dashboard_parser = subparsers.add_parser(
         "dashboard",
@@ -603,6 +639,50 @@ def _run_module_main(module_name: str, argv: list[str]) -> None:
         sys.exit(code)
 
 
+def _handle_resume(args: argparse.Namespace) -> None:
+    """Handle the ``resume`` subcommand.
+
+    Thin wrapper over :func:`_handle_run`: maps the positional ``session_id``
+    onto the working ``--resume`` code path and prompts for a query when ``-q``
+    is omitted (mirrors the interactive REPL ``resume`` verb).
+    """
+    # Pre-flight: fail fast on an unresolvable session id. Without this,
+    # _handle_run prints "Resuming from: <id>", the store's build_context_summary
+    # returns "" for a missing id, and the run silently starts fresh -- the user
+    # believes they resumed when they did not. get_session resolves exact ids and
+    # unique prefixes (returns None otherwise), matching what the agent will do.
+    from chemgraph.memory.store import SessionStore
+
+    if SessionStore().get_session(args.session_id) is None:
+        console.print(
+            f"[red]No session found for '{args.session_id}'.[/red]"
+        )
+        console.print(
+            "[dim]Use 'chemgraph session list' to see resumable sessions "
+            "(exact id or a unique prefix).[/dim]"
+        )
+        sys.exit(1)
+
+    args.resume = args.session_id
+    if not args.query:
+        from rich.prompt import Prompt
+
+        args.query = Prompt.ask(
+            "[bold cyan]Enter query to continue with[/bold cyan]"
+        ).strip()
+        if not args.query:
+            console.print("[red]A query is required to resume a session.[/red]")
+            sys.exit(1)
+    _handle_run(args)
+
+
+def _handle_jobs(args: argparse.Namespace) -> None:
+    """Handle the ``jobs`` subcommand."""
+    from chemgraph.cli.jobs import handle_jobs
+
+    handle_jobs(args)
+
+
 def _handle_academy(args: argparse.Namespace) -> None:
     """Handle Academy-backed ChemGraph campaign commands."""
     command = getattr(args, "academy_command", None)
@@ -671,6 +751,12 @@ def main() -> None:
 
     elif args.command == "models":
         list_models()
+
+    elif args.command == "resume":
+        _handle_resume(args)
+
+    elif args.command == "jobs":
+        _handle_jobs(args)
 
     elif args.command == "dashboard":
         _run_module_main(

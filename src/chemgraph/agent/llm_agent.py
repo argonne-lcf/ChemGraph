@@ -1,7 +1,9 @@
 import asyncio
 import datetime
+import json
 import os
 import time
+from pathlib import Path
 from typing import Callable, Collection, List, Optional
 import uuid
 
@@ -66,6 +68,49 @@ from chemgraph.prompt.xanes_prompt import (
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# Every cost-bearing tool takes a single pydantic parameter, so the LLM's
+# tool-call ``args`` nest one level under a wrapper key (``params`` for most,
+# ``graspa_input`` for gRASPA). The manifest reads ``driver`` / ``calculator`` /
+# ``input_structure_file`` at the TOP level of the recorded args, so the hook
+# must unwrap that inner dict before recording -- otherwise every field reads as
+# ``?``. Some tools name their structure field differently; ``alias`` maps that
+# field onto the canonical ``input_structure_file`` a resume reads.
+_TOOL_ARG_SPEC = {
+    "run_ase": {"wrapper": "params"},
+    "run_xanes": {"wrapper": "params"},
+    "run_mace_single": {"wrapper": "params"},
+    "run_mace_ensemble": {"wrapper": "params", "alias": "input_structure_directory"},
+    "run_graspa": {"wrapper": "graspa_input", "alias": "cif_path"},
+}
+
+
+def _unwrap_tool_args(name, args):
+    """Return a cost tool's inner args dict with the structure field normalized.
+
+    Cost tools wrap their real arguments under a single pydantic-param key; the
+    manifest reads ``driver`` / ``calculator`` / ``input_structure_file`` at the
+    top level, so return the inner dict. When the wrapper key is absent (a flat
+    direct call, or a test feeding args already unwrapped), return ``args``
+    unchanged. Any tool-specific structure-field alias is copied onto
+    ``input_structure_file`` so a resume finds it under the canonical name.
+    """
+    if not isinstance(args, dict):
+        return args
+    spec = _TOOL_ARG_SPEC.get(name)
+    if spec is None:
+        return args
+    wrapper = spec.get("wrapper")
+    inner = args.get(wrapper) if wrapper else None
+    if not isinstance(inner, dict):
+        # Already-flat args (direct call / test shape) -> use as-is.
+        inner = args
+    alias = spec.get("alias")
+    if alias and alias in inner and "input_structure_file" not in inner:
+        inner = dict(inner)
+        inner["input_structure_file"] = inner[alias]
+    return inner
 
 
 class ChemGraph:
@@ -187,6 +232,20 @@ class ChemGraph:
             self.session_store = SessionStore(db_path=memory_db_path)
         else:
             self.session_store = None
+
+        # Durable run manifest (records executed cost-bearing steps + args +
+        # result-file paths for crash-safe, cross-allocation resume). Lives in
+        # the log dir on the shared filesystem, independent of the SessionStore
+        # message layer which drops tool-call args.
+        from chemgraph.memory.manifest import RunManifest
+
+        self.run_manifest = RunManifest(
+            os.path.join(self.log_dir, "run_manifest.json")
+        )
+        # Open cost-bearing steps, keyed by tool_call_id so parallel tool calls
+        # in one AI message each close the correct manifest step. Each value is
+        # {"idx": int, "tool": str, "args": dict}.
+        self._pending_steps: dict[str, dict] = {}
 
         # Track whether session has been registered in the memory store
         self._session_created: bool = False
@@ -650,6 +709,181 @@ class ChemGraph:
         except Exception as e:
             logger.warning(f"Failed to save messages to session store: {e}")
 
+    _COST_TOOLS = {
+        "run_ase",
+        "run_mace_single",
+        "run_mace_ensemble",
+        "run_graspa",
+        "run_xanes",
+    }
+
+    def _manifest_observe(self, message) -> None:
+        """Record cost-bearing tool starts/ends into the run manifest.
+
+        Reads tool-call args from live graph state -- before
+        ``_save_messages_to_store``'s empty-content filter drops pure tool-call
+        messages -- so the durable manifest keeps the args (calculator, driver,
+        input file) a resumed agent needs. Best-effort: never breaks the run.
+        """
+        try:
+            from chemgraph.agent.turn import _message_tool_calls
+
+            # AI message issuing a cost-bearing tool call -> record a step start.
+            for call in _message_tool_calls(message) or []:
+                name = (
+                    call.get("name")
+                    if isinstance(call, dict)
+                    else getattr(call, "name", None)
+                )
+                if name in self._COST_TOOLS:
+                    raw_args = (
+                        call.get("args", {})
+                        if isinstance(call, dict)
+                        else getattr(call, "args", {})
+                    )
+                    # The LLM nests the real args under a single pydantic-param
+                    # wrapper key; unwrap so the manifest records driver /
+                    # calculator / input_structure_file at the top level.
+                    args = _unwrap_tool_args(name, raw_args)
+                    call_id = (
+                        call.get("id")
+                        if isinstance(call, dict)
+                        else getattr(call, "id", None)
+                    )
+                    idx = self.run_manifest.record_step_start(name, args)
+                    # Key by tool_call_id so the matching ToolMessage closes THIS
+                    # step even when several tool calls are open at once. A missing
+                    # id (rare) falls back to a synthetic key.
+                    key = call_id if call_id is not None else f"__noid_{idx}"
+                    self._pending_steps[key] = {
+                        "idx": idx,
+                        "tool": name,
+                        "args": args,
+                    }
+
+            # ToolMessage returning a result -> record the step end.
+            role = getattr(message, "type", None) or getattr(message, "role", None)
+            if role == "tool" and self._pending_steps:
+                # Match the ToolMessage to its open step by tool_call_id. If the
+                # id is absent or unknown, fall back to the single open step when
+                # exactly one is pending (unambiguous), else skip.
+                call_id = getattr(message, "tool_call_id", None)
+                if call_id in self._pending_steps:
+                    key = call_id
+                elif len(self._pending_steps) == 1:
+                    key = next(iter(self._pending_steps))
+                else:
+                    key = None
+                if key is None:
+                    return
+                pending = self._pending_steps.pop(key)
+                pending_step_idx = pending["idx"]
+                pending_step_tool = pending["tool"]
+                pending_step_args = pending["args"]
+                content = str(getattr(message, "content", ""))
+                # LangGraph's ToolNode serializes a non-string tool return via
+                # json.dumps, so in production `content` is the JSON of the
+                # run_ase_core result dict. Parse it and read the resume contract
+                # (wall_time_capped / result_file / restart_file /
+                # resume_input_file / wall_time) as structured fields. Scraping the
+                # human-readable message for a "saved to <path>" substring is
+                # brittle (it breaks the moment the wording changes and mis-parses
+                # a trailing '."' as part of the path), so JSON is the source of
+                # truth; the string path below is only a fallback for a plain-text
+                # ToolMessage (older tools / hand-written test content).
+                is_error = getattr(message, "status", None) == "error"
+                result_file = None
+                wall_time = None
+                wall_time_capped = False
+                restart_file = None
+                resume_input_file = None
+                try:
+                    payload = json.loads(content)
+                except (json.JSONDecodeError, TypeError):
+                    payload = None
+                if isinstance(payload, dict):
+                    is_error = is_error or payload.get("status") == "failure"
+                    if not is_error:
+                        result_file = payload.get("result_file")
+                        wall_time = payload.get("wall_time")
+                        wall_time_capped = bool(payload.get("wall_time_capped"))
+                        restart_file = payload.get("restart_file")
+                        resume_input_file = payload.get("resume_input_file")
+                else:
+                    # Plain-text fallback: recover the result-file path from the
+                    # message and read the capped flags out of that JSON on disk.
+                    is_error = (
+                        is_error
+                        or content.lstrip().startswith("Error")
+                        or '"status": "failure"' in content
+                    )
+                    if not is_error and "saved to " in content:
+                        result_file = (
+                            content.split("saved to ", 1)[1].split()[0].rstrip(".")
+                        )
+                    if result_file and os.path.isfile(result_file):
+                        try:
+                            parsed = json.loads(
+                                Path(result_file).read_text(encoding="utf-8")
+                            )
+                            wall_time = parsed.get("wall_time")
+                            wall_time_capped = bool(parsed.get("wall_time_capped"))
+                            restart_file = parsed.get("restart_file")
+                        except Exception:
+                            pass
+                if not is_error and wall_time_capped:
+                    # Wall-clock cap: record the step as "capped" (NOT done) and
+                    # queue the same step as the pending next step so a resumed
+                    # agent continues it as unfinished work.
+                    self.run_manifest.record_step_end(
+                        pending_step_idx,
+                        result_file=result_file,
+                        wall_time=wall_time,
+                        status="capped",
+                    )
+                    # For a capped opt, the durable partial geometry is a
+                    # standalone structure file; point the pending step's input at
+                    # it so a resume continues from the moved atoms and skips
+                    # recomputing from the original input.
+                    pending_args = pending_step_args
+                    if resume_input_file:
+                        pending_args = dict(pending_args)
+                        pending_args["input_structure_file"] = resume_input_file
+                        reason = (
+                            "wall-clock cap; resume from partial geometry "
+                            f"{resume_input_file}"
+                        )
+                    elif restart_file:
+                        reason = (
+                            f"wall-clock cap; resume with restart_file={restart_file}"
+                        )
+                    else:
+                        reason = (
+                            "wall-clock cap; no restart written, rerun with "
+                            "more wall-clock budget"
+                        )
+                    self.run_manifest.set_pending(
+                        pending_step_tool,
+                        pending_args,
+                        reason=reason,
+                    )
+                    self.run_manifest.set_status("capped")
+                else:
+                    self.run_manifest.record_step_end(
+                        pending_step_idx,
+                        result_file=result_file,
+                        wall_time=wall_time,
+                        status="failed" if is_error else "done",
+                    )
+                    if not is_error:
+                        # A genuinely-completed step clears any stale PENDING
+                        # marker and resets a leftover 'capped' status, so a
+                        # successful resume no longer renders the old pending
+                        # block. (A failed step leaves both untouched.)
+                        self.run_manifest.mark_running()
+        except Exception as exc:  # manifest is best-effort, never break the run
+            logger.debug("manifest observe skipped: %s", exc)
+
     def load_previous_context(
         self,
         session_id: str,
@@ -797,6 +1031,7 @@ class ChemGraph:
                         except Exception:
                             pass
                         logger.info(new_message)
+                        self._manifest_observe(new_message)
                         prev_msgs = s["messages"]
                     last_st = s
             except GraphInterrupt as gi:
@@ -846,6 +1081,28 @@ class ChemGraph:
             config["callbacks"] = callbacks
         logger.debug("validated config=%s", config)
 
+        # When resuming, adopt the prior session's log dir BEFORE anything reads
+        # it. The durable partials a resume must find ({stem}_opt.partial.xyz,
+        # {stem}_vibcache, run_manifest.json) live under that session's log_dir;
+        # a fresh auto-generated dir would hide them and force a full recompute.
+        # Also re-point self.run_manifest at the prior manifest so new steps
+        # append to it, keeping all bookkeeping in one
+        # file. This is the single choke point for every resume path.
+        if resume_from and self.session_store:
+            try:
+                prior = self.session_store.get_session(resume_from)
+            except Exception:
+                prior = None
+            prior_log_dir = getattr(prior, "log_dir", None) if prior else None
+            if prior_log_dir and os.path.isdir(prior_log_dir):
+                self.log_dir = prior_log_dir
+                os.environ["CHEMGRAPH_LOG_DIR"] = prior_log_dir
+                from chemgraph.memory.manifest import RunManifest
+
+                self.run_manifest = RunManifest(
+                    os.path.join(prior_log_dir, "run_manifest.json")
+                )
+
         # Initialize logging directory before determining inputs or running workflow
         # Check if CHEMGRAPH_LOG_DIR is already set
         if not os.environ.get("CHEMGRAPH_LOG_DIR"):
@@ -854,9 +1111,17 @@ class ChemGraph:
         # Ensure session exists in memory store
         self._ensure_session(query)
 
-        # If resuming from a previous session, prepend context
+        # If resuming from a previous session, prepend context. Augment the
+        # text summary with the run manifest (completed steps + result-file
+        # paths + pending next step) so the agent continues precisely and avoids
+        # recomputing work whose args the summary layer dropped.
         if resume_from and self.session_store:
             context = self.session_store.build_context_summary(resume_from)
+            from chemgraph.memory.manifest import RunManifest
+
+            manifest = RunManifest.for_session(self.session_store, resume_from)
+            if manifest:
+                context = f"{context}\n\n{manifest.render_for_context()}"
             if context:
                 query = (
                     f"{context}\n\n"

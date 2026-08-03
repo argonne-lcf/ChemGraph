@@ -153,14 +153,59 @@ class JobTracker:
             logger.warning("Could not load job tracker state: %s", exc)
             return
 
+        if not isinstance(data, dict):
+            logger.warning(
+                "Job tracker state in %s is not a JSON object (got %s); "
+                "ignoring it.",
+                self._persist_file,
+                type(data).__name__,
+            )
+            return
+
         orphaned: list[tuple[str, str]] = []  # (batch_id, task_id)
+        skipped = 0
         with self._lock:
             for bid, info in data.items():
                 if bid in self._batches:
                     continue  # don't overwrite live batches
 
+                # A persist file can be valid JSON but structurally
+                # incomplete (hand-edited, partially written, or produced by
+                # a future/older schema). Skip such a batch with a warning;
+                # raising KeyError here would lose every other batch.
+                if not isinstance(info, dict):
+                    skipped += 1
+                    continue
+                tool_name = info.get("tool_name")
+                submitted_raw = info.get("submitted_at")
+                if tool_name is None or submitted_raw is None:
+                    logger.warning(
+                        "Batch '%s' in %s is missing required fields "
+                        "(tool_name/submitted_at); skipping it.",
+                        bid,
+                        self._persist_file,
+                    )
+                    skipped += 1
+                    continue
+                try:
+                    submitted_at = datetime.fromisoformat(submitted_raw)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "Batch '%s' in %s has an unparseable submitted_at "
+                        "(%r); skipping it.",
+                        bid,
+                        self._persist_file,
+                        submitted_raw,
+                    )
+                    skipped += 1
+                    continue
+
                 tasks = []
+                malformed_task = False
                 for t in info.get("tasks", []):
+                    if not isinstance(t, dict) or "task_id" not in t:
+                        malformed_task = True
+                        break
                     tracked = TrackedTask(
                         task_id=t["task_id"],
                         meta=t.get("meta", {}),
@@ -174,16 +219,28 @@ class JobTracker:
                     if tracked.globus_task_id is None and tracked.result is None:
                         orphaned.append((bid, tracked.task_id))
                     tasks.append(tracked)
+                if malformed_task:
+                    logger.warning(
+                        "Batch '%s' in %s has a malformed task entry; "
+                        "skipping the batch.",
+                        bid,
+                        self._persist_file,
+                    )
+                    skipped += 1
+                    continue
 
                 self._batches[bid] = TrackedBatch(
                     batch_id=bid,
-                    tool_name=info["tool_name"],
-                    submitted_at=datetime.fromisoformat(info["submitted_at"]),
+                    tool_name=tool_name,
+                    submitted_at=submitted_at,
                     tasks=tasks,
                 )
 
         logger.info(
-            "Loaded %d batches from %s", len(data), self._persist_file
+            "Loaded %d batches from %s (%d skipped)",
+            len(data) - skipped,
+            self._persist_file,
+            skipped,
         )
         if orphaned:
             logger.warning(
@@ -307,11 +364,23 @@ class JobTracker:
 
     # ── status ─────────────────────────────────────────────────────────
 
-    def get_status(self, batch_id: str) -> dict:
+    def get_status(self, batch_id: str, offline: bool = False) -> dict:
         """Return the current status of a batch.
 
         For tasks loaded from disk (no in-memory ``Future``), queries
         Globus Compute directly if a ``globus_task_id`` is available.
+
+        Parameters
+        ----------
+        batch_id : str
+            The batch identifier.
+        offline : bool
+            When ``True``, never construct a Globus Compute client or make a
+            network call: disk-loaded tasks with no cached result are reported
+            as still pending. Defaults to ``False`` so the MCP-HPC path is
+            unchanged. The CLI passes ``offline=True`` because it only reads
+            what is already on disk and must not trigger an interactive Globus
+            OAuth login just to list batches.
 
         Returns
         -------
@@ -363,7 +432,12 @@ class JobTracker:
                         dirty = True
 
                 # --- loaded-from-disk path (no future, use Globus client) ---
-                elif t.future is None and t.result is None and t.globus_task_id:
+                elif (
+                    not offline
+                    and t.future is None
+                    and t.result is None
+                    and t.globus_task_id
+                ):
                     gc = self._get_gc_client()
                     if gc is not None:
                         try:
@@ -437,7 +511,7 @@ class JobTracker:
     # ── results ────────────────────────────────────────────────────────
 
     def get_results(
-        self, batch_id: str, include_partial: bool = False
+        self, batch_id: str, include_partial: bool = False, offline: bool = False
     ) -> dict:
         """Collect results from a batch.
 
@@ -449,13 +523,16 @@ class JobTracker:
             If ``True``, return results for completed tasks even if some
             are still pending.  If ``False`` (default) and the batch is
             not fully resolved, return a status message instead.
+        offline : bool
+            Forwarded to :meth:`get_status`; when ``True`` no Globus client
+            is created or queried. Defaults to ``False``.
 
         Returns
         -------
         dict
             Contains ``status``, ``results`` list, and summary counts.
         """
-        status_info = self.get_status(batch_id)
+        status_info = self.get_status(batch_id, offline=offline)
         if "error" in status_info:
             return status_info
 
@@ -487,14 +564,21 @@ class JobTracker:
 
     # ── listing ────────────────────────────────────────────────────────
 
-    def list_batches(self) -> list[dict]:
-        """Return a summary of all tracked batches."""
+    def list_batches(self, offline: bool = False) -> list[dict]:
+        """Return a summary of all tracked batches.
+
+        Parameters
+        ----------
+        offline : bool
+            Forwarded to :meth:`get_status` for every batch; when ``True`` no
+            Globus client is created or queried. Defaults to ``False``.
+        """
         with self._lock:
             batch_ids = list(self._batches.keys())
 
         summaries = []
         for bid in batch_ids:
-            summaries.append(self.get_status(bid))
+            summaries.append(self.get_status(bid, offline=offline))
         return summaries
 
     # ── cancellation ───────────────────────────────────────────────────

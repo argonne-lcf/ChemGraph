@@ -22,6 +22,24 @@ def setup_test_env():
     pass
 
 
+@pytest.fixture(autouse=True)
+def clear_allocation_env(monkeypatch):
+    """Strip CHEMGRAPH_ALLOCATION_* from every test's environment.
+
+    ``run_ase_core`` now reads these to derive an allocation-aware wall-clock cap
+    (tests/test_allocation_cap.py). A developer with them exported in their shell
+    would otherwise see unrelated calculation tests (test_cap, test_cap_vib,
+    test_mcp, ...) silently capped. Clearing globally keeps every test hermetic;
+    the allocation tests set them explicitly via monkeypatch.
+    """
+    for var in (
+        "CHEMGRAPH_ALLOCATION_DEADLINE",
+        "CHEMGRAPH_ALLOCATION_SECONDS",
+        "CHEMGRAPH_ALLOCATION_MARGIN",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture
 def simple_h2_molecule():
     """Fixture providing a simple H2 molecule for testing"""

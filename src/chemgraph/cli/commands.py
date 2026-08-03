@@ -339,6 +339,64 @@ def _next_thread_id() -> int:
     return _thread_counter
 
 
+def _print_cap_handoff(console, agent) -> None:
+    """Print a copy-pasteable resume handoff when a run hit the wall-clock cap.
+
+    Display-only and fully best-effort: a missing/None run manifest, a
+    non-capped status, or any unexpected error is a silent no-op, so this never
+    crashes the CLI on the normal (uncapped) path.
+
+    Parameters
+    ----------
+    console : Any
+        Rich console to print the handoff panel to.
+    agent : Any
+        ChemGraph agent whose ``run_manifest`` and ``session_id`` are read.
+    """
+    try:
+        manifest = getattr(agent, "run_manifest", None)
+        if manifest is None:
+            return
+        if getattr(manifest, "status", None) != "capped":
+            return
+
+        data = getattr(manifest, "_data", {}) or {}
+        pending = data.get("pending_next_step") or {}
+        reason = pending.get("reason", "") if isinstance(pending, dict) else ""
+
+        # `agent.session_id` is the durable SQLite session id that
+        # `chemgraph resume <id>` / `--resume <id>` resolves via
+        # SessionStore.get_session (prefix matching supported).
+        session_id = getattr(agent, "session_id", None)
+        resume_cmd = (
+            f"chemgraph resume {session_id}"
+            if session_id
+            else "chemgraph resume <session_id>"
+        )
+
+        body_lines = [
+            "This run hit the wall-clock/allocation cap and saved a "
+            "resumable partial.",
+            "",
+            "Continue where it left off with:",
+            f"  [bold cyan]{resume_cmd}[/bold cyan]",
+        ]
+        if reason:
+            body_lines.append("")
+            body_lines.append(f"[dim]{reason}[/dim]")
+
+        console.print(
+            Panel(
+                "\n".join(body_lines),
+                title="[bold yellow]Run capped - resumable[/bold yellow]",
+                style="yellow",
+            )
+        )
+    except Exception:
+        # Best-effort handoff; never break the CLI.
+        pass
+
+
 def run_query(
     agent: Any,
     query: str,
@@ -402,6 +460,10 @@ def run_query(
             )
             progress.update(task, description="[green]Query completed!")
             time.sleep(0.3)
+            # A wall-clock-capped run completes normally (no interrupt), so this
+            # is the completion point it always reaches. Best-effort, no-op
+            # unless the run manifest reports "capped".
+            _print_cap_handoff(console, agent)
             return result
         except HumanInputRequired as hir:
             progress.update(task, description="[yellow]Agent needs your input")

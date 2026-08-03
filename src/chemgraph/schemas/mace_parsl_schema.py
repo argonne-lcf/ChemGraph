@@ -52,6 +52,16 @@ class mace_input_schema(BaseModel):
         default=1000,
         description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
     )
+    max_wall_seconds: float | None = Field(
+        default=None,
+        description=(
+            "Soft wall-clock cap in seconds for this calculation. When set, the "
+            "optimization/vibration self-terminates at the deadline and returns a "
+            "resumable partial short of convergence. The effective cap "
+            "is the tighter of this value and any allocation budget "
+            "(CHEMGRAPH_ALLOCATION_* env). None = no explicit cap."
+        ),
+    )
     optimizer: str = Field(
         default="lbfgs",
         description="The optimization algorithm used for geometry optimization. Options are 'bfgs', 'lbfgs', 'gpmin', 'fire', 'mdmin'",
@@ -111,6 +121,17 @@ class mace_input_schema_ensemble(BaseModel):
     steps: int = Field(
         default=1000,
         description="Maximum number of optimization steps. The optimization will terminate if this number is reached, even if forces haven't converged to fmax.",
+    )
+    max_wall_seconds: float | None = Field(
+        default=None,
+        description=(
+            "Soft wall-clock cap in seconds applied to each structure in the "
+            "ensemble. When set, a per-structure optimization/vibration self-"
+            "terminates at the deadline and returns a resumable partial instead "
+            "of running to convergence. The effective cap is the tighter of this "
+            "value and any allocation budget (CHEMGRAPH_ALLOCATION_* env). None = "
+            "no explicit cap."
+        ),
     )
     optimizer: str = Field(
         default="lbfgs",

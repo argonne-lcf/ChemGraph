@@ -63,3 +63,7 @@ vib*.traj
 
 # Kubernetes secrets (keep secrets.yaml.template, ignore actual secrets)
 k8s/secrets.yaml
+
+# Long-run cap / manifest run artifacts (session log dirs, test outputs)
+cg_logs/
+tests/*_output.json
