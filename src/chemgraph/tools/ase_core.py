@@ -307,7 +307,13 @@ def prepare_dft_calculator(atoms, calc, calc_model):
         is left untouched so a user-supplied box is not clobbered;
       * the DFT calculator is rebuilt WITH the atoms so its k-mesh follows
         ``atoms.pbc`` (Gamma for a molecule, per-axis masked mesh for a
-        slab/wire, the configured mesh for a bulk solid).
+        slab/wire, the configured mesh for a bulk solid);
+      * a structure that was just given a vacuum box is then marked periodic.
+        ``atoms.center()`` supplies the cell but leaves ``pbc`` all False, and
+        ASE's VASP calculator refuses to run on anything not fully periodic
+        (``check_pbc``), so without this a molecule never reaches VASP. This
+        happens AFTER the rebuild above, because ``get_calculator`` reads
+        ``atoms.pbc`` to choose the molecule branch.
 
     The ``isinstance`` guard is mandatory: every other calculator's
     ``get_calculator()`` is zero-arg and would raise ``TypeError`` on ``atoms=``.
@@ -340,7 +346,29 @@ def prepare_dft_calculator(atoms, calc, calc_model):
         # user-supplied box is never clobbered.
         if is_nonperiodic(atoms) and atoms.cell.rank < 3:
             atoms.center(vacuum=calc_model.vacuum)
-        return calc_model.get_calculator(atoms=atoms)
+        # Build the calculator BEFORE touching pbc below: get_calculator reads
+        # atoms.pbc to choose the k-mesh: a single Gamma point for a molecule,
+        # a per-axis masked mesh for a slab/wire, the configured mesh for bulk.
+        # Flipping pbc first would send a molecule down the bulk branch (full
+        # k-mesh + VASP's metallic smearing) and un-mask a slab's vacuum axis.
+        dft_calc = calc_model.get_calculator(atoms=atoms)
+        # ASE's VASP calculator refuses anything not FULLY periodic
+        # (check_pbc: ``if not atoms.pbc.all(): raise``). That rejects three
+        # cases the code otherwise supports: a centered molecule (pbc all
+        # False), a molecule the user supplied their own rank-3 box for, and
+        # (despite mask_kmesh_by_pbc existing precisely for them) every slab
+        # ([T,T,F]) and wire ([T,F,F]). A plane-wave code has no aperiodic
+        # mode, so in VASP's model all of these ARE fully periodic cells and
+        # marking them so states what VASP will do anyway. Enough vacuum is
+        # what makes the residual image interaction small; it never removes it,
+        # and no dipole or monopole correction is applied here, so a polar or
+        # charged species needs a bigger box or an explicit IDIPOL/LDIPOL via
+        # input_data. The masked k-mesh computed above keeps the vacuum axes
+        # from being sampled as if they dispersed. QE needs none of this: pw.x
+        # has no equivalent check and write_espresso_in ignores pbc.
+        if isinstance(calc_model, VaspCalc) and not atoms.pbc.all():
+            atoms.pbc = True
+        return dft_calc
     return calc
 
 
@@ -541,6 +569,12 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
     logger.info("Read %d atoms from %s", len(atoms), input_structure_file)
     atoms.info.update(system_info)
+
+    # Remember how the structure was written before the plane-wave preparation
+    # below can mark it periodic. Gas-phase thermochemistry keys off this: an
+    # aperiodic input stays eligible even after being given a box, while a real
+    # crystal keeps its periodicity and is refused.
+    was_periodic_on_input = bool(atoms.pbc.any())
 
     # Subprocess plane-wave DFT (QE/VASP) needs a finite cell and a
     # periodicity-aware k-mesh, neither of which get_calculator could know at
@@ -764,10 +798,25 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                         )
                         spin_S = (multiplicity - 1) / 2.0
 
+                        # IdealGasThermo rejects periodic atoms outright
+                        # (ase.thermochemistry: "should not have periodic
+                        # boundary conditions"), and that guard is the only
+                        # thing stopping a crystal from being handed
+                        # rigid-rotor gas statistics, which are meaningless for
+                        # a solid. Keep it for anything periodic on input, and
+                        # sidestep it only for a structure the plane-wave path
+                        # boxed on our behalf: that is still one isolated
+                        # molecule, whose partition functions need nothing but
+                        # its masses and positions. `atoms` stays untouched.
+                        thermo_atoms = atoms
+                        if atoms.pbc.any() and not was_periodic_on_input:
+                            thermo_atoms = atoms.copy()
+                            thermo_atoms.pbc = False
+
                         thermo = IdealGasThermo(
                             vib_energies=energies,
                             potentialenergy=single_point_energy,
-                            atoms=atoms,
+                            atoms=thermo_atoms,
                             geometry=geometry,
                             symmetrynumber=symmetrynumber,
                             spin=spin_S,

