@@ -16,10 +16,10 @@ LLM reads a natural-language prompt, chooses the tool, fills in the input, and
 the tool launches the real DFT engine through ASE.
 
 > Scope note: this example proves the ChemGraph -> tool -> engine flow and the
-> code path. The Quantum ESPRESSO path is runnable on Aurora (real `pw.x`); the
-> VASP path is documented for a VASP-equipped host and has **not** been run on
-> real VASP here (Aurora has no VASP binary). Treat the VASP section as the
-> setup a VASP user would follow, not a validated run.
+> code path. The Quantum ESPRESSO path is runnable on Aurora (real `pw.x`). The
+> VASP path has been run against real `vasp_std` (VASP 6.5.1, 8 MPI ranks, PBE
+> PAW) on a VASP-licensed cluster: the agent chose `run_vasp` unprompted and
+> bulk Si returned -10.8379 eV at ENCUT=325, 4x4x4.
 
 ---
 
@@ -114,17 +114,44 @@ python examples/plane_wave_tools/run_plane_wave.py --engine qe
 python examples/plane_wave_tools/run_plane_wave.py --engine vasp
 ```
 
-Override the prompt to try your own chemistry:
-
-```bash
-QE_PROMPT="Compute the total energy of an isolated water molecule with Quantum ESPRESSO." \
-  python examples/plane_wave_tools/run_plane_wave.py --engine qe
-```
-
 Expected: an `INFO` line showing the Argo model mapping, then the LLM calling
 `run_qe` (or `run_vasp`), the DFT engine running through ASE, and ChemGraph
 reporting the result. If the requested engine is not registered on the host, the
 script exits early and prints exactly which environment variables are missing.
+
+### Where the structure comes from
+
+The example writes the bulk-Si cell itself, into `$PLANE_WAVE_WORKDIR`
+(default `./plane_wave_example`), and names that file in the prompt. Set
+`MP_API_KEY` and it fetches the relaxed [mp-149](https://materialsproject.org/materials/mp-149)
+cell from Materials Project; without a key it falls back to an idealized
+`ase.build.bulk("Si", "diamond", a=5.43)` lattice. Either way you get a real
+periodic rank-3 cell, and any fetch failure falls back rather than aborting.
+
+This is deliberate, not a shortcut. **No tool in the `single_agent` set can
+build a crystal.** The only structure source is `smiles_to_coordinate_file`,
+which is RDKit-backed and returns an isolated molecule with no cell. A prompt
+that just says "bulk silicon" makes the model reach for it and get one lone Si
+atom at `pbc=[F,F,F]`: VASP rejects that outright, and pw.x accepts it and
+quietly reports the energy of the wrong system. The LLM still chooses the tool
+and fills in every plane-wave parameter; only the lattice is supplied.
+
+### Overriding the prompt
+
+`QE_PROMPT` / `VASP_PROMPT` replace the default outright, so they must name a
+structure file themselves. The example's own file is a good starting point:
+
+```bash
+VASP_PROMPT="Relax the crystal in '$PWD/plane_wave_example/si_bulk.xyz' with VASP \
+using input_structure_file='$PWD/plane_wave_example/si_bulk.xyz', driver='opt', \
+a 4x4x4 k-point mesh and a 300 eV cutoff." \
+  python examples/plane_wave_tools/run_plane_wave.py --engine vasp
+```
+
+For QE, `QE_SI_PSEUDO` sets the Si UPF filename looked up inside
+`$ESPRESSO_PSEUDO` (default `Si.pbe-n-rrkjus_psl.1.0.0.UPF`); pw.x needs an
+explicit per-element pseudopotential, whereas ASE derives VASP's POTCAR path
+from `$VASP_PP_PATH` and the element symbol.
 
 ---
 
