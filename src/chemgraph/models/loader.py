@@ -10,6 +10,7 @@ from typing import Optional
 
 from chemgraph.models.alcf_endpoints import load_alcf_model
 from chemgraph.models.anthropic import load_anthropic_model
+from chemgraph.models.codex import load_codex_model
 from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
 from chemgraph.models.local_model import load_ollama_model
@@ -73,7 +74,9 @@ def load_chat_model(
     if model_name is None:
         raise ValueError("load_chat_model requires model_name or settings")
 
-    if model_name in supported_openai_models or model_name in supported_argo_models:
+    if model_name.startswith("codex:"):
+        return load_codex_model(model_name)
+    elif model_name in supported_openai_models or model_name in supported_argo_models:
         kwargs = {
             "model_name": model_name,
             "temperature": temperature,
@@ -106,5 +109,5 @@ def load_chat_model(
         raise ValueError(
             f"Model '{model_name}' not found in any supported model list. "
             "Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, "
-            "argo:<model>, ALCF, or Ollama."
+            "codex:<model>, argo:<model>, ALCF, or Ollama."
         )
