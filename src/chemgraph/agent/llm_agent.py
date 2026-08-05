@@ -14,6 +14,7 @@ from chemgraph.models.local_model import load_ollama_model
 from chemgraph.models.anthropic import load_anthropic_model
 from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
+from chemgraph.models.codex import load_codex_model
 from chemgraph.models.supported_models import (
     MODELS_WITH_REASONING_EFFORT,
     SUPPORTED_REASONING_EFFORTS,
@@ -102,7 +103,9 @@ class ChemGraph:
     Parameters
     ----------
     model_name : str, optional
-        Name of the language model to use, by default "gpt-4o-mini"
+        Name of the language model to use, by default "gpt-4o-mini".
+        Experimental ChatGPT subscription-backed Codex models use the
+        ``codex:<model-id>`` prefix and support only ``single_agent``.
     workflow_type : str, optional
         Type of workflow to use. Options:
         - "single_agent"
@@ -192,6 +195,11 @@ class ChemGraph:
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
     ):
+        if model_name.startswith("codex:") and workflow_type != "single_agent":
+            raise ValueError(
+                "Experimental codex: models currently support only the "
+                "single_agent workflow."
+            )
         reasoning_effort = _resolve_reasoning_effort(model_name, reasoning_effort)
 
         # Always generate a unique identifier for this instance
@@ -232,7 +240,9 @@ class ChemGraph:
             frequency_penalty = 0.0  # No repetition penalty
             presence_penalty = 0.0  # No presence penalty
 
-            if (
+            if model_name.startswith("codex:"):
+                llm = load_codex_model(model_name)
+            elif (
                 model_name in supported_openai_models
                 or model_name in supported_argo_models
             ):

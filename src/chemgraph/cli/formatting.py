@@ -79,9 +79,15 @@ def list_models() -> None:
 
         table.add_row(model, provider, model_type)
 
+    table.add_row(
+        "codex:<model-id>",
+        "Codex / ChatGPT",
+        "Experimental",
+    )
+
     console.print(table)
     console.print(
-        f"\n[bold green]Total models available: {len(all_supported_models)}[/bold green]"
+        f"\n[bold green]Curated models available: {len(all_supported_models)}[/bold green]"
     )
 
 

@@ -73,7 +73,10 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         "--model",
         type=str,
         default="gpt-4o-mini",
-        help="LLM model to use (default: gpt-4o-mini)",
+        help=(
+            "LLM model to use; experimental Codex subscription models use "
+            "codex:<model-id> (default: gpt-4o-mini)"
+        ),
     )
     parser.add_argument(
         "-w",
@@ -486,7 +489,11 @@ def _handle_run(args: argparse.Namespace) -> None:
         )
         return
 
-    if args.model not in all_supported_models:
+    if args.model.startswith("codex:"):
+        console.print(
+            "[yellow]Using experimental Codex subscription support.[/yellow]"
+        )
+    elif args.model not in all_supported_models:
         console.print(
             f"[yellow]Using custom model ID: {args.model} (not in curated list)[/yellow]"
         )

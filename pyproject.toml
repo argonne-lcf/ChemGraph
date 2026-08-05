@@ -52,6 +52,9 @@ dependencies = [
     ]
 
 [project.optional-dependencies]
+codex = [
+    "openai-codex==0.144.4",
+]
 calculators = [
     "tblite==0.4.0; python_version < '3.13' or platform_system != 'Darwin'",
 ]

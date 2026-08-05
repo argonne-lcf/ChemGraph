@@ -586,14 +586,40 @@ chemgraph -q "Optimize methane" -m groq:openai/gpt-oss-120b
 
 No curated model list is maintained -- any model available on Groq can be used by prefixing it with `groq:`. See the [Groq docs](https://console.groq.com/docs/models) for current models.
 
+#### Experimental Codex subscription support
+
+ChemGraph can use the official Codex Python SDK with an existing ChatGPT-backed
+Codex login. Install the optional extra and authenticate with ChatGPT:
+
+```bash
+pip install "chemgraph[codex]"
+codex login
+```
+
+Then prefix a model available to your Codex account with `codex:`:
+
+```bash
+chemgraph \
+  --model "codex:<codex-model-id>" \
+  --workflow single_agent \
+  --query "What is the SMILES string for aspirin?"
+```
+
+This experimental provider supports only `single_agent`. It does not use
+`OPENAI_API_KEY` or the OpenAI Platform API, and it rejects Codex sessions that
+are authenticated with an API key. See
+[Experimental Codex subscription support](docs/codex_subscription.md) for
+details.
+
 #### LLM Provider Prefixes
 
 For third-party providers that share model names with other services, ChemGraph uses a prefix convention to route models unambiguously:
 
-| Prefix  | Provider                    | Auth Env Var     | Example                               |
-| ------- | --------------------------- | ---------------- | ------------------------------------- |
-| `argo:` | Argo API (Argonne internal) | `OPENAI_API_KEY` | `argo:gpt-4o`, `argo:claude-sonnet-4` |
-| `groq:` | Groq Cloud                  | `GROQ_API_KEY`   | `groq:llama-3.3-70b-versatile`        |
+| Prefix  | Provider                    | Authentication       | Example                               |
+| ------- | --------------------------- | -------------------- | ------------------------------------- |
+| `codex:` | Codex SDK (experimental)   | ChatGPT Codex login  | `codex:<codex-model-id>`              |
+| `argo:` | Argo API (Argonne internal) | `OPENAI_API_KEY`     | `argo:gpt-4o`, `argo:claude-sonnet-4` |
+| `groq:` | Groq Cloud                  | `GROQ_API_KEY`       | `groq:llama-3.3-70b-versatile`        |
 
 Direct model names (no prefix) are used for:
 
@@ -697,6 +723,9 @@ chemgraph -q "Your query" -m meta-llama/Meta-Llama-3.1-70B-Instruct
 
 # Groq models (groq: prefix, any Groq model)
 chemgraph -q "Your query" -m groq:llama-3.3-70b-versatile
+
+# Codex SDK with a ChatGPT subscription login (experimental)
+chemgraph -q "Your query" -m "codex:<codex-model-id>" -w single_agent
 
 # Local models (Ollama)
 chemgraph -q "Your query" -m llama3.2
