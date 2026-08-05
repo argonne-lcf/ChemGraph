@@ -70,6 +70,37 @@ file transfer. These are deployment building blocks, not zero-configuration
 public services. They can require ALCF filesystems, scheduler configuration,
 Parsl, external executables, and credentials.
 
+### Multiwfn
+
+Use the Linux no-GUI Multiwfn distribution for unattended or HPC-node runs.
+Configure the executable before starting the dedicated server:
+
+```bash
+export MULTIWFN_EXE=/path/to/Multiwfn_3.8_bin_Linux_noGUI/Multiwfn
+export MULTIWFN_HOME=/path/to/Multiwfn_3.8_bin_Linux_noGUI
+python -m chemgraph.mcp.multiwfn_mcp
+```
+
+`MULTIWFN_HOME` is optional and defaults to the executable's directory. The
+tool accepts exact, pre-validated menu responses rather than a
+natural-language task:
+
+```json
+{
+  "params": {
+    "input_file": "/data/water.fchk",
+    "menu_inputs": ["-10"],
+    "timeout_s": 600
+  }
+}
+```
+
+Use an empty string for pressing Enter, and include the responses needed to
+leave submenus and exit cleanly. Each call writes its menu input, complete
+stdout and stderr logs, and generated artifacts to a unique directory under
+`CHEMGRAPH_LOG_DIR`. The same runner is available to custom graphs as
+`chemgraph.tools.multiwfn_tools.run_multiwfn`.
+
 Start from the [general examples](https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_example),
 [Parsl example](https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_parsl_example),
 or [XANES examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/xanes_mcp).

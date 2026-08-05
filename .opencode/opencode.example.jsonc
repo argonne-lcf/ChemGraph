@@ -34,6 +34,24 @@
 
     // ── Additional MCP servers (uncomment to enable) ────────────────────
     //
+    // Multiwfn wavefunction analysis (exact batch menu sequences)
+    // Requires: Linux no-GUI Multiwfn distribution
+    //
+    // "chemgraph-multiwfn": {
+    //   "type": "local",
+    //   "command": [
+    //     "{env:CHEMGRAPH_PYTHON}",
+    //     "-m",
+    //     "chemgraph.mcp.multiwfn_mcp"
+    //   ],
+    //   "enabled": true,
+    //   "environment": {
+    //     "CHEMGRAPH_LOG_DIR": "./chemgraph_mcp_logs",
+    //     "MULTIWFN_EXE": "{env:MULTIWFN_EXE}",
+    //     "MULTIWFN_HOME": "{env:MULTIWFN_HOME}"
+    //   }
+    // },
+    //
     // MACE + Parsl (HPC ensemble calculations)
     // Requires: parsl, mace-torch, HPC environment
     //
