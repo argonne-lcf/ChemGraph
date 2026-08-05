@@ -22,14 +22,22 @@ EXAMPLES_ROOT_ENV = 'CHEMGRAPH_EXAMPLES_ROOT'
 
 MOF_CRUX_AURORA = 'mof-crux-aurora'
 MOF_CRUX_AURORA_MOCK = 'mof-crux-aurora-mock'
+MOF_CRUX_AURORA_CODEX = 'mof-crux-aurora-codex'
 
 CAMPAIGNS = {
     'mof-crux-aurora': f'{MOF_CRUX_AURORA}/campaign.jsonc',
     'mof-crux-aurora-mock': f'{MOF_CRUX_AURORA_MOCK}/campaign.jsonc',
+    'mof-crux-aurora-codex': f'{MOF_CRUX_AURORA_CODEX}/campaign.jsonc',
 }
 
 LM_CONFIG_TEMPLATES = {
     'argo-gpt5mini-federated-chat': f'{MOF_CRUX_AURORA}/lm_config.json',
+    # Codex subscription path. No base_url / api_key -- the openai-codex
+    # SDK reads its own session tokens from ~/.codex/ (per-user-per-HPC).
+    # Model must be one of the IDs returned by ``Codex().models()`` on
+    # the operator's account (ChatGPT Plus gets gpt-5.6-{sol,terra,luna},
+    # gpt-5.5, gpt-5.4[-mini]).
+    'codex-gpt5.6-luna': f'{MOF_CRUX_AURORA}/lm_config_codex.json',
 }
 
 

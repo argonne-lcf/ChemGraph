@@ -156,6 +156,82 @@ Point the MCP wrapper at it via profile env:
 }
 ```
 
+### Codex ChatGPT subscription (alternative to argo-shim)
+
+If you'd rather skip Argo entirely and run every agent on a Codex
+subscription (ChatGPT Plus / Team / Enterprise), see the sibling
+campaign `mof-crux-aurora-codex`. Same pipeline, different LM backend.
+
+Setup, once per operator per HPC (Codex tokens don't cross machines
+until you scp them):
+
+1. **Laptop:**
+
+   ```bash
+   pip install "openai-codex==0.144.4"           # SDK + native binary
+   # or via chemgraph[codex] extra once the feature branch lands
+   ln -sf /path/to/site-packages/codex_cli_bin/bin/codex $VENV/bin/codex
+   codex login                                    # browser flow, sign in with ChatGPT
+   codex login status                             # expect: "Logged in using ChatGPT"
+   ```
+
+2. **List models your account gets** (Plus tier is restricted to
+   Codex-branded models; API-only names like `gpt-4o` are rejected):
+
+   ```bash
+   python -c "
+   from openai_codex import Codex, CodexConfig
+   import tempfile
+   with tempfile.TemporaryDirectory() as tmp:
+       with Codex(config=CodexConfig(cwd=tmp)) as c:
+           for m in c.models().data:
+               print(f'  {m.id}  ({m.display_name})')
+   "
+   ```
+
+   Typical Plus output: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`,
+   `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`.
+
+3. **Copy the token cache to both HPCs** (the SDK reads
+   `~/.codex/session.json`; compute nodes don't have browsers so the
+   token has to be delivered as a file):
+
+   ```bash
+   ssh crux mkdir -p ~/.codex
+   scp ~/.codex/*.json crux:~/.codex/
+   ssh aurora mkdir -p ~/.codex
+   scp ~/.codex/*.json aurora:~/.codex/
+   ```
+
+   The `openai-codex==0.144.4` package must also be installed in the
+   HPC venvs. Refresh (rerun `codex login` + rescp) whenever the
+   session expires -- typical ChatGPT sessions last days to weeks.
+
+4. **Launch with `--lm-connect none`** so the dashboard skips its
+   argo-shim probe and reverse-tunnel setup:
+
+   ```bash
+   swarm dashboard -- "$RUN_ID" \
+     --system crux,aurora --enable-launch-buttons \
+     --lm-connect none \
+     --bundle-root "/eagle/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph" \
+     --project "${ALCF_PROJECT}"
+   ```
+
+   Then in the canvas pick the `mof-crux-aurora-codex` campaign, launch
+   both sites, inject the same kickoff JSON as the Argo variant.
+
+Model choice: `mof-crux-aurora-codex` defaults to `codex:gpt-5.6-luna`
+(fast + affordable) via `lm_config_template: codex-gpt5.6-luna`. Edit
+`examples/campaigns/mof-crux-aurora/lm_config_codex.json` to swap in
+another Codex-branded model.
+
+Known limits: (1) one ChatGPT seat means both HPC agents authenticate
+as the same user simultaneously; OpenAI's abuse detection has not been
+observed to flag this at demo-scale but is untested at higher parallel
+load. (2) token expiry is silent -- if a run hangs on the first LM
+call, rerun `codex login` on your laptop + rescp.
+
 ### Argo-shim (laptop)
 
 `swarm dashboard` needs a local `argo-shim` on your laptop at

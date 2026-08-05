@@ -195,11 +195,12 @@ class ChemGraph:
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
     ):
-        if model_name.startswith("codex:") and workflow_type != "single_agent":
-            raise ValueError(
-                "Experimental codex: models currently support only the "
-                "single_agent workflow."
-            )
+        # Codex + multi_agent verified working with ChatGPT Plus tier
+        # (gpt-5.6-luna, planner_executor loop completes with a valid
+        # PlannerResponse). Guard removed so the Academy federated demo
+        # can run every agent on a Codex subscription without Argo.
+        # If a specific engine turns out to be incompatible in practice,
+        # narrow the check to (engine, model) instead of blanket.
         reasoning_effort = _resolve_reasoning_effort(model_name, reasoning_effort)
 
         # Always generate a unique identifier for this instance
