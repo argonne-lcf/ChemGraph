@@ -97,6 +97,16 @@ pip install chemgraph[calculators]
 > wheel is available), installing the `calculators` extra may require a local
 > Fortran toolchain.
 
+To install with MACE (`mace_mp`, `mace_off`, `mace_anicc`):
+```bash
+pip install "chemgraph[mace]"
+```
+
+> `mace-torch` is an optional extra. A default installation leaves the MACE
+> calculators unregistered, and requesting `mace_mp` then raises a pydantic
+> `ValidationError`, a `ValueError` subclass, listing the calculators the
+> environment does offer.
+
 **Install from Source (Alternative Methods)**
 
 If you need to install from source for the latest version:
@@ -171,22 +181,19 @@ If you need to install from source for the latest version:
 
 **Optional: Install with UMA support**
 
-> ⚠️ **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 
-> 
-> **For PyPI installations**, you can try:
+> ⚠️ **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with `mace-torch` (which pins `e3nn==0.4.4`).
+>
+> MACE is an optional extra, so a plain install pulls in neither `mace-torch`
+> nor its `e3nn==0.4.4` pin, which is what blocked UMA. Try:
 > ```bash
-> pip install chemgraph[uma]
+> pip install "chemgraph[uma]"     # or: pip install -e ".[uma]" from source
 > ```
-> However, this may fail due to the e3nn version conflict. If it does, you'll need to install from source using the workaround below.
+> If resolution still fails, install UMA in a dedicated environment. The `uma`
+> extra pins `fairchem-core==2.3.0`, which has no Python 3.13 build.
+> Install MACE on its own with `pip install "chemgraph[mace]"`. Requesting both
+> in one environment (`".[mace,uma]"`) hits the `e3nn` conflict.
 >
-> **For source installations**, if you need to install UMA support in an environment where `mace-torch` might cause this conflict, you can try the following workaround:
-> 1. **Temporarily modify `pyproject.toml`**: Open the `pyproject.toml` file in the root of the ChemGraph project.
-> 2. Find the line containing `"mace-torch",` in the `dependencies` list.
-> 3. Comment out this line by adding a `#` at the beginning (e.g., `#    "mace-torch",`).
-> 4. **Install UMA extras**: Run `pip install -e ".[uma]"`.
-> 5. **(Optional) Restore `pyproject.toml`**: After installation, you can uncomment the `mace-torch` line if you still need it for other purposes in the same environment. Be aware that `mace-torch` might not function correctly due to the `e3nn` version mismatch (`e3nn>=0.5` will be present for UMA).
->
-> **The most robust solution for using both MACE and UMA with their correct dependencies is to create separate Conda environments, as highlighted in the "Note on Compatibility" above.**
+> **Separate Conda environments give both MACE and UMA their correct dependencies, as highlighted in the "Note on Compatibility" above.**
 
 > **Important for UMA Model Access:** The `facebook/UMA` model is a gated model on Hugging Face. To use it, you must:
 > 1. Visit the [facebook/UMA model page](https://huggingface.co/facebook/UMA) on Hugging Face.

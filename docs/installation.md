@@ -49,9 +49,18 @@ source chemgraph-env/bin/activate  # Windows: .\chemgraph-env\Scripts\activate
 uv pip install -e .
 ```
 
+## Optional MACE install
+
+MACE is an optional extra, so a plain install leaves `mace-torch` out and the
+`mace_mp`, `mace_off`, and `mace_anicc` calculators stay unregistered:
+
+```bash
+pip install "chemgraph[mace]"     # or: pip install -e ".[mace]" from source
+```
+
 ## Optional UMA install
 
-`uma` and `mace-torch` can conflict through different `e3nn` requirements.
+`uma` and `mace` can conflict through different `e3nn` requirements.
 Use separate environments if you need both MACE and UMA.
 
 PyPI attempt:

@@ -48,9 +48,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .
+        # MACE is an optional extra; install it here so the mace_mp tests run
+        # in CI. Without it they skip.
+        pip install -e ".[mace]"
         python -m pip check
-            
+
     - name: Run tests
       run: |
         python -m pytest tests/ -v -k "not tblite"

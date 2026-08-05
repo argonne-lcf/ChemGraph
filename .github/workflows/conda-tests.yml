@@ -63,7 +63,8 @@ jobs:
     - name: Install ChemGraph with MACE support
       shell: bash -l {0}
       run: |
-        pip install --no-cache-dir -e .
+        # MACE is an optional extra, and this job exists to exercise it.
+        pip install --no-cache-dir -e ".[mace]"
         pip install --no-cache-dir pytest
     
     - name: Run tests with MACE
@@ -107,18 +108,10 @@ jobs:
   #     run: |
   #       conda install -c conda-forge nwchem -y
 
-  #   - name: Temporarily modify pyproject.toml for UMA e3nn compatibility
-  #     shell: bash -l {0}
-  #     run: |
-  #       echo "Backing up pyproject.toml to pyproject.toml.original..."
-  #       cp pyproject.toml pyproject.toml.original
-  #       echo "Commenting out mace-torch from pyproject.toml..."
-  #       # This sed command finds lines starting with optional whitespace,
-  #       # then "mace-torch>=0.3.13", and prepends a '#' to the matched line.
-  #       sed -i 's/^[[:space:]]*"mace-torch>=0.3.13",/#&/' pyproject.toml
-  #       echo "pyproject.toml after modification:"
-  #       cat pyproject.toml
-    
+  #   # mace-torch is an optional extra, so a plain install brings in neither
+  #   # it nor the old e3nn, and the pyproject edit this job used to perform
+  #   # is no longer needed.
+
   #   - name: Install ChemGraph with UMA support
   #     shell: bash -l {0}
   #     env:
@@ -145,14 +138,4 @@ jobs:
   #     run: |
   #       python -m pytest tests/ -v 
     
-  #   - name: Restore pyproject.toml
-  #     shell: bash -l {0}
-  #     if: always() # Ensures this step runs even if previous steps fail
-  #     run: |
-  #       echo "Restoring pyproject.toml from pyproject.toml.original..."
-  #       if [ -f pyproject.toml.original ]; then
-  #         mv pyproject.toml.original pyproject.toml
-  #         echo "pyproject.toml restored."
-  #       else
-  #         echo "Backup pyproject.toml.original not found. Cannot restore."
-  #       fi 
+ 

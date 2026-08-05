@@ -19,8 +19,8 @@ pip install -e .                                  # core
 pip install -e ".[academy,parsl,globus_compute]"  # to run the HPC/Academy tests
 ```
 
-Optional extras: `calculators`, `uma`, `ui`, `parsl`, `ensemble_launcher`,
-`globus_compute`, `academy`, `xanes`, `rag`.
+Optional extras: `calculators`, `mace`, `uma`, `ui`, `parsl`,
+`ensemble_launcher`, `globus_compute`, `academy`, `xanes`, `rag`, `docking`.
 
 ## Build / test / lint commands
 

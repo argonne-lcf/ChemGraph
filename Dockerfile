@@ -23,8 +23,9 @@ RUN conda install -y -c conda-forge \
     nwchem \
     && conda clean -afy
 
-# Install ChemGraph and UI runtime
-RUN pip install --no-cache-dir . && \
+# Install ChemGraph and UI runtime. MACE is an optional extra, requested here
+# so the image keeps offering the mace_mp calculator the docs demonstrate.
+RUN pip install --no-cache-dir ".[mace]" && \
     pip install --no-cache-dir jupyterlab
 
 # Install Python tblite from source with conservative flags to avoid ABI/symbol issues on ARM.

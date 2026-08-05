@@ -37,7 +37,6 @@ dependencies = [
     "ase",
     "rdkit",
     "pymatgen",
-    "mace-torch",
     "globus_sdk",
     "streamlit==1.48.1",
     "stmol==0.0.9",
@@ -54,6 +53,9 @@ dependencies = [
 [project.optional-dependencies]
 calculators = [
     "tblite==0.4.0; python_version < '3.13' or platform_system != 'Darwin'",
+]
+mace = [
+    "mace-torch",
 ]
 uma = [
     "fairchem-core==2.3.0",

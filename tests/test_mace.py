@@ -1,4 +1,5 @@
 from pathlib import Path
+import importlib.util
 import json
 import pytest
 from chemgraph.tools.ase_tools import (
@@ -7,6 +8,14 @@ from chemgraph.tools.ase_tools import (
 from chemgraph.schemas.ase_input import ASEInputSchema
 
 TEST_DIR = Path(__file__).parent
+
+# Every test here runs a mace_mp calculation. MaceCalc is unregistered when
+# mace-torch is absent, so the schema fixtures below fail validation at setup.
+# Guard the whole module the way test_calculators.py guards its own
+# engine-specific tests.
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("mace") is None, reason="MACE not installed"
+)
 
 
 @pytest.fixture

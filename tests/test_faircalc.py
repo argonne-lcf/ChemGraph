@@ -22,6 +22,14 @@ if is_fairchem_installed():
     pass
 
 
+# The fixtures below request mace_mp, so these tests need mace-torch as well as
+# fairchem. With fairchem present and mace absent the skipif would let them run
+# and the fixtures would fail schema validation, since MaceCalc is unregistered.
+requires_mace = pytest.mark.skipif(
+    importlib.util.find_spec("mace") is None, reason="MACE not installed"
+)
+
+
 @pytest.fixture
 def base_ase_input():
     """Base fixture for ASE input with common parameters"""
@@ -60,6 +68,7 @@ def thermo_ase_schema(base_ase_input):
     return ASEInputSchema(**input_dict)
 
 
+@requires_mace
 @pytest.mark.skipif(not is_fairchem_installed(), reason="FairChem is not installed")
 def test_run_ase_opt(opt_ase_schema):
     """Test ASE geometry optimization."""
@@ -82,6 +91,7 @@ def test_run_ase_opt(opt_ase_schema):
     assert data["simulation_input"]["driver"] == "opt"
 
 
+@requires_mace
 @pytest.mark.skipif(not is_fairchem_installed(), reason="FairChem is not installed")
 def test_run_ase_vib(vib_ase_schema):
     """Test ASE vibrational analysis."""
@@ -103,6 +113,7 @@ def test_run_ase_vib(vib_ase_schema):
     assert len(data["vibrational_frequencies"]["energies"]) > 0
 
 
+@requires_mace
 @pytest.mark.skipif(not is_fairchem_installed(), reason="FairChem is not installed")
 def test_run_ase_thermo(thermo_ase_schema):
     """Test ASE thermochemistry calculation."""
