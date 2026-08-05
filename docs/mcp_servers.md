@@ -4,6 +4,7 @@
 ## Available servers
 
 - `mcp_tools.py`: general ASE-powered chemistry tools
+- `multiwfn_mcp.py`: scripted Multiwfn wavefunction analyses
 - `mace_mcp_parsl.py`: MACE + Parsl workflows
 - `graspa_mcp_parsl.py`: gRASPA + Parsl workflows
 - `xanes_mcp_parsl.py`: XANES/FDMNES + Parsl workflows
@@ -21,6 +22,49 @@ python -m chemgraph.mcp.mcp_tools
 
 ```bash
 python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
+```
+
+### Enable Multiwfn
+
+Use the Linux no-GUI Multiwfn distribution for unattended or HPC-node runs.
+Configure the executable before starting the dedicated Multiwfn server:
+
+```bash
+export MULTIWFN_EXE=/path/to/Multiwfn_3.8_bin_Linux_noGUI/Multiwfn
+export MULTIWFN_HOME=/path/to/Multiwfn_3.8_bin_Linux_noGUI
+python -m chemgraph.mcp.multiwfn_mcp
+```
+
+`MULTIWFN_HOME` is optional and defaults to the executable's directory. When
+present, its `settings.ini` controls Multiwfn options such as its OpenMP thread
+count. The executable runs in a separate process, while ChemGraph captures its
+screen output so it cannot interfere with MCP's stdio protocol.
+
+The tool requires the exact menu responses rather than a natural-language task.
+For example, an MCP call has the following input shape:
+
+```json
+{
+  "params": {
+    "input_file": "/data/water.fchk",
+    "menu_inputs": ["-10"],
+    "timeout_s": 600
+  }
+}
+```
+
+Each item is one response; use an empty string for pressing Enter. Include the
+responses needed to return from submenus and exit cleanly. Menu numbers vary by
+Multiwfn version, so validate the sequence interactively against the installed
+version first. Each call writes `multiwfn.in`, complete stdout/stderr logs, and
+generated artifacts to a unique directory under `CHEMGRAPH_LOG_DIR`.
+
+The same runner is available as a LangChain tool for custom graphs:
+
+```python
+from chemgraph.tools.multiwfn_tools import run_multiwfn
+
+tools = [run_multiwfn]
 ```
 
 ## Common CLI options
@@ -84,6 +128,7 @@ The example config (`.opencode/opencode.example.jsonc`) includes all servers. En
 | Server name | Module | Tools | Status
 |---|---|---|
 | `chemgraph` | `chemgraph.mcp.mcp_tools` | molecule_name_to_smiles, smiles_to_coordinate_file, run_ase, extract_output_json | Stable
+| `chemgraph-multiwfn` | `chemgraph.mcp.multiwfn_mcp` | scripted Multiwfn analyses | Experimental
 | `chemgraph-mace-parsl` | `chemgraph.mcp.mace_mcp_parsl` | MACE ensemble calculations via Parsl (HPC) | Experimental
 | `chemgraph-graspa-parsl` | `chemgraph.mcp.graspa_mcp_parsl` | gRASPA gas adsorption via Parsl (HPC) | Experimental
 | `chemgraph-xanes-parsl` | `chemgraph.mcp.xanes_mcp_parsl` | XANES/FDMNES ensembles via Parsl (HPC) | Experimental

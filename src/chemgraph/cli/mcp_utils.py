@@ -35,6 +35,9 @@ _FORWARDED_ENV_VARS = (
     # ChemGraph runtime selection
     "CHEMGRAPH_EXECUTION_BACKEND",
     "CHEMGRAPH_LOG_DIR",
+    # Multiwfn local batch execution
+    "MULTIWFN_EXE",
+    "MULTIWFN_HOME",
     # Globus Compute
     "GLOBUS_COMPUTE_ENDPOINT_ID",
     # Globus Transfer
