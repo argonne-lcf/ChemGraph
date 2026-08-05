@@ -250,25 +250,43 @@ def _write_lm_config(
     data = json.loads(template_path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise RuntimeError(f"LM template must contain a JSON object: {template_path}")
-    data["base_url"] = base_url
+
+    # Codex (subscription-backed) does not use base_url/user -- the
+    # openai-codex SDK reads ~/.codex/ session tokens. Detect via the
+    # template's declared model or provider so we don't clobber it
+    # with argo-flavored fields.
+    template_model = data.get("model", "")
+    template_provider = data.get("provider", "")
+    is_codex = (
+        isinstance(template_model, str) and template_model.startswith("codex:")
+    ) or template_provider == "codex_subscription"
+
+    if not is_codex:
+        # argo / openai-compatible path: base_url + user are required.
+        data["base_url"] = base_url
+        if lm_user:
+            data["user"] = lm_user
+        # Refuse to ship a config whose `user` is still the template
+        # placeholder. Argo rejects requests with an unknown user, but
+        # only at first-call time on the compute node, after the whole
+        # daemon + relay stack is already running -- expensive to debug.
+        # Fail here instead, with a message pointing at the fix.
+        if data.get("user") in (None, "", "<argo-user>"):
+            raise RuntimeError(
+                f"lm_config.json was written with user={data.get('user')!r}. "
+                "Pass --lm-user <your-argo-username> or export ARGO_USER "
+                "before launching spawn-site / run-compute."
+            )
+    # Only honor a caller-supplied model override if it's for the SAME
+    # provider family (both codex or neither codex). Otherwise it means
+    # the CLI's argo-defaulted --lm-model would clobber a codex template
+    # (or vice versa), which is never what the operator meant.
     if lm_model:
-        data["model"] = lm_model
-    if lm_user:
-        data["user"] = lm_user
+        override_is_codex = lm_model.startswith("codex:")
+        if override_is_codex == is_codex:
+            data["model"] = lm_model
     if max_tokens is not None:
         data["max_tokens"] = max_tokens
-
-    # Refuse to ship a config whose `user` is still the template
-    # placeholder. Argo rejects requests with an unknown user, but
-    # only at first-call time on the compute node, after the whole
-    # daemon + relay stack is already running -- expensive to debug.
-    # Fail here instead, with a message pointing at the fix.
-    if data.get("user") in (None, "", "<argo-user>"):
-        raise RuntimeError(
-            f"lm_config.json was written with user={data.get('user')!r}. "
-            "Pass --lm-user <your-argo-username> or export ARGO_USER "
-            "before launching spawn-site / run-compute."
-        )
 
     # In federated runs, run_dir is SHARED across sites (via dashboard
     # metadata pointing at the same /eagle path). Each site's compute
