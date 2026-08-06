@@ -6,7 +6,20 @@ path does not use the OpenAI Platform API or `OPENAI_API_KEY`.
 
 ## Install and authenticate
 
-Install the optional dependency:
+### 1. Install the Codex CLI
+
+The `openai-codex` Python package provides the SDK and its internal runtime,
+but it does not install a `codex` command on your shell `PATH`. Follow the
+[official Codex CLI installation guide](https://learn.chatgpt.com/docs/codex/cli),
+then verify that the command is available:
+
+```bash
+codex --version
+```
+
+### 2. Install the ChemGraph Codex extra
+
+For a package installation:
 
 ```bash
 pip install "chemgraph[codex]"
@@ -18,7 +31,9 @@ For an editable source checkout, install the extra into the active environment:
 pip install -e ".[codex]"
 ```
 
-Then authenticate Codex with ChatGPT:
+### 3. Authenticate with ChatGPT
+
+Use the separately installed CLI to authenticate Codex with ChatGPT:
 
 ```bash
 codex login
@@ -61,6 +76,7 @@ agent = ChemGraph(
 - ChemGraph does not start a login flow. Run `codex login` before initializing
   a `codex:` model.
 
-See the official [Codex SDK documentation](https://learn.chatgpt.com/docs/codex-sdk)
-and [authentication guide](https://learn.chatgpt.com/docs/auth) for supported
-Codex login and account behavior.
+See the official [Codex SDK documentation](https://learn.chatgpt.com/docs/codex-sdk),
+[Codex CLI installation guide](https://learn.chatgpt.com/docs/codex/cli), and
+[authentication guide](https://learn.chatgpt.com/docs/auth) for supported
+installation and account behavior.

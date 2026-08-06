@@ -589,7 +589,10 @@ No curated model list is maintained -- any model available on Groq can be used b
 #### Experimental Codex subscription support
 
 ChemGraph can use the official Codex Python SDK with an existing ChatGPT-backed
-Codex login. Install the optional extra and authenticate with ChatGPT:
+Codex login. The Codex CLI is a separate prerequisite; the Python SDK does not
+install the `codex` shell command. Follow the
+[official Codex CLI installation guide](https://learn.chatgpt.com/docs/codex/cli),
+then install the ChemGraph extra and authenticate with ChatGPT:
 
 ```bash
 pip install "chemgraph[codex]"

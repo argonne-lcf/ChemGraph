@@ -322,4 +322,7 @@ def test_codex_install_hint_preserves_extra_name(monkeypatch):
         )
 
     assert agent is None
-    assert "chemgraph[codex]" in capture.get()
+    output = capture.get()
+    assert "Codex CLI separately" in output
+    assert "chemgraph[codex]" in output
+    assert "codex login" in output

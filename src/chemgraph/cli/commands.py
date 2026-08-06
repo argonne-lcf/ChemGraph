@@ -315,8 +315,9 @@ def initialize_agent(
             err_str = str(e).lower()
             if model_name.startswith("codex:"):
                 console.print(
-                    "[dim]Codex models require the optional chemgraph\\[codex] "
-                    "extra and an active ChatGPT login from `codex login`.[/dim]"
+                    "[dim]Install the Codex CLI separately, install the optional "
+                    "chemgraph\\[codex] extra, then run `codex login` and choose "
+                    "ChatGPT authentication.[/dim]"
                 )
             elif "authentication" in err_str or "api" in err_str:
                 console.print(
