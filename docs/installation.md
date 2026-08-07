@@ -15,6 +15,19 @@ To include optional calculator extras (including `tblite`):
 pip install "chemgraph[calculators]"
 ```
 
+To use the experimental Codex subscription provider with an existing ChatGPT
+login, first follow the
+[official Codex CLI installation guide](https://learn.chatgpt.com/docs/codex/cli).
+The Python SDK does not install the `codex` shell command. Then run:
+
+```bash
+pip install "chemgraph[codex]"
+codex login
+```
+
+See [Experimental Codex subscription support](codex_subscription.md) for usage
+and authentication constraints.
+
 !!! warning
     On platforms without a prebuilt `tblite` wheel, installing `calculators` may require a local Fortran toolchain.
 
@@ -28,6 +41,14 @@ cd ChemGraph
 python -m venv chemgraph-env
 source chemgraph-env/bin/activate  # Windows: .\chemgraph-env\Scripts\activate
 pip install -e .
+```
+
+For experimental Codex subscription support, install the Codex CLI as shown
+above, then include the optional extra in the editable install:
+
+```bash
+pip install -e ".[codex]"
+codex login
 ```
 
 ### conda

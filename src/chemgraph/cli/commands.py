@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from typing import Any, Dict, Optional
 
 from rich.panel import Panel
+from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Prompt
 from rich.table import Table
@@ -93,6 +94,11 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
         required credentials are available or not required.
     """
     model_lower = model_name.lower()
+
+    # Codex subscription models reuse the user's ChatGPT-backed Codex login.
+    # They must never fall through to OpenAI Platform API-key validation.
+    if model_name.startswith("codex:"):
+        return True, ""
 
     # OpenAI models (including GPT family, o-series, and Argo OpenAI)
     if (
@@ -304,10 +310,16 @@ def initialize_agent(
             return None
         except Exception as e:
             progress.update(task, description="[red]Agent initialization failed!")
-            console.print(f"[red]Error initializing agent: {e}[/red]")
+            console.print(f"[red]Error initializing agent: {escape(str(e))}[/red]")
 
             err_str = str(e).lower()
-            if "authentication" in err_str or "api" in err_str:
+            if model_name.startswith("codex:"):
+                console.print(
+                    "[dim]Install the Codex CLI separately, install the optional "
+                    "chemgraph\\[codex] extra, then run `codex login` and choose "
+                    "ChatGPT authentication.[/dim]"
+                )
+            elif "authentication" in err_str or "api" in err_str:
                 console.print(
                     "[dim]This looks like an API key issue. Check your credentials.[/dim]"
                 )

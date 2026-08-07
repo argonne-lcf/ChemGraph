@@ -50,6 +50,7 @@ plugins:
 nav:
   - Overview: index.md
   - Installation: installation.md
+  - Experimental Codex Support: codex_subscription.md
   - Example Usage: example_usage.md
   - Streamlit Web Interface: streamlit_web_interface.md
   - MCP Servers: mcp_servers.md
