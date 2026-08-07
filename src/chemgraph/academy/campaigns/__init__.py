@@ -22,12 +22,10 @@ EXAMPLES_ROOT_ENV = 'CHEMGRAPH_EXAMPLES_ROOT'
 
 MOF_CRUX_AURORA = 'mof-crux-aurora'
 MOF_CRUX_AURORA_MOCK = 'mof-crux-aurora-mock'
-MOF_CRUX_AURORA_CODEX = 'mof-crux-aurora-codex'
 
 CAMPAIGNS = {
     'mof-crux-aurora': f'{MOF_CRUX_AURORA}/campaign.jsonc',
     'mof-crux-aurora-mock': f'{MOF_CRUX_AURORA_MOCK}/campaign.jsonc',
-    'mof-crux-aurora-codex': f'{MOF_CRUX_AURORA_CODEX}/campaign.jsonc',
 }
 
 LM_CONFIG_TEMPLATES = {
