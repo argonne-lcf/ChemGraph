@@ -15,6 +15,7 @@ from chemgraph.tools.cheminformatics_tools import (
 )
 from chemgraph.tools.report_tools import generate_html
 from chemgraph.tools.generic_tools import calculator, ask_human
+from chemgraph.tools.docking_tools import run_docking
 from chemgraph.prompt.single_agent_prompt import (
     single_agent_prompt,
     formatter_prompt,
@@ -306,6 +307,7 @@ def ChemGraphAgent(
             molecule_name_to_smiles,
             extract_output_json,
             calculator,
+            run_docking,
         ]
         if human_supervised:
             tools.append(ask_human)
@@ -498,6 +500,7 @@ def construct_single_agent_graph(
                 run_ase,
                 extract_output_json,
                 calculator,
+                run_docking,
             ]
             if human_supervised:
                 tools.append(ask_human)
