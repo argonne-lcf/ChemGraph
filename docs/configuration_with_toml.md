@@ -12,7 +12,7 @@ Create a `config.toml` file in your project directory to configure ChemGraph beh
 [general]
 # Default model to use for queries
 model = "gpt-4o-mini"
-# Workflow type: single_agent, multi_agent, python_relp, graspa, mock_agent
+# Workflow type: single_agent, multi_agent, python_relp, graspa, molecular_docking, mock_agent
 # Alias accepted by CLI/UI: python_repl -> python_relp
 workflow = "single_agent"
 # Output format: state, last_message
@@ -334,7 +334,18 @@ chemgraph -q "Write analysis code" -w python_repl
 
 # gRASPA - molecular simulation
 chemgraph -q "Run adsorption simulation" -w graspa
+
+# Molecular docking - dock a candidate into a receptor (AutoDock Vina)
+chemgraph -q "Dock aspirin into 'receptor.pdbqt'" -w molecular_docking
 ```
+
+!!! note "Molecular docking workflow requirements"
+    The `molecular_docking` workflow needs the optional docking dependency (`pip
+    install -e ".[docking]"` for Meeko) plus AutoDock Vina from conda-forge
+    (`conda install -c conda-forge vina`). The candidate may be a SMILES, a
+    molecule name, or a PubChem CID; the receptor is a prepared rigid receptor
+    `.pdbqt`, or a SMILES/name/CID for a small-molecule target. The search box is
+    detected automatically.
 
 **Output Formats:**
 

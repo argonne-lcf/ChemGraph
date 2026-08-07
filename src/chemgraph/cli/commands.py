@@ -49,6 +49,7 @@ ALL_WORKFLOW_TYPES = [
     "graspa_mcp",
     "rag_agent",
     "single_agent_xanes",
+    "molecular_docking",
 ]
 
 # Common aliases so users can type the "obvious" name.

@@ -11,6 +11,7 @@ WORKFLOWS = [
     "single_agent_mcp",
     "graspa_mcp",
     "single_agent_xanes",
+    "molecular_docking",
 ]
 
 
@@ -32,6 +33,7 @@ def test_constructor_is_called(monkeypatch, workflow_type):
         "single_agent_mcp": "construct_single_agent_mcp_graph",
         "graspa_mcp": "construct_graspa_mcp_graph",
         "single_agent_xanes": "construct_single_agent_xanes_graph",
+        "molecular_docking": "construct_molecular_docking_graph",
     }[workflow_type]
 
     monkeypatch.setattr(

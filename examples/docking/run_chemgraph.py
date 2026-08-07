@@ -1,9 +1,9 @@
 """Run molecular docking through the ChemGraph agent.
 
-Docks a small-molecule candidate into a receptor with AutoDock Vina, driven by the
-ChemGraph single-agent graph bound to the ``run_docking`` tool and a docking-specific
-prompt. The candidate can be a SMILES, a molecule name, or a PubChem CID; the receptor
-here is the prepared vancomycin PDBQT that ships alongside this example.
+Docks a small-molecule candidate into a receptor with AutoDock Vina using the
+``molecular_docking`` workflow, which binds the docking tools and prompt for you. The
+candidate can be a SMILES, a molecule name, or a PubChem CID; the receptor here is the
+prepared vancomycin PDBQT that ships alongside this example.
 
 Prerequisites:
   - An LLM provider key (e.g. OPENAI_API_KEY)
@@ -20,8 +20,6 @@ import asyncio
 import os
 
 from chemgraph.agent.llm_agent import ChemGraph
-from chemgraph.prompt.docking_prompt import docking_prompt
-from chemgraph.tools.docking_tools import run_docking
 
 MODEL_NAME = "gpt-4o-mini"
 
@@ -38,9 +36,7 @@ PROMPT = (
 async def main():
     cg = ChemGraph(
         model_name=MODEL_NAME,
-        workflow_type="single_agent",
-        system_prompt=docking_prompt,
-        tools=[run_docking],
+        workflow_type="molecular_docking",
     )
     print(f"Model: {MODEL_NAME}")
     print(f"Prompt: {PROMPT}\n")

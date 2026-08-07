@@ -60,7 +60,9 @@ from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
 from chemgraph.graphs.rag_agent import construct_rag_agent_graph
 from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
+from chemgraph.graphs.molecular_docking import construct_molecular_docking_graph
 from chemgraph.prompt.rag_prompt import rag_agent_prompt
+from chemgraph.prompt.molecular_docking_prompt import molecular_docking_prompt
 from chemgraph.prompt.xanes_prompt import (
     xanes_single_agent_prompt as default_xanes_single_agent_prompt,
     xanes_formatter_prompt as default_xanes_formatter_prompt,
@@ -395,6 +397,7 @@ class ChemGraph:
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
             "rag_agent": {"constructor": construct_rag_agent_graph},
             "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
+            "molecular_docking": {"constructor": construct_molecular_docking_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -474,6 +477,19 @@ class ChemGraph:
                 if self.formatter_prompt != default_formatter_prompt
                 else default_xanes_formatter_prompt,
                 tools=self.tools,
+            )
+        elif self.workflow_type == "molecular_docking":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm,
+                system_prompt=self.system_prompt
+                if not prompt_is_default
+                else molecular_docking_prompt,
+                structured_output=self.structured_output,
+                formatter_prompt=self.formatter_prompt,
+                tools=self.tools,
+                max_retries=self.max_retries,
+                human_supervised=self.human_supervised,
+                terminal_tool_names=self.terminal_tool_names,
             )
 
     def visualize(self):
