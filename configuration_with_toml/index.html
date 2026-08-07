@@ -1675,7 +1675,7 @@
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">[general]</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># Default model to use for queries</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">model</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;gpt-4o-mini&quot;</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Workflow type: single_agent, multi_agent, python_relp, graspa, mock_agent</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Workflow type: single_agent, multi_agent, python_relp, graspa, molecular_docking, mock_agent</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># Alias accepted by CLI/UI: python_repl -&gt; python_relp</span>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">workflow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;single_agent&quot;</span>
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># Output format: state, last_message</span>
@@ -2060,7 +2060,19 @@ uses a prefix convention to route models unambiguously:</p>
 </span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>
 </span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="c1"># gRASPA - molecular simulation</span>
 </span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Run adsorption simulation&quot;</span><span class="w"> </span>-w<span class="w"> </span>graspa
+</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>
+</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="c1"># Molecular docking - dock a candidate into a receptor (AutoDock Vina)</span>
+</span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Dock aspirin into &#39;receptor.pdbqt&#39;&quot;</span><span class="w"> </span>-w<span class="w"> </span>molecular_docking
 </span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Molecular docking workflow requirements</p>
+<p>The <code>molecular_docking</code> workflow needs the optional docking dependency (<code>pip
+install -e ".[docking]"</code> for Meeko) plus AutoDock Vina from conda-forge
+(<code>conda install -c conda-forge vina</code>). The candidate may be a SMILES, a
+molecule name, or a PubChem CID; the receptor is a prepared rigid receptor
+<code>.pdbqt</code>, or a SMILES/name/CID for a small-molecule target. The search box is
+detected automatically.</p>
+</div>
 <p><strong>Output Formats:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Full state output (default)</span>
 </span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>chemgraph<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="w"> </span>-o<span class="w"> </span>state
