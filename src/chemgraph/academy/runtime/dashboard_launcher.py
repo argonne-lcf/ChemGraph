@@ -121,7 +121,20 @@ def parse_args() -> argparse.Namespace:
             "view. Built-ins: " + ", ".join(list_builtin_system_profiles())
         ),
     )
-    a("--lm-connect", choices=("mac-argo-relay", "direct"), default="mac-argo-relay")
+    a(
+        "--lm-connect",
+        choices=("mac-argo-relay", "direct", "none"),
+        default="mac-argo-relay",
+        help=(
+            "mac-argo-relay: expect a local argo-shim on this laptop and "
+            "open reverse tunnels so compute nodes reach it. "
+            "direct: compute nodes hit --lm-base-url over public internet "
+            "(needs the compute node to have outbound access). "
+            "none: agents supply their own LM connection out-of-band "
+            "(e.g. a Codex subscription reading ~/.codex/); dashboard "
+            "skips both the argo-shim probe and the reverse-tunnel setup."
+        ),
+    )
     a("--lm-base-url")
     a("--remote-host")
     a("--ssh-control-path")
@@ -371,12 +384,19 @@ def _setup_site(
         relay_host = wait_relay(profile, remote_host, control_path, relay_port, site.relay_process, relay_log)
         site.relay_host = relay_host
 
-    lm_base_url = (
-        f"http://{relay_host}:{relay_port}/argoapi/v1"
-        if relay_host else str(args.lm_base_url)
-    )
+    if relay_host:
+        lm_base_url = f"http://{relay_host}:{relay_port}/argoapi/v1"
+    elif args.lm_connect == "none":
+        # Agents bring their own LM (e.g. Codex reading ~/.codex/). No
+        # base_url required or meaningful; agents ignore it entirely.
+        lm_base_url = ""
+    else:
+        lm_base_url = str(args.lm_base_url)
     site.lm_base_url = lm_base_url
-    print(f"[{profile.name}] Compute-node LM URL: {lm_base_url}", flush=True)
+    if lm_base_url:
+        print(f"[{profile.name}] Compute-node LM URL: {lm_base_url}", flush=True)
+    else:
+        print(f"[{profile.name}] LM connect mode 'none' -- agents supply their own LM (e.g. Codex).", flush=True)
 
     # Dashboard metadata is site-invariant infrastructure (relay URL,
     # workspace paths, remote_run_dir). The campaign is runtime-

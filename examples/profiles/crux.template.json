@@ -6,15 +6,13 @@
   "run_root": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/runs",
   "relay_host_file": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/uan-relay-18187-crux.host",
   "relay_port": 18187,
-  "venv_python": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/venvs/academy-swarm/bin/python",
+  "venv_python": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/venvs/academy-dev/bin/python",
   "redis_bin_dir": "/eagle/${ALCF_PROJECT}/${ALCF_USER}/tools/redis-crux/bin",
   "redis_port": 6392,
   "redis_bind": "0.0.0.0",
   "redis_protected_mode": "no",
   "mpiexec": "mpiexec",
-  "pythonpath_entries": [
-    "/eagle/${ALCF_PROJECT}/${ALCF_USER}/ChemGraph-argonne/src"
-  ],
+  "pythonpath_entries": [],
   "path_entries": [
     "/eagle/${ALCF_PROJECT}/${ALCF_USER}/tools/redis-crux/bin",
     "/eagle/${ALCF_PROJECT}/${ALCF_USER}/bin"

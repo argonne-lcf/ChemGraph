@@ -30,6 +30,12 @@ CAMPAIGNS = {
 
 LM_CONFIG_TEMPLATES = {
     'argo-gpt5mini-federated-chat': f'{MOF_CRUX_AURORA}/lm_config.json',
+    # Codex subscription path. No base_url / api_key -- the openai-codex
+    # SDK reads its own session tokens from ~/.codex/ (per-user-per-HPC).
+    # Model must be one of the IDs returned by ``Codex().models()`` on
+    # the operator's account (ChatGPT Plus gets gpt-5.6-{sol,terra,luna},
+    # gpt-5.5, gpt-5.4[-mini]).
+    'codex-gpt5.6-luna': f'{MOF_CRUX_AURORA}/lm_config_codex.json',
 }
 
 
@@ -129,6 +135,28 @@ def resolve_campaign(path_or_name: str | Path) -> Path:
         for root in candidate_roots:
             user_copy = root / value / 'campaign.jsonc'
             if user_copy.exists():
+                # Warn if a user-copy is silently overriding a newer
+                # shipped example. Bit us hard debugging a stale
+                # user-copies dir on Crux that pinned MCP subprocess
+                # commands to venv paths that no longer existed --
+                # everyone else got what looked like a mysterious
+                # ModuleNotFoundError.
+                shipped = _resolve_campaign_asset(path_or_name, CAMPAIGNS)
+                if shipped.exists() and shipped != user_copy:
+                    try:
+                        shipped_mtime = shipped.stat().st_mtime
+                        user_mtime = user_copy.stat().st_mtime
+                        if shipped_mtime > user_mtime:
+                            import logging
+                            logging.getLogger(__name__).warning(
+                                "Using user-copy campaign %s (mtime %s), but "
+                                "shipped example at %s is newer (mtime %s). "
+                                "Delete the user-copy to pick up the shipped "
+                                "version.",
+                                user_copy, shipped_mtime, shipped, user_mtime,
+                            )
+                    except OSError:
+                        pass
                 return user_copy.resolve()
     return _resolve_campaign_asset(path_or_name, CAMPAIGNS)
 

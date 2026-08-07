@@ -88,9 +88,11 @@ def _from_mapping(data: Mapping[str, Any]) -> LLMSettings:
         raise ValueError("LM config requires a non-empty 'model' field")
 
     provider = data.get("provider")
-    if provider is not None and provider != "openai_compatible_tools":
+    _ALLOWED_PROVIDERS = {"openai_compatible_tools", "codex_subscription"}
+    if provider is not None and provider not in _ALLOWED_PROVIDERS:
         raise ValueError(
-            "LM config 'provider' must be 'openai_compatible_tools' or absent",
+            f"LM config 'provider' must be one of {sorted(_ALLOWED_PROVIDERS)} "
+            "or absent",
         )
 
     api_key = data.get("api_key")
@@ -99,6 +101,8 @@ def _from_mapping(data: Mapping[str, Any]) -> LLMSettings:
             "openai_compatible_tools provider requires api_key "
             "(use 'dummy' for Argo shim routes that ignore auth)",
         )
+    # codex_subscription intentionally has no api_key check -- the
+    # openai-codex SDK reads its own ~/.codex/ session tokens.
 
     return LLMSettings(
         model=str(model),
