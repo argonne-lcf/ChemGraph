@@ -1,12 +1,17 @@
 # Molecular docking with ChemGraph
 
-Runs the `run_docking` tool (AutoDock Vina) through the ChemGraph **single-agent**
-graph with a docking-specific prompt — no dedicated graph or workflow needed. The
-agent takes a candidate (SMILES / name / PubChem CID) and a receptor, and returns the
-predicted binding affinity and poses.
+Runs the AutoDock Vina docking tool through the ChemGraph **`molecular_docking`**
+workflow. The agent takes a candidate (SMILES / name / PubChem CID) and a receptor,
+and returns the predicted binding affinity and poses.
+
+You can also run it straight from the CLI:
+```bash
+chemgraph -q "Dock aspirin into 'vancomycin_receptor.pdbqt'" -w molecular_docking
+```
+or pick **molecular_docking** as the workflow in the Streamlit UI (`streamlit run src/ui/app.py`).
 
 ## What's here
-- `run_chemgraph.py` — binds `run_docking` + `docking_prompt` to the single-agent graph and docks a candidate into the receptor.
+- `run_chemgraph.py` — runs the `molecular_docking` workflow to dock a candidate into the receptor.
 - `vancomycin_receptor.pdbqt` — a prepared rigid receptor: **vancomycin (chain A of RCSB PDB [1FVM](https://www.rcsb.org/structure/1FVM))**, in PDBQT format (coordinates + Gasteiger charges + AutoDock atom types). PDB data is public domain.
 
 ## Setup

@@ -31,12 +31,16 @@ def test_mock_docking_shape():
     assert isinstance(res["best_affinity_kcal_mol"], float)
 
 
-def test_single_agent_binds_run_docking():
-    """The single-agent graph builds with run_docking bound (no LLM calls)."""
-    from chemgraph.graphs.single_agent import construct_single_agent_graph
+def test_molecular_docking_graph_builds():
+    """The molecular_docking graph builds with docking tools by default (no LLM calls)."""
+    from chemgraph.graphs.molecular_docking import (
+        DEFAULT_DOCKING_TOOLS,
+        construct_molecular_docking_graph,
+    )
     from chemgraph.tools.docking_tools import run_docking
 
-    graph = construct_single_agent_graph(MagicMock(), tools=[run_docking])
+    assert run_docking in DEFAULT_DOCKING_TOOLS
+    graph = construct_molecular_docking_graph(MagicMock())
     assert graph is not None
 
 

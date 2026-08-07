@@ -50,6 +50,7 @@ class _FakeWorkflow:
         ),
         ("rag_agent", "construct_rag_agent_graph", {}),
         ("single_agent_xanes", "construct_single_agent_xanes_graph", {}),
+        ("molecular_docking", "construct_molecular_docking_graph", {}),
     ],
 )
 def test_graph_constructor_is_called(
