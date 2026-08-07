@@ -2,6 +2,7 @@
 
 from deepdiff import DeepDiff
 from chemgraph.schemas.ase_input import ASEInputSchema
+from chemgraph.schemas.plane_wave_input import QEInputSchema, VaspInputSchema
 
 
 def remove_ignored_fields(obj, ignored_keys=("cell", "pbc")):
@@ -132,11 +133,19 @@ def single_function_checker(
         result = {"valid": False, "error": error}
         return result
 
-    # Have a special case for run_ase due to complex input schema
-    if tool_name_model == "run_ase":
+    # Special-case the ASE tools due to their complex input schema. run_qe /
+    # run_vasp are calculator-pinned variants of run_ase, each validated through
+    # its own pinned schema.
+    _ase_tool_schemas = {
+        "run_ase": ASEInputSchema,
+        "run_qe": QEInputSchema,
+        "run_vasp": VaspInputSchema,
+    }
+    if tool_name_model in _ase_tool_schemas:
+        schema_cls = _ase_tool_schemas[tool_name_model]
         try:
-            model_args = ASEInputSchema(**model_args_raw["params"]).model_dump()
-            answer_args = ASEInputSchema(**answer_args_raw["params"]).model_dump()
+            model_args = schema_cls(**model_args_raw["params"]).model_dump()
+            answer_args = schema_cls(**answer_args_raw["params"]).model_dump()
         except Exception as e:
             result = {"valid": False, "error": e}
             return result

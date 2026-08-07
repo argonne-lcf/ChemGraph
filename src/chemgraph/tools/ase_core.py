@@ -274,6 +274,23 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     elif "nwchem" in calc_type:
         from chemgraph.schemas.calculators.nwchem_calc import NWChemCalc
         calc = NWChemCalc(**calculator)
+    elif "vasp" in calc_type:
+        from chemgraph.schemas.calculators.vasp_calc import VaspCalc
+        # Normalize aliases (e.g. "VASP", "vasp_std") to the canonical type so
+        # VaspCalc.get_calculator's strict check passes (mirrors espresso below).
+        vasp_args = {**calculator, "calculator_type": "vasp"}
+        calc = VaspCalc(**vasp_args)
+    elif (
+        "espresso" in calc_type
+        or "qe" in calc_type
+        or "pwscf" in calc_type
+        or calc_type == "pw"
+    ):
+        from chemgraph.schemas.calculators.espresso_calc import EspressoCalc
+        # Normalize aliases (qe/pwscf/pw/quantum-espresso) to the canonical type
+        # so EspressoCalc.get_calculator's strict check passes.
+        espresso_args = {**calculator, "calculator_type": "espresso"}
+        calc = EspressoCalc(**espresso_args)
     elif "fairchem" in calc_type:
         from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
         calc = FAIRChemCalc(**calculator)
@@ -287,7 +304,7 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
         raise ValueError(
             f"Unsupported calculator: {calculator}. "
             "Available calculators are EMT, TBLite (GFN2-xTB, GFN1-xTB), "
-            "Orca, NWChem, FAIRChem, MACE, or AIMNET2."
+            "Orca, NWChem, FAIRChem, MACE, AIMNET2, VASP, or Quantum ESPRESSO."
         )
 
     extra_info: dict = {}
@@ -306,6 +323,87 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
         ase_calculator = calc.get_calculator()
 
     return ase_calculator, extra_info, calc
+
+
+def prepare_dft_calculator(atoms, calc, calc_model):
+    """Finalize a subprocess plane-wave DFT calculator once the atoms are known.
+
+    ``load_calculator`` builds every calculator before the structure is read, so
+    a plane-wave engine (Quantum ESPRESSO / VASP) cannot yet know the cell or
+    periodicity it must run under. This bridges that gap, and is a no-op for
+    every other calculator type:
+
+      * a non-periodic structure without a full 3D cell (``pbc`` all False and
+        ``cell.rank < 3`` -- a bare molecule at rank 0, or a degenerate
+        zero-volume cell at rank 1/2) is given a vacuum box in place (so pw.x/
+        VASP have a finite, non-singular cell and the writer sees the moved
+        cell); a non-periodic structure that already carries a full rank-3 cell
+        is left untouched so a user-supplied box is not clobbered;
+      * the DFT calculator is rebuilt WITH the atoms so its k-mesh follows
+        ``atoms.pbc`` (Gamma for a molecule, per-axis masked mesh for a
+        slab/wire, the configured mesh for a bulk solid);
+      * a structure that was just given a vacuum box is then marked periodic.
+        ``atoms.center()`` supplies the cell but leaves ``pbc`` all False, and
+        ASE's VASP calculator refuses to run on anything not fully periodic
+        (``check_pbc``), so without this a molecule never reaches VASP. This
+        happens AFTER the rebuild above, because ``get_calculator`` reads
+        ``atoms.pbc`` to choose the molecule branch.
+
+    The ``isinstance`` guard is mandatory: every other calculator's
+    ``get_calculator()`` is zero-arg and would raise ``TypeError`` on ``atoms=``.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms
+        The structure just read from disk. Mutated in place when centering.
+    calc : object
+        The ASE calculator already built by ``load_calculator``.
+    calc_model : object
+        The ChemGraph calculator schema instance from ``load_calculator``.
+
+    Returns
+    -------
+    object
+        The calculator to attach to ``atoms`` -- rebuilt for QE/VASP, otherwise
+        the ``calc`` passed in unchanged.
+    """
+    from chemgraph.schemas.calculators._plane_wave import is_nonperiodic
+    from chemgraph.schemas.calculators.espresso_calc import EspressoCalc
+    from chemgraph.schemas.calculators.vasp_calc import VaspCalc
+
+    if isinstance(calc_model, (EspressoCalc, VaspCalc)):
+        # A non-periodic structure with no full 3D cell (rank < 3) has no finite
+        # box for a plane-wave run: rank 0 is a bare xyz molecule, rank 1/2 is a
+        # degenerate cell with a zero-volume (singular) lattice vector that would
+        # make pw.x/VASP emit garbage. Give both a clean vacuum box. A structure
+        # that already carries a full rank-3 cell is left untouched so a
+        # user-supplied box is never clobbered.
+        if is_nonperiodic(atoms) and atoms.cell.rank < 3:
+            atoms.center(vacuum=calc_model.vacuum)
+        # Build the calculator BEFORE touching pbc below: get_calculator reads
+        # atoms.pbc to choose the k-mesh: a single Gamma point for a molecule,
+        # a per-axis masked mesh for a slab/wire, the configured mesh for bulk.
+        # Flipping pbc first would send a molecule down the bulk branch (full
+        # k-mesh + VASP's metallic smearing) and un-mask a slab's vacuum axis.
+        dft_calc = calc_model.get_calculator(atoms=atoms)
+        # ASE's VASP calculator refuses anything not FULLY periodic
+        # (check_pbc: ``if not atoms.pbc.all(): raise``). That rejects three
+        # cases the code otherwise supports: a centered molecule (pbc all
+        # False), a molecule the user supplied their own rank-3 box for, and
+        # (despite mask_kmesh_by_pbc existing precisely for them) every slab
+        # ([T,T,F]) and wire ([T,F,F]). A plane-wave code has no aperiodic
+        # mode, so in VASP's model all of these ARE fully periodic cells and
+        # marking them so states what VASP will do anyway. Enough vacuum is
+        # what makes the residual image interaction small; it never removes it,
+        # and no dipole or monopole correction is applied here, so a polar or
+        # charged species needs a bigger box or an explicit IDIPOL/LDIPOL via
+        # input_data. The masked k-mesh computed above keeps the vacuum axes
+        # from being sampled as if they dispersed. QE needs none of this: pw.x
+        # has no equivalent check and write_espresso_in ignores pbc.
+        if isinstance(calc_model, VaspCalc) and not atoms.pbc.all():
+            atoms.pbc = True
+        return dft_calc
+    return calc
 
 
 # ---------------------------------------------------------------------------
@@ -487,7 +585,8 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             "error_type": "ValueError",
             "message": (
                 f"Unsupported calculator: {calculator}. Available calculators are "
-                "MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
+                "MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), "
+                "NWChem, Orca, VASP and Quantum ESPRESSO"
             ),
         }
     logger.info("Calculator loaded successfully: %s", type(calc).__name__)
@@ -504,6 +603,20 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
     logger.info("Read %d atoms from %s", len(atoms), input_structure_file)
     atoms.info.update(system_info)
+
+    # Remember how the structure was written before the plane-wave preparation
+    # below can mark it periodic. Gas-phase thermochemistry keys off this: an
+    # aperiodic input stays eligible even after being given a box, while a real
+    # crystal keeps its periodicity and is refused.
+    was_periodic_on_input = bool(atoms.pbc.any())
+
+    # Subprocess plane-wave DFT (QE/VASP) needs a finite cell and a
+    # periodicity-aware k-mesh, neither of which get_calculator could know at
+    # load_calculator time (the atoms were not read yet). Now that atoms exist,
+    # center a cell-less molecule and rebuild the calculator with the atoms; a
+    # no-op for every other calculator type (see prepare_dft_calculator).
+    calc = prepare_dft_calculator(atoms, calc, calc_model)
+
     atoms.calc = calc
 
     # ------------------------------------------------------------------
@@ -733,10 +846,25 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                         )
                         spin_S = (multiplicity - 1) / 2.0
 
+                        # IdealGasThermo rejects periodic atoms outright
+                        # (ase.thermochemistry: "should not have periodic
+                        # boundary conditions"), and that guard is the only
+                        # thing stopping a crystal from being handed
+                        # rigid-rotor gas statistics, which are meaningless for
+                        # a solid. Keep it for anything periodic on input, and
+                        # sidestep it only for a structure the plane-wave path
+                        # boxed on our behalf: that is still one isolated
+                        # molecule, whose partition functions need nothing but
+                        # its masses and positions. `atoms` stays untouched.
+                        thermo_atoms = atoms
+                        if atoms.pbc.any() and not was_periodic_on_input:
+                            thermo_atoms = atoms.copy()
+                            thermo_atoms.pbc = False
+
                         thermo = IdealGasThermo(
                             vib_energies=all_energies,
                             potentialenergy=single_point_energy,
-                            atoms=atoms,
+                            atoms=thermo_atoms,
                             geometry=geometry,
                             symmetrynumber=symmetrynumber,
                             spin=spin_S,

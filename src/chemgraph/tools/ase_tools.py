@@ -13,6 +13,7 @@ from langchain_core.tools import tool
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema
+from chemgraph.schemas.plane_wave_input import QEInputSchema, VaspInputSchema
 from chemgraph.tools.ase_core import (
     _resolve_path,
     _resolve_existing_path,
@@ -171,4 +172,60 @@ def run_ase(params: ASEInputSchema) -> dict:
     """
     # MACE thread/process serialization now lives in run_ase_core ->
     # load_calculator, so this wrapper just delegates.
+    return run_ase_core(params)
+
+
+@tool
+def run_qe(params: QEInputSchema) -> dict:
+    """Run a Quantum ESPRESSO (pw.x) plane-wave DFT calculation.
+
+    A calculator-pinned variant of ``run_ase`` for Quantum ESPRESSO: the
+    ``calculator`` is fixed to the QE (pw.x) engine, so only QE parameters
+    (plane-wave cutoffs, k-point mesh, pseudopotentials, smearing) are exposed.
+    Use this when the user asks for a plane-wave DFT calculation with Quantum
+    ESPRESSO / pw.x. Same drivers as ``run_ase`` (energy, opt, vib, thermo, ir).
+
+    Parameters
+    ----------
+    params : QEInputSchema
+        Input parameters with the calculator pinned to Quantum ESPRESSO.
+
+    Returns
+    -------
+    dict
+        Output containing calculation results and status.
+
+    Raises
+    ------
+    ValueError
+        If the calculation fails.
+    """
+    return run_ase_core(params)
+
+
+@tool
+def run_vasp(params: VaspInputSchema) -> dict:
+    """Run a VASP plane-wave DFT calculation.
+
+    A calculator-pinned variant of ``run_ase`` for VASP: the ``calculator`` is
+    fixed to the VASP engine, so only VASP parameters (ENCUT, k-point mesh,
+    spin, smearing, INCAR overrides) are exposed. Use this when the user asks
+    for a plane-wave DFT calculation with VASP. Same drivers as ``run_ase``
+    (energy, opt, vib, thermo, ir).
+
+    Parameters
+    ----------
+    params : VaspInputSchema
+        Input parameters with the calculator pinned to VASP.
+
+    Returns
+    -------
+    dict
+        Output containing calculation results and status.
+
+    Raises
+    ------
+    ValueError
+        If the calculation fails.
+    """
     return run_ase_core(params)
