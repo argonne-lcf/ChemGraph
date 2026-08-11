@@ -26,6 +26,8 @@ from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 def _tool_call_signature(tool_calls) -> tuple:
     """Create a comparable signature for a list of tool calls.
@@ -454,6 +456,7 @@ def construct_single_agent_graph(
     max_retries: int = 1,
     human_supervised: bool = False,
     terminal_tool_names: Collection[str] = (),
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct a geometry optimization graph.
 
@@ -482,6 +485,11 @@ def construct_single_agent_graph(
     terminal_tool_names : Collection[str], optional
         Tool names that should terminate the graph after successful tool
         execution instead of routing back to the LLM, by default empty.
+    checkpointer : optional
+        LangGraph checkpointer used to compile the graph. When omitted, a new
+        ``MemorySaver`` preserves the existing standalone behavior. Pass
+        ``None`` when embedding this graph as a subgraph so it inherits the
+        parent graph's checkpointer.
 
     Returns
     -------
@@ -490,7 +498,8 @@ def construct_single_agent_graph(
     """
     try:
         logger.info("Constructing single agent graph")
-        checkpointer = MemorySaver()
+        if checkpointer is _DEFAULT_CHECKPOINTER:
+            checkpointer = MemorySaver()
         if tools is None:
             tools = [
                 smiles_to_coordinate_file,

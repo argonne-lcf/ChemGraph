@@ -49,6 +49,7 @@ from langgraph.types import Command
 from langgraph.errors import GraphInterrupt
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
+from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.agent.turn import serialize_state
 
 
@@ -111,6 +112,7 @@ class ChemGraph:
     workflow_type : str, optional
         Type of workflow to use. Options:
         - "single_agent"
+        - "main_agent" (drive with ``MainAgentSession``, not ``run``)
         - "multi_agent"
         - "python_relp"
         - "graspa_agent"
@@ -376,7 +378,12 @@ class ChemGraph:
                 return prompt
             return f"{prompt}{self.calculator_selection_context}"
 
-        if self.workflow_type in {"single_agent", "mock_agent", "single_agent_mcp"}:
+        if self.workflow_type in {
+            "single_agent",
+            "main_agent",
+            "mock_agent",
+            "single_agent_mcp",
+        }:
             self.system_prompt = append_calculator_context(self.system_prompt)
         elif self.workflow_type == "multi_agent":
             self.planner_prompt = append_calculator_context(self.planner_prompt)
@@ -389,6 +396,7 @@ class ChemGraph:
 
         self.workflow_map = {
             "single_agent": {"constructor": construct_single_agent_graph},
+            "main_agent": {"constructor": construct_main_agent_graph},
             "multi_agent": {"constructor": construct_multi_agent_graph},
             "python_relp": {"constructor": construct_relp_graph},
             "graspa": {"constructor": construct_graspa_graph},
@@ -417,6 +425,19 @@ class ChemGraph:
                 max_retries=self.max_retries,
                 human_supervised=self.human_supervised,
                 terminal_tool_names=self.terminal_tool_names,
+            )
+        elif self.workflow_type == "main_agent":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm,
+                main_tools=self.tools,
+                subagent_system_prompt=self.system_prompt,
+                subagent_formatter_prompt=self.formatter_prompt,
+                subagent_report_prompt=self.report_prompt,
+                subagent_structured_output=self.structured_output,
+                subagent_generate_report=self.generate_report,
+                subagent_max_retries=self.max_retries,
+                subagent_human_supervised=self.human_supervised,
+                subagent_terminal_tool_names=self.terminal_tool_names,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -774,6 +795,12 @@ class ChemGraph:
             Session ID to load context from. The previous conversation
             summary is prepended to the query.
         """
+        if self.workflow_type == "main_agent":
+            raise RuntimeError(
+                "The main_agent workflow maintains a checkpointed conversation. "
+                "Drive it with MainAgentSession instead of ChemGraph.run()."
+            )
+
         from chemgraph.agent.turn import (
             _executed_tool_names,
             _state_messages,

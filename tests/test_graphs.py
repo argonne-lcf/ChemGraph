@@ -34,6 +34,7 @@ class _FakeWorkflow:
     ("workflow_type", "constructor_attr", "kwargs"),
     [
         ("single_agent", "construct_single_agent_graph", {}),
+        ("main_agent", "construct_main_agent_graph", {}),
         ("multi_agent", "construct_multi_agent_graph", {}),
         ("python_relp", "construct_relp_graph", {}),
         ("graspa", "construct_graspa_graph", {}),
@@ -152,6 +153,76 @@ def test_single_agent_initialization_injects_calculator_availability(monkeypatch
     assert "Calculator availability detected during ChemGraph initialization" in system_prompt
     assert cg.default_calculator in system_prompt
     assert cg.default_calculator in cg.available_calculators
+
+
+def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tmp_path):
+    captured = {}
+    workflow = _FakeWorkflow()
+    main_tool = _DummyTool("read_file")
+
+    def fake_constructor(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return workflow
+
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.construct_main_agent_graph",
+        fake_constructor,
+    )
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.load_openai_model",
+        lambda **_kwargs: "FAKE_LLM",
+    )
+
+    cg = ChemGraph(
+        model_name="gpt-4o-mini",
+        workflow_type="main_agent",
+        enable_memory=False,
+        log_dir=str(tmp_path / "logs"),
+        tools=[main_tool],
+        formatter_prompt="custom formatter",
+        report_prompt="custom report",
+        structured_output=True,
+        generate_report=True,
+        max_retries=4,
+        human_supervised=True,
+        terminal_tool_names=("save_result",),
+    )
+
+    assert cg.workflow is workflow
+    assert captured["args"] == ("FAKE_LLM",)
+    assert captured["kwargs"]["main_tools"] == [main_tool]
+    assert "Calculator availability detected" in captured["kwargs"][
+        "subagent_system_prompt"
+    ]
+    assert captured["kwargs"]["subagent_formatter_prompt"] == cg.formatter_prompt
+    assert captured["kwargs"]["subagent_report_prompt"] == cg.report_prompt
+    assert captured["kwargs"]["subagent_structured_output"] is True
+    assert captured["kwargs"]["subagent_generate_report"] is True
+    assert captured["kwargs"]["subagent_max_retries"] == cg.max_retries
+    assert captured["kwargs"]["subagent_human_supervised"] is True
+    assert captured["kwargs"]["subagent_terminal_tool_names"] == ("save_result",)
+
+
+@pytest.mark.asyncio
+async def test_main_agent_rejects_one_shot_run(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.construct_main_agent_graph",
+        lambda *_args, **_kwargs: _FakeWorkflow(),
+    )
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.load_openai_model",
+        lambda **_kwargs: "FAKE_LLM",
+    )
+    cg = ChemGraph(
+        model_name="gpt-4o-mini",
+        workflow_type="main_agent",
+        enable_memory=False,
+        log_dir=str(tmp_path / "logs"),
+    )
+
+    with pytest.raises(RuntimeError, match="MainAgentSession"):
+        await cg.run("hello")
 
 
 def test_rag_and_xanes_default_prompts_are_preserved(monkeypatch, tmp_path):
