@@ -297,9 +297,8 @@ def human_review_node(
     if config is None:
         human_response = interrupt({"question": question})
     else:
-        # LangGraph cannot propagate its runnable context into async graph
-        # nodes on Python 3.10. Restore it explicitly so interrupt() works
-        # when this synchronous node is driven through astream().
+        # Restore the runnable context explicitly so interrupt() works when
+        # this synchronous node is driven through astream().
         with set_config_context(config) as context:
             human_response = context.run(interrupt, {"question": question})
 

@@ -1,5 +1,5 @@
 !!! note
-    ChemGraph requires **Python 3.10+**.
+    ChemGraph requires **Python 3.11+**.
 
 ## Install from PyPI (recommended)
 

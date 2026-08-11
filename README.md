@@ -18,7 +18,7 @@ ChemGraph supports diverse simulation backends, including ab initio quantum chem
 <details open>
   <summary><strong>Installation Instructions</strong></summary>
 
-Ensure you have **Python 3.10 or higher** installed on your system. 
+Ensure you have **Python 3.11 or higher** installed on your system.
 
 **Install-Free Method (Docker from GHCR)**
 
@@ -141,7 +141,7 @@ If you need to install from source for the latest version:
    ```
 
    The `environment.yml` file automatically installs all required dependencies including:
-   - Python 3.10
+   - Python 3.11
    - Core packages (numpy, pandas, pytest, rich, toml)
    - Computational chemistry packages (nwchem, tblite)
    - All ChemGraph dependencies via pip
