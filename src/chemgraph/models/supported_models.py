@@ -121,6 +121,21 @@ supported_gemini_models = [
 # See https://console.groq.com/docs/models for current models.
 supported_groq_models: list[str] = []
 
+# Default OpenRouter API base URL (OpenAI-compatible).
+OPENROUTER_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+
+# OpenRouter models -- use the "openrouter:" prefix (e.g.
+# "openrouter:moonshotai/kimi-k3"). The prefix is stripped before the request
+# and the remainder is sent as the OpenRouter slug verbatim.
+# This list is curated for *discovery* (--list-models, UI dropdown, per-model
+# quirk sets such as MODELS_WITHOUT_TEMPERATURE); it is NOT a gate. Dispatch is
+# by prefix, so any slug from https://openrouter.ai/models also works.
+supported_openrouter_models = [
+    "openrouter:moonshotai/kimi-k3",
+    "openrouter:deepseek/deepseek-v4-pro",
+    "openrouter:deepseek/deepseek-v4-flash",
+]
+
 # Default Argo API base URL (used when no --base-url is provided).
 ARGO_DEFAULT_BASE_URL = "https://apps.inside.anl.gov/argoapi/v1"
 
@@ -202,4 +217,5 @@ all_supported_models = (
     + supported_argo_models
     + supported_gemini_models
     + supported_groq_models
+    + supported_openrouter_models
 )

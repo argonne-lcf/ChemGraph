@@ -48,6 +48,10 @@ argo_user = ""
 base_url = "https://api.groq.com/openai/v1"
 timeout = 30
 
+[api.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+timeout = 60
+
 [api.anthropic]
 base_url = "https://api.anthropic.com"
 timeout = 30

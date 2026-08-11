@@ -108,6 +108,19 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
     if model_name.startswith("codex:"):
         return True, ""
 
+    # OpenRouter models. Checked before the OpenAI branch below, whose
+    # ``"o1"/"o3"/"o4" in model_lower`` test is a substring match that would
+    # otherwise claim slugs like ``openrouter:openai/o3``, and before the
+    # local-model branch, which would claim ``openrouter:meta-llama/...``.
+    if model_name.startswith("openrouter:"):
+        if not os.getenv("OPENROUTER_API_KEY"):
+            return (
+                False,
+                "OpenRouter API key not found. Set the OPENROUTER_API_KEY "
+                "environment variable. Get a key at https://openrouter.ai/keys",
+            )
+        return True, ""
+
     # OpenAI models (including GPT family, o-series, and Argo OpenAI)
     if (
         model_name in supported_openai_models

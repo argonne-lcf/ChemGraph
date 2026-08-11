@@ -56,6 +56,10 @@ def list_models() -> None:
 
     # Categorize models by provider
     model_info = {
+        # Prefix-routed providers first: the lookup below breaks on the first
+        # substring match, so "openrouter:openai/gpt-oss-120b" would otherwise
+        # be claimed by the "openai" / "gpt" / "llama" keys.
+        "openrouter:": {"provider": "OpenRouter", "type": "Cloud"},
         "openai": {"provider": "OpenAI", "type": "Cloud"},
         "gpt": {"provider": "OpenAI", "type": "Cloud"},
         "claude": {"provider": "Anthropic", "type": "Cloud"},
@@ -127,6 +131,11 @@ def check_api_keys_status() -> None:
             "examples": "groq:llama-3.3-70b-versatile",
         },
         {
+            "provider": "OpenRouter",
+            "env_var": "OPENROUTER_API_KEY",
+            "examples": "openrouter:moonshotai/kimi-k3",
+        },
+        {
             "provider": "ALCF",
             "env_var": "ALCF_ACCESS_TOKEN",
             "examples": "Llama-3.1-405B, Qwen3-32B",
@@ -162,6 +171,7 @@ def check_api_keys_status() -> None:
     console.print("  [cyan]OpenAI:[/cyan] https://platform.openai.com/api-keys")
     console.print("  [cyan]Anthropic:[/cyan] https://console.anthropic.com/")
     console.print("  [cyan]Google:[/cyan] https://aistudio.google.com/apikey")
+    console.print("  [cyan]OpenRouter:[/cyan] https://openrouter.ai/keys")
 
 
 # ---------------------------------------------------------------------------
