@@ -2,6 +2,7 @@ import json
 
 from langchain_core.messages import AIMessage
 
+from chemgraph.agent.main_session import MainAgentTurnResult
 from chemgraph.cli.formatting import _content_text, console, format_response
 
 
@@ -58,3 +59,20 @@ def test_format_response_detects_atomic_json_in_structured_content():
     assert "ChemGraph Response" in output
     assert "Water optimized" in output
     assert "Molecular Structure Data" in output
+
+
+def test_format_response_renders_main_agent_turn_result():
+    result = MainAgentTurnResult(
+        thread_id="thread-1",
+        status="waiting_for_user",
+        assistant_response="Delegated calculation complete.",
+        interrupts=(),
+        state={},
+    )
+
+    with console.capture() as capture:
+        format_response(result)
+
+    output = capture.get()
+    assert "ChemGraph Response" in output
+    assert "Delegated calculation complete" in output
