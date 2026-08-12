@@ -8,7 +8,7 @@
 
 !!! info "Session Memory"
 
-    ChemGraph automatically persists every conversation to a local SQLite database. You can browse past sessions, review tool calls and results, and resume previous conversations with full context using the CLI (`--list-sessions`, `--show-session`, `--resume`) or interactive mode (`history`, `show`, `resume`).
+    ChemGraph automatically persists every conversation to a local SQLite database. You can browse past sessions, review tool calls and results, and resume previous conversations with full context using the CLI (`--list-sessions`, `--show-session`, `--resume`) or interactive mode (`/history`, `/show`, `/resume`).
 
 !!! info "Evaluation & Benchmarking"
 

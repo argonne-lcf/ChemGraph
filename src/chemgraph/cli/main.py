@@ -198,6 +198,7 @@ Examples:
   # Legacy style (still works)
   %(prog)s -q "What is the SMILES string for water?"
   %(prog)s --interactive
+  %(prog)s --interactive -w main_agent
   %(prog)s --list-models
 
   # Subcommand style
@@ -451,6 +452,20 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     # Resolve workflow alias (e.g. python_repl -> python_relp)
     args.workflow = resolve_workflow(args.workflow)
+
+    if args.workflow == "main_agent":
+        if getattr(args, "resume", None):
+            console.print(
+                "[red]--resume is not supported for the process-lifetime "
+                "main_agent workflow.[/red]"
+            )
+            sys.exit(2)
+        if not getattr(args, "interactive", False):
+            console.print(
+                "[red]main_agent requires interactive mode. Use "
+                "`chemgraph --interactive -w main_agent`.[/red]"
+            )
+            sys.exit(2)
 
     # ---- MCP tool loading ----------------------------------------------
     mcp_tools = None

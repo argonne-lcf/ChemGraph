@@ -41,6 +41,7 @@ from chemgraph.cli.formatting import (
 # All workflow types registered in ChemGraph.workflow_map
 ALL_WORKFLOW_TYPES = [
     "single_agent",
+    "main_agent",
     "multi_agent",
     "python_relp",
     "graspa",
@@ -214,7 +215,8 @@ def initialize_agent(
     human_supervised : bool, optional
         Whether to enable human-interrupt tooling.
     tools : list, optional
-        Custom tool list for MCP-backed workflows.
+        Custom tools for MCP-backed workflows, or supervisor-level tools for
+        ``main_agent``. The default chemistry subagent retains its built-ins.
 
     Returns
     -------
@@ -498,6 +500,127 @@ def run_query(
     return None
 
 
+def create_main_agent_session(agent: Any):
+    """Create the CLI session driver for a constructed main-agent workflow."""
+    from chemgraph.agent.main_session import MainAgentSession
+
+    return MainAgentSession(
+        agent.workflow,
+        thread_id=agent.session_id,
+        recursion_limit=agent.recursion_limit,
+    )
+
+
+def _interrupt_question(payload: Any) -> str:
+    """Extract readable question text from an interrupt payload."""
+    if isinstance(payload, dict):
+        return str(
+            payload.get(
+                "question",
+                payload.get("message", payload.get("instruction", payload)),
+            )
+        )
+    return str(payload)
+
+
+def _main_agent_failure_hint(session: Any) -> None:
+    if getattr(session, "failed", False):
+        console.print(
+            "[yellow]The checkpoint can be resumed with the `/retry` command.[/yellow]"
+        )
+
+
+def _run_main_agent_operation(
+    session: Any,
+    operation: Any,
+    *,
+    progress_description: str,
+) -> Any:
+    """Run one session operation and resolve nested-graph interrupts."""
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task(progress_description, total=None)
+            result = run_async_callable(operation)
+    except Exception as exc:
+        console.print(f"[red]Error processing main-agent session: {exc}[/red]")
+        _main_agent_failure_hint(session)
+        return None
+
+    interrupt_count = 0
+    while result.status == "waiting_for_user" and result.interrupts:
+        interrupt_count += len(result.interrupts)
+        if interrupt_count > 10:
+            console.print(
+                "[red]Exceeded maximum number of nested clarifications.[/red]"
+            )
+            return None
+
+        answers: Any
+        if len(result.interrupts) == 1:
+            pending = result.interrupts[0]
+            console.print(
+                Panel(
+                    _interrupt_question(pending.payload),
+                    title="[bold yellow]Agent needs your input[/bold yellow]",
+                    style="yellow",
+                )
+            )
+            answers = Prompt.ask("[bold cyan]Your response[/bold cyan]")
+        else:
+            answers = {}
+            for pending in result.interrupts:
+                console.print(
+                    Panel(
+                        _interrupt_question(pending.payload),
+                        title=(
+                            "[bold yellow]Agent needs your input"
+                            f" ({pending.id})[/bold yellow]"
+                        ),
+                        style="yellow",
+                    )
+                )
+                answers[pending.id] = Prompt.ask(
+                    "[bold cyan]Your response[/bold cyan]"
+                )
+
+        try:
+            result = run_async_callable(lambda: session.resume(answers))
+        except Exception as exc:
+            console.print(f"[red]Error resuming main-agent session: {exc}[/red]")
+            _main_agent_failure_hint(session)
+            return None
+
+    return result
+
+
+def run_main_agent_query(session: Any, query: str, verbose: bool = False) -> Any:
+    """Run one main-agent turn and resolve nested clarifications."""
+    if verbose:
+        console.print(f"[blue]Main-agent thread:[/blue] {session.thread_id}")
+
+    return _run_main_agent_operation(
+        session,
+        lambda: session.run(query),
+        progress_description="Processing main-agent turn...",
+    )
+
+
+def retry_main_agent_session(session: Any, verbose: bool = False) -> Any:
+    """Retry the failed operation for one main-agent session."""
+    if verbose:
+        console.print(f"[blue]Main-agent thread:[/blue] {session.thread_id}")
+    return _run_main_agent_operation(
+        session,
+        session.retry,
+        progress_description="Retrying main-agent operation...",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Session management
 # ---------------------------------------------------------------------------
@@ -680,6 +803,55 @@ def save_output(content: str, output_file: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+_INTERACTIVE_COMMANDS = {
+    "clear",
+    "config",
+    "help",
+    "history",
+    "model",
+    "quit",
+    "resume",
+    "retry",
+    "show",
+    "workflow",
+}
+_INTERACTIVE_BARE_ALIASES = {
+    "clear": "clear",
+    "config": "config",
+    "exit": "quit",
+    "help": "help",
+    "history": "history",
+    "q": "quit",
+    "quit": "quit",
+    "retry": "retry",
+}
+_INTERACTIVE_SLASH_ALIASES = {
+    "exit": "quit",
+    "q": "quit",
+}
+
+
+def _parse_interactive_input(query: str) -> tuple[str, str] | None:
+    """Return a canonical interactive command and its argument, if any."""
+    stripped = query.strip()
+    bare_command = _INTERACTIVE_BARE_ALIASES.get(stripped.lower())
+    if bare_command is not None:
+        return bare_command, ""
+    if not stripped.startswith("/"):
+        return None
+
+    command_text = stripped[1:].strip()
+    if not command_text:
+        return "unknown", ""
+    parts = command_text.split(maxsplit=1)
+    name = parts[0]
+    argument = parts[1] if len(parts) == 2 else ""
+    name = _INTERACTIVE_SLASH_ALIASES.get(name.lower(), name.lower())
+    if name not in _INTERACTIVE_COMMANDS:
+        return "unknown", name
+    return name, argument.strip()
+
+
 def interactive_mode(
     model: str = "gpt-4o-mini",
     workflow: str = "single_agent",
@@ -730,7 +902,8 @@ def interactive_mode(
         "Type your queries and get AI-powered computational chemistry insights."
     )
     console.print(
-        "[dim]Type 'quit', 'exit', or 'q' to exit. Type 'help' for commands.[/dim]\n"
+        "[dim]Type '/quit' to exit or '/help' for commands. Exact bare "
+        "aliases such as 'quit' and 'help' also work.[/dim]\n"
     )
 
     # Allow the user to override model/workflow at startup.
@@ -760,6 +933,10 @@ def interactive_mode(
     if not agent:
         return
 
+    main_session = (
+        create_main_agent_session(agent) if workflow == "main_agent" else None
+    )
+
     console.print(
         "[green]Ready! You can now ask computational chemistry questions.[/green]\n"
     )
@@ -767,26 +944,55 @@ def interactive_mode(
     while True:
         try:
             query = Prompt.ask("\n[bold cyan]ChemGraph[/bold cyan]")
+            parsed_command = _parse_interactive_input(query)
 
-            if query.lower() in ("quit", "exit", "q"):
+            if parsed_command is None:
+                command = None
+                argument = ""
+            else:
+                command, argument = parsed_command
+
+            if command == "unknown":
+                label = f"/{argument}" if argument else "/"
+                console.print(
+                    f"[red]Unknown interactive command: {label}[/red]"
+                )
+                console.print("[dim]Type /help to see available commands.[/dim]")
+                continue
+            if command == "quit":
+                if argument:
+                    console.print("[red]Usage: /quit[/red]")
+                    continue
                 console.print("[yellow]Goodbye![/yellow]")
                 break
-            elif query.lower() == "help":
+            elif command == "help":
+                if argument:
+                    console.print("[red]Usage: /help[/red]")
+                    continue
                 console.print(
                     Panel(
                         """
 Available commands:
-  quit/exit/q        Exit interactive mode
-  help               Show this help message
-  clear              Clear screen
-  config             Show current configuration
-  model <name>       Change model
-  workflow <type>    Change workflow type
+  /quit              Exit interactive mode
+  /help              Show this help message
+  /clear             Clear screen
+  /config            Show current configuration
+  /model <name>      Change model
+  /workflow <type>   Change workflow type
 
 Session commands:
-  history            List recent sessions
-  show <id>          Show a session's conversation
-  resume <id>        Resume from a previous session
+  /history           List recent sessions
+  /show <id>         Show a session's conversation
+  /resume <id>       Resume from a previous session
+  /retry             Retry a failed main_agent operation
+
+Exact bare aliases for commands without arguments remain supported. Commands
+with arguments require the leading slash so prompts beginning with words such
+as "show", "model", or "workflow" are sent to the agent.
+
+main_agent keeps one checkpointed thread until you quit or switch
+model/workflow. Its thread is process-local; `/resume` does not currently
+restore it later. Nested chemistry workers may pause to request input.
 
 Example queries:
   What is the SMILES string for water?
@@ -799,29 +1005,45 @@ Example queries:
                     )
                 )
                 continue
-            elif query.lower() == "clear":
+            elif command == "clear":
+                if argument:
+                    console.print("[red]Usage: /clear[/red]")
+                    continue
                 console.clear()
                 continue
-            elif query.lower() == "config":
+            elif command == "config":
+                if argument:
+                    console.print("[red]Usage: /config[/red]")
+                    continue
                 console.print(f"Model: {model}")
                 console.print(f"Workflow: {workflow}")
-                if hasattr(agent, "session_id"):
+                if main_session is not None:
+                    console.print(f"Thread ID: {main_session.thread_id}")
+                    console.print(f"Failed: {main_session.failed}")
+                elif hasattr(agent, "session_id"):
                     console.print(f"Session ID: {agent.session_id}")
                 continue
-            elif query.lower() == "history":
+            elif command == "history":
+                if argument:
+                    console.print("[red]Usage: /history[/red]")
+                    continue
                 list_sessions()
                 continue
-            elif query.lower().startswith("show "):
-                sid = query[5:].strip()
-                if sid:
-                    show_session(sid)
-                else:
-                    console.print("[red]Usage: show <session_id>[/red]")
+            elif command == "show":
+                if not argument:
+                    console.print("[red]Usage: /show <session_id>[/red]")
+                    continue
+                show_session(argument)
                 continue
-            elif query.lower().startswith("resume "):
-                sid = query[7:].strip()
-                if not sid:
-                    console.print("[red]Usage: resume <session_id>[/red]")
+            elif command == "resume":
+                if not argument:
+                    console.print("[red]Usage: /resume <session_id>[/red]")
+                    continue
+                if main_session is not None:
+                    console.print(
+                        "[yellow]Persistent resume is not supported for the "
+                        "process-lifetime main_agent workflow.[/yellow]"
+                    )
                     continue
                 resume_query = Prompt.ask(
                     "[bold cyan]Enter query to continue with[/bold cyan]"
@@ -831,16 +1053,33 @@ Example queries:
                         agent,
                         resume_query,
                         verbose=verbose,
-                        resume_from=sid,
+                        resume_from=argument,
                     )
                     if result:
                         format_response(result, verbose=verbose)
                 continue
-            elif query.startswith("model "):
-                new_model = query[6:].strip()
-                model = new_model
-                agent = initialize_agent(
-                    model,
+            elif command == "retry":
+                if argument:
+                    console.print("[red]Usage: /retry[/red]")
+                    continue
+                if main_session is None:
+                    console.print(
+                        "[yellow]/retry is available only for the main_agent "
+                        "workflow.[/yellow]"
+                    )
+                    continue
+                result = retry_main_agent_session(main_session, verbose=verbose)
+                if result:
+                    format_response(result, verbose=verbose)
+                    console.print(f"[dim]Thread: {main_session.thread_id}[/dim]")
+                continue
+            elif command == "model":
+                if not argument:
+                    console.print("[red]Usage: /model <name>[/red]")
+                    continue
+                new_model = argument
+                new_agent = initialize_agent(
+                    new_model,
                     workflow,
                     structured,
                     return_option,
@@ -851,16 +1090,25 @@ Example queries:
                     human_supervised=human_supervised,
                     tools=tools,
                 )
-                if agent:
+                if new_agent:
+                    model = new_model
+                    agent = new_agent
+                    main_session = (
+                        create_main_agent_session(agent)
+                        if workflow == "main_agent"
+                        else None
+                    )
                     console.print(f"[green]Model changed to: {model}[/green]")
                 continue
-            elif query.startswith("workflow "):
-                new_workflow = resolve_workflow(query[9:].strip())
+            elif command == "workflow":
+                if not argument:
+                    console.print("[red]Usage: /workflow <type>[/red]")
+                    continue
+                new_workflow = resolve_workflow(argument)
                 if new_workflow in ALL_WORKFLOW_TYPES:
-                    workflow = new_workflow
-                    agent = initialize_agent(
+                    new_agent = initialize_agent(
                         model,
-                        workflow,
+                        new_workflow,
                         structured,
                         return_option,
                         generate_report,
@@ -870,7 +1118,14 @@ Example queries:
                         human_supervised=human_supervised,
                         tools=tools,
                     )
-                    if agent:
+                    if new_agent:
+                        workflow = new_workflow
+                        agent = new_agent
+                        main_session = (
+                            create_main_agent_session(agent)
+                            if workflow == "main_agent"
+                            else None
+                        )
                         console.print(
                             f"[green]Workflow changed to: {workflow}[/green]"
                         )
@@ -881,16 +1136,25 @@ Example queries:
                     )
                 continue
 
-            # Execute query (each query gets a unique thread ID)
-            result = run_query(agent, query, verbose=verbose)
+            if main_session is not None:
+                result = run_main_agent_query(
+                    main_session,
+                    query,
+                    verbose=verbose,
+                )
+            else:
+                # Existing workflows use a fresh thread for each query.
+                result = run_query(agent, query, verbose=verbose)
             if result:
                 format_response(result, verbose=verbose)
-                if hasattr(agent, "session_id") and agent.session_id:
+                if main_session is not None:
+                    console.print(f"[dim]Thread: {main_session.thread_id}[/dim]")
+                elif hasattr(agent, "session_id") and agent.session_id:
                     console.print(f"[dim]Session: {agent.session_id}[/dim]")
 
         except KeyboardInterrupt:
             console.print(
-                "\n[yellow]Interrupted. Type 'quit' to exit.[/yellow]"
+                "\n[yellow]Interrupted. Type '/quit' to exit.[/yellow]"
             )
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")

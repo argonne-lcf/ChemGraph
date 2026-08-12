@@ -326,6 +326,9 @@ chemgraph -q "Your query" -m llama3.2
 # Single agent (default) - best for most tasks
 chemgraph -q "Optimize water molecule" -w single_agent
 
+# Long-lived supervisor - delegates chemistry tasks to the existing agent
+chemgraph --interactive -w main_agent
+
 # Multi-agent - complex tasks with planning
 chemgraph -q "Complex analysis" -w multi_agent
 
@@ -371,9 +374,23 @@ Start an interactive session for continuous conversations:
 chemgraph --interactive
 ```
 
+To test the long-lived supervisor, select `main_agent` explicitly:
+
+```bash
+chemgraph --interactive -w main_agent
+```
+
+Each prompt runs as a normal turn on the same checkpointed, process-lifetime
+thread, and chemistry work is delegated through Deep Agents' `task` middleware
+tool. A nested chemistry worker can still pause to request input. Quitting or
+switching the model or workflow discards the process-local thread; durable
+`--resume` support for `main_agent` is not yet available. If a model or graph
+operation fails transiently, enter `/retry` to resume its checkpoint without
+adding the previous user message a second time.
+
 **Interactive Features:**
 - **Persistent conversation**: Maintain context across queries
-- **Session memory**: Conversations are automatically saved to a local SQLite database (`~/.chemgraph/sessions.db`) and can be resumed later
+- **Session memory**: Standard workflows are saved to a local SQLite database (`~/.chemgraph/sessions.db`) and can be resumed later; `main_agent` is process-local in this first version
 - **Model switching**: Change models mid-conversation
 - **Workflow switching**: Switch between different agent types
 - **Built-in commands**: Help, clear, config, session management, etc.
@@ -381,18 +398,24 @@ chemgraph --interactive
 **Interactive Commands:**
 ```bash
 # In interactive mode, type:
-help                    # Show available commands
-clear                   # Clear screen
-config                  # Show current configuration and session ID
-quit                    # Exit interactive mode
-model gpt-4o           # Change model
-workflow multi_agent   # Change workflow
+/help                   # Show available commands
+/clear                  # Clear screen
+/config                 # Show current configuration and session ID
+/quit                   # Exit interactive mode
+/model gpt-4o           # Change model
+/workflow multi_agent   # Change workflow
 
 # Session management:
-history                 # List recent sessions
-show <session_id>       # Show a session's conversation
-resume <session_id>     # Resume from a previous session
+/history                # List recent sessions
+/show <session_id>      # Show a session's conversation
+/resume <session_id>    # Resume from a previous session
+/retry                  # Retry a failed main_agent operation
 ```
+
+Exact bare aliases for commands without arguments, such as `help`, `quit`, and
+`history`, remain supported. Commands with arguments require `/`, so natural
+prompts beginning with words such as `show`, `model`, or `workflow` are sent to
+the active agent.
 
 #### Utility Commands
 

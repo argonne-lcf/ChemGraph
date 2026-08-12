@@ -9,7 +9,7 @@ this repository. Human contributors should read
 ChemGraph is a computational-chemistry agent framework (PyPI package
 `chemgraph`, import package `chemgraph`). It connects natural-language queries to
 molecular simulations via a LangGraph/LangChain agent architecture, ASE, RDKit,
-and MCP servers. Requires Python >= 3.10.
+and MCP servers. Requires Python >= 3.11.
 
 ## Setup
 

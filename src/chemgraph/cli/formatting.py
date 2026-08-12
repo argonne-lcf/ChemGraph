@@ -232,6 +232,21 @@ def format_response(result: Any, verbose: bool = False) -> None:
         console.print("[red]No response received from agent.[/red]")
         return
 
+    if hasattr(result, "assistant_response"):
+        response = str(getattr(result, "assistant_response", "")).strip()
+        if response:
+            console.print(
+                Panel(
+                    Markdown(response),
+                    title="ChemGraph Response",
+                    style="green",
+                    padding=(1, 2),
+                )
+            )
+        elif verbose:
+            console.print("[dim]Main agent returned no assistant text.[/dim]")
+        return
+
     # Extract messages from result
     messages: list[Any] = []
     if isinstance(result, list):

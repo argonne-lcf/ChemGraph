@@ -18,7 +18,7 @@ ChemGraph supports diverse simulation backends, including ab initio quantum chem
 <details open>
   <summary><strong>Installation Instructions</strong></summary>
 
-Ensure you have **Python 3.10 or higher** installed on your system. 
+Ensure you have **Python 3.11 or higher** installed on your system.
 
 **Install-Free Method (Docker from GHCR)**
 
@@ -141,7 +141,7 @@ If you need to install from source for the latest version:
    ```
 
    The `environment.yml` file automatically installs all required dependencies including:
-   - Python 3.10
+   - Python 3.11
    - Core packages (numpy, pandas, pytest, rich, toml)
    - Computational chemistry packages (nwchem, tblite)
    - All ChemGraph dependencies via pip
@@ -608,9 +608,15 @@ chemgraph \
   --query "What is the SMILES string for aspirin?"
 ```
 
-This experimental provider supports only `single_agent`. It does not use
-`OPENAI_API_KEY` or the OpenAI Platform API, and it rejects Codex sessions that
-are authenticated with an API key. See
+For a long-lived Codex-backed supervisor, use interactive mode:
+
+```bash
+chemgraph --interactive --model "codex:<codex-model-id>" --workflow main_agent
+```
+
+This experimental provider supports `single_agent` and `main_agent`. It does
+not use `OPENAI_API_KEY` or the OpenAI Platform API, and it rejects Codex
+sessions that are authenticated with an API key. See
 [Experimental Codex subscription support](docs/codex_subscription.md) for
 details.
 
@@ -729,6 +735,7 @@ chemgraph -q "Your query" -m groq:llama-3.3-70b-versatile
 
 # Codex SDK with a ChatGPT subscription login (experimental)
 chemgraph -q "Your query" -m "codex:<codex-model-id>" -w single_agent
+chemgraph --interactive -m "codex:<codex-model-id>" -w main_agent
 
 # Local models (Ollama)
 chemgraph -q "Your query" -m llama3.2
@@ -787,18 +794,23 @@ chemgraph --interactive
 **Interactive Commands:**
 ```bash
 # In interactive mode, type:
-help                    # Show available commands
-clear                   # Clear screen
-config                  # Show current configuration and session ID
-quit                    # Exit interactive mode
-model gpt-4o           # Change model
-workflow multi_agent   # Change workflow
+/help                   # Show available commands
+/clear                  # Clear screen
+/config                 # Show current configuration and session ID
+/quit                   # Exit interactive mode
+/model gpt-4o           # Change model
+/workflow multi_agent   # Change workflow
 
 # Session management:
-history                 # List recent sessions
-show <session_id>       # Show a session's conversation
-resume <session_id>     # Resume from a previous session
+/history                # List recent sessions
+/show <session_id>      # Show a session's conversation
+/resume <session_id>    # Resume from a previous session
+/retry                  # Retry a failed main_agent operation
 ```
+
+Exact bare aliases for commands without arguments, such as `help`, `quit`, and
+`history`, remain supported. Commands with arguments require `/`, so a natural
+prompt such as `show me the available tools` is sent to the agent.
 
 #### Utility Commands
 

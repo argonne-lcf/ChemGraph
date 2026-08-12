@@ -7,9 +7,11 @@ from langchain_core.tools import tool
 
 from chemgraph.agent import llm_agent
 from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.main_session import MainAgentSession
 from chemgraph.cli import commands
 from chemgraph.cli.commands import check_api_keys
 from chemgraph.cli.formatting import console
+from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.models import codex as codex_model
 from chemgraph.models.codex import (
@@ -270,7 +272,19 @@ def test_shared_loader_routes_codex_prefix(monkeypatch):
     )
 
 
-def test_chemgraph_routes_codex_to_single_agent(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ("workflow_type", "constructor_name"),
+    [
+        ("single_agent", "construct_single_agent_graph"),
+        ("main_agent", "construct_main_agent_graph"),
+    ],
+)
+def test_chemgraph_routes_codex_to_supported_workflow(
+    monkeypatch,
+    tmp_path,
+    workflow_type,
+    constructor_name,
+):
     captured = {}
     monkeypatch.setattr(
         llm_agent,
@@ -279,13 +293,13 @@ def test_chemgraph_routes_codex_to_single_agent(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         llm_agent,
-        "construct_single_agent_graph",
+        constructor_name,
         lambda llm, *_args, **_kwargs: captured.setdefault("llm", llm),
     )
 
     ChemGraph(
         model_name="codex:test-model",
-        workflow_type="single_agent",
+        workflow_type=workflow_type,
         enable_memory=False,
         log_dir=str(tmp_path),
     )
@@ -293,9 +307,85 @@ def test_chemgraph_routes_codex_to_single_agent(monkeypatch, tmp_path):
     assert captured["llm"] == ("codex-model", "codex:test-model")
 
 
-def test_chemgraph_rejects_codex_for_other_workflows():
-    with pytest.raises(ValueError, match="only the single_agent workflow"):
+def test_chemgraph_rejects_codex_for_unsupported_workflows():
+    with pytest.raises(ValueError, match="single_agent and main_agent workflows"):
         ChemGraph(model_name="codex:test-model", workflow_type="multi_agent")
+
+
+@pytest.mark.asyncio
+async def test_codex_adapter_runs_main_agent_delegation(fake_codex_sdk):
+    fake_codex_sdk.responses.extend(
+        [
+            json.dumps(
+                {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "name": "task",
+                            "arguments": json.dumps(
+                                {
+                                    "subagent_type": "chemgraph",
+                                    "description": "Look up the aspirin SMILES.",
+                                }
+                            ),
+                        }
+                    ],
+                }
+            ),
+            json.dumps(
+                {
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "name": "lookup_smiles",
+                            "arguments": json.dumps({"name": "aspirin"}),
+                        }
+                    ],
+                }
+            ),
+            json.dumps(
+                {
+                    "content": "The aspirin SMILES is "
+                    "CC(=O)OC1=CC=CC=C1C(=O)O.",
+                    "tool_calls": [],
+                }
+            ),
+            json.dumps(
+                {
+                    "content": "The chemistry worker found the aspirin SMILES.",
+                    "tool_calls": [],
+                }
+            ),
+        ]
+    )
+    model = CodexChatModel(model_id="gpt-5.6-terra")
+    worker = construct_single_agent_graph(
+        model,
+        system_prompt="Use the lookup tool before answering.",
+        tools=[lookup_smiles],
+        checkpointer=None,
+    )
+    graph = construct_main_agent_graph(
+        model,
+        subagents=[
+            {
+                "name": "chemgraph",
+                "description": "Executes chemistry lookup tasks.",
+                "runnable": worker,
+            }
+        ],
+    )
+
+    result = await MainAgentSession(
+        graph,
+        thread_id="codex-main-agent-test",
+    ).run("Find the aspirin SMILES")
+
+    assert result.status == "completed"
+    assert result.assistant_response == (
+        "The chemistry worker found the aspirin SMILES."
+    )
+    assert len(fake_codex_sdk.run_calls) == 4
 
 
 def test_codex_models_never_require_openai_api_key(monkeypatch):
