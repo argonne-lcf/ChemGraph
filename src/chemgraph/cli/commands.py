@@ -50,12 +50,14 @@ ALL_WORKFLOW_TYPES = [
     "rag_agent",
     "single_agent_xanes",
     "molecular_docking",
+    "single_agent_iri",
 ]
 
 # Common aliases so users can type the "obvious" name.
 WORKFLOW_ALIASES: Dict[str, str] = {
     "python_repl": "python_relp",
     "graspa_agent": "graspa",
+    "iri": "single_agent_iri",
 }
 
 
