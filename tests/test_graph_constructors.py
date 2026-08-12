@@ -9,7 +9,6 @@ WORKFLOWS = [
     "python_relp",
     "graspa",
     "mock_agent",
-    "single_agent_mcp",
     "graspa_mcp",
     "single_agent_xanes",
     "molecular_docking",
@@ -32,7 +31,6 @@ def test_constructor_is_called(monkeypatch, workflow_type):
         "python_relp": "construct_relp_graph",
         "graspa": "construct_graspa_graph",
         "mock_agent": "construct_mock_agent_graph",
-        "single_agent_mcp": "construct_single_agent_mcp_graph",
         "graspa_mcp": "construct_graspa_mcp_graph",
         "single_agent_xanes": "construct_single_agent_xanes_graph",
         "molecular_docking": "construct_molecular_docking_graph",
@@ -51,7 +49,7 @@ def test_constructor_is_called(monkeypatch, workflow_type):
 
     # For MCP workflows some constructors expect tools; pass a non-empty list
     kwargs = {}
-    if workflow_type in {"single_agent_mcp", "graspa_mcp"}:
+    if workflow_type == "graspa_mcp":
         kwargs["tools"] = ["DUMMY_TOOL"]
         kwargs["data_tools"] = ["DUMMY_TOOL"]
 

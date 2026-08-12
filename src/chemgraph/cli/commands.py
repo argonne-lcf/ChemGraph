@@ -46,7 +46,6 @@ ALL_WORKFLOW_TYPES = [
     "python_relp",
     "graspa",
     "mock_agent",
-    "single_agent_mcp",
     "graspa_mcp",
     "rag_agent",
     "single_agent_xanes",
