@@ -385,7 +385,7 @@ thread, and chemistry work is delegated through Deep Agents' `task` middleware
 tool. A nested chemistry worker can still pause to request input. Quitting or
 switching the model or workflow discards the process-local thread; durable
 `--resume` support for `main_agent` is not yet available. If a model or graph
-operation fails transiently, enter `retry` to resume its checkpoint without
+operation fails transiently, enter `/retry` to resume its checkpoint without
 adding the previous user message a second time.
 
 **Interactive Features:**
@@ -398,18 +398,24 @@ adding the previous user message a second time.
 **Interactive Commands:**
 ```bash
 # In interactive mode, type:
-help                    # Show available commands
-clear                   # Clear screen
-config                  # Show current configuration and session ID
-quit                    # Exit interactive mode
-model gpt-4o           # Change model
-workflow multi_agent   # Change workflow
+/help                   # Show available commands
+/clear                  # Clear screen
+/config                 # Show current configuration and session ID
+/quit                   # Exit interactive mode
+/model gpt-4o           # Change model
+/workflow multi_agent   # Change workflow
 
 # Session management:
-history                 # List recent sessions
-show <session_id>       # Show a session's conversation
-resume <session_id>     # Resume from a previous session
+/history                # List recent sessions
+/show <session_id>      # Show a session's conversation
+/resume <session_id>    # Resume from a previous session
+/retry                  # Retry a failed main_agent operation
 ```
+
+Exact bare aliases for commands without arguments, such as `help`, `quit`, and
+`history`, remain supported. Commands with arguments require `/`, so natural
+prompts beginning with words such as `show`, `model`, or `workflow` are sent to
+the active agent.
 
 #### Utility Commands
 

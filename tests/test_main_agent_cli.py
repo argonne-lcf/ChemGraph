@@ -50,6 +50,7 @@ class _FakeMainSession:
         self.failed = False
         return result
 
+
 def test_main_agent_is_a_cli_workflow():
     assert "main_agent" in commands.ALL_WORKFLOW_TYPES
     assert "main_agent" in cli_main._WORKFLOW_CHOICES
@@ -94,7 +95,7 @@ def test_main_agent_query_failure_suggests_retry():
 
     assert result is None
     assert session.failed is True
-    assert "`retry` command" in capture.get()
+    assert "`/retry` command" in capture.get()
 
 
 def test_retry_main_agent_session_resumes_failed_operation():
@@ -144,7 +145,7 @@ def test_interactive_main_agent_discards_session_on_quit(monkeypatch):
 def test_interactive_main_agent_retry_command(monkeypatch):
     session = _FakeMainSession([], failed=True)
     agent = SimpleNamespace()
-    answers = iter(["gpt-4o-mini", "main_agent", "retry", "quit"])
+    answers = iter(["gpt-4o-mini", "main_agent", "/retry", "quit"])
 
     monkeypatch.setattr(
         commands.Prompt,
@@ -172,6 +173,187 @@ def test_interactive_main_agent_retry_command(monkeypatch):
 
     assert calls == [(session, False)]
     assert session.calls == []
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("/show AbC123", ("show", "AbC123")),
+        ("/resume old-thread", ("resume", "old-thread")),
+        ("/model Provider/Model-X", ("model", "Provider/Model-X")),
+        ("/workflow single_agent", ("workflow", "single_agent")),
+        ("/SHOW MixedCase", ("show", "MixedCase")),
+        ("help", ("help", "")),
+        ("retry", ("retry", "")),
+        ("show me the tools", None),
+        ("model a molecule", None),
+    ],
+)
+def test_parse_interactive_input(value, expected):
+    assert commands._parse_interactive_input(value) == expected
+
+
+def test_interactive_show_prompt_reaches_main_agent(monkeypatch):
+    prompt = "show me the list of all the tools your subagent has"
+    session = _FakeMainSession([])
+    agent = SimpleNamespace()
+    answers = iter(["gpt-4o-mini", "main_agent", prompt, "quit"])
+    calls = []
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: agent)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda _agent: session,
+    )
+    monkeypatch.setattr(
+        commands,
+        "show_session",
+        lambda _sid: pytest.fail("natural-language prompt called show_session"),
+    )
+
+    def fake_run(active_session, query, verbose=False):
+        calls.append((active_session, query, verbose))
+        return _turn_result()
+
+    monkeypatch.setattr(commands, "run_main_agent_query", fake_run)
+
+    with console.capture():
+        commands.interactive_mode(workflow="main_agent", generate_report=False)
+
+    assert calls == [(session, prompt, False)]
+
+
+def test_interactive_slash_show_dispatches_to_session_command(monkeypatch):
+    session = _FakeMainSession([])
+    agent = SimpleNamespace()
+    answers = iter(["gpt-4o-mini", "main_agent", "/show AbC123", "quit"])
+    shown = []
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: agent)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda _agent: session,
+    )
+    monkeypatch.setattr(commands, "show_session", shown.append)
+    monkeypatch.setattr(
+        commands,
+        "run_main_agent_query",
+        lambda *_args, **_kwargs: pytest.fail("/show reached the agent"),
+    )
+
+    with console.capture():
+        commands.interactive_mode(workflow="main_agent", generate_report=False)
+
+    assert shown == ["AbC123"]
+
+
+def test_interactive_slash_resume_dispatches_to_saved_session(monkeypatch):
+    agent = SimpleNamespace(session_id="active-session")
+    answers = iter(
+        ["gpt-4o-mini", "single_agent", "/resume old-thread", "continue", "quit"]
+    )
+    calls = []
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: agent)
+
+    def fake_run(active_agent, query, verbose=False, resume_from=None):
+        calls.append((active_agent, query, verbose, resume_from))
+        return None
+
+    monkeypatch.setattr(commands, "run_query", fake_run)
+
+    with console.capture():
+        commands.interactive_mode(generate_report=False)
+
+    assert calls == [(agent, "continue", False, "old-thread")]
+
+
+def test_interactive_slash_model_and_workflow_switches(monkeypatch):
+    answers = iter(
+        [
+            "first-model",
+            "main_agent",
+            "/model Provider/Next-Model",
+            "/workflow single_agent",
+            "quit",
+        ]
+    )
+    initial_agent = SimpleNamespace()
+    next_agent = SimpleNamespace()
+    single_agent = SimpleNamespace(session_id="single")
+    agents = iter([initial_agent, next_agent, single_agent])
+    initialization_calls = []
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+
+    def fake_initialize(model, workflow, *_args, **_kwargs):
+        initialization_calls.append((model, workflow))
+        return next(agents)
+
+    monkeypatch.setattr(commands, "initialize_agent", fake_initialize)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda _agent: SimpleNamespace(thread_id="main", failed=False),
+    )
+
+    with console.capture():
+        commands.interactive_mode(workflow="main_agent", generate_report=False)
+
+    assert initialization_calls == [
+        ("first-model", "main_agent"),
+        ("Provider/Next-Model", "main_agent"),
+        ("Provider/Next-Model", "single_agent"),
+    ]
+
+
+def test_interactive_reports_invalid_slash_commands(monkeypatch):
+    agent = SimpleNamespace()
+    session = _FakeMainSession([])
+    answers = iter(
+        ["gpt-4o-mini", "main_agent", "/show", "/not-a-command", "quit"]
+    )
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: agent)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda _agent: session,
+    )
+
+    with console.capture() as capture:
+        commands.interactive_mode(workflow="main_agent", generate_report=False)
+
+    output = capture.get()
+    assert "Usage: /show <session_id>" in output
+    assert "Unknown interactive command: /not-a-command" in output
+    assert "Type /help" in output
 
 
 def _run_args(**overrides):

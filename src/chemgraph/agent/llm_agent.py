@@ -108,7 +108,8 @@ class ChemGraph:
     model_name : str, optional
         Name of the language model to use, by default "gpt-4o-mini".
         Experimental ChatGPT subscription-backed Codex models use the
-        ``codex:<model-id>`` prefix and support only ``single_agent``.
+        ``codex:<model-id>`` prefix and support ``single_agent`` and
+        ``main_agent``.
     workflow_type : str, optional
         Type of workflow to use. Options:
         - "single_agent"
@@ -199,10 +200,13 @@ class ChemGraph:
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
     ):
-        if model_name.startswith("codex:") and workflow_type != "single_agent":
+        if model_name.startswith("codex:") and workflow_type not in {
+            "single_agent",
+            "main_agent",
+        }:
             raise ValueError(
                 "Experimental codex: models currently support only the "
-                "single_agent workflow."
+                "single_agent and main_agent workflows."
             )
         reasoning_effort = _resolve_reasoning_effort(model_name, reasoning_effort)
 

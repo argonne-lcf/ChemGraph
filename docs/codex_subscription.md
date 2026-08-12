@@ -55,6 +55,16 @@ chemgraph \
   --query "What is the SMILES string for aspirin?"
 ```
 
+For a long-lived supervisor that delegates chemistry work to a subagent, use
+interactive mode:
+
+```bash
+chemgraph \
+  --interactive \
+  --model "codex:<codex-model-id>" \
+  --workflow main_agent
+```
+
 The same model syntax works through the Python API:
 
 ```python
@@ -68,7 +78,9 @@ agent = ChemGraph(
 
 ## Current limitations
 
-- Only the `single_agent` workflow is supported.
+- Only the `single_agent` and `main_agent` workflows are supported.
+- `main_agent` sessions are process-local and must be run in interactive mode;
+  durable `--resume` support is not yet available.
 - The integration is experimental and pins `openai-codex==0.144.4` together
   with that SDK's bundled Codex runtime.
 - ChemGraph starts ephemeral, read-only Codex threads. ChemGraph's LangGraph
