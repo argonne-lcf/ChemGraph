@@ -106,6 +106,22 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         help="Enable the ask_human tool for human-in-the-loop interaction",
     )
     parser.add_argument(
+        "--deepagent",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Experimentally add a workspace Deep Agent to main_agent "
+            "(interactive mode only)"
+        ),
+    )
+    parser.add_argument(
+        "--deepagent-workspace",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Workspace root for the experimental local-shell Deep Agent",
+    )
+    parser.add_argument(
         "--recursion-limit",
         type=int,
         default=20,
@@ -349,6 +365,8 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 "thread": 1,
                 "recursion_limit": 20,
                 "human_supervised": False,
+                "enable_deepagent": False,
+                "deepagent_workspace": None,
                 "verbose": False,
             },
             "api": {},
@@ -394,6 +412,9 @@ def _handle_run(args: argparse.Namespace) -> None:
     args : argparse.Namespace
         Parsed CLI arguments.
     """
+    cli_deepagent = getattr(args, "deepagent", None)
+    cli_deepagent_workspace = getattr(args, "deepagent_workspace", None)
+
     # Handle special commands first
     if getattr(args, "list_models", False):
         list_models()
@@ -427,6 +448,8 @@ def _handle_run(args: argparse.Namespace) -> None:
         # Honour config recursion_limit unless user gave explicit flag.
         if "recursion_limit" in config and "--recursion-limit" not in sys.argv:
             args.recursion_limit = config["recursion_limit"]
+        if getattr(args, "deepagent", None) is None and "enable_deepagent" in config:
+            args.deepagent = bool(config["enable_deepagent"])
 
     # ---- Configure logging verbosity --------------------------------
     import logging as _logging
@@ -452,6 +475,19 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     # Resolve workflow alias (e.g. python_repl -> python_relp)
     args.workflow = resolve_workflow(args.workflow)
+    enable_deepagent = bool(getattr(args, "deepagent", False))
+    deepagent_workspace = getattr(args, "deepagent_workspace", None)
+    if deepagent_workspace is not None and not enable_deepagent:
+        if cli_deepagent is False and cli_deepagent_workspace is None:
+            deepagent_workspace = None
+        else:
+            console.print("[red]--deepagent-workspace requires --deepagent.[/red]")
+            sys.exit(2)
+    if enable_deepagent and not getattr(args, "interactive", False):
+        console.print(
+            "[red]The experimental Deep Agent requires interactive mode.[/red]"
+        )
+        sys.exit(2)
 
     if args.workflow == "main_agent":
         if getattr(args, "resume", None):
@@ -501,6 +537,8 @@ def _handle_run(args: argparse.Namespace) -> None:
             argo_user=argo_user,
             verbose=(args.verbose > 0),
             tools=mcp_tools,
+            enable_deepagent=enable_deepagent,
+            deepagent_workspace=deepagent_workspace,
         )
         return
 

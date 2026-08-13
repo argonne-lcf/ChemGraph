@@ -28,6 +28,9 @@ thread = 1
 recursion_limit = 20
 # Allow the agent to pause and ask for human input
 human_supervised = false
+# Development-only workspace subagent for interactive main_agent sessions.
+enable_deepagent = false
+# deepagent_workspace = "."
 # Enable verbose output
 verbose = false
 
@@ -288,6 +291,8 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 | `--output`          | `-o`  | Output format (`state`, `last_message`)              | `state`        |
 | `--structured`      | `-s`  | Use structured output format                         | `False`        |
 | `--report`          | `-r`  | Generate detailed report                             | `False`        |
+| `--deepagent`       |       | Enable the experimental `main_agent` workspace worker | `False`       |
+| `--deepagent-workspace` |   | Root used by the experimental workspace worker       | Current directory |
 | `--resume`          |       | Resume from a previous session ID (prefix supported) |                |
 | `--list-sessions`   |       | List recent sessions from the memory database        |                |
 | `--show-session`    |       | Show conversation for a session (prefix supported)   |                |
@@ -387,6 +392,48 @@ switching the model or workflow discards the process-local thread; durable
 `--resume` support for `main_agent` is not yet available. If a model or graph
 operation fails transiently, enter `/retry` to resume its checkpoint without
 adding the previous user message a second time.
+
+#### Experimental workspace Deep Agent
+
+For development and testing, `main_agent` can register an additional
+`deepagent` sibling alongside the existing `chemgraph` chemistry worker:
+
+```bash
+chemgraph --interactive -w main_agent --deepagent \
+  --deepagent-workspace /absolute/path/to/workspace
+```
+
+The supervisor routes molecular simulations and calculator work to
+`chemgraph`, while repository exploration, coding, file analysis, and test runs
+can be delegated to `deepagent`. The equivalent TOML settings are
+`general.enable_deepagent = true` and `general.deepagent_workspace = "..."`.
+An explicit `--no-deepagent` overrides an enabled TOML setting.
+
+!!! danger "Development-only host shell"
+    The experimental CLI uses Deep Agents' `LocalShellBackend`. Its filesystem
+    tools are rooted at the selected workspace, but shell commands are executed
+    directly on the host and can access paths outside that root. ChemGraph
+    displays a warning and requires startup confirmation, then requires an
+    approve/reject decision before every shell command and every file
+    write/edit/delete. Only a small environment allowlist is forwarded; API
+    keys and token variables are not copied. Do not use this mode for deployed
+    or untrusted workloads.
+
+Python callers can instead pass any compatible Deep Agents backend without
+using the host-shell CLI path:
+
+```python
+agent = ChemGraph(
+    model_name="gpt-4o-mini",
+    workflow_type="main_agent",
+    enable_deepagent=True,
+    deepagent_backend=my_sandbox_backend,
+)
+```
+
+A production release must use an isolated sandbox backend with explicit user
+approval, defined lifecycle and cleanup, artifact transfer, and network/secret
+policies. The experimental local backend is not a production sandbox.
 
 **Interactive Features:**
 - **Persistent conversation**: Maintain context across queries

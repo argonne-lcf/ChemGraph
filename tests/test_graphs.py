@@ -154,6 +154,7 @@ def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tm
     captured = {}
     workflow = _FakeWorkflow()
     main_tool = _DummyTool("read_file")
+    deepagent_backend = object()
 
     def fake_constructor(*args, **kwargs):
         captured["args"] = args
@@ -182,6 +183,8 @@ def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tm
         max_retries=4,
         human_supervised=True,
         terminal_tool_names=("save_result",),
+        enable_deepagent=True,
+        deepagent_backend=deepagent_backend,
     )
 
     assert cg.workflow is workflow
@@ -197,6 +200,9 @@ def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tm
     assert captured["kwargs"]["subagent_max_retries"] == cg.max_retries
     assert captured["kwargs"]["subagent_human_supervised"] is True
     assert captured["kwargs"]["subagent_terminal_tool_names"] == ("save_result",)
+    assert captured["kwargs"]["enable_deepagent"] is True
+    assert captured["kwargs"]["deepagent_backend"] is deepagent_backend
+    assert captured["kwargs"]["deepagent_recursion_limit"] == cg.recursion_limit
 
 
 @pytest.mark.asyncio
