@@ -4,6 +4,7 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
+import toml
 
 from chemgraph.agent.main_session import MainAgentTurnResult, PendingInterrupt
 from chemgraph.cli import commands
@@ -575,9 +576,14 @@ def test_deepagent_toml_and_cli_precedence(
 ):
     config_path = tmp_path / "config.toml"
     config_path.write_text(
-        "[general]\n"
-        "enable_deepagent = true\n"
-        f'deepagent_workspace = "{tmp_path}"\n'
+        toml.dumps(
+            {
+                "general": {
+                    "enable_deepagent": True,
+                    "deepagent_workspace": str(tmp_path),
+                }
+            }
+        )
     )
     captured = {}
     monkeypatch.setattr(
