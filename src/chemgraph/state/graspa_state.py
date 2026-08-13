@@ -116,14 +116,3 @@ class PlannerResponse(BaseModel):
             return normalized
 
         return data
-
-
-class SubPlannerDecision(BaseModel):
-    """Output schema for the Sub-Planner's decision."""
-
-    next_step: Literal["delegate_to_executor", "finish"] = Field(
-        description="Check if more info is needed (delegate) or if the task is done (finish)."
-    )
-    instruction: str = Field(
-        description="If delegating, the precise instruction for the Executor. If finishing, the final answer."
-    )
