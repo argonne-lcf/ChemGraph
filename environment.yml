@@ -31,7 +31,6 @@ dependencies:
     - pydantic==2.13.4
     - pubchempy==1.0.5
     - numexpr==2.11.0
-    - deepdiff==8.5.0
     - pymatgen==2025.3.10
     - mace-torch==0.3.13
     - globus-sdk
