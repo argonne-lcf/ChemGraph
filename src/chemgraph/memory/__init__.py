@@ -6,6 +6,21 @@ enabling users to review past sessions and resume from previous context.
 """
 
 from chemgraph.memory.store import SessionStore
-from chemgraph.memory.schemas import Session, SessionMessage, SessionSummary
+from chemgraph.memory.schemas import (
+    MainAgentGraphConfig,
+    MainAgentSessionMetadata,
+    Session,
+    SessionMessage,
+    SessionSummary,
+    SubagentRun,
+)
 
-__all__ = ["SessionStore", "Session", "SessionMessage", "SessionSummary"]
+__all__ = [
+    "MainAgentGraphConfig",
+    "MainAgentSessionMetadata",
+    "SessionStore",
+    "Session",
+    "SessionMessage",
+    "SessionSummary",
+    "SubagentRun",
+]

@@ -17,6 +17,7 @@ from ase.io import read as ase_read
 
 from chemgraph.agent.llm_agent import HumanInputRequired
 from chemgraph.memory.store import SessionStore
+from chemgraph.memory.durable import delete_durable_session
 from chemgraph.models.supported_models import supported_argo_models
 from chemgraph.schemas.ase_input import (
     get_available_calculator_names,
@@ -402,7 +403,7 @@ def _render_session_sidebar() -> None:
                     help="Delete this session",
                 ):
                     try:
-                        store.delete_session(s.session_id)
+                        delete_durable_session(store, s.session_id)
                         # If we just deleted the active session, reset
                         if current_sid == s.session_id:
                             _start_new_chat()

@@ -13,6 +13,19 @@ from chemgraph.cli.formatting import console
 cli_main = importlib.import_module("chemgraph.cli.main")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_durable_databases(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        commands,
+        "DEFAULT_CHECKPOINT_DB",
+        str(tmp_path / "checkpoints.db"),
+    )
+    monkeypatch.setattr(
+        "chemgraph.memory.store.DEFAULT_DB_PATH",
+        str(tmp_path / "sessions.db"),
+    )
+
+
 def _turn_result(*interrupts: PendingInterrupt) -> MainAgentTurnResult:
     return MainAgentTurnResult(
         thread_id="main-thread",
@@ -196,6 +209,10 @@ def test_deepagent_cli_boolean_flags():
 
     assert parser.parse_args(["--deepagent"]).deepagent is True
     assert parser.parse_args(["--no-deepagent"]).deepagent is False
+    assert (
+        parser.parse_args(["--checkpoint-db", "/tmp/checkpoints.db"]).checkpoint_db
+        == "/tmp/checkpoints.db"
+    )
 
 
 def test_main_agent_query_failure_suggests_retry():
@@ -236,10 +253,10 @@ def test_interactive_main_agent_discards_session_on_quit(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
 
-    def fake_run(active_session, query, verbose=False):
+    def fake_run(active_session, query, verbose=False, **_kwargs):
         assert active_session is session
         assert query == "calculate"
         assert verbose is False
@@ -267,12 +284,12 @@ def test_interactive_main_agent_retry_command(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
 
     calls = []
 
-    def fake_retry(active_session, verbose=False):
+    def fake_retry(active_session, verbose=False, **_kwargs):
         calls.append((active_session, verbose))
         active_session.failed = False
         return _turn_result()
@@ -320,7 +337,7 @@ def test_interactive_show_prompt_reaches_main_agent(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
     monkeypatch.setattr(
         commands,
@@ -328,7 +345,7 @@ def test_interactive_show_prompt_reaches_main_agent(monkeypatch):
         lambda _sid: pytest.fail("natural-language prompt called show_session"),
     )
 
-    def fake_run(active_session, query, verbose=False):
+    def fake_run(active_session, query, verbose=False, **_kwargs):
         calls.append((active_session, query, verbose))
         return _turn_result()
 
@@ -355,7 +372,7 @@ def test_interactive_slash_show_dispatches_to_session_command(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
     monkeypatch.setattr(commands, "show_session", shown.append)
     monkeypatch.setattr(
@@ -426,7 +443,7 @@ def test_interactive_slash_model_and_workflow_switches(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: SimpleNamespace(thread_id="main", failed=False),
+        lambda _agent, **_kwargs: SimpleNamespace(thread_id="main", failed=False),
     )
 
     with console.capture():
@@ -473,7 +490,7 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: SimpleNamespace(thread_id="main", failed=False),
+        lambda _agent, **_kwargs: SimpleNamespace(thread_id="main", failed=False),
     )
 
     with console.capture():
@@ -507,7 +524,7 @@ def test_interactive_reports_invalid_slash_commands(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
 
     with console.capture() as capture:
@@ -556,12 +573,17 @@ def test_main_agent_requires_interactive_cli_mode():
     assert "requires interactive mode" in capture.get()
 
 
-def test_main_agent_rejects_persistent_resume():
-    with console.capture() as capture, pytest.raises(SystemExit) as exc_info:
-        cli_main._handle_run(_run_args(interactive=True, resume="old-thread"))
+def test_main_agent_dispatches_persistent_resume(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        cli_main,
+        "interactive_mode",
+        lambda **kwargs: captured.update(kwargs),
+    )
 
-    assert exc_info.value.code == 2
-    assert "--resume is not supported" in capture.get()
+    cli_main._handle_run(_run_args(interactive=True, resume="old-thread"))
+
+    assert captured["resume_session"] == "old-thread"
 
 
 @pytest.mark.parametrize(

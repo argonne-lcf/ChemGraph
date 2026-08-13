@@ -10,6 +10,8 @@ human_supervised = false
 # Development-only: add a workspace Deep Agent to interactive main_agent.
 enable_deepagent = false
 # deepagent_workspace = "."
+# Durable main-agent checkpoint database.
+# checkpoint_db = "~/.chemgraph/checkpoints.db"
 verbose = false
 
 [logging]

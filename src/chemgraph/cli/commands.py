@@ -19,6 +19,11 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from chemgraph.memory.store import SessionStore
+from chemgraph.memory.durable import delete_durable_session
+from chemgraph.cli.checkpoint_runtime import (
+    DEFAULT_CHECKPOINT_DB,
+    CheckpointRuntime,
+)
 from chemgraph.models.supported_models import (
     supported_alcf_models,
     supported_anthropic_models,
@@ -234,6 +239,10 @@ def initialize_agent(
     on_event: Optional[Any] = None,
     enable_deepagent: bool = False,
     deepagent_workspace: str | None = None,
+    checkpointer: Any | None = None,
+    reasoning_effort: str | None = None,
+    max_retries: int = 1,
+    terminal_tool_names: tuple[str, ...] = (),
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -362,6 +371,10 @@ def initialize_agent(
                 on_event=on_event,
                 enable_deepagent=enable_deepagent,
                 deepagent_backend=deepagent_backend,
+                checkpointer=checkpointer,
+                reasoning_effort=reasoning_effort,
+                max_retries=max_retries,
+                terminal_tool_names=terminal_tool_names,
             )
 
         try:
@@ -571,14 +584,25 @@ def run_query(
     return None
 
 
-def create_main_agent_session(agent: Any):
+def create_main_agent_session(
+    agent: Any,
+    *,
+    thread_id: str | None = None,
+    checkpoint_db: str | None = None,
+):
     """Create the CLI session driver for a constructed main-agent workflow."""
     from chemgraph.agent.main_session import MainAgentSession
 
+    metadata = agent.main_agent_metadata.model_copy(deep=True)
+    if checkpoint_db is not None:
+        metadata.checkpoint_backend = "AsyncSqliteSaver"
+        metadata.checkpoint_db = os.path.abspath(os.path.expanduser(checkpoint_db))
     return MainAgentSession(
         agent.workflow,
-        thread_id=agent.session_id,
+        thread_id=thread_id or agent.session_id,
         recursion_limit=agent.recursion_limit,
+        session_store=agent.session_store,
+        session_metadata=metadata,
     )
 
 
@@ -664,6 +688,7 @@ def _run_main_agent_operation(
     operation: Any,
     *,
     progress_description: str,
+    checkpoint_runtime: CheckpointRuntime | None = None,
 ) -> Any:
     """Run one session operation and resolve nested-graph interrupts."""
     try:
@@ -674,7 +699,11 @@ def _run_main_agent_operation(
             transient=True,
         ) as progress:
             progress.add_task(progress_description, total=None)
-            result = run_async_callable(operation)
+            result = (
+                checkpoint_runtime.run(operation)
+                if checkpoint_runtime is not None
+                else run_async_callable(operation)
+            )
     except Exception as exc:
         console.print(f"[red]Error processing main-agent session: {exc}[/red]")
         _main_agent_failure_hint(session)
@@ -699,7 +728,11 @@ def _run_main_agent_operation(
                 answers[pending.id] = _prompt_for_interrupt(pending.payload)
 
         try:
-            result = run_async_callable(lambda: session.resume(answers))
+            result = (
+                checkpoint_runtime.run(lambda: session.resume(answers))
+                if checkpoint_runtime is not None
+                else run_async_callable(lambda: session.resume(answers))
+            )
         except Exception as exc:
             console.print(f"[red]Error resuming main-agent session: {exc}[/red]")
             _main_agent_failure_hint(session)
@@ -708,7 +741,12 @@ def _run_main_agent_operation(
     return result
 
 
-def run_main_agent_query(session: Any, query: str, verbose: bool = False) -> Any:
+def run_main_agent_query(
+    session: Any,
+    query: str,
+    verbose: bool = False,
+    checkpoint_runtime: CheckpointRuntime | None = None,
+) -> Any:
     """Run one main-agent turn and resolve nested clarifications."""
     if verbose:
         console.print(f"[blue]Main-agent thread:[/blue] {session.thread_id}")
@@ -717,10 +755,15 @@ def run_main_agent_query(session: Any, query: str, verbose: bool = False) -> Any
         session,
         lambda: session.run(query),
         progress_description="Processing main-agent turn...",
+        checkpoint_runtime=checkpoint_runtime,
     )
 
 
-def retry_main_agent_session(session: Any, verbose: bool = False) -> Any:
+def retry_main_agent_session(
+    session: Any,
+    verbose: bool = False,
+    checkpoint_runtime: CheckpointRuntime | None = None,
+) -> Any:
     """Retry the failed operation for one main-agent session."""
     if verbose:
         console.print(f"[blue]Main-agent thread:[/blue] {session.thread_id}")
@@ -728,6 +771,21 @@ def retry_main_agent_session(session: Any, verbose: bool = False) -> Any:
         session,
         session.retry,
         progress_description="Retrying main-agent operation...",
+        checkpoint_runtime=checkpoint_runtime,
+    )
+
+
+def restore_main_agent_session(
+    session: Any,
+    *,
+    checkpoint_runtime: CheckpointRuntime | None = None,
+) -> Any:
+    """Restore one durable thread and immediately resolve pending interrupts."""
+    return _run_main_agent_operation(
+        session,
+        session.restore,
+        progress_description="Restoring main-agent thread...",
+        checkpoint_runtime=checkpoint_runtime,
     )
 
 
@@ -762,6 +820,8 @@ def list_sessions(limit: int = 20, db_path: Optional[str] = None) -> None:
     table.add_column("Workflow", style="yellow", width=14)
     table.add_column("Queries", style="white", justify="right", width=8)
     table.add_column("Messages", style="white", justify="right", width=9)
+    table.add_column("Children", style="white", justify="right", width=8)
+    table.add_column("Status", style="magenta", width=16)
     table.add_column("Date", style="dim", width=16)
 
     for s in sessions:
@@ -772,6 +832,8 @@ def list_sessions(limit: int = 20, db_path: Optional[str] = None) -> None:
             s.workflow_type,
             str(s.query_count),
             str(s.message_count),
+            str(s.child_run_count),
+            s.status,
             s.updated_at.strftime("%Y-%m-%d %H:%M"),
         )
 
@@ -818,6 +880,8 @@ def show_session(
     meta_table.add_row("Model", session.model_name)
     meta_table.add_row("Workflow", session.workflow_type)
     meta_table.add_row("Queries", str(session.query_count))
+    meta_table.add_row("Status", session.status)
+    meta_table.add_row("Child Runs", str(session.child_run_count))
     meta_table.add_row("Created", session.created_at.strftime("%Y-%m-%d %H:%M:%S"))
     meta_table.add_row("Updated", session.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
     if session.log_dir:
@@ -855,6 +919,17 @@ def show_session(
         console.print(f"  {label} [dim]{timestamp}[/dim]")
         console.print(f"    {content}\n")
 
+    for child in session.child_runs:
+        child_title = (
+            f"{child.agent_name} · {child.status} · {child.run_id[:8]}"
+        )
+        console.print(Panel(child.delegated_task, title=child_title, style="magenta"))
+        if child.error_text:
+            console.print(f"  [red]{escape(child.error_text)}[/red]")
+        for msg in child.messages:
+            tool_label = f" ({msg.tool_name})" if msg.tool_name else ""
+            console.print(f"  [bold]{msg.role}{tool_label}[/bold]: {msg.content}")
+
 
 def delete_session_cmd(session_id: str, db_path: Optional[str] = None) -> None:
     """Delete a session from the database.
@@ -879,8 +954,16 @@ def delete_session_cmd(session_id: str, db_path: Optional[str] = None) -> None:
         f"({session.title or 'Untitled'})[/yellow]"
     )
 
-    if store.delete_session(session_id):
-        console.print("[green]Session deleted.[/green]")
+    try:
+        deleted = delete_durable_session(store, session_id)
+    except Exception as exc:
+        console.print(
+            "[red]Checkpoint deletion failed; the session record was kept: "
+            f"{escape(str(exc))}[/red]"
+        )
+        return
+    if deleted:
+        console.print("[green]Session and checkpoints deleted.[/green]")
     else:
         console.print("[red]Failed to delete session.[/red]")
 
@@ -976,6 +1059,8 @@ def interactive_mode(
     tools: Optional[list] = None,
     enable_deepagent: bool = False,
     deepagent_workspace: str | None = None,
+    checkpoint_db: str | None = None,
+    resume_session: str | None = None,
 ) -> None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -1023,15 +1108,49 @@ def interactive_mode(
         "aliases such as 'quit' and 'help' also work.[/dim]\n"
     )
 
-    # Allow the user to override model/workflow at startup.
-    model = Prompt.ask(
-        "Select model (or type a custom model ID)", default=model
-    )
-    workflow = Prompt.ask(
-        "Select workflow",
-        choices=ALL_WORKFLOW_TYPES,
-        default=resolve_workflow(workflow),
-    )
+    checkpoint_runtime: CheckpointRuntime | None = None
+    checkpoint_saver = None
+    restored_thread_id: str | None = None
+    stored_graph_config = None
+    if resume_session:
+        resolved = SessionStore().get_session_metadata(resume_session)
+        if resolved is None or resolved[1] is None:
+            console.print(
+                f"[red]Durable main-agent session '{resume_session}' was not found.[/red]"
+            )
+            return
+        restored_thread_id, stored_metadata = resolved
+        stored_graph_config = stored_metadata.graph_config
+        model = stored_graph_config.model_name
+        workflow = "main_agent"
+        recursion_limit = stored_graph_config.recursion_limit
+        structured = stored_graph_config.structured_output
+        generate_report = stored_graph_config.generate_report
+        human_supervised = stored_graph_config.human_supervised
+        enable_deepagent = stored_graph_config.enable_deepagent
+        deepagent_workspace = stored_graph_config.deepagent_workspace
+        checkpoint_db = stored_metadata.checkpoint_db or checkpoint_db
+    else:
+        # Allow the user to override model/workflow at startup.
+        model = Prompt.ask(
+            "Select model (or type a custom model ID)", default=model
+        )
+        workflow = Prompt.ask(
+            "Select workflow",
+            choices=ALL_WORKFLOW_TYPES,
+            default=resolve_workflow(workflow),
+        )
+
+    if workflow == "main_agent":
+        checkpoint_runtime = CheckpointRuntime()
+        try:
+            checkpoint_saver = checkpoint_runtime.open_sqlite(
+                checkpoint_db or DEFAULT_CHECKPOINT_DB
+            )
+        except Exception as exc:
+            checkpoint_runtime.close()
+            console.print(f"[red]Could not open checkpoint database: {exc}[/red]")
+            return
 
     # Initialize agent with the full config context.
     agent = initialize_agent(
@@ -1052,13 +1171,45 @@ def interactive_mode(
             if enable_deepagent and workflow == "main_agent"
             else None
         ),
+        checkpointer=checkpoint_saver,
+        reasoning_effort=(
+            stored_graph_config.reasoning_effort if stored_graph_config else None
+        ),
+        max_retries=(stored_graph_config.max_retries if stored_graph_config else 1),
+        terminal_tool_names=(
+            stored_graph_config.terminal_tool_names if stored_graph_config else ()
+        ),
     )
     if not agent:
+        if checkpoint_runtime is not None:
+            checkpoint_runtime.close()
         return
 
     main_session = (
-        create_main_agent_session(agent) if workflow == "main_agent" else None
+        create_main_agent_session(
+            agent,
+            thread_id=restored_thread_id,
+            checkpoint_db=checkpoint_db or DEFAULT_CHECKPOINT_DB,
+        )
+        if workflow == "main_agent"
+        else None
     )
+
+    if restored_thread_id and main_session is not None:
+        result = restore_main_agent_session(
+            main_session,
+            checkpoint_runtime=checkpoint_runtime,
+        )
+        if result is None:
+            if checkpoint_runtime is not None:
+                checkpoint_runtime.close()
+            return
+        if result.status == "failed":
+            console.print(
+                "[yellow]The restored operation can be continued with /retry.[/yellow]"
+            )
+        elif result.assistant_response:
+            format_response(result, verbose=verbose)
 
     console.print(
         "[green]Ready! You can now ask computational chemistry questions.[/green]\n"
@@ -1087,6 +1238,8 @@ def interactive_mode(
                     console.print("[red]Usage: /quit[/red]")
                     continue
                 console.print("[yellow]Goodbye![/yellow]")
+                if checkpoint_runtime is not None:
+                    checkpoint_runtime.close()
                 break
             elif command == "help":
                 if argument:
@@ -1113,9 +1266,9 @@ Exact bare aliases for commands without arguments remain supported. Commands
 with arguments require the leading slash so prompts beginning with words such
 as "show", "model", or "workflow" are sent to the agent.
 
-main_agent keeps one checkpointed thread until you quit or switch
-model/workflow. Its thread is process-local; `/resume` does not currently
-restore it later. Nested chemistry workers may pause to request input.
+main_agent keeps one durable checkpointed thread. `/resume <id>` restores
+completed, interrupted, or retryable threads. Nested chemistry workers may
+pause to request input.
 
 Example queries:
   What is the SMILES string for water?
@@ -1166,10 +1319,74 @@ Example queries:
                 if not argument:
                     console.print("[red]Usage: /resume <session_id>[/red]")
                     continue
+                target = SessionStore().get_session_metadata(argument)
+                if target is not None and target[1] is not None:
+                    target_id, target_metadata = target
+                    target_config = target_metadata.graph_config
+                    candidate_runtime = checkpoint_runtime or CheckpointRuntime()
+                    try:
+                        candidate_saver = candidate_runtime.open_sqlite(
+                            target_metadata.checkpoint_db or DEFAULT_CHECKPOINT_DB
+                        )
+                        candidate_agent = initialize_agent(
+                            target_config.model_name,
+                            "main_agent",
+                            target_config.structured_output,
+                            return_option,
+                            target_config.generate_report,
+                            target_config.recursion_limit,
+                            base_url=base_url,
+                            argo_user=argo_user,
+                            verbose=verbose,
+                            human_supervised=target_config.human_supervised,
+                            tools=tools,
+                            enable_deepagent=target_config.enable_deepagent,
+                            deepagent_workspace=target_config.deepagent_workspace,
+                            checkpointer=candidate_saver,
+                            reasoning_effort=target_config.reasoning_effort,
+                            max_retries=target_config.max_retries,
+                            terminal_tool_names=target_config.terminal_tool_names,
+                        )
+                        if candidate_agent is None:
+                            raise RuntimeError("Could not recreate the stored agent.")
+                        candidate_session = create_main_agent_session(
+                            candidate_agent,
+                            thread_id=target_id,
+                            checkpoint_db=(
+                                target_metadata.checkpoint_db or DEFAULT_CHECKPOINT_DB
+                            ),
+                        )
+                        restored = restore_main_agent_session(
+                            candidate_session,
+                            checkpoint_runtime=candidate_runtime,
+                        )
+                        if restored is None:
+                            raise RuntimeError("The stored thread could not be restored.")
+                    except Exception as exc:
+                        if checkpoint_runtime is None:
+                            candidate_runtime.close()
+                        console.print(f"[red]Could not restore session: {exc}[/red]")
+                        continue
+                    checkpoint_runtime = candidate_runtime
+                    checkpoint_saver = candidate_saver
+                    agent = candidate_agent
+                    main_session = candidate_session
+                    model = target_config.model_name
+                    workflow = "main_agent"
+                    checkpoint_db = target_metadata.checkpoint_db
+                    enable_deepagent = target_config.enable_deepagent
+                    deepagent_workspace = target_config.deepagent_workspace
+                    if restored.status == "failed":
+                        console.print(
+                            "[yellow]The restored operation can be continued with "
+                            "/retry.[/yellow]"
+                        )
+                    elif restored.assistant_response:
+                        format_response(restored, verbose=verbose)
+                    continue
                 if main_session is not None:
                     console.print(
-                        "[yellow]Persistent resume is not supported for the "
-                        "process-lifetime main_agent workflow.[/yellow]"
+                        "[red]The selected session is not a durable main-agent thread.[/red]"
                     )
                     continue
                 resume_query = Prompt.ask(
@@ -1195,7 +1412,14 @@ Example queries:
                         "workflow.[/yellow]"
                     )
                     continue
-                result = retry_main_agent_session(main_session, verbose=verbose)
+                if checkpoint_runtime is None:
+                    result = retry_main_agent_session(main_session, verbose=verbose)
+                else:
+                    result = retry_main_agent_session(
+                        main_session,
+                        verbose=verbose,
+                        checkpoint_runtime=checkpoint_runtime,
+                    )
                 if result:
                     format_response(result, verbose=verbose)
                     console.print(f"[dim]Thread: {main_session.thread_id}[/dim]")
@@ -1222,12 +1446,16 @@ Example queries:
                         if enable_deepagent and workflow == "main_agent"
                         else None
                     ),
+                    checkpointer=(checkpoint_saver if workflow == "main_agent" else None),
                 )
                 if new_agent:
                     model = new_model
                     agent = new_agent
                     main_session = (
-                        create_main_agent_session(agent)
+                        create_main_agent_session(
+                            agent,
+                            checkpoint_db=checkpoint_db or DEFAULT_CHECKPOINT_DB,
+                        )
                         if workflow == "main_agent"
                         else None
                     )
@@ -1239,6 +1467,11 @@ Example queries:
                     continue
                 new_workflow = resolve_workflow(argument)
                 if new_workflow in ALL_WORKFLOW_TYPES:
+                    if new_workflow == "main_agent" and checkpoint_runtime is None:
+                        checkpoint_runtime = CheckpointRuntime()
+                        checkpoint_saver = checkpoint_runtime.open_sqlite(
+                            checkpoint_db or DEFAULT_CHECKPOINT_DB
+                        )
                     new_agent = initialize_agent(
                         model,
                         new_workflow,
@@ -1258,12 +1491,18 @@ Example queries:
                             if enable_deepagent and new_workflow == "main_agent"
                             else None
                         ),
+                        checkpointer=(
+                            checkpoint_saver if new_workflow == "main_agent" else None
+                        ),
                     )
                     if new_agent:
                         workflow = new_workflow
                         agent = new_agent
                         main_session = (
-                            create_main_agent_session(agent)
+                            create_main_agent_session(
+                                agent,
+                                checkpoint_db=checkpoint_db or DEFAULT_CHECKPOINT_DB,
+                            )
                             if workflow == "main_agent"
                             else None
                         )
@@ -1278,11 +1517,19 @@ Example queries:
                 continue
 
             if main_session is not None:
-                result = run_main_agent_query(
-                    main_session,
-                    query,
-                    verbose=verbose,
-                )
+                if checkpoint_runtime is None:
+                    result = run_main_agent_query(
+                        main_session,
+                        query,
+                        verbose=verbose,
+                    )
+                else:
+                    result = run_main_agent_query(
+                        main_session,
+                        query,
+                        verbose=verbose,
+                        checkpoint_runtime=checkpoint_runtime,
+                    )
             else:
                 # Existing workflows use a fresh thread for each query.
                 result = run_query(agent, query, verbose=verbose)

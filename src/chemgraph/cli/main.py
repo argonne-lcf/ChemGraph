@@ -157,7 +157,17 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         "--resume",
         type=str,
         metavar="ID",
-        help="Resume from a previous session (injects context into new query)",
+        help=(
+            "Resume a prior session; main_agent restores exact checkpoints and "
+            "other workflows inject readable context"
+        ),
+    )
+    parser.add_argument(
+        "--checkpoint-db",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="SQLite checkpoint database for durable main_agent threads",
     )
     parser.add_argument(
         "-v",
@@ -367,6 +377,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 "human_supervised": False,
                 "enable_deepagent": False,
                 "deepagent_workspace": None,
+                "checkpoint_db": None,
                 "verbose": False,
             },
             "api": {},
@@ -490,12 +501,6 @@ def _handle_run(args: argparse.Namespace) -> None:
         sys.exit(2)
 
     if args.workflow == "main_agent":
-        if getattr(args, "resume", None):
-            console.print(
-                "[red]--resume is not supported for the process-lifetime "
-                "main_agent workflow.[/red]"
-            )
-            sys.exit(2)
         if not getattr(args, "interactive", False):
             console.print(
                 "[red]main_agent requires interactive mode. Use "
@@ -539,6 +544,14 @@ def _handle_run(args: argparse.Namespace) -> None:
             tools=mcp_tools,
             enable_deepagent=enable_deepagent,
             deepagent_workspace=deepagent_workspace,
+            checkpoint_db=(
+                getattr(args, "checkpoint_db", None) or config.get("checkpoint_db")
+            ),
+            resume_session=(
+                getattr(args, "resume", None)
+                if args.workflow == "main_agent"
+                else None
+            ),
         )
         return
 

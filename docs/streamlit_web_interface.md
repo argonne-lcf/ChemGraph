@@ -54,7 +54,7 @@ API keys entered in the UI are applied as process environment variables for the 
 
 ## Sessions
 
-The main sidebar lists recent saved sessions. Loading a session rebuilds the visible conversation history from `~/.chemgraph/sessions.db`; deleting a session removes it from that database. A new chat clears the visible conversation and starts a new saved session on the next successful exchange.
+The main sidebar lists recent saved sessions. Loading a session rebuilds the visible conversation history from `~/.chemgraph/sessions.db`; it does not restore a durable CLI `main_agent` graph. Deleting a durable local main-agent session removes its LangGraph checkpoints before removing its readable transcript. A new chat clears the visible conversation and starts a new saved session on the next successful exchange.
 
 The UI uses the active saved configuration for model, workflow, thread, report generation, and human-supervision settings. To change these settings, use the Configuration page, save the configuration, then click **Reload Config** or **Refresh Agents** on the main page.
 

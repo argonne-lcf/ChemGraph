@@ -1,13 +1,22 @@
 import asyncio
 import datetime
+import hashlib
+import json
 import os
+from pathlib import Path
 import time
 from typing import Any, Callable, Collection, List, Optional
 import uuid
 
 from chemgraph.agent.events import EventCallback, _AstreamEventCallback
 from chemgraph.memory.store import SessionStore
-from chemgraph.memory.schemas import SessionMessage
+from chemgraph import __version__
+from chemgraph.memory.schemas import (
+    MainAgentGraphConfig,
+    MainAgentSessionMetadata,
+    SessionMessage,
+)
+from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 from chemgraph.models.openai import load_openai_model
 from chemgraph.models.alcf_endpoints import load_alcf_model
 from chemgraph.models.local_model import load_ollama_model
@@ -47,6 +56,7 @@ from chemgraph.prompt.multi_agent_prompt import (
 )
 from langgraph.types import Command
 from langgraph.errors import GraphInterrupt
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.main_agent import construct_main_agent_graph
@@ -206,6 +216,7 @@ class ChemGraph:
         deepagent_backend: Any | None = None,
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
+        checkpointer: BaseCheckpointSaver | None = None,
     ):
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
@@ -213,6 +224,8 @@ class ChemGraph:
             )
         if deepagent_backend is not None and not enable_deepagent:
             raise ValueError("deepagent_backend requires enable_deepagent=True.")
+        if checkpointer is not None and workflow_type != "main_agent":
+            raise ValueError("checkpointer is supported only for the main_agent workflow.")
         if model_name.startswith("codex:") and workflow_type not in {
             "single_agent",
             "main_agent",
@@ -224,7 +237,9 @@ class ChemGraph:
         reasoning_effort = _resolve_reasoning_effort(model_name, reasoning_effort)
 
         # Always generate a unique identifier for this instance
-        self.uuid = str(uuid.uuid4())[:8]
+        self.uuid = (
+            str(uuid.uuid4()) if workflow_type == "main_agent" else str(uuid.uuid4())[:8]
+        )
 
         # Initialize log directory.  Explicit ``log_dir`` argument takes
         # precedence over the ``CHEMGRAPH_LOG_DIR`` environment variable,
@@ -360,6 +375,7 @@ class ChemGraph:
         self.terminal_tool_names = tuple(terminal_tool_names)
         self.enable_deepagent = enable_deepagent
         self.deepagent_backend = deepagent_backend
+        self.checkpointer = checkpointer
         self.on_event = on_event
 
         # Record whether the caller relied on the default system prompt before
@@ -412,6 +428,61 @@ class ChemGraph:
         else:
             self.support_structured_output = support_structured_output
 
+        tool_signatures = tuple(
+            sorted(
+                f"{getattr(tool, 'name', type(tool).__name__)}:"
+                f"{getattr(getattr(tool, 'args_schema', None), '__name__', '')}"
+                for tool in self.tools or []
+            )
+        )
+        workspace = getattr(self.deepagent_backend, "cwd", None)
+        topology_payload = {
+            "model_name": self.model_name,
+            "reasoning_effort": self.reasoning_effort,
+            "recursion_limit": self.recursion_limit,
+            "structured_output": self.structured_output,
+            "generate_report": self.generate_report,
+            "max_retries": self.max_retries,
+            "human_supervised": self.human_supervised,
+            "terminal_tool_names": self.terminal_tool_names,
+            "enable_deepagent": self.enable_deepagent,
+            "workspace": str(workspace) if workspace is not None else None,
+            "tool_signatures": tool_signatures,
+            "system_prompt": self.system_prompt,
+            "formatter_prompt": self.formatter_prompt,
+            "report_prompt": self.report_prompt,
+        }
+        topology_fingerprint = hashlib.sha256(
+            json.dumps(topology_payload, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        self.main_agent_metadata = MainAgentSessionMetadata(
+            graph_config=MainAgentGraphConfig(
+                model_name=self.model_name,
+                recursion_limit=self.recursion_limit,
+                reasoning_effort=self.reasoning_effort,
+                structured_output=self.structured_output,
+                generate_report=self.generate_report,
+                max_retries=self.max_retries,
+                human_supervised=self.human_supervised,
+                terminal_tool_names=self.terminal_tool_names,
+                enable_deepagent=self.enable_deepagent,
+                deepagent_workspace=(
+                    str(Path(workspace).resolve()) if workspace is not None else None
+                ),
+                subagent_names=(
+                    ("chemgraph", "deepagent")
+                    if self.enable_deepagent
+                    else ("chemgraph",)
+                ),
+                tool_signatures=tool_signatures,
+                package_version=__version__,
+                topology_fingerprint=topology_fingerprint,
+            ),
+            checkpoint_backend=(
+                type(checkpointer).__name__ if checkpointer is not None else "memory"
+            ),
+        )
+
         self.workflow_map = {
             "single_agent": {"constructor": construct_single_agent_graph},
             "main_agent": {"constructor": construct_main_agent_graph},
@@ -458,6 +529,12 @@ class ChemGraph:
                 enable_deepagent=self.enable_deepagent,
                 deepagent_backend=self.deepagent_backend,
                 deepagent_recursion_limit=self.recursion_limit,
+                checkpointer=self.checkpointer,
+                subagent_recorder=(
+                    SubagentRunRecorder(self.session_store)
+                    if self.session_store is not None
+                    else None
+                ),
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -545,7 +622,17 @@ class ChemGraph:
         list
             List of messages in the current state
         """
+        if type(getattr(self.workflow, "checkpointer", None)).__name__.startswith(
+            "Async"
+        ):
+            raise RuntimeError(
+                "This workflow uses an async checkpointer; use `await aget_state()` instead."
+            )
         return self.workflow.get_state(config).values
+
+    async def aget_state(self, config={"configurable": {"thread_id": "1"}}):
+        """Asynchronously return the current workflow state values."""
+        return (await self.workflow.aget_state(config)).values
 
     def write_state(
         self,
