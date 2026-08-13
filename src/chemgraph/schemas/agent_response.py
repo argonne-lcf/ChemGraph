@@ -48,32 +48,6 @@ class IRSpectrum(BaseModel):
 
     plot: Optional[str] = None  # base64 PNG image
 
-
-class InfraredSpectrum(BaseModel):
-    """
-    Schema for calculating infrared spectrum from a simulation.
-
-    Attributes
-    ----------
-    frequency_spec_cm1 : list[str]
-        List of range of frequencies in inverse centimeters (cm^-1)
-        Each entry is a string representation of the frequency value.
-    intensity_spec_D2A2amu1 : list[str]
-        List of range of intensities in (D/A)^2 amu^-1
-        Each entry is a string representation of the intensity value.
-    """
-
-    frequency_spec_cm1: list[str] = Field(
-        ...,
-        description="Range of frequencies for plotting spectrum in cm-1.",
-    )
-
-    intensity_spec_D2A2amu1: list[str] = Field(
-        ...,
-        description="Values of intensities for plotting spectrum in (D/A)^2 amu^-1.",
-    )
-
-
 class ScalarResult(BaseModel):
     """
     Schema for storing a scalar numerical result from a simulation or calculation.
