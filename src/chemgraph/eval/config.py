@@ -218,7 +218,6 @@ class BenchmarkConfig(BaseModel):
         valid = {
             "single_agent",
             "multi_agent",
-            "single_agent_mcp",
         }
         for wf in v:
             if wf not in valid:

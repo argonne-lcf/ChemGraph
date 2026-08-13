@@ -53,7 +53,7 @@ ChemGraph/
 
 ### Workflows (graphs/)
 
-Each file defines a LangGraph `StateGraph`. The 9 workflows are:
+Each file defines a LangGraph `StateGraph`. The workflows are:
 
 | Workflow | File | Purpose |
 |---|---|---|
@@ -62,7 +62,6 @@ Each file defines a LangGraph `StateGraph`. The 9 workflows are:
 | `python_relp` | `python_relp_agent.py` | Interactive Python REPL |
 | `graspa` | `graspa_agent.py` | Gas adsorption in MOFs |
 | `mock_agent` | `mock_agent.py` | Testing workflow |
-| `single_agent_mcp` | `single_agent_mcp.py` | Single agent via MCP tools |
 | `graspa_mcp` | `graspa_mcp.py` | gRASPA via MCP + Parsl |
 | `mof_builder_mcp` | `mof_builder_mcp.py` | MOF construction via MCP |
 

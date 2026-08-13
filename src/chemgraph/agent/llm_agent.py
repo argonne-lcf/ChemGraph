@@ -57,7 +57,6 @@ from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
-from chemgraph.graphs.single_agent_mcp import construct_single_agent_mcp_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
 from chemgraph.graphs.rag_agent import construct_rag_agent_graph
 from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
@@ -386,7 +385,6 @@ class ChemGraph:
             "single_agent",
             "main_agent",
             "mock_agent",
-            "single_agent_mcp",
         }:
             self.system_prompt = append_calculator_context(self.system_prompt)
         elif self.workflow_type == "multi_agent":
@@ -405,7 +403,6 @@ class ChemGraph:
             "python_relp": {"constructor": construct_relp_graph},
             "graspa": {"constructor": construct_graspa_graph},
             "mock_agent": {"constructor": construct_mock_agent_graph},
-            "single_agent_mcp": {"constructor": construct_single_agent_mcp_graph},
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
             "rag_agent": {"constructor": construct_rag_agent_graph},
             "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
@@ -470,12 +467,6 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 system_prompt=self.system_prompt,
-            )
-        elif self.workflow_type == "single_agent_mcp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm=llm,
-                system_prompt=self.system_prompt,
-                tools=self.tools,
             )
         elif self.workflow_type == "graspa_mcp":
             self.workflow = self.workflow_map[workflow_type]["constructor"](

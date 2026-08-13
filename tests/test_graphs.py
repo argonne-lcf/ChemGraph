@@ -40,11 +40,6 @@ class _FakeWorkflow:
         ("graspa", "construct_graspa_graph", {}),
         ("mock_agent", "construct_mock_agent_graph", {}),
         (
-            "single_agent_mcp",
-            "construct_single_agent_mcp_graph",
-            {"tools": [_DummyTool("mcp_tool")]},
-        ),
-        (
             "graspa_mcp",
             "construct_graspa_mcp_graph",
             {"tools": [_DummyTool("executor")], "data_tools": [_DummyTool("analysis")]},
