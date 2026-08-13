@@ -87,6 +87,8 @@ def _headers(needs_auth: bool = True) -> dict[str, str]:
     if not needs_auth:
         return {}
     token = os.environ.get("ALCF_API_TOKEN")
+    if not token and _try_refresh_token():
+        token = os.environ.get("ALCF_API_TOKEN")
     if not token:
         raise RuntimeError(
             "This action needs $ALCF_API_TOKEN. Get one from "
@@ -154,7 +156,18 @@ def _try_refresh_token() -> bool:
     try:
         with open(_TOKENS_PATH) as f:
             data = json.load(f)
+        # Two shapes exist in the wild for the same on-disk path:
+        #   flat -- written by _complete_reauth below
+        #   nested -- written by ALCF's helper script (globus_sdk.UserApp),
+        #             tokens under data["data"]["DEFAULT"][<scope-uuid>]
         refresh_token = data.get("refresh_token")
+        if not refresh_token:
+            nested = (
+                data.get("data", {})
+                .get("DEFAULT", {})
+                .get(_GLOBUS_SCOPE_CLIENT_ID, {})
+            )
+            refresh_token = nested.get("refresh_token")
         if not refresh_token:
             return False
         client = globus_sdk.NativeAppAuthClient(_GLOBUS_AUTH_CLIENT_ID)
