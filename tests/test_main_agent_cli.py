@@ -4,6 +4,7 @@ import importlib
 from types import SimpleNamespace
 
 import pytest
+import toml
 
 from chemgraph.agent.main_session import MainAgentTurnResult, PendingInterrupt
 from chemgraph.cli import commands
@@ -85,6 +86,116 @@ def test_main_agent_query_answers_subagent_interrupt(monkeypatch):
     assert result.assistant_response == "turn complete"
     assert session.calls == [("run", "calculate"), ("resume", "EMT")]
     assert "Which calculator?" in capture.get()
+
+
+def test_main_agent_query_handles_deepagent_approval(monkeypatch):
+    approval = PendingInterrupt(
+        id="approval-id",
+        payload={
+            "action_requests": [
+                {"name": "execute", "args": {"command": "pytest -q"}}
+            ],
+            "review_configs": [
+                {
+                    "action_name": "execute",
+                    "allowed_decisions": ["approve", "reject"],
+                }
+            ],
+        },
+    )
+    session = _FakeMainSession([_turn_result(approval), _turn_result()])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_args, **_kwargs: "approve")
+
+    with console.capture() as capture:
+        result = commands.run_main_agent_query(session, "run tests")
+
+    assert result.assistant_response == "turn complete"
+    assert session.calls == [
+        ("run", "run tests"),
+        ("resume", {"decisions": [{"type": "approve"}]}),
+    ]
+    assert "pytest -q" in capture.get()
+
+
+def test_experimental_backend_requires_confirmation_and_filters_environment(
+    monkeypatch,
+    tmp_path,
+):
+    captured = {}
+
+    class FakeBackend:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("deepagents.backends.LocalShellBackend", FakeBackend)
+    monkeypatch.setattr(commands.Confirm, "ask", lambda *_args, **_kwargs: True)
+    monkeypatch.setenv("PATH", "/test/bin")
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
+
+    backend = commands._create_experimental_deepagent_backend(str(tmp_path))
+
+    assert isinstance(backend, FakeBackend)
+    assert captured["root_dir"] == tmp_path.resolve()
+    assert captured["virtual_mode"] is True
+    assert captured["inherit_env"] is False
+    assert captured["env"]["PATH"] == "/test/bin"
+    assert "OPENAI_API_KEY" not in captured["env"]
+
+
+def test_experimental_backend_stops_when_confirmation_is_declined(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(commands.Confirm, "ask", lambda *_args, **_kwargs: False)
+
+    with pytest.raises(RuntimeError, match="was not approved"):
+        commands._create_experimental_deepagent_backend(str(tmp_path))
+
+
+def test_experimental_backend_rejects_missing_workspace(tmp_path):
+    with pytest.raises(ValueError, match="not a directory"):
+        commands._create_experimental_deepagent_backend(
+            str(tmp_path / "missing")
+        )
+
+
+def test_deepagent_approval_preserves_batched_action_order(monkeypatch):
+    answers = iter(["approve", "reject"])
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+    payload = {
+        "action_requests": [
+            {"name": "write_file", "args": {"file_path": "/one"}},
+            {"name": "delete", "args": {"file_path": "/two"}},
+        ],
+        "review_configs": [
+            {
+                "action_name": "write_file",
+                "allowed_decisions": ["approve", "reject"],
+            },
+            {
+                "action_name": "delete",
+                "allowed_decisions": ["approve", "reject"],
+            },
+        ],
+    }
+
+    with console.capture():
+        response = commands._prompt_for_interrupt(payload)
+
+    assert response == {
+        "decisions": [{"type": "approve"}, {"type": "reject"}]
+    }
+
+
+def test_deepagent_cli_boolean_flags():
+    parser = cli_main.create_argument_parser()
+
+    assert parser.parse_args(["--deepagent"]).deepagent is True
+    assert parser.parse_args(["--no-deepagent"]).deepagent is False
 
 
 def test_main_agent_query_failure_suggests_retry():
@@ -328,6 +439,58 @@ def test_interactive_slash_model_and_workflow_switches(monkeypatch):
     ]
 
 
+def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
+    answers = iter(
+        [
+            "first-model",
+            "main_agent",
+            "/workflow single_agent",
+            "/workflow main_agent",
+            "quit",
+        ]
+    )
+    agents = iter(
+        [
+            SimpleNamespace(),
+            SimpleNamespace(session_id="single"),
+            SimpleNamespace(),
+        ]
+    )
+    initialization_calls = []
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+
+    def fake_initialize(*_args, **kwargs):
+        initialization_calls.append(
+            (kwargs["enable_deepagent"], kwargs["deepagent_workspace"])
+        )
+        return next(agents)
+
+    monkeypatch.setattr(commands, "initialize_agent", fake_initialize)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda _agent: SimpleNamespace(thread_id="main", failed=False),
+    )
+
+    with console.capture():
+        commands.interactive_mode(
+            workflow="main_agent",
+            generate_report=False,
+            enable_deepagent=True,
+            deepagent_workspace="/workspace",
+        )
+
+    assert initialization_calls == [
+        (True, "/workspace"),
+        (False, None),
+        (True, "/workspace"),
+    ]
+
+
 def test_interactive_reports_invalid_slash_commands(monkeypatch):
     agent = SimpleNamespace()
     session = _FakeMainSession([])
@@ -370,6 +533,16 @@ def _run_args(**overrides):
         "workflow": "main_agent",
         "resume": None,
         "interactive": False,
+        "structured": False,
+        "output": "state",
+        "report": False,
+        "human_supervised": False,
+        "recursion_limit": 20,
+        "deepagent": None,
+        "deepagent_workspace": None,
+        "mcp_url": None,
+        "mcp_command": None,
+        "mcp_server_name": None,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -389,3 +562,45 @@ def test_main_agent_rejects_persistent_resume():
 
     assert exc_info.value.code == 2
     assert "--resume is not supported" in capture.get()
+
+
+@pytest.mark.parametrize(
+    ("cli_value", "expected"),
+    [(None, True), (False, False)],
+)
+def test_deepagent_toml_and_cli_precedence(
+    monkeypatch,
+    tmp_path,
+    cli_value,
+    expected,
+):
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        toml.dumps(
+            {
+                "general": {
+                    "enable_deepagent": True,
+                    "deepagent_workspace": str(tmp_path),
+                }
+            }
+        )
+    )
+    captured = {}
+    monkeypatch.setattr(
+        cli_main,
+        "interactive_mode",
+        lambda **kwargs: captured.update(kwargs),
+    )
+
+    cli_main._handle_run(
+        _run_args(
+            config=str(config_path),
+            interactive=True,
+            deepagent=cli_value,
+        )
+    )
+
+    assert captured["enable_deepagent"] is expected
+    assert captured["deepagent_workspace"] == (
+        str(tmp_path) if expected else None
+    )

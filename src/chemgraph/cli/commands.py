@@ -9,12 +9,13 @@ from __future__ import annotations
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from rich.panel import Panel
 from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from chemgraph.memory.store import SessionStore
@@ -171,6 +172,52 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
 
 _INIT_TIMEOUT_SECONDS = 30
 
+_DEEPAGENT_ENV_ALLOWLIST = (
+    "PATH",
+    "PYTHONPATH",
+    "VIRTUAL_ENV",
+    "CONDA_PREFIX",
+    "TMPDIR",
+    "CHEMGRAPH_LOG_DIR",
+)
+
+
+def _create_experimental_deepagent_backend(workspace: str | None):
+    """Create the explicitly approved development-only host-shell backend."""
+    from deepagents.backends import LocalShellBackend
+
+    root = Path(workspace or Path.cwd()).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"Deep Agent workspace is not a directory: {root}")
+
+    console.print(
+        Panel(
+            "The experimental Deep Agent can read and modify files under "
+            f"{root} and can run arbitrary shell commands on this host. The "
+            "shell is not confined to that directory. Every shell command and "
+            "file mutation will require approval.",
+            title="[bold red]Experimental host-shell access[/bold red]",
+            style="red",
+        )
+    )
+    if not Confirm.ask(
+        "Enable this development-only capability?",
+        default=False,
+    ):
+        raise RuntimeError("Experimental Deep Agent access was not approved.")
+
+    environment = {
+        name: os.environ[name]
+        for name in _DEEPAGENT_ENV_ALLOWLIST
+        if name in os.environ
+    }
+    return LocalShellBackend(
+        root_dir=root,
+        virtual_mode=True,
+        env=environment,
+        inherit_env=False,
+    )
+
 
 def initialize_agent(
     model_name: str,
@@ -185,6 +232,8 @@ def initialize_agent(
     human_supervised: bool = False,
     tools: Optional[list] = None,
     on_event: Optional[Any] = None,
+    enable_deepagent: bool = False,
+    deepagent_workspace: str | None = None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -216,6 +265,10 @@ def initialize_agent(
     tools : list, optional
         Custom tools for MCP-backed workflows, or supervisor-level tools for
         ``main_agent``. The default chemistry subagent retains its built-ins.
+    enable_deepagent : bool, optional
+        Enable the development-only workspace worker for ``main_agent``.
+    deepagent_workspace : str, optional
+        Root directory exposed to the development-only local backend.
 
     Returns
     -------
@@ -225,6 +278,22 @@ def initialize_agent(
     """
     # Resolve workflow alias before initializing.
     workflow_type = resolve_workflow(workflow_type)
+    if enable_deepagent and workflow_type != "main_agent":
+        raise ValueError(
+            "The experimental Deep Agent is available only with main_agent."
+        )
+    if deepagent_workspace is not None and not enable_deepagent:
+        raise ValueError("--deepagent-workspace requires --deepagent.")
+
+    deepagent_backend = None
+    if enable_deepagent:
+        try:
+            deepagent_backend = _create_experimental_deepagent_backend(
+                deepagent_workspace
+            )
+        except (RuntimeError, ValueError) as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            return None
 
     if verbose:
         console.print("[blue]Initializing agent with:[/blue]")
@@ -235,6 +304,7 @@ def initialize_agent(
         console.print(f"  Generate Report: {generate_report}")
         console.print(f"  Human Supervised: {human_supervised}")
         console.print(f"  Recursion Limit: {recursion_limit}")
+        console.print(f"  Deep Agent: {enable_deepagent}")
         if base_url:
             console.print(f"  Base URL: {base_url}")
         if argo_user:
@@ -290,6 +360,8 @@ def initialize_agent(
                 human_supervised=human_supervised,
                 tools=tools,
                 on_event=on_event,
+                enable_deepagent=enable_deepagent,
+                deepagent_backend=deepagent_backend,
             )
 
         try:
@@ -522,6 +594,64 @@ def _interrupt_question(payload: Any) -> str:
     return str(payload)
 
 
+def _is_tool_review(payload: Any) -> bool:
+    """Return whether an interrupt is a Deep Agents tool-review request."""
+    return (
+        isinstance(payload, dict)
+        and isinstance(payload.get("action_requests"), list)
+        and isinstance(payload.get("review_configs"), list)
+    )
+
+
+def _prompt_for_interrupt(payload: Any) -> Any:
+    """Render one interrupt and collect its resume value."""
+    if not _is_tool_review(payload):
+        console.print(
+            Panel(
+                _interrupt_question(payload),
+                title="[bold yellow]Agent needs your input[/bold yellow]",
+                style="yellow",
+            )
+        )
+        return Prompt.ask("[bold cyan]Your response[/bold cyan]")
+
+    review_configs = {
+        item.get("action_name"): item
+        for item in payload["review_configs"]
+        if isinstance(item, dict)
+    }
+    decisions = []
+    for action in payload["action_requests"]:
+        if not isinstance(action, dict):
+            raise ValueError("Invalid Deep Agent approval request.")
+        name = str(action.get("name", "unknown"))
+        args = action.get("args", {})
+        config = review_configs.get(name, {})
+        allowed = [
+            item
+            for item in config.get("allowed_decisions", [])
+            if item in {"approve", "reject"}
+        ]
+        if not allowed:
+            raise ValueError(
+                f"Deep Agent action {name!r} does not allow approve/reject."
+            )
+        console.print(
+            Panel(
+                f"Tool: {escape(name)}\nArguments: {escape(repr(args))}",
+                title="[bold red]Deep Agent approval required[/bold red]",
+                style="red",
+            )
+        )
+        decision = Prompt.ask(
+            "[bold cyan]Decision[/bold cyan]",
+            choices=allowed,
+            default="reject" if "reject" in allowed else allowed[0],
+        )
+        decisions.append({"type": decision})
+    return {"decisions": decisions}
+
+
 def _main_agent_failure_hint(session: Any) -> None:
     if getattr(session, "failed", False):
         console.print(
@@ -562,30 +692,11 @@ def _run_main_agent_operation(
         answers: Any
         if len(result.interrupts) == 1:
             pending = result.interrupts[0]
-            console.print(
-                Panel(
-                    _interrupt_question(pending.payload),
-                    title="[bold yellow]Agent needs your input[/bold yellow]",
-                    style="yellow",
-                )
-            )
-            answers = Prompt.ask("[bold cyan]Your response[/bold cyan]")
+            answers = _prompt_for_interrupt(pending.payload)
         else:
             answers = {}
             for pending in result.interrupts:
-                console.print(
-                    Panel(
-                        _interrupt_question(pending.payload),
-                        title=(
-                            "[bold yellow]Agent needs your input"
-                            f" ({pending.id})[/bold yellow]"
-                        ),
-                        style="yellow",
-                    )
-                )
-                answers[pending.id] = Prompt.ask(
-                    "[bold cyan]Your response[/bold cyan]"
-                )
+                answers[pending.id] = _prompt_for_interrupt(pending.payload)
 
         try:
             result = run_async_callable(lambda: session.resume(answers))
@@ -863,6 +974,8 @@ def interactive_mode(
     argo_user: Optional[str] = None,
     verbose: bool = False,
     tools: Optional[list] = None,
+    enable_deepagent: bool = False,
+    deepagent_workspace: str | None = None,
 ) -> None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -894,6 +1007,11 @@ def interactive_mode(
         Whether to print diagnostic output.
     tools : list, optional
         Custom tool list for MCP-backed workflows.
+    enable_deepagent : bool, optional
+        Whether to add the experimental workspace Deep Agent whenever the
+        selected workflow is ``main_agent``.
+    deepagent_workspace : str, optional
+        Local workspace used by the experimental host-shell backend.
     """
     console.print(create_banner())
     console.print("[bold green]Welcome to ChemGraph Interactive Mode![/bold green]")
@@ -928,6 +1046,12 @@ def interactive_mode(
         verbose=verbose,
         human_supervised=human_supervised,
         tools=tools,
+        enable_deepagent=enable_deepagent and workflow == "main_agent",
+        deepagent_workspace=(
+            deepagent_workspace
+            if enable_deepagent and workflow == "main_agent"
+            else None
+        ),
     )
     if not agent:
         return
@@ -1016,6 +1140,10 @@ Example queries:
                     continue
                 console.print(f"Model: {model}")
                 console.print(f"Workflow: {workflow}")
+                console.print(
+                    "Deep Agent: "
+                    f"{'enabled' if enable_deepagent and workflow == 'main_agent' else 'disabled'}"
+                )
                 if main_session is not None:
                     console.print(f"Thread ID: {main_session.thread_id}")
                     console.print(f"Failed: {main_session.failed}")
@@ -1088,6 +1216,12 @@ Example queries:
                     argo_user=argo_user,
                     human_supervised=human_supervised,
                     tools=tools,
+                    enable_deepagent=enable_deepagent and workflow == "main_agent",
+                    deepagent_workspace=(
+                        deepagent_workspace
+                        if enable_deepagent and workflow == "main_agent"
+                        else None
+                    ),
                 )
                 if new_agent:
                     model = new_model
@@ -1116,6 +1250,14 @@ Example queries:
                         argo_user=argo_user,
                         human_supervised=human_supervised,
                         tools=tools,
+                        enable_deepagent=(
+                            enable_deepagent and new_workflow == "main_agent"
+                        ),
+                        deepagent_workspace=(
+                            deepagent_workspace
+                            if enable_deepagent and new_workflow == "main_agent"
+                            else None
+                        ),
                     )
                     if new_agent:
                         workflow = new_workflow

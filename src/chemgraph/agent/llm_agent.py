@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import os
 import time
-from typing import Callable, Collection, List, Optional
+from typing import Any, Callable, Collection, List, Optional
 import uuid
 
 from chemgraph.agent.events import EventCallback, _AstreamEventCallback
@@ -156,6 +156,12 @@ class ChemGraph:
     terminal_tool_names : Collection[str], optional
         Tool names that should terminate supported workflows after
         successful execution, by default empty.
+    enable_deepagent : bool, optional
+        Add the experimental workspace Deep Agent to ``main_agent``, by
+        default False.
+    deepagent_backend : BackendProtocol, optional
+        Backend used by the workspace Deep Agent. When omitted, its files are
+        stored in checkpointed agent state.
     on_event : callable, optional
         Callback invoked with dashboard workflow events, by default None.
 
@@ -196,9 +202,17 @@ class ChemGraph:
         human_input_handler: Optional[Callable[[str], str]] = None,
         human_supervised: bool = False,
         terminal_tool_names: Collection[str] = (),
+        enable_deepagent: bool = False,
+        deepagent_backend: Any | None = None,
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
     ):
+        if enable_deepagent and workflow_type != "main_agent":
+            raise ValueError(
+                "enable_deepagent is supported only for the main_agent workflow."
+            )
+        if deepagent_backend is not None and not enable_deepagent:
+            raise ValueError("deepagent_backend requires enable_deepagent=True.")
         if model_name.startswith("codex:") and workflow_type not in {
             "single_agent",
             "main_agent",
@@ -344,6 +358,8 @@ class ChemGraph:
         self.human_input_handler = human_input_handler
         self.human_supervised = human_supervised
         self.terminal_tool_names = tuple(terminal_tool_names)
+        self.enable_deepagent = enable_deepagent
+        self.deepagent_backend = deepagent_backend
         self.on_event = on_event
 
         # Record whether the caller relied on the default system prompt before
@@ -439,6 +455,9 @@ class ChemGraph:
                 subagent_max_retries=self.max_retries,
                 subagent_human_supervised=self.human_supervised,
                 subagent_terminal_tool_names=self.terminal_tool_names,
+                enable_deepagent=self.enable_deepagent,
+                deepagent_backend=self.deepagent_backend,
+                deepagent_recursion_limit=self.recursion_limit,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](

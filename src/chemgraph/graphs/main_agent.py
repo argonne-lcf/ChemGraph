@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Collection, Sequence
 from typing import Any
 
+from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
+from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware import SubAgentMiddleware
 from deepagents.middleware.subagents import CompiledSubAgent
 from langchain.agents import create_agent
@@ -30,7 +32,36 @@ Rules:
 3. Review subagent results and give the user a complete response. If required
    input is missing, ask a clear question in your response.
 4. Use supervisor-level tools directly when their descriptions match the task.
+5. When available, use `chemgraph` for molecular construction, simulation,
+   calculator use, and other computational chemistry work. Use `deepagent` for
+   repository exploration, coding, testing, file analysis, and other long
+   workspace tasks when that specialist is available.
+6. Do not launch parallel workspace-mutating tasks. Parallel delegation is
+   appropriate only for independent read-only work.
+7. If deepagent is available, do not generate the code or file edits yourself;
+   delegate those tasks to deepagent.
 """
+
+
+DEFAULT_DEEPAGENT_PROMPT = """\
+You are ChemGraph's workspace specialist. Complete repository exploration,
+coding, testing, file analysis, and other multi-step workspace tasks. Use the
+built-in filesystem and execution tools when needed. Do not perform molecular
+simulations or invent chemistry results; return those tasks to the supervisor
+for delegation to the `chemgraph` specialist.
+
+The calling supervisor sees only your final assistant message. Return a concise,
+self-contained report including important results, changed paths, commands run,
+and any failures or unresolved risks.
+"""
+
+
+_DEEPAGENT_INTERRUPT_ON = {
+    "execute": {"allowed_decisions": ["approve", "reject"]},
+    "write_file": {"allowed_decisions": ["approve", "reject"]},
+    "edit_file": {"allowed_decisions": ["approve", "reject"]},
+    "delete": {"allowed_decisions": ["approve", "reject"]},
+}
 
 
 def latest_assistant_text(messages: list[Any]) -> str:
@@ -144,10 +175,18 @@ def construct_main_agent_graph(
     subagent_max_retries: int = 1,
     subagent_human_supervised: bool = False,
     subagent_terminal_tool_names: Collection[str] = (),
+    enable_deepagent: bool = False,
+    deepagent_backend: BackendProtocol | None = None,
+    deepagent_recursion_limit: int = 50,
     system_prompt: str = DEFAULT_MAIN_AGENT_PROMPT,
     checkpointer: Any | None = None,
 ):
     """Construct a checkpointed supervisor with Deep Agents delegation."""
+    if deepagent_recursion_limit <= 0:
+        raise ValueError("deepagent_recursion_limit must be positive.")
+    if deepagent_backend is not None and not enable_deepagent:
+        raise ValueError("deepagent_backend requires enable_deepagent=True.")
+
     if subagents is None:
         worker_kwargs: dict[str, Any] = {
             "tools": subagent_tools,
@@ -165,7 +204,7 @@ def construct_main_agent_graph(
         if subagent_report_prompt is not None:
             worker_kwargs["report_prompt"] = subagent_report_prompt
         worker = construct_single_agent_graph(llm, **worker_kwargs)
-        subagents = [
+        registered_subagents: list[CompiledSubAgent] = [
             {
                 "name": "chemgraph",
                 "description": (
@@ -175,8 +214,36 @@ def construct_main_agent_graph(
                 "runnable": worker,
             }
         ]
+    else:
+        registered_subagents = list(subagents)
 
-    validated_subagents = _validate_subagents(subagents)
+    if enable_deepagent:
+        workspace_agent = create_deep_agent(
+            model=llm,
+            tools=[],
+            system_prompt=DEFAULT_DEEPAGENT_PROMPT,
+            backend=(
+                deepagent_backend
+                if deepagent_backend is not None
+                else StateBackend()
+            ),
+            interrupt_on=_DEEPAGENT_INTERRUPT_ON,
+            checkpointer=None,
+            name="deepagent",
+        ).with_config({"recursion_limit": deepagent_recursion_limit})
+        registered_subagents.append(
+            {
+                "name": "deepagent",
+                "description": (
+                    "Explores repositories and workspaces, edits files, runs tests, "
+                    "and completes long multi-step coding or data-analysis tasks. "
+                    "Use chemgraph instead for molecular simulations."
+                ),
+                "runnable": workspace_agent,
+            }
+        )
+
+    validated_subagents = _validate_subagents(registered_subagents)
     supervisor_tools = list(main_tools or [])
     _validate_main_tools(supervisor_tools)
     middleware = SubAgentMiddleware(
@@ -194,6 +261,7 @@ def construct_main_agent_graph(
 
 
 __all__ = [
+    "DEFAULT_DEEPAGENT_PROMPT",
     "DEFAULT_MAIN_AGENT_PROMPT",
     "construct_main_agent_graph",
     "latest_assistant_text",

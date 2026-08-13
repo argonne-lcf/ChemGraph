@@ -7,6 +7,9 @@ report = true
 thread = 1
 recursion_limit = 20
 human_supervised = false
+# Development-only: add a workspace Deep Agent to interactive main_agent.
+enable_deepagent = false
+# deepagent_workspace = "."
 verbose = false
 
 [logging]

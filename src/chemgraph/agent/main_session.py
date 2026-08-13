@@ -150,6 +150,8 @@ class MainAgentSession:
         if "" in expected:
             raise RuntimeError("Pending interrupts do not expose stable IDs.")
         provided = {str(key) for key in response}
+        if len(self._pending) == 1 and provided != expected:
+            return dict(response)
         if provided != expected:
             raise ValueError(
                 "Interrupt response IDs must exactly match the pending interrupts."

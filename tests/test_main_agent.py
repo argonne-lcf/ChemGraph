@@ -3,6 +3,7 @@
 from typing import Annotated, Any, TypedDict
 
 import pytest
+from deepagents.backends import LocalShellBackend
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -58,6 +59,12 @@ def _task_call(call_id: str, description: str = "do the work") -> dict:
         "id": call_id,
         "type": "tool_call",
     }
+
+
+def _deepagent_task_call(call_id: str, description: str = "inspect workspace") -> dict:
+    call = _task_call(call_id, description)
+    call["args"]["subagent_type"] = "deepagent"
+    return call
 
 
 def _answering_subgraph(answer: str, calls: list[str] | None = None):
@@ -354,6 +361,205 @@ def test_default_worker_forwards_options_and_inherits_parent_checkpoint(monkeypa
         "report_prompt": "report prompt",
     }
     assert isinstance(graph.checkpointer, InMemorySaver)
+
+
+def test_deepagent_is_opt_in_and_receives_backend_configuration(monkeypatch):
+    captured = {}
+
+    class FakeDeepAgent:
+        def invoke(self, state, config=None):
+            return {"messages": [AIMessage(content="done")]}
+
+        async def ainvoke(self, state, config=None):
+            return self.invoke(state, config=config)
+
+        def with_config(self, config):
+            captured["config"] = config
+            return self
+
+    def fake_create_deep_agent(**kwargs):
+        captured["kwargs"] = kwargs
+        return FakeDeepAgent()
+
+    backend = object()
+    monkeypatch.setattr(
+        "chemgraph.graphs.main_agent.create_deep_agent",
+        fake_create_deep_agent,
+    )
+
+    construct_main_agent_graph(
+        _ScriptedChatModel(responses=[]),
+        subagents=[_subagent(_answering_subgraph("chemistry"), name="chemgraph")],
+        enable_deepagent=True,
+        deepagent_backend=backend,
+        deepagent_recursion_limit=17,
+    )
+
+    assert captured["kwargs"]["backend"] is backend
+    assert captured["kwargs"]["tools"] == []
+    assert captured["kwargs"]["checkpointer"] is None
+    assert set(captured["kwargs"]["interrupt_on"]) == {
+        "execute",
+        "write_file",
+        "edit_file",
+        "delete",
+    }
+    assert captured["config"] == {"recursion_limit": 17}
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({"deepagent_backend": object()}, "requires enable_deepagent"),
+        (
+            {"enable_deepagent": True, "deepagent_recursion_limit": 0},
+            "must be positive",
+        ),
+    ],
+)
+def test_deepagent_configuration_validation(kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        construct_main_agent_graph(
+            _ScriptedChatModel(responses=[]),
+            subagents=[_subagent(_answering_subgraph("done"))],
+            **kwargs,
+        )
+
+
+@pytest.mark.asyncio
+async def test_deepagent_execute_requires_structured_approval(tmp_path):
+    llm = _ScriptedChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[_deepagent_task_call("workspace-task")],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "execute",
+                        "args": {"command": "pwd"},
+                        "id": "execute-call",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="Workspace inspection complete."),
+            AIMessage(content="The workspace specialist completed the task."),
+        ]
+    )
+    graph = construct_main_agent_graph(
+        llm,
+        subagents=[
+            _subagent(_answering_subgraph("chemistry"), name="chemgraph")
+        ],
+        enable_deepagent=True,
+        deepagent_backend=LocalShellBackend(root_dir=tmp_path, env={}),
+    )
+    session = MainAgentSession(graph, thread_id="deepagent-approval")
+
+    pending = await session.run("Inspect the workspace")
+
+    assert pending.status == "waiting_for_user"
+    assert len(pending.interrupts) == 1
+    payload = pending.interrupts[0].payload
+    assert payload["action_requests"] == [
+        {
+            "name": "execute",
+            "args": {"command": "pwd"},
+            "description": (
+                "Tool execution requires approval\n\n"
+                "Tool: execute\nArgs: {'command': 'pwd'}"
+            ),
+        }
+    ]
+
+    completed = await session.resume({"decisions": [{"type": "approve"}]})
+
+    assert completed.status == "completed"
+    assert completed.assistant_response == (
+        "The workspace specialist completed the task."
+    )
+
+
+@pytest.mark.asyncio
+async def test_rejected_deepagent_write_leaves_workspace_unchanged(tmp_path):
+    llm = _ScriptedChatModel(
+        responses=[
+            AIMessage(content="", tool_calls=[_deepagent_task_call("write-task")]),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "write_file",
+                        "args": {"file_path": "/blocked.txt", "content": "blocked"},
+                        "id": "write-call",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="The write was rejected."),
+            AIMessage(content="No files were changed."),
+        ]
+    )
+    graph = construct_main_agent_graph(
+        llm,
+        subagents=[
+            _subagent(_answering_subgraph("chemistry"), name="chemgraph")
+        ],
+        enable_deepagent=True,
+        deepagent_backend=LocalShellBackend(root_dir=tmp_path, env={}),
+    )
+    session = MainAgentSession(graph, thread_id="deepagent-rejection")
+
+    pending = await session.run("Create a file")
+    assert pending.status == "waiting_for_user"
+    completed = await session.resume({"decisions": [{"type": "reject"}]})
+
+    assert completed.assistant_response == "No files were changed."
+    assert not (tmp_path / "blocked.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_deepagent_can_delegate_to_its_general_purpose_subagent():
+    llm = _ScriptedChatModel(
+        responses=[
+            AIMessage(content="", tool_calls=[_deepagent_task_call("outer-task")]),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "task",
+                        "args": {
+                            "subagent_type": "general-purpose",
+                            "description": "Summarize the workspace task.",
+                        },
+                        "id": "inner-task",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="Inner analysis complete."),
+            AIMessage(content="Workspace report complete."),
+            AIMessage(content="The workspace task is complete."),
+        ]
+    )
+    graph = construct_main_agent_graph(
+        llm,
+        subagents=[
+            _subagent(_answering_subgraph("chemistry"), name="chemgraph")
+        ],
+        enable_deepagent=True,
+    )
+
+    result = await MainAgentSession(
+        graph,
+        thread_id="nested-deepagent",
+    ).run("Analyze the workspace")
+
+    assert result.status == "completed"
+    assert result.assistant_response == "The workspace task is complete."
 
 
 @pytest.mark.parametrize(
