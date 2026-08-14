@@ -1552,10 +1552,24 @@ Example queries:
                 new_workflow = resolve_workflow(argument)
                 if new_workflow in ALL_WORKFLOW_TYPES:
                     if new_workflow == "main_agent" and checkpoint_runtime is None:
-                        checkpoint_runtime = CheckpointRuntime()
-                        checkpoint_saver = checkpoint_runtime.open_sqlite(
-                            checkpoint_db or DEFAULT_CHECKPOINT_DB
-                        )
+                        candidate_runtime = None
+                        try:
+                            candidate_runtime = CheckpointRuntime()
+                            candidate_saver = candidate_runtime.open_sqlite(
+                                checkpoint_db or DEFAULT_CHECKPOINT_DB
+                            )
+                        except Exception as exc:
+                            if candidate_runtime is not None:
+                                candidate_runtime.close()
+                            checkpoint_runtime = None
+                            checkpoint_saver = None
+                            console.print(
+                                "[red]Could not open checkpoint database: "
+                                f"{exc}[/red]"
+                            )
+                            continue
+                        checkpoint_runtime = candidate_runtime
+                        checkpoint_saver = candidate_saver
                     new_agent = initialize_agent(
                         model,
                         new_workflow,

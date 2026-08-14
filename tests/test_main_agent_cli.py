@@ -458,6 +458,72 @@ def test_interactive_slash_model_and_workflow_switches(monkeypatch):
     ]
 
 
+def test_workflow_switch_recovers_from_checkpoint_open_failure(monkeypatch):
+    class FakeRuntime:
+        def __init__(self, *, error=None):
+            self.error = error
+            self.closed = False
+            self.saver = SimpleNamespace()
+            self.opened_paths = []
+
+        def open_sqlite(self, path):
+            self.opened_paths.append(path)
+            if self.error is not None:
+                raise self.error
+            return self.saver
+
+        def close(self):
+            self.closed = True
+
+    failed_runtime = FakeRuntime(error=RuntimeError("database is locked"))
+    successful_runtime = FakeRuntime()
+    runtimes = iter([failed_runtime, successful_runtime])
+    initial_agent = SimpleNamespace(session_id="initial")
+    main_agent = SimpleNamespace()
+    agents = iter([initial_agent, main_agent])
+    initialization_calls = []
+    answers = iter(
+        [
+            "first-model",
+            "single_agent",
+            "/workflow main_agent",
+            "/workflow main_agent",
+            "quit",
+        ]
+    )
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+    monkeypatch.setattr(commands, "CheckpointRuntime", lambda: next(runtimes))
+
+    def fake_initialize(_model, workflow, *_args, **kwargs):
+        initialization_calls.append((workflow, kwargs["checkpointer"]))
+        return next(agents)
+
+    monkeypatch.setattr(commands, "initialize_agent", fake_initialize)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda *_args, **_kwargs: SimpleNamespace(thread_id="main", failed=False),
+    )
+
+    with console.capture() as capture:
+        commands.interactive_mode(workflow="single_agent", generate_report=False)
+
+    assert failed_runtime.closed is True
+    assert successful_runtime.closed is True
+    assert initialization_calls == [
+        ("single_agent", None),
+        ("main_agent", successful_runtime.saver),
+    ]
+    output = capture.get()
+    assert "Could not open checkpoint database: database is locked" in output
+    assert "Workflow changed to: main_agent" in output
+
+
 def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
     target_config = MainAgentGraphConfig(
         model_name="argo:gpt-5.6-sol",

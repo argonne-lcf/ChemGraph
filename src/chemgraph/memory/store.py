@@ -152,7 +152,6 @@ class SessionStore:
             conn.executescript(_SCHEMA_SQL)
             self._add_missing_columns(conn, "sessions", _SESSION_COLUMNS)
             self._add_missing_columns(conn, "messages", _MESSAGE_COLUMNS)
-            conn.executescript(_SCHEMA_SQL)
             conn.execute("PRAGMA user_version = 1")
 
     @staticmethod
