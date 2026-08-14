@@ -67,5 +67,3 @@
       - **[Multi-Agent System](https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/2_Demo-multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where planner and executor agents decompose and run computational chemistry tasks.
 
       - **[Model Context Protocol (MCP) Server](https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/3_Demo_using_MCP.ipynb)**: This notebook shows how to run and connect to ChemGraph MCP tooling.
-
-      - **[Single-Agent System with gRASPA](https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/Demo_graspa_agent.ipynb)**: This notebook provides a sample guide on executing a gRASPA simulation using a single agent. For gRASPA-related installation instructions, visit the [gRASPA GitHub repository](https://github.com/snurr-group/gRASPA). The notebook's functionality has been validated on a single compute node at ALCF Polaris.
