@@ -75,6 +75,12 @@ codex = [
 calculators = [
     "tblite==0.4.0; python_version < '3.13' or platform_system != 'Darwin'",
 ]
+rootstock = [
+    "rootstock>=1.6,<2",
+]
+nvalchemi_mace = [
+    "nvalchemi-toolkit[mace]>=0.2,<0.3",
+]
 uma = [
     "fairchem-core==2.3.0",
     "e3nn>=0.5",
