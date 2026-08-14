@@ -9,8 +9,23 @@ import toml
 from chemgraph.agent.main_session import MainAgentTurnResult, PendingInterrupt
 from chemgraph.cli import commands
 from chemgraph.cli.formatting import console
+from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
+from chemgraph.memory.store import SessionStore
 
 cli_main = importlib.import_module("chemgraph.cli.main")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_durable_databases(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        commands,
+        "DEFAULT_CHECKPOINT_DB",
+        str(tmp_path / "checkpoints.db"),
+    )
+    monkeypatch.setattr(
+        "chemgraph.memory.store.DEFAULT_DB_PATH",
+        str(tmp_path / "sessions.db"),
+    )
 
 
 def _turn_result(*interrupts: PendingInterrupt) -> MainAgentTurnResult:
@@ -196,6 +211,10 @@ def test_deepagent_cli_boolean_flags():
 
     assert parser.parse_args(["--deepagent"]).deepagent is True
     assert parser.parse_args(["--no-deepagent"]).deepagent is False
+    assert (
+        parser.parse_args(["--checkpoint-db", "/tmp/checkpoints.db"]).checkpoint_db
+        == "/tmp/checkpoints.db"
+    )
 
 
 def test_main_agent_query_failure_suggests_retry():
@@ -236,10 +255,10 @@ def test_interactive_main_agent_discards_session_on_quit(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
 
-    def fake_run(active_session, query, verbose=False):
+    def fake_run(active_session, query, verbose=False, **_kwargs):
         assert active_session is session
         assert query == "calculate"
         assert verbose is False
@@ -267,12 +286,12 @@ def test_interactive_main_agent_retry_command(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
 
     calls = []
 
-    def fake_retry(active_session, verbose=False):
+    def fake_retry(active_session, verbose=False, **_kwargs):
         calls.append((active_session, verbose))
         active_session.failed = False
         return _turn_result()
@@ -320,7 +339,7 @@ def test_interactive_show_prompt_reaches_main_agent(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
     monkeypatch.setattr(
         commands,
@@ -328,7 +347,7 @@ def test_interactive_show_prompt_reaches_main_agent(monkeypatch):
         lambda _sid: pytest.fail("natural-language prompt called show_session"),
     )
 
-    def fake_run(active_session, query, verbose=False):
+    def fake_run(active_session, query, verbose=False, **_kwargs):
         calls.append((active_session, query, verbose))
         return _turn_result()
 
@@ -355,7 +374,7 @@ def test_interactive_slash_show_dispatches_to_session_command(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
     monkeypatch.setattr(commands, "show_session", shown.append)
     monkeypatch.setattr(
@@ -426,7 +445,7 @@ def test_interactive_slash_model_and_workflow_switches(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: SimpleNamespace(thread_id="main", failed=False),
+        lambda _agent, **_kwargs: SimpleNamespace(thread_id="main", failed=False),
     )
 
     with console.capture():
@@ -437,6 +456,226 @@ def test_interactive_slash_model_and_workflow_switches(monkeypatch):
         ("Provider/Next-Model", "main_agent"),
         ("Provider/Next-Model", "single_agent"),
     ]
+
+
+def test_workflow_switch_recovers_from_checkpoint_open_failure(monkeypatch):
+    class FakeRuntime:
+        def __init__(self, *, error=None):
+            self.error = error
+            self.closed = False
+            self.saver = SimpleNamespace()
+            self.opened_paths = []
+
+        def open_sqlite(self, path):
+            self.opened_paths.append(path)
+            if self.error is not None:
+                raise self.error
+            return self.saver
+
+        def close(self):
+            self.closed = True
+
+    failed_runtime = FakeRuntime(error=RuntimeError("database is locked"))
+    successful_runtime = FakeRuntime()
+    runtimes = iter([failed_runtime, successful_runtime])
+    initial_agent = SimpleNamespace(session_id="initial")
+    main_agent = SimpleNamespace()
+    agents = iter([initial_agent, main_agent])
+    initialization_calls = []
+    answers = iter(
+        [
+            "first-model",
+            "single_agent",
+            "/workflow main_agent",
+            "/workflow main_agent",
+            "quit",
+        ]
+    )
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+    monkeypatch.setattr(commands, "CheckpointRuntime", lambda: next(runtimes))
+
+    def fake_initialize(_model, workflow, *_args, **kwargs):
+        initialization_calls.append((workflow, kwargs["checkpointer"]))
+        return next(agents)
+
+    monkeypatch.setattr(commands, "initialize_agent", fake_initialize)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda *_args, **_kwargs: SimpleNamespace(thread_id="main", failed=False),
+    )
+
+    with console.capture() as capture:
+        commands.interactive_mode(workflow="single_agent", generate_report=False)
+
+    assert failed_runtime.closed is True
+    assert successful_runtime.closed is True
+    assert initialization_calls == [
+        ("single_agent", None),
+        ("main_agent", successful_runtime.saver),
+    ]
+    output = capture.get()
+    assert "Could not open checkpoint database: database is locked" in output
+    assert "Workflow changed to: main_agent" in output
+
+
+def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
+    target_config = MainAgentGraphConfig(
+        model_name="argo:gpt-5.6-sol",
+        structured_output=True,
+        generate_report=True,
+        human_supervised=True,
+        recursion_limit=77,
+        reasoning_effort="high",
+        max_retries=4,
+        terminal_tool_names=("finish",),
+        topology_fingerprint="target",
+    )
+    target_db = str(tmp_path / "target-checkpoints.db")
+    SessionStore().create_session(
+        "target-thread",
+        target_config.model_name,
+        "main_agent",
+        session_metadata=MainAgentSessionMetadata(
+            graph_config=target_config,
+            checkpoint_backend="AsyncSqliteSaver",
+            checkpoint_db=target_db,
+        ),
+    )
+    answers = iter(
+        [
+            "initial-model",
+            "main_agent",
+            "/resume target-thread",
+            "/workflow single_agent",
+            "quit",
+        ]
+    )
+    agents = iter([SimpleNamespace(), SimpleNamespace(), SimpleNamespace(session_id="new")])
+    initialization_calls = []
+    sessions = iter(
+        [
+            SimpleNamespace(thread_id="initial", failed=False),
+            SimpleNamespace(thread_id="target-thread", failed=False),
+        ]
+    )
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+
+    def fake_initialize(*args, **kwargs):
+        initialization_calls.append((args, kwargs))
+        return next(agents)
+
+    monkeypatch.setattr(commands, "initialize_agent", fake_initialize)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda *_args, **_kwargs: next(sessions),
+    )
+    monkeypatch.setattr(
+        commands,
+        "restore_main_agent_session",
+        lambda *_args, **_kwargs: MainAgentTurnResult(
+            thread_id="target-thread",
+            status="completed",
+            assistant_response="",
+            interrupts=(),
+            state={},
+        ),
+    )
+
+    with console.capture():
+        commands.interactive_mode(workflow="main_agent", generate_report=False)
+
+    resume_args, resume_kwargs = initialization_calls[1]
+    rebuild_args, rebuild_kwargs = initialization_calls[2]
+    assert resume_args[:6] == (
+        target_config.model_name,
+        "main_agent",
+        True,
+        "state",
+        True,
+        77,
+    )
+    assert rebuild_args[:6] == (
+        target_config.model_name,
+        "single_agent",
+        True,
+        "state",
+        True,
+        77,
+    )
+    for kwargs in (resume_kwargs, rebuild_kwargs):
+        assert kwargs["human_supervised"] is True
+        assert kwargs["reasoning_effort"] == "high"
+        assert kwargs["max_retries"] == 4
+        assert kwargs["terminal_tool_names"] == ("finish",)
+
+
+def test_startup_resume_distinguishes_process_local_session(monkeypatch):
+    SessionStore().create_session(
+        "process-local",
+        "scripted",
+        "main_agent",
+        session_metadata=MainAgentSessionMetadata(
+            graph_config=MainAgentGraphConfig(model_name="scripted"),
+            checkpoint_backend="memory",
+        ),
+    )
+    monkeypatch.setattr(
+        commands,
+        "initialize_agent",
+        lambda *_args, **_kwargs: pytest.fail("process-local session was initialized"),
+    )
+
+    with console.capture() as capture:
+        commands.interactive_mode(resume_session="process-local")
+
+    assert "process-local checkpoint" in capture.get()
+
+
+def test_interactive_eof_closes_checkpoint_runtime(monkeypatch):
+    class FakeRuntime:
+        def __init__(self):
+            self.closed = False
+
+        def open_sqlite(self, _path):
+            return SimpleNamespace()
+
+        def close(self):
+            self.closed = True
+
+    runtime = FakeRuntime()
+    answers = iter(["model", "main_agent"])
+
+    def prompt(*_args, **_kwargs):
+        try:
+            return next(answers)
+        except StopIteration as exc:
+            raise EOFError from exc
+
+    monkeypatch.setattr(commands, "CheckpointRuntime", lambda: runtime)
+    monkeypatch.setattr(commands.Prompt, "ask", prompt)
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda *_args, **_kwargs: SimpleNamespace(thread_id="main", failed=False),
+    )
+
+    with console.capture():
+        commands.interactive_mode(workflow="main_agent")
+
+    assert runtime.closed is True
 
 
 def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
@@ -473,7 +712,7 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: SimpleNamespace(thread_id="main", failed=False),
+        lambda _agent, **_kwargs: SimpleNamespace(thread_id="main", failed=False),
     )
 
     with console.capture():
@@ -507,7 +746,7 @@ def test_interactive_reports_invalid_slash_commands(monkeypatch):
     monkeypatch.setattr(
         commands,
         "create_main_agent_session",
-        lambda _agent: session,
+        lambda _agent, **_kwargs: session,
     )
 
     with console.capture() as capture:
@@ -556,12 +795,17 @@ def test_main_agent_requires_interactive_cli_mode():
     assert "requires interactive mode" in capture.get()
 
 
-def test_main_agent_rejects_persistent_resume():
-    with console.capture() as capture, pytest.raises(SystemExit) as exc_info:
-        cli_main._handle_run(_run_args(interactive=True, resume="old-thread"))
+def test_main_agent_dispatches_persistent_resume(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        cli_main,
+        "interactive_mode",
+        lambda **kwargs: captured.update(kwargs),
+    )
 
-    assert exc_info.value.code == 2
-    assert "--resume is not supported" in capture.get()
+    cli_main._handle_run(_run_args(interactive=True, resume="old-thread"))
+
+    assert captured["resume_session"] == "old-thread"
 
 
 @pytest.mark.parametrize(

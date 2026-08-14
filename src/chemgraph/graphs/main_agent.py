@@ -15,8 +15,10 @@ from langchain_core.messages import AIMessage, ToolMessage, convert_to_messages
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.errors import GraphInterrupt
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
+from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 
 
 DEFAULT_MAIN_AGENT_PROMPT = """\
@@ -99,15 +101,45 @@ def _preserve_terminal_tool_output(result: Any) -> Any:
     }
 
 
-def _adapt_subagent(spec: CompiledSubAgent) -> CompiledSubAgent:
+def _adapt_subagent(
+    spec: CompiledSubAgent,
+    recorder: SubagentRunRecorder | None = None,
+) -> CompiledSubAgent:
     runnable = spec["runnable"]
 
     def invoke(state: Any, config: RunnableConfig) -> Any:
-        return _preserve_terminal_tool_output(runnable.invoke(state, config=config))
+        run_id = recorder.start(spec["name"], state, config) if recorder else None
+        try:
+            result = runnable.invoke(state, config=config)
+        except GraphInterrupt:
+            if recorder and run_id:
+                recorder.interrupted(run_id)
+            raise
+        except Exception as exc:
+            if recorder and run_id:
+                recorder.failed(run_id, exc)
+            raise
+        result = _preserve_terminal_tool_output(result)
+        if recorder and run_id:
+            recorder.completed(run_id, result)
+        return result
 
     async def ainvoke(state: Any, config: RunnableConfig) -> Any:
-        result = await runnable.ainvoke(state, config=config)
-        return _preserve_terminal_tool_output(result)
+        run_id = recorder.start(spec["name"], state, config) if recorder else None
+        try:
+            result = await runnable.ainvoke(state, config=config)
+        except GraphInterrupt:
+            if recorder and run_id:
+                recorder.interrupted(run_id)
+            raise
+        except Exception as exc:
+            if recorder and run_id:
+                recorder.failed(run_id, exc)
+            raise
+        result = _preserve_terminal_tool_output(result)
+        if recorder and run_id:
+            recorder.completed(run_id, result)
+        return result
 
     return {
         "name": spec["name"],
@@ -118,6 +150,7 @@ def _adapt_subagent(spec: CompiledSubAgent) -> CompiledSubAgent:
 
 def _validate_subagents(
     subagents: Sequence[CompiledSubAgent],
+    recorder: SubagentRunRecorder | None = None,
 ) -> list[CompiledSubAgent]:
     if not subagents:
         raise ValueError("At least one subagent must be registered.")
@@ -147,7 +180,7 @@ def _validate_subagents(
                 f"Subagent {name!r} must provide invoke and ainvoke methods."
             )
         names.add(name)
-        validated.append(_adapt_subagent(spec))
+        validated.append(_adapt_subagent(spec, recorder))
     return validated
 
 
@@ -180,6 +213,7 @@ def construct_main_agent_graph(
     deepagent_recursion_limit: int = 50,
     system_prompt: str = DEFAULT_MAIN_AGENT_PROMPT,
     checkpointer: Any | None = None,
+    subagent_recorder: SubagentRunRecorder | None = None,
 ):
     """Construct a checkpointed supervisor with Deep Agents delegation."""
     if deepagent_recursion_limit <= 0:
@@ -243,7 +277,7 @@ def construct_main_agent_graph(
             }
         )
 
-    validated_subagents = _validate_subagents(registered_subagents)
+    validated_subagents = _validate_subagents(registered_subagents, subagent_recorder)
     supervisor_tools = list(main_tools or [])
     _validate_main_tools(supervisor_tools)
     middleware = SubAgentMiddleware(
@@ -255,7 +289,7 @@ def construct_main_agent_graph(
         tools=supervisor_tools,
         system_prompt=system_prompt,
         middleware=[middleware],
-        checkpointer=checkpointer or InMemorySaver(),
+        checkpointer=checkpointer if checkpointer is not None else InMemorySaver(),
         name="main_agent",
     )
 

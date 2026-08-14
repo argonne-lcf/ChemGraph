@@ -31,6 +31,8 @@ human_supervised = false
 # Development-only workspace subagent for interactive main_agent sessions.
 enable_deepagent = false
 # deepagent_workspace = "."
+# Durable main-agent checkpoint database
+# checkpoint_db = "~/.chemgraph/checkpoints.db"
 # Enable verbose output
 verbose = false
 
@@ -293,6 +295,7 @@ chemgraph [OPTIONS] -q "YOUR_QUERY"
 | `--report`          | `-r`  | Generate detailed report                             | `False`        |
 | `--deepagent`       |       | Enable the experimental `main_agent` workspace worker | `False`       |
 | `--deepagent-workspace` |   | Root used by the experimental workspace worker       | Current directory |
+| `--checkpoint-db`    |       | SQLite checkpoints for durable `main_agent` threads | `~/.chemgraph/checkpoints.db` |
 | `--resume`          |       | Resume from a previous session ID (prefix supported) |                |
 | `--list-sessions`   |       | List recent sessions from the memory database        |                |
 | `--show-session`    |       | Show conversation for a session (prefix supported)   |                |
@@ -385,13 +388,27 @@ To test the long-lived supervisor, select `main_agent` explicitly:
 chemgraph --interactive -w main_agent
 ```
 
-Each prompt runs as a normal turn on the same checkpointed, process-lifetime
-thread, and chemistry work is delegated through Deep Agents' `task` middleware
-tool. A nested chemistry worker can still pause to request input. Quitting or
-switching the model or workflow discards the process-local thread; durable
-`--resume` support for `main_agent` is not yet available. If a model or graph
-operation fails transiently, enter `/retry` to resume its checkpoint without
-adding the previous user message a second time.
+Each prompt runs on one durable thread, and chemistry work is delegated through
+Deep Agents' `task` middleware tool. The CLI stores exact graph state in
+`~/.chemgraph/checkpoints.db` and readable transcripts in
+`~/.chemgraph/sessions.db`. Quitting or switching model/workflow leaves the old
+thread available for exact recovery:
+
+```bash
+chemgraph --interactive -w main_agent --resume <session-id>
+```
+
+Use `/resume <session-id>` to switch threads inside the REPL. Pending
+clarifications and approvals are presented immediately. Use `/retry` after a
+recoverable failure; the original user message is not added again.
+
+The checkpoint database is authoritative. The sessions database is a
+best-effort readable projection: a projection write failure is logged but does
+not change a completed graph result. Checkpoint serialization remains strict
+and does not use pickle, so unsupported objects in graph state still fail the
+authoritative graph operation. When a retry follows a different branch, the
+readable transcript is replaced with the branch represented by the latest
+checkpoint.
 
 #### Experimental workspace Deep Agent
 
@@ -437,7 +454,7 @@ policies. The experimental local backend is not a production sandbox.
 
 **Interactive Features:**
 - **Persistent conversation**: Maintain context across queries
-- **Session memory**: Standard workflows are saved to a local SQLite database (`~/.chemgraph/sessions.db`) and can be resumed later; `main_agent` is process-local in this first version
+- **Session memory**: Standard workflows use summary-injection resume; `main_agent` additionally uses durable LangGraph checkpoints for exact recovery
 - **Model switching**: Change models mid-conversation
 - **Workflow switching**: Switch between different agent types
 - **Built-in commands**: Help, clear, config, session management, etc.
@@ -500,6 +517,9 @@ chemgraph --show-session a3b2
 ```bash
 # Injects previous conversation context into the new query
 chemgraph -q "Now optimize the geometry at 500K" --resume a3b2
+
+# Restore exact main-agent state, including pending interrupts
+chemgraph --interactive -w main_agent --resume a3b2
 ```
 
 **Delete a Session:**
@@ -508,6 +528,54 @@ chemgraph --delete-session a3b2c1d4
 ```
 
 Session IDs support prefix matching -- you only need to type enough characters to uniquely identify the session.
+
+Main-agent checkpoints and full tool transcripts can contain sensitive prompts,
+arguments, and outputs. They are unencrypted; ChemGraph restricts local file
+permissions where the platform supports POSIX modes. SQLite is intended for
+local use. Python deployments should inject an async production saver such as
+`AsyncPostgresSaver` and retain ownership of its lifecycle.
+
+Without an injected saver, Python `main_agent` sessions use process-local
+memory checkpoints. Their readable records can be reviewed and deleted, but
+they cannot be restored after the process that owns the checkpointer exits.
+
+When injecting `AsyncSqliteSaver`, create, invoke, inspect, and close it on the
+same event loop and pass it through `ChemGraph(..., checkpointer=saver)`. Exact
+restore also requires recreating custom tools, prompts, credentials, MCP
+bindings, and sandbox backends with the same graph topology.
+
+```python
+import aiosqlite
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.main_session import MainAgentSession
+
+
+async def run_durable_thread():
+    async with aiosqlite.connect("checkpoints.db") as connection:
+        saver = AsyncSqliteSaver(
+            connection,
+            serde=JsonPlusSerializer(
+                pickle_fallback=False,
+                allowed_msgpack_modules=None,
+            ),
+        )
+        await saver.setup()
+        agent = ChemGraph(workflow_type="main_agent", checkpointer=saver)
+        session = MainAgentSession(
+            agent.workflow,
+            thread_id="your-stable-thread-id",
+            session_store=agent.session_store,
+            session_metadata=agent.main_agent_metadata,
+        )
+        await session.run("Optimize a water molecule")
+```
+
+The CLI recreates its local-shell Deep Agent only after showing the host-access
+warning and receiving fresh approval. Python callers must recreate their own
+injected sandbox backend before restoring a thread.
 
 #### Configuration File Support
 

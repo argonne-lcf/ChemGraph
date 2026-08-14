@@ -79,8 +79,9 @@ agent = ChemGraph(
 ## Current limitations
 
 - Only the `single_agent` and `main_agent` workflows are supported.
-- `main_agent` sessions are process-local and must be run in interactive mode;
-  durable `--resume` support is not yet available.
+- `main_agent` must be run in interactive mode. Its supervisor checkpoint is
+  durable and can be restored with `--resume` or `/resume`; individual Codex
+  model calls still start fresh read-only Codex threads.
 - The integration is experimental and pins `openai-codex==0.144.4` together
   with that SDK's bundled Codex runtime.
 - ChemGraph starts ephemeral, read-only Codex threads. ChemGraph's LangGraph
