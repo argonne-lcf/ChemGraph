@@ -1299,8 +1299,9 @@ interactive mode:</p>
 <h2 id="current-limitations">Current limitations</h2>
 <ul>
 <li>Only the <code>single_agent</code> and <code>main_agent</code> workflows are supported.</li>
-<li><code>main_agent</code> sessions are process-local and must be run in interactive mode;
-  durable <code>--resume</code> support is not yet available.</li>
+<li><code>main_agent</code> must be run in interactive mode. Its supervisor checkpoint is
+  durable and can be restored with <code>--resume</code> or <code>/resume</code>; individual Codex
+  model calls still start fresh read-only Codex threads.</li>
 <li>The integration is experimental and pins <code>openai-codex==0.144.4</code> together
   with that SDK's bundled Codex runtime.</li>
 <li>ChemGraph starts ephemeral, read-only Codex threads. ChemGraph's LangGraph

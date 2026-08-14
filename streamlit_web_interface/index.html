@@ -1276,7 +1276,7 @@
 </ul>
 <p>API keys entered in the UI are applied as process environment variables for the current Streamlit process and are not saved to <code>config.toml</code>. For shared deployments, prefer server-side environment variables.</p>
 <h2 id="sessions">Sessions</h2>
-<p>The main sidebar lists recent saved sessions. Loading a session rebuilds the visible conversation history from <code>~/.chemgraph/sessions.db</code>; deleting a session removes it from that database. A new chat clears the visible conversation and starts a new saved session on the next successful exchange.</p>
+<p>The main sidebar lists recent saved sessions. Loading a session rebuilds the visible conversation history from <code>~/.chemgraph/sessions.db</code>; it does not restore a durable CLI <code>main_agent</code> graph. Deleting a durable local main-agent session removes its LangGraph checkpoints before removing its readable transcript. A new chat clears the visible conversation and starts a new saved session on the next successful exchange.</p>
 <p>The UI uses the active saved configuration for model, workflow, thread, report generation, and human-supervision settings. To change these settings, use the Configuration page, save the configuration, then click <strong>Reload Config</strong> or <strong>Refresh Agents</strong> on the main page.</p>
 <h2 id="artifacts">Artifacts</h2>
 <p>The UI detects structures and reports from agent messages. For IR calculations, it looks in the run directory referenced by the result message for files such as <code>ir_spectrum_&lt;name&gt;.png</code>, <code>frequencies_&lt;name&gt;.csv</code>, and <code>&lt;name&gt;_vib.&lt;mode&gt;.traj</code>.</p>
