@@ -3,7 +3,7 @@
 import os
 import sqlite3
 import stat
-import time
+import threading
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -538,25 +538,38 @@ def test_local_database_files_are_private(tmp_path):
 def test_busy_runtime_shutdown_is_bounded_and_finishes_on_owner_thread(
     monkeypatch, caplog
 ):
+    owner_blocked = threading.Event()
+    release_owner = threading.Event()
+
     class BlockingConnection:
         async def close(self):
             import asyncio
 
-            asyncio.get_running_loop().call_soon(time.sleep, 0.15)
+            def block_owner():
+                owner_blocked.set()
+                release_owner.wait()
+
+            asyncio.get_running_loop().call_soon(block_owner)
 
     monkeypatch.setattr(checkpoint_runtime_module, "_CLOSE_TIMEOUT_SECONDS", 0.03)
     runtime = CheckpointRuntime()
     runtime._connections["blocking"] = BlockingConnection()
+    close_thread = threading.Thread(target=runtime.close)
 
-    started = time.monotonic()
-    runtime.close()
-    elapsed = time.monotonic() - started
+    try:
+        close_thread.start()
+        assert owner_blocked.wait(timeout=1.0)
+        close_thread.join(timeout=1.0)
 
-    assert elapsed < 0.12
-    assert runtime._thread.is_alive()
-    runtime._thread.join(timeout=0.5)
+        assert not close_thread.is_alive()
+        assert runtime._thread.is_alive()
+        assert "still running after shutdown" in caplog.text
+    finally:
+        release_owner.set()
+        close_thread.join(timeout=1.0)
+
+    runtime._thread.join(timeout=1.0)
     assert not runtime._thread.is_alive()
-    assert "still running after shutdown" in caplog.text
 
 
 def test_close_sqlite_releases_cached_saver(tmp_path):
