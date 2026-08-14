@@ -4,7 +4,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from chemgraph.agent import llm_agent
-from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
 
 
 class _DummyTool:
@@ -176,8 +176,10 @@ def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tm
         enable_memory=False,
         log_dir=str(tmp_path / "logs"),
         tools=[main_tool],
-        formatter_prompt="custom formatter",
-        report_prompt="custom report",
+        prompts=PromptConfig(
+            formatter="custom formatter",
+            report="custom report",
+        ),
         structured_output=True,
         generate_report=True,
         max_retries=4,

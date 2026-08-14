@@ -3,6 +3,7 @@ import datetime
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 import time
 from typing import Any, Callable, Collection, List, Optional
@@ -83,6 +84,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class PromptConfig:
+    """Prompts used across ChemGraph workflows.
+
+    Each field defaults to the corresponding module-level prompt, so an
+    unspecified ``PromptConfig`` reproduces ChemGraph's default behavior. Only
+    override the fields relevant to the active ``workflow_type``:
+
+    - ``system``/``formatter``/``report``: single_agent, main_agent, mock_agent.
+    - ``planner``/``executor``/``aggregator``/``formatter_multi``: multi_agent.
+    """
+
+    system: str = single_agent_prompt
+    formatter: str = default_formatter_prompt
+    report: str = default_report_prompt
+    planner: str = default_planner_prompt
+    executor: str = default_executor_prompt
+    aggregator: str = default_aggregator_prompt
+    formatter_multi: str = default_formatter_multi_prompt
+
+
 def _resolve_reasoning_effort(
     model_name: str, reasoning_effort: Optional[str]
 ) -> Optional[str]:
@@ -135,10 +157,12 @@ class ChemGraph:
         Reasoning effort for manually verified GPT-5.6 models, which default to
         ``"none"``. Supported values are ``none``, ``low``, ``medium``,
         ``high``, ``xhigh``, and ``max``.
-    system_prompt : str, optional
-        System prompt for the language model, by default single_agent_prompt
-    formatter_prompt : str, optional
-        Prompt for formatting output, by default formatter_prompt
+    prompts : PromptConfig, optional
+        Prompts for the active workflow. Defaults to ``PromptConfig()``, which
+        uses ChemGraph's built-in prompts. Override only the fields relevant to
+        ``workflow_type`` (e.g. ``system``/``formatter``/``report`` for
+        single/main agents, ``planner``/``executor``/``aggregator``/
+        ``formatter_multi`` for multi_agent).
     structured_output : bool, optional
         Whether to use structured output, by default False
     return_option : str, optional
@@ -190,17 +214,11 @@ class ChemGraph:
         base_url: str = None,
         api_key: str = None,
         argo_user: str = None,
-        system_prompt: str = single_agent_prompt,
-        formatter_prompt: str = default_formatter_prompt,
+        prompts: Optional["PromptConfig"] = None,
         structured_output: bool = False,
         return_option: str = "last_message",
         recursion_limit: int = 50,
-        planner_prompt: str = default_planner_prompt,
-        executor_prompt: str = default_executor_prompt,
-        aggregator_prompt: str = default_aggregator_prompt,
-        formatter_multi_prompt: str = default_formatter_multi_prompt,
         generate_report: bool = False,
-        report_prompt: str = default_report_prompt,
         support_structured_output: bool = True,
         tools: List = None,
         data_tools: List = None,
@@ -353,20 +371,22 @@ class ChemGraph:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
             raise e
 
+        prompts = prompts or PromptConfig()
+
         self.workflow_type = workflow_type
         self.model_name = model_name
         self.reasoning_effort = reasoning_effort
-        self.system_prompt = system_prompt
-        self.formatter_prompt = formatter_prompt
+        self.system_prompt = prompts.system
+        self.formatter_prompt = prompts.formatter
         self.structured_output = structured_output
         self.generate_report = generate_report
-        self.report_prompt = report_prompt
+        self.report_prompt = prompts.report
         self.return_option = return_option
         self.recursion_limit = recursion_limit
-        self.planner_prompt = planner_prompt
-        self.executor_prompt = executor_prompt
-        self.aggregator_prompt = aggregator_prompt
-        self.formatter_multi_prompt = formatter_multi_prompt
+        self.planner_prompt = prompts.planner
+        self.executor_prompt = prompts.executor
+        self.aggregator_prompt = prompts.aggregator
+        self.formatter_multi_prompt = prompts.formatter_multi
         self.tools = tools
         self.data_tools = data_tools
         self.max_retries = max_retries
@@ -382,7 +402,7 @@ class ChemGraph:
         # any mutation below rewrites it (e.g. stripping ask_human when
         # unsupervised). Downstream workflow branches use this to decide whether
         # to substitute their own default prompt.
-        prompt_is_default = system_prompt == single_agent_prompt
+        prompt_is_default = self.system_prompt == single_agent_prompt
 
         # When human supervision is disabled and the caller is using the
         # default system prompt, strip the ask_human instructions so the

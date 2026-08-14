@@ -11,15 +11,59 @@ EventCallback = Callable[[str, dict], None]
 
 
 def _serialized_name(serialized: Any) -> str | None:
-    from chemgraph.agent.turn import _serialized_name as turn_serialized_name
+    if isinstance(serialized, dict):
+        return serialized.get("name") or serialized.get("id")
+    return None
 
-    return turn_serialized_name(serialized)
+
+def _message_tool_calls(message: Any) -> list[Any]:
+    if isinstance(message, dict):
+        calls = message.get("tool_calls")
+    else:
+        calls = getattr(message, "tool_calls", None)
+    return calls if isinstance(calls, list) else []
+
+
+def _call_name(call: Any) -> str | None:
+    if isinstance(call, dict):
+        if call.get("name"):
+            return str(call["name"])
+        function = call.get("function")
+        if isinstance(function, dict) and function.get("name"):
+            return str(function["name"])
+    name = getattr(call, "name", None)
+    return str(name) if name else None
+
+
+def _call_id(call: Any) -> str | None:
+    if isinstance(call, dict):
+        value = call.get("id") or call.get("tool_call_id")
+    else:
+        value = getattr(call, "id", None) or getattr(call, "tool_call_id", None)
+    return str(value) if value else None
 
 
 def _response_tool_calls(response: Any) -> list[dict[str, str | None]]:
-    from chemgraph.agent.turn import _response_tool_calls as turn_response_tool_calls
-
-    return turn_response_tool_calls(response)
+    try:
+        generations = getattr(response, "generations", None) or []
+        tool_calls: list[dict[str, str | None]] = []
+        for generation_group in generations:
+            for generation in generation_group or []:
+                message = getattr(generation, "message", None)
+                for call in _message_tool_calls(message):
+                    name = _call_name(call)
+                    if not name:
+                        continue
+                    tool_calls.append(
+                        {
+                            "name": name,
+                            "id": _call_id(call),
+                        },
+                    )
+        return tool_calls
+    except Exception:  # noqa: BLE001 - event extraction must not break runs.
+        logger.debug("failed to extract llm_decision tool calls", exc_info=True)
+        return []
 
 
 def _serialize_state(value: Any) -> Any:
