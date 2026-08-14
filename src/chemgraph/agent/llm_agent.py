@@ -608,7 +608,7 @@ class ChemGraph:
         """Return an ASCII representation of the LangGraph workflow."""
         return self.workflow.get_graph().draw_ascii()
 
-    def get_state(self, config={"configurable": {"thread_id": "1"}}):
+    def get_state(self, config: dict | None = None):
         """Get the current state of the workflow.
 
         Parameters
@@ -622,16 +622,14 @@ class ChemGraph:
         list
             List of messages in the current state
         """
-        if type(getattr(self.workflow, "checkpointer", None)).__name__.startswith(
-            "Async"
-        ):
-            raise RuntimeError(
-                "This workflow uses an async checkpointer; use `await aget_state()` instead."
-            )
+        if config is None:
+            config = {"configurable": {"thread_id": "1"}}
         return self.workflow.get_state(config).values
 
-    async def aget_state(self, config={"configurable": {"thread_id": "1"}}):
+    async def aget_state(self, config: dict | None = None):
         """Asynchronously return the current workflow state values."""
+        if config is None:
+            config = {"configurable": {"thread_id": "1"}}
         return (await self.workflow.aget_state(config)).values
 
     def write_state(

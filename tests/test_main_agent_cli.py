@@ -9,6 +9,8 @@ import toml
 from chemgraph.agent.main_session import MainAgentTurnResult, PendingInterrupt
 from chemgraph.cli import commands
 from chemgraph.cli.formatting import console
+from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
+from chemgraph.memory.store import SessionStore
 
 cli_main = importlib.import_module("chemgraph.cli.main")
 
@@ -454,6 +456,160 @@ def test_interactive_slash_model_and_workflow_switches(monkeypatch):
         ("Provider/Next-Model", "main_agent"),
         ("Provider/Next-Model", "single_agent"),
     ]
+
+
+def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
+    target_config = MainAgentGraphConfig(
+        model_name="argo:gpt-5.6-sol",
+        structured_output=True,
+        generate_report=True,
+        human_supervised=True,
+        recursion_limit=77,
+        reasoning_effort="high",
+        max_retries=4,
+        terminal_tool_names=("finish",),
+        topology_fingerprint="target",
+    )
+    target_db = str(tmp_path / "target-checkpoints.db")
+    SessionStore().create_session(
+        "target-thread",
+        target_config.model_name,
+        "main_agent",
+        session_metadata=MainAgentSessionMetadata(
+            graph_config=target_config,
+            checkpoint_backend="AsyncSqliteSaver",
+            checkpoint_db=target_db,
+        ),
+    )
+    answers = iter(
+        [
+            "initial-model",
+            "main_agent",
+            "/resume target-thread",
+            "/workflow single_agent",
+            "quit",
+        ]
+    )
+    agents = iter([SimpleNamespace(), SimpleNamespace(), SimpleNamespace(session_id="new")])
+    initialization_calls = []
+    sessions = iter(
+        [
+            SimpleNamespace(thread_id="initial", failed=False),
+            SimpleNamespace(thread_id="target-thread", failed=False),
+        ]
+    )
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+
+    def fake_initialize(*args, **kwargs):
+        initialization_calls.append((args, kwargs))
+        return next(agents)
+
+    monkeypatch.setattr(commands, "initialize_agent", fake_initialize)
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda *_args, **_kwargs: next(sessions),
+    )
+    monkeypatch.setattr(
+        commands,
+        "restore_main_agent_session",
+        lambda *_args, **_kwargs: MainAgentTurnResult(
+            thread_id="target-thread",
+            status="completed",
+            assistant_response="",
+            interrupts=(),
+            state={},
+        ),
+    )
+
+    with console.capture():
+        commands.interactive_mode(workflow="main_agent", generate_report=False)
+
+    resume_args, resume_kwargs = initialization_calls[1]
+    rebuild_args, rebuild_kwargs = initialization_calls[2]
+    assert resume_args[:6] == (
+        target_config.model_name,
+        "main_agent",
+        True,
+        "state",
+        True,
+        77,
+    )
+    assert rebuild_args[:6] == (
+        target_config.model_name,
+        "single_agent",
+        True,
+        "state",
+        True,
+        77,
+    )
+    for kwargs in (resume_kwargs, rebuild_kwargs):
+        assert kwargs["human_supervised"] is True
+        assert kwargs["reasoning_effort"] == "high"
+        assert kwargs["max_retries"] == 4
+        assert kwargs["terminal_tool_names"] == ("finish",)
+
+
+def test_startup_resume_distinguishes_process_local_session(monkeypatch):
+    SessionStore().create_session(
+        "process-local",
+        "scripted",
+        "main_agent",
+        session_metadata=MainAgentSessionMetadata(
+            graph_config=MainAgentGraphConfig(model_name="scripted"),
+            checkpoint_backend="memory",
+        ),
+    )
+    monkeypatch.setattr(
+        commands,
+        "initialize_agent",
+        lambda *_args, **_kwargs: pytest.fail("process-local session was initialized"),
+    )
+
+    with console.capture() as capture:
+        commands.interactive_mode(resume_session="process-local")
+
+    assert "process-local checkpoint" in capture.get()
+
+
+def test_interactive_eof_closes_checkpoint_runtime(monkeypatch):
+    class FakeRuntime:
+        def __init__(self):
+            self.closed = False
+
+        def open_sqlite(self, _path):
+            return SimpleNamespace()
+
+        def close(self):
+            self.closed = True
+
+    runtime = FakeRuntime()
+    answers = iter(["model", "main_agent"])
+
+    def prompt(*_args, **_kwargs):
+        try:
+            return next(answers)
+        except StopIteration as exc:
+            raise EOFError from exc
+
+    monkeypatch.setattr(commands, "CheckpointRuntime", lambda: runtime)
+    monkeypatch.setattr(commands.Prompt, "ask", prompt)
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(
+        commands,
+        "create_main_agent_session",
+        lambda *_args, **_kwargs: SimpleNamespace(thread_id="main", failed=False),
+    )
+
+    with console.capture():
+        commands.interactive_mode(workflow="main_agent")
+
+    assert runtime.closed is True
 
 
 def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):

@@ -402,6 +402,14 @@ Use `/resume <session-id>` to switch threads inside the REPL. Pending
 clarifications and approvals are presented immediately. Use `/retry` after a
 recoverable failure; the original user message is not added again.
 
+The checkpoint database is authoritative. The sessions database is a
+best-effort readable projection: a projection write failure is logged but does
+not change a completed graph result. Checkpoint serialization remains strict
+and does not use pickle, so unsupported objects in graph state still fail the
+authoritative graph operation. When a retry follows a different branch, the
+readable transcript is replaced with the branch represented by the latest
+checkpoint.
+
 #### Experimental workspace Deep Agent
 
 For development and testing, `main_agent` can register an additional
@@ -526,6 +534,10 @@ arguments, and outputs. They are unencrypted; ChemGraph restricts local file
 permissions where the platform supports POSIX modes. SQLite is intended for
 local use. Python deployments should inject an async production saver such as
 `AsyncPostgresSaver` and retain ownership of its lifecycle.
+
+Without an injected saver, Python `main_agent` sessions use process-local
+memory checkpoints. Their readable records can be reviewed and deleted, but
+they cannot be restored after the process that owns the checkpointer exits.
 
 When injecting `AsyncSqliteSaver`, create, invoke, inspect, and close it on the
 same event loop and pass it through `ChemGraph(..., checkpointer=saver)`. Exact

@@ -3,6 +3,7 @@
 import os
 import sqlite3
 import stat
+import time
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -12,6 +13,7 @@ from chemgraph.agent.main_session import (
     MainAgentSession,
     MissingCheckpointError,
 )
+from chemgraph.cli import checkpoint_runtime as checkpoint_runtime_module
 from chemgraph.cli.checkpoint_runtime import CheckpointRuntime
 from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.memory.durable import delete_durable_session
@@ -318,6 +320,136 @@ def test_child_tool_transcript_is_lossless_and_replay_idempotent(tmp_path):
     assert len({message.message_id for message in runs[0].messages}) == 4
 
 
+def test_unserializable_child_transcript_does_not_fail_completed_run(tmp_path):
+    store = SessionStore(str(tmp_path / "sessions.db"))
+    store.create_session(
+        "root",
+        "scripted",
+        "main_agent",
+        session_metadata=_metadata(tmp_path / "checkpoints.db"),
+    )
+    recorder = SubagentRunRecorder(store)
+    state = {"messages": [HumanMessage(content="calculate")]}
+    config = {
+        "configurable": {
+            "thread_id": "root",
+            "checkpoint_ns": "task:unserializable",
+        }
+    }
+    run_id = recorder.start("chemgraph", state, config)
+
+    recorder.completed(
+        run_id,
+        {
+            "messages": [
+                ToolMessage(
+                    content="done",
+                    tool_call_id="tool-1",
+                    artifact=object(),
+                )
+            ]
+        },
+    )
+
+    run = store.get_session("root").child_runs[0]
+    assert run.status == "completed"
+    assert run.messages == []
+    assert run.error_text == "Readable transcript unavailable: TypeError"
+
+
+def test_readable_sync_failure_does_not_break_completed_turn(monkeypatch, tmp_path):
+    checkpoint_db = tmp_path / "checkpoints.db"
+    store = SessionStore(str(tmp_path / "sessions.db"))
+    runtime = CheckpointRuntime()
+    saver = runtime.open_sqlite(str(checkpoint_db))
+    graph = _graph(_ScriptedChatModel(responses=[AIMessage(content="done")]), saver)
+    session = MainAgentSession(
+        graph,
+        thread_id="store-failure",
+        session_store=store,
+        session_metadata=_metadata(checkpoint_db),
+    )
+    monkeypatch.setattr(
+        store,
+        "synchronize_messages",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("store broke")),
+    )
+
+    result = runtime.run(lambda: session.run("hello"))
+    runtime.close()
+
+    assert result.status == "completed"
+    assert store.get_session("store-failure").status == "completed"
+
+
+def test_readable_registration_failure_does_not_prevent_turn(monkeypatch, tmp_path):
+    checkpoint_db = tmp_path / "checkpoints.db"
+    store = SessionStore(str(tmp_path / "sessions.db"))
+    monkeypatch.setattr(
+        store,
+        "create_session",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("store broke")),
+    )
+    runtime = CheckpointRuntime()
+    saver = runtime.open_sqlite(str(checkpoint_db))
+    graph = _graph(_ScriptedChatModel(responses=[AIMessage(content="done")]), saver)
+    session = MainAgentSession(
+        graph,
+        thread_id="registration-failure",
+        session_store=store,
+        session_metadata=_metadata(checkpoint_db),
+    )
+
+    result = runtime.run(lambda: session.run("hello"))
+    runtime.close()
+
+    assert result.status == "completed"
+    assert store.get_session("registration-failure") is None
+
+
+def test_status_failure_does_not_mask_graph_error(monkeypatch, tmp_path):
+    checkpoint_db = tmp_path / "checkpoints.db"
+    store = SessionStore(str(tmp_path / "sessions.db"))
+    runtime = CheckpointRuntime()
+    saver = runtime.open_sqlite(str(checkpoint_db))
+    graph = _graph(_ScriptedChatModel(responses=[RuntimeError("graph broke")]), saver)
+    session = MainAgentSession(
+        graph,
+        thread_id="original-error",
+        session_store=store,
+        session_metadata=_metadata(checkpoint_db),
+    )
+    session._ensure_registered("hello")
+    monkeypatch.setattr(
+        store,
+        "update_session_status",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("store broke")),
+    )
+
+    with pytest.raises(RuntimeError, match="graph broke"):
+        runtime.run(lambda: session.run("hello"))
+    runtime.close()
+
+
+def test_all_recorder_storage_failures_are_nonfatal():
+    class BrokenStore:
+        def upsert_subagent_run(self, **_kwargs):
+            raise RuntimeError("store broke")
+
+    recorder = SubagentRunRecorder(BrokenStore())
+    config = {
+        "configurable": {
+            "thread_id": "root",
+            "checkpoint_ns": "task:broken-store",
+        }
+    }
+
+    assert recorder.start("chemgraph", {"messages": []}, config) is None
+    recorder.interrupted("missing")
+    recorder.failed("missing", RuntimeError("graph broke"))
+    recorder.completed("missing", {"messages": []})
+
+
 def test_delete_removes_session_children_and_checkpoints(tmp_path):
     checkpoint_db = tmp_path / "checkpoints.db"
     store = SessionStore(str(tmp_path / "sessions.db"))
@@ -338,8 +470,27 @@ def test_delete_removes_session_children_and_checkpoints(tmp_path):
     assert store.get_session("delete-me") is None
     runtime = CheckpointRuntime()
     saver = runtime.open_sqlite(str(checkpoint_db))
-    assert runtime.run(lambda: saver.aget({"configurable": {"thread_id": "delete-me"}})) is None
+    assert runtime.run(
+        lambda: saver.aget({"configurable": {"thread_id": "delete-me"}})
+    ) is None
     runtime.close()
+
+
+def test_delete_removes_process_local_session_record(tmp_path):
+    store = SessionStore(str(tmp_path / "sessions.db"))
+    metadata = MainAgentSessionMetadata(
+        graph_config=MainAgentGraphConfig(model_name="scripted"),
+        checkpoint_backend="memory",
+    )
+    store.create_session(
+        "process-local",
+        "scripted",
+        "main_agent",
+        session_metadata=metadata,
+    )
+
+    assert delete_durable_session(store, "process-local") is True
+    assert store.get_session("process-local") is None
 
 
 def test_legacy_session_database_migrates_in_place(tmp_path):
@@ -382,3 +533,52 @@ def test_local_database_files_are_private(tmp_path):
 
     assert stat.S_IMODE(session_db.stat().st_mode) == 0o600
     assert stat.S_IMODE(checkpoint_db.stat().st_mode) == 0o600
+
+
+def test_busy_runtime_shutdown_is_bounded_and_finishes_on_owner_thread(
+    monkeypatch, caplog
+):
+    class BlockingConnection:
+        async def close(self):
+            import asyncio
+
+            asyncio.get_running_loop().call_soon(time.sleep, 0.15)
+
+    monkeypatch.setattr(checkpoint_runtime_module, "_CLOSE_TIMEOUT_SECONDS", 0.03)
+    runtime = CheckpointRuntime()
+    runtime._connections["blocking"] = BlockingConnection()
+
+    started = time.monotonic()
+    runtime.close()
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.12
+    assert runtime._thread.is_alive()
+    runtime._thread.join(timeout=0.5)
+    assert not runtime._thread.is_alive()
+    assert "still running after shutdown" in caplog.text
+
+
+def test_close_sqlite_releases_cached_saver(tmp_path):
+    checkpoint_db = tmp_path / "checkpoints.db"
+    runtime = CheckpointRuntime()
+    first = runtime.open_sqlite(str(checkpoint_db))
+
+    runtime.close_sqlite(str(checkpoint_db))
+    second = runtime.open_sqlite(str(checkpoint_db))
+    runtime.close()
+
+    assert second is not first
+
+
+def test_runtime_can_be_closed_from_owner_loop():
+    runtime = CheckpointRuntime()
+
+    async def close_runtime():
+        runtime.close()
+
+    runtime.run(close_runtime)
+    runtime._thread.join(timeout=0.5)
+
+    assert not runtime._thread.is_alive()
+    runtime.close()

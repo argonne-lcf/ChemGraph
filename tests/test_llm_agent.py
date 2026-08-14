@@ -110,6 +110,34 @@ def test_visualize_returns_ascii_graph():
     graph.draw_ascii.assert_called_once_with()
 
 
+def test_state_access_delegates_capability_and_uses_fresh_defaults():
+    class AsyncLookingWorkflow:
+        checkpointer = type("AsyncCustomSaver", (), {})()
+
+        def __init__(self):
+            self.sync_configs = []
+            self.async_configs = []
+
+        def get_state(self, config):
+            self.sync_configs.append(config)
+            return SimpleNamespace(values={"mode": "sync"})
+
+        async def aget_state(self, config):
+            self.async_configs.append(config)
+            return SimpleNamespace(values={"mode": "async"})
+
+    workflow = AsyncLookingWorkflow()
+    agent = object.__new__(ChemGraph)
+    agent.workflow = workflow
+
+    assert agent.get_state() == {"mode": "sync"}
+    first_config = workflow.sync_configs[0]
+    first_config["mutated"] = True
+    assert agent.get_state() == {"mode": "sync"}
+    assert "mutated" not in workflow.sync_configs[1]
+    assert asyncio.run(agent.aget_state()) == {"mode": "async"}
+
+
 def test_turn_event_callback_emits_llm_decision_for_tool_calls():
     events = []
     callback = _TurnEventCallback(

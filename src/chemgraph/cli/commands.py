@@ -25,6 +25,7 @@ from chemgraph.cli.checkpoint_runtime import (
     CheckpointRuntime,
 )
 from chemgraph.models.supported_models import (
+    MODELS_WITH_REASONING_EFFORT,
     supported_alcf_models,
     supported_anthropic_models,
     supported_gemini_models,
@@ -958,12 +959,11 @@ def delete_session_cmd(session_id: str, db_path: Optional[str] = None) -> None:
         deleted = delete_durable_session(store, session_id)
     except Exception as exc:
         console.print(
-            "[red]Checkpoint deletion failed; the session record was kept: "
-            f"{escape(str(exc))}[/red]"
+            f"[red]Could not fully delete the session: {escape(str(exc))}[/red]"
         )
         return
     if deleted:
-        console.print("[green]Session and checkpoints deleted.[/green]")
+        console.print("[green]Session deleted.[/green]")
     else:
         console.print("[red]Failed to delete session.[/red]")
 
@@ -1112,14 +1112,35 @@ def interactive_mode(
     checkpoint_saver = None
     restored_thread_id: str | None = None
     stored_graph_config = None
+    reasoning_effort: str | None = None
+    max_retries = 1
+    terminal_tool_names: tuple[str, ...] = ()
     if resume_session:
         resolved = SessionStore().get_session_metadata(resume_session)
-        if resolved is None or resolved[1] is None:
+        if resolved is None:
             console.print(
                 f"[red]Durable main-agent session '{resume_session}' was not found.[/red]"
             )
             return
+        if resolved[1] is None:
+            console.print(
+                f"[red]Session '{resume_session}' exists but is not a durable "
+                "main-agent thread.[/red]"
+            )
+            return
         restored_thread_id, stored_metadata = resolved
+        if stored_metadata.checkpoint_backend == "memory":
+            console.print(
+                f"[red]Session '{resume_session}' used a process-local checkpoint "
+                "and cannot be restored after its owner process exits.[/red]"
+            )
+            return
+        if stored_metadata.checkpoint_backend not in {None, "AsyncSqliteSaver"}:
+            console.print(
+                f"[red]Session '{resume_session}' uses a caller-owned external "
+                "checkpointer and cannot be restored by the CLI.[/red]"
+            )
+            return
         stored_graph_config = stored_metadata.graph_config
         model = stored_graph_config.model_name
         workflow = "main_agent"
@@ -1129,6 +1150,9 @@ def interactive_mode(
         human_supervised = stored_graph_config.human_supervised
         enable_deepagent = stored_graph_config.enable_deepagent
         deepagent_workspace = stored_graph_config.deepagent_workspace
+        reasoning_effort = stored_graph_config.reasoning_effort
+        max_retries = stored_graph_config.max_retries
+        terminal_tool_names = stored_graph_config.terminal_tool_names
         checkpoint_db = stored_metadata.checkpoint_db or checkpoint_db
     else:
         # Allow the user to override model/workflow at startup.
@@ -1172,13 +1196,9 @@ def interactive_mode(
             else None
         ),
         checkpointer=checkpoint_saver,
-        reasoning_effort=(
-            stored_graph_config.reasoning_effort if stored_graph_config else None
-        ),
-        max_retries=(stored_graph_config.max_retries if stored_graph_config else 1),
-        terminal_tool_names=(
-            stored_graph_config.terminal_tool_names if stored_graph_config else ()
-        ),
+        reasoning_effort=reasoning_effort,
+        max_retries=max_retries,
+        terminal_tool_names=terminal_tool_names,
     )
     if not agent:
         if checkpoint_runtime is not None:
@@ -1320,14 +1340,38 @@ Example queries:
                     console.print("[red]Usage: /resume <session_id>[/red]")
                     continue
                 target = SessionStore().get_session_metadata(argument)
+                if target is None and main_session is not None:
+                    console.print(f"[red]Session '{argument}' was not found.[/red]")
+                    continue
                 if target is not None and target[1] is not None:
                     target_id, target_metadata = target
+                    if target_metadata.checkpoint_backend == "memory":
+                        console.print(
+                            "[red]The selected session used a process-local "
+                            "checkpoint and is no longer restorable.[/red]"
+                        )
+                        continue
+                    if target_metadata.checkpoint_backend not in {
+                        None,
+                        "AsyncSqliteSaver",
+                    }:
+                        console.print(
+                            "[red]The selected session uses a caller-owned external "
+                            "checkpointer and cannot be restored by the CLI.[/red]"
+                        )
+                        continue
                     target_config = target_metadata.graph_config
+                    candidate_db = (
+                        target_metadata.checkpoint_db or DEFAULT_CHECKPOINT_DB
+                    )
+                    previous_db = (
+                        checkpoint_db or DEFAULT_CHECKPOINT_DB
+                        if checkpoint_runtime is not None
+                        else None
+                    )
                     candidate_runtime = checkpoint_runtime or CheckpointRuntime()
                     try:
-                        candidate_saver = candidate_runtime.open_sqlite(
-                            target_metadata.checkpoint_db or DEFAULT_CHECKPOINT_DB
-                        )
+                        candidate_saver = candidate_runtime.open_sqlite(candidate_db)
                         candidate_agent = initialize_agent(
                             target_config.model_name,
                             "main_agent",
@@ -1352,9 +1396,7 @@ Example queries:
                         candidate_session = create_main_agent_session(
                             candidate_agent,
                             thread_id=target_id,
-                            checkpoint_db=(
-                                target_metadata.checkpoint_db or DEFAULT_CHECKPOINT_DB
-                            ),
+                            checkpoint_db=candidate_db,
                         )
                         restored = restore_main_agent_session(
                             candidate_session,
@@ -1365,6 +1407,15 @@ Example queries:
                     except Exception as exc:
                         if checkpoint_runtime is None:
                             candidate_runtime.close()
+                        elif (
+                            previous_db is not None
+                            and os.path.abspath(os.path.expanduser(candidate_db))
+                            != os.path.abspath(os.path.expanduser(previous_db))
+                        ):
+                            try:
+                                candidate_runtime.close_sqlite(candidate_db)
+                            except Exception:
+                                pass
                         console.print(f"[red]Could not restore session: {exc}[/red]")
                         continue
                     checkpoint_runtime = candidate_runtime
@@ -1373,9 +1424,28 @@ Example queries:
                     main_session = candidate_session
                     model = target_config.model_name
                     workflow = "main_agent"
-                    checkpoint_db = target_metadata.checkpoint_db
+                    checkpoint_db = candidate_db
+                    structured = target_config.structured_output
+                    generate_report = target_config.generate_report
+                    human_supervised = target_config.human_supervised
+                    recursion_limit = target_config.recursion_limit
+                    reasoning_effort = target_config.reasoning_effort
+                    max_retries = target_config.max_retries
+                    terminal_tool_names = target_config.terminal_tool_names
                     enable_deepagent = target_config.enable_deepagent
                     deepagent_workspace = target_config.deepagent_workspace
+                    if (
+                        previous_db is not None
+                        and os.path.abspath(os.path.expanduser(previous_db))
+                        != os.path.abspath(os.path.expanduser(candidate_db))
+                    ):
+                        try:
+                            checkpoint_runtime.close_sqlite(previous_db)
+                        except Exception as exc:
+                            console.print(
+                                "[yellow]Could not release the previous checkpoint "
+                                f"database: {escape(str(exc))}[/yellow]"
+                            )
                     if restored.status == "failed":
                         console.print(
                             "[yellow]The restored operation can be continued with "
@@ -1429,6 +1499,11 @@ Example queries:
                     console.print("[red]Usage: /model <name>[/red]")
                     continue
                 new_model = argument
+                new_reasoning_effort = (
+                    reasoning_effort
+                    if new_model in MODELS_WITH_REASONING_EFFORT
+                    else None
+                )
                 new_agent = initialize_agent(
                     new_model,
                     workflow,
@@ -1447,9 +1522,18 @@ Example queries:
                         else None
                     ),
                     checkpointer=(checkpoint_saver if workflow == "main_agent" else None),
+                    reasoning_effort=new_reasoning_effort,
+                    max_retries=max_retries,
+                    terminal_tool_names=terminal_tool_names,
                 )
                 if new_agent:
+                    if reasoning_effort is not None and new_reasoning_effort is None:
+                        console.print(
+                            "[yellow]Reasoning effort was reset because the new "
+                            "model does not support it.[/yellow]"
+                        )
                     model = new_model
+                    reasoning_effort = new_reasoning_effort
                     agent = new_agent
                     main_session = (
                         create_main_agent_session(
@@ -1494,6 +1578,9 @@ Example queries:
                         checkpointer=(
                             checkpoint_saver if new_workflow == "main_agent" else None
                         ),
+                        reasoning_effort=reasoning_effort,
+                        max_retries=max_retries,
+                        terminal_tool_names=terminal_tool_names,
                     )
                     if new_agent:
                         workflow = new_workflow
@@ -1540,6 +1627,11 @@ Example queries:
                 elif hasattr(agent, "session_id") and agent.session_id:
                     console.print(f"[dim]Session: {agent.session_id}[/dim]")
 
+        except EOFError:
+            console.print("\n[yellow]Goodbye![/yellow]")
+            if checkpoint_runtime is not None:
+                checkpoint_runtime.close()
+            break
         except KeyboardInterrupt:
             console.print(
                 "\n[yellow]Interrupted. Type '/quit' to exit.[/yellow]"

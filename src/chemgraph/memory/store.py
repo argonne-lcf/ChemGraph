@@ -487,6 +487,22 @@ class SessionStore:
                 (now, run_id),
             )
 
+    def update_subagent_run_status(
+        self,
+        run_id: str,
+        status: SubagentRunStatus,
+        *,
+        error_text: str | None = None,
+    ) -> None:
+        """Update child-run lifecycle metadata without replacing its transcript."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE subagent_runs SET status = ?, error_text = ?, updated_at = ? "
+                "WHERE run_id = ?",
+                (status, error_text, now, run_id),
+            )
+
     def get_session_metadata(
         self, session_id: str
     ) -> tuple[str, MainAgentSessionMetadata | None] | None:

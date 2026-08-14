@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any
 
@@ -12,6 +13,7 @@ from chemgraph.memory.store import SessionStore
 
 
 _RUN_NAMESPACE = uuid.UUID("7ceaa8ee-c7ac-4efd-99e6-b8e3ad89de82")
+logger = logging.getLogger(__name__)
 
 
 class SubagentRunRecorder:
@@ -37,34 +39,79 @@ class SubagentRunRecorder:
         task = str(getattr(messages[-1], "content", "")) if messages else ""
         return run_id, thread_id, task
 
-    def start(self, agent_name: str, state: Any, config: dict) -> str:
-        run_id, thread_id, task = self._identity(agent_name, state, config)
-        checkpoint_namespace = str(config["configurable"]["checkpoint_ns"])
-        self.store.upsert_subagent_run(
-            run_id=run_id,
-            session_id=thread_id,
-            agent_name=agent_name,
-            delegated_task=task,
-            checkpoint_namespace=checkpoint_namespace,
-            status="running",
-        )
+    def start(self, agent_name: str, state: Any, config: dict) -> str | None:
+        try:
+            run_id, thread_id, task = self._identity(agent_name, state, config)
+            checkpoint_namespace = str(config["configurable"]["checkpoint_ns"])
+            self.store.upsert_subagent_run(
+                run_id=run_id,
+                session_id=thread_id,
+                agent_name=agent_name,
+                delegated_task=task,
+                checkpoint_namespace=checkpoint_namespace,
+                status="running",
+            )
+        except Exception:
+            logger.warning(
+                "Could not record the start of subagent %s.",
+                agent_name,
+                exc_info=True,
+            )
+            return None
         return run_id
 
     def interrupted(self, run_id: str) -> None:
-        run = self._get_identity(run_id)
-        self.store.upsert_subagent_run(**run, status="waiting_for_user")
+        try:
+            run = self._get_identity(run_id)
+            self.store.upsert_subagent_run(**run, status="waiting_for_user")
+        except Exception:
+            logger.warning(
+                "Could not record interruption of subagent run %s.",
+                run_id,
+                exc_info=True,
+            )
 
     def failed(self, run_id: str, error: BaseException) -> None:
-        run = self._get_identity(run_id)
-        self.store.upsert_subagent_run(
-            **run,
-            status="failed",
-            error_text=repr(error),
-        )
+        try:
+            run = self._get_identity(run_id)
+            self.store.upsert_subagent_run(
+                **run,
+                status="failed",
+                error_text=repr(error),
+            )
+        except Exception:
+            logger.warning(
+                "Could not record failure of subagent run %s.",
+                run_id,
+                exc_info=True,
+            )
 
     def completed(self, run_id: str, result: Any) -> None:
         messages = result.get("messages", []) if isinstance(result, dict) else []
-        self.store.complete_subagent_run(run_id, serialize_messages(list(messages)))
+        try:
+            serialized = serialize_messages(list(messages))
+            self.store.complete_subagent_run(run_id, serialized)
+        except Exception as exc:
+            logger.warning(
+                "Could not persist the transcript for completed subagent run %s.",
+                run_id,
+                exc_info=True,
+            )
+            try:
+                self.store.update_subagent_run_status(
+                    run_id,
+                    "completed",
+                    error_text=(
+                        "Readable transcript unavailable: "
+                        f"{type(exc).__name__}"
+                    ),
+                )
+            except Exception:
+                logger.warning(
+                    "Could not mark subagent run %s completed.",
+                    run_id,
+                    exc_info=True,
+                )
 
     def _get_identity(self, run_id: str) -> dict[str, str]:
         with self.store._connect() as conn:

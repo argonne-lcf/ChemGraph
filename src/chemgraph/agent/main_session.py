@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetad
 from chemgraph.memory.serialization import serialize_messages
 from chemgraph.memory.store import SessionStore
 
+
+logger = logging.getLogger(__name__)
 
 SessionStatus = Literal["completed", "waiting_for_user", "failed"]
 
@@ -107,8 +110,16 @@ class MainAgentSession:
         self.session_metadata = session_metadata
         self._registered = False
         if self.session_store is not None:
-            existing = self.session_store.get_session_metadata(self._thread_id)
-            self._registered = existing is not None
+            try:
+                existing = self.session_store.get_session_metadata(self._thread_id)
+            except Exception:
+                logger.warning(
+                    "Could not inspect readable storage for main-agent thread %s.",
+                    self._thread_id,
+                    exc_info=True,
+                )
+            else:
+                self._registered = existing is not None
 
     @property
     def thread_id(self) -> str:
@@ -171,9 +182,13 @@ class MainAgentSession:
             if metadata is not None and self.session_metadata is not None:
                 stored_config = metadata.graph_config
                 active_config = self.session_metadata.graph_config
-                if stored_config.graph_schema_version != active_config.graph_schema_version:
+                if (
+                    stored_config.graph_schema_version
+                    != active_config.graph_schema_version
+                ):
                     raise IncompatibleCheckpointError(
-                        "The stored graph schema is incompatible with this ChemGraph version."
+                        "The stored graph schema is incompatible with this "
+                        "ChemGraph version."
                     )
                 if (
                     stored_config.topology_fingerprint
@@ -221,28 +236,31 @@ class MainAgentSession:
         return {str(key): value for key, value in response.items()}
 
     async def _run(self, stream_input: Any) -> MainAgentTurnResult:
-        if self.session_store is not None:
-            self.session_store.update_session_status(self.thread_id, "running")
+        self._update_status("running")
         try:
-            result = await self._run_once(stream_input)
+            result, state_values = await self._run_once(stream_input)
         except Exception:
             self._failed = True
             try:
                 snapshot = await self.workflow.aget_state(self.config)
-                if snapshot and snapshot.values:
-                    self._synchronize(snapshot.values, "failed")
-                elif self.session_store is not None:
-                    self.session_store.update_session_status(self.thread_id, "failed")
             except Exception:
-                if self.session_store is not None:
-                    self.session_store.update_session_status(self.thread_id, "failed")
+                snapshot = None
+                logger.debug(
+                    "Could not inspect checkpoint after main-agent failure.",
+                    exc_info=True,
+                )
+            if snapshot and snapshot.values:
+                self._synchronize(snapshot.values, "failed")
+            else:
+                self._update_status("failed")
             raise
         self._failed = False
-        snapshot = await self.workflow.aget_state(self.config)
-        self._synchronize(snapshot.values if snapshot else {}, result.status)
+        self._synchronize(state_values, result.status)
         return result
 
-    async def _run_once(self, stream_input: Any) -> MainAgentTurnResult:
+    async def _run_once(
+        self, stream_input: Any
+    ) -> tuple[MainAgentTurnResult, dict[str, Any]]:
         last_state: dict[str, Any] | None = None
         found: list[PendingInterrupt] = []
         try:
@@ -265,7 +283,7 @@ class MainAgentSession:
 
         pending = _deduplicate_interrupts(found)
         self._pending = pending
-        return MainAgentTurnResult(
+        result = MainAgentTurnResult(
             thread_id=self.thread_id,
             status="waiting_for_user" if pending else "completed",
             assistant_response=latest_assistant_text(
@@ -274,6 +292,7 @@ class MainAgentSession:
             interrupts=pending,
             state=serialize_state(state_values),
         )
+        return result, state_values
 
     def _ensure_registered(self, message: str) -> None:
         if self.session_store is None or self._registered:
@@ -281,15 +300,29 @@ class MainAgentSession:
         metadata = self.session_metadata or MainAgentSessionMetadata(
             graph_config=MainAgentGraphConfig(model_name="unknown")
         )
-        self.session_store.create_session(
-            session_id=self.thread_id,
-            model_name=metadata.graph_config.model_name,
-            workflow_type="main_agent",
-            title=SessionStore.generate_title(message),
-            status="new",
-            session_metadata=metadata,
-        )
-        self._registered = True
+        try:
+            self.session_store.create_session(
+                session_id=self.thread_id,
+                model_name=metadata.graph_config.model_name,
+                workflow_type="main_agent",
+                title=SessionStore.generate_title(message),
+                status="new",
+                session_metadata=metadata,
+            )
+        except Exception:
+            logger.warning(
+                "Could not register readable storage for main-agent thread %s.",
+                self.thread_id,
+                exc_info=True,
+            )
+            try:
+                self._registered = (
+                    self.session_store.get_session_metadata(self.thread_id) is not None
+                )
+            except Exception:
+                pass
+        else:
+            self._registered = True
 
     def _synchronize(
         self,
@@ -300,11 +333,31 @@ class MainAgentSession:
             return
         values = state if isinstance(state, dict) else {}
         raw_messages = values.get("messages", [])
-        self.session_store.synchronize_messages(
-            self.thread_id,
-            serialize_messages(list(raw_messages or [])),
-        )
-        self.session_store.update_session_status(self.thread_id, status)
+        try:
+            self.session_store.synchronize_messages(
+                self.thread_id,
+                serialize_messages(list(raw_messages or [])),
+            )
+        except Exception:
+            logger.warning(
+                "Could not synchronize the readable transcript for main-agent "
+                "thread %s.",
+                self.thread_id,
+                exc_info=True,
+            )
+        self._update_status(status)
+
+    def _update_status(self, status: str) -> None:
+        if self.session_store is None or not self._registered:
+            return
+        try:
+            self.session_store.update_session_status(self.thread_id, status)
+        except Exception:
+            logger.warning(
+                "Could not update readable status for main-agent thread %s.",
+                self.thread_id,
+                exc_info=True,
+            )
 
     def _result_from_snapshot(self, snapshot: Any) -> MainAgentTurnResult:
         found = list(_pending_interrupts(getattr(snapshot, "interrupts", ())))
