@@ -615,3 +615,72 @@ def test_a_marked_up_refusal_is_not_a_molecule():
         "\U0001f6ab **ACCESS DENIED** \U0001f6ab\n\nThe username is not authorized."
     )
     assert core.extract_smiles(denied) is None
+def test_a_registry_naming_a_missing_file_is_reported_as_such(tmp_path, monkeypatch,
+                                                              capsys):
+    """A typo in the registry must say so, not read as "you forgot to install".
+
+    The registry is user-editable, so a wrong filename is an expected mistake. Without
+    this the model resolves as a backend, `--check` tells the user to install it, and
+    the build dies 45 seconds later on "bash: no such file".
+    """
+    import importlib
+    import json as _json
+    from importlib import resources
+
+    packaged = resources.files("chemgraph.tools").joinpath("ocsr_registry.json")
+    reg = _json.loads(packaged.read_text())
+    reg["specialists"]["typo"] = {
+        "latency_s": 1.0,
+        "note": "names files that do not exist",
+        "worker": "typo_infer.py",
+        "install": {"script": "build_typo.sh", "weights": "~/w.pth",
+                    "env": "~/ocsr-typo", "python": "3.11",
+                    "size_gb": 1.0, "weights_gb": 0.1},
+        "install_note": "",
+    }
+    custom = tmp_path / "registry.json"
+    custom.write_text(_json.dumps(reg))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_REGISTRY", str(custom))
+
+    from chemgraph.tools import ocsr_models, ocsr_setup
+    importlib.reload(ocsr_models)
+    importlib.reload(ocsr_setup)
+    try:
+        assert ocsr_setup._missing_registry_files("typo") == [
+            "typo_infer.py", "build_typo.sh",
+        ]
+        # A correctly registered model reports nothing missing.
+        assert ocsr_setup._missing_registry_files(ocsr_models.DEFAULT_SPECIALIST) == []
+
+        assert ocsr_setup.cmd_check() == 1
+        out = capsys.readouterr().out
+        assert "REGISTRY ERROR" in out
+        assert "build_typo.sh" in out
+        # It must NOT send the user off to install something unbuildable.
+        assert "ocsr_setup <model>" not in out
+
+        # And the path helper refuses rather than returning a path to nothing.
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            ocsr_setup._script_path("typo")
+    finally:
+        monkeypatch.delenv("CHEMGRAPH_OCSR_REGISTRY")
+        importlib.reload(ocsr_models)
+        importlib.reload(ocsr_setup)
+
+
+def test_listings_survive_a_table_with_no_measurements(tmp_path, monkeypatch, capsys):
+    """Unmeasured must print as a dash, not crash and not read as zero."""
+    import json as _json
+
+    custom = tmp_path / "cal.json"
+    custom.write_text(_json.dumps({
+        "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
+    }))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(custom))
+
+    from chemgraph.tools import ocsr_setup
+    from chemgraph.tools.ocsr_models import describe_backends
+
+    assert ocsr_setup.cmd_list() == 0
+    assert "--" in capsys.readouterr().out
+    assert "unmeasured" in describe_backends()
