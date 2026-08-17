@@ -24,6 +24,7 @@ WORKFLOW_OPTIONS: list[str] = [
     "python_relp",
     "graspa",
     "molecular_docking",
+    "ocsr",
     "mock_agent",
 ]
 

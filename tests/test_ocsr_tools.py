@@ -665,3 +665,106 @@ def test_validate_votes_by_the_table_being_checked():
     # b is right, a is wrong: voting b-first scores 1/1, voting a-first scores 0/1.
     rows = _rows(({"a": "CCC", "b": "CCO"}, "CCO"))
     assert "1/1 = 100%" in calibrate.validate(rows, ["a", "b"], table)
+
+
+# -------------------------------------------------------------------------
+# The ocsr workflow
+# -------------------------------------------------------------------------
+def test_the_ocsr_workflow_is_reachable_from_every_entry_point():
+    """Registering a workflow takes three edits, and each one is easy to miss.
+
+    workflow_map is only a name check; ChemGraph.__init__ needs a branch that builds
+    the graph; and the CLI's own list gates `chemgraph -w`, which rejected "ocsr" as
+    an invalid choice while the workflow itself was fully working. The graph is built
+    for real by the test below.
+
+    Read from the source so the check does not depend on llm_agent's own imports
+    being satisfiable on the running interpreter.
+    """
+    import ast
+    from pathlib import Path
+
+    import chemgraph
+
+    root = Path(chemgraph.__file__).parent
+    tree = ast.parse((root / "agent" / "llm_agent.py").read_text())
+
+    registered: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Attribute) and t.attr == "workflow_map"
+            for t in node.targets
+        ):
+            registered = [k.value for k in node.value.keys]
+    assert "ocsr" in registered, registered
+
+    constructed = {
+        node.comparators[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Compare)
+        and isinstance(node.left, ast.Attribute)
+        and node.left.attr == "workflow_type"
+        and len(node.comparators) == 1
+        and isinstance(node.comparators[0], ast.Constant)
+        and isinstance(node.comparators[0].value, str)
+    }
+    missing = [k for k in registered if k not in constructed]
+    assert missing == [], (
+        f"registered but never constructed: {missing}. Add an elif branch in "
+        f"ChemGraph.__init__ that assigns self.workflow."
+    )
+
+    from chemgraph.cli.commands import ALL_WORKFLOW_TYPES
+
+    assert "ocsr" in ALL_WORKFLOW_TYPES, "chemgraph -w ocsr would be an invalid choice"
+
+
+def test_the_ocsr_prompt_only_promises_tools_that_are_bound():
+    """The prompt must not send the agent after a tool this workflow lacks.
+
+    It used to tell the agent to hand the SMILES to smiles_to_coordinate_file, which
+    is not in DEFAULT_OCSR_TOOLS, so a compliant agent would try to call a tool that
+    does not exist and burn a retry.
+    """
+    from chemgraph.graphs.ocsr_agent import DEFAULT_OCSR_TOOLS
+    from chemgraph.prompt.ocsr_prompt import ocsr_agent_prompt
+
+    bound = {t.name for t in DEFAULT_OCSR_TOOLS}
+    for other in ["smiles_to_coordinate_file", "run_ase", "molecule_name_to_smiles"]:
+        assert other not in bound  # guard the premise of this test
+        assert f"`{other}`" not in ocsr_agent_prompt
+
+
+# ---------------------------------------------------------------------------
+# Defects a round of review found
+# ---------------------------------------------------------------------------
+
+
+def _custom_table(tmp_path, accuracy=0.111):
+    """A valid table whose accuracies differ from the packaged one."""
+    import json as _json
+    from importlib import resources
+
+    packaged = resources.files("chemgraph.tools").joinpath(
+        "ocsr_calibration_4model.json")
+    table = _json.loads(packaged.read_text())
+    for entry in table["model_performance"].values():
+        entry["accuracy"] = accuracy
+    path = tmp_path / "cal.json"
+    path.write_text(_json.dumps(table))
+    return str(path)
+
+
+def test_the_ocsr_graph_binds_exactly_its_two_tools():
+    """The AST test above proves the workflow is registered; this proves it works.
+
+    Swapping the constructor, dropping a tool, or breaking the graph body all leave
+    the AST check green.
+    """
+    from unittest.mock import MagicMock
+
+    from chemgraph.graphs.ocsr_agent import DEFAULT_OCSR_TOOLS, construct_ocsr_graph
+
+    assert [t.name for t in DEFAULT_OCSR_TOOLS] == ["image_to_smiles", "validate_smiles"]
+    graph = construct_ocsr_graph(MagicMock())
+    assert graph is not None
