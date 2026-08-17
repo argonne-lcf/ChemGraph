@@ -12,6 +12,15 @@ python -m pip install --upgrade pip
 python -m pip install chemgraph
 ```
 
+Prefer [uv](https://docs.astral.sh/uv/)? Use it to create the same environment
+and install ChemGraph:
+
+```bash
+uv venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+uv pip install chemgraph
+```
+
 See [Installation](installation.md) if you need source or optional-extra setup.
 
 ## 2. Choose one model route

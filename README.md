@@ -26,14 +26,6 @@ Aurora.
 > calculator settings, convergence, units, and scientific conclusions before
 > relying on a result.
 
-## Start here
-
-- [Install ChemGraph](https://argonne-lcf.github.io/ChemGraph/installation/)
-- [Follow the quickstart](https://argonne-lcf.github.io/ChemGraph/quickstart/)
-- [Choose a model and authenticate](https://argonne-lcf.github.io/ChemGraph/models/)
-- [Browse workflows](https://argonne-lcf.github.io/ChemGraph/workflows/)
-- [Open the full documentation](https://argonne-lcf.github.io/ChemGraph/)
-
 ## Quickstart
 
 ChemGraph requires Python 3.11 or newer. A virtual environment keeps its
@@ -44,6 +36,15 @@ python -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip
 python -m pip install chemgraph
+```
+
+Prefer [uv](https://docs.astral.sh/uv/)? Use it to create the same environment
+and install ChemGraph:
+
+```bash
+uv venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+uv pip install chemgraph
 ```
 
 Choose one model provider and set only the credential it needs. The default
@@ -85,6 +86,14 @@ ChemGraph creates a session directory under `cg_logs/` by default. Tool output
 such as XYZ structures, JSON results, trajectories, spectra, and HTML reports
 is written there. Set `CHEMGRAPH_LOG_DIR` before starting ChemGraph to choose a
 different artifact directory.
+
+## Start here
+
+- [Install ChemGraph](https://argonne-lcf.github.io/ChemGraph/installation/)
+- [Follow the quickstart](https://argonne-lcf.github.io/ChemGraph/quickstart/)
+- [Choose a model and authenticate](https://argonne-lcf.github.io/ChemGraph/models/)
+- [Browse workflows](https://argonne-lcf.github.io/ChemGraph/workflows/)
+- [Open the full documentation](https://argonne-lcf.github.io/ChemGraph/)
 
 ## Common ways to use ChemGraph
 
