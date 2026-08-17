@@ -14,11 +14,12 @@ that it is on `PATH`:
 codex --version
 ```
 
-Install ChemGraph's pinned SDK integration:
+Install ChemGraph's pinned SDK integration from a source checkout:
 
 ```bash
-python -m pip install "chemgraph[codex]"
-# Source checkout: python -m pip install -e ".[codex]"
+git clone https://github.com/argonne-lcf/ChemGraph.git
+cd ChemGraph
+python -m pip install -e ".[codex]"
 ```
 
 ## Authenticate

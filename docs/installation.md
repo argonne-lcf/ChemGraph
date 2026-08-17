@@ -61,7 +61,7 @@ Install only the integrations needed by your workflow:
 | `ensemble_launcher` | `pip install "chemgraph[ensemble_launcher]"` | ALCF ensemble launcher |
 | `globus_compute` | `pip install "chemgraph[globus_compute]"` | Globus Compute execution |
 | `academy` | `pip install "chemgraph[academy]"` | Academy multi-agent runtime |
-| `codex` | `pip install "chemgraph[codex]"` | Experimental Codex subscription route |
+| `codex` | Source checkout: `pip install -e ".[codex]"` | Experimental Codex subscription route |
 
 Extras can be combined:
 
