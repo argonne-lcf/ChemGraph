@@ -684,3 +684,66 @@ def test_listings_survive_a_table_with_no_measurements(tmp_path, monkeypatch, ca
     assert ocsr_setup.cmd_list() == 0
     assert "--" in capsys.readouterr().out
     assert "unmeasured" in describe_backends()
+def test_a_new_specialist_needs_no_source_change(tmp_path, monkeypatch):
+    """The promise the registry file exists to keep.
+
+    Adding a model must be a data edit: one entry in ocsr_registry.json plus a worker
+    script. If this test needs a Python change to pass again, something has grown a
+    second hardcoded list of models and the promise is broken.
+    """
+    import json as _json
+    from importlib import resources
+
+    packaged = resources.files("chemgraph.tools").joinpath("ocsr_registry.json")
+    reg = _json.loads(packaged.read_text())
+    reg["specialists"]["newmodel"] = {
+        "latency_s": 1.5,
+        "note": "A hypothetical fifth specialist.",
+        "worker": "newmodel_infer.py",
+        "install": {"script": "build_newmodel.sh", "weights": "~/w/new.pth",
+                    "env": "~/ocsr-new", "python": "3.11",
+                    "size_gb": 2.0, "weights_gb": 0.5},
+        "install_note": "Added via JSON only.",
+    }
+    custom = tmp_path / "registry.json"
+    custom.write_text(_json.dumps(reg))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_REGISTRY", str(custom))
+
+    import importlib
+
+    from chemgraph.tools import ocsr_models, ocsr_setup, ocsr_tools
+    for mod in (ocsr_models, ocsr_setup, ocsr_tools):
+        importlib.reload(mod)
+    try:
+        assert "newmodel" in ocsr_models.SPECIALIST_MODELS
+        assert "newmodel" in ocsr_models.BACKENDS      # usable as backend="newmodel"
+        assert "newmodel" in ocsr_setup.MODELS         # and installable
+        assert "newmodel" in ocsr_tools._specialists()  # and votes in the ensemble
+        # It reaches dispatch rather than being rejected as an unknown backend.
+        r = ocsr_tools.image_to_smiles_core("/nonexistent.png", backend="newmodel")
+        assert "unknown backend" not in (r["error"] or "")
+    finally:
+        monkeypatch.delenv("CHEMGRAPH_OCSR_REGISTRY")
+        for mod in (ocsr_models, ocsr_setup, ocsr_tools):
+            importlib.reload(mod)
+
+
+def test_the_setup_hint_names_a_command_that_actually_runs():
+    """The first thing a new user sees must be copy-pasteable.
+
+    This message is returned into an agent's context when no specialist is installed,
+    so a command that exits 2 costs a retry loop and a confused user. It shipped
+    naming an `install` subcommand that ocsr_setup has never had.
+    """
+    from chemgraph.tools import ocsr_backends as backends
+    from chemgraph.tools import ocsr_models, ocsr_setup
+
+    hint = backends._setup_hint()
+    assert ocsr_models.DEFAULT_SPECIALIST in hint
+
+    # Pull the command out of the backticks and feed it to the CLI's own parser,
+    # not a copy of it, so the two cannot drift apart.
+    command = hint.split("`")[1].split()
+    assert command[:3] == ["python", "-m", "chemgraph.tools.ocsr_setup"]
+    args = ocsr_setup.build_parser().parse_args(command[3:])
+    assert args.model in ocsr_setup.MODELS

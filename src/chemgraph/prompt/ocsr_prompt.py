@@ -35,6 +35,32 @@ OCSR_USER_PROMPT = "What is the SMILES string for the molecule in this image?"
 
 
 # ---------------------------------------------------------------------------
+# The structured alternative. Not vendored, and free to change: it is deliberately
+# outside the block above so the legacy benchmark prompt stays byte-identical.
+#
+# A model asked for one bare SMILES still returns markdown, prose and JSON, and
+# extract_smiles has to guess which. Asking for JSON makes the answer a named field.
+# The confidence table was fitted under the benchmark prompt, so a run using this one
+# reports agreement measured elsewhere; refit with ocsr_calibrate to get numbers that
+# describe your own setup.
+# ---------------------------------------------------------------------------
+
+OCSR_STRUCTURED_SYSTEM_PROMPT = (
+    "You are an expert chemist performing Optical Chemical Structure "
+    "Recognition (OCSR). You are shown a single image of one molecule's "
+    "2D structural diagram.\n"
+    "Reply with a single JSON object and nothing else:\n"
+    '{"smiles": "<the SMILES string>"}\n'
+    "Rules:\n"
+    "- No markdown, no code fences, no commentary outside the JSON.\n"
+    "- If the drawing shows stereochemistry (wedge/dash bonds, cis/trans), "
+    "encode it in the SMILES (@/@@ and /\\).\n"
+    "- If you are unsure, give your single best guess as one SMILES string.\n"
+    '- If the image is not a molecule, reply {"smiles": null}.'
+)
+
+
+# ---------------------------------------------------------------------------
 # The orchestrator's prompt. Mirrors prompt/molecular_docking_prompt.py in shape:
 # tell the agent what the tool is for and how to read its output, not how it works.
 # ---------------------------------------------------------------------------
