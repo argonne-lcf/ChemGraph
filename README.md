@@ -354,6 +354,7 @@ for provider, calculator, path, UI, MCP, and session diagnostics.
 - [Full documentation](https://argonne-lcf.github.io/ChemGraph/)
 - [Example notebooks and runnable guides](https://argonne-lcf.github.io/ChemGraph/example_usage/)
 - [Evaluation and benchmarking](https://argonne-lcf.github.io/ChemGraph/evaluation/)
+- [ChemGraph Leaderboard](https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard)
 - [Project structure](https://argonne-lcf.github.io/ChemGraph/project_structure/)
 - [Contributing guide](CONTRIBUTING.md)
 

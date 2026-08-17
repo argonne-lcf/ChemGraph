@@ -68,4 +68,6 @@ calls, which is useful for diagnosing infrastructure before adding an LLM.
 
 Evaluation is dataset-driven rather than bundled with a default benchmark.
 Follow [Evaluation](evaluation.md) to create the supported JSON schema, select a
-judge, resume interrupted runs, and compare workflows.
+deterministic structured-output judge, resume interrupted runs, and compare
+workflows. Published results are available on the
+[ChemGraph Leaderboard](https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard).
