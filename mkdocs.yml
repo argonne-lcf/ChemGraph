@@ -1,83 +1,76 @@
-site_name: ChemGraph Docs
-repo_name: ChemGraph
-repo_url: https://github.com/argonne-lcf/ChemGraph/tree/
+site_name: ChemGraph
+site_description: Agentic computational chemistry workflows from the command line, Python, Streamlit, and MCP.
+site_url: https://argonne-lcf.github.io/ChemGraph/
+repo_name: argonne-lcf/ChemGraph
+repo_url: https://github.com/argonne-lcf/ChemGraph
+edit_uri: edit/main/docs/
 
 theme:
   name: material
-
-  # Font settings
-  font:
-    text: Merriweather Sans
-    code: Roboto Mono
-
+  logo: assets/chemgraph_logo.png
+  favicon: assets/chemgraph_logo.png
   features:
     - content.code.copy
-    - content.code.annotate
     - navigation.footer
-    - search.suggest
-    - header.autohide
+    - navigation.indexes
+    - navigation.sections
     - navigation.tabs
-
+    - search.highlight
+    - search.suggest
+    - toc.follow
   palette:
-    # Automatic mode
-    - media: "(prefers-color-scheme)"
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
-
-    # Light Mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-      primary: green
-      accent: deep purple
-
-    # Dark Mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       toggle:
         icon: material/brightness-4
-        name: Switch to system preferences
-      primary: indigo
-      accent: deep orange
+        name: Switch to light mode
 
 plugins:
-  - mkdocstrings
   - search
-
-nav:
-  - Overview: index.md
-  - Installation: installation.md
-  - Experimental Codex Support: codex_subscription.md
-  - Example Usage: example_usage.md
-  - Streamlit Web Interface: streamlit_web_interface.md
-  - MCP Servers: mcp_servers.md
-  - Evaluation & Benchmarking: evaluation.md
-  - Configuration with TOML: configuration_with_toml.md
-  - Project Structure: project_structure.md
-  - Running Local Models with vLLM: running_local_models.md
-  - Docker Support: docker_support.md
-  - Code Formatting & Linting: code_formatting_and_linting.md
-  - Contributing: contributing.md
-  - Citation: citation.md
-  - Acknowledgements: acknowledgements.md
-  - License: license.md
+  - mkdocstrings
 
 markdown_extensions:
+  - admonition
+  - attr_list
+  - pymdownx.details
   - pymdownx.highlight:
       anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
   - pymdownx.superfences
-  - pymdownx.details
-  - admonition
-  - pymdownx.tabbed:
-      alternate_style: true
-      combine_header_slug: true
-  - def_list
-  - pymdownx.tasklist:
-      custom_checkbox: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: installation.md
+      - Quickstart: quickstart.md
+      - Models and authentication: models.md
+      - Troubleshooting: troubleshooting.md
+  - Using ChemGraph:
+      - Command-line interface: cli.md
+      - Workflows: workflows.md
+      - Calculators: calculators.md
+      - Python API: python_api.md
+      - Streamlit interface: streamlit_web_interface.md
+      - Configuration: configuration_with_toml.md
+      - Examples: example_usage.md
+  - Integrations and scale:
+      - MCP servers: mcp_servers.md
+      - Docker: docker_support.md
+      - Local models: running_local_models.md
+      - HPC and Academy: hpc_and_academy.md
+  - Evaluation: evaluation.md
+  - Experimental:
+      - Codex subscription: codex_subscription.md
+  - Project:
+      - Project structure: project_structure.md
+      - Contributing: contributing.md
+      - Code formatting: code_formatting_and_linting.md
+      - Citation: citation.md
+      - Acknowledgements: acknowledgements.md
+      - License: license.md
