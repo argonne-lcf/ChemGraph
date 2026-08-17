@@ -51,6 +51,7 @@ ALL_WORKFLOW_TYPES = [
     "rag_agent",
     "single_agent_xanes",
     "molecular_docking",
+    "ocsr",
 ]
 
 # Common aliases so users can type the "obvious" name.
