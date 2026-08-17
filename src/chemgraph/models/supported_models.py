@@ -19,6 +19,10 @@ supported_ollama_models = ["llama3.2", "llama3.1"]
 ALCF_DEFAULT_BASE_URL = (
     "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
 )
+# Minerva cluster (NVIDIA B200) base URL.
+ALCF_MINERVA_BASE_URL = (
+    "https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1"
+)
 
 # ALCF models available through the ALCF inference endpoints.
 # See https://docs.alcf.anl.gov/services/inference-endpoints/#available-models
@@ -55,6 +59,19 @@ supported_alcf_models = [
     "AstroMLab/AstroSage-70B-20251009",
     # Vision Language Models
     "meta-llama/Llama-3.2-90B-Vision-Instruct",
+    # Served by Minerva rather than Sophia -- see supported_alcf_minerva_models
+    "nemotron-3-ultra",
+    "inkling-bf16",
+]
+
+# Subset of supported_alcf_models served by Minerva (NVIDIA B200) instead of
+# the Sophia default, so they resolve to ALCF_MINERVA_BASE_URL. Check which
+# cluster serves a model with:
+#   curl -H "Authorization: Bearer $ALCF_ACCESS_TOKEN" \
+#     https://inference-api.alcf.anl.gov/resource_server/list-endpoints
+supported_alcf_minerva_models = [
+    "nemotron-3-ultra",
+    "inkling-bf16",
 ]
 # Anthropic models
 supported_anthropic_models = [

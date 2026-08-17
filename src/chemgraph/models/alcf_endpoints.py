@@ -5,6 +5,8 @@ from langchain_openai import ChatOpenAI
 
 from chemgraph.models.supported_models import (
     ALCF_DEFAULT_BASE_URL,
+    ALCF_MINERVA_BASE_URL,
+    supported_alcf_minerva_models,
     supported_alcf_models,
 )
 
@@ -31,8 +33,8 @@ def load_alcf_model(
     model_name : str
         The name of the model to load.  Must be in ``supported_alcf_models``.
     base_url : str, optional
-        The base URL of the API endpoint.  Falls back to
-        ``ALCF_DEFAULT_BASE_URL`` if not provided.
+        The base URL of the API endpoint.  Falls back to the base URL of the
+        cluster that serves *model_name* if not provided.
     api_key : str, optional
         Globus access token.  If not provided, the function checks the
         ``ALCF_ACCESS_TOKEN`` environment variable.
@@ -66,16 +68,20 @@ def load_alcf_model(
             "See: https://docs.alcf.anl.gov/services/inference-endpoints/#api-access"
         )
 
-    # Resolve base URL -------------------------------------------------------
-    if not base_url:
-        base_url = ALCF_DEFAULT_BASE_URL
-
     # Validate model name ----------------------------------------------------
     if model_name not in supported_alcf_models:
         raise ValueError(
             f"Model '{model_name}' is not supported on ALCF. "
             f"Supported models: {supported_alcf_models}"
         )
+
+    # Resolve base URL -------------------------------------------------------
+    # Each ALCF cluster is a separate endpoint, so pick the one serving it.
+    if not base_url:
+        if model_name in supported_alcf_minerva_models:
+            base_url = ALCF_MINERVA_BASE_URL
+        else:
+            base_url = ALCF_DEFAULT_BASE_URL
 
     try:
         llm = ChatOpenAI(
