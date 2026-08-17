@@ -180,6 +180,10 @@ base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
 timeout = 30
 ```
 
+`base_url` is the Sophia endpoint. Models hosted on Minerva
+(`nemotron-3-ultra`, `inkling-bf16`) resolve to their own endpoint
+automatically and ignore this setting; pass `--base-url` to override either.
+
 2. Authenticate via Globus OAuth and set the access token:
 
 ```bash

@@ -528,7 +528,7 @@ Notes:
 
 #### Using ALCF Inference Endpoints
 
-ChemGraph supports [ALCF Inference Endpoints](https://docs.alcf.anl.gov/services/inference-endpoints/), which provide API access to open-source models running on dedicated ALCF hardware (Sophia cluster with vLLM).
+ChemGraph supports [ALCF Inference Endpoints](https://docs.alcf.anl.gov/services/inference-endpoints/), which provide API access to open-source models running on dedicated ALCF hardware (Sophia and Minerva clusters).
 
 1. Configure the endpoint in `config.toml` (already set by default):
 
@@ -537,6 +537,10 @@ ChemGraph supports [ALCF Inference Endpoints](https://docs.alcf.anl.gov/services
 base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
 timeout = 30
 ```
+
+`base_url` is the Sophia endpoint. Models hosted on Minerva
+(`nemotron-3-ultra`, `inkling-bf16`) resolve to their own endpoint
+automatically and ignore this setting; pass `--base-url` to override either.
 
 2. Authenticate via Globus OAuth:
 
