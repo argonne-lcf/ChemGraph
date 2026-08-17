@@ -290,23 +290,11 @@ Conda and uv instructions are available in the
 
 ## Docker
 
-The published image contains the source-tree entry points used by JupyterLab,
-Streamlit, MCP, and the CLI.
-
-```bash
-docker run --rm -it \
-  -e OPENAI_API_KEY \
-  -p 8501:8501 \
-  ghcr.io/argonne-lcf/chemgraph:latest \
-  streamlit run src/ui/app.py \
-    --server.address=0.0.0.0 \
-    --server.port=8501
-```
-
-Set the credential on the host first; `-e OPENAI_API_KEY` passes its value
-without embedding the secret in the command. The repository also provides
-Compose profiles for `jupyter`, `streamlit`, `mcp`, and `cli` development
-modes. See [Docker support](https://argonne-lcf.github.io/ChemGraph/docker_support/).
+Prefer containers? The
+[published ChemGraph image](https://github.com/argonne-lcf/ChemGraph/pkgs/container/chemgraph)
+supports the CLI, Streamlit, MCP, and JupyterLab. See
+[Docker support](https://argonne-lcf.github.io/ChemGraph/docker_support/) for
+commands, Compose profiles, credential forwarding, ports, and artifact mounts.
 
 ## Kubernetes
 
