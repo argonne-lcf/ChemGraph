@@ -1,69 +1,71 @@
-!!! note
-      Before exploring example usage in the `notebooks/` directory, ensure you have specified the necessary API tokens in your environment. 
+# Examples
 
-=== "OpenAI API Key"
-      1. Log in to your OpenAI account at the OpenAI Platform website. If you don't have an account, you'll need to create one first.
+Start with the [quickstart](quickstart.md), then choose an example closest to
+your intended deployment. Examples that use live models, external scientific
+programs, or HPC services require their own credentials and site setup.
 
-      2. Navigate to the API keys section. You can find this by clicking on your profile icon in the top-right corner and selecting "API keys."
+## Small local tasks
 
-      3. Click the + Create new secret key button.
+```bash
+# Lookup
+chemgraph run -q "What is the SMILES string for aspirin?"
 
-      4. Give your key a descriptive name (e.g., "ChemGraph").
+# Geometry optimization with the lightweight bundled calculator
+chemgraph run -q "Build water from SMILES O and optimize it with EMT."
 
-      5. Click Create secret key. A new key will be generated.
+# Frequencies
+chemgraph run -q "Calculate water vibrational frequencies with EMT."
 
-      6. Copy the key and save it in a secure location. You will not be able to see it again after this step.
+# Save only the final response
+chemgraph run --output last_message --output-file result.txt \
+  -q "Build methane and report its formula."
+```
 
-      7. Set the key in your environment using the command provided in the instructions:
-         ```bash
-         export OPENAI_API_KEY="your_api_key_here"  # On Unix or macOS
-         setx OPENAI_API_KEY "your_api_key_here"  # On Windows
-         ```
-      8. Restart your terminal or IDE to ensure the environment variable is loaded.
+Review calculator suitability before interpreting the result. EMT examples are
+setup checks, not general high-accuracy chemistry recommendations.
 
-=== "Anthropic API Key"
-      1. Sign up or log in to your Anthropic account at the [Anthropic console](https://console.anthropic.com/).
+## Interactive and Python examples
 
-      2. In the left-hand navigation menu, select API Keys.
+```bash
+chemgraph run --interactive
+```
 
-      3. Click on the option to create a new API key.
+For application code, begin with the async example in [Python API](python_api.md).
 
-      4. Provide a name for your API key (e.g., "ChemGraph").
+Repository notebooks and example directories cover richer use cases:
 
-      5. Click Create Key again.
+- [`notebooks/`](https://github.com/argonne-lcf/ChemGraph/tree/main/notebooks)
+- [`examples/`](https://github.com/argonne-lcf/ChemGraph/tree/main/examples)
+- [`scripts/`](https://github.com/argonne-lcf/ChemGraph/tree/main/scripts)
 
-      6. Copy the generated key and store it securely, as you may not be able to view it again.
+## MCP examples
 
-      7. Set the key in your environment using the command provided in the instructions:
-         ```bash
-         export ANTHROPIC_API_KEY="your_api_key_here"  # On Unix or macOS
-         setx ANTHROPIC_API_KEY "your_api_key_here"  # On Windows
-         ```
-      8. Restart your terminal or IDE to ensure the environment variable is loaded.
+- [General stdio and HTTP examples](https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_example)
+- [Parsl MCP example](https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_parsl_example)
+- [XANES MCP examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/xanes_mcp)
+- [OpenCode client example](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/chemgraph_opencode)
 
-=== "Google AI Studio (Gemini) API Key"
-      1. Go to the Google AI Studio website at [Google AI Studio](https://ai.google.com/studio) and sign in with your Google account.
+Read [MCP servers](mcp_servers.md) first to choose stdio or streamable HTTP.
 
-      2. In the left-hand menu, select Get API key.
+## Docking and XANES
 
-      3. Click the Create API key in new project button. A new key will be instantly generated.
+- [Docking example](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/docking)
+- [XANES examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/xanes_mcp)
 
-      4. Copy the API key by clicking the copy icon next to it.
+These are specialized workflows. Docking needs Meeko and Vina; XANES may need
+Materials Project access and/or FDMNES.
 
-      5. Set the key as an environment variable:
-         ```bash
-         export GEMINI_API_KEY="your_api_key_here"  # On Unix or macOS
-         setx GEMINI_API_KEY "your_api_key_here"  # On Windows
-         ```
-      6. Restart your terminal or IDE to ensure the environment variable is loaded.
+## Distributed execution and Academy
 
-???+ info "**Explore Example Notebooks**"
-      Navigate to the `notebooks/` directory to explore various example notebooks demonstrating different capabilities of ChemGraph.
+- [Execution backend demos](https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/demo)
+- [Academy MACE ensemble screening](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy/example-002-mace-ensemble-screening)
+- [Connect to Argo from an ALCF compute node](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/connecting_to_argo)
 
-      - **[Single-Agent System with MACE](https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/1_Demo_single_agent.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with MACE/xTB support.
+These examples deliberately separate direct backend calls from agent-driven
+calls, which is useful for diagnosing infrastructure before adding an LLM.
 
-      - **[Single-Agent System with UMA](https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/Demo_single_agent_UMA.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with UMA support.
+## Evaluation
 
-      - **[Multi-Agent System](https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/2_Demo-multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where planner and executor agents decompose and run computational chemistry tasks.
-
-      - **[Model Context Protocol (MCP) Server](https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/3_Demo_using_MCP.ipynb)**: This notebook shows how to run and connect to ChemGraph MCP tooling.
+Evaluation is dataset-driven rather than bundled with a default benchmark.
+Follow [Evaluation](evaluation.md) to create the supported JSON schema, select a
+judge, resume interrupted runs, and compare workflows.

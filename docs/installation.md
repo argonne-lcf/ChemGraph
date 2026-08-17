@@ -1,90 +1,106 @@
-!!! note
-    ChemGraph requires **Python 3.11+**.
+# Installation
 
-## Install from PyPI (recommended)
+ChemGraph requires Python 3.11 or newer. Use a virtual environment because its
+scientific dependencies may conflict with packages in other projects.
 
-```bash
-pip install chemgraph
-```
-
-Default installation does not require `tblite`.
-
-To include optional calculator extras (including `tblite`):
+## Install from PyPI
 
 ```bash
-pip install "chemgraph[calculators]"
+python -m venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install chemgraph
 ```
 
-To use the experimental Codex subscription provider with an existing ChatGPT
-login, first follow the
-[official Codex CLI installation guide](https://learn.chatgpt.com/docs/codex/cli).
-The Python SDK does not install the `codex` shell command. Then run:
+Confirm that the command-line entry point and model registry load:
 
 ```bash
-pip install "chemgraph[codex]"
-codex login
+chemgraph --help
+chemgraph models
 ```
 
-See [Experimental Codex subscription support](codex_subscription.md) for usage
-and authentication constraints.
-
-!!! warning
-    On platforms without a prebuilt `tblite` wheel, installing `calculators` may require a local Fortran toolchain.
+The core installation includes the agent framework, ASE, RDKit, MACE, EMT, the
+Streamlit dependencies, and the general MCP server. MACE downloads model weights
+when first used; start with EMT if you need an offline calculator smoke test.
 
 ## Install from source
 
-### pip/venv
+Use a source checkout for the Streamlit interface, examples, documentation, or
+development:
 
 ```bash
-git clone https://github.com/argonne-lcf/ChemGraph
+git clone https://github.com/argonne-lcf/ChemGraph.git
 cd ChemGraph
-python -m venv chemgraph-env
-source chemgraph-env/bin/activate  # Windows: .\chemgraph-env\Scripts\activate
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-For experimental Codex subscription support, install the Codex CLI as shown
-above, then include the optional extra in the editable install:
+With [uv](https://docs.astral.sh/uv/), the equivalent development setup is:
 
 ```bash
-pip install -e ".[codex]"
-codex login
-```
-
-### conda
-
-```bash
-git clone --depth 1 https://github.com/argonne-lcf/ChemGraph
-cd ChemGraph
-conda env create -f environment.yml
-conda activate chemgraph
-```
-
-### uv
-
-```bash
-git clone https://github.com/argonne-lcf/ChemGraph
-cd ChemGraph
-uv venv --python 3.11 chemgraph-env
-source chemgraph-env/bin/activate  # Windows: .\chemgraph-env\Scripts\activate
+uv venv
+source .venv/bin/activate
 uv pip install -e .
 ```
 
-## Optional UMA install
+## Optional extras
 
-`uma` and `mace-torch` can conflict through different `e3nn` requirements.
-Use separate environments if you need both MACE and UMA.
+Install only the integrations needed by your workflow:
 
-PyPI attempt:
+| Extra | Install command | Adds |
+| --- | --- | --- |
+| `calculators` | `pip install "chemgraph[calculators]"` | TBLite |
+| `uma` | `pip install "chemgraph[uma]"` | UMA through fairchem-core |
+| `ui` | `pip install "chemgraph[ui]"` | Additional UI dependencies |
+| `rag` | `pip install "chemgraph[rag]"` | Document ingestion and vector stores |
+| `xanes` | `pip install "chemgraph[xanes]"` | XANES workflow dependencies |
+| `docking` | `pip install "chemgraph[docking]"` | Meeko docking preparation |
+| `parsl` | `pip install "chemgraph[parsl]"` | Parsl execution |
+| `ensemble_launcher` | `pip install "chemgraph[ensemble_launcher]"` | ALCF ensemble launcher |
+| `globus_compute` | `pip install "chemgraph[globus_compute]"` | Globus Compute execution |
+| `academy` | `pip install "chemgraph[academy]"` | Academy multi-agent runtime |
+| `codex` | `pip install "chemgraph[codex]"` | Experimental Codex subscription route |
+
+Extras can be combined:
 
 ```bash
-pip install "chemgraph[uma]"
+python -m pip install "chemgraph[academy,parsl,globus_compute]"
 ```
 
-From source:
+!!! note "UMA environment"
+    UMA's `e3nn` requirements can conflict with the MACE stack in the core
+    environment. A separate virtual environment is the safest setup for UMA.
+
+## External programs
+
+Some integrations are Python adapters, not bundled simulation programs:
+
+- ORCA and NWChem must be installed and configured for ASE separately.
+- FDMNES is required for local XANES execution; set `FDMNES_EXE`.
+- AutoDock Vina is normally installed from conda-forge for docking.
+- Site-specific gRASPA and HPC modules require executables, schedulers, and
+  filesystem paths available at the target facility.
+
+## Conda environments
+
+If an integration needs compiled or external dependencies, create a clean
+environment first and install ChemGraph with pip inside it:
 
 ```bash
-pip install -e ".[uma]"
+conda create -n chemgraph python=3.11
+conda activate chemgraph
+python -m pip install chemgraph
 ```
 
-If resolution fails, install UMA in a separate environment dedicated to UMA workflows.
+## Docker
+
+Docker avoids a local Python installation and provides CLI, Streamlit, MCP, and
+Jupyter-oriented images. See [Docker](docker_support.md) for commands, ports,
+credential forwarding, and artifact volumes.
+
+## Next step
+
+Continue with the [quickstart](quickstart.md), then configure a provider in
+[Models and authentication](models.md).

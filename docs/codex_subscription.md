@@ -1,74 +1,61 @@
 # Experimental Codex subscription support
 
-ChemGraph can experimentally use the official Codex Python SDK with the
-ChatGPT-backed login already used by Codex CLI or the Codex IDE extension. This
-path does not use the OpenAI Platform API or `OPENAI_API_KEY`.
+ChemGraph can experimentally use the Codex Python SDK with a ChatGPT-backed
+login already established by Codex CLI or an IDE integration. This route does
+not use `OPENAI_API_KEY` and is distinct from OpenAI Platform API billing.
 
-## Install and authenticate
+## Install
 
-### 1. Install the Codex CLI
-
-The `openai-codex` Python package provides the SDK and its internal runtime,
-but it does not install a `codex` command on your shell `PATH`. Follow the
-[official Codex CLI installation guide](https://learn.chatgpt.com/docs/codex/cli),
-then verify that the command is available:
+Install Codex CLI using the
+[official Codex CLI guide](https://developers.openai.com/codex/cli/), then check
+that it is on `PATH`:
 
 ```bash
 codex --version
 ```
 
-### 2. Install the ChemGraph Codex extra
-
-For a package installation:
+Install ChemGraph's pinned SDK integration:
 
 ```bash
-pip install "chemgraph[codex]"
+python -m pip install "chemgraph[codex]"
+# Source checkout: python -m pip install -e ".[codex]"
 ```
 
-For an editable source checkout, install the extra into the active environment:
-
-```bash
-pip install -e ".[codex]"
-```
-
-### 3. Authenticate with ChatGPT
-
-Use the separately installed CLI to authenticate Codex with ChatGPT:
+## Authenticate
 
 ```bash
 codex login
 codex login status
 ```
 
-The active login must be a ChatGPT login. ChemGraph deliberately rejects a
-Codex session authenticated with an API key instead of silently falling back to
-usage-based OpenAI Platform billing.
+Use a ChatGPT login. ChemGraph rejects an API-key-authenticated Codex session
+instead of silently moving this route to usage-based Platform billing. Review
+the [official authentication guide](https://developers.openai.com/codex/auth/)
+for current account behavior.
 
-## Run ChemGraph
+## Run
 
-Prefix a model available to your Codex account with `codex:`:
+Prefix a model available to the signed-in Codex account with `codex:`:
 
 ```bash
-chemgraph \
+chemgraph run \
   --model "codex:<codex-model-id>" \
   --workflow single_agent \
   --query "What is the SMILES string for aspirin?"
 ```
 
-For a long-lived supervisor that delegates chemistry work to a subagent, use
-interactive mode:
+The long-lived supervisor is interactive:
 
 ```bash
-chemgraph \
-  --interactive \
+chemgraph run --interactive \
   --model "codex:<codex-model-id>" \
   --workflow main_agent
 ```
 
-The same model syntax works through the Python API:
+Python uses the normal ChemGraph import:
 
 ```python
-from chemgraph import ChemGraph
+from chemgraph.agent.llm_agent import ChemGraph
 
 agent = ChemGraph(
     model_name="codex:<codex-model-id>",
@@ -76,20 +63,18 @@ agent = ChemGraph(
 )
 ```
 
-## Current limitations
+## Limitations
 
-- Only the `single_agent` and `main_agent` workflows are supported.
-- `main_agent` must be run in interactive mode. Its supervisor checkpoint is
-  durable and can be restored with `--resume` or `/resume`; individual Codex
-  model calls still start fresh read-only Codex threads.
-- The integration is experimental and pins `openai-codex==0.144.4` together
-  with that SDK's bundled Codex runtime.
-- ChemGraph starts ephemeral, read-only Codex threads. ChemGraph's LangGraph
-  workflow executes chemistry tools; Codex is used only for model decisions.
-- ChemGraph does not start a login flow. Run `codex login` before initializing
-  a `codex:` model.
+- Only `single_agent` and `main_agent` are supported.
+- `main_agent` must be interactive and can restore its supervisor checkpoint;
+  individual Codex calls still start fresh read-only threads.
+- The integration pins `openai-codex==0.144.4`; check the installed ChemGraph
+  release before changing that dependency.
+- ChemGraph starts ephemeral, read-only Codex threads. ChemGraph's graph executes
+  chemistry tools; Codex supplies model decisions.
+- ChemGraph does not initiate login. Authenticate before constructing a
+  `codex:` model.
 
-See the official [Codex SDK documentation](https://learn.chatgpt.com/docs/codex-sdk),
-[Codex CLI installation guide](https://learn.chatgpt.com/docs/codex/cli), and
-[authentication guide](https://learn.chatgpt.com/docs/auth) for supported
-installation and account behavior.
+Because this integration is experimental, validate model availability and
+account behavior against the current official documentation and your installed
+Codex CLI.

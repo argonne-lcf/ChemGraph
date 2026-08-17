@@ -1,85 +1,53 @@
-!!! note
-    This section describes how to set up and run local language models using the vLLM inference server.
+# Local models
 
-### Inference Backend Setup (Remote/Local)
+Ollama is the simplest local model route currently wired into ChemGraph. Local
+inference avoids sending prompts to a hosted provider, but chemistry tools may
+still call network services or external programs.
 
-#### Virtual Python Environment
-All instructions below must be executed within a Python virtual environment. Ensure the virtual environment uses the same Python version as your project (e.g., Python 3.11).
+## Ollama quickstart
 
-**Example 1: Using conda**
-```bash
-conda create -n vllm-env python=3.11 -y
-conda activate vllm-env
-```
-
-**Example 2: Using python venv**
-```bash
-python3.11 -m venv vllm-env
-source vllm-env/bin/activate  # On Windows use `vllm-env\\Scripts\\activate`
-```
-
-#### Install Inference Server (vLLM)
-vLLM is recommended for serving many transformer models efficiently.
-
-**Basic vLLM installation from source:**
-Make sure your virtual environment is activated.
-```bash
-# Ensure git is installed
-git clone https://github.com/vllm-project/vllm.git
-cd vllm
-pip install -e .
-```
-For specific hardware acceleration (e.g., CUDA, ROCm), refer to the [official vLLM installation documentation](https://docs.vllm.ai/en/latest/getting_started/installation.html).
-
-#### Running the vLLM Server (Standalone)
-
-A script is provided at `scripts/run_vllm_server.sh` to help start a vLLM server with features like logging, retry attempts, and timeout. This is intended for running vLLM as a separate standalone service (for example, on a machine with GPU access).
-
-**Before running the script:**
-1.  Ensure your vLLM Python virtual environment is activated.
-    ```bash
-    # Example: if you used conda
-    # conda activate vllm-env 
-    # Example: if you used python venv
-    # source path/to/your/vllm-env/bin/activate
-    ```
-2.  Make the script executable:
-    ```bash
-    chmod +x scripts/run_vllm_server.sh
-    ```
-
-**To run the script:**
+Install and start Ollama using its
+[official instructions](https://ollama.com/download), then pull a supported
+model:
 
 ```bash
-./scripts/run_vllm_server.sh [MODEL_IDENTIFIER] [PORT] [MAX_MODEL_LENGTH]
+ollama pull llama3.2
+ollama list
+chemgraph models
+chemgraph run --model llama3.2 \
+  -q "Build water from SMILES O and optimize it with EMT."
 ```
 
--   `[MODEL_IDENTIFIER]` (optional): The Hugging Face model identifier. Defaults to `facebook/opt-125m`.
--   `[PORT]` (optional): The port for the vLLM server. Defaults to `8001`.
--   `[MAX_MODEL_LENGTH]` (optional): The maximum model length. Defaults to `4096`.
+The normal endpoint is `http://localhost:11434`. Override it when Ollama is
+hosted elsewhere:
 
-**Example:**
-```bash
-./scripts/run_vllm_server.sh meta-llama/Meta-Llama-3-8B-Instruct 8001 8192
+```toml
+[api.local]
+base_url = "http://localhost:11434"
 ```
 
-???+ info "**Important Note on Gated Models (e.g., Llama 3):**"
-    - Many models, such as those from the Llama family by Meta, are gated and require you to accept their terms of use on Hugging Face and use an access token for download. 
+## Selection and reliability
 
-    - To use such models with vLLM:
-        1. **Hugging Face Account and Token**: Ensure you have a Hugging Face account and have generated an access token with `read` permissions. You can find this in your Hugging Face account settings under "Access Tokens".
-        2.  **Accept Model License**: Navigate to the Hugging Face page of the specific model you want to use (e.g., `meta-llama/Meta-Llama-3-8B-Instruct`) and accept its license/terms if prompted.
-        3.  **Environment Variables**: Before running the vLLM server, set the following environment variables in your terminal session or environment configuration (e.g., `.bashrc`, `.zshrc`):
-            ```bash
-            export HF_TOKEN="your_hugging_face_token_here"
-            # Optional: Specify a directory for Hugging Face to download models and cache.
-            # export HF_HOME="/path/to/your/huggingface_cache_directory"
-            ```
-            vLLM will use these environment variables to authenticate with Hugging Face and download the model weights.
+ChemGraph recognizes a curated set of local identifiers. Use
+`chemgraph models` rather than assuming every Ollama tag is mapped. A model must
+also support tool calling well enough to emit the schemas expected by chemistry
+tools.
 
-    - The script will:
-        - Attempt to start the vLLM OpenAI-compatible API server.
-        - Log output to a file in the `logs/` directory (created if it doesn't exist at the project root).
-        - The server runs in the background via `nohup`.
+Smaller models may choose tools, arguments, or units less reliably. Start with
+a short, explicit EMT request and inspect every tool call/result. Model memory,
+accelerator needs, and downloads are determined by the selected Ollama model.
 
-    - This standalone script is the recommended approach for users who manage their own vLLM instances directly.
+## Advanced OpenAI-compatible endpoints
+
+The repository includes `scripts/run_vllm_server.sh` as an environment-specific
+vLLM helper. Custom endpoints are advanced: they must expose a compatible API,
+route through a compatible ChemGraph provider/model ID, and implement reliable
+tool calling. Review the script's hardware/model assumptions and test a
+non-destructive query first. Ollama remains the documented first local route.
+
+## Privacy boundary
+
+Local inference alone does not make a workflow offline. PubChem lookup, remote
+MCP servers, ALCF execution, hosted embeddings, and model/calculator downloads
+can still leave the machine. Choose local tools and pre-stage all required data
+for an air-gapped run.
