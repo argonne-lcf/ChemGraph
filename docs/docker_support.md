@@ -87,3 +87,6 @@ The TBLite build can take time, especially on ARM. Mount a dedicated artifact
 directory rather than a home directory, pass tokens at runtime, remember that
 container paths may differ from host paths, and pin an image tag or digest for
 reproducible deployments.
+
+To run the Streamlit and MCP images on a cluster, continue with
+[Kubernetes](kubernetes.md).

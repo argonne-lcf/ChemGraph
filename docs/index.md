@@ -50,6 +50,7 @@ Argo or ALCF-hosted model.
 | Use a browser interface | [Streamlit interface](streamlit_web_interface.md) |
 | Connect MCP clients and servers | [MCP servers](mcp_servers.md) |
 | Run with containers | [Docker](docker_support.md) |
+| Deploy Streamlit and MCP to a cluster | [Kubernetes](kubernetes.md) |
 | Scale across execution backends | [HPC and Academy](hpc_and_academy.md) |
 | Evaluate models with structured ground truth | [Evaluation](evaluation.md) and the [ChemGraph Leaderboard](https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard) |
 | Diagnose a failed first run | [Troubleshooting](troubleshooting.md) |

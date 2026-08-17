@@ -62,6 +62,7 @@ nav:
   - Integrations and scale:
       - MCP servers: mcp_servers.md
       - Docker: docker_support.md
+      - Kubernetes: kubernetes.md
       - Local models: running_local_models.md
       - HPC and Academy: hpc_and_academy.md
   - Evaluation: evaluation.md

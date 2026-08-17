@@ -299,6 +299,15 @@ without embedding the secret in the command. The repository also provides
 Compose profiles for `jupyter`, `streamlit`, `mcp`, and `cli` development
 modes. See [Docker support](https://argonne-lcf.github.io/ChemGraph/docker_support/).
 
+## Kubernetes
+
+The repository includes deployment templates for the Streamlit UI and general
+MCP server. They require cluster-specific review: the manifests default to the
+`dev` image tag, include ALCF proxy settings, expose LoadBalancer services, and
+do not configure persistent storage or application authentication. See the
+[Kubernetes guide](https://argonne-lcf.github.io/ChemGraph/kubernetes/) before
+applying files under [`k8s/`](k8s/README.md).
+
 ## Distributed and HPC execution
 
 ChemGraph includes pluggable execution backends for local processes, Parsl,
