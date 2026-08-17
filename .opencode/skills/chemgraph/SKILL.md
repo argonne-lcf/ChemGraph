@@ -267,7 +267,7 @@ docker compose --profile jupyter up
 - `rdkit` -- cheminformatics, 3D structure generation
 - `pubchempy` -- PubChem molecule lookup
 - `mcp` + `fastmcp` -- Model Context Protocol servers
-- `mace-torch` -- MACE ML potentials
+- `mace-torch` -- MACE ML potentials (optional, `[mace]` extra)
 - `pydantic` -- data validation
 - `parsl` -- HPC parallel execution (optional)
 - `streamlit` + `stmol` -- web UI (optional)

@@ -28,30 +28,22 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ "${{ matrix.install_extras }}" == "uma" ]; then
-          # 1. Install the main package (installs mace-torch + old e3nn)
-          pip install .
-          
-          # 2. FORCE UNINSTALL the conflicting packages
-          echo "💥 Forcefully removing mace-torch and e3nn for UMA compatibility..."
-          pip uninstall -y mace-torch e3nn
-          
-          # 3. MANUALLY install the UMA dependencies.
+          # mace-torch is an optional extra now, so a core install brings in
+          # neither it nor the old e3nn and there is nothing to remove first.
           # torchtnt 0.2.4 (via fairchem-core) imports pkg_resources, which was
-          # removed in setuptools 82.
-          # (We cannot use pip install .[uma] because it would trigger the resolution error)
+          # removed in setuptools 82, so setuptools stays pinned below that.
+          pip install "setuptools<82" .
           pip install "setuptools<82" "fairchem-core==2.13.0" "e3nn>=0.5"
-          
+
         elif [ "${{ matrix.install_extras }}" == "core" ]; then
           pip install .
         else
           pip install ".[${{ matrix.install_extras }}]"
         fi
 
-    # The UMA job intentionally removes the core MACE dependency to work
-    # around their incompatible e3nn requirements. Dependency consistency for
-    # that environment will be enabled when the extras are separated.
+    # Now that mace is its own extra, the UMA environment no longer has a
+    # conflicting mace-torch to work around, so it is checked like the rest.
     - name: Verify Dependency Consistency
-      if: matrix.install_extras != 'uma'
       run: python -m pip check
 
     - name: Verify Imports
@@ -72,8 +64,15 @@ jobs:
         extras = '${{ matrix.install_extras }}'
         failures = []
 
-        # Core imports that should always work
-        core_packages = ['chemgraph']
+        # Core imports that should always work. The submodules matter as much
+        # as the top-level package: importing chemgraph alone succeeds even
+        # when a calculator schema pulls in a package the core install lacks.
+        core_packages = [
+            'chemgraph',
+            'chemgraph.schemas.ase_input',
+            'chemgraph.tools.ase_tools',
+            'chemgraph.agent.llm_agent',
+        ]
         for pkg in core_packages:
             if not check_import(pkg):
                 failures.append(pkg)

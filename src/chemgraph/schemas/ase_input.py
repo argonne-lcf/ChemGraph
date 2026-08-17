@@ -231,8 +231,8 @@ class ASEInputSchema(BaseModel):
     calculator : Union[FAIRChemCalc, MaceCalc, NWChemCalc, OrcaCalc, TBLiteCalc, EMTCalc, AIMNET2Calc]
         ASE-compatible calculator used for the simulation. Supported types are determined
         by installed packages and may include:
-        - FAIRChem, MACE, NWChem, Orca, TBLite and EMT. The order determines the priority of the calculators.
-        - Use MACE or FAIRChem if the calculator is not specified.
+        - FAIRChem, MACE, AIMNET2, TBLite, EMT, NWChem and Orca. The order determines the priority of the calculators.
+        - Omitting the calculator selects the first one available in this environment.
     fmax : float
         Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
     steps : int

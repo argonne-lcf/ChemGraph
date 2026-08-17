@@ -1,7 +1,6 @@
 from pydantic import BaseModel, Field, model_validator
 
 from typing import Any, Optional, Dict
-import torch
 import logging
 
 try:
@@ -10,6 +9,27 @@ except ImportError:
     logging.warning("fairchem is not installed. .")
     FAIRChemCalculator = None
     pretrained_mlip = None
+
+
+DEFAULT_DEVICE = "cpu"
+
+
+def _resolve_device(device: str) -> str:
+    """Upgrade the default device to ``"cuda"`` when a GPU is visible.
+
+    torch ships with the optional ``uma`` and ``mace`` extras, so it can be
+    absent on a core install. ``ase_input`` imports this module to decide
+    whether FAIRChemCalc is available, which makes a module-level torch import
+    fatal for every calculator, so the probe happens here. A device the caller
+    asked for is returned untouched.
+    """
+    if device != DEFAULT_DEVICE:
+        return device
+    try:
+        import torch
+    except ImportError:
+        return DEFAULT_DEVICE
+    return "cuda" if torch.cuda.is_available() else DEFAULT_DEVICE
 
 
 class FAIRChemCalc(BaseModel):
@@ -57,8 +77,11 @@ class FAIRChemCalc(BaseModel):
         default="uma-s-1p1", description="Model names. Options are 'uma-s-1p1' and 'uma-m-1'"
     )
     device: str = Field(
-        default="cuda" if torch.cuda.is_available() else "cpu",
-        description="Computation device to use, either 'cpu' or 'cuda'.",
+        default=DEFAULT_DEVICE,
+        description=(
+            "Computation device to use, either 'cpu' or 'cuda'. Left at the "
+            "default, a visible GPU is used when one is present."
+        ),
     )
     inference_settings: str = Field(
         default="default", description="Settings for inference. Can be 'default' or 'turbo'"
@@ -106,7 +129,7 @@ class FAIRChemCalc(BaseModel):
         predict_unit = pretrained_mlip.get_predict_unit(
             model_name=self.model_name,
             inference_settings=self.inference_settings,
-            device=self.device,
+            device=_resolve_device(self.device),
         )
         return FAIRChemCalculator(
             predict_unit=predict_unit,

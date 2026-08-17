@@ -1,4 +1,5 @@
 from pathlib import Path
+import importlib.util
 import json
 import pytest
 from chemgraph.tools.ase_tools import (
@@ -14,6 +15,14 @@ from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema
 
 TEST_DIR = Path(__file__).parent
+
+# The run_ase tests below drive mace_mp. MaceCalc is unregistered when
+# mace-torch is absent, so their schema fixtures fail validation at setup.
+# Guard them so they skip. The cheminformatics tests need no calculator and
+# stay live.
+requires_mace = pytest.mark.skipif(
+    importlib.util.find_spec("mace") is None, reason="MACE not installed"
+)
 
 
 def test_molecule_name_to_smiles(monkeypatch):
@@ -139,6 +148,7 @@ def thermo_ase_schema(base_ase_input):
     return ASEInputSchema(**input_dict)
 
 
+@requires_mace
 def test_run_ase_energy(energy_ase_schema):
     """Test ASE energy calculation."""
     result = run_ase.invoke({"params": energy_ase_schema})
@@ -149,6 +159,7 @@ def test_run_ase_energy(energy_ase_schema):
     assert result['unit'] == "eV"
 
 
+@requires_mace
 def test_run_ase_opt(opt_ase_schema):
     """Test ASE geometry optimization."""
     result = run_ase.invoke({"params": opt_ase_schema})
@@ -170,6 +181,7 @@ def test_run_ase_opt(opt_ase_schema):
     assert data["simulation_input"]["driver"] == "opt"
 
 
+@requires_mace
 def test_run_ase_vib(vib_ase_schema):
     """Test ASE vibrational analysis."""
     result = run_ase.invoke({"params": vib_ase_schema})
@@ -190,6 +202,7 @@ def test_run_ase_vib(vib_ase_schema):
     assert len(data["vibrational_frequencies"]["energies"]) > 0
 
 
+@requires_mace
 def test_run_ase_thermo(thermo_ase_schema):
     """Test ASE thermochemistry calculation."""
     result = run_ase.invoke({"params": thermo_ase_schema})
