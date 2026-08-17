@@ -2,1365 +2,379 @@
   <img src="logo/chemgraph-color-dark__rgb-hires.jpg" alt="ChemGraph logo" width="240">
 </p>
 
-![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)
-![Conda Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/conda-tests.yml/badge.svg)
-![Test PyPI Package](https://github.com/argonne-lcf/ChemGraph/actions/workflows/test-pypi-package.yml/badge.svg)
-[![GHCR](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/argonne-lcf/ChemGraph/pkgs/container/chemgraph)
+[![Tests](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml/badge.svg)](https://github.com/argonne-lcf/ChemGraph/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/chemgraph.svg)](https://pypi.org/project/chemgraph/)
+[![Python](https://img.shields.io/pypi/pyversions/chemgraph.svg)](https://pypi.org/project/chemgraph/)
+[![Documentation](https://img.shields.io/badge/docs-MkDocs-4051b5)](https://argonne-lcf.github.io/ChemGraph/)
+[![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/argonne-lcf/ChemGraph/pkgs/container/chemgraph)
+[![License](https://img.shields.io/github/license/argonne-lcf/ChemGraph)](LICENSE)
 
-<details open>
-  <summary><strong>Overview</strong></summary>
+# ChemGraph
 
-**ChemGraph** is an agentic framework that can automate molecular simulation workflows using large language models (LLMs). Built on top of `LangGraph` and `ASE`, ChemGraph allows users to perform complex computational chemistry tasks, from structure generation to thermochemistry calculations, with a natural language interface. 
-ChemGraph supports diverse simulation backends, including ab initio quantum chemistry methods (e.g. coupled-cluster, DFT via NWChem, ORCA), semi-empirical methods (e.g., XTB via TBLite), and machine learning potentials (e.g, MACE, UMA) through a modular integration with `ASE`. 
+ChemGraph is an agent framework for computational chemistry and materials
+science. It connects natural-language requests to molecular construction,
+simulation, analysis, and reporting tools built with LangGraph, ASE, RDKit,
+and the Model Context Protocol (MCP).
 
-</details>
+Use ChemGraph from the command line, Python, a Streamlit web interface, or as
+an MCP server. Local workflows can use ASE calculators such as EMT and MACE;
+optional integrations add TBLite, UMA, docking, XANES, retrieval-augmented
+generation, and distributed execution on systems such as ALCF Polaris and
+Aurora.
 
-<details open>
-  <summary><strong>Installation Instructions</strong></summary>
+> ChemGraph can launch calculations and write files. Review generated inputs,
+> calculator settings, convergence, units, and scientific conclusions before
+> relying on a result.
 
-Ensure you have **Python 3.11 or higher** installed on your system.
+## Start here
 
-**Install-Free Method (Docker from GHCR)**
+- [Install ChemGraph](https://argonne-lcf.github.io/ChemGraph/installation/)
+- [Follow the quickstart](https://argonne-lcf.github.io/ChemGraph/quickstart/)
+- [Choose a model and authenticate](https://argonne-lcf.github.io/ChemGraph/models/)
+- [Browse workflows](https://argonne-lcf.github.io/ChemGraph/workflows/)
+- [Open the full documentation](https://argonne-lcf.github.io/ChemGraph/)
 
-Run ChemGraph without local Python/package installation:
+## Quickstart
 
-For complete Docker usage (GHCR, compose modes, environment variables, and publishing), see [`docs/docker_support.md`](docs/docker_support.md).
-
-Then launch one of:
-
-```bash
-# JupyterLab
-docker run --rm -it -p 8888:8888 ghcr.io/argonne-lcf/chemgraph:latest \
-  jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --LabApp.token=
-
-# Streamlit
-docker run --rm -it -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
-  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
-
-# MCP server (HTTP)
-docker run --rm -it -p 9003:9003 ghcr.io/argonne-lcf/chemgraph:latest \
-  python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
-
-# Interactive CLI shell
-docker run --rm -it --entrypoint /bin/bash -v "$PWD:/work" -w /work \
-  ghcr.io/argonne-lcf/chemgraph:latest
-# then run: chemgraph --config config.toml -q "your query"
-```
-
-**Pass API keys securely when running containers**
-
-Required keys depend on provider/model:
-
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GEMINI_API_KEY`
-- `GROQ_API_KEY`
-- `ALCF_ACCESS_TOKEN` (ALCF inference endpoints, via Globus OAuth)
-- Optional: `ARGO_USER` (Argo setups)
-
-Best practice for `docker run` is host variable pass-through:
+ChemGraph requires Python 3.11 or newer. A virtual environment keeps its
+scientific dependencies separate from other projects.
 
 ```bash
-export OPENAI_API_KEY="..."
-docker run --rm -it -e OPENAI_API_KEY -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
-  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+python -m venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install chemgraph
 ```
 
-For multiple keys, use an env file:
+Choose one model provider and set only the credential it needs. The default
+model is `gpt-4o-mini`.
+
+| Provider | Setup | Example model |
+| --- | --- | --- |
+| OpenAI | `export OPENAI_API_KEY="..."` | `gpt-4o-mini` |
+| Anthropic | `export ANTHROPIC_API_KEY="..."` | `claude-3-5-haiku-20241022` |
+| Google | `export GEMINI_API_KEY="..."` | `gemini-2.5-flash` |
+| Groq | `export GROQ_API_KEY="..."` | `groq:<model-id>` |
+| Argo (Argonne) | `export ARGO_USER="<anl-username>"` | `argo:gpt-4o` |
+| ALCF inference endpoints | `export ALCF_ACCESS_TOKEN="..."` | Use `chemgraph models` |
+| Ollama | Start Ollama locally; no API key | `llama3.2` |
+
+See [Models and authentication](https://argonne-lcf.github.io/ChemGraph/models/)
+for endpoint setup, ALCF token instructions, supported model identifiers, and
+the experimental Codex subscription route.
+
+Check the installation and run a small tool-using query:
 
-```bash
-docker run --rm -it --env-file .env.chemgraph -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
-  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
-```
-
-Do not commit `.env.chemgraph` and avoid storing API keys in `config.toml`.
-
-For `config.toml` options and provider/base URL settings, see [`docs/configuration_with_toml.md`](docs/configuration_with_toml.md).
-
-**Install from PyPI (Recommended)**
-
-The easiest way to install ChemGraph is from PyPI:
-
-```bash
-pip install chemgraph
-```
-
-> Default installation does **not** require `tblite`.
-> `tblite` is only installed when using the optional `calculators` extra.
-
-To install with calculator extras (includes `tblite`):
-```bash
-pip install chemgraph[calculators]
-```
-
-> Note: On some platforms/Python combinations (especially where no prebuilt `tblite`
-> wheel is available), installing the `calculators` extra may require a local
-> Fortran toolchain.
-
-**Install from Source (Alternative Methods)**
-
-If you need to install from source for the latest version:
-
-**Using pip from source**
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/argonne-lcf/ChemGraph
-   cd ChemGraph
-    ```
-2. Create and activate a virtual environment:
-   ```bash
-   # Using venv (built into Python)
-   python -m venv chemgraph-env
-   source chemgraph-env/bin/activate  # On Unix/macOS
-   # OR
-   .\chemgraph-env\Scripts\activate  # On Windows
-   ```
-
-3. Install ChemGraph:
-   ```bash
-   pip install -e .
-   ```
-
-**Using Conda from source**
-
-> ⚠️ **Note on Compatibility**  
-> ChemGraph supports both MACE and UMA (Meta's machine learning potential). However, due to the current dependency conflicts, particularly with `e3nn`—**you cannot install both in the same environment**.  
-> To use both libraries, create **separate Conda environments**, one for each.
-
-1. Clone the repository:
-   ```bash
-   git clone --depth 1 https://github.com/argonne-lcf/ChemGraph
-   cd ChemGraph
-   ```
-
-2. Create and activate the conda environment from the provided environment.yml:
-   ```bash
-   conda env create -f environment.yml
-   conda activate chemgraph
-   ```
-
-   The `environment.yml` file automatically installs all required dependencies including:
-   - Python 3.11
-   - Core packages (numpy, pandas, pytest, rich, toml)
-   - Computational chemistry packages (nwchem, tblite)
-   - All ChemGraph dependencies via pip
-   
-
-**Using uv from source**
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/argonne-lcf/ChemGraph
-   cd ChemGraph
-   ```
-
-2. Create and activate a virtual environment using uv:
-    ```bash
-    uv venv --python 3.11 chemgraph-env
-
-    source chemgraph-env/bin/activate # Unix/macos
-    # OR
-    .\chemgraph-env\Scripts\activate  # On Windows
-   ```
-
-3. Install ChemGraph using uv:
-    ```bash
-    uv pip install -e .
-    ```
-
-**Optional: Install with UMA support**
-
-> ⚠️ **Note on e3nn Conflict for UMA Installation:** The `uma` extras (requiring `e3nn>=0.5`) conflict with the base `mace-torch` dependency (which pins `e3nn==0.4.4`). 
-> 
-> **For PyPI installations**, you can try:
-> ```bash
-> pip install chemgraph[uma]
-> ```
-> However, this may fail due to the e3nn version conflict. If it does, you'll need to install from source using the workaround below.
->
-> **For source installations**, if you need to install UMA support in an environment where `mace-torch` might cause this conflict, you can try the following workaround:
-> 1. **Temporarily modify `pyproject.toml`**: Open the `pyproject.toml` file in the root of the ChemGraph project.
-> 2. Find the line containing `"mace-torch",` in the `dependencies` list.
-> 3. Comment out this line by adding a `#` at the beginning (e.g., `#    "mace-torch",`).
-> 4. **Install UMA extras**: Run `pip install -e ".[uma]"`.
-> 5. **(Optional) Restore `pyproject.toml`**: After installation, you can uncomment the `mace-torch` line if you still need it for other purposes in the same environment. Be aware that `mace-torch` might not function correctly due to the `e3nn` version mismatch (`e3nn>=0.5` will be present for UMA).
->
-> **The most robust solution for using both MACE and UMA with their correct dependencies is to create separate Conda environments, as highlighted in the "Note on Compatibility" above.**
-
-> **Important for UMA Model Access:** The `facebook/UMA` model is a gated model on Hugging Face. To use it, you must:
-> 1. Visit the [facebook/UMA model page](https://huggingface.co/facebook/UMA) on Hugging Face.
-> 2. Log in with your Hugging Face account.
-> 3. Accept the model's terms and conditions if prompted.
-> Your environment (local or CI) must also be authenticated with Hugging Face, typically by logging in via `huggingface-cli login` or ensuring `HF_TOKEN` is set and recognized.
-</details>
-
-<details open>
-  <summary><strong>Example Usage</strong></summary>
-
-1. Before exploring example usage in the `notebooks/` directory, ensure you have specified the necessary API tokens in your environment. For example, you can set the OpenAI API token and Anthropic API token using the following commands:
-
-   ```bash
-   # Set OpenAI API token
-   export OPENAI_API_KEY="your_openai_api_key_here"
-
-   # Set Anthropic API token
-   export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
-   
-   # Set Google API token
-   export GEMINI_API_KEY="your_google_api_key_here"
-   ```
-
-2. **Explore Example Notebooks**: Navigate to the `notebooks/` directory to explore various example notebooks demonstrating different capabilities of ChemGraph.
-
-   - **[Single-Agent System with MACE](notebooks/1_Demo_single_agent.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with MACE/xTB support.
-
-   - **[Single-Agent System with UMA](notebooks/Demo_single_agent_UMA.ipynb)**: This notebook demonstrates how a single agent can utilize multiple tools with UMA support.
-
-   - **[Multi-Agent System](notebooks/2_Demo-multi_agent.ipynb)**: This notebook demonstrates a multi-agent setup where planner and executor agents decompose and run computational chemistry tasks.
-
-   - **[Model Context Protocol (MCP) Server](notebooks/3_Demo_using_MCP.ipynb)**: This notebook demonstrates how to run an MCP server and connect to ChemGraph.
-
-   - **[Infrared absorption spectrum prediction](notebooks/Demo_infrared_spectrum.ipynb)**: This notebook demonstrates how to calculate an infrared absorption spectrum.
-
-
-</details>
-
-<details>
-  <summary><strong>Streamlit Web Interface</strong></summary>
-
-ChemGraph includes a **Streamlit web interface** for chat-driven computational chemistry workflows. The UI auto-initializes the selected agent, streams tool-call progress while a query runs, shows generated structures and reports, and stores conversations in the same local session database used by the CLI.
-
-### Features
-
-- **🧪 Interactive Chat Interface**: Natural language queries for computational chemistry tasks
-- **🧬 3D Molecular Visualization**: Interactive molecular structure display using `stmol` and `py3Dmol`
-- **📊 Report Integration**: Embedded and downloadable HTML reports from computational calculations
-- **💾 Data Export**: Download molecular structures as XYZ or JSON files
-- **🧮 Math Rendering**: Display LaTeX-style equations and reaction arrows in assistant responses
-- **🔧 Multiple Workflows**: Support for single-agent, multi-agent, Python REPL, and gRASPA workflows
-- **💬 Session Memory**: Browse, load, and delete saved conversations from `~/.chemgraph/sessions.db`
-- **👤 Human Supervision**: Optional follow-up prompts when the agent needs confirmation or missing inputs
-
-### Installation Requirements
-
-The Streamlit UI dependencies are included by default when you install ChemGraph:
-
-```bash
-# Install ChemGraph (includes UI dependencies)
-pip install -e .
-```
-
-**Alternative Installation Options:**
-```bash
-# Install only UI dependencies separately (if needed)
-pip install -e ".[ui]"
-
-# Install with UMA support (separate environment recommended)
-pip install -e ".[uma]"
-```
-
-### Running the Streamlit Interface
-
-1. **Set up your API keys** (same as for notebooks):
-   ```bash
-   export OPENAI_API_KEY="your_openai_api_key_here"
-   export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
-   ```
-
-2. **Launch the Streamlit app**:
-   ```bash
-   streamlit run src/ui/app.py
-   ```
-
-3. **Access the interface**: Open your browser to `http://localhost:8501`
-
-### Using the Interface
-
-#### Configuration
-- Use the **Configuration** page to edit `config.toml`, provider base URLs, API timeouts, workflow, recursion limit, report generation, and human supervision.
-- API keys entered in the UI are applied only to the current Streamlit process and are not written to `config.toml`.
-- The main sidebar shows calculators detected during ChemGraph initialization and marks the default calculator used when a query does not specify one.
-- To change model, workflow, thread, or report settings, edit them on the **Configuration** page, save, then use **Reload Config** or **Refresh Agents**.
-
-
-#### Interaction
-1. **Open the main page**: The agent initializes automatically from the active configuration.
-2. **Ask Questions**: Use the chat input to enter computational chemistry queries.
-3. **Monitor Tools**: Tool calls and completions stream in the assistant response while the workflow runs.
-4. **Respond to Prompts**: If human supervision is enabled and the agent pauses, answer in the same chat input.
-5. **View and Export Results**: Structures, IR artifacts, HTML reports, and download controls appear with the response when available.
-
-#### Example Queries
-- "What is the SMILES string for caffeine?"
-- "Optimize the geometry of water molecule using DFT"
-- "Calculate the single point energy of methane and show the structure"
-- "Generate the structure of aspirin and calculate its vibrational frequencies"
-
-#### Molecular Visualization
-The interface automatically detects molecular structure data in agent responses and provides:
-- **Interactive 3D Models**: Multiple visualization styles (ball & stick, sphere, stick, wireframe)
-- **Structure Information**: Chemical formula, composition, mass, center of mass
-- **Export Options**: Download as XYZ files or JSON data
-- **Fallback Display**: Table view when 3D visualization is unavailable
-
-#### Conversation Management
-- **History Display**: All queries and responses are preserved in conversation bubbles
-- **Saved Sessions**: Recent sessions can be loaded or deleted from the sidebar
-- **Structure Detection**: Molecular structures are automatically extracted and visualized
-- **Report Integration**: HTML reports and run artifacts are embedded directly in the interface
-- **Debug Information**: Expandable sections show detailed message processing information
-
-### Troubleshooting
-
-**3D Visualization Issues:**
-- Ensure `stmol` is installed: `pip install stmol`
-- If 3D display fails, the interface falls back to table/text display
-- Check browser compatibility for WebGL support
-
-**Agent Initialization:**
-- Verify API keys are set correctly
-- Verify provider base URLs and local model endpoints on the Configuration page
-- Check that ChemGraph package is installed: `pip install -e .`
-- Ensure all dependencies are available in your environment
-
-**Performance:**
-- For large molecular systems, visualization may take longer to load
-- Start a new chat or load a smaller saved session if rendering many prior structures becomes slow
-- Use **Refresh Agents** after changing credentials or external model services
-
-</details>
-
-<details>
-  <summary><strong>Configuration with TOML</strong></summary>
-
-ChemGraph supports comprehensive configuration through TOML files, allowing you to customize model settings, API configurations, chemistry parameters, and more.
-
-### Configuration File Structure
-
-Create a `config.toml` file in your project directory to configure ChemGraph behavior:
-
-```toml
-# ChemGraph Configuration File
-# This file contains all configuration settings for ChemGraph CLI and agents
-
-[general]
-# Default model to use for queries
-model = "gpt-4o-mini"
-# Workflow type: single_agent, multi_agent, python_relp, graspa, molecular_docking, mock_agent
-# Alias accepted by CLI/UI: python_repl -> python_relp
-workflow = "single_agent"
-# Output format: state, last_message
-output = "state"
-# Enable structured output
-structured = false
-# Generate detailed reports
-report = true
-# Default LangGraph thread ID
-thread = 1
-
-# Recursion limit for agent workflows
-recursion_limit = 20
-# Allow the agent to pause and ask for human input
-human_supervised = false
-# Enable verbose output
-verbose = false
-
-[llm]
-# Temperature for LLM responses (0.0 to 1.0)
-temperature = 0.1
-# Maximum tokens for responses
-max_tokens = 4000
-# Top-p sampling parameter
-top_p = 0.95
-# Frequency penalty (-2.0 to 2.0)
-frequency_penalty = 0.0
-# Presence penalty (-2.0 to 2.0)
-presence_penalty = 0.0
-
-[api]
-# Custom base URLs for different providers
-[api.openai]
-base_url = "https://api.openai.com/v1"
-timeout = 30
-argo_user = ""
-
-[api.anthropic]
-base_url = "https://api.anthropic.com"
-timeout = 30
-
-[api.google]
-base_url = "https://generativelanguage.googleapis.com/v1beta"
-timeout = 30
-
-[api.alcf]
-base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
-timeout = 30
-
-[api.local]
-# For local models like Ollama
-base_url = "http://localhost:11434"
-timeout = 60
-
-[chemistry]
-# Default calculation settings
-[chemistry.optimization]
-# Optimization method: BFGS, L-BFGS-B, CG, etc.
-method = "BFGS"
-# Force tolerance for convergence
-fmax = 0.05
-# Maximum optimization steps
-steps = 200
-
-[chemistry.frequencies]
-# Displacement for finite difference
-displacement = 0.01
-# Number of processes for parallel calculation
-nprocs = 1
-
-[chemistry.calculators]
-# Default calculator for different tasks
-default = "mace_mp"
-# Available calculators: mace_mp, emt, nwchem, orca, psi4, tblite
-fallback = "emt"
-
-[output]
-# Output file settings
-[output.files]
-# Default output directory
-directory = "./chemgraph_output"
-# File naming pattern
-pattern = "{timestamp}_{query_hash}"
-# Supported formats: xyz, json, html, png
-formats = ["xyz", "json", "html"]
-
-[output.visualization]
-# 3D visualization settings
-enable_3d = true
-# Molecular viewer: py3dmol, ase_gui
-viewer = "py3dmol"
-# Image resolution for saved figures
-dpi = 300
-
-[logging]
-# Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
-level = "INFO"
-# Log file location
-file = "./chemgraph.log"
-# Enable console logging
-console = true
-
-[features]
-# Enable experimental features
-enable_experimental = false
-# Enable caching of results
-enable_cache = true
-# Cache directory
-cache_dir = "./cache"
-# Cache expiration time in hours
-cache_expiry = 24
-
-[security]
-# Enable API key validation
-validate_keys = true
-# Enable request rate limiting
-rate_limit = true
-# Max requests per minute
-max_requests_per_minute = 60
-```
-
-The core CLI and UI currently consume `[general]`, `[api]`, `[chemistry]`, and
-`[output]` directly. The agent uses deterministic LLM defaults internally
-(`temperature=0.0`, fixed token limits); `[llm]` entries are kept for
-documentation/forward compatibility rather than active runtime tuning.
-
-### Using Configuration Files
-
-#### With the Command Line Interface
-
-```bash
-# Use configuration file
-chemgraph --config config.toml -q "What is the SMILES string for water?"
-
-# Override specific settings
-chemgraph --config config.toml -q "Optimize methane" -m gpt-4o --verbose
-```
-
-#### Using Argo (Argonne Internal)
-
-ChemGraph supports Argo through its OpenAI-compatible endpoint.
-
-1. Set your Argo/OpenAI base URL in `config.toml`:
-
-```toml
-[api.openai]
-base_url = "https://apps-dev.inside.anl.gov/argoapi/v1"
-timeout = 30
-argo_user = "<your_anl_domain_username>"
-```
-
-2. Set environment variables:
-
-```bash
-# Required by OpenAI-compatible clients in ChemGraph; for Argo use your ANL username
-export OPENAI_API_KEY="<your_anl_domain_username>"
-
-# Optional fallback only: used when api.openai.argo_user is not set in config.toml
-export ARGO_USER="<your_anl_domain_username>"
-```
-
-3. Use an Argo model ID with the `argo:` prefix (from `supported_argo_models` in `src/chemgraph/models/supported_models.py`), for example:
-
-```text
-argo:gpt-4o, argo:gpt-4o-latest, argo:gpt-5, argo:gpt-5-mini,
-argo:gemini-2.5-flash, argo:claude-sonnet-4.5
-```
-
-4. Run with config:
-
-```bash
-chemgraph --config config.toml -m argo:gpt-4o-latest -q "calculate the energy for water molecule using mace_mp"
-```
-
-Notes:
-- Argo endpoints are available on Argonne internal network (or VPN on an Argonne-managed machine).
-- For current Argo endpoint guidance and policy updates, refer to your internal Argo documentation.
-
-#### Using ALCF Inference Endpoints
-
-ChemGraph supports [ALCF Inference Endpoints](https://docs.alcf.anl.gov/services/inference-endpoints/), which provide API access to open-source models running on dedicated ALCF hardware (Sophia cluster with vLLM).
-
-1. Configure the endpoint in `config.toml` (already set by default):
-
-```toml
-[api.alcf]
-base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
-timeout = 30
-```
-
-2. Authenticate via Globus OAuth:
-
-```bash
-pip install globus_sdk
-wget https://raw.githubusercontent.com/argonne-lcf/inference-endpoints/refs/heads/main/inference_auth_token.py
-python inference_auth_token.py authenticate
-```
-
-3. Set the access token (valid for ~48 hours):
-
-```bash
-export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)
-```
-
-4. Run with an ALCF model (use the model name directly, no prefix needed):
-
-```bash
-chemgraph --config config.toml -m meta-llama/Meta-Llama-3.1-70B-Instruct \
-  -q "Calculate the energy of water using MACE"
-```
-
-See the [ALCF docs](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models) for the full list of available models.
-
-Notes:
-- Access tokens expire after 48 hours. Re-run `get_access_token` to refresh.
-- An internal policy requires Globus re-authentication every 30 days.
-- ALCF models are available to users with an active ALCF account.
-
-#### Using Groq
-
-ChemGraph supports [Groq](https://groq.com/) for fast LLM inference. Use the `groq:` prefix to route any model through Groq:
-
-1. Set your Groq API key:
-
-```bash
-export GROQ_API_KEY="your_groq_api_key_here"
-```
-
-2. Run with a Groq model (prefix the model name with `groq:`):
-
-```bash
-chemgraph -q "What is the SMILES for water?" -m groq:llama-3.3-70b-versatile
-chemgraph -q "Optimize methane" -m groq:openai/gpt-oss-120b
-```
-
-No curated model list is maintained -- any model available on Groq can be used by prefixing it with `groq:`. See the [Groq docs](https://console.groq.com/docs/models) for current models.
-
-#### Experimental Codex subscription support
-
-ChemGraph can use the official Codex Python SDK with an existing ChatGPT-backed
-Codex login. The Codex CLI is a separate prerequisite; the Python SDK does not
-install the `codex` shell command. Follow the
-[official Codex CLI installation guide](https://learn.chatgpt.com/docs/codex/cli),
-then install the ChemGraph extra and authenticate with ChatGPT:
-
-```bash
-pip install "chemgraph[codex]"
-codex login
-```
-
-Then prefix a model available to your Codex account with `codex:`:
-
-```bash
-chemgraph \
-  --model "codex:<codex-model-id>" \
-  --workflow single_agent \
-  --query "What is the SMILES string for aspirin?"
-```
-
-For a long-lived Codex-backed supervisor, use interactive mode:
-
-```bash
-chemgraph --interactive --model "codex:<codex-model-id>" --workflow main_agent
-```
-
-This experimental provider supports `single_agent` and `main_agent`. It does
-not use `OPENAI_API_KEY` or the OpenAI Platform API, and it rejects Codex
-sessions that are authenticated with an API key. See
-[Experimental Codex subscription support](docs/codex_subscription.md) for
-details.
-
-#### LLM Provider Prefixes
-
-For third-party providers that share model names with other services, ChemGraph uses a prefix convention to route models unambiguously:
-
-| Prefix  | Provider                    | Authentication       | Example                               |
-| ------- | --------------------------- | -------------------- | ------------------------------------- |
-| `codex:` | Codex SDK (experimental)   | ChatGPT Codex login  | `codex:<codex-model-id>`              |
-| `argo:` | Argo API (Argonne internal) | `OPENAI_API_KEY`     | `argo:gpt-4o`, `argo:claude-sonnet-4` |
-| `groq:` | Groq Cloud                  | `GROQ_API_KEY`       | `groq:llama-3.3-70b-versatile`        |
-
-Direct model names (no prefix) are used for:
-
-| Provider       | Auth Env Var        | Example                                  |
-| -------------- | ------------------- | ---------------------------------------- |
-| OpenAI         | `OPENAI_API_KEY`    | `gpt-4o`, `gpt-4o-mini`                  |
-| Anthropic      | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022`             |
-| Google         | `GEMINI_API_KEY`    | `gemini-2.5-pro`                         |
-| ALCF           | `ALCF_ACCESS_TOKEN` | `meta-llama/Meta-Llama-3.1-70B-Instruct` |
-| Ollama (local) | Not required        | `llama3.2`                               |
-
-For Argo, model names are mapped to Argo-specific wire names when using the default Argo endpoint. See `supported_argo_models` in `src/chemgraph/models/supported_models.py` for the full list.
-
-For Groq, the `groq:` prefix is stripped before sending to the Groq API. Any model available on the [Groq console](https://console.groq.com/docs/models) can be used.
-
-### Configuration Sections
-
-| Section       | Description                                             |
-| ------------- | ------------------------------------------------------- |
-| `[general]`   | Basic settings like model, workflow, and output format  |
-| `[llm]`       | Reserved/legacy LLM parameter documentation             |
-| `[api]`       | API endpoints and timeouts for different providers      |
-| `[chemistry]` | Chemistry-specific calculation settings                 |
-| `[output]`    | Output file formats and visualization settings          |
-| `[logging]`   | Logging configuration and verbosity levels              |
-| `[features]`  | Feature flags and experimental settings                 |
-| `[security]`  | Security settings and rate limiting                     |
-
-### Command Line Interface
-
-ChemGraph includes a powerful command-line interface (CLI) that provides all the functionality of the web interface through the terminal. The CLI features rich formatting, interactive mode, and comprehensive configuration options.
-
-#### Installation & Setup
-
-The CLI is included by default when you install ChemGraph:
-
-```bash
-pip install -e .
-```
-
-#### Basic Usage
-
-##### Quick Start
-
-```bash
-# Basic query
-chemgraph -q "What is the SMILES string for water?"
-
-# With model selection
-chemgraph -q "Optimize methane geometry using MACE" -m gpt-4o
-
-# With report generation
-chemgraph -q "Calculate CO2 vibrational frequencies using DFT with NWChem" -r
-
-# Using configuration file
-chemgraph --config config.toml -q "Your query here"
-```
-
-##### Command Syntax
-
-```bash
-chemgraph [OPTIONS] -q "YOUR_QUERY"
-```
-
-#### Command Line Options
-
-**Core Arguments:**
-
-| Option             | Short | Description                                          | Default        |
-| ------------------ | ----- | ---------------------------------------------------- | -------------- |
-| `--query`          | `-q`  | The computational chemistry query to execute         | Required       |
-| `--model`          | `-m`  | LLM model to use                                     | `gpt-4o-mini`  |
-| `--workflow`       | `-w`  | Workflow type                                        | `single_agent` |
-| `--output`         | `-o`  | Output format (`state`, `last_message`)              | `state`        |
-| `--structured`     | `-s`  | Use structured output format                         | `False`        |
-| `--report`         | `-r`  | Generate detailed report                             | `False`        |
-| `--resume`         |       | Resume from a previous session ID (prefix supported) |                |
-| `--list-sessions`  |       | List recent sessions from the memory database        |                |
-| `--show-session`   |       | Show conversation for a session (prefix supported)   |                |
-| `--delete-session` |       | Delete a session from the memory database            |                |
-
-**Model Selection:**
-
-```bash
-# OpenAI models
-chemgraph -q "Your query" -m gpt-4o
-chemgraph -q "Your query" -m gpt-4o-mini
-
-# Anthropic models
-chemgraph -q "Your query" -m claude-3-5-sonnet-20241022
-
-# Google models
-chemgraph -q "Your query" -m gemini-2.5-pro
-
-# Argo models (Argonne internal, argo: prefix)
-chemgraph -q "Your query" -m argo:gpt-4o
-chemgraph -q "Your query" -m argo:claude-sonnet-4
-
-# ALCF models (Globus auth required, no prefix)
-chemgraph -q "Your query" -m meta-llama/Meta-Llama-3.1-70B-Instruct
-
-# Groq models (groq: prefix, any Groq model)
-chemgraph -q "Your query" -m groq:llama-3.3-70b-versatile
-
-# Codex SDK with a ChatGPT subscription login (experimental)
-chemgraph -q "Your query" -m "codex:<codex-model-id>" -w single_agent
-chemgraph --interactive -m "codex:<codex-model-id>" -w main_agent
-
-# Local models (Ollama)
-chemgraph -q "Your query" -m llama3.2
-```
-
-**Workflow Types:**
-
-```bash
-# Single agent (default) - best for most tasks
-chemgraph -q "Optimize water molecule" -w single_agent
-
-# Multi-agent - complex tasks with planning
-chemgraph -q "Complex analysis" -w multi_agent
-
-# Python REPL - interactive coding
-chemgraph -q "Write analysis code" -w python_repl
-
-# gRASPA - molecular simulation
-chemgraph -q "Run adsorption simulation" -w graspa
-
-# Molecular docking - dock a candidate into a receptor (AutoDock Vina)
-chemgraph -q "Dock aspirin into 'receptor.pdbqt'" -w molecular_docking
-```
-
-**Output Formats:**
-
-```bash
-# Full state output (default)
-chemgraph -q "Your query" -o state
-
-# Last message only
-chemgraph -q "Your query" -o last_message
-
-# Structured output
-chemgraph -q "Your query" -s
-
-# Generate detailed report
-chemgraph -q "Your query" -r
-```
-
-#### Interactive Mode
-
-Start an interactive session for continuous conversations:
-
-```bash
-chemgraph --interactive
-```
-
-**Interactive Features:**
-- **Persistent conversation**: Maintain context across queries
-- **Session memory**: Conversations are automatically saved to a local SQLite database (`~/.chemgraph/sessions.db`) and can be resumed later
-- **Model switching**: Change models mid-conversation
-- **Workflow switching**: Switch between different agent types
-- **Built-in commands**: Help, clear, config, session management, etc.
-
-**Interactive Commands:**
-```bash
-# In interactive mode, type:
-/help                   # Show available commands
-/clear                  # Clear screen
-/config                 # Show current configuration and session ID
-/quit                   # Exit interactive mode
-/model gpt-4o           # Change model
-/workflow multi_agent   # Change workflow
-
-# Session management:
-/history                # List recent sessions
-/show <session_id>      # Show a session's conversation
-/resume <session_id>    # Resume from a previous session
-/retry                  # Retry a failed main_agent operation
-```
-
-Exact bare aliases for commands without arguments, such as `help`, `quit`, and
-`history`, remain supported. Commands with arguments require `/`, so a natural
-prompt such as `show me the available tools` is sent to the agent.
-
-#### Utility Commands
-
-**List Available Models:**
-```bash
-chemgraph --list-models
-```
-
-**Check API Keys:**
-```bash
-chemgraph --check-keys
-```
-
-**Get Help:**
 ```bash
 chemgraph --help
+chemgraph models
+chemgraph run --check-keys
+chemgraph run -q "What is the SMILES string for aspirin?"
 ```
 
-#### Session Memory
-
-ChemGraph automatically saves every conversation to a local SQLite database at `~/.chemgraph/sessions.db`. This allows you to browse past sessions, review tool calls and results, and resume previous conversations with full context.
-
-**List Recent Sessions:**
-```bash
-chemgraph --list-sessions
-```
-
-**View a Session's Conversation:**
-```bash
-# Full session ID or prefix (first few characters)
-chemgraph --show-session a3b2
-```
-
-**Resume From a Previous Session:**
-```bash
-# Injects previous conversation context into the new query
-chemgraph -q "Now optimize the geometry at 500K" --resume a3b2
-```
-
-**Delete a Session:**
-```bash
-chemgraph --delete-session a3b2c1d4
-```
-
-Session IDs support prefix matching -- you only need to type enough characters to uniquely identify the session.
-
-#### Configuration File Support
-
-Use TOML configuration files for consistent settings:
+The aspirin example uses an LLM and PubChem, so it requires network access.
+For a first calculation, explicitly choose the lightweight EMT calculator:
 
 ```bash
-chemgraph --config config.toml -q "Your query"
+chemgraph run \
+  -q "Build water from SMILES O, optimize it with EMT, and report the final energy." \
+  --output last_message
 ```
 
-#### Advanced Options
+ChemGraph creates a session directory under `cg_logs/` by default. Tool output
+such as XYZ structures, JSON results, trajectories, spectra, and HTML reports
+is written there. Set `CHEMGRAPH_LOG_DIR` before starting ChemGraph to choose a
+different artifact directory.
 
-**Timeout and Error Handling:**
-```bash
-# Set recursion limit
-chemgraph -q "Complex query" --recursion-limit 30
+## Common ways to use ChemGraph
 
-# Verbose output for debugging
-chemgraph -q "Your query" -v
+### Run one query
 
-# Save output to file
-chemgraph -q "Your query" --output-file results.txt
-```
-
-
-
-#### Example Workflows
-
-**Basic Molecular Analysis:**
-```bash
-# Get molecular structure
-chemgraph -q "What is the SMILES string for caffeine?"
-
-# Optimize geometry
-chemgraph -q "Optimize the geometry of caffeine using DFT" -m gpt-4o -r
-
-# Calculate properties
-chemgraph -q "Calculate the vibrational frequencies of optimized caffeine" -r
-```
-
-**Interactive Research Session:**
-```bash
-# Start interactive mode
-chemgraph --interactive
-
-# Select model and workflow
-> model gpt-4o
-> workflow single_agent
-
-# Conduct analysis
-> What is the structure of aspirin?
-> Optimize its geometry using DFT
-> Calculate its electronic properties
-> Compare with ibuprofen
-```
-
-**Batch Processing:**
-```bash
-# Process multiple queries
-chemgraph -q "Analyze water molecule" --output-file water_analysis.txt
-chemgraph -q "Analyze methane molecule" --output-file methane_analysis.txt
-chemgraph -q "Analyze ammonia molecule" --output-file ammonia_analysis.txt
-```
-
-#### API Key Setup
-
-**Required API Keys:**
-```bash
-# OpenAI (for GPT models)
-export OPENAI_API_KEY="your_openai_key_here"
-
-# Anthropic (for Claude models)
-export ANTHROPIC_API_KEY="your_anthropic_key_here"
-
-# Google (for Gemini models)
-export GEMINI_API_KEY="your_gemini_key_here"
-
-# Groq (for groq: prefixed models)
-export GROQ_API_KEY="your_groq_key_here"
-
-# ALCF (Globus OAuth access token)
-export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)
-```
-
-**Getting API Keys:**
-- **OpenAI**: Visit [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
-- **Anthropic**: Visit [console.anthropic.com](https://console.anthropic.com/)
-- **Google**: Visit [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-- **Groq**: Visit [console.groq.com/keys](https://console.groq.com/keys)
-- **ALCF**: See [ALCF Inference Endpoints docs](https://docs.alcf.anl.gov/services/inference-endpoints/#api-access)
-
-#### Performance Tips
-
-- Use `gpt-4o-mini` for faster, cost-effective queries
-- Use `gpt-4o` for complex analysis requiring higher reasoning
-- Enable `--report` for detailed documentation
-- Use `--structured` output for programmatic parsing
-- Leverage configuration files for consistent settings
-
-#### Troubleshooting
-
-**Common Issues:**
-```bash
-# Check API key status
-chemgraph --check-keys
-
-# Verify model availability
-chemgraph --list-models
-
-# Test with verbose output
-chemgraph -q "test query" -v
-
-# Check configuration
-chemgraph --config config.toml -q "test" --verbose
-```
-
-**Error Messages:**
-- **"Invalid model"**: Use `--list-models` to see available options
-- **"API key not found"**: Use `--check-keys` to verify setup
-- **"Query required"**: Use `-q` to specify your query
-- **"Timeout"**: Increase `--recursion-limit` or simplify query
-
-The CLI provides:
-- **Beautiful terminal output** with colors and formatting powered by Rich
-- **API key validation** before agent initialization
-- **Timeout protection** to prevent hanging processes
-- **Interactive mode** for continuous conversations
-- **Configuration file support** with TOML format
-- **Environment-specific settings** for development/production
-- **Comprehensive help** and examples for all features
-
-</details>
-
-<details>
-  <summary><strong>Project Structure</strong></summary>
-
-```
-chemgraph/
-│
-├── src/                       # Source code
-│   ├── chemgraph/             # Top-level package
-│   │   ├── agent/             # Agent-based task management
-│   │   ├── eval/              # Evaluation & benchmarking (LLM-as-judge)
-│   │   ├── graphs/            # Workflow graph utilities
-│   │   ├── mcp/               # MCP servers (stdio/streamable HTTP)
-│   │   ├── memory/            # Session memory (SQLite-backed persistence)
-│   │   ├── models/            # LLM provider integrations
-│   │   ├── prompt/            # Agent prompt templates
-│   │   ├── schemas/           # Pydantic data models
-│   │   ├── state/             # Agent state definitions
-│   │   ├── tools/             # Tools for molecular simulations
-│   │   ├── utils/             # Other utility functions
-│   ├── ui/                    # CLI and Streamlit UI
-│
-├── pyproject.toml             # Project configuration
-└── README.md                  # Project documentation
-```
-
-</details>
-
-<details>
-  <summary><strong>Evaluation & Benchmarking</strong></summary>
-
-ChemGraph includes a built-in evaluation module (`chemgraph.eval`) for benchmarking LLM tool-calling accuracy across models and workflows. It uses an **LLM-as-judge** strategy: a separate judge LLM grades the agent's tool-call sequence and final answer against ground-truth results using binary scoring (1 = correct, 0 = wrong).
-
-### Bundled Dataset
-
-A default dataset of **14 queries** across 4 categories is shipped with the package:
-
-| Category                     | Description                                   | Example                                                                       |
-| ---------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
-| **A** Single tool calls      | Name-to-SMILES, SMILES-to-coordinates         | "Provide the SMILES string for sulfur dioxide"                                |
-| **B** Multi-step from name   | Name → SMILES → coordinates → ASE simulation  | "Calculate the geometry optimization of sulfur dioxide using mace_mp"         |
-| **C** Multi-step from SMILES | SMILES → coordinates → ASE simulation         | "Calculate the single-point energy using mace_mp for SMILES: N#N"             |
-| **D** Reaction Gibbs energy  | Multi-species thermochemistry + stoichiometry | "Calculate the Gibbs free energy of reaction for Methane Combustion at 300 K" |
-
-### Running Evaluations
-
-**CLI (recommended):**
+`single_agent` is the default workflow and the best starting point.
 
 ```bash
-# Minimal invocation (uses bundled 14-query dataset)
-chemgraph-eval --models gpt-4o-mini --judge-model gpt-4o
-
-# Multiple models
-chemgraph-eval --models gpt-4o-mini gemini-2.5-flash claude-3-5-haiku-20241022 \
-    --judge-model gpt-4o
-
-# With TOML config (resolves base_url, argo_user, profiles)
-chemgraph-eval --models gpt-4o-mini --judge-model gpt-4o --config config.toml
-
-# Profile-based (reads [eval.profiles.*] from config.toml)
-chemgraph-eval --profile quick --models gpt-4o-mini --judge-model gpt-4o --config config.toml
-
-# Custom dataset, limit queries, specific workflow
-chemgraph-eval --models gpt-4o-mini \
-    --judge-model gpt-4o \
-    --dataset path/to/custom_ground_truth.json \
-    --workflows single_agent \
-    --max-queries 5 \
-    --output-dir eval_results
+chemgraph run \
+  --model gpt-4o-mini \
+  --workflow single_agent \
+  --query "Calculate the vibrational frequencies of water with EMT."
 ```
 
-**Python API:**
+Useful run options include:
+
+| Option | Purpose |
+| --- | --- |
+| `-m`, `--model` | Select the LLM provider/model identifier |
+| `-w`, `--workflow` | Select an agent workflow |
+| `-o`, `--output` | Return full `state` or only `last_message` |
+| `-s`, `--structured` | Request structured final output |
+| `-r`, `--report` | Allow generation of an HTML report |
+| `--human-supervised` | Allow supported workflows to pause for input |
+| `--output-file` | Save the CLI response to a file |
+| `-v` / `-vv` | Enable INFO / DEBUG diagnostics |
+
+The older form `chemgraph -q "..."` remains supported, but documentation uses
+the explicit `chemgraph run` subcommand.
+
+### Work interactively
+
+```bash
+chemgraph run --interactive
+```
+
+Inside the interactive shell, use `/help` to list commands. Sessions are saved
+to `~/.chemgraph/sessions.db` and can also be inspected from the CLI:
+
+```bash
+chemgraph session list
+chemgraph session show <session-id>
+chemgraph run --resume <session-id> -q "Continue with a frequency calculation."
+```
+
+The `main_agent` workflow is a long-lived supervisor with durable checkpoints
+and must be used interactively:
+
+```bash
+chemgraph run --interactive --workflow main_agent
+chemgraph run --interactive --workflow main_agent --resume <session-id>
+```
+
+See the [CLI guide](https://argonne-lcf.github.io/ChemGraph/cli/) for session
+semantics, interactive commands, MCP connections, tracing, and the
+development-only workspace Deep Agent.
+
+### Use the Python API
+
+`ChemGraph.run()` is asynchronous. Import the class from its current public
+module path:
 
 ```python
 import asyncio
-from chemgraph.eval import ModelBenchmarkRunner, BenchmarkConfig
 
-config = BenchmarkConfig(
-    models=["gpt-4o-mini", "gemini-2.5-flash"],
-    judge_model="gpt-4o",
-    # dataset defaults to bundled 14-query dataset
-    # workflow_types defaults to ["single_agent"]
-)
-runner = ModelBenchmarkRunner(config)
-results = asyncio.run(runner.run_all())
-runner.report()  # generates JSON + Markdown + console output
+from chemgraph.agent.llm_agent import ChemGraph
+
+
+async def main():
+    agent = ChemGraph(
+        model_name="gpt-4o-mini",
+        workflow_type="single_agent",
+        return_option="last_message",
+    )
+    result = await agent.run("What is the SMILES string for aspirin?")
+    print(result.content)
+
+
+asyncio.run(main())
 ```
 
-### CLI Options
+The checkpointed `main_agent` uses `MainAgentSession` rather than
+`ChemGraph.run()`. See the [Python API guide](https://argonne-lcf.github.io/ChemGraph/python_api/)
+for state returns, thread IDs, custom tools, and durable sessions.
 
-| Option                   | Description                                            | Default         |
-| ------------------------ | ------------------------------------------------------ | --------------- |
-| `--models`               | LLM model names to evaluate (required)                 | —               |
-| `--judge-model`          | LLM model name for the judge (required)                | —               |
-| `--profile`              | Eval profile name from config.toml `[eval.profiles.*]` | None            |
-| `--dataset`              | Path to ground-truth JSON file                         | Bundled dataset |
-| `--workflows`            | Workflow types to test                                 | `single_agent`  |
-| `--output-dir`           | Output directory for results                           | `eval_results`  |
-| `--max-queries`          | Max queries to evaluate (0 = all)                      | 0               |
-| `--recursion-limit`      | Max LangGraph recursion steps per query                | 50              |
-| `--config`               | Path to TOML config file                               | None            |
-| `--tags`                 | Free-form tags for run metadata                        | —               |
-| `--no-structured-output` | Disable structured output on the agent                 | —               |
-| `--report`               | Report format: `json`, `markdown`, `console`, `all`    | `all`           |
+### Use the Streamlit interface
 
-### TOML Profile Configuration
-
-Define reusable evaluation profiles in your `config.toml`:
-
-```toml
-[eval]
-default_profile = "quick"
-
-[eval.profiles.quick]
-judge_model = "gpt-4o-mini"
-workflow_types = ["single_agent"]
-recursion_limit = 20
-max_queries = 5
-
-[eval.profiles.standard]
-judge_model = "gpt-4o"
-workflow_types = ["single_agent", "multi_agent"]
-recursion_limit = 50
-```
-
-### Generating Custom Ground Truth
-
-To generate a new ground-truth dataset from custom molecules and reactions:
+The Streamlit entry point currently lives in the source tree. Run it from a
+repository checkout:
 
 ```bash
-cd scripts/evaluations
-
-# Full execution (runs tool chains, captures actual results)
-python generate_ground_truth.py --input_file input_data.json
-
-# Skip execution (empty results, faster)
-python generate_ground_truth.py --input_file input_data.json --skip_execution
-
-# Custom output path
-python generate_ground_truth.py --input_file input_data.json -o my_gt.json
+git clone https://github.com/argonne-lcf/ChemGraph.git
+cd ChemGraph
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+streamlit run src/ui/app.py
 ```
 
-### Output
+Open `http://localhost:8501`. For an image-based setup, use the Docker command
+below. The [Streamlit guide](https://argonne-lcf.github.io/ChemGraph/streamlit_web_interface/)
+describes configuration, supported workflows, sessions, and artifacts.
 
-Evaluation runs produce:
-- **JSON report** (`eval_results/benchmark_<timestamp>.json`) -- machine-readable results with per-query scores
-- **Markdown report** (`eval_results/benchmark_<timestamp>.md`) -- human-readable summary with accuracy tables
-- **Per-model detail files** (`eval_results/<model>_<workflow>_detail.json`) -- individual query results
-- **Console summary** -- printed accuracy table during the run
+### Expose chemistry tools through MCP
 
-For full documentation, see [`docs/evaluation.md`](docs/evaluation.md).
-
-</details>
-
-<details>
-  <summary><strong>Running With External LLM Endpoints</strong></summary>
-
-ChemGraph no longer provides an in-repo vLLM Docker stack. For local or hosted model inference, run your preferred OpenAI-compatible endpoint separately and configure ChemGraph with:
-
-- model name
-- API key environment variable
-- optional base URL (for non-default endpoints)
-
-For hosted providers:
-
-```bash
-export OPENAI_API_KEY="your_openai_api_key_here"
-export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
-export GEMINI_API_KEY="your_gemini_api_key_here"
-```
-
-Then run CLI, Streamlit, or notebooks normally.
-</details>
-
-<details>
-  <summary><strong>Docker Support (Jupyter, Streamlit, MCP, CLI)</strong></summary>
-
-The Docker setup is now a single ChemGraph image with profile-based runtime modes:
-
-- `jupyter` (JupyterLab)
-- `streamlit` (web UI)
-- `mcp` (MCP server over streamable HTTP)
-- `cli` (interactive shell with `chemgraph` command)
-
-See full guide: [`docs/docker_support.md`](docs/docker_support.md)
-
-**Quick start**
-
-Run JupyterLab (install-free):
-
-```bash
-docker run --rm -it -p 8888:8888 ghcr.io/argonne-lcf/chemgraph:latest \
-  jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --LabApp.token=
-```
-
-Run Streamlit (install-free):
-
-```bash
-docker run --rm -it -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
-  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
-```
-
-Run MCP server (install-free):
-
-```bash
-docker run --rm -it -p 9003:9003 ghcr.io/argonne-lcf/chemgraph:latest \
-  python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
-```
-
-Run interactive CLI shell (install-free):
-
-```bash
-docker run --rm -it --entrypoint /bin/bash -v "$PWD:/work" -w /work \
-  ghcr.io/argonne-lcf/chemgraph:latest
-# then run: chemgraph --config config.toml -q "your query"
-```
-
-If you want source-mounted development mode with Docker Compose, use:
-
-```bash
-docker compose build
-docker compose --profile jupyter up
-# or --profile streamlit / --profile mcp
-```
-
-**Ports**
-
-- JupyterLab: `8888`
-- Streamlit: `8501`
-- MCP (HTTP): `9003`
-
-### Running With Colmena
-
-If you use [Colmena](https://github.com/exalearn/colmena), run ChemGraph services in containers and let Colmena orchestrate tasks:
-
-1. Start one of the Docker modes above (`jupyter`, `streamlit`, or `mcp`).
-2. In your Colmena workflow, choose one integration pattern:
-   - call the ChemGraph CLI inside a worker task (e.g., `chemgraph -q ...`)
-   - connect to the MCP server (`docker compose --profile mcp up`) from your worker/client
-3. Mount the same project/output volume if Colmena workers and Docker run on the same host.
-
-Use this as an orchestration layer: Colmena schedules tasks; ChemGraph handles chemistry execution.
-
-### Kubernetes Deployment
-
-ChemGraph Streamlit can also be deployed on Kubernetes clusters. See the [`k8s/`](k8s/) directory for deployment manifests and instructions.
-
-**Quick deployment:**
-
-```bash
-cd k8s
-./deploy.sh deploy
-```
-
-For detailed instructions, see [`k8s/README.md`](k8s/README.md).
-</details>
-
-<details>
-  <summary><strong>Model Context Protocol (MCP) Servers</strong></summary>
-
-ChemGraph provides several **MCP servers** that expose its capabilities as standardized tools conforming to the [Model Context Protocol](https://modelcontextprotocol.io/). These can be connected to MCP-compliant clients or other agentic frameworks.
-
-### Available Servers
-
-The servers are located in `src/chemgraph/mcp/`:
-
-*   **`mcp_tools.py`**: General-purpose chemistry tools powered by ASE. Supports:
-    *   Geometry optimization (GetStructure, RunASE)
-    *   Energy/Thermochemistry calculations
-    *   File I/O (handling XYZ, JSON, etc.)
-*   **`mace_mcp_parsl.py`**: Tools for running **MACE** (Machine Learning Potential) simulations.
-    *   Supports single-structure calculations.
-    *   Supports **ensemble** calculations (directories of structures) using **Parsl** for parallel execution on HPC systems (e.g., Polaris, Aurora).
-*   **`graspa_mcp_parsl.py`**: Tools for **gRASPA** simulations (Gas Adsorption in MOFs).
-    *   Supports single and ensemble runs via Parsl.
-*   **`xanes_mcp_parsl.py`**: Tools for running XANES/FDMNES ensembles with Parsl.
-*   **`data_analysis_mcp.py`**: Tools for analyzing simulation results.
-    *   Aggregating JSONL logs from ensemble runs into CSV/DataFrames.
-    *   Plotting isotherms and other data.
-
-### Running a Server
-
-You can run the servers using Python. They support both `stdio` (default) and `streamable_http` transports.
-
-**Basic Usage (stdio)**
-Connect this directly to your MCP client (e.g., Claude Desktop config):
+Start the general tool server over stdio:
 
 ```bash
 python -m chemgraph.mcp.mcp_tools
 ```
 
-**Using streamable HTTP**
-To run a server that listens for HTTP connections (useful for remote deployment or debugging):
+Or start streamable HTTP:
 
 ```bash
-python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 8000
+python -m chemgraph.mcp.mcp_tools \
+  --transport streamable_http \
+  --host 127.0.0.1 \
+  --port 9003
 ```
 
-**Configuration via Arguments**
-All servers in `src/chemgraph/mcp/` support the following arguments:
-*   `--transport`: `stdio` (default) or `streamable_http`.
-*   `--port`: Port number (for HTTP transport).
-*   `--host`: Host address (default: 127.0.0.1).
+MCP clients connect to `http://localhost:9003/mcp/`. ChemGraph can also load
+MCP tools into an agent:
 
-**Note on HPC Servers:**
-For `graspa_mcp_parsl.py` and `xanes_mcp_parsl.py`, set `COMPUTE_SYSTEM=polaris` or `COMPUTE_SYSTEM=aurora` before launch so the server loads the matching Parsl configuration from `chemgraph.hpc_configs`. `mace_mcp_parsl.py` currently contains site-specific `worker_init` settings; review and edit those paths/modules before production use.
-
-</details>
-
-<details>
-  <summary><strong>Code Formatting & Linting</strong></summary>
-
-This project uses [Ruff](https://github.com/astral-sh/ruff) for **both formatting and linting**. To ensure all code follows our style guidelines, install the pre-commit hook:
-
-```sh
-pip install pre-commit
-pre-commit install
+```bash
+chemgraph run \
+  --mcp-url http://localhost:9003/mcp/ \
+  -q "Build a 3D structure for methane."
 ```
-</details>
 
-<details>
-  <summary><strong>Citation</strong></summary>
-    
-  If you use ChemGraph in your research, please cite [our paper](https://doi.org/10.1038/s42004-025-01776-9):
-    
-  ```bibtex
-    @article{pham_chemgraph_2026,
-    title = {{ChemGraph} as an agentic framework for computational chemistry workflows},
-    url = {https://doi.org/10.1038/s42004-025-01776-9},
-    doi = {10.1038/s42004-025-01776-9},
-    author = {Pham, Thang D. and Tanikanti, Aditya and Ke\c{c}eli, Murat},
-    date = {2026-01-08},
-    author={Pham, Thang D and Tanikanti, Aditya and Ke{\c{c}}eli, Murat},
-    journal={Communications Chemistry},
-    year={2026},
-    publisher={Nature Publishing Group UK London}
-    }
-  ```
-  If you use the HPC integration features,  please also cite [our preprint](https://arxiv.org/abs/2604.07681):
-  
-  ```bibtex
-    @misc{pham2026multiagent,
-    title         = {Multi-Agent Orchestration for High-Throughput Materials Screening on a Leadership-Class System},
-    author        = {Pham, Thang Duc and Tummalapalli, Harikrishna and Bhuiyan, Fakhrul Hasan and V{\'a}zquez Mayagoitia, {\'A}lvaro and Simpson, Christine and Balin, Riccardo and Vishwanath, Venkatram and Ke{\c{c}}eli, Murat},
-    year          = {2026},
-    eprint        = {2604.07681},
-    archivePrefix = {arXiv},
-    primaryClass  = {cs.AI},
-    doi           = {10.48550/arXiv.2604.07681},
-    url           = {https://arxiv.org/abs/2604.07681}
-}
-  ```
- </details>
-<details>
-  <summary><strong>Acknowledgments</strong></summary>
-This research used resources of the Argonne Leadership Computing Facility, a U.S.
-Department of Energy (DOE) Office of Science user facility at Argonne National
-Laboratory and is based on research supported by the U.S. DOE Office of Science-
-Advanced Scientific Computing Research Program, under Contract No. DE-AC02-
-06CH11357. Our work leverages ALCF Inference Endpoints, which provide a robust API
-for LLM inference on ALCF HPC clusters via Globus Compute. We are thankful to Serkan
-Altuntaş for his contributions to the user interface of ChemGraph and for insightful
-discussions on AIOps.
-</details>
+See [MCP servers](https://argonne-lcf.github.io/ChemGraph/mcp_servers/) for
+stdio client configuration and the experimental HPC servers.
 
-<details>
-  <summary><strong>Contributing</strong></summary>
-Contributions are welcome! ChemGraph uses a trunk-based workflow: `main` is
-always releasable, and changes land in small, frequent pull requests from
-short-lived branches (there is no long-lived `dev` branch). Before opening a PR,
-run `ruff check .` and `pytest tests/ -k "not tblite"`. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
-</details>
+## Choose a workflow
 
-<details>
-  <summary><strong>License</strong></summary>
-This project is licensed under the Apache 2.0 License.
-</details>
+| Workflow | Use it for | Important requirements |
+| --- | --- | --- |
+| `single_agent` | General molecule lookup, ASE calculations, and reports | Default and recommended first workflow |
+| `main_agent` | Long-lived supervisor with delegated chemistry work | Interactive mode; use `MainAgentSession` in Python |
+| `multi_agent` | Planner/executor decomposition and parallel subtasks | More model calls and orchestration overhead |
+| `python_relp` | LLM-directed Python and arithmetic (`python_repl` is an alias) | Executes Python in the ChemGraph process; use only with trusted prompts |
+| `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra plus Vina from conda-forge |
+| `rag_agent` | Query PDF/text documents alongside chemistry tools | `rag` extra; embedding model or OpenAI embeddings |
+| `single_agent_xanes` | XANES data retrieval, simulation, and plotting | `xanes` extra, `MP_API_KEY`, and/or `FDMNES_EXE` |
+| `graspa` | gRASPA adsorption workflows | Site-specific gRASPA executable/runtime |
+| `graspa_mcp` | Planner/executor workflow using supplied MCP tools | Advanced integration; MCP tools must be provided |
+| `mock_agent` | One-pass tool-call experiments | Primarily useful for development and evaluation |
+
+The [workflow guide](https://argonne-lcf.github.io/ChemGraph/workflows/) covers
+capabilities, limitations, and interface support in more detail.
+
+## Calculators and optional dependencies
+
+The core installation includes ASE, EMT, and MACE. ChemGraph detects calculator
+engines and external executables at startup, then exposes only the calculators
+available in that environment.
+
+| Capability | Installation | Notes |
+| --- | --- | --- |
+| EMT | Core install | Lightweight; useful for setup checks, not general high-accuracy chemistry |
+| MACE | Core install | First use downloads model weights and can be slow |
+| TBLite / xTB | `pip install "chemgraph[calculators]"` | May require a Fortran toolchain when no wheel is available |
+| UMA / FAIRChem | `pip install "chemgraph[uma]"` | Use a separate environment from MACE if `e3nn` resolution conflicts |
+| NWChem | Install the `nwchem` executable separately | Must be on `PATH` or configured through ASE |
+| ORCA | Install ORCA separately | Must be on `PATH` or configured through ASE |
+| AIMNet2 | Install `aimnet2calc` separately | Detected lazily when installed |
+
+Other extras are available for `rag`, `docking`, `xanes`, `parsl`,
+`ensemble_launcher`, `globus_compute`, `academy`, and experimental `codex`
+support. See [Installation](https://argonne-lcf.github.io/ChemGraph/installation/)
+and [Calculators](https://argonne-lcf.github.io/ChemGraph/calculators/).
+
+## Install from source
+
+Use a source checkout for development, notebooks, the Streamlit UI, and the
+latest unreleased changes:
+
+```bash
+git clone https://github.com/argonne-lcf/ChemGraph.git
+cd ChemGraph
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+Install only the extras required by the workflow you plan to run:
+
+```bash
+python -m pip install -e ".[rag]"
+python -m pip install -e ".[academy,parsl,globus_compute]"
+```
+
+Conda and uv instructions are available in the
+[installation guide](https://argonne-lcf.github.io/ChemGraph/installation/).
+
+## Docker
+
+The published image contains the source-tree entry points used by JupyterLab,
+Streamlit, MCP, and the CLI.
+
+```bash
+docker run --rm -it \
+  -e OPENAI_API_KEY \
+  -p 8501:8501 \
+  ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py \
+    --server.address=0.0.0.0 \
+    --server.port=8501
+```
+
+Set the credential on the host first; `-e OPENAI_API_KEY` passes its value
+without embedding the secret in the command. The repository also provides
+Compose profiles for `jupyter`, `streamlit`, `mcp`, and `cli` development
+modes. See [Docker support](https://argonne-lcf.github.io/ChemGraph/docker_support/).
+
+## Distributed and HPC execution
+
+ChemGraph includes pluggable execution backends for local processes, Parsl,
+Ensemble Launcher, and Globus Compute, plus an Academy-based persistent
+multi-agent campaign runtime. These paths require additional dependencies,
+site configuration, allocations, endpoints, or credentials and are not part
+of the first-run workflow.
+
+Start with:
+
+- [HPC and Academy](https://argonne-lcf.github.io/ChemGraph/hpc_and_academy/)
+- [`scripts/demo/`](scripts/demo/README.md) for execution-backend demos
+- [Academy MACE screening example](examples/academy/example-002-mace-ensemble-screening/README.md)
+- [Connecting to Argo from an ALCF compute node](examples/connecting_to_argo/README.md)
+
+## Configuration
+
+Most first runs need only command-line flags and environment variables. A TOML
+file is useful for provider endpoints, MCP connections, logging, UI settings,
+evaluation profiles, and execution backends:
+
+```bash
+chemgraph run --config config.toml -q "What is the SMILES string for water?"
+```
+
+The CLI and Streamlit UI do not consume every historical key in the repository
+example identically. Use the [configuration reference](https://argonne-lcf.github.io/ChemGraph/configuration_with_toml/)
+to see which settings are active in each interface. Never store API keys or
+access tokens in a committed TOML file.
+
+## Troubleshooting
+
+```bash
+chemgraph --help
+chemgraph models
+chemgraph run --check-keys
+chemgraph run -vv -q "What is the SMILES string for water?"
+```
+
+- Calculator warnings at startup mean an optional engine was not detected;
+  install it only if the requested workflow needs it.
+- A first MACE or local-embedding run may pause while model weights download.
+- `main_agent` requires `--interactive`.
+- The Streamlit source command must be run from a repository checkout.
+- A stale installed package can shadow a checkout; activate the intended
+  environment and use an editable install.
+
+See the [troubleshooting guide](https://argonne-lcf.github.io/ChemGraph/troubleshooting/)
+for provider, calculator, path, UI, MCP, and session diagnostics.
+
+## Documentation and examples
+
+- [Full documentation](https://argonne-lcf.github.io/ChemGraph/)
+- [Example notebooks and runnable guides](https://argonne-lcf.github.io/ChemGraph/example_usage/)
+- [Evaluation and benchmarking](https://argonne-lcf.github.io/ChemGraph/evaluation/)
+- [Project structure](https://argonne-lcf.github.io/ChemGraph/project_structure/)
+- [Contributing guide](CONTRIBUTING.md)
+
+## Citation
+
+If ChemGraph supports your research, cite:
+
+> Thang D. Pham, Aditya Tanikanti, and Murat Keçeli. “ChemGraph as an
+> agentic framework for computational chemistry workflows.”
+> *Communications Chemistry* 9, 33 (2026).
+> <https://doi.org/10.1038/s42004-025-01776-9>
+
+Users of the HPC orchestration features should also cite the
+[multi-agent orchestration preprint](https://arxiv.org/abs/2604.07681).
+BibTeX is available on the [citation page](https://argonne-lcf.github.io/ChemGraph/citation/).
+
+## Contributing and license
+
+Contributions are welcome. Branch from the latest `main`, keep each change
+focused, and run `ruff check .` plus `pytest tests/ -k "not tblite"` before
+opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete
+workflow.
+
+ChemGraph is distributed under the [Apache License 2.0](LICENSE).
