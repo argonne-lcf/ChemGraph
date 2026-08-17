@@ -1,0 +1,112 @@
+{
+  "committee": [
+    "decimer",
+    "molnextr",
+    "molscribe",
+    "ocsrglyph"
+  ],
+  "n_items": 722,
+  "scoring": "stereo_blind",
+  "abstention": "counts as a dissenting singleton vote; pattern parts always sum to the committee size",
+  "tie_break": "model-priority: decimer,molnextr,molscribe,ocsrglyph",
+  "min_n_for_point_estimate": 20,
+  "estimator": "Jeffreys: (k+0.5)/(n+1)",
+  "datasets": [
+    "eval100_random",
+    "eval100_minmax",
+    "eval100_stratified",
+    "pubchem"
+  ],
+  "model_performance": {
+    "decimer": {
+      "accuracy": 0.8989,
+      "k": 649,
+      "n": 722,
+      "ci": [
+        0.8753,
+        0.9193
+      ],
+      "abstention_rate": 0.0042
+    },
+    "molnextr": {
+      "accuracy": 0.8352,
+      "k": 603,
+      "n": 722,
+      "ci": [
+        0.8068,
+        0.8609
+      ],
+      "abstention_rate": 0.0429
+    },
+    "molscribe": {
+      "accuracy": 0.8241,
+      "k": 595,
+      "n": 722,
+      "ci": [
+        0.7951,
+        0.8505
+      ],
+      "abstention_rate": 0.054
+    },
+    "ocsrglyph": {
+      "accuracy": 0.7659,
+      "k": 553,
+      "n": 722,
+      "ci": [
+        0.734,
+        0.7957
+      ],
+      "abstention_rate": 0.0526
+    }
+  },
+  "patterns": {
+    "4": {
+      "k": 462,
+      "n": 462,
+      "p": 0.9989,
+      "ci": [
+        0.9946,
+        1.0
+      ]
+    },
+    "3/1": {
+      "k": 133,
+      "n": 135,
+      "p": 0.9816,
+      "ci": [
+        0.9533,
+        0.9969
+      ]
+    },
+    "2/1/1": {
+      "k": 46,
+      "n": 57,
+      "p": 0.8017,
+      "ci": [
+        0.6909,
+        0.8929
+      ]
+    },
+    "1/1/1/1": {
+      "k": 21,
+      "n": 56,
+      "p": 0.3772,
+      "ci": [
+        0.2571,
+        0.5055
+      ]
+    },
+    "2/2": {
+      "k": 7,
+      "n": 12,
+      "p": null,
+      "ci": [
+        0.3119,
+        0.8195
+      ]
+    }
+  },
+  "label_rule": "Where p is present, the consumer may quote it. Where p is null (n below min_n_for_point_estimate), no number is quoted: the label comes from the Jeffreys estimate (k+0.5)/(n+1), the same quantity p reports above the floor, so one rule covers the whole table.",
+  "model_performance_rule": "Per-model accuracy on the same n_items images, used when a backend runs one model and there is no agreement pattern to look up. 'accuracy' is the raw rate; 'ci' is the 95% Jeffreys interval; 'abstention_rate' is how often the model returned no parseable SMILES.",
+  "note": "Valid ONLY for this exact four-model committee. Refit with chemgraph.tools.ocsr_calibrate for any other set."
+}

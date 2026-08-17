@@ -111,6 +111,8 @@ where = ["src/"]
 
 [tool.setuptools.package-data]
 "chemgraph.eval" = ["data/*.json"]
+"chemgraph.tools" = ["*.json"]
+"chemgraph.tools.ocsr_workers" = ["*.py", "*.sh", "*.txt"]
 "chemgraph.academy.campaigns" = [
     "example-*/*.json",
     "example-*/*.jsonc",

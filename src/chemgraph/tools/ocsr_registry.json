@@ -1,0 +1,132 @@
+{
+  "schema": 1,
+  "_comment": "Registry of OCSR models. To wire in a new specialist: add an entry under 'specialists' and drop its worker script into chemgraph/tools/ocsr_workers/. No Python change is needed -- the backend, the installer, the listing, and ensemble membership are all derived from this file. Measured accuracy lives in the calibration table, not here, next to the k and n that produced it; run chemgraph.tools.ocsr_calibrate to fit one.",
+  "specialists": {
+    "decimer": {
+      "latency_s": 0.73,
+      "note": "Most accurate single model. The default for backend='auto'.",
+      "worker": "decimer_infer.py",
+      "install": {
+        "script": "build_decimer.sh",
+        "weights": "~/.data/DECIMER-V2",
+        "env": "~/ocsr-decimer",
+        "python": "3.10",
+        "size_gb": 2.6,
+        "weights_gb": 0.66
+      },
+      "install_note": "The default backend. Install this one first; it is enough for backend='auto'."
+    },
+    "molnextr": {
+      "latency_s": 4.35,
+      "note": "Strong second. Slowest of the four.",
+      "worker": "molnextr_infer.py",
+      "install": {
+        "script": "build_molnextr.sh",
+        "weights": "~/ocsr-weights/molnextr/molnextr_best.pth",
+        "env": "~/ocsr-molnextr",
+        "python": "3.8",
+        "size_gb": 6.1,
+        "weights_gb": 1.1
+      },
+      "install_note": "Only needed for backend='ensemble'. Also clones a source tree to ~/opt."
+    },
+    "molscribe": {
+      "latency_s": 4.98,
+      "note": "Its worker runs with PYTHONNOUSERSITE=1: a user-site numpy 2 shadows the env and breaks torch 1.13 at model load.",
+      "worker": "molscribe_infer.py",
+      "install": {
+        "script": "build_molscribe.sh",
+        "weights": "~/ocsr-weights/molscribe/swin_base_char_aux_1m.pth",
+        "env": "~/ocsr-molscribe",
+        "python": "3.10",
+        "size_gb": 4.4,
+        "weights_gb": 1.1
+      },
+      "install_note": "Only needed for backend='ensemble'. Pins numpy<2; see the script."
+    },
+    "ocsrglyph": {
+      "latency_s": 0.3,
+      "note": "Fastest and lightest of the four. Useful when latency matters more.",
+      "worker": "ocsrglyph_infer.py",
+      "install": {
+        "script": "build_ocsrglyph.sh",
+        "weights": "~/ocsr-weights/ocsrglyph/model.pth",
+        "env": "~/ocsr-glyph",
+        "python": "3.11",
+        "size_gb": 1.8,
+        "weights_gb": 0.37
+      },
+      "install_note": "Only needed for backend='ensemble'. Lightest and fastest of the four."
+    }
+  },
+  "vision_llms": {
+    "alcf": {
+      "meta-llama/Llama-4-Maverick-17B-128E-Instruct": {
+        "note": "Its endpoint was cold every time it was probed on 2026-08-14; check before relying on it."
+      },
+      "meta-llama/Llama-4-Scout-17B-16E-Instruct": {
+        "note": ""
+      },
+      "google/gemma-4-31B-it": {
+        "note": "Sees images and drives tool calls; read the example correctly on 2026-08-14."
+      },
+      "google/gemma-3-27b-it": {
+        "note": ""
+      },
+      "google/gemma-4-26B-A4B-it": {
+        "note": "Not probed; check before relying on it."
+      },
+      "google/gemma-4-E4B-it": {
+        "note": "Sees images and drives tool calls on 2026-08-14, but read the example wrong."
+      },
+      "meta-llama/Llama-3.2-90B-Vision-Instruct": {
+        "note": "Sees images and drives tool calls on 2026-08-14, but read the example wrong. The one model ChemGraph's '# Vision Language Models' comment labels; do not assume it is the best choice."
+      }
+    },
+    "shim": {
+      "argo:claude-opus-5": {
+        "wire_name": "claudeopus5",
+        "note": "Read the example correctly on 2026-08-14. The default for backend='shim'."
+      },
+      "argo:claude-sonnet-5": {
+        "wire_name": "claudesonnet5",
+        "note": "Read the example correctly on 2026-08-14, and the fastest of these."
+      },
+      "argo:claude-opus-4.8": {
+        "wire_name": "claudeopus48",
+        "note": "Read the example correctly on 2026-08-14."
+      },
+      "argo:claude-opus-4.6": {
+        "wire_name": "claudeopus46"
+      },
+      "argo:claude-sonnet-4.6": {
+        "wire_name": "claudesonnet46"
+      },
+      "argo:gpt-5.5": {
+        "wire_name": "gpt55"
+      },
+      "argo:gpt-5.4": {
+        "wire_name": "gpt54"
+      },
+      "argo:gpt-4.1": {
+        "wire_name": "gpt41"
+      },
+      "argo:gpt-4o": {
+        "wire_name": "gpt4o",
+        "note": "Read the example correctly once and wrong once on 2026-08-14."
+      },
+      "argo:gemini-2.5-flash": {
+        "wire_name": "gemini25flash"
+      },
+      "argo:gpt-5.6-sol": {
+        "wire_name": "gpt56sol",
+        "note": "Read the example correctly on 2026-08-14."
+      }
+    }
+  },
+  "defaults": {
+    "specialist": "decimer",
+    "alcf": "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+    "shim": "argo:claude-opus-5"
+  }
+}
