@@ -15,6 +15,7 @@ import pathlib
 import pytest
 
 from chemgraph.tools import ocsr_backends as backends
+from chemgraph.tools import ocsr_calibrate as calibrate
 from chemgraph.tools import ocsr_core as core
 from chemgraph.tools import ocsr_models as models
 from chemgraph.tools import ocsr_tools as tools
@@ -486,3 +487,112 @@ def test_the_ensemble_votes_by_the_order_the_table_records(monkeypatch, png, tmp
     assert r["smiles"] == "CCO"          # molnextr wins, as the table says
     assert r["confidence"] == round(77.5 / 101, 4)
     assert r["basis"] == "agreement"
+
+# -------------------------------------------------------------------------
+# Fitting a calibration table on your own labelled images
+# -------------------------------------------------------------------------
+def _rows(*specs):
+    """(per-model predictions, reference) pairs, the shape fit_calibration takes."""
+    out = []
+    for preds, ref in specs:
+        out.append(([{"model": m, "smiles": s, "ok": s is not None, "error": "",
+                      "infer_s": 0.1} for m, s in preds.items()], ref))
+    return out
+
+
+def test_fit_calibration_counts_what_actually_happened():
+
+    # 25 unanimous-and-right, 5 unanimous-and-wrong: the bucket should say 5/6ish.
+    rows = _rows(*([({"a": "CCO", "b": "CCO"}, "CCO")] * 25
+                   + [({"a": "CCN", "b": "CCN"}, "CCO")] * 5))
+    t = calibrate.fit_calibration(rows, ["a", "b"], min_n=20)
+    cell = t["patterns"]["2"]
+    assert (cell["k"], cell["n"]) == (25, 30)
+    assert 0.80 < cell["p"] < 0.85       # Jeffreys on 25/30
+    assert cell["ci"][0] < cell["p"] < cell["ci"][1]
+    assert t["committee"] == ["a", "b"]
+
+
+def test_a_fitted_table_is_usable_by_confidence():
+    """Round trip: what the fitter writes, the reader must understand."""
+
+    t = calibrate.fit_calibration(_rows(*([({"a": "CCO", "b": "CCO"}, "CCO")] * 40)),
+                            ["a", "b"], min_n=20)
+    c = core.confidence("2", t)
+    assert c["p"] is not None
+    assert c["reason"] is None
+    assert c["label"] in ("unanimous", "strong", "weak", "conflicting")
+# ---------------------------------------------------------------------------
+# The ocsr workflow
+# ---------------------------------------------------------------------------
+
+
+def test_report_renders_the_shipped_table():
+    """The fitter's own report crashed on the table ChemGraph ships.
+
+    It read cell["label"], which fit_calibration writes only above the sample floor
+    and the shipped table does not carry at all. Everything displayed now comes from
+    confidence(), the same call the tool makes, so the report cannot drift from it.
+    """
+    from chemgraph.tools import ocsr_calibrate as calibrate
+
+    text = calibrate.report(core.load_calibration(), 20)
+    assert "unanimous" in text
+    assert "low_n_conflicting" in text  # the 2/2 bucket, below the floor
+
+    # A table with no ci at all is valid; rendering it must not raise either.
+    thin = {"committee": ["a"], "n_items": 5, "scoring": "stereo_blind",
+            "patterns": {"1": {"k": 3, "n": 5}}}
+    core._validate_calibration(thin, "test")
+    assert "no interval" in calibrate.report(thin, 20)
+
+
+def test_the_fitter_withholds_a_number_below_the_sample_floor():
+    """False precision is the thing the floor exists to prevent.
+
+    A bucket of seven with a quoted decimal reads as a measurement; its interval is
+    50 points wide.
+    """
+    rows = _rows(*[({"a": "CCO", "b": "CCO"}, "CCO")] * 7)
+    table = calibrate.fit_calibration(rows, ["a", "b"], min_n=20)
+    assert table["patterns"]["2"]["n"] == 7
+    assert table["patterns"]["2"]["p"] is None
+    assert core.confidence("2", table)["label"].startswith("low_n_")
+
+    plenty = calibrate.fit_calibration(
+        _rows(*[({"a": "CCO", "b": "CCO"}, "CCO")] * 25), ["a", "b"], min_n=20)
+    assert plenty["patterns"]["2"]["p"] is not None
+
+
+def test_the_tie_break_comes_from_the_data_not_the_argument_order():
+    """--models is a set of names; nobody should have to know it is also a ranking.
+
+    The order decides who wins an even split, and the all-different bucket's number
+    measures how often that first model was right. Taking it from the order a caller
+    happened to type would bake an arbitrary choice into their table. It is ranked by
+    the solo accuracy measured on their own images instead, and --tie-break overrides.
+    """
+    data = _rows(*([({"decimer": "CCC", "molnextr": "CCO"}, "CCO")] * 7
+                   + [({"decimer": "CCO", "molnextr": "CCO"}, "CCO")] * 2
+                   + [({"decimer": "CCO", "molnextr": "CCC"}, "CCO")] * 1))
+    # molnextr is right 9/10 here, decimer 3/10, so molnextr must break ties
+    for order in (["decimer", "molnextr"], ["molnextr", "decimer"]):
+        table = calibrate.fit_calibration(data, order)
+        assert core.tie_break_order(table) == ["molnextr", "decimer"], order
+
+    explicit = calibrate.fit_calibration(data, ["decimer", "molnextr"],
+                                         tie_break=["decimer", "molnextr"])
+    assert core.tie_break_order(explicit) == ["decimer", "molnextr"]
+
+
+def test_validate_votes_by_the_table_being_checked():
+    """Comparing observed accuracy against a table means voting the table's way."""
+    table = {
+        "committee": ["a", "b"], "tie_break": "model-priority: b,a",
+        "n_items": 1, "scoring": "stereo_blind",
+        "patterns": {"1/1": {"k": 10, "n": 12, "p": round(10.5 / 13, 4)}},
+    }
+    core._validate_calibration(table, "test")
+    # b is right, a is wrong: voting b-first scores 1/1, voting a-first scores 0/1.
+    rows = _rows(({"a": "CCC", "b": "CCO"}, "CCO"))
+    assert "1/1 = 100%" in calibrate.validate(rows, ["a", "b"], table)
