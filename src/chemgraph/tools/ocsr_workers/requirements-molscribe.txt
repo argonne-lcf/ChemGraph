@@ -1,0 +1,22 @@
+# MolScribe specialist OCSR model. Python 3.10, torch 1.13.
+#
+#   conda create -p ~/ocsr-molscribe python=3.10 -y
+#   ~/ocsr-molscribe/bin/pip install -r requirements-molscribe.txt
+#
+# ORDER MATTERS. Install MolScribe first, then re-pin opencv and numpy LAST:
+# opencv>=4.11 drags numpy 2.x back in, and MolScribe's torch 1.13 is compiled
+# against numpy 1.x. Under numpy 2 it does not fail at import; torch.from_numpy
+# raises "Numpy is not available" at inference time, silently, until you predict.
+#
+# Weights: swin_base_char_aux_1m.pth (~1.1 GB) from HuggingFace yujieq/MolScribe,
+# fetched by build_molscribe.sh into ~/ocsr-weights/molscribe/.
+#
+# Roughly 4.4 GB installed.
+
+MolScribe
+huggingface_hub
+
+# these three must come last, in this order
+opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
