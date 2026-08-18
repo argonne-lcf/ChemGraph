@@ -1,6 +1,7 @@
 import importlib.util
 import pytest
 import numpy as np
+from pydantic import ValidationError
 from chemgraph.schemas.calculators.emt_calc import EMTCalc
 from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
@@ -39,6 +40,69 @@ def test_default_calculator_is_in_detected_available_calculators():
     assert available
     assert "Calculator availability detected during ChemGraph initialization" in context
     assert default in context
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("mace") is None, reason="MACE not installed"
+)
+@pytest.mark.parametrize("calculator_type", ["mace_mp", "mace_off", "mace_anicc"])
+@pytest.mark.parametrize(
+    ("schema_name", "structure_input"),
+    [
+        ("ASEInputSchema", {"input_structure_file": "methane.xyz"}),
+        (
+            "ase_input_schema_ensemble",
+            {"input_structure_directory": "structures"},
+        ),
+    ],
+)
+def test_mace_variant_preserved_by_ase_schema(
+    calculator_type, schema_name, structure_input
+):
+    from chemgraph.schemas import ase_input
+
+    schema = getattr(ase_input, schema_name)
+    params = schema(
+        **structure_input,
+        calculator={"calculator_type": calculator_type, "device": "cpu"},
+    )
+
+    assert isinstance(params.calculator, MaceCalc)
+    assert params.calculator.calculator_type == calculator_type
+    assert params.model_dump()["calculator"]["calculator_type"] == calculator_type
+
+
+@pytest.mark.parametrize("calculator_type", ["mace_invalid", "Mace", "MaceCalc"])
+def test_mace_calculator_schema_rejects_invalid_variant(calculator_type):
+    with pytest.raises(ValidationError):
+        MaceCalc(calculator_type=calculator_type)
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("mace") is None, reason="MACE not installed"
+)
+@pytest.mark.parametrize("calculator_type", ["mace_invalid", "Mace", "MaceCalc"])
+@pytest.mark.parametrize(
+    ("schema_name", "structure_input"),
+    [
+        ("ASEInputSchema", {"input_structure_file": "methane.xyz"}),
+        (
+            "ase_input_schema_ensemble",
+            {"input_structure_directory": "structures"},
+        ),
+    ],
+)
+def test_ase_schema_rejects_invalid_mace_variant(
+    calculator_type, schema_name, structure_input
+):
+    from chemgraph.schemas import ase_input
+
+    schema = getattr(ase_input, schema_name)
+    with pytest.raises(ValidationError):
+        schema(
+            **structure_input,
+            calculator={"calculator_type": calculator_type, "device": "cpu"},
+        )
 
 
 def test_emt_calculator():
