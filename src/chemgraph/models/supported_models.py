@@ -15,46 +15,85 @@ supported_openai_models = [
 ]
 # Ollama models that are supported
 supported_ollama_models = ["llama3.2", "llama3.1"]
-# Default ALCF inference API base URL (Sophia cluster, vLLM).
+# ALCF inference API base URLs. Each cluster is a separate endpoint.
+# Default: Sophia (NVIDIA A100, vLLM).
 ALCF_DEFAULT_BASE_URL = (
     "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
 )
+# Minerva (NVIDIA B200).
+ALCF_MINERVA_BASE_URL = (
+    "https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1"
+)
+# Metis (SambaNova SN40L). Chat completions only -- ALCF does not offer tool
+# calling on this cluster, so ChemGraph's tool-driven workflows cannot use it.
+ALCF_METIS_BASE_URL = (
+    "https://inference-api.alcf.anl.gov/resource_server/metis/api/v1"
+)
 
-# ALCF models available through the ALCF inference endpoints.
+# ALCF models -- all use the "alcf:" prefix (e.g. "alcf:inkling-bf16").
+# The prefix routes the request inside ChemGraph and is stripped before the
+# model name is sent to the endpoint. The cluster serving a model decides its
+# base URL; anything not listed under another cluster below uses Sophia.
 # See https://docs.alcf.anl.gov/services/inference-endpoints/#available-models
 supported_alcf_models = [
+    # -- Sophia --------------------------------------------------------------
     # Meta Llama Family
-    "meta-llama/Meta-Llama-3.1-8B-Instruct",
-    "meta-llama/Meta-Llama-3.1-70B-Instruct",
-    "meta-llama/Meta-Llama-3.1-405B-Instruct",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "meta-llama/Llama-4-Scout-17B-16E-Instruct",
-    "meta-llama/Llama-4-Maverick-17B-128E-Instruct",
+    "alcf:meta-llama/Meta-Llama-3.1-8B-Instruct",
+    "alcf:meta-llama/Meta-Llama-3.1-70B-Instruct",
+    "alcf:meta-llama/Meta-Llama-3.1-405B-Instruct",
+    "alcf:meta-llama/Llama-3.3-70B-Instruct",
+    "alcf:meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "alcf:meta-llama/Llama-4-Maverick-17B-128E-Instruct",
     # Mistral Family
-    "mistralai/Mistral-Large-Instruct-2407",
-    "mistralai/Mixtral-8x22B-Instruct-v0.1",
-    "mistralai/Devstral-2-123B-Instruct-2512",
+    "alcf:mistralai/Mistral-Large-Instruct-2407",
+    "alcf:mistralai/Mixtral-8x22B-Instruct-v0.1",
+    "alcf:mistralai/Devstral-2-123B-Instruct-2512",
     # OpenAI Family
-    "openai/gpt-oss-20b",
-    "openai/gpt-oss-120b",
+    "alcf:openai/gpt-oss-20b",
+    "alcf:openai/gpt-oss-120b",
     # Aurora GPT Family
-    "argonne/AuroraGPT-IT-v4-0125",
-    "argonne/AuroraGPT-Tulu3-SFT-0125",
-    "argonne/AuroraGPT-DPO-UFB-0225",
-    "argonne/AuroraGPT-KTO-UFB-0325",
+    "alcf:argonne/AuroraGPT-IT-v4-0125",
+    "alcf:argonne/AuroraGPT-Tulu3-SFT-0125",
+    "alcf:argonne/AuroraGPT-DPO-UFB-0225",
+    "alcf:argonne/AuroraGPT-KTO-UFB-0325",
     # Google Family
-    "google/gemma-3-27b-it",
-    "google/gemma-4-26B-A4B-it",
-    "google/gemma-4-31B-it",
-    "google/gemma-4-E4B-it",
+    "alcf:google/gemma-3-27b-it",
+    "alcf:google/gemma-4-26B-A4B-it",
+    "alcf:google/gemma-4-31B-it",
+    "alcf:google/gemma-4-E4B-it",
     # Other Models
-    "allenai/Llama-3.1-Tulu-3-405B",
-    "arcee-ai/Trinity-Large-Thinking-W4A16",
-    "nvidia/nemotron-3-super-120b",
-    "mgoin/Nemotron-4-340B-Instruct-hf",
-    "AstroMLab/AstroSage-70B-20251009",
+    "alcf:allenai/Llama-3.1-Tulu-3-405B",
+    "alcf:arcee-ai/Trinity-Large-Thinking-W4A16",
+    "alcf:nvidia/nemotron-3-super-120b",
+    "alcf:mgoin/Nemotron-4-340B-Instruct-hf",
+    "alcf:AstroMLab/AstroSage-70B-20251009",
     # Vision Language Models
-    "meta-llama/Llama-3.2-90B-Vision-Instruct",
+    "alcf:meta-llama/Llama-3.2-90B-Vision-Instruct",
+    # -- Minerva -------------------------------------------------------------
+    "alcf:nemotron-3-ultra",
+    "alcf:inkling-bf16",
+    # -- Metis (no tool calling) ---------------------------------------------
+    "alcf:gpt-oss-120b",
+    "alcf:Mistral-Large-3-675B-Instruct-2512",
+    "alcf:gemma-4-31B-it",
+]
+
+# Subsets of supported_alcf_models served by a cluster other than the Sophia
+# default, so they resolve to that cluster's base URL. Check which cluster
+# serves a model with:
+#   curl -H "Authorization: Bearer $ALCF_ACCESS_TOKEN" \
+#     https://inference-api.alcf.anl.gov/resource_server/list-endpoints
+supported_alcf_minerva_models = [
+    "alcf:nemotron-3-ultra",
+    "alcf:inkling-bf16",
+]
+# Metis reuses upstream names that Sophia carries with an org prefix
+# ("alcf:gpt-oss-120b" here vs "alcf:openai/gpt-oss-120b" on Sophia), so the
+# two are distinct entries and route to different clusters.
+supported_alcf_metis_models = [
+    "alcf:gpt-oss-120b",
+    "alcf:Mistral-Large-3-675B-Instruct-2512",
+    "alcf:gemma-4-31B-it",
 ]
 # Anthropic models
 supported_anthropic_models = [
