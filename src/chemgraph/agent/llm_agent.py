@@ -72,8 +72,10 @@ from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
 from chemgraph.graphs.rag_agent import construct_rag_agent_graph
 from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
 from chemgraph.graphs.molecular_docking import construct_molecular_docking_graph
+from chemgraph.graphs.ocsr_agent import construct_ocsr_graph
 from chemgraph.prompt.rag_prompt import rag_agent_prompt
 from chemgraph.prompt.molecular_docking_prompt import molecular_docking_prompt
+from chemgraph.prompt.ocsr_prompt import ocsr_agent_prompt
 from chemgraph.prompt.xanes_prompt import (
     xanes_single_agent_prompt as default_xanes_single_agent_prompt,
     xanes_formatter_prompt as default_xanes_formatter_prompt,
@@ -514,6 +516,7 @@ class ChemGraph:
             "rag_agent": {"constructor": construct_rag_agent_graph},
             "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
             "molecular_docking": {"constructor": construct_molecular_docking_graph},
+            "ocsr": {"constructor": construct_ocsr_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -622,6 +625,29 @@ class ChemGraph:
                 max_retries=self.max_retries,
                 human_supervised=self.human_supervised,
                 terminal_tool_names=self.terminal_tool_names,
+            )
+        elif self.workflow_type == "ocsr":
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm,
+                system_prompt=self.system_prompt
+                if not prompt_is_default
+                else ocsr_agent_prompt,
+                structured_output=self.structured_output,
+                formatter_prompt=self.formatter_prompt,
+                tools=self.tools,
+                max_retries=self.max_retries,
+                human_supervised=self.human_supervised,
+                terminal_tool_names=self.terminal_tool_names,
+            )
+        else:
+            # A workflow in workflow_map with no branch above leaves self.workflow
+            # unset, and the failure surfaces one call later as "'ChemGraph' object
+            # has no attribute 'workflow'", which names neither the workflow nor the
+            # missing branch. Registering a graph takes two edits, so say so here.
+            raise ValueError(
+                f"workflow {self.workflow_type!r} is in workflow_map but has no "
+                f"construction branch in ChemGraph.__init__; add one next to the "
+                f"other elif branches."
             )
 
     def visualize(self):

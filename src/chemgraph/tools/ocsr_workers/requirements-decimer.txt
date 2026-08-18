@@ -1,0 +1,14 @@
+# DECIMER specialist OCSR model. Python 3.10, TensorFlow.
+#
+#   conda create -p ~/ocsr-decimer python=3.10 -y
+#   ~/ocsr-decimer/bin/pip install -r requirements-decimer.txt
+#
+# or just run build_decimer.sh, which does the above plus the weight pre-fetch.
+#
+# Weights (~664 MB) are NOT listed here: DECIMER downloads them from Zenodo to
+# ~/.data/DECIMER-V2 on first use. On a host with no outbound network that first
+# call hangs until the startup timeout, so pre-fetch it with the build script.
+#
+# Roughly 2.6 GB installed.
+
+decimer
