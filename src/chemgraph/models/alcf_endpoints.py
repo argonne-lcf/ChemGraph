@@ -5,12 +5,40 @@ from langchain_openai import ChatOpenAI
 
 from chemgraph.models.supported_models import (
     ALCF_DEFAULT_BASE_URL,
+    ALCF_METIS_BASE_URL,
     ALCF_MINERVA_BASE_URL,
+    supported_alcf_metis_models,
     supported_alcf_minerva_models,
     supported_alcf_models,
 )
 
 logger = logging.getLogger(__name__)
+
+ALCF_MODEL_PREFIX = "alcf:"
+
+
+def _normalize_alcf_model(model_name: str) -> str:
+    """Strip the ``alcf:`` prefix to get the name the endpoint expects.
+
+    ALCF serves each model under its upstream ID.  The prefix only selects the
+    provider inside ChemGraph, so it is removed before the request is sent.
+
+    Parameters
+    ----------
+    model_name : str
+        Requested model identifier, normally ``alcf:``-prefixed.
+
+    Returns
+    -------
+    str
+        Model name to send to the endpoint.
+    """
+    if not model_name.startswith(ALCF_MODEL_PREFIX):
+        return model_name
+
+    stripped = model_name.removeprefix(ALCF_MODEL_PREFIX)
+    logger.info("Stripped alcf: prefix '%s' -> '%s'", model_name, stripped)
+    return stripped
 
 
 def load_alcf_model(
@@ -80,16 +108,21 @@ def load_alcf_model(
     if not base_url:
         if model_name in supported_alcf_minerva_models:
             base_url = ALCF_MINERVA_BASE_URL
+        elif model_name in supported_alcf_metis_models:
+            base_url = ALCF_METIS_BASE_URL
         else:
             base_url = ALCF_DEFAULT_BASE_URL
 
+    # The endpoint knows the model by its upstream ID, not the prefixed one.
+    wire_model = _normalize_alcf_model(model_name)
+
     try:
         llm = ChatOpenAI(
-            model=model_name,
+            model=wire_model,
             base_url=base_url,
             api_key=api_key,
         )
-        logger.info(f"Successfully loaded ALCF model: {model_name} from {base_url}")
+        logger.info(f"Successfully loaded ALCF model: {wire_model} from {base_url}")
     except Exception as e:
         logger.error(f"Failed to load ALCF model '{model_name}': {e}")
         raise
