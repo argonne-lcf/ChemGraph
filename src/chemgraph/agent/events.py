@@ -8,6 +8,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 logger = logging.getLogger(__name__)
 
 EventCallback = Callable[[str, dict], None]
+SUBAGENT_METADATA_KEY = "chemgraph_subagent"
 
 
 def _serialized_name(serialized: Any) -> str | None:
@@ -121,12 +122,16 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
         self._emit("llm_call_failed", {"error": repr(error)})
 
     def on_tool_start(self, serialized, input_str, **kwargs) -> None:
+        payload = {
+            "tool_name": _serialized_name(serialized),
+            "arguments": _serialize_state(input_str),
+        }
+        metadata = kwargs.get("metadata")
+        if isinstance(metadata, dict) and metadata.get(SUBAGENT_METADATA_KEY):
+            payload["subagent_name"] = str(metadata[SUBAGENT_METADATA_KEY])
         self._emit(
             "tool_call_started",
-            {
-                "tool_name": _serialized_name(serialized),
-                "arguments": _serialize_state(input_str),
-            },
+            payload,
         )
 
     def on_tool_end(self, output, **kwargs) -> None:

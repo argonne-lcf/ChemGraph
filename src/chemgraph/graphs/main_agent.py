@@ -8,7 +8,7 @@ from typing import Any
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
 from deepagents.backends.protocol import BackendProtocol
-from deepagents.middleware import SubAgentMiddleware
+from deepagents.middleware import FilesystemMiddleware, SubAgentMiddleware
 from deepagents.middleware.subagents import CompiledSubAgent
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, ToolMessage, convert_to_messages
@@ -17,6 +17,7 @@ from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphInterrupt
 
+from chemgraph.agent.events import SUBAGENT_METADATA_KEY
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 
@@ -42,6 +43,8 @@ Rules:
    appropriate only for independent read-only work.
 7. If deepagent is available, do not generate the code or file edits yourself;
    delegate those tasks to deepagent.
+8. Use `read_file` to inspect checkpoint-backed files returned by subagents
+   when their contents are needed. This tool cannot access host files.
 """
 
 
@@ -107,10 +110,17 @@ def _adapt_subagent(
 ) -> CompiledSubAgent:
     runnable = spec["runnable"]
 
+    def child_config(config: RunnableConfig) -> RunnableConfig:
+        adapted_config = dict(config)
+        metadata = dict(adapted_config.get("metadata") or {})
+        metadata[SUBAGENT_METADATA_KEY] = spec["name"]
+        adapted_config["metadata"] = metadata
+        return adapted_config
+
     def invoke(state: Any, config: RunnableConfig) -> Any:
         run_id = recorder.start(spec["name"], state, config) if recorder else None
         try:
-            result = runnable.invoke(state, config=config)
+            result = runnable.invoke(state, config=child_config(config))
         except GraphInterrupt:
             if recorder and run_id:
                 recorder.interrupted(run_id)
@@ -127,7 +137,7 @@ def _adapt_subagent(
     async def ainvoke(state: Any, config: RunnableConfig) -> Any:
         run_id = recorder.start(spec["name"], state, config) if recorder else None
         try:
-            result = await runnable.ainvoke(state, config=config)
+            result = await runnable.ainvoke(state, config=child_config(config))
         except GraphInterrupt:
             if recorder and run_id:
                 recorder.interrupted(run_id)
@@ -188,8 +198,12 @@ def _validate_main_tools(main_tools: Sequence[BaseTool]) -> None:
     names = [getattr(item, "name", "") for item in main_tools]
     if any(not name for name in names):
         raise ValueError("Every supervisor tool must have a non-empty name.")
-    if "task" in names:
-        raise ValueError("Supervisor tool name 'task' is reserved for subagents.")
+    reserved = {"read_file", "task"}
+    if conflicts := sorted(reserved.intersection(names)):
+        formatted = ", ".join(repr(name) for name in conflicts)
+        raise ValueError(
+            f"Supervisor tool name(s) {formatted} are reserved for middleware."
+        )
     if len(names) != len(set(names)):
         raise ValueError("Supervisor tool names must be unique.")
 
@@ -280,15 +294,20 @@ def construct_main_agent_graph(
     validated_subagents = _validate_subagents(registered_subagents, subagent_recorder)
     supervisor_tools = list(main_tools or [])
     _validate_main_tools(supervisor_tools)
-    middleware = SubAgentMiddleware(
-        backend=StateBackend(),
+    state_backend = StateBackend()
+    filesystem_middleware = FilesystemMiddleware(
+        backend=state_backend,
+        tools=["read_file"],
+    )
+    subagent_middleware = SubAgentMiddleware(
+        backend=state_backend,
         subagents=validated_subagents,
     )
     return create_agent(
         model=llm,
         tools=supervisor_tools,
         system_prompt=system_prompt,
-        middleware=[middleware],
+        middleware=[filesystem_middleware, subagent_middleware],
         checkpointer=checkpointer if checkpointer is not None else InMemorySaver(),
         name="main_agent",
     )

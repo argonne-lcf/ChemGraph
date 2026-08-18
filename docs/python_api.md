@@ -60,6 +60,13 @@ session-oriented async methods. This API is
 intended for durable, interactive supervisor workflows; consult the class
 docstrings in the installed version for constructor and persistence options.
 
+`MainAgentSession` accepts an optional `on_event` callback with the signature
+`(event_name, payload)`. Tagged `tool_call_started` payloads include
+`subagent_name`, allowing callers to distinguish delegated tool activity from
+supervisor tools. The supervisor can use `read_file` for checkpoint-backed
+files returned by subagents, but this does not expose host files or session
+artifacts.
+
 For CLI use, the equivalent is:
 
 ```bash
