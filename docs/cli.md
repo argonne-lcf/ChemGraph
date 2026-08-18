@@ -68,6 +68,14 @@ available interactively:
 chemgraph run --interactive --workflow main_agent
 ```
 
+While a delegated subagent is working, the CLI prints each subagent tool call
+and its arguments as it starts. Supervisor-only delegation and file-read calls
+and tool results are not printed.
+
+The supervisor's `read_file` tool reads only files stored in the durable graph
+state by a subagent. It does not grant access to the host filesystem or to
+files written under `CHEMGRAPH_LOG_DIR`.
+
 The development workspace Deep Agent can execute broad filesystem and shell
 actions. Enable it only in a disposable, trusted workspace after reviewing the
 CLI warning.
