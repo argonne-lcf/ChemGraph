@@ -49,7 +49,17 @@ _LABEL_BANDS = ((0.99, "unanimous"), (0.95, "strong"), (0.70, "weak"))
 # longest in the OCSR benchmark is 224.
 _MAX_SMILES_CHARS = 4000
 
-_SMILES_LABEL_RE = re.compile(r"^\s*(?:smiles|answer|result)\s*[:=]\s*", re.IGNORECASE)
+# The optional quotes around the key let a JSON reply be read at the line level:
+# '"smiles": "CCO"' is the single most common structured form a vision LLM returns,
+# and reaching it here keeps the word-by-word fallback from matching an element
+# symbol out of an adjacent "elements" list first.
+# Matches a "smiles": "..." pair anywhere, so a one-line JSON reply is read from its
+# own field instead of from whatever token happens to parse first.
+_JSON_SMILES_RE = re.compile(r"[\"'](?:smiles)[\"']\s*:\s*[\"']([^\"']*)[\"']",
+                             re.IGNORECASE)
+
+_SMILES_LABEL_RE = re.compile(
+    r"^\s*[\"']?(?:smiles|answer|result)[\"']?\s*[:=]\s*", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------
@@ -221,6 +231,47 @@ def _looks_like_prose(s: str) -> bool:
     return s.isalpha() and s.islower() and not set(s) <= set("cnopsbrifhe")
 
 
+_WRAPPER_PAIRS = (("(", ")"), ("[", "]"), ("{", "}"), ("<", ">"))
+
+
+def _strip_wrappers(s: str) -> str:
+    """Peel markdown emphasis, quotes and balanced brackets off a candidate.
+
+    Emphasis is the dangerous case. ``*`` is RDKit's wildcard atom, so ``**CCO**``
+    parses as a valid five-atom molecule and would be returned as the prediction with
+    two extra atoms in it. Quotes and brackets only cost a match, since ``(CCO)``
+    fails to parse.
+
+    Brackets are peeled only when balanced across the whole string, because a SMILES
+    legitimately contains them: ``[Na+]`` and ``C(=O)O`` must survive unchanged.
+    """
+    s = s.strip()
+    while True:
+        before = s
+        s = s.strip("`\"'").strip()
+        while len(s) > 1 and s[0] == s[-1] == "*":
+            s = s[1:-1].strip()
+        for opener, closer in _WRAPPER_PAIRS:
+            if len(s) > 1 and s[0] == opener and s[-1] == closer:
+                inner = s[1:-1]
+                # Only unwrap an outer pair that encloses the whole string, so
+                # "C(=O)O" is left alone: its first "(" closes before the end.
+                depth = 0
+                encloses = True
+                for i, ch in enumerate(s):
+                    depth += (ch == opener) - (ch == closer)
+                    if depth == 0 and i < len(s) - 1:
+                        encloses = False
+                        break
+                # Keep the wrapped form when it is the one that parses: "[NH4+]" is
+                # a whole SMILES, and stripping its brackets leaves "NH4+", which is
+                # not. Unwrap only when doing so turns a non-molecule into one.
+                if encloses and canonicalize(s) is None:
+                    s = inner.strip()
+        if s == before:
+            return s
+
+
 def extract_smiles(raw_text: str | None) -> str | None:
     """Pull a SMILES out of a model's raw reply.
 
@@ -231,12 +282,19 @@ def extract_smiles(raw_text: str | None) -> str | None:
     if not raw_text or len(raw_text) > _MAX_SMILES_CHARS:
         return None
     text = re.sub(r"```[a-zA-Z]*\n?", "", raw_text).replace("```", "")
+    # A JSON object on one line never reaches the line-anchored label below, and the
+    # word-by-word fallback would take "C" out of an adjacent "elements" list first.
+    keyed = _JSON_SMILES_RE.search(text)
+    if keyed:
+        candidate = keyed.group(1).strip()
+        if candidate and not _looks_like_prose(candidate) and canonicalize(candidate):
+            return candidate
     for line in text.splitlines():
-        cleaned = _SMILES_LABEL_RE.sub("", line).strip().strip("`\"'").strip()
+        cleaned = _strip_wrappers(_SMILES_LABEL_RE.sub("", line))
         if cleaned and not _looks_like_prose(cleaned) and canonicalize(cleaned) is not None:
             return cleaned
     for token in text.split():
-        cleaned = token.strip("`\"'").rstrip(".,;!?")
+        cleaned = _strip_wrappers(token.rstrip(".,;!?"))
         if (
             len(cleaned) > 1
             and not _looks_like_prose(cleaned)

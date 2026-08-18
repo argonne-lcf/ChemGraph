@@ -568,3 +568,50 @@ def test_an_unusable_tie_break_is_rejected_at_load(tie_break, why):
     # Absent is fine: an older table falls back to its committee order.
     core._validate_calibration(
         {"committee": ["a", "b"], "patterns": {"1/1": {"k": 1, "n": 2}}}, "test")
+
+
+@pytest.mark.parametrize("raw, want", [
+    # Markdown emphasis is the dangerous wrapper: "*" is RDKit's wildcard atom, so
+    # "**CCO**" parses as a valid five-atom molecule and was returned as a prediction.
+    ("**CCO**", "CCO"),
+    ("The SMILES is **CC(=O)Oc1ccccc1C(=O)O**", "CC(=O)Oc1ccccc1C(=O)O"),
+    ("*CCO*", "CCO"),
+    ("The answer is `CCO`.", "CCO"),
+    # Parentheses and brackets only cost a match, since "(CCO)" fails to parse.
+    ("(CCO)", "CCO"),
+    ("This is aspirin (CC(=O)Oc1ccccc1C(=O)O).", "CC(=O)Oc1ccccc1C(=O)O"),
+    ("[CCO]", "CCO"),
+    # A JSON reply is the most common structured form, and the "elements" list
+    # beside it is full of strings that parse: "Cl" is a molecule.
+    ('{"elements": ["C", "H", "Cl"], "smiles": "CCCl"}', "CCCl"),
+    ('```json\n{\n  "elements": ["C", "O"],\n  "smiles": "CCO"\n}\n```', "CCO"),
+    # Brackets and parentheses are SMILES syntax and must survive untouched.
+    ("[NH4+]", "[NH4+]"),
+    ("[Na+].[Cl-]", "[Na+].[Cl-]"),
+    ("C(=O)O", "C(=O)O"),
+    ("[C@H](N)C", "[C@H](N)C"),
+    ("*CCO", "*CCO"),
+    ("**[Na+].[Cl-]**", "[Na+].[Cl-]"),
+])
+def test_wrappers_are_peeled_without_damaging_real_smiles(raw, want):
+    """A wrapped SMILES must come back unwrapped, and a real one untouched.
+
+    Silent when broken: emphasis markers are wildcard atoms, so the extracted string
+    stays a valid molecule with extra atoms in it, and every downstream check passes
+    while the answer is wrong.
+    """
+    assert core.extract_smiles(raw) == want
+
+
+def test_a_marked_up_refusal_is_not_a_molecule():
+    """A refusal wrapped in emphasis must not become a wildcard-atom molecule.
+
+    Measured on benchmark replies: an auth-error page yielded the SMILES "**", two
+    wildcard atoms. The LLM backend screens those by keyword before extraction, so
+    this is the guard for every other caller and for wording the screen misses.
+    """
+    denied = (
+        "⚠️ **IMPORTANT AUTHENTICATION NOTICE FROM ARGO** ⚠️\n\n"
+        "\U0001f6ab **ACCESS DENIED** \U0001f6ab\n\nThe username is not authorized."
+    )
+    assert core.extract_smiles(denied) is None
