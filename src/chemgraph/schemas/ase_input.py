@@ -176,9 +176,11 @@ def _coerce_calculator_payload(data: Any) -> Any:
                 f"Available calculators are: {available_calc_names}"
             )
 
+        calculator_class = available_calcs[calc_key]
         init_args = calc.copy()
-        init_args.pop("calculator_type", None)
-        data["calculator"] = available_calcs[calc_key](**init_args)
+        if calculator_class is not MaceCalc:
+            init_args.pop("calculator_type", None)
+        data["calculator"] = calculator_class(**init_args)
         return data
 
     elif hasattr(calc, "__class__"):

@@ -604,6 +604,23 @@ def create_main_agent_session(
         recursion_limit=agent.recursion_limit,
         session_store=agent.session_store,
         session_metadata=metadata,
+        on_event=_render_main_agent_event,
+    )
+
+
+def _render_main_agent_event(event: str, payload: dict[str, Any]) -> None:
+    """Render one tagged subagent tool call during interactive execution."""
+    if event != "tool_call_started":
+        return
+    subagent_name = payload.get("subagent_name")
+    if not subagent_name:
+        return
+    tool_name = payload.get("tool_name") or "unknown"
+    arguments = payload.get("arguments", "")
+    console.print(
+        f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent_name))}[/bold cyan] "
+        f"[dim]→[/dim] [bold]{escape(str(tool_name))}[/bold]"
+        f"({escape(str(arguments))})"
     )
 
 

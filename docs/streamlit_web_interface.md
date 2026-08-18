@@ -1,72 +1,76 @@
-!!! note
-    ChemGraph includes a Streamlit web UI for chat-driven chemistry workflows, live tool progress, structure visualization, report viewing, and saved-session management.
+# Streamlit interface
 
-## Run the app
+The web interface provides model/workflow selection, chat, molecular
+visualization, saved sessions, and access to run artifacts.
 
-Install ChemGraph, then set the provider credentials required by the model you plan to use:
+## Run from a source checkout
 
-```bash
-export OPENAI_API_KEY="..."
-export ANTHROPIC_API_KEY="..."
-export GEMINI_API_KEY="..."
-export GROQ_API_KEY="..."
-# ALCF inference endpoints:
-export ALCF_ACCESS_TOKEN="..."
-```
-
-Launch:
+The Streamlit entry point is currently distributed in the repository source
+tree rather than as a standalone console script:
 
 ```bash
+git clone https://github.com/argonne-lcf/ChemGraph.git
+cd ChemGraph
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 streamlit run src/ui/app.py
 ```
 
-Then open `http://localhost:8501`.
+Open `http://localhost:8501`.
 
-## Features
+## Run with Docker
 
-- Chat input for single-agent, multi-agent, Python REPL, gRASPA, and mock-agent workflows exposed in the UI.
-- Automatic agent initialization from the active `config.toml`.
-- Sidebar calculator availability panel showing calculators detected at startup and the selected default.
-- Live tool-call status while workflows run.
-- Optional human-supervised pauses through the `ask_human` tool.
-- 3D molecular visualization with `stmol` and `py3Dmol`, with table/XYZ fallback when the viewer is unavailable.
-- Math-aware assistant rendering for LaTeX-style equations, reaction arrows, and thermochemistry expressions.
-- Embedded and downloadable HTML reports, IR spectrum artifacts, normal-mode trajectory controls, and structure export.
-- Session browser backed by `~/.chemgraph/sessions.db`.
-- Configuration editor for `config.toml` plus session-only API key entry.
+```bash
+docker run --rm -it \
+  -e OPENAI_API_KEY \
+  -p 8501:8501 \
+  ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py \
+    --server.address=0.0.0.0 \
+    --server.port=8501
+```
 
-## Configuration
+Set the credential in the host environment first. See [Docker](docker_support.md)
+for artifact volumes and other modes.
 
-The UI reads `config.toml` from the working directory where Streamlit is launched. If the file is missing, the app creates one with defaults.
+## Configure the interface
 
-Use the Configuration page for persistent settings:
+When started from the checkout, the app's default configuration path is the
+repository-root `config.toml`. The model and workflow can then be changed in the
+sidebar. The interface exposes these workflow choices:
 
-- `general.model`: default model.
-- `general.workflow`: workflow type. The UI accepts `single_agent`, `multi_agent`, `python_relp`, `graspa`, and `mock_agent`; `python_repl` is accepted as an alias for `python_relp`.
-- `general.thread`: default LangGraph thread ID.
-- `general.recursion_limit`: workflow recursion limit.
-- `general.report`: generate HTML reports when supported.
-- `general.human_supervised`: allow the agent to pause and request human input.
-- `api.*.base_url` and `api.*.timeout`: provider endpoint settings.
-- `api.openai.argo_user`: optional Argo username; `ARGO_USER` is used only as a fallback.
+- `single_agent`
+- `multi_agent`
+- `python_relp`
+- `graspa`
+- `molecular_docking`
+- `mock_agent`
 
-API keys entered in the UI are applied as process environment variables for the current Streamlit process and are not saved to `config.toml`. For shared deployments, prefer server-side environment variables.
+Not every CLI workflow is available in Streamlit. Optional workflows still
+need their dependencies and external programs.
 
-## Sessions
+API credentials entered in the UI should be treated as secrets. Prefer
+environment variables for shared deployments, avoid placing tokens in a
+committed TOML file, and protect network access to the Streamlit server.
 
-The main sidebar lists recent saved sessions. Loading a session rebuilds the visible conversation history from `~/.chemgraph/sessions.db`; it does not restore a durable CLI `main_agent` graph. Deleting a durable local main-agent session removes its LangGraph checkpoints before removing its readable transcript. A new chat clears the visible conversation and starts a new saved session on the next successful exchange.
+## Sessions and artifacts
 
-The UI uses the active saved configuration for model, workflow, thread, report generation, and human-supervision settings. To change these settings, use the Configuration page, save the configuration, then click **Reload Config** or **Refresh Agents** on the main page.
+The UI maintains chat state and exposes prior sessions through its session
+controls. Chemistry tools write artifacts to the same session-aware log layout
+as the CLI. Set `CHEMGRAPH_LOG_DIR` before starting Streamlit to redirect them.
 
-## Artifacts
+## Common problems
 
-The UI detects structures and reports from agent messages. For IR calculations, it looks in the run directory referenced by the result message for files such as `ir_spectrum_<name>.png`, `frequencies_<name>.csv`, and `<name>_vib.<mode>.traj`.
+- **App path not found:** run the command from a source checkout root, or use
+  the Docker image.
+- **Model absent or unauthorized:** run `chemgraph models` and
+  `chemgraph run --check-keys` in the same environment.
+- **Calculator missing:** install its optional extra or external executable;
+  use EMT for a basic check.
+- **Remote browser cannot connect:** bind Streamlit to an appropriate interface
+  only on a trusted network and follow your site's port-forwarding policy.
+- **Unexpected config:** inspect the repository-root `config.toml` used by the
+  source app.
 
-## Troubleshooting
-
-- If 3D rendering is unavailable, install `stmol`:
-  `pip install stmol`
-- If model calls fail, verify API keys and endpoint settings in `config.toml`.
-- If Argo is used, ensure `api.openai.base_url` and optional `api.openai.argo_user` are configured.
-- If a local model endpoint is selected, the UI probes `/models` and blocks queries when the local endpoint is unreachable.
-- If the UI still shows an old model, workflow, or calculator default after editing configuration, click **Reload Config** or **Refresh Agents**.
+See [Troubleshooting](troubleshooting.md) for broader diagnostics.
