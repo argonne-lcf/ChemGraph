@@ -1,0 +1,45 @@
+# MolNexTR specialist OCSR model. Python 3.8, CPU torch.
+#
+#   conda create -p ~/ocsr-molnextr python=3.8 -y
+#   ~/ocsr-molnextr/bin/pip install torch==1.12.1 torchvision==0.13.1 \
+#       --index-url https://download.pytorch.org/whl/cpu
+#   ~/ocsr-molnextr/bin/pip install -r requirements-molnextr.txt
+#   ~/ocsr-molnextr/bin/pip install -e ~/opt/MolNexTR
+#
+# The source tree comes from https://github.com/CYF2000127/MolNexTR (not on PyPI).
+#
+# The torch line is separate because it needs the CPU wheel index. Aurora's GPUs
+# are Intel, not CUDA, so every worker runs on CPU.
+#
+# Needs the MolNexTR source tree as well (build_molnextr.sh clones it to
+# ~/opt/MolNexTR); the package is not on PyPI. If `pip install -e` fails the
+# worker still runs with PYTHONPATH pointed at the clone.
+#
+# Weights: molnextr_best.pth (~1.1 GB) from HuggingFace CYF200127/MolNexTR.
+#
+# Python 3.8 is not a hard requirement, only what the upstream repo was built
+# against; its torch 2.4/numpy 1.24 combination would run on 3.10 too. Do not
+# "modernize" it without re-running the benchmark: the calibration table
+# describes these exact interpreters.
+#
+# Roughly 6.1 GB installed.
+
+# Inlined from CYF2000127/MolNexTR@main rather than fetched with `-r <URL>`.
+# The URL form defeats the point of recording pins, since it tracks a moving
+# branch. Note the GitHub org is CYF2000127 while the HuggingFace org for the
+# weights is CYF200127: genuinely different names on different hosts, and both
+# build-script lines are correct as written.
+pytorch-lightning
+opencv-python
+pillow
+pyparsing
+six
+albumentations==1.1.0
+SmilesPE
+timm==0.4.12
+pyonmttok==1.37.1
+OpenNMT-py==2.2.0
+matplotlib
+rdkit
+pandas
+huggingface_hub

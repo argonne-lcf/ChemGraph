@@ -63,3 +63,4 @@ vib*.traj
 
 # Kubernetes secrets (keep secrets.yaml.template, ignore actual secrets)
 k8s/secrets.yaml
+cg_logs/
