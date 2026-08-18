@@ -50,6 +50,12 @@ spec:
               name: chemgraph-secrets
               key: groq-api-key
               optional: true
+        - name: OPENROUTER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chemgraph-secrets
+              key: openrouter-api-key
+              optional: true
         - name: ARGO_USER
           valueFrom:
             secretKeyRef:
