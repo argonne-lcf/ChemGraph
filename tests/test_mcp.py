@@ -1,6 +1,7 @@
 """Test suite for MCP servers."""
 
 from concurrent.futures import Future
+import importlib.util
 import inspect
 import json
 from pathlib import Path
@@ -315,6 +316,52 @@ def test_mace_ensemble_energy_prefers_canonical_key():
         )
         == -1.0
     )
+
+
+@pytest.mark.parametrize(
+    ("calculator_type", "expected_model"),
+    [("mace_mp", "medium-mpa-0"), ("mace_off", "medium")],
+)
+@pytest.mark.skipif(
+    importlib.util.find_spec("mace") is None, reason="MACE not installed"
+)
+def test_run_ase_core_records_default_mace_model(
+    monkeypatch, tmp_path, calculator_type, expected_model
+):
+    """Persist the MACE default name without changing calculator input."""
+    from ase import Atoms
+    from ase.calculators.emt import EMT
+    from ase.io import write as ase_write
+
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from chemgraph.schemas.calculators.mace_calc import MaceCalc
+    from chemgraph.tools import ase_core
+
+    input_path = tmp_path / "cu.xyz"
+    output_path = tmp_path / "output.json"
+    ase_write(input_path, Atoms("Cu", positions=[[0.0, 0.0, 0.0]]))
+
+    received_models = []
+
+    def fake_get_calculator(self):
+        received_models.append(self.model)
+        return EMT()
+
+    monkeypatch.setattr(MaceCalc, "get_calculator", fake_get_calculator)
+    params = ASEInputSchema.model_construct(
+        input_structure_file=str(input_path),
+        output_results_file=str(output_path),
+        driver="opt",
+        calculator=MaceCalc(calculator_type=calculator_type),
+    )
+
+    result = ase_core.run_ase_core(params)
+    output = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result["status"] == "success", result
+    assert received_models == [None]
+    assert params.calculator.model is None
+    assert output["simulation_input"]["calculator"]["model"] == expected_model
 
 
 @pytest.mark.asyncio

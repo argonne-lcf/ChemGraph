@@ -22,6 +22,7 @@ import numpy as np
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
+from chemgraph.schemas.calculators.mace_calc import MaceCalc
 
 logger = logging.getLogger(__name__)
 
@@ -308,6 +309,21 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     return ase_calculator, extra_info, calc
 
 
+def _simulation_input_for_output(
+    params: ASEInputSchema, calc_model: object
+) -> ASEInputSchema:
+    """Return simulation input enriched with output-only calculator metadata."""
+    if not isinstance(calc_model, MaceCalc) or calc_model.model is not None:
+        return params
+
+    model_name = calc_model.get_model_name_for_output()
+    if model_name is None:
+        return params
+
+    output_calculator = calc_model.model_copy(update={"model": model_name})
+    return params.model_copy(update={"calculator": output_calculator})
+
+
 # ---------------------------------------------------------------------------
 # Misc helpers (kept for backward compat / UI)
 # ---------------------------------------------------------------------------
@@ -513,6 +529,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             ),
         }
     logger.info("Calculator loaded successfully: %s", type(calc).__name__)
+    simulation_input = _simulation_input_for_output(params, calc_model)
 
     try:
         atoms = read(input_structure_file)
@@ -551,7 +568,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             input_structure_file=input_structure_file,
             converged=True,
             final_structure=final_structure,
-            simulation_input=params,
+            simulation_input=simulation_input,
             success=True,
             dipole_value=dipole,
             potential_energy=potential_energy,
@@ -804,7 +821,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             input_structure_file=input_structure_file,
             converged=converged,
             final_structure=final_structure,
-            simulation_input=params,
+            simulation_input=simulation_input,
             vibrational_frequencies=vib_data,
             thermochemistry=thermo_data,
             success=True,
