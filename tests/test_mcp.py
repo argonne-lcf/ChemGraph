@@ -224,8 +224,97 @@ def test_run_ase_core_creates_output_parent_directory(monkeypatch, tmp_path):
     result = ase_core.run_ase_core(params)
 
     assert result["status"] == "success", result
+    assert result["driver"] == "energy"
+    assert result["potential_energy"] == pytest.approx(-1.234)
+    assert result["single_point_energy"] == pytest.approx(-1.234)
+    assert result["energy_unit"] == "eV"
+    assert result["results_file"] == str(output_path.resolve())
     assert output_path.exists()
     assert output_path.parent.is_dir()
+
+
+@pytest.mark.parametrize(
+    ("converged", "expected_steps", "expected_message"),
+    [
+        (True, 2, "Geometry optimization converged."),
+        (
+            False,
+            7,
+            "Geometry optimization completed without convergence after 7 steps.",
+        ),
+    ],
+)
+def test_run_ase_core_reports_optimization_completion(
+    monkeypatch, tmp_path, converged, expected_steps, expected_message
+):
+    from ase import Atoms
+    import ase.optimize
+    from ase.io import write as ase_write
+
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from chemgraph.tools import ase_core
+
+    input_path = tmp_path / "h2.xyz"
+    output_path = tmp_path / "optimization.json"
+    ase_write(input_path, Atoms(numbers=[1, 1], positions=[[0, 0, 0], [0, 0, 0.74]]))
+
+    class _FakeCalc:
+        def get_potential_energy(self, _atoms=None, force_consistent=False):
+            return -1.234
+
+    class _FakeOptimizer:
+        def __init__(self, _atoms):
+            self.nsteps = 0
+
+        def run(self, *, fmax, steps):
+            self.nsteps = expected_steps
+            return converged
+
+    monkeypatch.setattr(
+        ase_core, "load_calculator", lambda _calculator: (_FakeCalc(), {}, None)
+    )
+    monkeypatch.setattr(ase.optimize, "BFGS", _FakeOptimizer)
+    params = ASEInputSchema(
+        input_structure_file=str(input_path),
+        output_results_file=str(output_path),
+        driver="opt",
+        steps=7,
+        calculator={"calculator_type": "emt"},
+    )
+
+    result = ase_core.run_ase_core(params)
+    output = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result["status"] == "success"
+    assert result["driver"] == "opt"
+    assert result["converged"] is converged
+    assert result["optimization_steps"] == expected_steps
+    assert result["potential_energy"] == pytest.approx(-1.234)
+    assert result["single_point_energy"] == pytest.approx(-1.234)
+    assert result["energy_unit"] == "eV"
+    assert result["results_file"] == str(output_path.resolve())
+    assert expected_message in result["message"]
+    assert output["potential_energy"] == pytest.approx(-1.234)
+    assert output["single_point_energy"] == pytest.approx(-1.234)
+
+
+def test_mace_ensemble_energy_prefers_canonical_key():
+    pytest.importorskip("parsl")
+    from chemgraph.mcp.mace_mcp_parsl import _result_potential_energy
+
+    assert (
+        _result_potential_energy(
+            {"potential_energy": -2.0, "single_point_energy": -1.0}
+        )
+        == -2.0
+    )
+    assert _result_potential_energy({"single_point_energy": -1.0}) == -1.0
+    assert (
+        _result_potential_energy(
+            {"potential_energy": None, "single_point_energy": -1.0}
+        )
+        == -1.0
+    )
 
 
 @pytest.mark.asyncio
@@ -283,10 +372,16 @@ async def test_run_ase_energy_simple(base_ase_input_dict):
         res = await client.call_tool("run_ase", {"params": input_data})
         result_dict = json.loads(res.content[0].text)
         assert result_dict["status"] == "success"
+        assert result_dict["driver"] == "energy"
+        assert result_dict["potential_energy"] == result_dict["single_point_energy"]
+        assert result_dict["energy_unit"] == "eV"
+        assert result_dict["results_file"] == str(
+            Path(input_data["output_results_file"]).resolve()
+        )
         assert "single_point_energy" in result_dict
 
         assert isinstance(res.content[0], TextContent)
-        assert "Simulation completed" in res.content[0].text
+        assert "Single-point energy calculation completed" in res.content[0].text
 
 
 @pytest.mark.asyncio

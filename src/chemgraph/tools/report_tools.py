@@ -477,8 +477,16 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         )
 
     # Energy
-    if ase_output.single_point_energy is not None:
+    energy_ev = ase_output.potential_energy
+    if energy_ev is None:
         energy_ev = ase_output.single_point_energy
+    driver = ase_output.simulation_input.driver
+    energy_label = (
+        "Single Point Energy"
+        if driver in {"energy", "dipole"}
+        else "Final Potential Energy"
+    )
+    if energy_ev is not None:
         calc_results.append(f"""
         <li class='regular-item'>
             <div class="unit-toggle">
@@ -488,13 +496,13 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 <button onclick="toggleEnergyUnit('kcalmol')" data-unit="kcalmol">kcal/mol</button>
             </div>
             <div>
-                <strong>Single Point Energy</strong> (<span class="energy-unit">eV</span>): 
+                <strong>{energy_label}</strong> (<span class="energy-unit">eV</span>):
                 <span class="energy-value" data-ev="{energy_ev:.6f}"></span>
             </div>
         </li>""")
     else:
         calc_results.append(
-            f"<li class='regular-item'><strong>Single Point Energy</strong> ({ase_output.energy_unit}): N/A</li>"
+            f"<li class='regular-item'><strong>{energy_label}</strong> ({ase_output.energy_unit}): N/A</li>"
         )
 
     # Vibrational Frequencies

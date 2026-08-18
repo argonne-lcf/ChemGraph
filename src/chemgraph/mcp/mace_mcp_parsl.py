@@ -99,6 +99,14 @@ def run_mace_single(params: mace_input_schema):
     return run_mace_core(params)
 
 
+def _result_potential_energy(result: dict) -> float | None:
+    """Return canonical energy with a fallback for legacy tool results."""
+    potential_energy = result.get("potential_energy")
+    if potential_energy is not None:
+        return potential_energy
+    return result.get("single_point_energy")
+
+
 @mcp.tool(
     name="run_mace_ensemble",
     description="Run an ensemble of MACE calculations",
@@ -167,12 +175,15 @@ def run_mace_ensemble(params: mace_input_schema_ensemble):
             status = (
                 res.get("status", "unknown") if isinstance(res, dict) else "success"
             )
-            energy = res.get("single_point_energy") if isinstance(res, dict) else None
+            energy = None
+            if isinstance(res, dict):
+                energy = _result_potential_energy(res)
             results.append(
                 {
                     "structure": struct_name,
                     "output_result_file": out_file,
                     "status": status,
+                    "potential_energy": energy,
                     "single_point_energy": energy,
                     "raw_result": res,  # keep full result if needed by the LLM
                 }
