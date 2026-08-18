@@ -72,6 +72,67 @@ def test_main_agent_is_a_cli_workflow():
     assert "main_agent" in cli_main._WORKFLOW_CHOICES
 
 
+def test_interactive_event_renders_only_tagged_subagent_tool_calls():
+    with console.capture() as capture:
+        commands._render_main_agent_event(
+            "tool_call_started",
+            {
+                "subagent_name": "chemgraph",
+                "tool_name": "run_ase",
+                "arguments": "{'calculator': 'EMT'}",
+            },
+        )
+        commands._render_main_agent_event(
+            "tool_call_started",
+            {"tool_name": "task", "arguments": "{'description': 'work'}"},
+        )
+        commands._render_main_agent_event(
+            "tool_call_finished",
+            {
+                "subagent_name": "chemgraph",
+                "tool_name": "run_ase",
+                "result": "large result",
+            },
+        )
+
+    output = capture.get()
+    assert "chemgraph" in output
+    assert "run_ase" in output
+    assert "EMT" in output
+    assert "task" not in output
+    assert "large result" not in output
+
+
+def test_create_main_agent_session_installs_interactive_event_renderer(monkeypatch):
+    captured = {}
+
+    class FakeSession:
+        def __init__(self, workflow, **kwargs):
+            captured["workflow"] = workflow
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "chemgraph.agent.main_session.MainAgentSession",
+        FakeSession,
+    )
+    metadata = MainAgentSessionMetadata(
+        graph_config=MainAgentGraphConfig(model_name="test-model")
+    )
+    agent = SimpleNamespace(
+        workflow=object(),
+        main_agent_metadata=metadata,
+        session_id="thread-1",
+        recursion_limit=25,
+        session_store=None,
+    )
+
+    commands.create_main_agent_session(agent)
+
+    assert captured["workflow"] is agent.workflow
+    assert captured["thread_id"] == "thread-1"
+    assert captured["on_event"] is commands._render_main_agent_event
+
+
 def test_main_agent_query_runs_each_turn_on_same_session():
     session = _FakeMainSession([_turn_result(), _turn_result()])
 

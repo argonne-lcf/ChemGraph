@@ -12,6 +12,7 @@ from langchain_core.messages import HumanMessage
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 
+from chemgraph.agent.events import EventCallback, _AstreamEventCallback
 from chemgraph.agent.turn import serialize_state
 from chemgraph.graphs.main_agent import latest_assistant_text
 from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
@@ -95,6 +96,7 @@ class MainAgentSession:
         recursion_limit: int = 50,
         session_store: SessionStore | None = None,
         session_metadata: MainAgentSessionMetadata | None = None,
+        on_event: EventCallback | None = None,
     ):
         if recursion_limit <= 0:
             raise ValueError("recursion_limit must be positive.")
@@ -104,6 +106,10 @@ class MainAgentSession:
             "configurable": {"thread_id": self._thread_id},
             "recursion_limit": recursion_limit,
         }
+        if on_event is not None:
+            self.config["callbacks"] = [
+                _AstreamEventCallback(on_event, self._thread_id)
+            ]
         self._failed = False
         self._pending: tuple[PendingInterrupt, ...] = ()
         self.session_store = session_store

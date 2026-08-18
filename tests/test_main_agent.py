@@ -293,6 +293,59 @@ async def test_file_state_addition_restores_legacy_checkpoint():
 
 
 @pytest.mark.asyncio
+async def test_subagent_tool_events_include_direct_subagent_name():
+    @tool
+    def inspect_value(value: str) -> str:
+        """Inspect a test value."""
+        return f"inspected {value}"
+
+    worker_model = _ScriptedChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "inspect_value",
+                        "args": {"value": "sample"},
+                        "id": "inspect-1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="Worker finished."),
+        ]
+    )
+    worker = create_agent(worker_model, tools=[inspect_value], name="worker")
+    supervisor_model = _ScriptedChatModel(
+        responses=[
+            AIMessage(content="", tool_calls=[_task_call("task-1")]),
+            AIMessage(content="Supervisor finished."),
+        ]
+    )
+    events = []
+    graph = construct_main_agent_graph(
+        supervisor_model,
+        subagents=[_subagent(worker)],
+    )
+    session = MainAgentSession(
+        graph,
+        thread_id="subagent-events",
+        on_event=lambda event, payload: events.append((event, payload)),
+    )
+
+    await session.run("Inspect a value")
+
+    started = [payload for event, payload in events if event == "tool_call_started"]
+    task_event = next(payload for payload in started if payload["tool_name"] == "task")
+    worker_event = next(
+        payload for payload in started if payload["tool_name"] == "inspect_value"
+    )
+    assert "subagent_name" not in task_event
+    assert worker_event["subagent_name"] == "worker"
+    assert "sample" in worker_event["arguments"]
+
+
+@pytest.mark.asyncio
 async def test_nested_subagent_interrupt_resumes_then_completes_turn():
     llm = _ScriptedChatModel(
         responses=[

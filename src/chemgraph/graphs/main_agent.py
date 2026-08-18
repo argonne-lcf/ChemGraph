@@ -17,6 +17,7 @@ from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphInterrupt
 
+from chemgraph.agent.events import SUBAGENT_METADATA_KEY
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 
@@ -109,10 +110,17 @@ def _adapt_subagent(
 ) -> CompiledSubAgent:
     runnable = spec["runnable"]
 
+    def child_config(config: RunnableConfig) -> RunnableConfig:
+        adapted_config = dict(config)
+        metadata = dict(adapted_config.get("metadata") or {})
+        metadata[SUBAGENT_METADATA_KEY] = spec["name"]
+        adapted_config["metadata"] = metadata
+        return adapted_config
+
     def invoke(state: Any, config: RunnableConfig) -> Any:
         run_id = recorder.start(spec["name"], state, config) if recorder else None
         try:
-            result = runnable.invoke(state, config=config)
+            result = runnable.invoke(state, config=child_config(config))
         except GraphInterrupt:
             if recorder and run_id:
                 recorder.interrupted(run_id)
@@ -129,7 +137,7 @@ def _adapt_subagent(
     async def ainvoke(state: Any, config: RunnableConfig) -> Any:
         run_id = recorder.start(spec["name"], state, config) if recorder else None
         try:
-            result = await runnable.ainvoke(state, config=config)
+            result = await runnable.ainvoke(state, config=child_config(config))
         except GraphInterrupt:
             if recorder and run_id:
                 recorder.interrupted(run_id)

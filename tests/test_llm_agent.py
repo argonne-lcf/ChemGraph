@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from langchain_core.messages import AIMessage
+from chemgraph.agent.events import SUBAGENT_METADATA_KEY
 from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.agent.turn import _TurnEventCallback
 
@@ -198,6 +199,35 @@ def test_turn_event_callback_skips_llm_decision_without_tool_calls():
     )
 
     assert [event for event, _payload in events] == ["llm_call_finished"]
+
+
+def test_tool_event_includes_optional_subagent_name():
+    events = []
+    callback = _TurnEventCallback(
+        lambda event, payload: events.append((event, payload)),
+        "thread-1",
+    )
+
+    callback.on_tool_start(
+        {"name": "run_ase"},
+        "{'calculator': 'EMT'}",
+        metadata={SUBAGENT_METADATA_KEY: "chemgraph"},
+    )
+    callback.on_tool_start(
+        {"name": "read_file"},
+        "{'file_path': '/result.txt'}",
+    )
+
+    assert events[0] == (
+        "tool_call_started",
+        {
+            "thread_id": "thread-1",
+            "tool_name": "run_ase",
+            "arguments": "{'calculator': 'EMT'}",
+            "subagent_name": "chemgraph",
+        },
+    )
+    assert "subagent_name" not in events[1][1]
 
 
 def test_turn_event_callback_ignores_llm_decision_extraction_errors():
