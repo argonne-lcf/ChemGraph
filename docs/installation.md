@@ -88,3 +88,43 @@ pip install -e ".[uma]"
 ```
 
 If resolution fails, install UMA in a separate environment dedicated to UMA workflows.
+
+## Optional OCSR install
+
+Reading a molecule structure diagram and returning a SMILES.
+
+**Nothing to install for the vision-LLM backends.** They need only RDKit, which
+ChemGraph already requires, so any existing installation already has them:
+
+```bash
+export ALCF_ACCESS_TOKEN=...          # or another supported vision provider
+```
+
+```python
+from chemgraph.tools.ocsr_tools import image_to_smiles_core as read
+read("molecule.png", backend="alcf")
+```
+
+### Adding the specialist models
+
+The four **specialist** OCSR models are usually more accurate than a general vision
+model on ordinary structure diagrams, but they cannot be pip dependencies: they need
+Python 3.8, 3.10, 3.10 and 3.11 respectively, and MolScribe's torch is built against
+numpy 1.x while ChemGraph pins 2.2.6. This is the same conflict as `uma` against
+`mace-torch` above, so the same answer applies: separate environments.
+
+They install **alongside** an existing ChemGraph, not into it. Nothing in your current
+environment is touched, no package is upgraded or removed, and any other extras you
+have keep working. Each model gets its own conda environment and is driven as a
+subprocess.
+
+```bash
+python -m chemgraph.tools.ocsr_setup --list      # models, disk cost, what is installed
+python -m chemgraph.tools.ocsr_setup decimer     # ~3.3 GB, enough for backend="auto"
+python -m chemgraph.tools.ocsr_setup --check     # verify
+```
+
+`decimer` alone covers the default backend. The other three are only used by
+`backend="ensemble"`, which votes across all four and returns a calibrated confidence;
+all of them together cost about 18 GB. Requires `conda` on PATH. Remove one by
+deleting its environment directory; nothing else refers to it.
