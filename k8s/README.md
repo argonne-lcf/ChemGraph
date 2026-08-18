@@ -1,216 +1,89 @@
-# Kubernetes Deployment for ChemGraph Streamlit App
+# Kubernetes deployment for ChemGraph
 
-This directory contains Kubernetes manifests to deploy the ChemGraph Streamlit application on a Kubernetes cluster.
+This directory contains templates for deploying the ChemGraph Streamlit UI and
+general MCP server. Read the canonical
+[Kubernetes guide](../docs/kubernetes.md) before applying them; it covers image
+tags, cluster-specific proxy settings, storage, exposure, and security limits.
 
-## Prerequisites
+## Contents
 
-- A running Kubernetes cluster
-- `kubectl` configured to communicate with your cluster
-- Docker image available at `ghcr.io/argonne-lcf/chemgraph:latest` (or build your own)
-- API keys for the LLM providers you want to use
+| File | Purpose |
+| --- | --- |
+| `deployment.yaml` / `service.yaml` | Streamlit deployment and LoadBalancer service on port 8501 |
+| `mcp-deployment.yaml` / `mcp-service.yaml` | General MCP deployment and LoadBalancer service on port 9003 |
+| `ingress.yaml` | Optional, placeholder Streamlit ingress |
+| `secrets.yaml.template` | Untracked provider-secret template |
+| `deploy.sh` | Deploy, inspect, forward, or delete both services |
 
-## Files
+## Quickstart
 
-- `deployment.yaml` - Deployment manifest for the Streamlit app
-- `service.yaml` - Service manifest to expose the app
-- `secrets.yaml.template` - Template for storing API keys securely
-- `ingress.yaml` - (Optional) Ingress configuration for external access
+The helper requires an existing namespace:
 
-## Quick Start
+```bash
+kubectl create namespace chemgraph
+export NAMESPACE=chemgraph
+```
 
-### 1. Create the Secrets
+If the namespace already exists, omit the create command.
 
-First, copy the secrets template and fill in your API keys:
+Create the ignored secret file and replace only the credentials you need:
 
 ```bash
 cp secrets.yaml.template secrets.yaml
 ```
 
-Edit `secrets.yaml` and replace the placeholder values with your actual API keys:
+Never commit `secrets.yaml`. For production, use the secret-management system
+approved for your cluster.
 
-```yaml
-stringData:
-  openai-api-key: "sk-..."
-  anthropic-api-key: "sk-ant-..."
-  gemini-api-key: "..."
-  groq-api-key: "..."
-  argo-user: "..."
-  alcf-access-token: "..."
-```
-
-**Important:** Never commit `secrets.yaml` to version control! Add it to `.gitignore`.
-
-Apply the secret:
+Deploy both components with an explicit image tag:
 
 ```bash
-kubectl create namespace chemgraph  # Optional: create a dedicated namespace
-kubectl apply -f secrets.yaml
+IMAGE_TAG=<published-tag> NAMESPACE="$NAMESPACE" ./deploy.sh deploy
 ```
 
-### 2. Deploy the Application
+The manifests default to the `dev` image and include ALCF proxy environment
+variables. Review both deployment YAML files before deploying to another site.
 
-Apply the deployment and service manifests:
+## Inspect and access
 
 ```bash
-kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml
+NAMESPACE="$NAMESPACE" ./deploy.sh status
+NAMESPACE="$NAMESPACE" ./deploy.sh logs streamlit
+NAMESPACE="$NAMESPACE" ./deploy.sh logs mcp
 ```
 
-### 3. Access the Application
-
-Check the status of your deployment:
+Use separate terminals for local-only access:
 
 ```bash
-kubectl get pods -l app=chemgraph
-kubectl get svc chemgraph-streamlit
+NAMESPACE="$NAMESPACE" ./deploy.sh port-forward streamlit
+# http://localhost:8501
 ```
-
-Get the external IP (if using LoadBalancer type):
 
 ```bash
-kubectl get svc chemgraph-streamlit
+NAMESPACE="$NAMESPACE" ./deploy.sh port-forward mcp
+# http://localhost:9003/mcp/
 ```
 
-Once the service has an external IP, access the Streamlit app at:
-```
-http://<EXTERNAL-IP>:8501
-```
-
-If using a cloud provider, it may take a few minutes for the LoadBalancer to provision an external IP.
-
-## Alternative Access Methods
-
-### Using NodePort
-
-If your cluster doesn't support LoadBalancer, edit `service.yaml` and change the service type:
-
-```yaml
-spec:
-  type: NodePort
-```
-
-Then access the app using any node IP and the assigned NodePort:
+## Manual deployment
 
 ```bash
-kubectl get svc chemgraph-streamlit
-# Access at http://<NODE-IP>:<NODE-PORT>
+kubectl apply -f secrets.yaml -n "$NAMESPACE"
+kubectl apply -f deployment.yaml -f service.yaml -n "$NAMESPACE"
+kubectl apply -f mcp-deployment.yaml -f mcp-service.yaml -n "$NAMESPACE"
 ```
 
-### Using Port Forwarding (Development)
-
-For local testing, use port forwarding:
-
-```bash
-kubectl port-forward svc/chemgraph-streamlit 8501:8501
-```
-
-Then access at `http://localhost:8501`
-
-### Using Ingress (Production)
-
-For production deployments with a domain name, use the included ingress configuration:
-
-```bash
-kubectl apply -f ingress.yaml
-```
-
-Make sure you have an Ingress controller installed (like nginx-ingress or traefik) and update the host in `ingress.yaml`.
-
-## Customization
-
-### Resource Limits
-
-Edit `deployment.yaml` to adjust resource requests and limits:
-
-```yaml
-resources:
-  requests:
-    memory: "2Gi"
-    cpu: "1000m"
-  limits:
-    memory: "4Gi"
-    cpu: "2000m"
-```
-
-### Replicas
-
-To run multiple replicas for high availability:
-
-```yaml
-spec:
-  replicas: 3
-```
-
-### Using a Custom Image
-
-If you've built your own ChemGraph image:
-
-```yaml
-containers:
-- name: streamlit
-  image: your-registry/chemgraph:your-tag
-```
-
-## Monitoring and Troubleshooting
-
-### Check Pod Status
-
-```bash
-kubectl get pods -l app=chemgraph
-kubectl describe pod <pod-name>
-```
-
-### View Logs
-
-```bash
-kubectl logs -f deployment/chemgraph-streamlit
-```
-
-### Check Health Probes
-
-The deployment includes liveness and readiness probes that check the Streamlit health endpoint:
-
-```bash
-kubectl describe pod <pod-name> | grep -A 10 "Liveness\|Readiness"
-```
-
-### Common Issues
-
-**Pod not starting:**
-- Check if the image can be pulled: `kubectl describe pod <pod-name>`
-- Verify secrets are created: `kubectl get secrets`
-
-**Application crashes:**
-- Check logs: `kubectl logs <pod-name>`
-- Verify API keys are correct
-- Check resource limits are sufficient
-
-**Cannot access the service:**
-- Verify service is running: `kubectl get svc`
-- Check if LoadBalancer has an external IP assigned
-- Verify firewall rules allow traffic on port 8501
+Customize `ingress.yaml` before applying it; the checked-in hostname and ingress
+class are placeholders.
 
 ## Cleanup
 
-To remove all ChemGraph resources:
-
 ```bash
-kubectl delete -f deployment.yaml
-kubectl delete -f service.yaml
-kubectl delete secret chemgraph-secrets
+NAMESPACE="$NAMESPACE" ./deploy.sh delete
 ```
 
-## Security Considerations
+The helper keeps `chemgraph-secrets`. Delete it separately when it is no longer
+needed.
 
-1. **Never commit secrets to version control**
-2. **Use RBAC** to limit access to the namespace
-3. **Enable TLS** for production deployments (use Ingress with cert-manager)
-4. **Rotate API keys** regularly
-5. **Use network policies** to restrict pod-to-pod communication if needed
-6. **Consider using a secrets management solution** like HashiCorp Vault or Sealed Secrets
-
-## Additional Resources
-
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [ChemGraph README](../README.md)
-- [Streamlit Documentation](https://docs.streamlit.io/)
+The templates do not provide persistent volumes or application authentication.
+Do not expose either LoadBalancer publicly until persistence, TLS,
+authentication, RBAC, network policy, and secret management are addressed.

@@ -1,24 +1,37 @@
+# Project structure
+
+```text
+ChemGraph/
+├── src/
+│   ├── chemgraph/
+│   │   ├── agent/        # ChemGraph agent, durable sessions, run events
+│   │   ├── graphs/       # Single-, multi-, and specialized LangGraph graphs
+│   │   ├── tools/        # Chemistry, ASE, analysis, and file tools
+│   │   ├── mcp/          # General and HPC MCP servers
+│   │   ├── execution/    # Local, Parsl, Ensemble, Globus backends
+│   │   ├── academy/      # Persistent multi-agent campaigns and dashboard
+│   │   ├── models/       # Model registry, provider loaders, normalization
+│   │   ├── schemas/      # Pydantic input/output models
+│   │   ├── eval/         # Dataset-driven evaluation and judges
+│   │   ├── cli/          # Command-line parser and commands
+│   │   ├── memory/       # SQLite sessions and checkpoints
+│   │   ├── prompt/       # Agent prompts
+│   │   ├── hpc_configs/  # Facility Parsl configurations
+│   │   └── utils/        # Shared utilities
+│   └── ui/               # Streamlit application
+├── tests/                 # Pytest suite
+├── docs/                  # MkDocs site
+├── examples/              # Specialized runnable examples
+├── scripts/               # MCP, smoke, demo, and helper scripts
+├── notebooks/             # Interactive examples
+├── config.toml            # Example configuration
+├── pyproject.toml         # Package metadata and tooling
+└── mkdocs.yml             # Documentation navigation/theme
 ```
-chemgraph/
-│
-├── src/                       # Source code
-│   ├── chemgraph/             # Top-level package
-│   │   ├── agent/             # Agent-based task management
-│   │   ├── eval/              # Evaluation & benchmarking (LLM-as-judge)
-│   │   ├── graphs/            # Workflow graph utilities
-│   │   ├── mcp/               # MCP servers (stdio/streamable HTTP)
-│   │   ├── memory/            # Session memory (SQLite-backed persistence)
-│   │   ├── models/            # LLM provider integrations
-│   │   ├── prompt/            # Agent prompt templates
-│   │   ├── schemas/           # Pydantic data models
-│   │   ├── state/             # Agent state definitions
-│   │   ├── tools/             # Tools for molecular simulations
-│   │   ├── utils/             # Other utility functions
-│   ├── ui/                    # CLI and Streamlit UI package
-│
-├── scripts/                   # Utility & evaluation scripts
-│   ├── new_evaluation/        # Ground-truth dataset generation
-├── docs/                      # MkDocs documentation
-├── pyproject.toml             # Project configuration
-└── README.md                  # Project documentation
-```
+
+The installable package is `chemgraph`; the `src/ui` package contains the
+source-checkout Streamlit entry point. Package version and optional extras are
+single-sourced in `pyproject.toml`.
+
+For implementation conventions and validation commands, see
+[Contributing](contributing.md).

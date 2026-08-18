@@ -1,210 +1,92 @@
-!!! note
-    Docker setup is now intentionally simplified and does **not** include vLLM.
-    The same ChemGraph image can be launched in four modes: JupyterLab, Streamlit UI, MCP server, or interactive CLI.
+# Docker
 
-## Prerequisites
+The ChemGraph image can run JupyterLab, Streamlit, the CLI, or the general MCP
+server. It includes the source-tree entry points plus NWChem and TBLite support
+configured by the repository Dockerfile.
 
-- [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
+## Streamlit
 
-## Files
-
-- `Dockerfile`: standard ChemGraph container image
-- `Dockerfile.arm`: ARM-friendly variant (same runtime goals, no vLLM)
-- `docker-compose.yml`: profile-based launcher for Jupyter/Streamlit/MCP
-
-## Use Published GHCR Image (No Local Build)
-
-If you do not want a local install, run the published container image directly:
-
-### Pass API Keys Securely (Best Practice)
-
-Required keys depend on the model/provider you use:
-
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GEMINI_API_KEY`
-- `GROQ_API_KEY`
-- Optional: `ARGO_USER` (for Argo setups)
-
-Recommended pattern for `docker run` is host pass-through (do not put secret values inline in command history):
+Set the credential in your host environment, then pass it by name:
 
 ```bash
 export OPENAI_API_KEY="..."
-docker run --rm -it -e OPENAI_API_KEY -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
-  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+docker run --rm -it \
+  -e OPENAI_API_KEY \
+  -p 8501:8501 \
+  -v "$PWD/cg_logs:/app/cg_logs" \
+  ghcr.io/argonne-lcf/chemgraph:latest \
+  streamlit run src/ui/app.py \
+    --server.address=0.0.0.0 \
+    --server.port=8501
 ```
 
-For multiple keys, use an env file:
+Open `http://localhost:8501`. The volume preserves artifacts after exit.
+
+## CLI
 
 ```bash
-cat > .env.chemgraph << 'EOF'
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-GEMINI_API_KEY=...
-GROQ_API_KEY=...
-ARGO_USER=...
-EOF
-chmod 600 .env.chemgraph
-docker run --rm -it --env-file .env.chemgraph -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
-  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+docker run --rm -it \
+  -e OPENAI_API_KEY \
+  -v "$PWD/cg_logs:/app/cg_logs" \
+  ghcr.io/argonne-lcf/chemgraph:latest \
+  chemgraph run -q "What is the SMILES string for aspirin?"
 ```
 
-Security notes:
+Forward only the credential needed by the selected provider.
 
-- Pass only the key(s) needed for your selected model.
-- Do not commit `.env.chemgraph` or other secret files to git.
-- Avoid storing API keys in `config.toml`.
-
-Run JupyterLab:
+## MCP over HTTP
 
 ```bash
-docker run --rm -it -p 8888:8888 ghcr.io/argonne-lcf/chemgraph:latest \
-  jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --LabApp.token=
+docker run --rm -it \
+  -p 9003:9003 \
+  -v "$PWD/cg_logs:/app/cg_logs" \
+  ghcr.io/argonne-lcf/chemgraph:latest \
+  python -m chemgraph.mcp.mcp_tools \
+    --transport streamable_http \
+    --host 0.0.0.0 \
+    --port 9003
 ```
 
-Run Streamlit:
+Clients connect to `http://localhost:9003/mcp/`. Limit network exposure; this
+is a tool execution surface, not a hardened public API gateway.
+
+## JupyterLab
+
+The image default starts JupyterLab on port 8888:
 
 ```bash
-docker run --rm -it -p 8501:8501 ghcr.io/argonne-lcf/chemgraph:latest \
-  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
-```
-
-Run MCP server (HTTP):
-
-```bash
-docker run --rm -it -p 9003:9003 ghcr.io/argonne-lcf/chemgraph:latest \
-  python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
-```
-
-Run interactive CLI shell:
-
-```bash
-docker run --rm -it --entrypoint /bin/bash -v "$PWD:/work" -w /work \
+docker run --rm -it -p 8888:8888 -v "$PWD:/work" \
   ghcr.io/argonne-lcf/chemgraph:latest
 ```
 
-Then inside the container:
+The image starts Jupyter without a token. Publish it only on a trusted machine,
+or add authentication for shared deployments.
+
+## Compose profiles
+
+The repository Compose file builds `chemgraph:local`, mounts the checkout at
+`/app`, and defines four development profiles:
 
 ```bash
-chemgraph --help
-chemgraph --config config.toml -q "calculate the energy for smiles=O using mace_mp"
+docker compose --profile streamlit up --build
+docker compose --profile mcp up --build
+docker compose --profile jupyter up --build
+docker compose --profile cli run --rm cli
 ```
 
-## Build Image
+Compose forwards supported provider variables and stores tool artifacts in the
+checkout's `cg_logs/` directory.
 
-From project root:
-
-```bash
-docker compose build
-```
-
-If you previously built the image before this update, rebuild so the Git safe-directory
-setting for `/app` is included.
-
-## Run JupyterLab
-
-```bash
-docker compose --profile jupyter up
-```
-
-Access: `http://localhost:8888`
-
-## Run Streamlit App
-
-```bash
-docker compose --profile streamlit up
-```
-
-Access: `http://localhost:8501`
-
-## Run MCP Server (HTTP transport)
-
-```bash
-docker compose --profile mcp up
-```
-
-MCP endpoint: `http://localhost:9003`
-
-The compose service launches:
-
-```bash
-python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
-```
-
-## Environment Variables
-
-The compose file forwards these variables into the container when set on host:
-
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GEMINI_API_KEY`
-- `GROQ_API_KEY`
-- `CHEMGRAPH_LOG_DIR` (default in compose: `/app/cg_logs`)
-- `PYTHONPATH` is set to `/app/src` in compose so bind-mounted source code is used.
-
-Example:
-
-```bash
-export OPENAI_API_KEY="your_key"
-docker compose --profile streamlit up
-```
-
-## Stop Services
-
-```bash
-docker compose down
-```
-
-## Run Without Compose (Optional)
-
-Build once:
+## Build and operate safely
 
 ```bash
 docker build -t chemgraph:local .
 ```
 
-Jupyter:
+The TBLite build can take time, especially on ARM. Mount a dedicated artifact
+directory rather than a home directory, pass tokens at runtime, remember that
+container paths may differ from host paths, and pin an image tag or digest for
+reproducible deployments.
 
-```bash
-docker run --rm -it -p 8888:8888 -v "$PWD:/app" chemgraph:local \
-  jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --LabApp.token=
-```
-
-Streamlit:
-
-```bash
-docker run --rm -it -p 8501:8501 -v "$PWD:/app" chemgraph:local \
-  streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
-```
-
-MCP (HTTP):
-
-```bash
-docker run --rm -it -p 9003:9003 -v "$PWD:/app" chemgraph:local \
-  python -m chemgraph.mcp.mcp_tools --transport streamable_http --host 0.0.0.0 --port 9003
-```
-
-## Notes
-
-- This setup avoids local model-serving dependencies and keeps Docker usage focused on ChemGraph tooling.
-- If you need local LLM serving, run it as a separate service outside this Docker setup and point ChemGraph to that endpoint via model/base URL configuration.
-- Compose startup also runs `git config --global --add safe.directory /app` to avoid
-  Git "dubious ownership" errors in notebooks/Streamlit when the repo is bind-mounted.
-- The default `Dockerfile` installs `nwchem` and `tblite` with conda-forge.
-
-## Publish to GHCR
-
-A GitHub Actions workflow (`.github/workflows/ghcr-publish.yml`) publishes the Docker image to:
-
-- `ghcr.io/<org-or-user>/chemgraph:<tag>`
-- `ghcr.io/<org-or-user>/chemgraph:sha-<commit>`
-
-How to publish:
-
-```bash
-git tag v0.3.0
-git push origin v0.3.0
-```
-
-You can also trigger the workflow manually from Actions with `workflow_dispatch`.
+To run the Streamlit and MCP images on a cluster, continue with
+[Kubernetes](kubernetes.md).
