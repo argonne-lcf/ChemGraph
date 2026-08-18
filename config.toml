@@ -57,7 +57,6 @@ base_url = "https://generativelanguage.googleapis.com/v1beta"
 timeout = 30
 
 [api.alcf]
-# Sophia cluster. Minerva-hosted models use their own endpoint automatically.
 base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
 timeout = 30
 
