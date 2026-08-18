@@ -1801,6 +1801,12 @@ Interactive sessions preserve conversation context and can be resumed later.</p>
 available interactively:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent
 </code></pre></div>
+<p>While a delegated subagent is working, the CLI prints each subagent tool call
+and its arguments as it starts. Supervisor-only delegation and file-read calls
+and tool results are not printed.</p>
+<p>The supervisor's <code>read_file</code> tool reads only files stored in the durable graph
+state by a subagent. It does not grant access to the host filesystem or to
+files written under <code>CHEMGRAPH_LOG_DIR</code>.</p>
 <p>The development workspace Deep Agent can execute broad filesystem and shell
 actions. Enable it only in a disposable, trusted workspace after reviewing the
 CLI warning.</p>

@@ -1782,6 +1782,12 @@ construct <code>MainAgentSession</code> from <code>chemgraph.agent.main_session<
 session-oriented async methods. This API is
 intended for durable, interactive supervisor workflows; consult the class
 docstrings in the installed version for constructor and persistence options.</p>
+<p><code>MainAgentSession</code> accepts an optional <code>on_event</code> callback with the signature
+<code>(event_name, payload)</code>. Tagged <code>tool_call_started</code> payloads include
+<code>subagent_name</code>, allowing callers to distinguish delegated tool activity from
+supervisor tools. The supervisor can use <code>read_file</code> for checkpoint-backed
+files returned by subagents, but this does not expose host files or session
+artifacts.</p>
 <p>For CLI use, the equivalent is:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent
 </code></pre></div>
