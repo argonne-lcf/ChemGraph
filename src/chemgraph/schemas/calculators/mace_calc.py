@@ -8,7 +8,7 @@ import tempfile
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 from pydantic import BaseModel, Field
 import torch
 
@@ -126,9 +126,9 @@ class MaceCalc(BaseModel):
         by default 21.167088422553647 (40.0 * units.Bohr)
     """
 
-    calculator_type: str = Field(
+    calculator_type: Literal["mace_mp", "mace_off", "mace_anicc"] = Field(
         default="mace_mp",
-        description="Type of calculator. Options: 'mace_mp' (default) or 'mace_off'.",
+        description="Type of calculator. Options: 'mace_mp' (default), 'mace_off', or 'mace_anicc'.",
     )
     model: Optional[Union[str, Path]] = Field(
         default=None,
