@@ -1,9 +1,11 @@
 """Tests for the middleware-based main-agent supervisor."""
 
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 import pytest
-from deepagents.backends import LocalShellBackend
+from deepagents.backends import LocalShellBackend, StateBackend
+from deepagents.middleware import SubAgentMiddleware
+from langchain.agents import create_agent
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -23,6 +25,10 @@ from chemgraph.graphs.single_agent import construct_single_agent_graph
 
 class _MessageState(TypedDict):
     messages: Annotated[list, add_messages]
+
+
+class _FileState(_MessageState):
+    files: NotRequired[dict[str, Any]]
 
 
 class _ScriptedChatModel(BaseChatModel):
@@ -152,6 +158,28 @@ def _terminal_tool_subgraph():
     return builder.compile(checkpointer=None)
 
 
+def _file_writing_subgraph():
+    def write_node(_state):
+        timestamp = "2026-08-18T00:00:00+00:00"
+        return {
+            "messages": [AIMessage(content="Saved /results.txt")],
+            "files": {
+                "/results.txt": {
+                    "content": "energy=-1.0",
+                    "encoding": "utf-8",
+                    "created_at": timestamp,
+                    "modified_at": timestamp,
+                }
+            },
+        }
+
+    builder = StateGraph(_FileState)
+    builder.add_node("write", write_node)
+    builder.add_edge(START, "write")
+    builder.add_edge("write", END)
+    return builder.compile(checkpointer=None)
+
+
 def _subagent(runnable, *, name: str = "worker", description: str = "Test worker"):
     return {"name": name, "description": description, "runnable": runnable}
 
@@ -186,7 +214,82 @@ async def test_main_agent_delegates_and_keeps_normal_turns_on_one_thread():
         "Calculate something",
         "Explain that result",
     ]
-    assert {tool.name for tool in llm.bound_tools} == {"task"}
+    assert {tool.name for tool in llm.bound_tools} == {"read_file", "task"}
+
+
+@pytest.mark.asyncio
+async def test_main_agent_reads_subagent_files_across_turns():
+    read_call = {
+        "name": "read_file",
+        "args": {"file_path": "/results.txt"},
+        "id": "read-1",
+        "type": "tool_call",
+    }
+    llm = _ScriptedChatModel(
+        responses=[
+            AIMessage(content="", tool_calls=[_task_call("task-1")]),
+            AIMessage(content="", tool_calls=[read_call]),
+            AIMessage(content="The energy is -1.0."),
+            AIMessage(
+                content="",
+                tool_calls=[{**read_call, "id": "read-2"}],
+            ),
+            AIMessage(content="The saved energy is still -1.0."),
+        ]
+    )
+    graph = construct_main_agent_graph(
+        llm,
+        subagents=[_subagent(_file_writing_subgraph())],
+    )
+    session = MainAgentSession(graph, thread_id="checkpoint-files")
+
+    first = await session.run("Calculate and save the energy")
+    second = await session.run("Read the saved energy again")
+
+    assert first.assistant_response == "The energy is -1.0."
+    assert second.assistant_response == "The saved energy is still -1.0."
+    snapshot = graph.get_state(session.config).values
+    assert snapshot["files"]["/results.txt"]["content"] == "energy=-1.0"
+    read_results = [
+        message.content
+        for message in snapshot["messages"]
+        if isinstance(message, ToolMessage) and message.name == "read_file"
+    ]
+    assert len(read_results) == 2
+    assert all("energy=-1.0" in result for result in read_results)
+
+
+@pytest.mark.asyncio
+async def test_file_state_addition_restores_legacy_checkpoint():
+    saver = InMemorySaver()
+    config = {"configurable": {"thread_id": "legacy-checkpoint"}}
+    subagent = _subagent(_answering_subgraph("done"))
+    legacy_graph = create_agent(
+        model=_ScriptedChatModel(responses=[AIMessage(content="Legacy response")]),
+        tools=[],
+        middleware=[
+            SubAgentMiddleware(backend=StateBackend(), subagents=[subagent])
+        ],
+        checkpointer=saver,
+        name="main_agent",
+    )
+    await legacy_graph.ainvoke(
+        {"messages": [HumanMessage(content="Legacy question")]},
+        config=config,
+    )
+    upgraded_graph = construct_main_agent_graph(
+        _ScriptedChatModel(responses=[]),
+        subagents=[subagent],
+        checkpointer=saver,
+    )
+
+    snapshot = await upgraded_graph.aget_state(config)
+
+    assert [message.content for message in snapshot.values["messages"]] == [
+        "Legacy question",
+        "Legacy response",
+    ]
+    assert snapshot.values["files"] == {}
 
 
 @pytest.mark.asyncio
@@ -594,31 +697,46 @@ def test_subagent_validation(specs, error, match):
         )
 
 
-def test_main_tools_are_extensible_and_task_is_reserved():
+def test_main_tools_are_extensible_and_middleware_names_are_reserved():
     @tool
-    def read_file(path: str) -> str:
-        """Return test file contents."""
-        return path
+    def lookup_value(value: str) -> str:
+        """Return a test value."""
+        return value
 
     llm = _ScriptedChatModel(responses=[AIMessage(content="done")])
     graph = construct_main_agent_graph(
         llm,
         subagents=[_subagent(_answering_subgraph("done"))],
-        main_tools=[read_file],
+        main_tools=[lookup_value],
     )
     assert graph is not None
+    graph.invoke(
+        {"messages": [HumanMessage(content="Use no tools")]},
+        config={"configurable": {"thread_id": "custom-main-tool"}},
+    )
+    assert {tool.name for tool in llm.bound_tools} == {
+        "lookup_value",
+        "read_file",
+        "task",
+    }
+
+    @tool("read_file")
+    def duplicate_read_file(path: str) -> str:
+        """Conflict with the filesystem middleware tool."""
+        return path
 
     @tool("task")
     def duplicate_task(description: str) -> str:
         """Conflict with the middleware task tool."""
         return description
 
-    with pytest.raises(ValueError, match="reserved"):
-        construct_main_agent_graph(
-            llm,
-            subagents=[_subagent(_answering_subgraph("done"))],
-            main_tools=[duplicate_task],
-        )
+    for duplicate in (duplicate_read_file, duplicate_task):
+        with pytest.raises(ValueError, match="reserved"):
+            construct_main_agent_graph(
+                llm,
+                subagents=[_subagent(_answering_subgraph("done"))],
+                main_tools=[duplicate],
+            )
 
 
 def test_single_agent_preserves_default_and_allows_inherited_checkpointer():
