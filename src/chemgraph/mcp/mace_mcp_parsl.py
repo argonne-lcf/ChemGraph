@@ -16,7 +16,7 @@ from chemgraph.schemas.mace_parsl_schema import (
     mace_input_schema,
     mace_input_schema_ensemble,
 )
-from chemgraph.tools.parsl_tools import run_mace_core
+from chemgraph.tools.parsl_tools import _result_potential_energy, run_mace_core
 from parsl import python_app
 
 warnings.warn(
@@ -97,14 +97,6 @@ def run_mace_single(params: mace_input_schema):
         MACE calculation result.
     """
     return run_mace_core(params)
-
-
-def _result_potential_energy(result: dict) -> float | None:
-    """Return canonical energy with a fallback for legacy tool results."""
-    potential_energy = result.get("potential_energy")
-    if potential_energy is not None:
-        return potential_energy
-    return result.get("single_point_energy")
 
 
 @mcp.tool(

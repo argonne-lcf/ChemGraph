@@ -300,8 +300,7 @@ def test_run_ase_core_reports_optimization_completion(
 
 
 def test_mace_ensemble_energy_prefers_canonical_key():
-    pytest.importorskip("parsl")
-    from chemgraph.mcp.mace_mcp_parsl import _result_potential_energy
+    from chemgraph.tools.parsl_tools import _result_potential_energy
 
     assert (
         _result_potential_energy(
