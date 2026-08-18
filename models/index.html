@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/code_formatting_and_linting/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/models/">
       
       
-        <link rel="prev" href="../contributing/">
+        <link rel="prev" href="../quickstart/">
       
       
-        <link rel="next" href="../citation/">
+        <link rel="next" href="../troubleshooting/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Code formatting - ChemGraph</title>
+        <title>Models and authentication - ChemGraph</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#code-formatting-and-linting" class="md-skip">
+        <a href="#models-and-authentication" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +113,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Code formatting
+              Models and authentication
             
           </span>
         </div>
@@ -243,10 +243,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../installation/" class="md-tabs__link">
           
   
@@ -350,12 +352,10 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
+      <li class="md-tabs__item">
         <a href="../project_structure/" class="md-tabs__link">
           
   
@@ -445,8 +445,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -462,19 +464,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
             
   
   
@@ -492,7 +497,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -563,10 +568,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../models/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models and authentication
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -582,6 +614,103 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#provider-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provider routes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#select-and-test-a-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Select and test a model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-api-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Public API providers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#argonne-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Argonne routes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-ollama-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Ollama models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration file
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experimental-codex-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experimental Codex route
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1226,10 +1355,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1249,22 +1376,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
@@ -1282,7 +1406,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1353,19 +1477,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
         
   
   
@@ -1381,7 +1496,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1498,6 +1612,91 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#provider-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Provider routes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#select-and-test-a-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Select and test a model
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#public-api-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Public API providers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#argonne-routes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Argonne routes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#local-ollama-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Local Ollama models
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration file
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experimental-codex-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experimental Codex route
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1516,17 +1715,105 @@
   
 
 
-<h1 id="code-formatting-and-linting">Code formatting and linting<a class="headerlink" href="#code-formatting-and-linting" title="Permanent link">&para;</a></h1>
-<p>ChemGraph uses Ruff configuration from <code>pyproject.toml</code>. Match surrounding code
-and avoid reformatting unrelated files.</p>
-<p>Run the required lint gate from the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ruff<span class="w"> </span>check<span class="w"> </span>.
+<h1 id="models-and-authentication">Models and authentication<a class="headerlink" href="#models-and-authentication" title="Permanent link">&para;</a></h1>
+<p>ChemGraph selects a provider from the model identifier. Run <code>chemgraph models</code>
+to see the identifiers registered by your installed version.</p>
+<h2 id="provider-routes">Provider routes<a class="headerlink" href="#provider-routes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Model form</th>
+<th>Credential or setup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OpenAI</td>
+<td><code>gpt-4o-mini</code></td>
+<td><code>OPENAI_API_KEY</code></td>
+</tr>
+<tr>
+<td>Anthropic</td>
+<td><code>claude-...</code></td>
+<td><code>ANTHROPIC_API_KEY</code></td>
+</tr>
+<tr>
+<td>Google Gemini</td>
+<td><code>gemini-...</code></td>
+<td><code>GEMINI_API_KEY</code></td>
+</tr>
+<tr>
+<td>Groq</td>
+<td><code>groq:&lt;model-id&gt;</code></td>
+<td><code>GROQ_API_KEY</code></td>
+</tr>
+<tr>
+<td>Argo</td>
+<td><code>argo:&lt;model-id&gt;</code></td>
+<td><code>ARGO_USER</code> or <code>argo_user</code> in config</td>
+</tr>
+<tr>
+<td>ALCF endpoints</td>
+<td>Listed by <code>chemgraph models</code></td>
+<td><code>ALCF_ACCESS_TOKEN</code></td>
+</tr>
+<tr>
+<td>Ollama</td>
+<td>Curated local ID such as <code>llama3.2</code></td>
+<td>Running Ollama server; no key</td>
+</tr>
+<tr>
+<td>Codex</td>
+<td><code>codex:&lt;model-id&gt;</code></td>
+<td>Experimental subscription setup</td>
+</tr>
+</tbody>
+</table>
+<p>Only set credentials for providers you use. Do not commit secrets to
+<code>config.toml</code>, shell scripts, notebooks, or Git history.</p>
+<h2 id="select-and-test-a-model">Select and test a model<a class="headerlink" href="#select-and-test-a-model" title="Permanent link">&para;</a></h2>
+<p>The default is <code>gpt-4o-mini</code>. Override it per command:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>gpt-4o-mini<span class="w"> </span>-q<span class="w"> </span><span class="s2">"What is the formula of caffeine?"</span>
 </code></pre></div>
-<p>The configured rules include Python syntax/error checks and unused-import/name
-checks. The project targets Python 3.11 and uses an 88-character line length for
-Ruff formatting configuration.</p>
-<p>For the full contribution workflow and test commands, see
-<a href="../contributing/">Contributing</a>.</p>
+<p>Inspect the registry and validate configured credentials without starting a
+workflow:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>chemgraph<span class="w"> </span>models
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>gpt-4o-mini<span class="w"> </span>--check-keys
+</code></pre></div>
+<h2 id="public-api-providers">Public API providers<a class="headerlink" href="#public-api-providers" title="Permanent link">&para;</a></h2>
+<p>Set the provider's environment variable before launching ChemGraph:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">"..."</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># or ANTHROPIC_API_KEY, GEMINI_API_KEY, or GROQ_API_KEY</span>
+</code></pre></div>
+<p>Use the prefix shown by <code>chemgraph models</code> where one is required. Provider model
+catalogs change more frequently than ChemGraph releases; the CLI registry is
+the source of truth for identifiers supported by the installed version.</p>
+<h2 id="argonne-routes">Argonne routes<a class="headerlink" href="#argonne-routes" title="Permanent link">&para;</a></h2>
+<p>Argo routes use the <code>argo:</code> prefix and an Argonne username:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ARGO_USER</span><span class="o">=</span><span class="s2">"&lt;anl-username&gt;"</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>argo:gpt-4o<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Summarize the water molecule."</span>
+</code></pre></div>
+<p>ALCF-hosted inference routes use <code>ALCF_ACCESS_TOKEN</code>. Available endpoints and
+access policies are facility-managed, so use <code>chemgraph models</code> and the current
+ALCF service instructions rather than copying an old model name.</p>
+<h2 id="local-ollama-models">Local Ollama models<a class="headerlink" href="#local-ollama-models" title="Permanent link">&para;</a></h2>
+<p>Start Ollama, pull a model supported by ChemGraph, then select it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.2
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>llama3.2<span class="w"> </span>-q<span class="w"> </span><span class="s2">"What is the formula of water?"</span>
+</code></pre></div>
+<p>Local models vary substantially in tool-calling reliability. See
+<a href="../running_local_models/">Local models</a> for limitations and advanced endpoints.</p>
+<h2 id="configuration-file">Configuration file<a class="headerlink" href="#configuration-file" title="Permanent link">&para;</a></h2>
+<p>Non-secret endpoint settings and <code>argo_user</code> can be placed in <code>config.toml</code>.
+Choose the CLI model with <code>--model</code>; Streamlit reads its model default from the
+configuration file. Environment variables remain the recommended place for tokens.
+See <a href="../configuration_with_toml/">Configuration</a> for supported sections and
+interface-specific behavior.</p>
+<h2 id="experimental-codex-route">Experimental Codex route<a class="headerlink" href="#experimental-codex-route" title="Permanent link">&para;</a></h2>
+<p>The Codex subscription integration has separate dependencies and authentication
+and is not an OpenAI API-key replacement for every workflow. See
+<a href="../codex_subscription/">Codex subscription</a> before using a <code>codex:</code> model.</p>
 
 
 
@@ -1556,7 +1843,7 @@ Ruff formatting configuration.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../contributing/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Contributing">
+          <a href="../quickstart/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Quickstart">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1566,20 +1853,20 @@ Ruff formatting configuration.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Contributing
+                Quickstart
               </div>
             </div>
           </a>
         
         
           
-          <a href="../citation/" class="md-footer__link md-footer__link--next" aria-label="Next: Citation">
+          <a href="../troubleshooting/" class="md-footer__link md-footer__link--next" aria-label="Next: Troubleshooting">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Citation
+                Troubleshooting
               </div>
             </div>
             <div class="md-footer__button md-icon">

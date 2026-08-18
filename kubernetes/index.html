@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/code_formatting_and_linting/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/kubernetes/">
       
       
-        <link rel="prev" href="../contributing/">
+        <link rel="prev" href="../docker_support/">
       
       
-        <link rel="next" href="../citation/">
+        <link rel="next" href="../running_local_models/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Code formatting - ChemGraph</title>
+        <title>Kubernetes - ChemGraph</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#code-formatting-and-linting" class="md-skip">
+        <a href="#kubernetes" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +113,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Code formatting
+              Kubernetes
             
           </span>
         </div>
@@ -287,10 +287,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../mcp_servers/" class="md-tabs__link">
           
   
@@ -350,12 +352,10 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
+      <li class="md-tabs__item">
         <a href="../project_structure/" class="md-tabs__link">
           
   
@@ -897,8 +897,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -916,19 +918,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
             
   
   
@@ -946,7 +951,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1017,10 +1022,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../kubernetes/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1036,6 +1068,136 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quickstart" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quickstart
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cluster-specific-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cluster-specific settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-status-and-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check status and logs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#access-locally-with-port-forwarding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Access locally with port forwarding
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#loadbalancer-and-ingress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LoadBalancer and Ingress
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storage-and-replicas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage and replicas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#apply-manifests-manually" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Apply manifests manually
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#remove-the-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remove the deployment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1226,10 +1388,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1249,22 +1409,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
@@ -1282,7 +1439,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1353,19 +1510,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
         
   
   
@@ -1381,7 +1529,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1498,6 +1645,124 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quickstart" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quickstart
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cluster-specific-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cluster-specific settings
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#check-status-and-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check status and logs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#access-locally-with-port-forwarding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Access locally with port forwarding
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#loadbalancer-and-ingress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LoadBalancer and Ingress
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#storage-and-replicas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage and replicas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#apply-manifests-manually" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Apply manifests manually
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#remove-the-deployment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remove the deployment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security checklist
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1516,17 +1781,149 @@
   
 
 
-<h1 id="code-formatting-and-linting">Code formatting and linting<a class="headerlink" href="#code-formatting-and-linting" title="Permanent link">&para;</a></h1>
-<p>ChemGraph uses Ruff configuration from <code>pyproject.toml</code>. Match surrounding code
-and avoid reformatting unrelated files.</p>
-<p>Run the required lint gate from the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ruff<span class="w"> </span>check<span class="w"> </span>.
+<h1 id="kubernetes">Kubernetes<a class="headerlink" href="#kubernetes" title="Permanent link">&para;</a></h1>
+<p>The repository provides Kubernetes manifests for two services:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Deployment and service</th>
+<th>Port</th>
+<th>Endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Streamlit UI</td>
+<td><code>chemgraph-streamlit</code></td>
+<td>8501</td>
+<td><code>/</code></td>
+</tr>
+<tr>
+<td>General MCP server</td>
+<td><code>chemgraph-mcp</code></td>
+<td>9003</td>
+<td><code>/mcp/</code></td>
+</tr>
+</tbody>
+</table>
+<p>The files under <a href="https://github.com/argonne-lcf/ChemGraph/tree/main/k8s"><code>k8s/</code></a>
+are deployment templates. Review image tags, proxy settings, secrets, exposure,
+storage, and resource limits for your cluster before applying them.</p>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ul>
+<li>a Kubernetes cluster and permission to create deployments, services, and
+  secrets in a namespace;</li>
+<li><code>kubectl</code> configured for that cluster;</li>
+<li>a ChemGraph image tag available from
+  <code>ghcr.io/argonne-lcf/chemgraph</code> or a custom registry;</li>
+<li>credentials for the model provider used by Streamlit or an MCP client.</li>
+</ul>
+<p>The helper script expects its namespace to exist. The manifests themselves do
+not create one.</p>
+<h2 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h2>
+<p>Clone the repository and enter the manifest directory:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/argonne-lcf/ChemGraph.git
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>ChemGraph/k8s
 </code></pre></div>
-<p>The configured rules include Python syntax/error checks and unused-import/name
-checks. The project targets Python 3.11 and uses an 88-character line length for
-Ruff formatting configuration.</p>
-<p>For the full contribution workflow and test commands, see
-<a href="../contributing/">Contributing</a>.</p>
+<p>Create or select a namespace:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>kubectl<span class="w"> </span>create<span class="w"> </span>namespace<span class="w"> </span>chemgraph
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">NAMESPACE</span><span class="o">=</span>chemgraph
+</code></pre></div>
+<p>If <code>chemgraph</code> already exists, omit the create command. To use another existing
+namespace, set <code>NAMESPACE</code> to its name.</p>
+<p>Create the untracked secret manifest and replace the needed values:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>cp<span class="w"> </span>secrets.yaml.template<span class="w"> </span>secrets.yaml
+</code></pre></div>
+<p><code>k8s/secrets.yaml</code> is ignored by Git. Do not commit it, paste its contents into
+issues, or leave placeholder strings as live credentials. For production, use
+your cluster's approved external-secret mechanism instead of a plaintext local
+manifest.</p>
+<p>Deploy both services with an explicit image tag:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">IMAGE_TAG</span><span class="o">=</span>&lt;published-tag&gt;<span class="w"> </span><span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span><span class="w"> </span>./deploy.sh<span class="w"> </span>deploy
+</code></pre></div>
+<p>The YAML manifests currently default to the <code>dev</code> tag. <code>IMAGE_TAG</code> overrides
+both deployments without editing the files. Pin a tested version for repeatable
+deployments; edit the image references directly if your policy requires an
+immutable digest.</p>
+<h2 id="cluster-specific-settings">Cluster-specific settings<a class="headerlink" href="#cluster-specific-settings" title="Permanent link">&para;</a></h2>
+<p>Both deployment manifests currently contain the ALCF HTTP/HTTPS proxy. On a
+non-ALCF cluster, remove or replace the <code>HTTP_PROXY</code>, <code>HTTPS_PROXY</code>,
+<code>http_proxy</code>, and <code>https_proxy</code> environment entries before deployment.</p>
+<p>Also review:</p>
+<ul>
+<li>resource requests of 1 CPU and 2 GiB memory per pod;</li>
+<li>limits of 2 CPUs and 4 GiB memory per pod;</li>
+<li>registry authentication and <code>imagePullPolicy: Always</code>;</li>
+<li>whether outbound access to model providers, PubChem, and model downloads is
+  permitted;</li>
+<li>whether model/calculator caches need persistent storage.</li>
+</ul>
+<h2 id="check-status-and-logs">Check status and logs<a class="headerlink" href="#check-status-and-logs" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span><span class="w"> </span>./deploy.sh<span class="w"> </span>status
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span><span class="w"> </span>./deploy.sh<span class="w"> </span>logs<span class="w"> </span>streamlit
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span><span class="w"> </span>./deploy.sh<span class="w"> </span>logs<span class="w"> </span>mcp
+</code></pre></div>
+<p>Useful direct checks include:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>pods,deployments,services<span class="w"> </span>-l<span class="w"> </span><span class="nv">app</span><span class="o">=</span>chemgraph<span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>kubectl<span class="w"> </span>describe<span class="w"> </span>deployment<span class="w"> </span>chemgraph-streamlit<span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>kubectl<span class="w"> </span>describe<span class="w"> </span>deployment<span class="w"> </span>chemgraph-mcp<span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span>
+</code></pre></div>
+<p>The Streamlit deployment probes <code>/_stcore/health</code>. The MCP deployment uses a TCP
+probe on port 9003.</p>
+<h2 id="access-locally-with-port-forwarding">Access locally with port forwarding<a class="headerlink" href="#access-locally-with-port-forwarding" title="Permanent link">&para;</a></h2>
+<p>Avoid public exposure while validating a deployment:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span><span class="w"> </span>./deploy.sh<span class="w"> </span>port-forward<span class="w"> </span>streamlit
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="c1"># http://localhost:8501</span>
+</code></pre></div>
+<p>In another terminal:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span><span class="w"> </span>./deploy.sh<span class="w"> </span>port-forward<span class="w"> </span>mcp
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># http://localhost:9003/mcp/</span>
+</code></pre></div>
+<p>The <code>/mcp/</code> path and trailing slash are required by streamable-HTTP clients.</p>
+<h2 id="loadbalancer-and-ingress">LoadBalancer and Ingress<a class="headerlink" href="#loadbalancer-and-ingress" title="Permanent link">&para;</a></h2>
+<p>Both services use <code>type: LoadBalancer</code> by default. Check assigned addresses:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>kubectl<span class="w"> </span>get<span class="w"> </span>svc<span class="w"> </span>-l<span class="w"> </span><span class="nv">app</span><span class="o">=</span>chemgraph<span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span>
+</code></pre></div>
+<p><code>ingress.yaml</code> covers only Streamlit. Before applying it, replace
+<code>chemgraph.example.com</code>, select the installed ingress class, configure TLS, and
+remove controller annotations that do not apply to your cluster.</p>
+<p>The supplied services and ingress do not add application authentication. Do not
+publish Streamlit or the MCP tool server directly to an untrusted network.</p>
+<h2 id="storage-and-replicas">Storage and replicas<a class="headerlink" href="#storage-and-replicas" title="Permanent link">&para;</a></h2>
+<p>The templates do not mount persistent volumes. <code>CHEMGRAPH_LOG_DIR</code> points to
+<code>/app/cg_logs</code>, and local sessions, checkpoints, artifacts, and downloaded data
+inside a pod can be lost when that pod is replaced.</p>
+<p>Add appropriate persistent volumes or external state services before relying on
+durable sessions or artifacts. Do not scale Streamlit horizontally until session
+routing and shared persistence are designed; independent replicas do not share
+in-process or pod-local state automatically.</p>
+<h2 id="apply-manifests-manually">Apply manifests manually<a class="headerlink" href="#apply-manifests-manually" title="Permanent link">&para;</a></h2>
+<p>If you do not use <code>deploy.sh</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>secrets.yaml<span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>deployment.yaml<span class="w"> </span>-f<span class="w"> </span>service.yaml<span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>mcp-deployment.yaml<span class="w"> </span>-f<span class="w"> </span>mcp-service.yaml<span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span>
+</code></pre></div>
+<p>Apply <code>ingress.yaml</code> separately only after customizing it.</p>
+<h2 id="remove-the-deployment">Remove the deployment<a class="headerlink" href="#remove-the-deployment" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nv">NAMESPACE</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span><span class="w"> </span>./deploy.sh<span class="w"> </span>delete
+</code></pre></div>
+<p>The script intentionally keeps <code>chemgraph-secrets</code>. Delete that secret and the
+namespace separately only when you are certain they are no longer needed:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>kubectl<span class="w"> </span>delete<span class="w"> </span>secret<span class="w"> </span>chemgraph-secrets<span class="w"> </span>-n<span class="w"> </span><span class="s2">"</span><span class="nv">$NAMESPACE</span><span class="s2">"</span>
+</code></pre></div>
+<h2 id="security-checklist">Security checklist<a class="headerlink" href="#security-checklist" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Use least-privilege RBAC and a dedicated namespace/service account.</li>
+<li>Store credentials with an approved secret manager and rotate them regularly.</li>
+<li>Add network policies for inbound and outbound traffic.</li>
+<li>Put TLS and authentication in front of every externally reachable service.</li>
+<li>Restrict MCP access more tightly than a read-only web application because its
+  tools can execute calculations and write files.</li>
+<li>Mount only the data directories that a calculation needs.</li>
+</ul>
+<p>For container behavior and local image testing, see <a href="../docker_support/">Docker</a>.
+For MCP client details, see <a href="../mcp_servers/">MCP servers</a>.</p>
 
 
 
@@ -1556,7 +1953,7 @@ Ruff formatting configuration.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../contributing/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Contributing">
+          <a href="../docker_support/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Docker">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1566,20 +1963,20 @@ Ruff formatting configuration.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Contributing
+                Docker
               </div>
             </div>
           </a>
         
         
           
-          <a href="../citation/" class="md-footer__link md-footer__link--next" aria-label="Next: Citation">
+          <a href="../running_local_models/" class="md-footer__link md-footer__link--next" aria-label="Next: Local models">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Citation
+                Local models
               </div>
             </div>
             <div class="md-footer__button md-icon">

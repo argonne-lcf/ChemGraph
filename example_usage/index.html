@@ -6,24 +6,28 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
+        <meta name="description" content="Agentic computational chemistry workflows from the command line, Python, Streamlit, and MCP.">
       
       
       
-        <link rel="prev" href="../codex_subscription/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/example_usage/">
       
       
-        <link rel="next" href="../streamlit_web_interface/">
+        <link rel="prev" href="../configuration_with_toml/">
+      
+      
+        <link rel="next" href="../mcp_servers/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../assets/chemgraph_logo.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Example Usage - ChemGraph Docs</title>
+        <title>Examples - ChemGraph</title>
       
     
     
@@ -44,8 +48,8 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Merriweather Sans";--md-code-font:"Roboto Mono"}</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
       
     
     
@@ -75,6 +79,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#examples" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -85,10 +94,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="ChemGraph Docs" class="md-header__button md-logo" aria-label="ChemGraph Docs" data-md-component="logo">
+    <a href=".." title="ChemGraph" class="md-header__button md-logo" aria-label="ChemGraph" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/chemgraph_logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -99,13 +107,13 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            ChemGraph Docs
+            ChemGraph
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Example Usage
+              Examples
             
           </span>
         </div>
@@ -118,19 +126,9 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
     
-      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
-      </label>
-    
-  
-    
-    
-    
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="deep-purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
-    
-      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
       </label>
     
@@ -138,9 +136,9 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="deep-orange"  aria-label="Switch to system preferences"  type="radio" name="__palette" id="__palette_2">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
     
-      <label class="md-header__button md-icon" title="Switch to system preferences" for="__palette_0" hidden>
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
       </label>
     
@@ -197,13 +195,13 @@
     
     
       <div class="md-header__source">
-        <a href="https://github.com/argonne-lcf/ChemGraph/tree/" title="Go to repository" class="md-source" data-md-component="source">
+        <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    ChemGraph
+    argonne-lcf/ChemGraph
   </div>
 </a>
       </div>
@@ -234,7 +232,7 @@
   
     
   
-  Overview
+  Home
 
       </a>
     </li>
@@ -246,36 +244,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../installation/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
+          
   
   
     
   
-  Installation
+  Getting started
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../codex_subscription/" class="md-tabs__link">
-        
-  
-  
+        </a>
+      </li>
     
-  
-  Experimental Codex Support
-
-      </a>
-    </li>
   
 
       
@@ -286,17 +268,20 @@
     
   
   
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../cli/" class="md-tabs__link">
+          
   
   
     
   
-  Example Usage
+  Using ChemGraph
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -305,36 +290,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../streamlit_web_interface/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../mcp_servers/" class="md-tabs__link">
+          
   
   
     
   
-  Streamlit Web Interface
+  Integrations and scale
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../mcp_servers/" class="md-tabs__link">
-        
-  
-  
+        </a>
+      </li>
     
-  
-  MCP Servers
-
-      </a>
-    </li>
   
 
       
@@ -350,7 +319,7 @@
   
     
   
-  Evaluation & Benchmarking
+  Evaluation
 
       </a>
     </li>
@@ -362,17 +331,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../configuration_with_toml/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../codex_subscription/" class="md-tabs__link">
+          
   
   
     
   
-  Configuration with TOML
+  Experimental
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -381,150 +353,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../project_structure/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../project_structure/" class="md-tabs__link">
+          
   
   
     
   
-  Project Structure
+  Project
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../running_local_models/" class="md-tabs__link">
-        
-  
-  
+        </a>
+      </li>
     
-  
-  Running Local Models with vLLM
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../docker_support/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Docker Support
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../code_formatting_and_linting/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Code Formatting & Linting
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../contributing/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Contributing
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../citation/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Citation
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../acknowledgements/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Acknowledgements
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../license/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  License
-
-      </a>
-    </li>
   
 
       
@@ -550,23 +392,22 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="ChemGraph Docs" class="md-nav__button md-logo" aria-label="ChemGraph Docs" data-md-component="logo">
+    <a href=".." title="ChemGraph" class="md-nav__button md-logo" aria-label="ChemGraph" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/chemgraph_logo.png" alt="logo">
 
     </a>
-    ChemGraph Docs
+    ChemGraph
   </label>
   
     <div class="md-nav__source">
-      <a href="https://github.com/argonne-lcf/ChemGraph/tree/" title="Go to repository" class="md-source" data-md-component="source">
+      <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    ChemGraph
+    argonne-lcf/ChemGraph
   </div>
 </a>
     </div>
@@ -587,7 +428,7 @@
   <span class="md-ellipsis">
     
   
-    Overview
+    Home
   
 
     
@@ -602,6 +443,68 @@
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -626,22 +529,23 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
   
     <li class="md-nav__item">
-      <a href="../codex_subscription/" class="md-nav__link">
+      <a href="../quickstart/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Experimental Codex Support
+    Quickstart
   
 
     
@@ -650,6 +554,70 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Models and authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -662,20 +630,86 @@
   
   
   
-    <li class="md-nav__item md-nav__item--active">
+    
+    
       
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
       
       
+        
       
-      <a href="./" class="md-nav__link md-nav__link--active">
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using ChemGraph
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Using ChemGraph
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Example Usage
+    Command-line interface
   
 
     
@@ -684,13 +718,97 @@
   
 
       </a>
-      
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
     
-      
-      
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../calculators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -703,7 +821,7 @@
   <span class="md-ellipsis">
     
   
-    Streamlit Web Interface
+    Streamlit interface
   
 
     
@@ -715,9 +833,250 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_with_toml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#small-local-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Small local tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interactive-and-python-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive and Python examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mcp-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MCP examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#docking-and-xanes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docking and XANES
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#distributed-execution-and-academy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distributed execution and Academy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations and scale
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations and scale
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -730,7 +1089,7 @@
   <span class="md-ellipsis">
     
   
-    MCP Servers
+    MCP servers
   
 
     
@@ -739,6 +1098,126 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker_support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../running_local_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hpc_and_academy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HPC and Academy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -757,7 +1236,7 @@
   <span class="md-ellipsis">
     
   
-    Evaluation & Benchmarking
+    Evaluation
   
 
     
@@ -776,15 +1255,71 @@
   
   
   
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experimental
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Experimental
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
     <li class="md-nav__item">
-      <a href="../configuration_with_toml/" class="md-nav__link">
+      <a href="../codex_subscription/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Configuration with TOML
+    Codex subscription
   
 
     
@@ -796,9 +1331,83 @@
     </li>
   
 
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -811,7 +1420,7 @@
   <span class="md-ellipsis">
     
   
-    Project Structure
+    Project structure
   
 
     
@@ -823,90 +1432,10 @@
     </li>
   
 
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../running_local_models/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Running Local Models with vLLM
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../docker_support/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Docker Support
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../code_formatting_and_linting/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Code Formatting & Linting
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -931,9 +1460,38 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
     
-      
-      
+  
+    Code formatting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -958,9 +1516,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -985,9 +1544,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1012,6 +1572,14 @@
     </li>
   
 
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
   </ul>
 </nav>
@@ -1030,6 +1598,82 @@
   
   
   
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#small-local-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Small local tasks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interactive-and-python-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive and Python examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mcp-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MCP examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#docking-and-xanes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Docking and XANES
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#distributed-execution-and-academy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Distributed execution and Academy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -1049,115 +1693,65 @@
   
 
 
-  <h1>Example Usage</h1>
-
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Before exploring example usage in the <code>notebooks/</code> directory, ensure you have specified the necessary API tokens in your environment. </p>
-</div>
-<div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">OpenAI API Key</label><label for="__tabbed_1_2">Anthropic API Key</label><label for="__tabbed_1_3">Google AI Studio (Gemini) API Key</label></div>
-<div class="tabbed-content">
-<div class="tabbed-block">
-<ol>
-<li>
-<p>Log in to your OpenAI account at the OpenAI Platform website. If you don't have an account, you'll need to create one first.</p>
-</li>
-<li>
-<p>Navigate to the API keys section. You can find this by clicking on your profile icon in the top-right corner and selecting "API keys."</p>
-</li>
-<li>
-<p>Click the + Create new secret key button.</p>
-</li>
-<li>
-<p>Give your key a descriptive name (e.g., "ChemGraph").</p>
-</li>
-<li>
-<p>Click Create secret key. A new key will be generated.</p>
-</li>
-<li>
-<p>Copy the key and save it in a secure location. You will not be able to see it again after this step.</p>
-</li>
-<li>
-<p>Set the key in your environment using the command provided in the instructions:
-     <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Unix or macOS</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>setx<span class="w"> </span>OPENAI_API_KEY<span class="w"> </span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Windows</span>
-</span></code></pre></div></p>
-</li>
-<li>Restart your terminal or IDE to ensure the environment variable is loaded.</li>
-</ol>
-</div>
-<div class="tabbed-block">
-<ol>
-<li>
-<p>Sign up or log in to your Anthropic account at the <a href="https://console.anthropic.com/">Anthropic console</a>.</p>
-</li>
-<li>
-<p>In the left-hand navigation menu, select API Keys.</p>
-</li>
-<li>
-<p>Click on the option to create a new API key.</p>
-</li>
-<li>
-<p>Provide a name for your API key (e.g., "ChemGraph").</p>
-</li>
-<li>
-<p>Click Create Key again.</p>
-</li>
-<li>
-<p>Copy the generated key and store it securely, as you may not be able to view it again.</p>
-</li>
-<li>
-<p>Set the key in your environment using the command provided in the instructions:
-     <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Unix or macOS</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>setx<span class="w"> </span>ANTHROPIC_API_KEY<span class="w"> </span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Windows</span>
-</span></code></pre></div></p>
-</li>
-<li>Restart your terminal or IDE to ensure the environment variable is loaded.</li>
-</ol>
-</div>
-<div class="tabbed-block">
-<ol>
-<li>
-<p>Go to the Google AI Studio website at <a href="https://ai.google.com/studio">Google AI Studio</a> and sign in with your Google account.</p>
-</li>
-<li>
-<p>In the left-hand menu, select Get API key.</p>
-</li>
-<li>
-<p>Click the Create API key in new project button. A new key will be instantly generated.</p>
-</li>
-<li>
-<p>Copy the API key by clicking the copy icon next to it.</p>
-</li>
-<li>
-<p>Set the key as an environment variable:
-     <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">GEMINI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Unix or macOS</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>setx<span class="w"> </span>GEMINI_API_KEY<span class="w"> </span><span class="s2">&quot;your_api_key_here&quot;</span><span class="w">  </span><span class="c1"># On Windows</span>
-</span></code></pre></div></p>
-</li>
-<li>Restart your terminal or IDE to ensure the environment variable is loaded.</li>
-</ol>
-</div>
-</div>
-</div>
-<details class="info" open="open">
-<summary><strong>Explore Example Notebooks</strong></summary>
-<p>Navigate to the <code>notebooks/</code> directory to explore various example notebooks demonstrating different capabilities of ChemGraph.</p>
+<h1 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h1>
+<p>Start with the <a href="../quickstart/">quickstart</a>, then choose an example closest to
+your intended deployment. Examples that use live models, external scientific
+programs, or HPC services require their own credentials and site setup.</p>
+<h2 id="small-local-tasks">Small local tasks<a class="headerlink" href="#small-local-tasks" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Lookup</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>-q<span class="w"> </span><span class="s2">"What is the SMILES string for aspirin?"</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Geometry optimization with the lightweight bundled calculator</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Build water from SMILES O and optimize it with EMT."</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Frequencies</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Calculate water vibrational frequencies with EMT."</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># Save only the final response</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--output<span class="w"> </span>last_message<span class="w"> </span>--output-file<span class="w"> </span>result.txt<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Build methane and report its formula."</span>
+</code></pre></div>
+<p>Review calculator suitability before interpreting the result. EMT examples are
+setup checks, not general high-accuracy chemistry recommendations.</p>
+<h2 id="interactive-and-python-examples">Interactive and Python examples<a class="headerlink" href="#interactive-and-python-examples" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive
+</code></pre></div>
+<p>For application code, begin with the async example in <a href="../python_api/">Python API</a>.</p>
+<p>Repository notebooks and example directories cover richer use cases:</p>
 <ul>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/1_Demo_single_agent.ipynb">Single-Agent System with MACE</a></strong>: This notebook demonstrates how a single agent can utilize multiple tools with MACE/xTB support.</p>
-</li>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/Demo_single_agent_UMA.ipynb">Single-Agent System with UMA</a></strong>: This notebook demonstrates how a single agent can utilize multiple tools with UMA support.</p>
-</li>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/2_Demo-multi_agent.ipynb">Multi-Agent System</a></strong>: This notebook demonstrates a multi-agent setup where planner and executor agents decompose and run computational chemistry tasks.</p>
-</li>
-<li>
-<p><strong><a href="https://github.com/argonne-lcf/ChemGraph/blob/main/notebooks/3_Demo_using_MCP.ipynb">Model Context Protocol (MCP) Server</a></strong>: This notebook shows how to run and connect to ChemGraph MCP tooling.</p>
-</li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/notebooks"><code>notebooks/</code></a></li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples"><code>examples/</code></a></li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/scripts"><code>scripts/</code></a></li>
 </ul>
-</details>
+<h2 id="mcp-examples">MCP examples<a class="headerlink" href="#mcp-examples" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_example">General stdio and HTTP examples</a></li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_parsl_example">Parsl MCP example</a></li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/xanes_mcp">XANES MCP examples</a></li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/chemgraph_opencode">OpenCode client example</a></li>
+</ul>
+<p>Read <a href="../mcp_servers/">MCP servers</a> first to choose stdio or streamable HTTP.</p>
+<h2 id="docking-and-xanes">Docking and XANES<a class="headerlink" href="#docking-and-xanes" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/docking">Docking example</a></li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/xanes_mcp">XANES examples</a></li>
+</ul>
+<p>These are specialized workflows. Docking needs Meeko and Vina; XANES may need
+Materials Project access and/or FDMNES.</p>
+<h2 id="distributed-execution-and-academy">Distributed execution and Academy<a class="headerlink" href="#distributed-execution-and-academy" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/demo">Execution backend demos</a></li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy/example-002-mace-ensemble-screening">Academy MACE ensemble screening</a></li>
+<li><a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/connecting_to_argo">Connect to Argo from an ALCF compute node</a></li>
+</ul>
+<p>These examples deliberately separate direct backend calls from agent-driven
+calls, which is useful for diagnosing infrastructure before adding an LLM.</p>
+<h2 id="evaluation">Evaluation<a class="headerlink" href="#evaluation" title="Permanent link">&para;</a></h2>
+<p>Evaluation is dataset-driven rather than bundled with a default benchmark.
+Follow <a href="../evaluation/">Evaluation</a> to create the supported JSON schema, select a
+deterministic structured-output judge, resume interrupted runs, and compare
+workflows. Published results are available on the
+<a href="https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard">ChemGraph Leaderboard</a>.</p>
 
 
 
@@ -1187,7 +1781,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../codex_subscription/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Experimental Codex Support">
+          <a href="../configuration_with_toml/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Configuration">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1197,20 +1791,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                Experimental Codex Support
+                Configuration
               </div>
             </div>
           </a>
         
         
           
-          <a href="../streamlit_web_interface/" class="md-footer__link md-footer__link--next" aria-label="Next: Streamlit Web Interface">
+          <a href="../mcp_servers/" class="md-footer__link md-footer__link--next" aria-label="Next: MCP servers">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Streamlit Web Interface
+                MCP servers
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -1247,7 +1841,7 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.code.annotate", "navigation.footer", "search.suggest", "header.autohide", "navigation.tabs"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.indexes", "navigation.sections", "navigation.tabs", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>

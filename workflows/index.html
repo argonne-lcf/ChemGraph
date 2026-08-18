@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/code_formatting_and_linting/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/workflows/">
       
       
-        <link rel="prev" href="../contributing/">
+        <link rel="prev" href="../cli/">
       
       
-        <link rel="next" href="../citation/">
+        <link rel="next" href="../calculators/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Code formatting - ChemGraph</title>
+        <title>Workflows - ChemGraph</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#code-formatting-and-linting" class="md-skip">
+        <a href="#workflows" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +113,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Code formatting
+              Workflows
             
           </span>
         </div>
@@ -265,10 +265,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../cli/" class="md-tabs__link">
           
   
@@ -350,12 +352,10 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
+      <li class="md-tabs__item">
         <a href="../project_structure/" class="md-tabs__link">
           
   
@@ -626,8 +626,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -649,19 +651,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -679,7 +684,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -722,10 +727,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../workflows/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -741,6 +773,92 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#single-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single agent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#main-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Main agent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-agent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-repl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python REPL
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#specialized-workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Specialized workflows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interface-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interface compatibility
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1226,10 +1344,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1249,22 +1365,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
@@ -1282,7 +1395,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1353,19 +1466,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
         
   
   
@@ -1381,7 +1485,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1498,6 +1601,80 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#single-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single agent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#main-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Main agent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#multi-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multi-agent
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-repl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python REPL
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#specialized-workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Specialized workflows
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interface-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interface compatibility
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1516,17 +1693,109 @@
   
 
 
-<h1 id="code-formatting-and-linting">Code formatting and linting<a class="headerlink" href="#code-formatting-and-linting" title="Permanent link">&para;</a></h1>
-<p>ChemGraph uses Ruff configuration from <code>pyproject.toml</code>. Match surrounding code
-and avoid reformatting unrelated files.</p>
-<p>Run the required lint gate from the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ruff<span class="w"> </span>check<span class="w"> </span>.
+<h1 id="workflows">Workflows<a class="headerlink" href="#workflows" title="Permanent link">&para;</a></h1>
+<p>Select an agent architecture with <code>--workflow</code> on the CLI or <code>workflow_type</code> in
+Python. <code>single_agent</code> is the recommended first choice.</p>
+<table>
+<thead>
+<tr>
+<th>Workflow</th>
+<th>Purpose</th>
+<th>Requirements and constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>single_agent</code></td>
+<td>One general chemistry agent with local tools</td>
+<td>Default; CLI and Python</td>
+</tr>
+<tr>
+<td><code>main_agent</code></td>
+<td>Durable supervisor with checkpointed subagents</td>
+<td>Interactive CLI or <code>MainAgentSession</code> only</td>
+</tr>
+<tr>
+<td><code>multi_agent</code></td>
+<td>Routes tasks among specialized agents</td>
+<td>More model calls and orchestration overhead</td>
+</tr>
+<tr>
+<td><code>python_relp</code></td>
+<td>Chemistry agent with Python REPL capability</td>
+<td>Executes Python in the current process; alias <code>python_repl</code></td>
+</tr>
+<tr>
+<td><code>graspa</code></td>
+<td>gRASPA-oriented agent</td>
+<td>Site-specific executable/configuration; alias <code>graspa_agent</code></td>
+</tr>
+<tr>
+<td><code>mock_agent</code></td>
+<td>Deterministic development/testing route</td>
+<td>Not intended for scientific work</td>
+</tr>
+<tr>
+<td><code>graspa_mcp</code></td>
+<td>gRASPA through MCP</td>
+<td>Site and MCP setup required</td>
+</tr>
+<tr>
+<td><code>rag_agent</code></td>
+<td>Retrieval-augmented questions over documents</td>
+<td>Install <code>chemgraph[rag]</code></td>
+</tr>
+<tr>
+<td><code>single_agent_xanes</code></td>
+<td>XANES-focused single agent</td>
+<td>Install <code>chemgraph[xanes]</code>; FDMNES and/or Materials Project access</td>
+</tr>
+<tr>
+<td><code>molecular_docking</code></td>
+<td>Protein-ligand docking workflow</td>
+<td>Install <code>chemgraph[docking]</code>; Vina setup</td>
+</tr>
+</tbody>
+</table>
+<h2 id="single-agent">Single agent<a class="headerlink" href="#single-agent" title="Permanent link">&para;</a></h2>
+<p>Start here for structure building, property lookup, ASE calculations, analysis,
+and reports:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--workflow<span class="w"> </span>single_agent<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Optimize water with EMT and report its final energy."</span>
 </code></pre></div>
-<p>The configured rules include Python syntax/error checks and unused-import/name
-checks. The project targets Python 3.11 and uses an 88-character line length for
-Ruff formatting configuration.</p>
-<p>For the full contribution workflow and test commands, see
-<a href="../contributing/">Contributing</a>.</p>
+<p>It minimizes orchestration complexity while exposing the normal tool set.</p>
+<h2 id="main-agent">Main agent<a class="headerlink" href="#main-agent" title="Permanent link">&para;</a></h2>
+<p><code>main_agent</code> manages longer-lived tasks through specialized subagents and
+durable checkpoints. It is intentionally session-oriented:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent
+</code></pre></div>
+<p>In Python, construct <code>MainAgentSession</code>; <code>ChemGraph.run()</code> rejects this workflow.
+See <a href="../python_api/">Python API</a>.</p>
+<h2 id="multi-agent">Multi-agent<a class="headerlink" href="#multi-agent" title="Permanent link">&para;</a></h2>
+<p><code>multi_agent</code> delegates among specialized graphs. It is useful when a request
+crosses distinct chemistry capabilities, but consumes more model tokens and may
+take more graph steps than <code>single_agent</code>.</p>
+<h2 id="python-repl">Python REPL<a class="headerlink" href="#python-repl" title="Permanent link">&para;</a></h2>
+<p><code>python_relp</code> (spelling retained for compatibility) allows generated Python to
+run inside the ChemGraph process.</p>
+<div class="admonition danger">
+<p class="admonition-title">Arbitrary code execution</p>
+<p>Use this workflow only with trusted prompts and data in an isolated
+environment. Generated code can read, modify, or delete files accessible to
+the process and may invoke installed programs.</p>
+</div>
+<h2 id="specialized-workflows">Specialized workflows<a class="headerlink" href="#specialized-workflows" title="Permanent link">&para;</a></h2>
+<p>RAG accepts supported text/PDF sources and may use provider embeddings or a
+local fallback. XANES, docking, gRASPA, and MCP workflows need the corresponding
+scientific engine, credentials, site configuration, or server. Consult
+<a href="../installation/">Installation</a>, <a href="../calculators/">Calculators</a>, and
+<a href="../mcp_servers/">MCP servers</a> before selecting them.</p>
+<h2 id="interface-compatibility">Interface compatibility<a class="headerlink" href="#interface-compatibility" title="Permanent link">&para;</a></h2>
+<p>The Streamlit interface exposes a subset of workflows. The CLI is the broadest
+discovery surface, but <code>main_agent</code> is interactive-only and some specialized
+workflows depend on local resources. Run <code>chemgraph --help</code> and
+<code>chemgraph models</code> against the installed release instead of assuming every
+workflow is available in every environment.</p>
 
 
 
@@ -1556,7 +1825,7 @@ Ruff formatting configuration.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../contributing/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Contributing">
+          <a href="../cli/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Command-line interface">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1566,20 +1835,20 @@ Ruff formatting configuration.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Contributing
+                Command-line interface
               </div>
             </div>
           </a>
         
         
           
-          <a href="../citation/" class="md-footer__link md-footer__link--next" aria-label="Next: Citation">
+          <a href="../calculators/" class="md-footer__link md-footer__link--next" aria-label="Next: Calculators">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Citation
+                Calculators
               </div>
             </div>
             <div class="md-footer__button md-icon">

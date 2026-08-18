@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/code_formatting_and_linting/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/calculators/">
       
       
-        <link rel="prev" href="../contributing/">
+        <link rel="prev" href="../workflows/">
       
       
-        <link rel="next" href="../citation/">
+        <link rel="next" href="../python_api/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Code formatting - ChemGraph</title>
+        <title>Calculators - ChemGraph</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#code-formatting-and-linting" class="md-skip">
+        <a href="#calculators" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +113,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Code formatting
+              Calculators
             
           </span>
         </div>
@@ -265,10 +265,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../cli/" class="md-tabs__link">
           
   
@@ -350,12 +352,10 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
+      <li class="md-tabs__item">
         <a href="../project_structure/" class="md-tabs__link">
           
   
@@ -626,8 +626,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -649,19 +651,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -679,7 +684,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -750,10 +755,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../calculators/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -769,6 +801,114 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#calculator-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calculator overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-tools-can-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What tools can run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emt-for-setup-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EMT for setup checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mace-downloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MACE downloads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#uma-dependency-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UMA dependency isolation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-executables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External executables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#artifacts-and-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Artifacts and paths
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scientific-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scientific validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1226,10 +1366,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1249,22 +1387,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
@@ -1282,7 +1417,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1353,19 +1488,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
         
   
   
@@ -1381,7 +1507,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1498,6 +1623,102 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#calculator-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calculator overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-tools-can-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What tools can run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#emt-for-setup-checks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EMT for setup checks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mace-downloads" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MACE downloads
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#uma-dependency-isolation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UMA dependency isolation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-executables" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        External executables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#artifacts-and-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Artifacts and paths
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scientific-validation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scientific validation
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1516,17 +1737,103 @@
   
 
 
-<h1 id="code-formatting-and-linting">Code formatting and linting<a class="headerlink" href="#code-formatting-and-linting" title="Permanent link">&para;</a></h1>
-<p>ChemGraph uses Ruff configuration from <code>pyproject.toml</code>. Match surrounding code
-and avoid reformatting unrelated files.</p>
-<p>Run the required lint gate from the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ruff<span class="w"> </span>check<span class="w"> </span>.
+<h1 id="calculators">Calculators<a class="headerlink" href="#calculators" title="Permanent link">&para;</a></h1>
+<p>ChemGraph uses ASE calculators for energies, geometry optimization, vibrations,
+thermochemistry, and related tasks. Available calculators are detected at
+runtime; optional engines that cannot be imported or located are omitted.</p>
+<h2 id="calculator-overview">Calculator overview<a class="headerlink" href="#calculator-overview" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Calculator</th>
+<th>Setup</th>
+<th>Best use in onboarding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EMT</td>
+<td>Included with ASE</td>
+<td>Fast, offline smoke tests; limited elements/accuracy</td>
+</tr>
+<tr>
+<td>MACE</td>
+<td>Included in core ChemGraph</td>
+<td>General ML potential; downloads weights on first use</td>
+</tr>
+<tr>
+<td>TBLite</td>
+<td><code>pip install "chemgraph[calculators]"</code></td>
+<td>Semiempirical calculations</td>
+</tr>
+<tr>
+<td>UMA / fairchem</td>
+<td><code>pip install "chemgraph[uma]"</code> in a separate environment</td>
+<td>Advanced universal ML potential</td>
+</tr>
+<tr>
+<td>AIMNet2</td>
+<td>Install its package/model dependencies separately</td>
+<td>Supported molecular ML route when importable</td>
+</tr>
+<tr>
+<td>NWChem</td>
+<td>Install/configure NWChem for ASE</td>
+<td>External quantum chemistry</td>
+</tr>
+<tr>
+<td>ORCA</td>
+<td>Install/configure ORCA for ASE</td>
+<td>External quantum chemistry</td>
+</tr>
+</tbody>
+</table>
+<p>The agent may infer a calculator from a request, but explicitly naming one makes
+runs more reproducible:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Optimize water with EMT and report the final energy."</span>
 </code></pre></div>
-<p>The configured rules include Python syntax/error checks and unused-import/name
-checks. The project targets Python 3.11 and uses an 88-character line length for
-Ruff formatting configuration.</p>
-<p>For the full contribution workflow and test commands, see
-<a href="../contributing/">Contributing</a>.</p>
+<h2 id="what-tools-can-run">What tools can run<a class="headerlink" href="#what-tools-can-run" title="Permanent link">&para;</a></h2>
+<p>Calculator-backed tools cover operations such as:</p>
+<ul>
+<li>single-point energy and force calculations;</li>
+<li>geometry optimization;</li>
+<li>vibrational frequencies and normal modes;</li>
+<li>infrared and thermochemistry workflows where supported;</li>
+<li>calculator-specific properties such as dipoles.</li>
+</ul>
+<p>Support depends on the selected calculator. A valid property for one engine may
+not exist for another.</p>
+<h2 id="emt-for-setup-checks">EMT for setup checks<a class="headerlink" href="#emt-for-setup-checks" title="Permanent link">&para;</a></h2>
+<p>EMT is lightweight and requires no download, making it a useful plumbing test.
+It is not a general-purpose high-accuracy molecular method. Do not treat an EMT
+result as scientifically appropriate merely because the workflow completed.</p>
+<h2 id="mace-downloads">MACE downloads<a class="headerlink" href="#mace-downloads" title="Permanent link">&para;</a></h2>
+<p>MACE is installed with the core package, but pretrained weights may be fetched
+on first use. In restricted or offline environments, pre-stage the required
+model cache or choose EMT for the initial test.</p>
+<h2 id="uma-dependency-isolation">UMA dependency isolation<a class="headerlink" href="#uma-dependency-isolation" title="Permanent link">&para;</a></h2>
+<p>The UMA/fairchem stack can require an <code>e3nn</code> version that conflicts with MACE.
+Use a separate virtual environment for UMA rather than forcing incompatible
+versions into the core environment.</p>
+<h2 id="external-executables">External executables<a class="headerlink" href="#external-executables" title="Permanent link">&para;</a></h2>
+<p>Installing ChemGraph's Python dependencies does not install ORCA, NWChem,
+FDMNES, Vina, or site-specific simulation programs. Confirm licenses,
+executables, environment variables, pseudopotentials/basis data, and scheduler
+access independently.</p>
+<h2 id="artifacts-and-paths">Artifacts and paths<a class="headerlink" href="#artifacts-and-paths" title="Permanent link">&para;</a></h2>
+<p>Tool writers resolve relative artifact paths under the current session log
+directory. By default it is a unique directory below <code>cg_logs/</code>. Readers search
+using the same session-aware path handling. Choose a different parent before
+launching ChemGraph:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_LOG_DIR</span><span class="o">=</span><span class="s2">"/absolute/path/to/calculations"</span>
+</code></pre></div>
+<p>Typical outputs include XYZ files, trajectories, JSON/CSV data, spectra, normal
+modes, and HTML reports.</p>
+<h2 id="scientific-validation">Scientific validation<a class="headerlink" href="#scientific-validation" title="Permanent link">&para;</a></h2>
+<p>Always record the calculator and model version, numerical settings, charge and
+spin state, boundary conditions, units, and convergence criteria. Check whether
+the method covers the system's elements and chemistry. Agent-generated prose is
+not a substitute for inspecting calculation outputs.</p>
 
 
 
@@ -1556,7 +1863,7 @@ Ruff formatting configuration.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../contributing/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Contributing">
+          <a href="../workflows/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Workflows">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1566,20 +1873,20 @@ Ruff formatting configuration.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Contributing
+                Workflows
               </div>
             </div>
           </a>
         
         
           
-          <a href="../citation/" class="md-footer__link md-footer__link--next" aria-label="Next: Citation">
+          <a href="../python_api/" class="md-footer__link md-footer__link--next" aria-label="Next: Python API">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Citation
+                Python API
               </div>
             </div>
             <div class="md-footer__button md-icon">

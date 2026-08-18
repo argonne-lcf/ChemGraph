@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/code_formatting_and_linting/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/troubleshooting/">
       
       
-        <link rel="prev" href="../contributing/">
+        <link rel="prev" href="../models/">
       
       
-        <link rel="next" href="../citation/">
+        <link rel="next" href="../cli/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Code formatting - ChemGraph</title>
+        <title>Troubleshooting - ChemGraph</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#code-formatting-and-linting" class="md-skip">
+        <a href="#troubleshooting" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +113,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Code formatting
+              Troubleshooting
             
           </span>
         </div>
@@ -243,10 +243,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../installation/" class="md-tabs__link">
           
   
@@ -350,12 +352,10 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
+      <li class="md-tabs__item">
         <a href="../project_structure/" class="md-tabs__link">
           
   
@@ -445,8 +445,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -462,19 +464,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
         
           
-          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
             
   
   
@@ -492,7 +497,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -591,10 +596,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../troubleshooting/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -610,6 +642,136 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#command-not-found" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command not found
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#credential-check-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential check fails
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#calculator-is-unavailable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calculator is unavailable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-run-appears-to-hang" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A run appears to hang
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results-are-not-where-expected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results are not where expected
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-source-checkout-imports-the-wrong-chemgraph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A source checkout imports the wrong ChemGraph
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#streamlit-cannot-find-the-app-or-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streamlit cannot find the app or config
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-mcp-client-cannot-connect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An MCP client cannot connect
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-saved-session-cannot-be-resumed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A saved session cannot be resumed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#still-blocked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Still blocked
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1226,10 +1388,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -1249,22 +1409,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
             
   
   
@@ -1282,7 +1439,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1353,19 +1510,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
         
   
   
@@ -1381,7 +1529,6 @@
   
 
       </a>
-      
     </li>
   
 
@@ -1498,6 +1645,124 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#command-not-found" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command not found
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#credential-check-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Credential check fails
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#calculator-is-unavailable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calculator is unavailable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-run-appears-to-hang" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A run appears to hang
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results-are-not-where-expected" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results are not where expected
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-source-checkout-imports-the-wrong-chemgraph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A source checkout imports the wrong ChemGraph
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#streamlit-cannot-find-the-app-or-config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streamlit cannot find the app or config
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#an-mcp-client-cannot-connect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        An MCP client cannot connect
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-saved-session-cannot-be-resumed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A saved session cannot be resumed
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#still-blocked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Still blocked
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1516,17 +1781,76 @@
   
 
 
-<h1 id="code-formatting-and-linting">Code formatting and linting<a class="headerlink" href="#code-formatting-and-linting" title="Permanent link">&para;</a></h1>
-<p>ChemGraph uses Ruff configuration from <code>pyproject.toml</code>. Match surrounding code
-and avoid reformatting unrelated files.</p>
-<p>Run the required lint gate from the repository root:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ruff<span class="w"> </span>check<span class="w"> </span>.
+<h1 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h1>
+<p>Start with the narrowest diagnostic commands:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>--version
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>which<span class="w"> </span>chemgraph
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>chemgraph<span class="w"> </span>--help
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>chemgraph<span class="w"> </span>models
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--check-keys
 </code></pre></div>
-<p>The configured rules include Python syntax/error checks and unused-import/name
-checks. The project targets Python 3.11 and uses an 88-character line length for
-Ruff formatting configuration.</p>
-<p>For the full contribution workflow and test commands, see
-<a href="../contributing/">Contributing</a>.</p>
+<p>Add <code>-v</code> for INFO logs or <code>-vv</code> for DEBUG logs to a failing <code>chemgraph run</code>.</p>
+<h2 id="command-not-found">Command not found<a class="headerlink" href="#command-not-found" title="Permanent link">&para;</a></h2>
+<p>Activate the environment in which ChemGraph was installed:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>show<span class="w"> </span>chemgraph
+</code></pre></div>
+<p>Python 3.11 or newer is required.</p>
+<h2 id="credential-check-fails">Credential check fails<a class="headerlink" href="#credential-check-fails" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Confirm that the selected model and environment variable belong to the same
+  provider.</li>
+<li>Export the variable in the shell that launches ChemGraph, Streamlit, or
+  Docker.</li>
+<li>Use <code>ARGO_USER</code> for <code>argo:</code> routes and <code>ALCF_ACCESS_TOKEN</code> for ALCF routes.</li>
+<li>Do not quote placeholders literally or place secrets in committed config.</li>
+</ul>
+<p>See <a href="../models/">Models and authentication</a>.</p>
+<h2 id="calculator-is-unavailable">Calculator is unavailable<a class="headerlink" href="#calculator-is-unavailable" title="Permanent link">&para;</a></h2>
+<p>ChemGraph only registers engines it can import or locate. Name the calculator
+explicitly in your prompt, install its extra, and verify external executables
+separately. EMT is the simplest bundled smoke test. MACE can download weights
+on first use, and UMA is best installed in a separate environment.</p>
+<p>See <a href="../calculators/">Calculators</a>.</p>
+<h2 id="a-run-appears-to-hang">A run appears to hang<a class="headerlink" href="#a-run-appears-to-hang" title="Permanent link">&para;</a></h2>
+<p>The first call may be downloading model or calculator data. Use <code>-vv</code> to locate
+the active step and inspect the latest directory under <code>cg_logs/</code>. Live LLM and
+database calls also require network access.</p>
+<h2 id="results-are-not-where-expected">Results are not where expected<a class="headerlink" href="#results-are-not-where-expected" title="Permanent link">&para;</a></h2>
+<p>Relative artifact paths are resolved under the current ChemGraph session log
+directory. The default parent is <code>cg_logs/</code>. Set an absolute location before
+launching the process:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_LOG_DIR</span><span class="o">=</span><span class="s2">"/absolute/path/to/runs"</span>
+</code></pre></div>
+<h2 id="a-source-checkout-imports-the-wrong-chemgraph">A source checkout imports the wrong ChemGraph<a class="headerlink" href="#a-source-checkout-imports-the-wrong-chemgraph" title="Permanent link">&para;</a></h2>
+<p>A stale site-packages installation can shadow the checkout. Activate a clean
+environment and install the current checkout editable:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import chemgraph; print(chemgraph.__file__)"</span>
+</code></pre></div>
+<p>For test isolation, <code>PYTHONNOUSERSITE=1</code> can prevent user-site packages from
+being imported.</p>
+<h2 id="streamlit-cannot-find-the-app-or-config">Streamlit cannot find the app or config<a class="headerlink" href="#streamlit-cannot-find-the-app-or-config" title="Permanent link">&para;</a></h2>
+<p><code>src/ui/app.py</code> is a source-tree entry point. Run it from the repository root,
+or use Docker. Its default <code>config.toml</code> is also rooted at the checkout. See the
+<a href="../streamlit_web_interface/">Streamlit guide</a>.</p>
+<h2 id="an-mcp-client-cannot-connect">An MCP client cannot connect<a class="headerlink" href="#an-mcp-client-cannot-connect" title="Permanent link">&para;</a></h2>
+<p>For streamable HTTP, include the path and trailing slash:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>http://localhost:9003/mcp/
+</code></pre></div>
+<p>Confirm that server and client use the same transport. Stdio clients launch the
+module as a subprocess and do not connect to an HTTP port. See
+<a href="../mcp_servers/">MCP servers</a>.</p>
+<h2 id="a-saved-session-cannot-be-resumed">A saved session cannot be resumed<a class="headerlink" href="#a-saved-session-cannot-be-resumed" title="Permanent link">&para;</a></h2>
+<p>CLI sessions are stored in <code>~/.chemgraph/sessions.db</code>. List them with
+<code>chemgraph session list</code>, inspect one with <code>chemgraph session show &lt;id&gt;</code>, and
+resume with the same workflow. The checkpointed <code>main_agent</code> must run in
+interactive mode.</p>
+<h2 id="still-blocked">Still blocked<a class="headerlink" href="#still-blocked" title="Permanent link">&para;</a></h2>
+<p>Search <a href="https://github.com/argonne-lcf/ChemGraph/issues">GitHub issues</a>. When
+opening an issue, include the ChemGraph version, Python version, operating
+system, selected workflow/calculator, sanitized command, and relevant DEBUG
+output. Never include tokens or proprietary calculation inputs.</p>
 
 
 
@@ -1556,7 +1880,7 @@ Ruff formatting configuration.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../contributing/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Contributing">
+          <a href="../models/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Models and authentication">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1566,20 +1890,20 @@ Ruff formatting configuration.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Contributing
+                Models and authentication
               </div>
             </div>
           </a>
         
         
           
-          <a href="../citation/" class="md-footer__link md-footer__link--next" aria-label="Next: Citation">
+          <a href="../cli/" class="md-footer__link md-footer__link--next" aria-label="Next: Command-line interface">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Citation
+                Command-line interface
               </div>
             </div>
             <div class="md-footer__button md-icon">

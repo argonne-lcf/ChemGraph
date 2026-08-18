@@ -6,24 +6,28 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
+        <meta name="description" content="Agentic computational chemistry workflows from the command line, Python, Streamlit, and MCP.">
       
       
       
-        <link rel="prev" href="../project_structure/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/running_local_models/">
       
       
-        <link rel="next" href="../docker_support/">
+        <link rel="prev" href="../kubernetes/">
+      
+      
+        <link rel="next" href="../hpc_and_academy/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../assets/chemgraph_logo.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Running Local Models with vLLM - ChemGraph Docs</title>
+        <title>Local models - ChemGraph</title>
       
     
     
@@ -44,8 +48,8 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Merriweather Sans";--md-code-font:"Roboto Mono"}</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
       
     
     
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#inference-backend-setup-remotelocal" class="md-skip">
+        <a href="#local-models" class="md-skip">
           Skip to content
         </a>
       
@@ -90,10 +94,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="ChemGraph Docs" class="md-header__button md-logo" aria-label="ChemGraph Docs" data-md-component="logo">
+    <a href=".." title="ChemGraph" class="md-header__button md-logo" aria-label="ChemGraph" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/chemgraph_logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -104,13 +107,13 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            ChemGraph Docs
+            ChemGraph
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Running Local Models with vLLM
+              Local models
             
           </span>
         </div>
@@ -123,19 +126,9 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
     
-      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
-      </label>
-    
-  
-    
-    
-    
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="deep-purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
-    
-      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
       </label>
     
@@ -143,9 +136,9 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="deep-orange"  aria-label="Switch to system preferences"  type="radio" name="__palette" id="__palette_2">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
     
-      <label class="md-header__button md-icon" title="Switch to system preferences" for="__palette_0" hidden>
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
       </label>
     
@@ -202,13 +195,13 @@
     
     
       <div class="md-header__source">
-        <a href="https://github.com/argonne-lcf/ChemGraph/tree/" title="Go to repository" class="md-source" data-md-component="source">
+        <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    ChemGraph
+    argonne-lcf/ChemGraph
   </div>
 </a>
       </div>
@@ -239,7 +232,7 @@
   
     
   
-  Overview
+  Home
 
       </a>
     </li>
@@ -251,17 +244,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../installation/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
+          
   
   
     
   
-  Installation
+  Getting started
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -270,17 +266,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../codex_subscription/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../cli/" class="md-tabs__link">
+          
   
   
     
   
-  Experimental Codex Support
+  Using ChemGraph
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -288,56 +287,23 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../example_usage/" class="md-tabs__link">
-        
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../mcp_servers/" class="md-tabs__link">
+          
   
   
     
   
-  Example Usage
+  Integrations and scale
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../streamlit_web_interface/" class="md-tabs__link">
-        
-  
-  
+        </a>
+      </li>
     
-  
-  Streamlit Web Interface
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../mcp_servers/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  MCP Servers
-
-      </a>
-    </li>
   
 
       
@@ -353,7 +319,7 @@
   
     
   
-  Evaluation & Benchmarking
+  Evaluation
 
       </a>
     </li>
@@ -365,17 +331,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../configuration_with_toml/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../codex_subscription/" class="md-tabs__link">
+          
   
   
     
   
-  Configuration with TOML
+  Experimental
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -384,152 +353,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../project_structure/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../project_structure/" class="md-tabs__link">
+          
   
   
     
   
-  Project Structure
+  Project
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
+        </a>
+      </li>
     
-  
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Running Local Models with vLLM
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../docker_support/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Docker Support
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../code_formatting_and_linting/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Code Formatting & Linting
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../contributing/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Contributing
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../citation/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Citation
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../acknowledgements/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Acknowledgements
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../license/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  License
-
-      </a>
-    </li>
   
 
       
@@ -555,23 +392,22 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="ChemGraph Docs" class="md-nav__button md-logo" aria-label="ChemGraph Docs" data-md-component="logo">
+    <a href=".." title="ChemGraph" class="md-nav__button md-logo" aria-label="ChemGraph" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/chemgraph_logo.png" alt="logo">
 
     </a>
-    ChemGraph Docs
+    ChemGraph
   </label>
   
     <div class="md-nav__source">
-      <a href="https://github.com/argonne-lcf/ChemGraph/tree/" title="Go to repository" class="md-source" data-md-component="source">
+      <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    ChemGraph
+    argonne-lcf/ChemGraph
   </div>
 </a>
     </div>
@@ -592,7 +428,7 @@
   <span class="md-ellipsis">
     
   
-    Overview
+    Home
   
 
     
@@ -607,6 +443,68 @@
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -631,22 +529,23 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
   
     <li class="md-nav__item">
-      <a href="../codex_subscription/" class="md-nav__link">
+      <a href="../quickstart/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Experimental Codex Support
+    Quickstart
   
 
     
@@ -658,22 +557,23 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
   
     <li class="md-nav__item">
-      <a href="../example_usage/" class="md-nav__link">
+      <a href="../models/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Example Usage
+    Models and authentication
   
 
     
@@ -685,9 +585,225 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using ChemGraph
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Using ChemGraph
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-line interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../calculators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -700,7 +816,7 @@
   <span class="md-ellipsis">
     
   
-    Streamlit Web Interface
+    Streamlit interface
   
 
     
@@ -712,9 +828,142 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_with_toml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../example_usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations and scale
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations and scale
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -727,7 +976,7 @@
   <span class="md-ellipsis">
     
   
-    MCP Servers
+    MCP servers
   
 
     
@@ -736,6 +985,217 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker_support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local models
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ollama-quickstart" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ollama quickstart
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#selection-and-reliability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Selection and reliability
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-openai-compatible-endpoints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced OpenAI-compatible endpoints
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#privacy-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Privacy boundary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hpc_and_academy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HPC and Academy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -754,7 +1214,7 @@
   <span class="md-ellipsis">
     
   
-    Evaluation & Benchmarking
+    Evaluation
   
 
     
@@ -773,15 +1233,71 @@
   
   
   
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experimental
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Experimental
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
     <li class="md-nav__item">
-      <a href="../configuration_with_toml/" class="md-nav__link">
+      <a href="../codex_subscription/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Configuration with TOML
+    Codex subscription
   
 
     
@@ -793,9 +1309,83 @@
     </li>
   
 
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -808,7 +1398,7 @@
   <span class="md-ellipsis">
     
   
-    Project Structure
+    Project structure
   
 
     
@@ -820,183 +1410,10 @@
     </li>
   
 
-    
-      
-      
-  
-  
-    
-  
-  
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Running Local Models with vLLM
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Running Local Models with vLLM
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#inference-backend-setup-remotelocal" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Inference Backend Setup (Remote/Local)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Inference Backend Setup (Remote/Local)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#virtual-python-environment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Virtual Python Environment
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#install-inference-server-vllm" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Install Inference Server (vLLM)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#running-the-vllm-server-standalone" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running the vLLM Server (Standalone)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../docker_support/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Docker Support
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../code_formatting_and_linting/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Code Formatting & Linting
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1021,9 +1438,38 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
     
-      
-      
+  
+    Code formatting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -1048,9 +1494,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1075,9 +1522,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1102,6 +1550,14 @@
     </li>
   
 
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
   </ul>
 </nav>
@@ -1120,6 +1576,8 @@
   
   
   
+    
+  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -1128,52 +1586,46 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#inference-backend-setup-remotelocal" class="md-nav__link">
+  <a href="#ollama-quickstart" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Inference Backend Setup (Remote/Local)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Inference Backend Setup (Remote/Local)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#virtual-python-environment" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Virtual Python Environment
+        Ollama quickstart
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#install-inference-server-vllm" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#selection-and-reliability" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install Inference Server (vLLM)
+        Selection and reliability
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#running-the-vllm-server-standalone" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#advanced-openai-compatible-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Running the vLLM Server (Standalone)
+        Advanced OpenAI-compatible endpoints
       
     </span>
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
+      
+        <li class="md-nav__item">
+  <a href="#privacy-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Privacy boundary
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1197,88 +1649,44 @@
   
 
 
-  <h1>Running Local Models with vLLM</h1>
-
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This section describes how to set up and run local language models using the vLLM inference server.</p>
-</div>
-<h3 id="inference-backend-setup-remotelocal">Inference Backend Setup (Remote/Local)</h3>
-<h4 id="virtual-python-environment">Virtual Python Environment</h4>
-<p>All instructions below must be executed within a Python virtual environment. Ensure the virtual environment uses the same Python version as your project (e.g., Python 3.11).</p>
-<p><strong>Example 1: Using conda</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>conda<span class="w"> </span>create<span class="w"> </span>-n<span class="w"> </span>vllm-env<span class="w"> </span><span class="nv">python</span><span class="o">=</span><span class="m">3</span>.11<span class="w"> </span>-y
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>conda<span class="w"> </span>activate<span class="w"> </span>vllm-env
-</span></code></pre></div></p>
-<p><strong>Example 2: Using python venv</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python3.11<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>vllm-env
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">source</span><span class="w"> </span>vllm-env/bin/activate<span class="w">  </span><span class="c1"># On Windows use `vllm-env\\Scripts\\activate`</span>
-</span></code></pre></div></p>
-<h4 id="install-inference-server-vllm">Install Inference Server (vLLM)</h4>
-<p>vLLM is recommended for serving many transformer models efficiently.</p>
-<p><strong>Basic vLLM installation from source:</strong>
-Make sure your virtual environment is activated.
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Ensure git is installed</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/vllm-project/vllm.git
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nb">cd</span><span class="w"> </span>vllm
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
-</span></code></pre></div>
-For specific hardware acceleration (e.g., CUDA, ROCm), refer to the <a href="https://docs.vllm.ai/en/latest/getting_started/installation.html">official vLLM installation documentation</a>.</p>
-<h4 id="running-the-vllm-server-standalone">Running the vLLM Server (Standalone)</h4>
-<p>A script is provided at <code>scripts/run_vllm_server.sh</code> to help start a vLLM server with features like logging, retry attempts, and timeout. This is intended for running vLLM as a separate standalone service (for example, on a machine with GPU access).</p>
-<p><strong>Before running the script:</strong>
-1.  Ensure your vLLM Python virtual environment is activated.
-    <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Example: if you used conda</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># conda activate vllm-env </span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># Example: if you used python venv</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># source path/to/your/vllm-env/bin/activate</span>
-</span></code></pre></div>
-2.  Make the script executable:
-    <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chmod<span class="w"> </span>+x<span class="w"> </span>scripts/run_vllm_server.sh
-</span></code></pre></div></p>
-<p><strong>To run the script:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>./scripts/run_vllm_server.sh<span class="w"> </span><span class="o">[</span>MODEL_IDENTIFIER<span class="o">]</span><span class="w"> </span><span class="o">[</span>PORT<span class="o">]</span><span class="w"> </span><span class="o">[</span>MAX_MODEL_LENGTH<span class="o">]</span>
-</span></code></pre></div>
-<ul>
-<li><code>[MODEL_IDENTIFIER]</code> (optional): The Hugging Face model identifier. Defaults to <code>facebook/opt-125m</code>.</li>
-<li><code>[PORT]</code> (optional): The port for the vLLM server. Defaults to <code>8001</code>.</li>
-<li><code>[MAX_MODEL_LENGTH]</code> (optional): The maximum model length. Defaults to <code>4096</code>.</li>
-</ul>
-<p><strong>Example:</strong>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>./scripts/run_vllm_server.sh<span class="w"> </span>meta-llama/Meta-Llama-3-8B-Instruct<span class="w"> </span><span class="m">8001</span><span class="w"> </span><span class="m">8192</span>
-</span></code></pre></div></p>
-<details class="info" open="open">
-<summary><strong>Important Note on Gated Models (e.g., Llama 3):</strong></summary>
-<ul>
-<li>
-<p>Many models, such as those from the Llama family by Meta, are gated and require you to accept their terms of use on Hugging Face and use an access token for download. </p>
-</li>
-<li>
-<p>To use such models with vLLM:</p>
-<ol>
-<li><strong>Hugging Face Account and Token</strong>: Ensure you have a Hugging Face account and have generated an access token with <code>read</code> permissions. You can find this in your Hugging Face account settings under "Access Tokens".</li>
-<li><strong>Accept Model License</strong>: Navigate to the Hugging Face page of the specific model you want to use (e.g., <code>meta-llama/Meta-Llama-3-8B-Instruct</code>) and accept its license/terms if prompted.</li>
-<li><strong>Environment Variables</strong>: Before running the vLLM server, set the following environment variables in your terminal session or environment configuration (e.g., <code>.bashrc</code>, <code>.zshrc</code>):
-    <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">HF_TOKEN</span><span class="o">=</span><span class="s2">&quot;your_hugging_face_token_here&quot;</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># Optional: Specify a directory for Hugging Face to download models and cache.</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="c1"># export HF_HOME=&quot;/path/to/your/huggingface_cache_directory&quot;</span>
-</span></code></pre></div>
-    vLLM will use these environment variables to authenticate with Hugging Face and download the model weights.</li>
-</ol>
-</li>
-<li>
-<p>The script will:</p>
-<ul>
-<li>Attempt to start the vLLM OpenAI-compatible API server.</li>
-<li>Log output to a file in the <code>logs/</code> directory (created if it doesn't exist at the project root).</li>
-<li>The server runs in the background via <code>nohup</code>.</li>
-</ul>
-</li>
-<li>
-<p>This standalone script is the recommended approach for users who manage their own vLLM instances directly.</p>
-</li>
-</ul>
-</details>
+<h1 id="local-models">Local models<a class="headerlink" href="#local-models" title="Permanent link">&para;</a></h1>
+<p>Ollama is the simplest local model route currently wired into ChemGraph. Local
+inference avoids sending prompts to a hosted provider, but chemistry tools may
+still call network services or external programs.</p>
+<h2 id="ollama-quickstart">Ollama quickstart<a class="headerlink" href="#ollama-quickstart" title="Permanent link">&para;</a></h2>
+<p>Install and start Ollama using its
+<a href="https://ollama.com/download">official instructions</a>, then pull a supported
+model:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.2
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>ollama<span class="w"> </span>list
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>chemgraph<span class="w"> </span>models
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>llama3.2<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Build water from SMILES O and optimize it with EMT."</span>
+</code></pre></div>
+<p>The normal endpoint is <code>http://localhost:11434</code>. Override it when Ollama is
+hosted elsewhere:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">[api.local]</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">base_url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"http://localhost:11434"</span>
+</code></pre></div>
+<h2 id="selection-and-reliability">Selection and reliability<a class="headerlink" href="#selection-and-reliability" title="Permanent link">&para;</a></h2>
+<p>ChemGraph recognizes a curated set of local identifiers. Use
+<code>chemgraph models</code> rather than assuming every Ollama tag is mapped. A model must
+also support tool calling well enough to emit the schemas expected by chemistry
+tools.</p>
+<p>Smaller models may choose tools, arguments, or units less reliably. Start with
+a short, explicit EMT request and inspect every tool call/result. Model memory,
+accelerator needs, and downloads are determined by the selected Ollama model.</p>
+<h2 id="advanced-openai-compatible-endpoints">Advanced OpenAI-compatible endpoints<a class="headerlink" href="#advanced-openai-compatible-endpoints" title="Permanent link">&para;</a></h2>
+<p>The repository includes <code>scripts/run_vllm_server.sh</code> as an environment-specific
+vLLM helper. Custom endpoints are advanced: they must expose a compatible API,
+route through a compatible ChemGraph provider/model ID, and implement reliable
+tool calling. Review the script's hardware/model assumptions and test a
+non-destructive query first. Ollama remains the documented first local route.</p>
+<h2 id="privacy-boundary">Privacy boundary<a class="headerlink" href="#privacy-boundary" title="Permanent link">&para;</a></h2>
+<p>Local inference alone does not make a workflow offline. PubChem lookup, remote
+MCP servers, ALCF execution, hosted embeddings, and model/calculator downloads
+can still leave the machine. Choose local tools and pre-stage all required data
+for an air-gapped run.</p>
 
 
 
@@ -1308,7 +1716,7 @@ For specific hardware acceleration (e.g., CUDA, ROCm), refer to the <a href="htt
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../project_structure/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Project Structure">
+          <a href="../kubernetes/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Kubernetes">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1318,20 +1726,20 @@ For specific hardware acceleration (e.g., CUDA, ROCm), refer to the <a href="htt
                 Previous
               </span>
               <div class="md-ellipsis">
-                Project Structure
+                Kubernetes
               </div>
             </div>
           </a>
         
         
           
-          <a href="../docker_support/" class="md-footer__link md-footer__link--next" aria-label="Next: Docker Support">
+          <a href="../hpc_and_academy/" class="md-footer__link md-footer__link--next" aria-label="Next: HPC and Academy">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Docker Support
+                HPC and Academy
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -1368,7 +1776,7 @@ For specific hardware acceleration (e.g., CUDA, ROCm), refer to the <a href="htt
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.code.annotate", "navigation.footer", "search.suggest", "header.autohide", "navigation.tabs"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.indexes", "navigation.sections", "navigation.tabs", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>

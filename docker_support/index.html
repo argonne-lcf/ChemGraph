@@ -6,24 +6,28 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
+        <meta name="description" content="Agentic computational chemistry workflows from the command line, Python, Streamlit, and MCP.">
       
       
       
-        <link rel="prev" href="../running_local_models/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/docker_support/">
       
       
-        <link rel="next" href="../code_formatting_and_linting/">
+        <link rel="prev" href="../mcp_servers/">
+      
+      
+        <link rel="next" href="../kubernetes/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../assets/chemgraph_logo.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Docker Support - ChemGraph Docs</title>
+        <title>Docker - ChemGraph</title>
       
     
     
@@ -44,8 +48,8 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Merriweather Sans";--md-code-font:"Roboto Mono"}</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
       
     
     
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#prerequisites" class="md-skip">
+        <a href="#docker" class="md-skip">
           Skip to content
         </a>
       
@@ -90,10 +94,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="ChemGraph Docs" class="md-header__button md-logo" aria-label="ChemGraph Docs" data-md-component="logo">
+    <a href=".." title="ChemGraph" class="md-header__button md-logo" aria-label="ChemGraph" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/chemgraph_logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -104,13 +107,13 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            ChemGraph Docs
+            ChemGraph
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Docker Support
+              Docker
             
           </span>
         </div>
@@ -123,19 +126,9 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
     
-      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
-      </label>
-    
-  
-    
-    
-    
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="deep-purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
-    
-      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
       </label>
     
@@ -143,9 +136,9 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="deep-orange"  aria-label="Switch to system preferences"  type="radio" name="__palette" id="__palette_2">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
     
-      <label class="md-header__button md-icon" title="Switch to system preferences" for="__palette_0" hidden>
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
       </label>
     
@@ -202,13 +195,13 @@
     
     
       <div class="md-header__source">
-        <a href="https://github.com/argonne-lcf/ChemGraph/tree/" title="Go to repository" class="md-source" data-md-component="source">
+        <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    ChemGraph
+    argonne-lcf/ChemGraph
   </div>
 </a>
       </div>
@@ -239,7 +232,7 @@
   
     
   
-  Overview
+  Home
 
       </a>
     </li>
@@ -251,17 +244,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../installation/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
+          
   
   
     
   
-  Installation
+  Getting started
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -270,17 +266,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../codex_subscription/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../cli/" class="md-tabs__link">
+          
   
   
     
   
-  Experimental Codex Support
+  Using ChemGraph
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -288,56 +287,23 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="../example_usage/" class="md-tabs__link">
-        
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../mcp_servers/" class="md-tabs__link">
+          
   
   
     
   
-  Example Usage
+  Integrations and scale
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../streamlit_web_interface/" class="md-tabs__link">
-        
-  
-  
+        </a>
+      </li>
     
-  
-  Streamlit Web Interface
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../mcp_servers/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  MCP Servers
-
-      </a>
-    </li>
   
 
       
@@ -353,7 +319,7 @@
   
     
   
-  Evaluation & Benchmarking
+  Evaluation
 
       </a>
     </li>
@@ -365,17 +331,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../configuration_with_toml/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../codex_subscription/" class="md-tabs__link">
+          
   
   
     
   
-  Configuration with TOML
+  Experimental
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -384,152 +353,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../project_structure/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../project_structure/" class="md-tabs__link">
+          
   
   
     
   
-  Project Structure
+  Project
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../running_local_models/" class="md-tabs__link">
-        
-  
-  
+        </a>
+      </li>
     
-  
-  Running Local Models with vLLM
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-    
-  
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Docker Support
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../code_formatting_and_linting/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Code Formatting & Linting
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../contributing/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Contributing
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../citation/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Citation
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../acknowledgements/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Acknowledgements
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../license/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  License
-
-      </a>
-    </li>
   
 
       
@@ -555,23 +392,22 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="ChemGraph Docs" class="md-nav__button md-logo" aria-label="ChemGraph Docs" data-md-component="logo">
+    <a href=".." title="ChemGraph" class="md-nav__button md-logo" aria-label="ChemGraph" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/chemgraph_logo.png" alt="logo">
 
     </a>
-    ChemGraph Docs
+    ChemGraph
   </label>
   
     <div class="md-nav__source">
-      <a href="https://github.com/argonne-lcf/ChemGraph/tree/" title="Go to repository" class="md-source" data-md-component="source">
+      <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    ChemGraph
+    argonne-lcf/ChemGraph
   </div>
 </a>
     </div>
@@ -592,7 +428,7 @@
   <span class="md-ellipsis">
     
   
-    Overview
+    Home
   
 
     
@@ -607,6 +443,68 @@
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -631,22 +529,23 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
   
     <li class="md-nav__item">
-      <a href="../codex_subscription/" class="md-nav__link">
+      <a href="../quickstart/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Experimental Codex Support
+    Quickstart
   
 
     
@@ -658,22 +557,23 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
   
     <li class="md-nav__item">
-      <a href="../example_usage/" class="md-nav__link">
+      <a href="../models/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Example Usage
+    Models and authentication
   
 
     
@@ -685,9 +585,225 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using ChemGraph
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Using ChemGraph
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-line interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../calculators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -700,7 +816,7 @@
   <span class="md-ellipsis">
     
   
-    Streamlit Web Interface
+    Streamlit interface
   
 
     
@@ -712,9 +828,142 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_with_toml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../example_usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations and scale
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations and scale
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -727,7 +976,7 @@
   <span class="md-ellipsis">
     
   
-    MCP Servers
+    MCP servers
   
 
     
@@ -736,6 +985,239 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#streamlit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Streamlit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mcp-over-http" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MCP over HTTP
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#jupyterlab" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JupyterLab
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compose-profiles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compose profiles
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-and-operate-safely" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build and operate safely
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../running_local_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hpc_and_academy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HPC and Academy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -754,7 +1236,7 @@
   <span class="md-ellipsis">
     
   
-    Evaluation & Benchmarking
+    Evaluation
   
 
     
@@ -773,15 +1255,71 @@
   
   
   
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experimental
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Experimental
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
     <li class="md-nav__item">
-      <a href="../configuration_with_toml/" class="md-nav__link">
+      <a href="../codex_subscription/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Configuration with TOML
+    Codex subscription
   
 
     
@@ -793,9 +1331,83 @@
     </li>
   
 
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -808,7 +1420,7 @@
   <span class="md-ellipsis">
     
   
-    Project Structure
+    Project structure
   
 
     
@@ -820,282 +1432,10 @@
     </li>
   
 
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../running_local_models/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Running Local Models with vLLM
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-    
-  
-  
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Docker Support
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Docker Support
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Prerequisites
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Files
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#use-published-ghcr-image-no-local-build" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Use Published GHCR Image (No Local Build)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Use Published GHCR Image (No Local Build)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#pass-api-keys-securely-best-practice" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pass API Keys Securely (Best Practice)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#build-image" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Build Image
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#run-jupyterlab" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run JupyterLab
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#run-streamlit-app" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run Streamlit App
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#run-mcp-server-http-transport" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run MCP Server (HTTP transport)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Environment Variables
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stop-services" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stop Services
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#run-without-compose-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run Without Compose (Optional)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Notes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#publish-to-ghcr" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Publish to GHCR
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../code_formatting_and_linting/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Code Formatting & Linting
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1120,9 +1460,38 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
     
-      
-      
+  
+    Code formatting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -1147,9 +1516,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1174,9 +1544,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1201,6 +1572,14 @@
     </li>
   
 
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
   </ul>
 </nav>
@@ -1219,6 +1598,8 @@
   
   
   
+    
+  
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
@@ -1227,10 +1608,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#prerequisites" class="md-nav__link">
+  <a href="#streamlit" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Prerequisites
+        Streamlit
       
     </span>
   </a>
@@ -1238,10 +1619,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#files" class="md-nav__link">
+  <a href="#cli" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Files
+        CLI
       
     </span>
   </a>
@@ -1249,38 +1630,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#use-published-ghcr-image-no-local-build" class="md-nav__link">
+  <a href="#mcp-over-http" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Use Published GHCR Image (No Local Build)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Use Published GHCR Image (No Local Build)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#pass-api-keys-securely-best-practice" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Pass API Keys Securely (Best Practice)
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#build-image" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Build Image
+        MCP over HTTP
       
     </span>
   </a>
@@ -1288,10 +1641,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#run-jupyterlab" class="md-nav__link">
+  <a href="#jupyterlab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Run JupyterLab
+        JupyterLab
       
     </span>
   </a>
@@ -1299,10 +1652,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#run-streamlit-app" class="md-nav__link">
+  <a href="#compose-profiles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Run Streamlit App
+        Compose profiles
       
     </span>
   </a>
@@ -1310,65 +1663,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#run-mcp-server-http-transport" class="md-nav__link">
+  <a href="#build-and-operate-safely" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Run MCP Server (HTTP transport)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Environment Variables
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stop-services" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stop Services
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#run-without-compose-optional" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Run Without Compose (Optional)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Notes
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#publish-to-ghcr" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Publish to GHCR
+        Build and operate safely
       
     </span>
   </a>
@@ -1395,151 +1693,69 @@
   
 
 
-  <h1>Docker Support</h1>
-
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Docker setup is now intentionally simplified and does <strong>not</strong> include vLLM.
-The same ChemGraph image can be launched in four modes: JupyterLab, Streamlit UI, MCP server, or interactive CLI.</p>
-</div>
-<h2 id="prerequisites">Prerequisites</h2>
-<ul>
-<li><a href="https://docs.docker.com/get-docker/">Docker</a></li>
-<li><a href="https://docs.docker.com/compose/install/">Docker Compose</a></li>
-</ul>
-<h2 id="files">Files</h2>
-<ul>
-<li><code>Dockerfile</code>: standard ChemGraph container image</li>
-<li><code>Dockerfile.arm</code>: ARM-friendly variant (same runtime goals, no vLLM)</li>
-<li><code>docker-compose.yml</code>: profile-based launcher for Jupyter/Streamlit/MCP</li>
-</ul>
-<h2 id="use-published-ghcr-image-no-local-build">Use Published GHCR Image (No Local Build)</h2>
-<p>If you do not want a local install, run the published container image directly:</p>
-<h3 id="pass-api-keys-securely-best-practice">Pass API Keys Securely (Best Practice)</h3>
-<p>Required keys depend on the model/provider you use:</p>
-<ul>
-<li><code>OPENAI_API_KEY</code></li>
-<li><code>ANTHROPIC_API_KEY</code></li>
-<li><code>GEMINI_API_KEY</code></li>
-<li><code>GROQ_API_KEY</code></li>
-<li>Optional: <code>ARGO_USER</code> (for Argo setups)</li>
-</ul>
-<p>Recommended pattern for <code>docker run</code> is host pass-through (do not put secret values inline in command history):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;...&quot;</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-e<span class="w"> </span>OPENAI_API_KEY<span class="w"> </span>-p<span class="w"> </span><span class="m">8501</span>:8501<span class="w"> </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py<span class="w"> </span>--server.address<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--server.port<span class="o">=</span><span class="m">8501</span>
-</span></code></pre></div>
-<p>For multiple keys, use an env file:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>cat<span class="w"> </span>&gt;<span class="w"> </span>.env.chemgraph<span class="w"> </span><span class="s">&lt;&lt; &#39;EOF&#39;</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="s">OPENAI_API_KEY=...</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="s">ANTHROPIC_API_KEY=...</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="s">GEMINI_API_KEY=...</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="s">GROQ_API_KEY=...</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="s">ARGO_USER=...</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="s">EOF</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>.env.chemgraph
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>--env-file<span class="w"> </span>.env.chemgraph<span class="w"> </span>-p<span class="w"> </span><span class="m">8501</span>:8501<span class="w"> </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py<span class="w"> </span>--server.address<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--server.port<span class="o">=</span><span class="m">8501</span>
-</span></code></pre></div>
-<p>Security notes:</p>
-<ul>
-<li>Pass only the key(s) needed for your selected model.</li>
-<li>Do not commit <code>.env.chemgraph</code> or other secret files to git.</li>
-<li>Avoid storing API keys in <code>config.toml</code>.</li>
-</ul>
-<p>Run JupyterLab:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8888</span>:8888<span class="w"> </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>jupyter<span class="w"> </span>lab<span class="w"> </span>--ip<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="o">=</span><span class="m">8888</span><span class="w"> </span>--no-browser<span class="w"> </span>--allow-root<span class="w"> </span>--LabApp.token<span class="o">=</span>
-</span></code></pre></div>
-<p>Run Streamlit:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8501</span>:8501<span class="w"> </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py<span class="w"> </span>--server.address<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--server.port<span class="o">=</span><span class="m">8501</span>
-</span></code></pre></div>
-<p>Run MCP server (HTTP):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">9003</span>:9003<span class="w"> </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
-</span></code></pre></div>
-<p>Run interactive CLI shell:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>--entrypoint<span class="w"> </span>/bin/bash<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/work&quot;</span><span class="w"> </span>-w<span class="w"> </span>/work<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>ghcr.io/argonne-lcf/chemgraph:latest
-</span></code></pre></div>
-<p>Then inside the container:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>chemgraph<span class="w"> </span>--help
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>chemgraph<span class="w"> </span>--config<span class="w"> </span>config.toml<span class="w"> </span>-q<span class="w"> </span><span class="s2">&quot;calculate the energy for smiles=O using mace_mp&quot;</span>
-</span></code></pre></div>
-<h2 id="build-image">Build Image</h2>
-<p>From project root:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>build
-</span></code></pre></div>
-<p>If you previously built the image before this update, rebuild so the Git safe-directory
-setting for <code>/app</code> is included.</p>
-<h2 id="run-jupyterlab">Run JupyterLab</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>jupyter<span class="w"> </span>up
-</span></code></pre></div>
-<p>Access: <code>http://localhost:8888</code></p>
-<h2 id="run-streamlit-app">Run Streamlit App</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>streamlit<span class="w"> </span>up
-</span></code></pre></div>
-<p>Access: <code>http://localhost:8501</code></p>
-<h2 id="run-mcp-server-http-transport">Run MCP Server (HTTP transport)</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>mcp<span class="w"> </span>up
-</span></code></pre></div>
-<p>MCP endpoint: <code>http://localhost:9003</code></p>
-<p>The compose service launches:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
-</span></code></pre></div>
-<h2 id="environment-variables">Environment Variables</h2>
-<p>The compose file forwards these variables into the container when set on host:</p>
-<ul>
-<li><code>OPENAI_API_KEY</code></li>
-<li><code>ANTHROPIC_API_KEY</code></li>
-<li><code>GEMINI_API_KEY</code></li>
-<li><code>GROQ_API_KEY</code></li>
-<li><code>CHEMGRAPH_LOG_DIR</code> (default in compose: <code>/app/cg_logs</code>)</li>
-<li><code>PYTHONPATH</code> is set to <code>/app/src</code> in compose so bind-mounted source code is used.</li>
-</ul>
-<p>Example:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">&quot;your_key&quot;</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>streamlit<span class="w"> </span>up
-</span></code></pre></div>
-<h2 id="stop-services">Stop Services</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>down
-</span></code></pre></div>
-<h2 id="run-without-compose-optional">Run Without Compose (Optional)</h2>
-<p>Build once:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>chemgraph:local<span class="w"> </span>.
-</span></code></pre></div>
-<p>Jupyter:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8888</span>:8888<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span>jupyter<span class="w"> </span>lab<span class="w"> </span>--ip<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="o">=</span><span class="m">8888</span><span class="w"> </span>--no-browser<span class="w"> </span>--allow-root<span class="w"> </span>--LabApp.token<span class="o">=</span>
-</span></code></pre></div>
-<p>Streamlit:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8501</span>:8501<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py<span class="w"> </span>--server.address<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span>--server.port<span class="o">=</span><span class="m">8501</span>
-</span></code></pre></div>
-<p>MCP (HTTP):</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">9003</span>:9003<span class="w"> </span>-v<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">:/app&quot;</span><span class="w"> </span>chemgraph:local<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">9003</span>
-</span></code></pre></div>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>This setup avoids local model-serving dependencies and keeps Docker usage focused on ChemGraph tooling.</li>
-<li>If you need local LLM serving, run it as a separate service outside this Docker setup and point ChemGraph to that endpoint via model/base URL configuration.</li>
-<li>Compose startup also runs <code>git config --global --add safe.directory /app</code> to avoid
-  Git "dubious ownership" errors in notebooks/Streamlit when the repo is bind-mounted.</li>
-<li>The default <code>Dockerfile</code> installs <code>nwchem</code> and <code>tblite</code> with conda-forge.</li>
-</ul>
-<h2 id="publish-to-ghcr">Publish to GHCR</h2>
-<p>A GitHub Actions workflow (<code>.github/workflows/ghcr-publish.yml</code>) publishes the Docker image to:</p>
-<ul>
-<li><code>ghcr.io/&lt;org-or-user&gt;/chemgraph:&lt;tag&gt;</code></li>
-<li><code>ghcr.io/&lt;org-or-user&gt;/chemgraph:sha-&lt;commit&gt;</code></li>
-</ul>
-<p>How to publish:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>git<span class="w"> </span>tag<span class="w"> </span>v0.3.0
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>v0.3.0
-</span></code></pre></div>
-<p>You can also trigger the workflow manually from Actions with <code>workflow_dispatch</code>.</p>
+<h1 id="docker">Docker<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h1>
+<p>The ChemGraph image can run JupyterLab, Streamlit, the CLI, or the general MCP
+server. It includes the source-tree entry points plus NWChem and TBLite support
+configured by the repository Dockerfile.</p>
+<h2 id="streamlit">Streamlit<a class="headerlink" href="#streamlit" title="Permanent link">&para;</a></h2>
+<p>Set the credential in your host environment, then pass it by name:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">OPENAI_API_KEY</span><span class="o">=</span><span class="s2">"..."</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>-e<span class="w"> </span>OPENAI_API_KEY<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>-p<span class="w"> </span><span class="m">8501</span>:8501<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/cg_logs:/app/cg_logs"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span>--server.address<span class="o">=</span><span class="m">0</span>.0.0.0<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span>--server.port<span class="o">=</span><span class="m">8501</span>
+</code></pre></div>
+<p>Open <code>http://localhost:8501</code>. The volume preserves artifacts after exit.</p>
+<h2 id="cli">CLI<a class="headerlink" href="#cli" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>-e<span class="w"> </span>OPENAI_API_KEY<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/cg_logs:/app/cg_logs"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span>chemgraph<span class="w"> </span>run<span class="w"> </span>-q<span class="w"> </span><span class="s2">"What is the SMILES string for aspirin?"</span>
+</code></pre></div>
+<p>Forward only the credential needed by the selected provider.</p>
+<h2 id="mcp-over-http">MCP over HTTP<a class="headerlink" href="#mcp-over-http" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>-p<span class="w"> </span><span class="m">9003</span>:9003<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">/cg_logs:/app/cg_logs"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>ghcr.io/argonne-lcf/chemgraph:latest<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span>--port<span class="w"> </span><span class="m">9003</span>
+</code></pre></div>
+<p>Clients connect to <code>http://localhost:9003/mcp/</code>. Limit network exposure; this
+is a tool execution surface, not a hardened public API gateway.</p>
+<h2 id="jupyterlab">JupyterLab<a class="headerlink" href="#jupyterlab" title="Permanent link">&para;</a></h2>
+<p>The image default starts JupyterLab on port 8888:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span>-p<span class="w"> </span><span class="m">8888</span>:8888<span class="w"> </span>-v<span class="w"> </span><span class="s2">"</span><span class="nv">$PWD</span><span class="s2">:/work"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>ghcr.io/argonne-lcf/chemgraph:latest
+</code></pre></div>
+<p>The image starts Jupyter without a token. Publish it only on a trusted machine,
+or add authentication for shared deployments.</p>
+<h2 id="compose-profiles">Compose profiles<a class="headerlink" href="#compose-profiles" title="Permanent link">&para;</a></h2>
+<p>The repository Compose file builds <code>chemgraph:local</code>, mounts the checkout at
+<code>/app</code>, and defines four development profiles:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>streamlit<span class="w"> </span>up<span class="w"> </span>--build
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>mcp<span class="w"> </span>up<span class="w"> </span>--build
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>jupyter<span class="w"> </span>up<span class="w"> </span>--build
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>docker<span class="w"> </span>compose<span class="w"> </span>--profile<span class="w"> </span>cli<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>cli
+</code></pre></div>
+<p>Compose forwards supported provider variables and stores tool artifacts in the
+checkout's <code>cg_logs/</code> directory.</p>
+<h2 id="build-and-operate-safely">Build and operate safely<a class="headerlink" href="#build-and-operate-safely" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>chemgraph:local<span class="w"> </span>.
+</code></pre></div>
+<p>The TBLite build can take time, especially on ARM. Mount a dedicated artifact
+directory rather than a home directory, pass tokens at runtime, remember that
+container paths may differ from host paths, and pin an image tag or digest for
+reproducible deployments.</p>
+<p>To run the Streamlit and MCP images on a cluster, continue with
+<a href="../kubernetes/">Kubernetes</a>.</p>
 
 
 
@@ -1569,7 +1785,7 @@ setting for <code>/app</code> is included.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../running_local_models/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Running Local Models with vLLM">
+          <a href="../mcp_servers/" class="md-footer__link md-footer__link--prev" aria-label="Previous: MCP servers">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1579,20 +1795,20 @@ setting for <code>/app</code> is included.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Running Local Models with vLLM
+                MCP servers
               </div>
             </div>
           </a>
         
         
           
-          <a href="../code_formatting_and_linting/" class="md-footer__link md-footer__link--next" aria-label="Next: Code Formatting &amp; Linting">
+          <a href="../kubernetes/" class="md-footer__link md-footer__link--next" aria-label="Next: Kubernetes">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Code Formatting & Linting
+                Kubernetes
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -1629,7 +1845,7 @@ setting for <code>/app</code> is included.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.code.annotate", "navigation.footer", "search.suggest", "header.autohide", "navigation.tabs"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.indexes", "navigation.sections", "navigation.tabs", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>

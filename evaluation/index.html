@@ -6,24 +6,28 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
+        <meta name="description" content="Agentic computational chemistry workflows from the command line, Python, Streamlit, and MCP.">
       
       
       
-        <link rel="prev" href="../mcp_servers/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/evaluation/">
       
       
-        <link rel="next" href="../configuration_with_toml/">
+        <link rel="prev" href="../hpc_and_academy/">
+      
+      
+        <link rel="next" href="../codex_subscription/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../assets/chemgraph_logo.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Evaluation & Benchmarking - ChemGraph Docs</title>
+        <title>Evaluation - ChemGraph</title>
       
     
     
@@ -44,8 +48,8 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Merriweather+Sans:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"Merriweather Sans";--md-code-font:"Roboto Mono"}</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
       
     
     
@@ -76,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#evaluation-benchmarking" class="md-skip">
+        <a href="#evaluation" class="md-skip">
           Skip to content
         </a>
       
@@ -90,10 +94,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="ChemGraph Docs" class="md-header__button md-logo" aria-label="ChemGraph Docs" data-md-component="logo">
+    <a href=".." title="ChemGraph" class="md-header__button md-logo" aria-label="ChemGraph" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/chemgraph_logo.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -104,13 +107,13 @@
       <div class="md-header__ellipsis">
         <div class="md-header__topic">
           <span class="md-ellipsis">
-            ChemGraph Docs
+            ChemGraph
           </span>
         </div>
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Evaluation & Benchmarking
+              Evaluation
             
           </span>
         </div>
@@ -123,19 +126,9 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
     
-      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
-      </label>
-    
-  
-    
-    
-    
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="green" data-md-color-accent="deep-purple"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
-    
-      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
       </label>
     
@@ -143,9 +136,9 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="deep-orange"  aria-label="Switch to system preferences"  type="radio" name="__palette" id="__palette_2">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
     
-      <label class="md-header__button md-icon" title="Switch to system preferences" for="__palette_0" hidden>
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
       </label>
     
@@ -202,13 +195,13 @@
     
     
       <div class="md-header__source">
-        <a href="https://github.com/argonne-lcf/ChemGraph/tree/" title="Go to repository" class="md-source" data-md-component="source">
+        <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    ChemGraph
+    argonne-lcf/ChemGraph
   </div>
 </a>
       </div>
@@ -239,7 +232,7 @@
   
     
   
-  Overview
+  Home
 
       </a>
     </li>
@@ -251,17 +244,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../installation/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
+          
   
   
     
   
-  Installation
+  Getting started
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -270,17 +266,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../codex_subscription/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../cli/" class="md-tabs__link">
+          
   
   
     
   
-  Experimental Codex Support
+  Using ChemGraph
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -289,55 +288,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../example_usage/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../mcp_servers/" class="md-tabs__link">
+          
   
   
     
   
-  Example Usage
+  Integrations and scale
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../streamlit_web_interface/" class="md-tabs__link">
-        
-  
-  
+        </a>
+      </li>
     
-  
-  Streamlit Web Interface
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../mcp_servers/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  MCP Servers
-
-      </a>
-    </li>
   
 
       
@@ -355,7 +319,7 @@
   
     
   
-  Evaluation & Benchmarking
+  Evaluation
 
       </a>
     </li>
@@ -367,17 +331,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../configuration_with_toml/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../codex_subscription/" class="md-tabs__link">
+          
   
   
     
   
-  Configuration with TOML
+  Experimental
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -386,150 +353,20 @@
   
   
   
-    <li class="md-tabs__item">
-      <a href="../project_structure/" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item">
+        <a href="../project_structure/" class="md-tabs__link">
+          
   
   
     
   
-  Project Structure
+  Project
 
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../running_local_models/" class="md-tabs__link">
-        
-  
-  
+        </a>
+      </li>
     
-  
-  Running Local Models with vLLM
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../docker_support/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Docker Support
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../code_formatting_and_linting/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Code Formatting & Linting
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../contributing/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Contributing
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../citation/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Citation
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../acknowledgements/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  Acknowledgements
-
-      </a>
-    </li>
-  
-
-      
-        
-  
-  
-  
-  
-    <li class="md-tabs__item">
-      <a href="../license/" class="md-tabs__link">
-        
-  
-  
-    
-  
-  License
-
-      </a>
-    </li>
   
 
       
@@ -555,23 +392,22 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="ChemGraph Docs" class="md-nav__button md-logo" aria-label="ChemGraph Docs" data-md-component="logo">
+    <a href=".." title="ChemGraph" class="md-nav__button md-logo" aria-label="ChemGraph" data-md-component="logo">
       
-  
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+  <img src="../assets/chemgraph_logo.png" alt="logo">
 
     </a>
-    ChemGraph Docs
+    ChemGraph
   </label>
   
     <div class="md-nav__source">
-      <a href="https://github.com/argonne-lcf/ChemGraph/tree/" title="Go to repository" class="md-source" data-md-component="source">
+      <a href="https://github.com/argonne-lcf/ChemGraph" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
-    ChemGraph
+    argonne-lcf/ChemGraph
   </div>
 </a>
     </div>
@@ -592,7 +428,7 @@
   <span class="md-ellipsis">
     
   
-    Overview
+    Home
   
 
     
@@ -607,6 +443,68 @@
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -631,22 +529,23 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
   
     <li class="md-nav__item">
-      <a href="../codex_subscription/" class="md-nav__link">
+      <a href="../quickstart/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Experimental Codex Support
+    Quickstart
   
 
     
@@ -658,22 +557,23 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
   
     <li class="md-nav__item">
-      <a href="../example_usage/" class="md-nav__link">
+      <a href="../models/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Example Usage
+    Models and authentication
   
 
     
@@ -685,9 +585,225 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using ChemGraph
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Using ChemGraph
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-line interface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../calculators/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Calculators
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python_api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -700,7 +816,7 @@
   <span class="md-ellipsis">
     
   
-    Streamlit Web Interface
+    Streamlit interface
   
 
     
@@ -712,9 +828,137 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration_with_toml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../example_usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Integrations and scale
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Integrations and scale
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -727,7 +971,7 @@
   <span class="md-ellipsis">
     
   
-    MCP Servers
+    MCP servers
   
 
     
@@ -736,6 +980,126 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docker_support/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../kubernetes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kubernetes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../running_local_models/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local models
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hpc_and_academy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HPC and Academy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -763,7 +1127,7 @@
   <span class="md-ellipsis">
     
   
-    Evaluation & Benchmarking
+    Evaluation
   
 
     
@@ -781,7 +1145,7 @@
   <span class="md-ellipsis">
     
   
-    Evaluation & Benchmarking
+    Evaluation
   
 
     
@@ -807,10 +1171,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#main-pipeline" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Overview
+        Main pipeline
       
     </span>
   </a>
@@ -818,118 +1182,61 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#bundled-dataset" class="md-nav__link">
+  <a href="#quickstart" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Bundled Dataset
+        Quickstart
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Bundled Dataset">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#categories" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Categories
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#running-evaluations" class="md-nav__link">
+  <a href="#structured-ground-truth" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Running Evaluations
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Running Evaluations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#cli" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CLI
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="CLI">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#minimal-invocation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Minimal Invocation
+        Structured ground truth
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#multiple-models" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#profiles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Multiple Models
+        Profiles
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#with-toml-config" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#reports-and-diagnostics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        With TOML Config
+        Reports and diagnostics
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#profile-based" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#resume-interrupted-runs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Profile-Based
+        Resume interrupted runs
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#custom-dataset-limits" class="md-nav__link">
-    <span class="md-ellipsis">
       
-        Custom Dataset &amp; Limits
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
-          <li class="md-nav__item">
+        <li class="md-nav__item">
   <a href="#python-api" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -939,239 +1246,12 @@
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
-  
-</li>
       
         <li class="md-nav__item">
-  <a href="#cli-reference" class="md-nav__link">
+  <a href="#optional-llm-judge" class="md-nav__link">
     <span class="md-ellipsis">
       
-        CLI Reference
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configuration
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Configuration">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#benchmarkconfig" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        BenchmarkConfig
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#toml-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        TOML Profiles
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#llm-judge" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LLM Judge
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="LLM Judge">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#scoring-rules" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Scoring Rules
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#using-a-different-judge" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Using a Different Judge
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#ground-truth-generation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Ground-Truth Generation
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Ground-Truth Generation">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#input-format" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Input Format
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#running-the-generator" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running the Generator
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#output-format" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output Format
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#custom-datasets" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Custom Datasets
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#output-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output &amp; Reports
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Output &amp; Reports">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#json-report" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        JSON Report
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#markdown-report" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Markdown Report
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#per-model-detail-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Per-Model Detail Files
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#console-summary" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Console Summary
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Testing
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#module-structure" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Module Structure
+        Optional LLM judge
       
     </span>
   </a>
@@ -1192,15 +1272,71 @@
   
   
   
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Experimental
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Experimental
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
     <li class="md-nav__item">
-      <a href="../configuration_with_toml/" class="md-nav__link">
+      <a href="../codex_subscription/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Configuration with TOML
+    Codex subscription
   
 
     
@@ -1212,9 +1348,83 @@
     </li>
   
 
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
     
       
       
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Project
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
   
   
   
@@ -1227,7 +1437,7 @@
   <span class="md-ellipsis">
     
   
-    Project Structure
+    Project structure
   
 
     
@@ -1239,90 +1449,10 @@
     </li>
   
 
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../running_local_models/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Running Local Models with vLLM
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../docker_support/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Docker Support
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../code_formatting_and_linting/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Code Formatting & Linting
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1347,9 +1477,38 @@
     </li>
   
 
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code_formatting_and_linting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
     
-      
-      
+  
+    Code formatting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
   
   
   
@@ -1374,9 +1533,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1401,9 +1561,10 @@
     </li>
   
 
-    
-      
-      
+              
+            
+              
+                
   
   
   
@@ -1425,6 +1586,14 @@
   
 
       </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -1456,10 +1625,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#main-pipeline" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Overview
+        Main pipeline
       
     </span>
   </a>
@@ -1467,118 +1636,61 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#bundled-dataset" class="md-nav__link">
+  <a href="#quickstart" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Bundled Dataset
+        Quickstart
       
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Bundled Dataset">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#categories" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Categories
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#running-evaluations" class="md-nav__link">
+  <a href="#structured-ground-truth" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Running Evaluations
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Running Evaluations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#cli" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CLI
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="CLI">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#minimal-invocation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Minimal Invocation
+        Structured ground truth
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#multiple-models" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#profiles" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Multiple Models
+        Profiles
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#with-toml-config" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#reports-and-diagnostics" class="md-nav__link">
     <span class="md-ellipsis">
       
-        With TOML Config
+        Reports and diagnostics
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#profile-based" class="md-nav__link">
+      
+        <li class="md-nav__item">
+  <a href="#resume-interrupted-runs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Profile-Based
+        Resume interrupted runs
       
     </span>
   </a>
   
 </li>
-        
-          <li class="md-nav__item">
-  <a href="#custom-dataset-limits" class="md-nav__link">
-    <span class="md-ellipsis">
       
-        Custom Dataset &amp; Limits
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
-          <li class="md-nav__item">
+        <li class="md-nav__item">
   <a href="#python-api" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1588,239 +1700,12 @@
   </a>
   
 </li>
-        
-      </ul>
-    </nav>
-  
-</li>
       
         <li class="md-nav__item">
-  <a href="#cli-reference" class="md-nav__link">
+  <a href="#optional-llm-judge" class="md-nav__link">
     <span class="md-ellipsis">
       
-        CLI Reference
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Configuration
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Configuration">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#benchmarkconfig" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        BenchmarkConfig
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#toml-profiles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        TOML Profiles
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#llm-judge" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LLM Judge
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="LLM Judge">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#scoring-rules" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Scoring Rules
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#using-a-different-judge" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Using a Different Judge
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#ground-truth-generation" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Ground-Truth Generation
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Ground-Truth Generation">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#input-format" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Input Format
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#running-the-generator" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Running the Generator
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#output-format" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output Format
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#custom-datasets" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Custom Datasets
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#output-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Output &amp; Reports
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Output &amp; Reports">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#json-report" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        JSON Report
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#markdown-report" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Markdown Report
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#per-model-detail-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Per-Model Detail Files
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#console-summary" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Console Summary
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#testing" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Testing
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#module-structure" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Module Structure
+        Optional LLM judge
       
     </span>
   </a>
@@ -1847,361 +1732,204 @@
   
 
 
-<h1 id="evaluation-benchmarking">Evaluation &amp; Benchmarking</h1>
-<p>ChemGraph includes a built-in evaluation module (<code>chemgraph.eval</code>) for benchmarking LLM tool-calling accuracy across multiple models and workflows. The module uses an <strong>LLM-as-judge</strong> strategy where a separate judge LLM compares the agent's tool-call sequence and final answer against ground-truth results using binary scoring (1 = correct, 0 = wrong).</p>
-<h2 id="overview">Overview</h2>
-<p>The evaluation pipeline works as follows:</p>
+<h1 id="evaluation">Evaluation<a class="headerlink" href="#evaluation" title="Permanent link">&para;</a></h1>
+<p>ChemGraph's primary evaluation pipeline uses the <strong>deterministic structured-output
+judge</strong>. It asks each agent for a <code>ResponseFormatter</code> result, compares that result
+field-by-field with structured ground truth, and produces reproducible binary
+scores without a second judge model.</p>
+<p>View published results on the
+<a href="https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard">ChemGraph Leaderboard</a>.</p>
+<p>The LLM-as-judge path remains available for qualitative or legacy comparisons,
+but it is secondary because it adds cost, nondeterminism, and judge-model bias.</p>
+<p>No default benchmark dataset is bundled. Supply <code>--dataset</code> or define <code>dataset</code>
+in a selected TOML evaluation profile.</p>
+<h2 id="main-pipeline">Main pipeline<a class="headerlink" href="#main-pipeline" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Ground-truth structured_output
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>              ↓
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Agent ResponseFormatter JSON
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>              ↓
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>Deterministic field comparators
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>              ↓
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Per-query score: all expected fields pass = 1, otherwise 0
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>              ↓
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>Accuracy and per-field diagnostics
+</code></pre></div>
+<p>For every model, workflow, and query, the runner:</p>
 <ol>
-<li><strong>Load dataset</strong> -- A ground-truth JSON file containing queries, expected tool-call sequences, and actual results.</li>
-<li><strong>Run agent</strong> -- For each <code>(model, workflow, query)</code> combination, initialize a <code>ChemGraph</code> agent, execute the query, and capture tool calls and the final answer.</li>
-<li><strong>Judge</strong> -- A separate judge LLM compares the agent's output against the ground truth and assigns a binary score.</li>
-<li><strong>Report</strong> -- Aggregate scores are written as JSON, Markdown, and console reports.</li>
+<li>starts ChemGraph with structured output enabled;</li>
+<li>captures the agent's tool calls, final result, and <code>ResponseFormatter</code> JSON;</li>
+<li>compares each non-null expected field with the matching actual field;</li>
+<li>records a binary score, per-field pass/fail values, and a rationale;</li>
+<li>aggregates correct queries into structured-output accuracy.</li>
 </ol>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Dataset (14 queries)
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    │
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    ▼
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>┌──────────────────┐     ┌──────────────┐     ┌───────────┐
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  ChemGraph Agent │ ──▶ │  LLM Judge   │ ──▶ │  Reports  │
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  (model under    │     │  (separate   │     │  (JSON,   │
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│   test)          │     │   model)     │     │   MD,     │
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>└──────────────────┘     └──────────────┘     │   console)│
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                                              └───────────┘
-</span></code></pre></div>
-<h2 id="bundled-dataset">Bundled Dataset</h2>
-<p>A default dataset of <strong>14 queries</strong> across 4 categories is shipped with the package at <code>src/chemgraph/eval/data/ground_truth.json</code> and used automatically when no explicit dataset is provided.</p>
-<h3 id="categories">Categories</h3>
+<p>Formatter/JSON parse failures score as incorrect and remain in the accuracy
+denominator. Ground truth with no non-null structured fields is also invalid and
+scores as a failure instead of receiving a trivial pass.</p>
+<h2 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h2>
+<p>Run the structured judge explicitly. A judge model is not needed:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--dataset<span class="w"> </span>evaluation/questions.json<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>--workflows<span class="w"> </span>single_agent<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span>--judge-type<span class="w"> </span>structured<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span>--output-dir<span class="w"> </span>eval_results
+</code></pre></div>
+<p>Always include <code>--judge-type structured</code> unless a selected profile already sets
+it. The CLI's compatibility fallback is still <code>llm</code> when no judge type is
+specified.</p>
+<h2 id="structured-ground-truth">Structured ground truth<a class="headerlink" href="#structured-ground-truth" title="Permanent link">&para;</a></h2>
+<p>The preferred dataset format is a JSON array. Each item needs a unique ID,
+query, and <code>answer.structured_output</code> object:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">[</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p">{</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"water-smiles"</span><span class="p">,</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">"category"</span><span class="p">:</span><span class="w"> </span><span class="s2">"lookup"</span><span class="p">,</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="nt">"query"</span><span class="p">:</span><span class="w"> </span><span class="s2">"What is the SMILES string for water?"</span><span class="p">,</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span><span class="nt">"answer"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">      </span><span class="nt">"tool_calls"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">        </span><span class="p">{</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">          </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"molecule_name_to_smiles"</span><span class="p">,</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">          </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"water"</span><span class="p">}</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">      </span><span class="p">],</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">      </span><span class="nt">"result"</span><span class="p">:</span><span class="w"> </span><span class="s2">"O"</span><span class="p">,</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">      </span><span class="nt">"structured_output"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">        </span><span class="nt">"smiles"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"O"</span><span class="p">]</span>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">      </span><span class="p">}</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="p">]</span>
+</code></pre></div>
+<p>Only non-null fields in the expected <code>structured_output</code> are judged, so include
+every result modality that the query is required to return.</p>
 <table>
 <thead>
 <tr>
-<th>Category</th>
-<th>IDs</th>
-<th>Description</th>
-<th>Tool Chain</th>
+<th>Structured field</th>
+<th>Expected shape</th>
+<th>Comparison</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><strong>A</strong> Single tool calls</td>
-<td>1--4</td>
-<td>Name-to-SMILES, SMILES-to-coordinates (1 or 2 molecules)</td>
-<td><code>molecule_name_to_smiles</code> or <code>smiles_to_coordinate_file</code></td>
+<td><code>smiles</code></td>
+<td>List of SMILES strings</td>
+<td>RDKit canonicalization; expected values matched independently of order</td>
 </tr>
 <tr>
-<td><strong>B</strong> Multi-step from name</td>
-<td>5--9</td>
-<td>Full pipeline from molecule name to ASE simulation</td>
-<td><code>molecule_name_to_smiles</code> → <code>smiles_to_coordinate_file</code> → <code>run_ase</code></td>
+<td><code>scalar_answer</code></td>
+<td><code>{value, property, unit}</code></td>
+<td>Value within 5% relative tolerance; normalized property category; unit match</td>
 </tr>
 <tr>
-<td><strong>C</strong> Multi-step from SMILES</td>
-<td>10--11</td>
-<td>Pipeline from SMILES string to ASE simulation</td>
-<td><code>smiles_to_coordinate_file</code> → <code>run_ase</code></td>
+<td><code>dipole</code></td>
+<td><code>{value: [dx, dy, dz], unit}</code></td>
+<td>Components within 5% relative tolerance; normalized unit match</td>
 </tr>
 <tr>
-<td><strong>D</strong> Reaction Gibbs energy</td>
-<td>12--14</td>
-<td>Multi-species thermochemistry with stoichiometric calculation</td>
-<td><code>molecule_name_to_smiles</code> → <code>smiles_to_coordinate_file</code> → <code>run_ase</code> (per species) → <code>calculator</code></td>
+<td><code>vibrational_answer</code></td>
+<td><code>{frequency_cm1: [...]}</code></td>
+<td>Imaginary modes removed; sorted real modes compared within 5%</td>
+</tr>
+<tr>
+<td><code>ir_spectrum</code></td>
+<td><code>{frequency_cm1: [...], intensity: [...]}</code></td>
+<td>Frequencies and intensities compared within 5%</td>
+</tr>
+<tr>
+<td><code>atoms_data</code></td>
+<td><code>{numbers: [...], positions: [...]}</code></td>
+<td>Atomic numbers exact; each coordinate within 0.1 Å</td>
 </tr>
 </tbody>
 </table>
-<h2 id="running-evaluations">Running Evaluations</h2>
-<h3 id="cli">CLI</h3>
-<p>The evaluation module provides a standalone CLI command (<code>chemgraph-eval</code>) as well as a subcommand (<code>chemgraph eval</code>).</p>
-<h4 id="minimal-invocation">Minimal Invocation</h4>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Uses the bundled 14-query dataset, single_agent workflow</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>chemgraph-eval<span class="w"> </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span>--judge-model<span class="w"> </span>gpt-4o
-</span></code></pre></div>
-<h4 id="multiple-models">Multiple Models</h4>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>chemgraph-eval<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span>gemini-2.5-flash<span class="w"> </span>claude-3-5-haiku-20241022<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span>--judge-model<span class="w"> </span>gpt-4o
-</span></code></pre></div>
-<h4 id="with-toml-config">With TOML Config</h4>
-<p>When a <code>config.toml</code> is provided, the evaluation module resolves <code>base_url</code> and <code>argo_user</code> for each model from the <code>[api.*]</code> sections, matching the behaviour of the main CLI.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>chemgraph-eval<span class="w"> </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span>--judge-model<span class="w"> </span>gpt-4o<span class="w"> </span>--config<span class="w"> </span>config.toml
-</span></code></pre></div>
-<h4 id="profile-based">Profile-Based</h4>
-<p>Profiles are defined under <code>[eval.profiles.*]</code> in <code>config.toml</code> and provide reusable configurations:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chemgraph-eval<span class="w"> </span>--profile<span class="w"> </span>quick<span class="w"> </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span>--judge-model<span class="w"> </span>gpt-4o<span class="w"> </span>--config<span class="w"> </span>config.toml
-</span></code></pre></div>
-<h4 id="custom-dataset-limits">Custom Dataset &amp; Limits</h4>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph-eval<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span>--judge-model<span class="w"> </span>gpt-4o<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span>--dataset<span class="w"> </span>path/to/custom_ground_truth.json<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span>--workflows<span class="w"> </span>single_agent<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span>--max-queries<span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span>--output-dir<span class="w"> </span>eval_results
-</span></code></pre></div>
-<h3 id="python-api">Python API</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.eval</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelBenchmarkRunner</span><span class="p">,</span> <span class="n">BenchmarkConfig</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">config</span> <span class="o">=</span> <span class="n">BenchmarkConfig</span><span class="p">(</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">,</span> <span class="s2">&quot;gemini-2.5-flash&quot;</span><span class="p">],</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">judge_model</span><span class="o">=</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="c1"># dataset defaults to bundled 14-query dataset</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="c1"># workflow_types defaults to [&quot;single_agent&quot;]</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="p">)</span>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">ModelBenchmarkRunner</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="n">results</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run_all</span><span class="p">())</span>
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="n">runner</span><span class="o">.</span><span class="n">report</span><span class="p">()</span>  <span class="c1"># generates JSON + Markdown + console output</span>
-</span></code></pre></div>
-<p>You can also control report format:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">runner</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;json&quot;</span><span class="p">)</span>      <span class="c1"># JSON only</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">runner</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;markdown&quot;</span><span class="p">)</span>  <span class="c1"># Markdown only</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">runner</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;console&quot;</span><span class="p">)</span>   <span class="c1"># Console table only</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="n">runner</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>       <span class="c1"># All formats (default)</span>
-</span></code></pre></div>
-<h2 id="cli-reference">CLI Reference</h2>
-<table>
-<thead>
-<tr>
-<th>Option</th>
-<th>Description</th>
-<th>Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>--models</code></td>
-<td>LLM model names to evaluate (required, space-separated)</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>--judge-model</code></td>
-<td>LLM model name for the judge (required)</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>--profile</code></td>
-<td>Eval profile name from <code>[eval.profiles.*]</code> in config.toml</td>
-<td>None</td>
-</tr>
-<tr>
-<td><code>--dataset</code></td>
-<td>Path to ground-truth JSON file</td>
-<td>Bundled dataset</td>
-</tr>
-<tr>
-<td><code>--workflows</code></td>
-<td>Workflow types to test (space-separated)</td>
-<td><code>single_agent</code></td>
-</tr>
-<tr>
-<td><code>--output-dir</code></td>
-<td>Output directory for results</td>
-<td><code>eval_results</code></td>
-</tr>
-<tr>
-<td><code>--max-queries</code></td>
-<td>Max queries to evaluate (0 = all)</td>
-<td>0</td>
-</tr>
-<tr>
-<td><code>--recursion-limit</code></td>
-<td>Max LangGraph recursion steps per query</td>
-<td>50</td>
-</tr>
-<tr>
-<td><code>--config</code></td>
-<td>Path to TOML config file</td>
-<td>None</td>
-</tr>
-<tr>
-<td><code>--tags</code></td>
-<td>Free-form tags for run metadata (space-separated)</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>--no-structured-output</code></td>
-<td>Disable structured output on the agent</td>
-<td>—</td>
-</tr>
-<tr>
-<td><code>--report</code></td>
-<td>Report format: <code>json</code>, <code>markdown</code>, <code>console</code>, <code>all</code></td>
-<td><code>all</code></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Valid workflow types</strong>: <code>single_agent</code>, <code>multi_agent</code></p>
-<h2 id="configuration">Configuration</h2>
-<h3 id="benchmarkconfig">BenchmarkConfig</h3>
-<p>The <code>BenchmarkConfig</code> Pydantic model holds all settings for a benchmark run:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.eval</span><span class="w"> </span><span class="kn">import</span> <span class="n">BenchmarkConfig</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">config</span> <span class="o">=</span> <span class="n">BenchmarkConfig</span><span class="p">(</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;gpt-4o-mini&quot;</span><span class="p">],</span>           <span class="c1"># Required: models to evaluate</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">judge_model</span><span class="o">=</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span>             <span class="c1"># Required: judge model</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">workflow_types</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;single_agent&quot;</span><span class="p">],</span>   <span class="c1"># Default: [&quot;single_agent&quot;]</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="n">dataset</span><span class="o">=</span><span class="s2">&quot;path/to/gt.json&quot;</span><span class="p">,</span>        <span class="c1"># Default: bundled dataset</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;eval_results&quot;</span><span class="p">,</span>        <span class="c1"># Default: &quot;eval_results&quot;</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="n">structured_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>           <span class="c1"># Default: True</span>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>    <span class="n">recursion_limit</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>               <span class="c1"># Default: 50</span>
-</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>    <span class="n">max_queries</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>                    <span class="c1"># Default: 0 (all queries)</span>
-</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>    <span class="n">config_file</span><span class="o">=</span><span class="s2">&quot;config.toml&quot;</span><span class="p">,</span>        <span class="c1"># Default: None</span>
-</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="p">)</span>
-</span></code></pre></div>
-<h3 id="toml-profiles">TOML Profiles</h3>
-<p>Define reusable profiles in your <code>config.toml</code>:</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">[eval]</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">default_profile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;standard&quot;</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="k">[eval.profiles.standard]</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">judge_model</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;gpt-4o&quot;</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="n">workflow_types</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;single_agent&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;multi_agent&quot;</span><span class="p">]</span>
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="n">recursion_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">50</span>
-</span></code></pre></div>
-<p>Profiles are loaded via <code>BenchmarkConfig.from_profile()</code> or the <code>--profile</code> CLI flag. CLI arguments always override profile values.</p>
-<p>When <code>--config</code> is provided without <code>--profile</code>, the <code>[eval] default_profile</code> is used automatically if defined.</p>
-<p>List available profiles:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.eval</span><span class="w"> </span><span class="kn">import</span> <span class="n">BenchmarkConfig</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">profiles</span> <span class="o">=</span> <span class="n">BenchmarkConfig</span><span class="o">.</span><span class="n">list_profiles</span><span class="p">(</span><span class="s2">&quot;config.toml&quot;</span><span class="p">)</span>
-</span></code></pre></div>
-<h2 id="llm-judge">LLM Judge</h2>
-<p>The judge is implemented in <code>chemgraph.eval.llm_judge</code> and uses the following evaluation rubric:</p>
-<h3 id="scoring-rules">Scoring Rules</h3>
+<p>The default numeric tolerances come from <code>judge_structured_output()</code>. The CLI
+runner currently uses those defaults. The loader also accepts the legacy object
+format containing <code>manual_workflow</code> or <code>llm_workflow</code>, but new datasets should
+use the list format above.</p>
+<p>Keep ground truth under version control when licensing permits, document how it
+was produced, and review it independently of every model being measured.</p>
+<h2 id="profiles">Profiles<a class="headerlink" href="#profiles" title="Permanent link">&para;</a></h2>
+<p>Make structured judging the explicit default in a reusable profile:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[eval]</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">default_profile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"standard"</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">[eval.profiles.standard]</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">dataset</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"evaluation/questions.json"</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">workflow_types</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"single_agent"</span><span class="p">]</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">judge_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"structured"</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">structured_output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">recursion_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">50</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">max_queries</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
+</code></pre></div>
+<p>Then run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--config<span class="w"> </span>config.toml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--profile<span class="w"> </span>standard<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--models<span class="w"> </span>gpt-4o-mini
+</code></pre></div>
+<p><code>--profile</code> requires <code>--config</code>. CLI values override matching profile values.
+If <code>[eval] default_profile</code> exists, providing <code>--config</code> without <code>--profile</code>
+selects it automatically.</p>
+<h2 id="reports-and-diagnostics">Reports and diagnostics<a class="headerlink" href="#reports-and-diagnostics" title="Permanent link">&para;</a></h2>
+<p>Select <code>--report json</code>, <code>markdown</code>, <code>console</code>, or <code>all</code> (the default). Structured
+results include:</p>
 <ul>
-<li><strong>Binary scoring</strong>: 1 = correct, 0 = wrong</li>
-<li><strong>Numeric tolerance</strong>: Values must match within <strong>5% relative tolerance</strong></li>
-<li><strong>Minor formatting</strong>: Extra explanation, rounding, or formatting differences are acceptable</li>
-<li><strong>File paths</strong>: Minor path/name differences are acceptable if the expected output is produced</li>
-<li><strong>Tool calls</strong>: Missing tool calls are acceptable if the final answer is correct and the dependency chain is preserved</li>
-<li><strong>Key arguments must match</strong>: calculator type, driver, SMILES strings, molecule names, temperature, method</li>
-<li><strong>Optional parameters</strong>: Differences in default/optional parameter values are acceptable</li>
-<li><strong>Final verdict</strong>: Correct (1) only if <strong>both</strong> the tool-call sequence and final result are substantially correct</li>
+<li><code>structured_judge_aggregate</code>: query count, correct count, accuracy, and parse
+  errors for each model/workflow pair;</li>
+<li><code>structured_judge_details</code>: per-query score, <code>field_scores</code>, rationale, query
+  metadata, and parse error;</li>
+<li>raw tool calls and final agent results for debugging failures.</li>
 </ul>
-<h3 id="using-a-different-judge">Using a Different Judge</h3>
-<p>The judge model should ideally be a capable model (e.g., <code>gpt-4o</code>) that is different from the model under test to avoid self-evaluation bias:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Evaluate gpt-4o-mini, judged by gpt-4o</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>chemgraph-eval<span class="w"> </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span>--judge-model<span class="w"> </span>gpt-4o
-</span></code></pre></div>
-<h2 id="ground-truth-generation">Ground-Truth Generation</h2>
-<p>The ground-truth dataset is generated by the script <code>scripts/evaluations/generate_ground_truth.py</code>, which programmatically builds and executes tool-call chains for each query category.</p>
-<h3 id="input-format">Input Format</h3>
-<p>The input file (<code>input_data.json</code>) contains molecules and reactions:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">    </span><span class="nt">&quot;molecules&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">        </span><span class="p">{</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">            </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;water&quot;</span><span class="p">,</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">            </span><span class="nt">&quot;number_of_atoms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">            </span><span class="nt">&quot;smiles&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;O&quot;</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">        </span><span class="p">}</span>
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">    </span><span class="p">],</span>
-</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">    </span><span class="nt">&quot;reactions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">        </span><span class="p">{</span>
-</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="w">            </span><span class="nt">&quot;reaction_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Methane Combustion&quot;</span><span class="p">,</span>
-</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a><span class="w">            </span><span class="nt">&quot;reactants&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="w">                </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Methane&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;smiles&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;coefficient&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">},</span>
-</span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="w">                </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Oxygen&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;smiles&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;O=O&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;coefficient&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">}</span>
-</span><span id="__span-12-15"><a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="w">            </span><span class="p">],</span>
-</span><span id="__span-12-16"><a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a><span class="w">            </span><span class="nt">&quot;products&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-12-17"><a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a><span class="w">                </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Carbon dioxide&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;smiles&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;O=C=O&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;coefficient&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">},</span>
-</span><span id="__span-12-18"><a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a><span class="w">                </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Water&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;smiles&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;O&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;coefficient&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">}</span>
-</span><span id="__span-12-19"><a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a><span class="w">            </span><span class="p">]</span>
-</span><span id="__span-12-20"><a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a><span class="w">        </span><span class="p">}</span>
-</span><span id="__span-12-21"><a id="__codelineno-12-21" name="__codelineno-12-21" href="#__codelineno-12-21"></a><span class="w">    </span><span class="p">]</span>
-</span><span id="__span-12-22"><a id="__codelineno-12-22" name="__codelineno-12-22" href="#__codelineno-12-22"></a><span class="p">}</span>
-</span></code></pre></div>
-<h3 id="running-the-generator">Running the Generator</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nb">cd</span><span class="w"> </span>scripts/evaluations
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="c1"># Full execution (runs all tool chains end-to-end, captures results)</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>python<span class="w"> </span>generate_ground_truth.py<span class="w"> </span>--input_file<span class="w"> </span>input_data.json
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="c1"># Skip execution (produces entries with empty results -- faster for testing)</span>
-</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>python<span class="w"> </span>generate_ground_truth.py<span class="w"> </span>--input_file<span class="w"> </span>input_data.json<span class="w"> </span>--skip_execution
-</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>
-</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="c1"># Custom output path</span>
-</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>python<span class="w"> </span>generate_ground_truth.py<span class="w"> </span>--input_file<span class="w"> </span>input_data.json<span class="w"> </span>-o<span class="w"> </span>my_ground_truth.json
-</span></code></pre></div>
-<h3 id="output-format">Output Format</h3>
-<p>Each entry in the generated <code>ground_truth.json</code> has this structure:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">    </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;5&quot;</span><span class="p">,</span>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="nt">&quot;query&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Calculate the geometry optimization of sulfur dioxide using mace_mp&quot;</span><span class="p">,</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="nt">&quot;answer&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">        </span><span class="nt">&quot;tool_calls&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">            </span><span class="p">{</span><span class="nt">&quot;molecule_name_to_smiles&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sulfur dioxide&quot;</span><span class="p">}},</span>
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">            </span><span class="p">{</span><span class="nt">&quot;smiles_to_coordinate_file&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;smiles&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;O=S=O&quot;</span><span class="p">}},</span>
-</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">            </span><span class="p">{</span><span class="nt">&quot;run_ase&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;input_structure_file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;calculator_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mace_mp&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;driver&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;opt&quot;</span><span class="p">}}</span>
-</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">        </span><span class="p">],</span>
-</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">        </span><span class="nt">&quot;result&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">            </span><span class="nt">&quot;energy&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">-14.523</span><span class="p">,</span>
-</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">            </span><span class="nt">&quot;positions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[[</span><span class="err">...</span><span class="p">],</span><span class="w"> </span><span class="err">...</span><span class="p">],</span>
-</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="w">            </span><span class="nt">&quot;...&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span>
-</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a><span class="w">        </span><span class="p">}</span>
-</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-14-16"><a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="p">}</span>
-</span></code></pre></div>
-<h3 id="custom-datasets">Custom Datasets</h3>
-<p>You can create your own ground-truth dataset by following either of two supported JSON formats:</p>
-<p><strong>List format</strong> (recommended):</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">[</span>
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">    </span><span class="p">{</span>
-</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">        </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;1&quot;</span><span class="p">,</span>
-</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">        </span><span class="nt">&quot;query&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Your natural language query&quot;</span><span class="p">,</span>
-</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">        </span><span class="nt">&quot;answer&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">            </span><span class="nt">&quot;tool_calls&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="err">...</span><span class="p">],</span>
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">            </span><span class="nt">&quot;result&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="err">...</span><span class="p">}</span>
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">        </span><span class="p">}</span>
-</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="p">]</span>
-</span></code></pre></div>
-<p><strong>Legacy dict format</strong> (also supported):</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">    </span><span class="nt">&quot;molecule_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">        </span><span class="nt">&quot;query&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Your query&quot;</span><span class="p">,</span>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">        </span><span class="nt">&quot;answer&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="err">...</span><span class="p">}</span>
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="p">}</span>
-</span></code></pre></div>
-<p>Both formats are auto-detected by <code>load_dataset()</code>.</p>
-<h2 id="output-reports">Output &amp; Reports</h2>
-<p>Evaluation runs produce output in the <code>eval_results/</code> directory (configurable via <code>--output-dir</code>):</p>
-<h3 id="json-report">JSON Report</h3>
-<p><code>benchmark_&lt;timestamp&gt;.json</code> -- Machine-readable aggregate results:</p>
-<ul>
-<li>Run metadata (timestamp, models, workflows, tags)</li>
-<li>Per-model, per-workflow accuracy scores</li>
-<li>Per-query judge scores and reasoning</li>
-</ul>
-<h3 id="markdown-report">Markdown Report</h3>
-<p><code>benchmark_&lt;timestamp&gt;.md</code> -- Human-readable summary with accuracy tables:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>| Model          | Workflow     | Queries | Correct | Accuracy | Parse Errors |
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>|----------------|-------------|---------|---------|----------|--------------|
-</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>| gpt-4o-mini    | single_agent | 14      | 11      | 78.6%    | 0            |
-</span><span id="__span-17-4"><a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>| gemini-2.5-flash | single_agent | 14    | 12      | 85.7%    | 1            |
-</span></code></pre></div>
-<h3 id="per-model-detail-files">Per-Model Detail Files</h3>
-<p><code>&lt;model&gt;_&lt;workflow&gt;_detail.json</code> -- Full detail for each query including the agent's tool calls, final answer, judge score, and judge reasoning.</p>
-<h3 id="console-summary">Console Summary</h3>
-<p>A Rich-formatted table printed to the console during the run showing real-time accuracy per model and workflow.</p>
-<h2 id="testing">Testing</h2>
-<p>The evaluation module has a comprehensive test suite:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Run all eval tests</span>
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>pytest<span class="w"> </span>tests/test_eval.py<span class="w"> </span>-v
-</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
-</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="c1"># Run specific test classes</span>
-</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>pytest<span class="w"> </span>tests/test_eval.py::TestBenchmarkConfig<span class="w"> </span>-v
-</span><span id="__span-18-6"><a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>pytest<span class="w"> </span>tests/test_eval.py::TestLLMJudge<span class="w"> </span>-v
-</span><span id="__span-18-7"><a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>pytest<span class="w"> </span>tests/test_eval.py::TestCLI<span class="w"> </span>-v
-</span></code></pre></div>
-<h2 id="module-structure">Module Structure</h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>src/chemgraph/eval/
-</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>├── __init__.py          # Public API exports
-</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>├── cli.py               # CLI entry point (chemgraph-eval command)
-</span><span id="__span-19-4"><a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a>├── config.py            # BenchmarkConfig (Pydantic model)
-</span><span id="__span-19-5"><a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a>├── datasets.py          # Dataset loading &amp; GroundTruthItem schema
-</span><span id="__span-19-6"><a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>├── llm_judge.py         # LLM-as-judge evaluator (binary scoring)
-</span><span id="__span-19-7"><a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a>├── reporter.py          # JSON/Markdown/console report generators
-</span><span id="__span-19-8"><a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a>├── runner.py            # ModelBenchmarkRunner orchestration
-</span><span id="__span-19-9"><a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a>└── data/
-</span><span id="__span-19-10"><a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a>    └── ground_truth.json  # Bundled default dataset (14 queries)
-</span></code></pre></div>
+<p>Use the per-field rationale to distinguish a wrong scientific value from a
+missing field, unit/property mismatch, geometry difference, or formatter parse
+failure.</p>
+<h2 id="resume-interrupted-runs">Resume interrupted runs<a class="headerlink" href="#resume-interrupted-runs" title="Permanent link">&para;</a></h2>
+<p>The runner writes per-query checkpoints even when resume is disabled. Continue
+with the same dataset, model/workflow configuration, and output directory:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--dataset<span class="w"> </span>evaluation/questions.json<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--judge-type<span class="w"> </span>structured<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>eval_results<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--resume
+</code></pre></div>
+<p>Use <code>--max-queries</code> for a smoke test, <code>--recursion-limit</code> to bound graph
+execution, and <code>--tags</code> for run metadata. Evaluation currently accepts
+<code>single_agent</code> and <code>multi_agent</code> workflows.</p>
+<h2 id="python-api">Python API<a class="headerlink" href="#python-api" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.eval</span><span class="w"> </span><span class="kn">import</span> <span class="n">BenchmarkConfig</span><span class="p">,</span> <span class="n">ModelBenchmarkRunner</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">config</span> <span class="o">=</span> <span class="n">BenchmarkConfig</span><span class="p">(</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">"gpt-4o-mini"</span><span class="p">],</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">dataset</span><span class="o">=</span><span class="s2">"evaluation/questions.json"</span><span class="p">,</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">workflow_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"single_agent"</span><span class="p">],</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">structured_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">judge_type</span><span class="o">=</span><span class="s2">"structured"</span><span class="p">,</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">output_dir</span><span class="o">=</span><span class="s2">"eval_results"</span><span class="p">,</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="p">)</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">ModelBenchmarkRunner</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run_all</span><span class="p">())</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="n">runner</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">"all"</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="optional-llm-judge">Optional LLM judge<a class="headerlink" href="#optional-llm-judge" title="Permanent link">&para;</a></h2>
+<p>Use the LLM judge only when a deterministic structured comparison does not
+capture the evaluation goal or when reproducing a legacy benchmark:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--dataset<span class="w"> </span>evaluation/questions.json<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--judge-type<span class="w"> </span>llm<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--judge-model<span class="w"> </span>gpt-4o<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span>--output-dir<span class="w"> </span>eval_results
+</code></pre></div>
+<p>Use <code>--judge-type both</code> to record deterministic and LLM-judge results side by
+side. Report the judge model and settings, and do not substitute the LLM score
+for the structured score on leaderboard-style comparisons.</p>
+<p>Evaluation runs invoke real models and tools unless your test setup replaces
+them. Estimate cost, isolate credentials, and begin with a small dataset.</p>
 
 
 
@@ -2231,7 +1959,7 @@
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../mcp_servers/" class="md-footer__link md-footer__link--prev" aria-label="Previous: MCP Servers">
+          <a href="../hpc_and_academy/" class="md-footer__link md-footer__link--prev" aria-label="Previous: HPC and Academy">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -2241,20 +1969,20 @@
                 Previous
               </span>
               <div class="md-ellipsis">
-                MCP Servers
+                HPC and Academy
               </div>
             </div>
           </a>
         
         
           
-          <a href="../configuration_with_toml/" class="md-footer__link md-footer__link--next" aria-label="Next: Configuration with TOML">
+          <a href="../codex_subscription/" class="md-footer__link md-footer__link--next" aria-label="Next: Codex subscription">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Configuration with TOML
+                Codex subscription
               </div>
             </div>
             <div class="md-footer__button md-icon">
@@ -2291,7 +2019,7 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "content.code.annotate", "navigation.footer", "search.suggest", "header.autohide", "navigation.tabs"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["content.code.copy", "navigation.footer", "navigation.indexes", "navigation.sections", "navigation.tabs", "search.highlight", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
