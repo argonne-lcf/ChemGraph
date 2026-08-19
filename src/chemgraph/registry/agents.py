@@ -173,24 +173,29 @@ class AgentRegistry:
             self.register(spec)
 
     def register(self, spec: AgentSpec, *, replace: bool = False) -> None:
-        """Register one worker specification."""
+        """Register or replace one worker specification."""
         if not isinstance(spec, AgentSpec):
             raise TypeError("AgentRegistry entries must be AgentSpec objects.")
         if not spec.name:
             raise ValueError("Registry names must not be empty.")
 
+        previous = self._specs.get(spec.name)
         claimed = (spec.name, *spec.aliases)
-        duplicates = [
-            name
-            for name in claimed
-            if name in self._specs or name in self._aliases
-        ]
-        if duplicates and not (replace and duplicates == [spec.name]):
-            raise DuplicateRegistryEntryError(
-                f"Agent name or alias already registered: {duplicates!r}."
+        collisions = []
+        for name in claimed:
+            owner = name if name in self._specs else self._aliases.get(name)
+            if owner is None:
+                continue
+            replacing_same_agent = (
+                replace and previous is not None and owner == spec.name
             )
-        if replace and spec.name in self._specs:
-            previous = self._specs[spec.name]
+            if not replacing_same_agent:
+                collisions.append(name)
+        if collisions:
+            raise DuplicateRegistryEntryError(
+                f"Agent name or alias already registered: {collisions!r}."
+            )
+        if previous is not None:
             for alias in previous.aliases:
                 self._aliases.pop(alias, None)
 
@@ -266,6 +271,20 @@ class AgentRegistry:
         self._constructors[spec.name] = constructor
         return constructor
 
+    def _prepare_constructor(
+        self,
+        spec: AgentSpec,
+        llm: Any,
+        constructor_kwargs: Mapping[str, Any],
+    ) -> Callable[..., Any]:
+        """Load a constructor and validate its arguments without invoking it."""
+        constructor = self._get_constructor(spec)
+        try:
+            inspect.signature(constructor).bind(llm, **constructor_kwargs)
+        except TypeError as exc:
+            raise TypeError(f"Invalid options for agent {spec.name!r}: {exc}") from exc
+        return constructor
+
     def build(
         self,
         name: str,
@@ -283,11 +302,7 @@ class AgentRegistry:
         if require_available and not status.available:
             raise RegistryUnavailableError(spec.name, status.issues)
 
-        constructor = self._get_constructor(spec)
-        try:
-            inspect.signature(constructor).bind(llm, **constructor_kwargs)
-        except TypeError as exc:
-            raise TypeError(f"Invalid options for agent {spec.name!r}: {exc}") from exc
+        constructor = self._prepare_constructor(spec, llm, constructor_kwargs)
         return constructor(llm, **constructor_kwargs)
 
     def as_subagent(
@@ -325,7 +340,7 @@ class AgentRegistry:
         options: Mapping[str, Mapping[str, Any]] | None = None,
         require_available: bool = True,
     ) -> list[CompiledSubAgent]:
-        """Validate and build an explicit worker list atomically."""
+        """Prevalidate and build an explicit worker list."""
         requested = tuple(names)
         canonical = tuple(self.resolve_name(name) for name in requested)
         if len(canonical) != len(set(canonical)):
@@ -338,6 +353,10 @@ class AgentRegistry:
         for requested_name, canonical_name in zip(requested, canonical, strict=True):
             spec = self.get_spec(canonical_name)
             kwargs = dict(by_name.get(requested_name, by_name.get(canonical_name, {})))
+            if kwargs.get("checkpointer") is not None:
+                raise ValueError(
+                    "Registry subagents must inherit the parent checkpointer."
+                )
             kwargs["checkpointer"] = None
             status = self.availability(
                 canonical_name,
@@ -349,14 +368,18 @@ class AgentRegistry:
         if unavailable:
             raise RegistryUnavailableError("worker agents", unavailable)
 
+        constructors = [
+            self._prepare_constructor(spec, llm, kwargs) for spec, kwargs in prepared
+        ]
         return [
-            self.as_subagent(
-                spec.name,
-                llm=llm,
-                require_available=False,
-                **kwargs,
+            {
+                "name": spec.name,
+                "description": spec.description,
+                "runnable": constructor(llm, **kwargs),
+            }
+            for (spec, kwargs), constructor in zip(
+                prepared, constructors, strict=True
             )
-            for spec, kwargs in prepared
         ]
 
 

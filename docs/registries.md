@@ -84,8 +84,9 @@ workers = registry.as_subagents(
 main_graph = construct_main_agent_graph(model, subagents=workers)
 ```
 
-`as_subagents()` validates the whole requested set before constructing any
-worker. Per-worker constructor arguments are supplied through `options`:
+`as_subagents()` validates names, availability, constructor loading, and
+constructor options for the whole requested set before invoking any constructor.
+Per-worker constructor arguments are supplied through `options`:
 
 ```python
 workers = registry.as_subagents(
@@ -101,5 +102,11 @@ workers = registry.as_subagents(
 ```
 
 Both registries support explicit custom registration with `ToolSpec` or
-`AgentSpec`. Duplicate names and aliases are rejected unless a caller
-intentionally replaces a tool specification.
+`AgentSpec`. Passing `replace=True` allows an existing canonical specification
+to be replaced. An agent replacement may retain, remove, or add aliases owned
+by that same canonical agent, but it cannot claim a canonical name or alias
+owned by another entry.
+
+Batch prevalidation catches registry, availability, import, and constructor
+option errors. It does not roll back workers if a constructor itself raises at
+runtime after an earlier worker was constructed.

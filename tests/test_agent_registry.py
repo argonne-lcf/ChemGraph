@@ -25,6 +25,14 @@ EXPECTED_WORKERS = (
 )
 
 
+def _factory_v1(_llm):
+    return "factory-v1"
+
+
+def _factory_v2(_llm):
+    return "factory-v2"
+
+
 def _graspa_mcp_options():
     return {
         "executor_tools": [calculator],
@@ -65,6 +73,91 @@ def test_registration_rejects_duplicate_names_and_aliases():
                 aliases=("worker",),
             )
         )
+
+
+def test_replacement_retains_changes_aliases_and_invalidates_constructor():
+    registry = AgentRegistry(specs=())
+    registry.register(
+        AgentSpec(
+            "worker",
+            "Worker v1",
+            "tests.test_agent_registry:_factory_v1",
+            aliases=("keep", "remove"),
+        )
+    )
+    assert registry.build("worker", llm=object()) == "factory-v1"
+
+    replacement = AgentSpec(
+        "worker",
+        "Worker v2",
+        "tests.test_agent_registry:_factory_v2",
+        aliases=("keep", "new"),
+    )
+    registry.register(replacement, replace=True)
+
+    assert registry.get_spec("worker") is replacement
+    assert registry.resolve_name("keep") == "worker"
+    assert registry.resolve_name("new") == "worker"
+    with pytest.raises(UnknownRegistryEntryError, match="Unknown worker agent"):
+        registry.resolve_name("remove")
+    assert registry.build("worker", llm=object()) == "factory-v2"
+
+
+@pytest.mark.parametrize("foreign_identifier", ["other", "other_alias"])
+def test_replacement_rejects_identifiers_owned_by_another_agent(
+    foreign_identifier,
+):
+    original = AgentSpec(
+        "worker",
+        "Worker",
+        "tests.test_agent_registry:_factory_v1",
+        aliases=("worker_alias",),
+    )
+    other = AgentSpec(
+        "other",
+        "Other",
+        "tests.test_agent_registry:_factory_v1",
+        aliases=("other_alias",),
+    )
+    registry = AgentRegistry(specs=(original, other))
+
+    with pytest.raises(DuplicateRegistryEntryError, match="already registered"):
+        registry.register(
+            AgentSpec(
+                "worker",
+                "Replacement",
+                "tests.test_agent_registry:_factory_v2",
+                aliases=("worker_alias", foreign_identifier),
+            ),
+            replace=True,
+        )
+
+    assert registry.specs() == (original, other)
+    assert registry.resolve_name("worker_alias") == "worker"
+    assert registry.resolve_name("other_alias") == "other"
+
+
+def test_replacement_rejects_a_canonical_name_owned_as_an_alias():
+    original = AgentSpec(
+        "first",
+        "First",
+        "tests.test_agent_registry:_factory_v1",
+        aliases=("second",),
+    )
+    registry = AgentRegistry(specs=(original,))
+
+    with pytest.raises(DuplicateRegistryEntryError, match="already registered"):
+        registry.register(
+            AgentSpec(
+                "second",
+                "Second",
+                "tests.test_agent_registry:_factory_v2",
+            ),
+            replace=True,
+        )
+
+    assert registry.specs() == (original,)
+    assert registry.resolve_name("second") == "first"
 
 
 def test_graspa_mcp_requires_both_external_tool_groups():
@@ -129,6 +222,46 @@ def test_batch_validation_occurs_before_any_worker_is_built(monkeypatch):
             ["single_agent", "graspa_mcp"],
             llm=object(),
             options={"graspa_mcp": {"executor_tools": [calculator]}},
+        )
+    assert calls == []
+
+
+def test_batch_options_are_bound_before_any_worker_is_built(monkeypatch):
+    registry = AgentRegistry(
+        specs=(
+            AgentSpec("first", "First", "unused:first"),
+            AgentSpec("second", "Second", "unused:second"),
+        )
+    )
+    calls = []
+
+    def constructor(_llm, checkpointer=None):
+        calls.append(checkpointer)
+        return object()
+
+    monkeypatch.setattr(registry, "_get_constructor", lambda _spec: constructor)
+
+    with pytest.raises(TypeError, match="Invalid options for agent 'second'"):
+        registry.as_subagents(
+            ["first", "second"],
+            llm=object(),
+            options={"second": {"unexpected": True}},
+            require_available=False,
+        )
+    assert calls == []
+
+
+def test_batch_rejects_an_independent_checkpointer_before_loading(monkeypatch):
+    registry = AgentRegistry()
+    calls = []
+    monkeypatch.setattr(registry, "_get_constructor", lambda spec: calls.append(spec))
+
+    with pytest.raises(ValueError, match="inherit the parent checkpointer"):
+        registry.as_subagents(
+            ["single_agent", "python_relp"],
+            llm=object(),
+            options={"python_relp": {"checkpointer": MemorySaver()}},
+            require_available=False,
         )
     assert calls == []
 
