@@ -130,9 +130,6 @@ OPENROUTER_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 # This list is curated for *discovery* only (--list-models, UI dropdown); it is
 # NOT a gate. Dispatch is by prefix, so any slug from
 # https://openrouter.ai/models also works.
-# Every entry supports tool calling, which each ChemGraph workflow needs.
-# Slugs are the undated ones, which OpenRouter keeps stable; dated snapshots
-# such as deepseek-v4-pro-0813 also work but are not carried here.
 supported_openrouter_models = [
     # DeepSeek
     "openrouter:deepseek/deepseek-v4-pro",
