@@ -12,8 +12,36 @@ chemgraph -q "Which ALCF machines are currently up?" -w iri
 ```
 or pick **single_agent_iri** as the workflow in the Streamlit UI (`streamlit run src/ui/app.py`).
 
+## Two tool sets
+
+`single_agent_iri` is a single graph that can be bound to either of two
+shipped tool sets:
+
+| Tool set | Import from | Tools | When to use |
+|---|---|---:|---|
+| **`ALCF_IRI_FLAT_TOOLS`** (default) | `chemgraph.tools.alcf_iri_flat_tools` | 43 | One tool per IRI endpoint. Higher judge score in our eval; recommended default. |
+| **`ALCF_IRI_CATEGORY_TOOLS`** | `chemgraph.tools.alcf_iri_tools` | 7 | Category dispatchers with a `list_actions`/`describe` discovery protocol. ~3× smaller upfront schema surface; useful when context is tight or the model handles many-tool prompts poorly. |
+
+Pick one at construction time; nothing else changes:
+
+```python
+from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.tools.alcf_iri_flat_tools import ALCF_IRI_FLAT_TOOLS
+# from chemgraph.tools.alcf_iri_tools import ALCF_IRI_CATEGORY_TOOLS
+
+cg = ChemGraph(
+    model_name="gpt-4o-mini",
+    workflow_type="single_agent_iri",
+    tools=ALCF_IRI_FLAT_TOOLS,  # or ALCF_IRI_CATEGORY_TOOLS
+)
+```
+
+The graph auto-selects a matching system prompt when you don't pass one
+(`alcf_iri_flat_prompt` for flat, `alcf_iri_prompt` for category).
+
 ## What's here
-- `run_chemgraph.py` — runs one query end-to-end and prints the answer.
+- `run_chemgraph.py` — runs one query end-to-end through **both** tool sets
+  so you can see the swap pattern.
 - (this README)
 
 ## Setup
@@ -93,15 +121,15 @@ python run_chemgraph.py
 
 ## Design at a glance
 
-Instead of binding one `@tool` per endpoint (~43 tools, ~8k tokens of schemas
-upfront), `single_agent_iri` bundles the endpoints into **7 category tools**
-(facility / status / account / compute / filesystem / task / auth), each
-accepting an `action` enum. The LLM discovers per-action schemas on demand
-via `list_actions` / `describe`. Trades one extra LLM turn on cold action
-lookups for a ~4x reduction in the tool-schema prompt footprint.
+**Flat** (default): one `@tool` per IRI endpoint. ~43 tools, ~5k tokens of
+tool-schema in the prompt, but each schema is small and self-documenting
+(`alcf_status_list_resources` has just the args it needs). No discovery
+turn; the model picks the tool by name.
 
-A flat-tool baseline is also shipped as `single_agent_iri_flat` for
-head-to-head comparison (see `notebooks/iri_benchmark.ipynb`).
+**Category**: 7 dispatcher tools, each taking an `action` enum plus optional
+`params`. Cuts prompt schema footprint ~3× at rest, at the cost of one
+extra LLM turn on cold action lookups (`list_actions` / `describe`). Useful
+when the flat 43-tool surface is prohibitive.
 
 ## References
 - ALCF IRI docs: https://docs.alcf.anl.gov/services/iri-api/
