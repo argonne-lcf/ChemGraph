@@ -159,6 +159,13 @@ BUILTIN_AGENT_SPECS: tuple[AgentSpec, ...] = (
         ),
         tags=frozenset({"docking", "drug-discovery"}),
     ),
+    AgentSpec(
+        "single_agent_iri",
+        "ALCF IRI Facility API worker for facility status and HPC operations.",
+        "chemgraph.graphs.single_agent_iri:construct_iri_graph",
+        aliases=("iri",),
+        tags=frozenset({"alcf", "iri", "hpc"}),
+    ),
 )
 
 

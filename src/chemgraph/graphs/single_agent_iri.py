@@ -28,6 +28,8 @@ from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 def route_tools(state: State):
     if isinstance(state, list):
@@ -79,6 +81,7 @@ def construct_iri_graph(
     structured_output: bool = False,
     formatter_prompt: str = formatter_prompt,
     tools: list | None = None,
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct the single-agent IRI graph.
 
@@ -91,9 +94,14 @@ def construct_iri_graph(
     system_prompt : str, optional
         System prompt. If omitted, auto-selected based on ``tools``:
         category -> ``alcf_iri_prompt``, flat/other -> ``alcf_iri_flat_prompt``.
+    checkpointer : optional
+        LangGraph checkpointer used to compile the graph. When omitted, a new
+        ``MemorySaver`` preserves standalone behavior. Pass ``None`` when
+        embedding this graph so it inherits the parent checkpointer.
     """
     logger.info("Constructing single_agent_iri graph")
-    checkpointer = MemorySaver()
+    if checkpointer is _DEFAULT_CHECKPOINTER:
+        checkpointer = MemorySaver()
     if tools is None:
         tools = ALCF_IRI_FLAT_TOOLS
     if system_prompt is None:

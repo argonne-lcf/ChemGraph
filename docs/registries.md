@@ -4,10 +4,10 @@ ChemGraph provides explicit registries for discovering in-process tools and
 worker graphs without eagerly importing every implementation. These registries
 are intended to support orchestration and, later, controlled benchmarking.
 
-The first registry release deliberately excludes MCP tools, skills, selector
-middleware, and benchmark code. The `main_agent` graph is also excluded from
-both registries: it remains the orchestration graph that consumes registered
-workers.
+The first registry release deliberately excludes MCP tools, generated IRI API
+tool collections, skills, selector middleware, and benchmark code. The
+`main_agent` graph is also excluded from both registries: it remains the
+orchestration graph that consumes registered workers.
 
 ## Tool registry
 
@@ -66,9 +66,9 @@ worker = registry.build("single_agent", llm=model)
 ```
 
 The registered workers are `single_agent`, `multi_agent`, `python_relp`,
-`graspa`, `mock_agent`, `graspa_mcp`, `rag_agent`, `single_agent_xanes`, and
-`molecular_docking`. Existing `python_repl` and `graspa_agent` spellings are
-supported as aliases.
+`graspa`, `mock_agent`, `graspa_mcp`, `rag_agent`, `single_agent_xanes`,
+`molecular_docking`, and `single_agent_iri`. Existing `python_repl`,
+`graspa_agent`, and `iri` spellings are supported as aliases.
 
 Standalone workers keep their existing default in-memory checkpointer. When a
 worker is handed to an orchestration graph, use `as_subagent()` or

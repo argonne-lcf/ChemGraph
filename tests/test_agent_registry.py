@@ -22,6 +22,7 @@ EXPECTED_WORKERS = (
     "rag_agent",
     "single_agent_xanes",
     "molecular_docking",
+    "single_agent_iri",
 )
 
 
@@ -54,6 +55,7 @@ def test_existing_workflow_aliases_resolve_to_canonical_workers():
 
     assert registry.resolve_name("python_repl") == "python_relp"
     assert registry.resolve_name("graspa_agent") == "graspa"
+    assert registry.resolve_name("iri") == "single_agent_iri"
     assert registry.get_spec("python_repl").name == "python_relp"
 
 
