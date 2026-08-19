@@ -23,6 +23,8 @@ from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 def _tool_call_signature(tool_calls) -> tuple:
     """Create a comparable signature for a list of tool calls.
@@ -169,6 +171,7 @@ def construct_single_agent_xanes_graph(
     structured_output: bool = False,
     formatter_prompt: str = xanes_formatter_prompt,
     tools: list = None,
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct a single-agent graph for XANES/FDMNES workflows.
 
@@ -207,7 +210,8 @@ def construct_single_agent_xanes_graph(
                 "The run_xanes tool will not work without the FDMNES executable."
             )
 
-        checkpointer = MemorySaver()
+        if checkpointer is _DEFAULT_CHECKPOINTER:
+            checkpointer = MemorySaver()
         if tools is None:
             tools = [
                 molecule_name_to_smiles,

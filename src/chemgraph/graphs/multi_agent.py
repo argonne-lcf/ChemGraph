@@ -40,6 +40,8 @@ from chemgraph.prompt.multi_agent_prompt import (
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 # ---------------------------------------------------------------------------
 # Serialization helpers
@@ -792,6 +794,7 @@ def construct_multi_agent_graph(
     max_retries: int = 1,
     max_task_retries: int = 2,
     human_supervised: bool = False,
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct the planner-executor graph using the Send() pattern.
 
@@ -844,7 +847,8 @@ def construct_multi_agent_graph(
             calculator,
         ]
 
-    checkpointer = MemorySaver()
+    if checkpointer is _DEFAULT_CHECKPOINTER:
+        checkpointer = MemorySaver()
 
     # Build the executor subgraph
     executor_subgraph = construct_executor_subgraph(

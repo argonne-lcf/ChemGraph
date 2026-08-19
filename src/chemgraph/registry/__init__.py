@@ -1,4 +1,6 @@
-"""Public registry APIs for ChemGraph tools."""
+"""Public registry APIs for ChemGraph tools and worker agents."""
+
+from chemgraph.registry.agents import AgentRegistry, AgentSpec
 
 from chemgraph.registry.tools import (
     DuplicateRegistryEntryError,
@@ -13,6 +15,8 @@ from chemgraph.registry.tools import (
 )
 
 __all__ = [
+    "AgentRegistry",
+    "AgentSpec",
     "DuplicateRegistryEntryError",
     "RegistryAvailability",
     "RegistryError",
