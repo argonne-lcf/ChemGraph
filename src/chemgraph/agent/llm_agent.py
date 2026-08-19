@@ -73,6 +73,7 @@ from chemgraph.graphs.rag_agent import construct_rag_agent_graph
 from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
 from chemgraph.graphs.molecular_docking import construct_molecular_docking_graph
 from chemgraph.graphs.ocsr_agent import construct_ocsr_graph
+from chemgraph.graphs.single_agent_iri import construct_iri_graph
 from chemgraph.prompt.rag_prompt import rag_agent_prompt
 from chemgraph.prompt.molecular_docking_prompt import molecular_docking_prompt
 from chemgraph.prompt.ocsr_prompt import ocsr_agent_prompt
@@ -517,6 +518,7 @@ class ChemGraph:
             "single_agent_xanes": {"constructor": construct_single_agent_xanes_graph},
             "molecular_docking": {"constructor": construct_molecular_docking_graph},
             "ocsr": {"constructor": construct_ocsr_graph},
+            "single_agent_iri": {"constructor": construct_iri_graph},
         }
 
         if workflow_type not in self.workflow_map:
@@ -638,6 +640,17 @@ class ChemGraph:
                 max_retries=self.max_retries,
                 human_supervised=self.human_supervised,
                 terminal_tool_names=self.terminal_tool_names,
+            )
+        elif self.workflow_type == "single_agent_iri":
+            # System-prompt selection is delegated to the graph: it auto-picks
+            # alcf_iri_prompt for category tools, alcf_iri_flat_prompt otherwise.
+            # A caller-supplied prompt still wins (prompt_is_default=False path).
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm,
+                system_prompt=None if prompt_is_default else self.system_prompt,
+                structured_output=self.structured_output,
+                formatter_prompt=self.formatter_prompt,
+                tools=self.tools,
             )
 
     def visualize(self):
