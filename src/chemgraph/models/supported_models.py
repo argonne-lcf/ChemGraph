@@ -127,13 +127,30 @@ OPENROUTER_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 # OpenRouter models -- use the "openrouter:" prefix (e.g.
 # "openrouter:moonshotai/kimi-k3"). The prefix is stripped before the request
 # and the remainder is sent as the OpenRouter slug verbatim.
-# This list is curated for *discovery* (--list-models, UI dropdown, per-model
-# quirk sets such as MODELS_WITHOUT_TEMPERATURE); it is NOT a gate. Dispatch is
-# by prefix, so any slug from https://openrouter.ai/models also works.
+# This list is curated for *discovery* only (--list-models, UI dropdown); it is
+# NOT a gate. Dispatch is by prefix, so any slug from
+# https://openrouter.ai/models also works.
+# Every entry supports tool calling, which each ChemGraph workflow needs.
+# Slugs are the undated ones, which OpenRouter keeps stable; dated snapshots
+# such as deepseek-v4-pro-0813 also work but are not carried here.
 supported_openrouter_models = [
-    "openrouter:moonshotai/kimi-k3",
+    # DeepSeek
     "openrouter:deepseek/deepseek-v4-pro",
     "openrouter:deepseek/deepseek-v4-flash",
+    # Kimi
+    "openrouter:moonshotai/kimi-k3",
+    "openrouter:moonshotai/kimi-k2.6",
+    # Qwen
+    "openrouter:qwen/qwen3.8-max",
+    "openrouter:qwen/qwen3.8-2.4t-a95b",
+    "openrouter:qwen/qwen3.8-27b",
+    "openrouter:qwen/qwen3.7-flash",
+    # GLM
+    "openrouter:z-ai/glm-5.2",
+    "openrouter:z-ai/glm-5.1",
+    # MiniMax
+    "openrouter:minimax/minimax-m3",
+    "openrouter:minimax/minimax-m2.7",
 ]
 
 # Default Argo API base URL (used when no --base-url is provided).
@@ -171,6 +188,7 @@ supported_argo_models = [
     "argo:gemini-3.1-flash-lite",
     "argo:gemini-3.5-flash",
     # Claude via Argo
+    "argo:claude-opus-5",
     "argo:claude-opus-4.8",
     "argo:claude-opus-4.7",
     "argo:claude-opus-4.6",
