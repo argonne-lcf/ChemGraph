@@ -122,6 +122,8 @@ where = ["src/"]
 "chemgraph.academy.runtime.profiles" = ["*.json"]
 "chemgraph.academy.runtime.templates" = ["*"]
 "chemgraph.academy.dashboard" = ["static/*"]
+"chemgraph.tools.files.template_graspa_sycl" = ["*.def", "simulation.input"]
+"chemgraph.tools.files.template_graspa_cuda" = ["*.def", "simulation.input"]
 "ui" = ["assets/*.png"]
 
 [tool.ruff]

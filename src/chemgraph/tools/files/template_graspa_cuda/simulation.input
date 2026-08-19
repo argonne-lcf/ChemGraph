@@ -2,30 +2,26 @@ NumberOfInitializationCycles NCYCLE
 NumberOfEquilibrationCycles  0
 NumberOfProductionCycles     NCYCLE
 
-UseMaxStep  yes
+UseMaxStep no
 MaxStepPerCycle 1
-
 RestartFile no
-RandomSeed  0
-
 BMCBiasingMethod LJ_Biasing
-
-Widom_Trials 10
-Widom_Orientation 10
+NumberOfTrialPositions 10
+NumberOfTrialOrientations 10
 NumberOfBlocks 1
 AdsorbateAllocateSpace 30240
+
 NumberOfSimulations 1
 SingleSimulation yes
-
 DifferentFrameworks yes
+
+UseChargesFromCIFFile yes
 InputFileType cif
 FrameworkName CIFFILE
 UnitCells 0 UC_X UC_Y UC_Z
-
 ChargeMethod Ewald
 Temperature TEMPERATURE
-Pressure    PRESSURE
-
+Pressure PRESSURE
 OverlapCriteria 1e5
 CutOffVDW CUTOFF
 CutOffCoulomb CUTOFF
