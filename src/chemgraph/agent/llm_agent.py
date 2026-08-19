@@ -24,6 +24,7 @@ from chemgraph.models.local_model import load_ollama_model
 from chemgraph.models.anthropic import load_anthropic_model
 from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
+from chemgraph.models.openrouter import load_openrouter_model
 from chemgraph.models.codex import load_codex_model
 from chemgraph.models.supported_models import (
     MODELS_WITH_REASONING_EFFORT,
@@ -297,6 +298,13 @@ class ChemGraph:
 
             if model_name.startswith("codex:"):
                 llm = load_codex_model(model_name)
+            elif model_name.startswith("openrouter:"):
+                llm = load_openrouter_model(
+                    model_name=model_name,
+                    api_key=api_key,
+                    base_url=base_url,
+                    temperature=temperature,
+                )
             elif (
                 model_name in supported_openai_models
                 or model_name in supported_argo_models

@@ -117,6 +117,8 @@ def _extract_endpoint_from_cli_toml(raw: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(model, str):
         if model.startswith("argo:"):
             base_url = (api.get("argo") or {}).get("base_url")
+        elif model.startswith("openrouter:"):
+            base_url = (api.get("openrouter") or {}).get("base_url")
         else:
             for section_name in ("openai", "anthropic", "gemini", "alcf", "ollama"):
                 section = api.get(section_name) or {}
@@ -138,6 +140,8 @@ def _provider_section_for(model: Any) -> str:
             return "argo"
         if model.startswith("groq:"):
             return "groq"
+        if model.startswith("openrouter:"):
+            return "openrouter"
     return "openai"
 
 

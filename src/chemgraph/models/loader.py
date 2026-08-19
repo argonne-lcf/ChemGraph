@@ -15,6 +15,7 @@ from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
 from chemgraph.models.local_model import load_ollama_model
 from chemgraph.models.openai import load_openai_model
+from chemgraph.models.openrouter import load_openrouter_model
 from chemgraph.models.settings import LLMSettings
 from chemgraph.models.supported_models import (
     supported_alcf_models,
@@ -76,6 +77,13 @@ def load_chat_model(
 
     if model_name.startswith("codex:"):
         return load_codex_model(model_name)
+    elif model_name.startswith("openrouter:"):
+        return load_openrouter_model(
+            model_name=model_name,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=temperature,
+        )
     elif model_name in supported_openai_models or model_name in supported_argo_models:
         kwargs = {
             "model_name": model_name,
@@ -109,5 +117,5 @@ def load_chat_model(
         raise ValueError(
             f"Model '{model_name}' not found in any supported model list. "
             "Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, "
-            "codex:<model>, argo:<model>, ALCF, or Ollama."
+            "openrouter:<model>, codex:<model>, argo:<model>, ALCF, or Ollama."
         )

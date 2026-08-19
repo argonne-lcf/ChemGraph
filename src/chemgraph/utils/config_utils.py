@@ -10,6 +10,7 @@ from chemgraph.models.supported_models import (
     ALCF_METIS_BASE_URL,
     ALCF_MINERVA_BASE_URL,
     ARGO_DEFAULT_BASE_URL,
+    OPENROUTER_DEFAULT_BASE_URL,
     all_supported_models,
     supported_alcf_metis_models,
     supported_alcf_minerva_models,
@@ -113,6 +114,12 @@ def get_base_url_for_model_from_nested_config(
         return normalize_openai_base_url(
             api.get("openai", {}).get("base_url") or ARGO_DEFAULT_BASE_URL
         )
+    # Prefix-routed, and matched before any list lookup: the fallthrough at the
+    # end of this function returns [api.openai].base_url, so an uncurated
+    # openrouter: slug would otherwise be sent to whatever OpenAI-compatible
+    # endpoint is configured there (the Argo gateway, by default).
+    if model_name.startswith("openrouter:"):
+        return api.get("openrouter", {}).get("base_url") or OPENROUTER_DEFAULT_BASE_URL
     if model_name in supported_openai_models:
         return normalize_openai_base_url(api.get("openai", {}).get("base_url"))
     # Minerva and Metis have their own endpoints, and [api.alcf] base_url
@@ -153,6 +160,9 @@ def get_base_url_for_model_from_flat_config(
         return normalize_openai_base_url(
             config.get("api_openai_base_url") or ARGO_DEFAULT_BASE_URL
         )
+    # See the note in get_base_url_for_model_from_nested_config.
+    if model_name.startswith("openrouter:"):
+        return config.get("api_openrouter_base_url") or OPENROUTER_DEFAULT_BASE_URL
     if model_name in supported_openai_models:
         return normalize_openai_base_url(config.get("api_openai_base_url"))
     # See the note in get_base_url_for_model_from_nested_config.
