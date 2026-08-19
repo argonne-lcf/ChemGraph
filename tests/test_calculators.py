@@ -78,6 +78,21 @@ def test_mace_calculator_schema_rejects_invalid_variant(calculator_type):
         MaceCalc(calculator_type=calculator_type)
 
 
+@pytest.mark.parametrize(
+    ("calculator_type", "model", "expected"),
+    [
+        ("mace_mp", None, "medium-mpa-0"),
+        ("mace_off", None, "medium"),
+        ("mace_anicc", None, None),
+        ("mace_mp", "small-0b2", "small-0b2"),
+    ],
+)
+def test_mace_model_name_for_output(calculator_type, model, expected):
+    calc = MaceCalc(calculator_type=calculator_type, model=model)
+
+    assert calc.get_model_name_for_output() == expected
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("mace") is None, reason="MACE not installed"
 )

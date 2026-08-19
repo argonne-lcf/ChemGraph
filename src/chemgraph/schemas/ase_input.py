@@ -381,8 +381,19 @@ class ASEOutputSchema(BaseModel):
     simulation_input: ASEInputSchema = Field(
         description="Simulation input for Atomic Simulation Environment."
     )
-    single_point_energy: float = Field(
-        default=None, description="Single-point energy/Potential energy"
+    potential_energy: Optional[float] = Field(
+        default=None,
+        description=(
+            "Potential energy in eV evaluated at the reported structure. For "
+            "optimization-based drivers, this is the final-structure energy."
+        ),
+    )
+    single_point_energy: Optional[float] = Field(
+        default=None,
+        description=(
+            "Deprecated compatibility alias for potential_energy. New consumers "
+            "should use potential_energy."
+        ),
     )
     energy_unit: str = Field(default="eV", description="The unit of the energy reported.")
     dipole_value: List[Optional[float]] = Field(

@@ -37,6 +37,7 @@ sample_ase_output = {
         "temperature": 298.0,
         "pressure": 101325.0,
     },
+    "potential_energy": -13.786080327355158,
     "single_point_energy": -13.786080327355158,
     "energy_unit": "eV",
     "dipole_value": [None, None, None],
@@ -132,6 +133,37 @@ def test_generate_html_distinguishes_filtered_and_legacy_modes(tmp_path):
     legacy_content = legacy_html.read_text(encoding="utf-8")
     assert legacy_content.count("<td>Translation/Rotation</td>") == 6
     assert "This legacy result includes the first 6" in legacy_content
+
+
+@pytest.mark.parametrize(
+    ("driver", "legacy_energy", "expected_label"),
+    [
+        ("energy", False, "Single Point Energy"),
+        ("thermo", False, "Final Potential Energy"),
+        ("thermo", True, "Final Potential Energy"),
+    ],
+)
+def test_generate_html_labels_energy_by_driver(
+    tmp_path, driver, legacy_energy, expected_label
+):
+    output = json.loads(json.dumps(sample_ase_output))
+    output["simulation_input"]["driver"] = driver
+    if legacy_energy:
+        output.pop("potential_energy")
+
+    results_json = tmp_path / f"{driver}.json"
+    report_html = tmp_path / f"{driver}.html"
+    results_json.write_text(json.dumps(output), encoding="utf-8")
+
+    generate_html.invoke(
+        {
+            "results_json_path": str(results_json),
+            "output_path": str(report_html),
+        }
+    )
+
+    content = report_html.read_text(encoding="utf-8")
+    assert expected_label in content
 
 
 @pytest.fixture(scope="session")

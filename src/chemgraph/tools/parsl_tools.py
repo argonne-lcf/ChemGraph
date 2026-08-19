@@ -26,6 +26,15 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+
+def _result_potential_energy(result: dict) -> float | None:
+    """Return canonical energy with a fallback for legacy tool results."""
+    potential_energy = result.get("potential_energy")
+    if potential_energy is not None:
+        return potential_energy
+    return result.get("single_point_energy")
+
+
 # ---------------------------------------------------------------------------
 # Core execution — delegates to the unified implementation
 # ---------------------------------------------------------------------------
