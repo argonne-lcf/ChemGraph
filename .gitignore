@@ -63,3 +63,12 @@ vib*.traj
 
 # Kubernetes secrets (keep secrets.yaml.template, ignore actual secrets)
 k8s/secrets.yaml
+
+# ChemGraph agent session logs (per-machine, per-run)
+cg_logs/
+**/cg_logs/
+
+# IRI benchmark / eval notebook artifacts (per-machine, personal analysis)
+notebooks/iri_*_results.json
+notebooks/iri_*_first_turn.json
+notebooks/iri_*_dataset.json
