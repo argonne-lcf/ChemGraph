@@ -58,6 +58,7 @@ nav:
       - Python API: python_api.md
       - Streamlit interface: streamlit_web_interface.md
       - Configuration: configuration_with_toml.md
+      - Adsorption engines: adsorption_engines.md
       - Examples: example_usage.md
   - Integrations and scale:
       - MCP servers: mcp_servers.md

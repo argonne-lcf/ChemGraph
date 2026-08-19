@@ -131,6 +131,25 @@ specific. Start from the runnable examples linked in
 [HPC and Academy](hpc_and_academy.md) rather than copying credentials or endpoint
 IDs into documentation.
 
+## Adsorption engine
+
+Adsorption tools read one active `[adsorption]` section. The engine and
+executable are deployment settings; temperature, pressure, composition, and
+cycles remain request inputs.
+
+```toml
+[adsorption]
+engine = "graspa_cuda"
+executable = "/path/on/worker/to/nvc_main.x"
+timeout_seconds = 7200
+
+[adsorption.environment]
+OMP_NUM_THREADS = "1"
+```
+
+See [Adsorption engines](adsorption_engines.md) for CUDA/SYCL capabilities,
+mixture inputs, and HPC staging.
+
 ## Which interface reads what?
 
 | Setting area | CLI run | Streamlit | Evaluation | Execution layer |
@@ -141,6 +160,7 @@ IDs into documentation.
 | `[logging]` | Yes | Application-dependent | Yes | Yes |
 | `[eval]`, `[eval.profiles.*]` | No | No | Yes | No |
 | `[execution]` | Through backend tools | Through backend tools | No | Yes |
+| `[adsorption]` | Through adsorption tools | Through adsorption tools | No | Yes |
 
 ## Security
 

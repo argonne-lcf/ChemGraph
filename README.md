@@ -237,7 +237,7 @@ stdio client configuration and the experimental HPC servers.
 | `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra plus Vina from conda-forge |
 | `rag_agent` | Query PDF/text documents alongside chemistry tools | `rag` extra; embedding model or OpenAI embeddings |
 | `single_agent_xanes` | XANES data retrieval, simulation, and plotting | `xanes` extra, `MP_API_KEY`, and/or `FDMNES_EXE` |
-| `graspa` | gRASPA adsorption workflows | Site-specific gRASPA executable/runtime |
+| `graspa` | gRASPA adsorption workflows | Configure a CUDA or SYCL engine under `[adsorption]` |
 | `graspa_mcp` | Planner/executor workflow using supplied MCP tools | Advanced integration; MCP tools must be provided |
 | `mock_agent` | One-pass tool-call experiments | Primarily useful for development and evaluation |
 

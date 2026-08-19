@@ -77,6 +77,16 @@ nprocs = 1
 default = "mace_mp"
 fallback = "emt"
 
+# Select one external adsorption engine. Executable paths and environment
+# variables must be valid on the worker where the simulation runs.
+# [adsorption]
+# engine = "graspa_cuda"  # graspa_cuda (Polaris) or graspa_sycl (Aurora)
+# executable = "/path/on/worker/to/nvc_main.x"
+# timeout_seconds = 7200
+#
+# [adsorption.environment]
+# OMP_NUM_THREADS = "1"
+
 [output.files]
 directory = "./chemgraph_output"
 pattern = "{timestamp}_{query_hash}"
