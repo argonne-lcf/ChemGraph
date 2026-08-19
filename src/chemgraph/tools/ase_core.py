@@ -22,6 +22,7 @@ import numpy as np
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
+from chemgraph.schemas.calculators.mace_calc import MaceCalc
 
 logger = logging.getLogger(__name__)
 
@@ -308,6 +309,21 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     return ase_calculator, extra_info, calc
 
 
+def _simulation_input_for_output(
+    params: ASEInputSchema, calc_model: object
+) -> ASEInputSchema:
+    """Return simulation input enriched with output-only calculator metadata."""
+    if not isinstance(calc_model, MaceCalc) or calc_model.model is not None:
+        return params
+
+    model_name = calc_model.get_model_name_for_output()
+    if model_name is None:
+        return params
+
+    output_calculator = calc_model.model_copy(update={"model": model_name})
+    return params.model_copy(update={"calculator": output_calculator})
+
+
 # ---------------------------------------------------------------------------
 # Misc helpers (kept for backward compat / UI)
 # ---------------------------------------------------------------------------
@@ -391,6 +407,28 @@ def create_xyz_string(atomic_numbers, positions) -> Optional[str]:
     except Exception as e:
         print(f"Error creating XYZ string: {e}")
         return None
+
+
+def _energy_result_metadata(
+    driver: str,
+    potential_energy: float,
+    results_file: str,
+    *,
+    converged: Optional[bool] = None,
+    optimization_steps: Optional[int] = None,
+) -> dict:
+    """Build consistent energy metadata for a successful tool result."""
+    result = {
+        "driver": driver,
+        "potential_energy": potential_energy,
+        "energy_unit": "eV",
+        "results_file": os.path.abspath(results_file),
+    }
+    if converged is not None:
+        result["converged"] = converged
+    if optimization_steps is not None:
+        result["optimization_steps"] = optimization_steps
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +529,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             ),
         }
     logger.info("Calculator loaded successfully: %s", type(calc).__name__)
+    simulation_input = _simulation_input_for_output(params, calc_model)
 
     try:
         atoms = read(input_structure_file)
@@ -511,8 +550,8 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     # ------------------------------------------------------------------
     if driver in ("energy", "dipole"):
         logger.info("Running single-point %s calculation", driver)
-        energy = atoms.get_potential_energy()
-        logger.info("Single-point energy: %s eV", energy)
+        potential_energy = float(atoms.get_potential_energy())
+        logger.info("Single-point energy: %s eV", potential_energy)
         final_structure = atoms_to_atomsdata(atoms)
 
         dipole: List[Optional[float]] = [None, None, None]
@@ -529,10 +568,11 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             input_structure_file=input_structure_file,
             converged=True,
             final_structure=final_structure,
-            simulation_input=params,
+            simulation_input=simulation_input,
             success=True,
             dipole_value=dipole,
-            single_point_energy=energy,
+            potential_energy=potential_energy,
+            single_point_energy=potential_energy,
             wall_time=wall_time,
         )
         with open(output_results_file, "w", encoding="utf-8") as wf:
@@ -542,14 +582,26 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         if driver == "energy":
             return {
                 "status": "success",
-                "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
-                "single_point_energy": energy,
+                "message": (
+                    "Single-point energy calculation completed. "
+                    f"Results saved to {os.path.abspath(output_results_file)}"
+                ),
+                **_energy_result_metadata(
+                    driver, potential_energy, output_results_file
+                ),
+                "single_point_energy": potential_energy,
                 "unit": "eV",
             }
         else:  # dipole
             return {
                 "status": "success",
-                "message": f"Simulation completed. Results saved to {os.path.abspath(output_results_file)}",
+                "message": (
+                    "Dipole calculation completed. "
+                    f"Results saved to {os.path.abspath(output_results_file)}"
+                ),
+                **_energy_result_metadata(
+                    driver, potential_energy, output_results_file
+                ),
                 "dipole_moment": dipole,
                 "dipole_unit": "e * Angstrom",
             }
@@ -570,15 +622,17 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             raise ValueError(f"Unsupported optimizer: {optimizer}")
 
         logger.info("Running optimization with %s (fmax=%s, steps=%s)", optimizer, fmax, steps)
+        optimization_steps = 0
         if len(atoms) > 1:
             dyn = optimizer_class(atoms)
             converged = dyn.run(fmax=fmax, steps=steps)
+            optimization_steps = dyn.nsteps
         else:
             converged = True
         logger.info("Optimization converged=%s", converged)
 
-        single_point_energy = float(atoms.get_potential_energy())
-        logger.info("Post-optimization energy: %s eV", single_point_energy)
+        potential_energy = float(atoms.get_potential_energy())
+        logger.info("Post-optimization energy: %s eV", potential_energy)
         final_structure = AtomsData(
             numbers=atoms.numbers,
             positions=atoms.positions,
@@ -713,9 +767,9 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     logger.info("Computing thermochemistry (T=%s K, P=%s Pa)", temperature, pressure)
                     if len(atoms) == 1:
                         thermo_data = {
-                            "enthalpy": single_point_energy,
+                            "enthalpy": potential_energy,
                             "entropy": 0.0,
-                            "gibbs_free_energy": single_point_energy,
+                            "gibbs_free_energy": potential_energy,
                             "unit": "eV",
                         }
                     else:
@@ -735,7 +789,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
                         thermo = IdealGasThermo(
                             vib_energies=all_energies,
-                            potentialenergy=single_point_energy,
+                            potentialenergy=potential_energy,
                             atoms=atoms,
                             geometry=geometry,
                             symmetrynumber=symmetrynumber,
@@ -767,12 +821,13 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             input_structure_file=input_structure_file,
             converged=converged,
             final_structure=final_structure,
-            simulation_input=params,
+            simulation_input=simulation_input,
             vibrational_frequencies=vib_data,
             thermochemistry=thermo_data,
             success=True,
             ir_data=ir_data,
-            single_point_energy=single_point_energy,
+            potential_energy=potential_energy,
+            single_point_energy=potential_energy,
             wall_time=wall_time,
         )
         with open(output_results_file, "w", encoding="utf-8") as wf:
@@ -780,16 +835,32 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
         # ---- minimal return payload ----
         abs_output = os.path.abspath(output_results_file)
+        energy_metadata = _energy_result_metadata(
+            driver,
+            potential_energy,
+            output_results_file,
+            converged=converged,
+            optimization_steps=optimization_steps,
+        )
         if driver == "opt":
+            if converged:
+                message = f"Geometry optimization converged. Results saved to {abs_output}"
+            else:
+                message = (
+                    "Geometry optimization completed without convergence after "
+                    f"{optimization_steps} steps. Results saved to {abs_output}"
+                )
             return {
                 "status": "success",
-                "message": f"Simulation completed. Results saved to {abs_output}",
-                "single_point_energy": single_point_energy,
+                "message": message,
+                **energy_metadata,
+                "single_point_energy": potential_energy,
                 "unit": "eV",
             }
         elif driver == "vib":
             return {
                 "status": "success",
+                **energy_metadata,
                 "result": {"vibrational_frequencies": vib_data},
                 "message": (
                     "Vibrational analysis completed; frequencies returned. "
@@ -799,6 +870,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         elif driver == "thermo":
             return {
                 "status": "success",
+                **energy_metadata,
                 "result": {"thermochemistry": thermo_data},
                 "message": (
                     "Thermochemistry computed and returned. "
@@ -808,6 +880,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         elif driver == "ir":
             return {
                 "status": "success",
+                **energy_metadata,
                 "result": {"vibrational_frequencies": vib_data},
                 "message": (
                     "Infrared computed and returned. "

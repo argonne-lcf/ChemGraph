@@ -16,7 +16,7 @@ from chemgraph.schemas.mace_parsl_schema import (
     mace_input_schema,
     mace_input_schema_ensemble,
 )
-from chemgraph.tools.parsl_tools import run_mace_core
+from chemgraph.tools.parsl_tools import _result_potential_energy, run_mace_core
 from parsl import python_app
 
 warnings.warn(
@@ -167,12 +167,15 @@ def run_mace_ensemble(params: mace_input_schema_ensemble):
             status = (
                 res.get("status", "unknown") if isinstance(res, dict) else "success"
             )
-            energy = res.get("single_point_energy") if isinstance(res, dict) else None
+            energy = None
+            if isinstance(res, dict):
+                energy = _result_potential_energy(res)
             results.append(
                 {
                     "structure": struct_name,
                     "output_result_file": out_file,
                     "status": status,
+                    "potential_energy": energy,
                     "single_point_energy": energy,
                     "raw_result": res,  # keep full result if needed by the LLM
                 }

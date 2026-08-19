@@ -14,6 +14,11 @@ import torch
 
 _logger = logging.getLogger(__name__)
 
+_DEFAULT_MODEL_NAMES = {
+    "mace_mp": "medium-mpa-0",
+    "mace_off": "medium",
+}
+
 # Process-wide lock for MACE operations.
 # MACE model deserialization (torch.load) triggers torch.fx.symbolic_trace
 # inside Contraction.__init__, which temporarily patches
@@ -132,7 +137,9 @@ class MaceCalc(BaseModel):
     )
     model: Optional[Union[str, Path]] = Field(
         default=None,
-        description="Path to the model. If None, it will use the default model for the selected calculator type. "
+        description="Path to the model. If None, MACE selects its default model. "
+        "ChemGraph records 'medium-mpa-0' for mace_mp and 'medium' for mace_off "
+        "in successful simulation output. "
         "Options: 'small', 'medium', 'large', 'small-0b', 'medium-0b', 'small-0b2', 'medium-0b2','large-0b2', 'medium-0b3', 'medium-mpa-0', 'medium-omat-0', 'mace-matpes-pbe-0', 'mace-matpes-r2scan-0'",
     )
     device: str = Field(
@@ -159,6 +166,17 @@ class MaceCalc(BaseModel):
         default=21.167088422553647,  # Equivalent to 40.0 * units.Bohr,
         description="Cutoff radius in Bohr for D3 dispersion corrections (only for 'mace_mp').",
     )
+
+    def get_model_name_for_output(self) -> Optional[Union[str, Path]]:
+        """Return the model identifier to record in simulation output.
+
+        MACE still receives ``None`` when the caller omits a model. This
+        method only supplies ChemGraph's maintained name for that upstream
+        default so persisted simulation metadata is not ambiguous.
+        """
+        if self.model is not None:
+            return self.model
+        return _DEFAULT_MODEL_NAMES.get(self.calculator_type)
 
     def get_calculator(self):
         """Get the appropriate MACECalculator instance based on the selected calculator type.
