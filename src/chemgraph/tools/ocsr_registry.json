@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "_comment": "OCSR specialist models. All four install into ChemGraph's own environment; see examples/ocsr/README.md. accuracy is exact match over the 722-image benchmark (n=722 for each). import_name is what ocsr_backends probes to decide whether a model is installed. weights is where a checkpoint is cached; DECIMER manages its own cache and has none.",
+  "specialists": {
+    "decimer": {
+      "import_name": "DECIMER",
+      "accuracy": 0.8989,
+      "latency_s": 0.73,
+      "note": "Most accurate of the four, and the only one on PyPI. The default.",
+      "install": {}
+    },
+    "molnextr": {
+      "import_name": "MolNexTR",
+      "accuracy": 0.8352,
+      "latency_s": 4.35,
+      "note": "Second by exact match. Needs the timm compatibility shim.",
+      "install": {
+        "weights": "~/ocsr-weights/molnextr/molnextr_best.pth",
+        "weights_gb": 1.1
+      }
+    },
+    "molscribe": {
+      "import_name": "molscribe",
+      "accuracy": 0.8241,
+      "latency_s": 4.98,
+      "note": "Needs the timm compatibility shim.",
+      "install": {
+        "weights": "~/ocsr-weights/molscribe/swin_base_char_aux_1m.pth",
+        "weights_gb": 1.1
+      }
+    },
+    "ocsrglyph": {
+      "import_name": "glyph",
+      "accuracy": 0.7659,
+      "latency_s": 0.3,
+      "note": "Fastest of the four. Lowest exact match on this benchmark.",
+      "install": {
+        "weights": "~/ocsr-weights/ocsrglyph/model.pth",
+        "weights_gb": 0.37
+      }
+    }
+  },
+  "defaults": {
+    "specialist": "decimer"
+  }
+}
