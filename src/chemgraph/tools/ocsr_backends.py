@@ -63,7 +63,8 @@ def _narrow(ok=False, smiles=None, raw="", model_used=None,
 # ---------------------------------------------------------------------------
 
 
-def smiles_from_llm(image_bytes: bytes, mime: str, llm: Any) -> dict:
+def smiles_from_llm(image_bytes: bytes, mime: str, llm: Any,
+                    structured: bool = False) -> dict:
     """Read a structure image with the agent's own LLM.
 
     Parameters
@@ -76,6 +77,10 @@ def smiles_from_llm(image_bytes: bytes, mime: str, llm: Any) -> dict:
         keeps this path from reading credentials out of the environment: ChemGraph
         cannot yet give a sub-agent a different model, so the fallback is by
         definition the agent's own.
+    structured
+        Ask for ``{"smiles": ...}`` instead of a bare string. The reply is read the
+        same way either way; this only makes the named-field form more likely, and
+        gives a non-molecule image an explicit null to answer with.
 
     A model without vision support fails here as an API error, and is reported like
     any other failure. Pre-empting it would mean keeping a list of vision-capable
@@ -96,7 +101,8 @@ def smiles_from_llm(image_bytes: bytes, mime: str, llm: Any) -> dict:
 
     try:
         resp = llm.invoke([
-            SystemMessage(content=ocsr_prompt.OCSR_SYSTEM_PROMPT),
+            SystemMessage(content=ocsr_prompt.OCSR_STRUCTURED_SYSTEM_PROMPT
+                          if structured else ocsr_prompt.OCSR_SYSTEM_PROMPT),
             HumanMessage(content=[
                 {"type": "text", "text": ocsr_prompt.OCSR_USER_PROMPT},
                 {"type": "image_url",

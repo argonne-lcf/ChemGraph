@@ -1,9 +1,11 @@
 """Prompts for the OCSR tool.
 
-Two distinct prompts that are easy to confuse:
+Two distinct kinds of prompt, easy to confuse:
 
 1. :data:`OCSR_SYSTEM_PROMPT` and :data:`OCSR_USER_PROMPT` go *inside* the tool, to the
    vision model, and are vendored verbatim (see below).
+   :data:`OCSR_STRUCTURED_SYSTEM_PROMPT` replaces the first of those when the caller
+   asks for a JSON reply.
 2. :data:`ocsr_agent_prompt` is the *orchestrator's* system prompt, used when binding
    the tool to a ChemGraph agent. It is ours to write and the vision model never sees it.
 """
@@ -35,13 +37,12 @@ OCSR_USER_PROMPT = "What is the SMILES string for the molecule in this image?"
 
 
 # ---------------------------------------------------------------------------
-# The structured alternative. Not vendored, and free to change: it is deliberately
-# outside the block above so the legacy benchmark prompt stays byte-identical.
+# The structured alternative, selected by structured=True on the llm path. Outside
+# the vendored block above so that one stays byte-identical.
 #
-# A model asked for one bare SMILES still returns markdown, prose and JSON, and
-# extract_smiles has to guess which. Asking for JSON makes the answer a named field.
-# The published accuracies were measured under the benchmark prompt above, so they
-# do not describe a run that uses this one.
+# Asking for JSON makes the answer a named field, so extract_smiles reads it from
+# its own key instead of falling back to scanning tokens, and gives a non-molecule
+# an explicit way to say so.
 # ---------------------------------------------------------------------------
 
 OCSR_STRUCTURED_SYSTEM_PROMPT = (
@@ -79,6 +80,11 @@ and is the right choice when nothing else is installed.
 
 Do not work through every model hoping one succeeds. Two attempts is a reasonable
 ceiling; past that, tell the user the drawing could not be read.
+
+With `model="llm"`, `structured=True` asks your own model for a JSON reply instead
+of a bare string. Reach for it when a plain call came back with no SMILES the tool
+could read: the answer arrives in a named field, and an image that is not a molecule
+can say so instead of being guessed at. It does nothing for the specialists.
 
 Read `valid` before you act on the answer. When it is false, RDKit could not parse
 what the model produced, so the string is not a molecule and reporting it as one

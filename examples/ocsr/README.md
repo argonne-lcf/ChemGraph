@@ -37,6 +37,19 @@ structure it was drawn from. `--agent` routes the same call through an LLM.
 `pip install 'chemgraph[ocsr]'` installs all four specialists. `llm` needs no
 install and uses the agent's own model.
 
+The specialists return a SMILES and nothing else. An LLM returns whatever it likes,
+so the tool pulls the SMILES back out of markdown, parentheses, code fences and
+prose. `structured=True` asks the model for `{"smiles": ...}` instead, which puts
+the answer in a named field and lets an image that is not a molecule reply with
+null instead of a guess:
+
+```python
+image_to_smiles_core("diagram.png", model="llm", structured=True)
+```
+
+It changes only the system prompt sent to the model, so the four specialists ignore
+it. The published accuracies were measured under the other prompt.
+
 Exact match is over a 722-image benchmark. It ranks the four against each other;
 it does not predict how any of them will do on your images. DECIMER is the default because it is the most accurate of the four.
 
