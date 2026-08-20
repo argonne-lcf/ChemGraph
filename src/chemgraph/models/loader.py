@@ -10,6 +10,10 @@ from typing import Optional
 
 from chemgraph.models.alcf_endpoints import load_alcf_model
 from chemgraph.models.anthropic import load_anthropic_model
+from chemgraph.models.aurora_endpoints import (
+    AURORA_MODEL_PREFIX,
+    load_aurora_model,
+)
 from chemgraph.models.codex import load_codex_model
 from chemgraph.models.gemini import load_gemini_model
 from chemgraph.models.groq import load_groq_model
@@ -77,6 +81,13 @@ def load_chat_model(
 
     if model_name.startswith("codex:"):
         return load_codex_model(model_name)
+    elif model_name.startswith(AURORA_MODEL_PREFIX):
+        return load_aurora_model(
+            model_name=model_name,
+            base_url=base_url,
+            api_key=api_key,
+            temperature=temperature,
+        )
     elif model_name.startswith("openrouter:"):
         return load_openrouter_model(
             model_name=model_name,

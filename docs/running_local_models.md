@@ -45,6 +45,34 @@ route through a compatible ChemGraph provider/model ID, and implement reliable
 tool calling. Review the script's hardware/model assumptions and test a
 non-destructive query first. Ollama remains the documented first local route.
 
+## Aurora on-node inference (`aurora:` models)
+
+ChemGraph has a first-class provider for on-node LLM servers on ALCF Aurora
+(llama.cpp SYCL `llama-server` or vLLM-XPU) that expose an OpenAI-compatible
+`/v1` endpoint. Use an `aurora:<served-model-id>` model, where the id matches
+the server's advertised name (`llama-server --alias` / vLLM
+`--served-model-name`). Any served id works; `chemgraph models` lists a few for
+discovery.
+
+```bash
+# On the Aurora node serving the model (OpenAI-compatible /v1 on :8000):
+export AURORA_BASE_URL="http://127.0.0.1:8000/v1"   # co-located, or an SSH tunnel
+chemgraph run --model aurora:gpt-oss-120b \
+  -q "Build water from SMILES O, optimize it with EMT, and report the energy."
+```
+
+Or configure it in `config.toml`:
+
+```toml
+[api.aurora]
+base_url = "http://127.0.0.1:8000/v1"
+```
+
+The endpoint address changes per job and compute nodes have no public IP, so run
+ChemGraph on the same node (`127.0.0.1`) or tunnel from a login node. The chosen
+model must support tool calling. Authentication is usually disabled, so the API
+key defaults to `"dummy"`.
+
 ## Privacy boundary
 
 Local inference alone does not make a workflow offline. PubChem lookup, remote

@@ -65,6 +65,7 @@ nav:
       - Docker: docker_support.md
       - Kubernetes: kubernetes.md
       - Local models: running_local_models.md
+      - Aurora inference recipes: aurora_recipes.md
       - HPC and Academy: hpc_and_academy.md
   - Evaluation: evaluation.md
   - Experimental:
