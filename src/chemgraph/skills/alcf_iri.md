@@ -85,5 +85,8 @@ Total: 43 tools. Naming is stable -- `alcf_compute_list_jobs`, `alcf_account_lis
 
 - ALCF IRI docs: https://docs.alcf.anl.gov/services/iri-api/
 - OpenAPI spec: https://api.alcf.anl.gov/openapi.json
-- MCP server module: `chemgraph.mcp.alcf_iri_mcp` (43 tools, `python -m chemgraph.mcp.alcf_iri_mcp`)
+- MCP server module: `chemgraph.mcp.alcf_iri_mcp`
+  - `python -m chemgraph.mcp.alcf_iri_mcp` -- flat (43 tools, default)
+  - `python -m chemgraph.mcp.alcf_iri_mcp --variant category` -- 7 dispatchers with discovery
+  - env override: `CHEMGRAPH_IRI_MCP_VARIANT=flat|category`
 - LangGraph workflow shipping the same tool set: `single_agent_iri` (see `examples/iri/`)

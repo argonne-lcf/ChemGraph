@@ -77,18 +77,33 @@ or [XANES examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/
 ## ALCF IRI Facility API server
 
 `chemgraph.mcp.alcf_iri_mcp` exposes ALCF's IRI Facility API
-(<https://api.alcf.anl.gov>) as 43 flat MCP tools -- one per endpoint,
-named `alcf_<category>_<action>`. Public endpoints (machine status,
+(<https://api.alcf.anl.gov>) via MCP. Public endpoints (machine status,
 incidents, facility metadata) work with no auth; project/allocation, PBS
 job, and filesystem endpoints need a Globus-issued ALCF token. Write
 actions (`submit_job`, `cancel_job`, `mkdir`, `rm`, `chmod`, ...)
 additionally require `ALCF_IRI_ALLOW_UNSAFE=1` in the server's
 environment.
 
+Two tool-registration variants, mirroring the LangGraph workflow's
+`ALCF_IRI_FLAT_TOOLS` / `ALCF_IRI_CATEGORY_TOOLS` split:
+
+* **flat** (default) -- 43 tools, one per IRI action, named
+  `alcf_<category>_<action>`. Higher judge score on our eval.
+* **category** -- 7 dispatcher tools (`alcf_facility`, `alcf_status`,
+  `alcf_account`, `alcf_compute`, `alcf_filesystem`, `alcf_task`,
+  `alcf_auth`), each taking `action` + optional `params` with the
+  standard `list_actions`/`describe` discovery protocol. Smaller
+  upfront schema surface.
+
 ```bash
-python -m chemgraph.mcp.alcf_iri_mcp                                 # stdio
+python -m chemgraph.mcp.alcf_iri_mcp                                     # flat, stdio
+python -m chemgraph.mcp.alcf_iri_mcp --variant category                  # category, stdio
 python -m chemgraph.mcp.alcf_iri_mcp --transport streamable_http --port 9010
 ```
+
+The variant can also be set via `CHEMGRAPH_IRI_MCP_VARIANT=flat|category`
+for MCP client configs that can pass env but not argv (e.g. Claude
+Desktop `mcpServers` entries).
 
 Same underlying implementation as the `single_agent_iri` LangGraph
 workflow (see [`examples/iri/`](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/iri)),
