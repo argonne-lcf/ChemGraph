@@ -66,7 +66,7 @@ def test_unset_model_falls_back_to_the_llm_when_nothing_is_installed(monkeypatch
     monkeypatch.setattr(backends, "available_specialists", lambda: [])
     seen = {}
 
-    def fake_llm(image_bytes, mime, llm):
+    def fake_llm(image_bytes, mime, llm, structured=False):
         seen["called"] = True
         return {"ok": True, "smiles": ASPIRIN, "raw": "", "model_used": "gpt-4o",
                 "cold_start": False, "latency_s": 1.0, "error": ""}
@@ -204,7 +204,7 @@ def test_make_ocsr_tools_binds_the_llm(monkeypatch, image):
     sentinel = object()
     seen = {}
 
-    def fake_llm(image_bytes, mime, llm):
+    def fake_llm(image_bytes, mime, llm, structured=False):
         seen["llm"] = llm
         return {"ok": True, "smiles": ASPIRIN, "raw": "", "model_used": "bound",
                 "cold_start": False, "latency_s": 1.0, "error": ""}
@@ -334,6 +334,55 @@ def test_the_ocsr_modules_import_and_run_without_torch(tmp_path):
     proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
 
     assert proc.returncode == 0, proc.stderr[-2000:]
+
+
+def test_structured_selects_the_json_prompt(monkeypatch, image):
+    """The flag has to reach the system message, which is the only thing it changes."""
+    from chemgraph.prompt import ocsr_prompt
+
+    seen = {}
+
+    def fake_llm_call(image_bytes, mime, llm, structured=False):
+        seen["structured"] = structured
+        return {"ok": True, "smiles": ASPIRIN, "raw": "", "model_used": "m",
+                "cold_start": False, "latency_s": 1.0, "error": ""}
+
+    monkeypatch.setattr(backends, "smiles_from_llm", fake_llm_call)
+    tools.image_to_smiles_core(image, model="llm", structured=True, llm=object())
+    assert seen["structured"] is True
+
+    tools.image_to_smiles_core(image, model="llm", llm=object())
+    assert seen["structured"] is False, "the default must stay the vendored prompt"
+
+    assert "json" in ocsr_prompt.OCSR_STRUCTURED_SYSTEM_PROMPT.lower() or (
+        '"smiles"' in ocsr_prompt.OCSR_STRUCTURED_SYSTEM_PROMPT)
+
+
+def test_a_structured_null_reply_is_an_error_not_a_molecule(monkeypatch, image):
+    """The JSON prompt lets a model say "not a molecule"; that must not parse."""
+    class NullLLM:
+        model_name = "fake"
+
+        def invoke(self, messages):
+            class R:
+                content = '{"smiles": null}'
+            return R()
+
+    result = tools.image_to_smiles_core(image, model="llm", structured=True,
+                                        llm=NullLLM())
+
+    assert not result["ok"]
+    assert result["smiles"] is None
+
+
+def test_structured_is_ignored_by_the_specialists(monkeypatch, image):
+    """Specialists take no prompt, so the flag must not change their dispatch."""
+    _stub(monkeypatch, ok=True, smiles=ASPIRIN)
+
+    plain = tools.image_to_smiles_core(image, model="decimer")
+    flagged = tools.image_to_smiles_core(image, model="decimer", structured=True)
+
+    assert plain == flagged
 
 
 def test_smiles_is_canonicalized_so_models_agree_on_one_string(monkeypatch, image):

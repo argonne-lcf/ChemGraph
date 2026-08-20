@@ -57,6 +57,7 @@ def _resolve_model(model: str | None) -> tuple[str, str]:
 
 
 def image_to_smiles_core(image_path: str, model: str | None = None,
+                         structured: bool = False,
                          llm: Any = None) -> dict:
     """Read a molecule's 2D structure diagram and return its SMILES.
 
@@ -72,6 +73,9 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
         ``decimer``, ``molnextr``, ``molscribe``, ``ocsrglyph``, or ``llm`` for the
         agent's own model. ``None`` picks the default specialist, or the LLM when no
         specialist is installed.
+    structured : bool, optional
+        With ``model="llm"``, ask for a JSON reply. Ignored by the specialists,
+        which take no prompt.
     llm : optional
         The chat model to use when ``model="llm"``. Supplied by
         :func:`make_ocsr_tools`.
@@ -92,7 +96,8 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
         return core.build_result(model_used=name, error=f"cannot read {image_path}: {e}")
 
     if name == models.LLM_MODEL:
-        narrow = backends.smiles_from_llm(image_bytes, mime, llm)
+        narrow = backends.smiles_from_llm(image_bytes, mime, llm,
+                                          structured=structured)
     else:
         # The resolved path, so a specialist opens the same file that was validated.
         narrow = backends.smiles_from_specialist(name, resolved)
@@ -174,6 +179,9 @@ _TOOL_DOC = """Read a molecule's 2D structure diagram from an image and return i
     model : str, optional
         'decimer', 'molnextr', 'molscribe', 'ocsrglyph', or 'llm'. Unset picks the
         default.
+    structured : bool, optional
+        With model='llm', ask for a JSON reply. Leave it off unless the model is
+        returning prose the tool cannot read. No effect on the specialists.
 
     Returns
     -------
@@ -211,8 +219,10 @@ def make_ocsr_tools(llm: Any = None) -> list:
     client.
     """
 
-    def _run(image_path: str, model: str | None = None) -> dict:
-        return image_to_smiles_core(image_path, model=model, llm=llm)
+    def _run(image_path: str, model: str | None = None,
+             structured: bool = False) -> dict:
+        return image_to_smiles_core(image_path, model=model,
+                                    structured=structured, llm=llm)
 
     _run.__doc__ = _TOOL_DOC
     return [StructuredTool.from_function(
