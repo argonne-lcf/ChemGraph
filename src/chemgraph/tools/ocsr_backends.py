@@ -279,12 +279,9 @@ def checkpoint_path(name: str) -> str | None:
     return os.path.expanduser(weights)
 
 
-def _install_hint(name: str) -> str:
-    """How to install one model. The extra reaches DECIMER only, so pointing every
-    failure at it would send the user to a command that changes nothing."""
-    if name == models.DEFAULT_SPECIALIST:
-        return "Install it with: pip install 'chemgraph[ocsr]'"
-    return (f"{name} installs from source; see examples/ocsr/README.md. "
+def _install_hint() -> str:
+    """How to install a missing model. One extra covers all four."""
+    return (f"Install it with: pip install 'chemgraph[ocsr]'. "
             f"Installed here: {', '.join(available_specialists()) or 'none'}.")
 
 
@@ -295,8 +292,9 @@ def _resolve_weights(name: str) -> tuple[str | None, str]:
         return None, ""
     if os.path.exists(path):
         return path, ""
-    return None, (f"{name}'s checkpoint is missing at {path}. Fetch it with: "
-                  f"python -m chemgraph.tools.ocsr_download {name}")
+    return None, (f"{name}'s checkpoint is missing at {path}. "
+                  f"examples/ocsr/README.md lists where to download it, and "
+                  f"CHEMGRAPH_OCSR_WEIGHTS_DIR moves where it is looked for.")
 
 
 def _get_model(name: str) -> tuple[Callable[[str], Any] | None, bool, str]:
@@ -319,7 +317,7 @@ def _get_model(name: str) -> tuple[Callable[[str], Any] | None, bool, str]:
             loaded = _LOADERS[name](weights)
         except ImportError as e:
             return None, True, (f"{name} is not installed ({e}). "
-                                f"{_install_hint(name)}")
+                                f"{_install_hint()}")
         except Exception as e:
             return None, True, f"loading {name} failed: {type(e).__name__}: {e}"[:400]
 

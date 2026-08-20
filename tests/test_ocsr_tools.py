@@ -257,17 +257,9 @@ def test_an_explicit_model_is_never_silently_swapped(monkeypatch, image):
     assert "molscribe" in result["error"]
 
 
-def test_install_hint_does_not_send_users_to_a_command_that_does_nothing():
-    """`pip install chemgraph[ocsr]` reaches DECIMER only.
-
-    The other three are unpublished, so telling a user to run the extra when
-    MolNexTR is missing sends them to a command that changes nothing.
-    """
-    assert "chemgraph[ocsr]" in backends._install_hint("decimer")
-    for name in ("molnextr", "molscribe", "ocsrglyph"):
-        hint = backends._install_hint(name)
-        assert "chemgraph[ocsr]" not in hint, f"{name} is not in the extra"
-        assert "README" in hint, f"{name} should point at the install steps"
+def test_install_hint_names_the_extra():
+    """One command installs all four, so every missing model points at the same one."""
+    assert "chemgraph[ocsr]" in backends._install_hint()
 
 
 def test_torchvision_is_imported_before_tensorflow_can_be():
@@ -292,3 +284,5 @@ def test_torchvision_is_imported_before_tensorflow_can_be():
         "ocsr_backends must import torchvision at module scope; without it a "
         "DECIMER call followed by any torch model segfaults"
     )
+
+
