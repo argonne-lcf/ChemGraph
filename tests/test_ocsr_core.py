@@ -36,29 +36,11 @@ def png(tmp_path):
 
 
 def test_load_image_bytes_round_trip(png):
-    import base64
-
     data, mime = core.load_image_bytes(str(png))
     assert mime == "image/png"
     assert data.startswith(b"\x89PNG")
-    b64, mime64 = core.load_image_b64(str(png))
-    assert (mime64, base64.b64decode(b64)) == (mime, data)
     with pytest.raises(FileNotFoundError):
         core.load_image_bytes(str(png) + ".missing")
-
-
-def test_extract_image_path_only_picks_a_real_image(tmp_path, png):
-    """Pulling a path out of free text must verify it, not trust the extension.
-
-    ``png`` is a tmp_path fixture, so on Windows it carries a drive letter. A pattern
-    that cannot match ``C:`` returns the remainder joined against the current drive,
-    which points at a different filesystem location.
-    """
-    decoy = tmp_path / "notes.png"
-    decoy.write_text("not an image")
-    assert core.extract_image_path(f"read {png} please") == str(png)
-    assert core.extract_image_path(f"read {decoy} please") is None
-    assert core.extract_image_path("no image here") is None
 
 
 def test_mime_is_sniffed_not_taken_from_the_extension(tmp_path):

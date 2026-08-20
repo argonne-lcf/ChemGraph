@@ -14,7 +14,6 @@ RDKit is a core ChemGraph dependency and is imported lazily here regardless.
 
 from __future__ import annotations
 
-import base64
 import logging
 import os
 import re
@@ -125,44 +124,6 @@ def load_image_bytes(image_path: str, max_bytes: int = _MAX_IMAGE_BYTES) -> tupl
     return data, mime
 
 
-def load_image_b64(image_path: str, max_bytes: int = _MAX_IMAGE_BYTES) -> tuple[str, str]:
-    """Read an image and return ``(base64_ascii, mime_type)`` for a data URL."""
-    data, mime = load_image_bytes(image_path, max_bytes=max_bytes)
-    return base64.b64encode(data).decode("ascii"), mime
-
-
-def extract_image_path(text: str) -> str | None:
-    """Pull the first usable image path out of a free-text query.
-
-    A candidate must both exist and pass the magic-byte check, so a text file named
-    ``notes.png`` is never selected.
-
-    Parameters
-    ----------
-    text : str
-        Natural-language query, e.g. "what is the SMILES in /data/mol.png?".
-
-    Returns
-    -------
-    str or None
-        Absolute path to the first real image mentioned, else None.
-    """
-    if not text:
-        return None
-    # The optional drive prefix keeps a Windows path whole: without it the match
-    # starts after "C:", and joining the remainder against the current drive points
-    # somewhere else entirely.
-    pattern = r"(?:[A-Za-z]:)?[\w./~\\-]+\.(?:png|jpe?g|gif|webp|bmp|tiff?)"
-    for token in re.findall(pattern, text, flags=re.IGNORECASE):
-        candidate = token.strip("'\"")
-        try:
-            load_image_bytes(candidate)
-        except Exception:
-            continue
-        return os.path.abspath(os.path.expanduser(candidate))
-    return None
-
-
 # ---------------------------------------------------------------------------
 # SMILES handling
 # ---------------------------------------------------------------------------
@@ -175,10 +136,10 @@ def canonicalize(smiles: str | None, stereo: bool = False) -> str | None:
     labels carry no stereochemistry, so comparing with it makes a model that correctly
     reads a wedge bond look wrong.
 
-    Grouping predictions by this, rather than by raw string, is load-bearing for
-    :func:`vote`. DECIMER emits Kekule SMILES while the other specialists emit
-    aromatic, so raw-string comparison finds unanimity on 12 of 422 benchmark items
-    where canonical comparison finds it on 289.
+    Grouping predictions by this, rather than by raw string, matters because DECIMER
+    emits Kekule SMILES while the other specialists emit aromatic: on 422 benchmark
+    items raw-string comparison finds the four unanimous on 12, where canonical
+    comparison finds it on 289.
     """
     if not smiles or len(smiles) > _MAX_SMILES_CHARS:
         return None

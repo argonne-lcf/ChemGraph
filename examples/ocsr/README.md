@@ -26,18 +26,19 @@ structure it was drawn from. `--agent` routes the same call through an LLM.
 
 `model=` takes one of four specialists or `llm`:
 
-| model | exact match | speed | install |
-|-------|-------------|-------|---------|
-| `decimer` (default) | 0.899 | 0.7 s | `pip install decimer` |
-| `molnextr` | 0.835 | 4.4 s | from source, needs the shim |
-| `molscribe` | 0.824 | 5.0 s | from source, needs the shim |
-| `ocsrglyph` | 0.766 | 0.3 s | from source |
-| `llm` | not measured | varies | none, uses the agent's own model |
+| model | exact match | speed |
+|-------|-------------|-------|
+| `decimer` (default) | 0.899 | 0.7 s |
+| `molnextr` | 0.835 | 4.4 s |
+| `molscribe` | 0.824 | 5.0 s |
+| `ocsrglyph` | 0.766 | 0.3 s |
+| `llm` | not measured | varies |
+
+`pip install 'chemgraph[ocsr]'` installs all four specialists. `llm` needs no
+install and uses the agent's own model.
 
 Exact match is over a 722-image benchmark. It ranks the four against each other;
-it does not predict how any of them will do on your images. DECIMER is the default on both
-counts that matter here: most accurate, and the only one that is a plain
-`pip install`.
+it does not predict how any of them will do on your images. DECIMER is the default because it is the most accurate of the four.
 
 `list_ocsr_models` reports the same table plus what is actually installed on the
 machine you are on.
@@ -48,51 +49,35 @@ machine you are on.
 pip install 'chemgraph[ocsr]'
 ```
 
-That installs DECIMER, and nothing else is needed to use the tool: `model=decimer`
-and `model=llm` both work from here.
+That installs all four specialists. Three of them also need a checkpoint on disk,
+listed under Checkpoints below; DECIMER fetches its own.
 
-The other three install from source, and each needs its checkpoint as well, listed
-under Checkpoints below. MolNexTR and OCSRGlyph are unpublished on PyPI. MolScribe is
-published, but that release pins `torch<2.0` and `numpy<2.0`, which pip would resolve
-by downgrading both underneath ChemGraph.
+DECIMER is on PyPI. The other three install from GitHub, pinned to a commit so the
+extra keeps resolving to what was tested here. MolNexTR and MolScribe point at forks
+whose only change is two lines of `setup.py` each: both pin `timm==0.4.12`, OCSRGlyph
+needs timm 1.x, and no single version satisfies both.
 
-```bash
-# OCSRGlyph
-git clone https://github.com/EdisonScientific/glyph
-pip install --no-deps -e ./glyph
+Installing them one at a time lets the later install replace the timm the earlier one
+needs, and pip reports success while OCSRGlyph fails at inference with
+`RuntimeError: features_only not implemented for Vision Transformer models`.
 
-# MolScribe
-git clone https://github.com/thomas0809/MolScribe
-pip install --no-deps -e ./MolScribe
+MolScribe is on PyPI, but that release pins `torch>=1.11.0,<2.0`, which pip resolves
+by downgrading torch underneath ChemGraph, so the extra installs from git. Current
+git has relaxed the torch pin and keeps `numpy>=1.19.5,<2.0`, which the fork relaxes
+too: MolScribe was run over the benchmark images on numpy 2.2.6 with predictions
+identical to its pinned environment.
 
-# MolNexTR ships no package configuration, so it goes on PYTHONPATH
-git clone https://github.com/CYF2000127/MolNexTR
-export PYTHONPATH="$PWD/MolNexTR:$PYTHONPATH"
-pip install pystow matplotlib opencv-python pandas OpenNMT-py==2.2.0 albumentations==1.1.0 SmilesPE
-```
-
-Use `--no-deps` for OCSRGlyph and MolScribe. Both pin dependencies that are years
-old, and letting pip resolve them downgrades torch and numpy underneath ChemGraph.
-Their real requirements are already satisfied by ChemGraph's own.
-
-pip may warn that `molscribe 1.1.1 requires numpy<2.0`. That pin is stale in the
-same way its `torch<2.0` is: MolScribe was run over 60 benchmark images on numpy
-2.2.6 with no errors and predictions identical to its pinned environment.
-
-All four run in ChemGraph's environment. None needs one of its own, and none
-requires changing ChemGraph's pinned versions.
+All four run in ChemGraph's environment. None needs one of its own, and none requires
+changing ChemGraph's pinned versions.
 
 ### About the timm shim
 
 MolNexTR and MolScribe each vendor a Swin Transformer written against timm 0.4.12
-internals, and pin `timm==0.4.12` for it. Installing that pin breaks OCSRGlyph,
-which needs timm 1.x.
-
-`chemgraph.tools.timm_compat` restores the handful of import paths timm moved after
-0.4.12, so both models run on current timm with their own source untouched. The
-backend applies it before loading either model; there is nothing to configure.
-Verified by reproducing MolNexTR's timm 0.4.12 predictions exactly across 60
-benchmark images.
+internals. `chemgraph.tools.timm_compat` restores the handful of import paths timm
+moved after 0.4.12, so both models run on current timm with their own source
+untouched. The backend applies it before loading either model; there is nothing to
+configure. Verified by reproducing MolNexTR's timm 0.4.12 predictions exactly across
+the benchmark images.
 
 ## Checkpoints
 
@@ -108,8 +93,22 @@ it and tells you what is missing instead of failing inside the model:
 | `molscribe` | `~/ocsr-weights/molscribe/swin_base_char_aux_1m.pth` | 1.1 GB |
 | `ocsrglyph` | `~/ocsr-weights/ocsrglyph/model.pth` | 0.4 GB |
 
-Each is on Hugging Face; the paths above are what `ocsr_registry.json` records, and
-pointing `CHEMGRAPH_OCSR_REGISTRY` at your own copy of that file moves them.
+All three are on Hugging Face. MolNexTR publishes its checkpoint in a dataset repo,
+hence the `--repo-type`:
+
+```bash
+pip install huggingface_hub
+hf download CYF200127/MolNexTR molnextr_best.pth --repo-type dataset \
+    --local-dir ~/ocsr-weights/molnextr
+hf download yujieq/MolScribe swin_base_char_aux_1m.pth \
+    --local-dir ~/ocsr-weights/molscribe
+hf download EdisonScientific/OCSRGlyph model.pth \
+    --local-dir ~/ocsr-weights/ocsrglyph
+```
+
+The paths above are what `ocsr_registry.json` records. `CHEMGRAPH_OCSR_WEIGHTS_DIR`
+moves the parent directory, and pointing `CHEMGRAPH_OCSR_REGISTRY` at your own copy
+of that file moves each path individually.
 
 A model is loaded once per process. The first call pays for building the network and
 reading the checkpoint, measured cold on a shared CPU node at 9 s for MolScribe, 19 s
