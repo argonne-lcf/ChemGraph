@@ -131,6 +131,23 @@ turn; the model picks the tool by name.
 extra LLM turn on cold action lookups (`list_actions` / `describe`). Useful
 when the flat 43-tool surface is prohibitive.
 
+## Also available as an MCP server
+
+The same 43 flat tools ship as a standalone MCP server for use with
+non-LangChain clients (Claude Desktop, other agent frameworks,
+`main_agent`'s MCP wiring):
+
+```bash
+python -m chemgraph.mcp.alcf_iri_mcp                                 # stdio
+python -m chemgraph.mcp.alcf_iri_mcp --transport streamable_http --port 9010
+```
+
+Same auth flow (`$ALCF_API_TOKEN` -> on-disk Globus cache -> interactive
+re-auth via `alcf_auth_start_reauth` / `alcf_auth_complete_reauth`).
+Same `$ALCF_IRI_ALLOW_UNSAFE=1` gate for write actions. A capability
+card for skill-routing agents (e.g. `main_agent`) lives at
+`src/chemgraph/skills/alcf_iri.md`.
+
 ## References
 - ALCF IRI docs: https://docs.alcf.anl.gov/services/iri-api/
 - OpenAPI spec: https://api.alcf.anl.gov/openapi.json
