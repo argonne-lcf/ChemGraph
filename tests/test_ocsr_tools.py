@@ -268,3 +268,27 @@ def test_install_hint_does_not_send_users_to_a_command_that_does_nothing():
         hint = backends._install_hint(name)
         assert "chemgraph[ocsr]" not in hint, f"{name} is not in the extra"
         assert "README" in hint, f"{name} should point at the install steps"
+
+
+def test_torchvision_is_imported_before_tensorflow_can_be():
+    """Guards the module-scope torchvision import in ocsr_backends.
+
+    Loading torchvision into a process that already holds TensorFlow segfaults, so
+    reading one image with DECIMER and the next with a torch model kills the process.
+    The import looks unused and is easy to delete during a tidy-up; this test fails
+    if that happens.
+    """
+    import ast
+    import pathlib
+
+    source = pathlib.Path(backends.__file__).read_text()
+    tree = ast.parse(source)
+
+    imports_torchvision = any(
+        isinstance(node, ast.Import) and any(a.name == "torchvision" for a in node.names)
+        for node in ast.walk(tree)
+    )
+    assert imports_torchvision, (
+        "ocsr_backends must import torchvision at module scope; without it a "
+        "DECIMER call followed by any torch model segfaults"
+    )

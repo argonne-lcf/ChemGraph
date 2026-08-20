@@ -38,6 +38,17 @@ import threading
 import time
 from typing import Any, Callable
 
+# Import torchvision before anything pulls in TensorFlow. Loading it into a process
+# that already holds TensorFlow segfaults inside torchvision.ops, so a session that
+# reads one image with DECIMER and the next with any torch model dies on the second
+# call. The reverse order is safe, and importing torch alone is safe; torchvision is
+# the one that has to go first. Keep this at module scope: the specialists are
+# imported lazily, which is exactly what makes the order accidental otherwise.
+try:
+    import torchvision  # noqa: F401
+except ImportError:  # pragma: no cover - torch is optional until a model is used
+    pass
+
 from chemgraph.tools import ocsr_core as core
 from chemgraph.tools import ocsr_models as models
 
