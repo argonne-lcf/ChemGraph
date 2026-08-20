@@ -38,17 +38,6 @@ import threading
 import time
 from typing import Any, Callable
 
-# Import torchvision before anything pulls in TensorFlow. Loading it into a process
-# that already holds TensorFlow segfaults inside torchvision.ops, so a session that
-# reads one image with DECIMER and the next with any torch model dies on the second
-# call. The reverse order is safe, and importing torch alone is safe; torchvision is
-# the one that has to go first. Keep this at module scope: the specialists are
-# imported lazily, which is exactly what makes the order accidental otherwise.
-try:
-    import torchvision  # noqa: F401
-except ImportError:  # pragma: no cover - torch is optional until a model is used
-    pass
-
 from chemgraph.tools import ocsr_core as core
 from chemgraph.tools import ocsr_models as models
 
@@ -279,6 +268,25 @@ def checkpoint_path(name: str) -> str | None:
     return os.path.expanduser(weights)
 
 
+def _preload_torchvision() -> None:
+    """Import torchvision before anything can pull in TensorFlow.
+
+    Loading torchvision into a process that already holds TensorFlow segfaults inside
+    ``torchvision.ops``, so reading one image with DECIMER and the next with any torch
+    model kills the process. The reverse order is safe, and importing torch alone is
+    safe; torchvision is the one that has to go first.
+
+    Called before loading any specialist, so importing this module on an install
+    without torch stays free: ``llm_agent`` reaches here
+    through ``ocsr_agent`` on every workflow, including the ones that use no OCSR
+    model at all.
+    """
+    try:
+        import torchvision  # noqa: F401
+    except ImportError:  # pragma: no cover - torch is optional until a model is used
+        pass
+
+
 def _install_hint() -> str:
     """How to install a missing model. One extra covers all four."""
     return (f"Install it with: pip install 'chemgraph[ocsr]'. "
@@ -313,6 +321,7 @@ def _get_model(name: str) -> tuple[Callable[[str], Any] | None, bool, str]:
         if error:
             return None, True, error
 
+        _preload_torchvision()
         try:
             loaded = _LOADERS[name](weights)
         except ImportError as e:

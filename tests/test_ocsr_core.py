@@ -43,6 +43,31 @@ def test_load_image_bytes_round_trip(png):
         core.load_image_bytes(str(png) + ".missing")
 
 
+def test_a_bare_name_resolves_against_the_log_dir(tmp_path, monkeypatch, png):
+    """Matches every other file-reading tool: a sibling wrote it there by bare name."""
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "written.png").write_bytes(png.read_bytes())
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(log_dir))
+    monkeypatch.chdir(tmp_path)
+
+    data, mime = core.load_image_bytes("written.png")
+
+    assert mime == "image/png" and data.startswith(b"\x89PNG")
+
+
+def test_a_cwd_relative_path_still_wins_over_the_log_dir(tmp_path, monkeypatch, png):
+    """The log dir is a fallback; a file that exists in cwd is the one meant."""
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "here.png").write_text("not an image")
+    (tmp_path / "here.png").write_bytes(png.read_bytes())
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(log_dir))
+    monkeypatch.chdir(tmp_path)
+
+    assert core.load_image_bytes("here.png")[1] == "image/png"
+
+
 def test_mime_is_sniffed_not_taken_from_the_extension(tmp_path):
     """A text file renamed .png must be refused.
 

@@ -69,6 +69,25 @@ def _sniff_mime(head: bytes) -> str | None:
     return None
 
 
+def resolve_image_path(image_path: str) -> str:
+    """Expand ``~`` and resolve a bare name the way every other file-reading tool does.
+
+    A relative path is looked up in ``CHEMGRAPH_LOG_DIR`` when it is not found in the
+    working directory, so an image an agent wrote there can be read back by bare name.
+    Matches ``ase_core._resolve_existing_path``, and repeats its three lines instead of
+    importing it: that module reaches ``torch`` through the fairchem calculator schema,
+    which would put a torch import back on the path of every OCSR call.
+    """
+    path = os.path.expanduser(image_path)
+    if not os.path.isfile(path):
+        log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+        if log_dir and not os.path.isabs(path):
+            candidate = os.path.join(log_dir, path)
+            if os.path.isfile(candidate):
+                path = candidate
+    return os.path.abspath(path)
+
+
 def load_image_bytes(image_path: str, max_bytes: int = _MAX_IMAGE_BYTES) -> tuple[bytes, str]:
     """Read an image file safely and return ``(raw_bytes, mime_type)``.
 
@@ -96,7 +115,7 @@ def load_image_bytes(image_path: str, max_bytes: int = _MAX_IMAGE_BYTES) -> tupl
     ValueError
         Not a regular file, too large, or not a recognized image format.
     """
-    path = os.path.abspath(os.path.expanduser(image_path))
+    path = resolve_image_path(image_path)
     try:
         st = os.lstat(path)  # lstat, so a symlink is judged on its own terms
     except FileNotFoundError:
@@ -136,10 +155,10 @@ def canonicalize(smiles: str | None, stereo: bool = False) -> str | None:
     labels carry no stereochemistry, so comparing with it makes a model that correctly
     reads a wedge bond look wrong.
 
-    Grouping predictions by this, rather than by raw string, matters because DECIMER
-    emits Kekule SMILES while the other specialists emit aromatic: on 422 benchmark
-    items raw-string comparison finds the four unanimous on 12, where canonical
-    comparison finds it on 289.
+    ``stereo=True`` is what the tool returns to the caller, so two models that read
+    the same structure produce the same string: DECIMER emits Kekule SMILES while the
+    other three emit aromatic, and on 422 benchmark items raw-string comparison finds
+    the four unanimous on 12 where canonical comparison finds it on 289.
     """
     if not smiles or len(smiles) > _MAX_SMILES_CHARS:
         return None
