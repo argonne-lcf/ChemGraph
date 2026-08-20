@@ -16,6 +16,8 @@ from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 def route_tools(state: State):
     """Route to the 'tools' node if the last message has tool calls; otherwise, route to 'done'.
@@ -104,6 +106,7 @@ def construct_graspa_graph(
     structured_output: bool = False,
     formatter_prompt: str = formatter_prompt,
     tools: list = None,
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct a geometry optimization graph.
 
@@ -126,7 +129,8 @@ def construct_graspa_graph(
     """
     try:
         logger.info("Constructing gRASPA graph")
-        checkpointer = MemorySaver()
+        if checkpointer is _DEFAULT_CHECKPOINTER:
+            checkpointer = MemorySaver()
         if tools is None:
             tools = [run_graspa]
         tool_node = ToolNode(tools=tools)

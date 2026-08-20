@@ -14,6 +14,8 @@ from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 class State(TypedDict):
     """Type definition for the state dictionary used in the graph.
@@ -171,7 +173,11 @@ def CompChemAgent(state: State, llm: ChatOpenAI, system_prompt=single_agent_prom
     return {"messages": [llm_with_tools.invoke(messages)]}
 
 
-def construct_relp_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
+def construct_relp_graph(
+    llm: ChatOpenAI,
+    system_prompt=single_agent_prompt,
+    checkpointer=_DEFAULT_CHECKPOINTER,
+):
     """Construct a graph for REPL-based Python execution workflow.
 
     This function creates a state graph that implements a workflow for executing
@@ -197,7 +203,8 @@ def construct_relp_graph(llm: ChatOpenAI, system_prompt=single_agent_prompt):
     """
     try:
         logger.info("Constructing geometry optimization graph")
-        checkpointer = MemorySaver()
+        if checkpointer is _DEFAULT_CHECKPOINTER:
+            checkpointer = MemorySaver()
         tools = [
             repl_tool,
             calculator,

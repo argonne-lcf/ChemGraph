@@ -54,6 +54,7 @@ nav:
   - Using ChemGraph:
       - Command-line interface: cli.md
       - Workflows: workflows.md
+      - Tool and agent registries: registries.md
       - Calculators: calculators.md
       - Python API: python_api.md
       - Streamlit interface: streamlit_web_interface.md

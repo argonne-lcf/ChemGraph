@@ -19,6 +19,8 @@ from chemgraph.state.state import State
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 def ChemGraphAgent(state: State, llm: ChatOpenAI, system_prompt: str, tools=None):
     """LLM node that processes messages and decides next actions.
@@ -61,6 +63,7 @@ def construct_mock_agent_graph(
     llm: ChatOpenAI,
     system_prompt: str = single_agent_prompt,
     tools: list = None,
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct a geometry optimization graph.
 
@@ -78,7 +81,8 @@ def construct_mock_agent_graph(
         The constructed single agent graph
     """
     logger.info("Constructing mock agent graph")
-    checkpointer = MemorySaver()
+    if checkpointer is _DEFAULT_CHECKPOINTER:
+        checkpointer = MemorySaver()
     if tools is None:
         tools = [
             file_to_atomsdata,

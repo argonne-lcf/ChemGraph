@@ -46,6 +46,8 @@ from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 # ---------------------------------------------------------------------------
 # Helpers (reuse the repeated-tool-call detection from single_agent)
@@ -190,6 +192,7 @@ def construct_rag_agent_graph(
     llm,
     system_prompt: str = rag_agent_prompt,
     tools: list = None,
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct a RAG agent graph with document retrieval and chemistry tools.
 
@@ -210,7 +213,8 @@ def construct_rag_agent_graph(
     """
     try:
         logger.info("Constructing RAG agent graph")
-        checkpointer = MemorySaver()
+        if checkpointer is _DEFAULT_CHECKPOINTER:
+            checkpointer = MemorySaver()
 
         if tools is None:
             tools = _default_tools()

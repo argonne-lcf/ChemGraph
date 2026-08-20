@@ -21,6 +21,8 @@ from chemgraph.prompt.graspa_prompt import (
 
 logger = setup_logger(__name__)
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 def planner_agent(
     state: PlannerState,
@@ -296,6 +298,7 @@ def construct_graspa_mcp_graph(
     analyst_prompt: str = analyst_prompt,
     executor_tools: list = None,
     analysis_tools: list = None,
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct the gRASPA MCP map-reduce graph.
 
@@ -319,7 +322,8 @@ def construct_graspa_mcp_graph(
     CompiledStateGraph
         Compiled gRASPA MCP graph.
     """
-    checkpointer = MemorySaver()
+    if checkpointer is _DEFAULT_CHECKPOINTER:
+        checkpointer = MemorySaver()
 
     # Create the Executor subgraph
     executor_subgraph = construct_executor_subgraph(

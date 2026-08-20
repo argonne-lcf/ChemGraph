@@ -24,6 +24,8 @@ from chemgraph.tools.docking_tools import run_docking
 # ligand-receptor binding are included; general gas-phase/DFT tools are omitted.
 DEFAULT_DOCKING_TOOLS = [run_docking, molecule_name_to_smiles]
 
+_DEFAULT_CHECKPOINTER = object()
+
 
 def construct_molecular_docking_graph(
     llm: ChatOpenAI,
@@ -36,6 +38,7 @@ def construct_molecular_docking_graph(
     max_retries: int = 1,
     human_supervised: bool = False,
     terminal_tool_names: Collection[str] = (),
+    checkpointer=_DEFAULT_CHECKPOINTER,
 ):
     """Construct the molecular docking graph.
 
@@ -59,6 +62,9 @@ def construct_molecular_docking_graph(
     """
     if tools is None:
         tools = list(DEFAULT_DOCKING_TOOLS)
+    graph_kwargs = {}
+    if checkpointer is not _DEFAULT_CHECKPOINTER:
+        graph_kwargs["checkpointer"] = checkpointer
     return construct_single_agent_graph(
         llm,
         system_prompt=system_prompt,
@@ -70,4 +76,5 @@ def construct_molecular_docking_graph(
         max_retries=max_retries,
         human_supervised=human_supervised,
         terminal_tool_names=terminal_tool_names,
+        **graph_kwargs,
     )
