@@ -223,7 +223,7 @@ Additional instructions:
 - Carefully check that the values you format are present in the **actual output of prior tools or agents**.
 - Pay close attention to whether the desired result is a **list vs. a scalar**, and choose the correct format accordingly.
 - Populate only the relevant fields; leave the rest as null.
-- **Never convert units or change precision.** Copy each value and its unit exactly as reported by the prior agents, and record the unit in the corresponding unit field. Only emit a different unit if the user explicitly requested it.
+- Preserve the reported unit exactly, and use the reported numeric value without converting or intentionally rounding it. Because scalar JSON fields are numeric, insignificant trailing zeros may not be retained. Do not infer extra precision. Only emit a different unit if the user explicitly requested it.
 
 You MUST output ONLY a valid JSON object matching the following JSON schema. Do not include any text, markdown fences, or explanation outside the JSON object.
 
