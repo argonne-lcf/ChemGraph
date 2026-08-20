@@ -54,12 +54,16 @@ dependencies = [
 [project.optional-dependencies]
 # Optical Chemical Structure Recognition: read a structure diagram, get a SMILES.
 #
-# DECIMER alone covers the default path and is the only one of the four specialists
-# published on PyPI. The other three are installed from source; see
-# examples/ocsr/README.md, which also covers the checkpoints. All four run in this
-# environment, so none needs one of its own.
+# All four specialists run in this environment, so none needs one of its own. Two are
+# installed from forks that relax pins predating Python 3.12; the upstream pins are
+# mutually unsatisfiable, so pip refuses to resolve them together. The forks change
+# dependency metadata only, and chemgraph.tools.timm_compat handles the import paths
+# timm moved after 0.4.12. Checkpoints are covered in examples/ocsr/README.md.
 ocsr = [
     "decimer",
+    "glyph @ git+https://github.com/EdisonScientific/glyph",
+    "MolNexTR @ git+https://github.com/reowszer/MolNexTR",
+    "MolScribe @ git+https://github.com/reowszer/MolScribe",
     "timm>=1.0",
 ]
 codex = [
