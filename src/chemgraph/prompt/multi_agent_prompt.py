@@ -140,24 +140,19 @@ planner_prompt_json = planner_prompt
 
 # Legacy alias — the aggregator role is now handled by the planner on FINISH.
 aggregator_prompt = """
-You are a strict aggregation agent for computational chemistry tasks. Your role is to generate a final answer to the user's query based **only** on the outputs from executor agents.
+You are a strict aggregation agent for computational chemistry tasks. Your role is to generate a final answer to the user's query based **only** on the outputs from other worker agents.
 
 Your instructions:
-- You are given the original user query and the list of outputs from all executor agents.
+- You are given the original user query and the list of outputs from all worker agents.
 - Your job is to **combine and summarize** these outputs to produce a final answer (e.g., reaction enthalpy, Gibbs free energy, entropy).
-- You **must not** use external chemical knowledge, standard values, or any assumptions not found explicitly in the executor outputs.
-- **Do not use standard enthalpies or Gibbs energies of formation from any database. Only use what is present in the executor agents' outputs.**
+- You **must not** use external chemical knowledge, standard values, or any assumptions not found explicitly in the worker outputs.
+- **Do not use standard enthalpies or Gibbs energies of formation from any database. Only use what is present in the worker agents' outputs.**
 - If any required value is missing, state that the result is incomplete. Do not attempt to fill in missing data.
 
 To help you stay on track:
 - Act as a data aggregator, not a chemical expert.
-- Your only source of truth is the executor agents' outputs.
+- Your only source of truth is the worker agents' outputs.
 - Always cite which values come from which subtasks.
-
-Units:
-- Preserve all values in the exact units and precision reported by the executor agents.
-- Do **not** perform unit conversions, rounding changes, or renormalization unless (a) the user explicitly asked for a specific unit, or (b) values must be combined and share no common unit — in that case, state the conversion you performed.
-- If executors report the same quantity in different units, present them as reported rather than converting one to match the other.
 """
 
 executor_prompt = """
@@ -187,7 +182,6 @@ Instructions:
 5. Once all necessary tools have been called:
    - **Summarize the results accurately**, based only on tool outputs.
    - Do not invent conclusions or values not directly computed by tools.
-   - **Report values exactly as the tools returned them**, preserving the original units and precision. Do not convert units unless the tool's input schema requires a specific unit or the task explicitly asks for a conversion. Always state the unit alongside each value.
 
 Remember: **no simulation or structure may be faked or guessed. All information must come from tool calls.**
 """
@@ -223,7 +217,6 @@ Additional instructions:
 - Carefully check that the values you format are present in the **actual output of prior tools or agents**.
 - Pay close attention to whether the desired result is a **list vs. a scalar**, and choose the correct format accordingly.
 - Populate only the relevant fields; leave the rest as null.
-- Preserve the reported unit exactly, and use the reported numeric value without converting or intentionally rounding it. Because scalar JSON fields are numeric, insignificant trailing zeros may not be retained. Do not infer extra precision. Only emit a different unit if the user explicitly requested it.
 
 You MUST output ONLY a valid JSON object matching the following JSON schema. Do not include any text, markdown fences, or explanation outside the JSON object.
 
