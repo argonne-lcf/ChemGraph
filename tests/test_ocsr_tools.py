@@ -262,27 +262,103 @@ def test_install_hint_names_the_extra():
     assert "chemgraph[ocsr]" in backends._install_hint()
 
 
-def test_torchvision_is_imported_before_tensorflow_can_be():
-    """Guards the module-scope torchvision import in ocsr_backends.
+def test_importing_the_backends_does_not_import_torchvision():
+    """ocsr_agent is imported by llm_agent for every workflow, OCSR or not.
 
-    Loading torchvision into a process that already holds TensorFlow segfaults, so
-    reading one image with DECIMER and the next with a torch model kills the process.
-    The import looks unused and is easy to delete during a tidy-up; this test fails
-    if that happens.
+    A module-scope torch import would make an install with no torch fail on an
+    unrelated workflow, so the preload is deferred to the model-loading path.
     """
     import ast
     import pathlib
 
-    source = pathlib.Path(backends.__file__).read_text()
-    tree = ast.parse(source)
-
-    imports_torchvision = any(
-        isinstance(node, ast.Import) and any(a.name == "torchvision" for a in node.names)
-        for node in ast.walk(tree)
+    tree = ast.parse(pathlib.Path(backends.__file__).read_text())
+    module_scope = {
+        alias.name
+        for node in tree.body
+        if isinstance(node, (ast.Import, ast.Try))
+        for sub in ast.walk(node)
+        if isinstance(sub, ast.Import)
+        for alias in sub.names
+    }
+    assert "torchvision" not in module_scope, (
+        "importing torchvision at module scope breaks installs without torch"
     )
-    assert imports_torchvision, (
-        "ocsr_backends must import torchvision at module scope; without it a "
-        "DECIMER call followed by any torch model segfaults"
+
+
+def test_torchvision_is_preloaded_before_a_specialist_loads():
+    """Loading torchvision into a process that already holds TensorFlow segfaults.
+
+    DECIMER pulls in TensorFlow, so reading one image with it and the next with any
+    torch model kills the process unless torchvision was imported first. The call
+    looks pointless and is easy to delete during a tidy-up; this fails if that
+    happens.
+    """
+    import inspect
+
+    assert "_preload_torchvision()" in inspect.getsource(backends._get_model), (
+        "_get_model must preload torchvision before loading any specialist"
     )
 
 
+def test_the_ocsr_modules_import_and_run_without_torch(tmp_path):
+    """An install with no torch must still reach the LLM path and the error paths.
+
+    llm_agent imports ocsr_agent for every workflow, so a torch import anywhere on
+    this module's import path breaks unrelated workflows on such an install. Runs in
+    a subprocess because the guard has to be in place before the first import.
+    """
+    import subprocess
+    import sys
+    import textwrap
+
+    script = textwrap.dedent("""
+        import sys
+        BLOCK = ("torch", "torchvision", "tensorflow")
+
+        class Blocker:
+            def find_spec(self, name, path=None, target=None):
+                if name.split(".")[0] in BLOCK:
+                    raise ImportError("blocked " + name)
+                return None
+
+        sys.meta_path.insert(0, Blocker())
+
+        from chemgraph.tools import ocsr_backends, ocsr_core, ocsr_models, ocsr_tools
+
+        result = ocsr_tools.image_to_smiles_core("/nonexistent/molecule.png")
+        assert not result["ok"], result
+        leaked = [m for m in BLOCK if m in sys.modules]
+        assert not leaked, leaked
+        print("ok")
+    """)
+    proc = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+
+    assert proc.returncode == 0, proc.stderr[-2000:]
+
+
+def test_smiles_is_canonicalized_so_models_agree_on_one_string(monkeypatch, image):
+    """DECIMER writes Kekule where the others write aromatic; same molecule."""
+    _stub(monkeypatch, ok=True, smiles="CC(=O)OC1=CC=CC=C1C(=O)O")
+
+    assert tools.image_to_smiles_core(image)["smiles"] == ASPIRIN
+
+
+def test_canonicalization_keeps_stereochemistry(monkeypatch, image):
+    """validate_smiles_core's canonical_smiles drops stereo for benchmark scoring.
+
+    Returning that would silently discard what a model correctly read off the wedge
+    bonds, so the returned SMILES is canonicalized separately with stereo kept.
+    """
+    penicillin = "CC1(C)S[C@@H]2[C@H](NC(=O)Cc3ccccc3)C(=O)N2[C@H]1C(=O)O"
+    _stub(monkeypatch, ok=True, smiles=penicillin)
+
+    assert "@" in tools.image_to_smiles_core(image)["smiles"]
+
+
+def test_an_unparseable_smiles_is_still_reported(monkeypatch, image):
+    """Canonicalization cannot silently blank an answer RDKit rejects."""
+    _stub(monkeypatch, ok=True, smiles="C1CC")
+
+    result = tools.image_to_smiles_core(image)
+
+    assert result["smiles"] == "C1CC" and not result["valid"]

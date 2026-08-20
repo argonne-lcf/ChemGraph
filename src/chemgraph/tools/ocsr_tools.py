@@ -84,7 +84,8 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
     # one, and a non-image renamed to .png, and it does so identically for every
     # model instead of once per backend.
     try:
-        image_bytes, mime = core.load_image_bytes(image_path)
+        resolved = core.resolve_image_path(image_path)
+        image_bytes, mime = core.load_image_bytes(resolved)
     except (FileNotFoundError, ValueError) as e:
         return core.build_result(model_used=name, error=str(e))
     except OSError as e:
@@ -93,7 +94,8 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
     if name == models.LLM_MODEL:
         narrow = backends.smiles_from_llm(image_bytes, mime, llm)
     else:
-        narrow = backends.smiles_from_specialist(name, image_path)
+        # The resolved path, so a specialist opens the same file that was validated.
+        narrow = backends.smiles_from_specialist(name, resolved)
 
     if not narrow["ok"]:
         return core.build_result(
@@ -104,6 +106,14 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
         )
 
     validation = core.validate_smiles_core(narrow["smiles"])
+
+    # Canonical form, so two models that read the same structure return the same
+    # string: DECIMER writes Kekule SMILES where the others write aromatic. Keeps
+    # stereochemistry, unlike validation's `canonical_smiles`, which drops it to match
+    # how the benchmark scores. Falls back to the raw string when RDKit could not
+    # parse it, since an unparseable answer is still worth reporting with valid=False.
+    smiles = core.canonicalize(narrow["smiles"], stereo=True) or narrow["smiles"]
+
     warning = ""
     if validation.get("n_fragments", 0) > 1:
         warning = (f"the image contains {validation['n_fragments']} disconnected "
@@ -112,7 +122,7 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
 
     return core.build_result(
         ok=True,
-        smiles=narrow["smiles"],
+        smiles=smiles,
         valid=validation.get("valid", False),
         formula=validation.get("formula"),
         n_fragments=validation.get("n_fragments", 0),
@@ -171,7 +181,8 @@ _TOOL_DOC = """Read a molecule's 2D structure diagram from an image and return i
         ok : bool
             Whether a parseable SMILES was produced.
         smiles : str or None
-            The SMILES, canonicalized by RDKit.
+            The SMILES, canonicalized by RDKit with stereochemistry kept, so two
+            models that read the same structure return the same string.
         valid : bool
             Whether RDKit parsed it.
         formula : str or None
