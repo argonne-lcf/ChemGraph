@@ -1,85 +1,16 @@
 """File-system helpers for the ChemGraph Streamlit UI.
 
-Functions for resolving output paths, finding XYZ files, checking file
-recency, and extracting directory paths from agent messages.
+Functions for finding XYZ files and extracting directory paths from agent
+messages.  Helpers that searched the current working directory or the
+global ``CHEMGRAPH_LOG_DIR`` were removed on purpose: they picked up
+stale artifacts from earlier sessions.  Per-exchange attribution lives in
+:mod:`ui.artifacts`.
 """
 
 import os
 import re
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Optional
-
-
-def resolve_output_path(path: str) -> str:
-    """Resolve output paths relative to CHEMGRAPH_LOG_DIR when set.
-
-    Parameters
-    ----------
-    path : str
-        Absolute or relative output path.
-
-    Returns
-    -------
-    str
-        Resolved output path.
-    """
-    if not path:
-        return path
-    if os.path.isabs(path):
-        return path
-    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-    if log_dir:
-        return os.path.join(log_dir, path)
-    return path
-
-
-def changed_recently(path: str = "ir_spectrum.png", window_seconds: int = 300) -> bool:
-    """Return True if a file was modified within a recent time window.
-
-    Parameters
-    ----------
-    path : str, optional
-        File path to inspect.
-    window_seconds : int, optional
-        Recency window in seconds.
-
-    Returns
-    -------
-    bool
-        ``True`` when the file exists and is recent.
-    """
-    p = Path(resolve_output_path(path))
-    if not p.exists():
-        return False
-
-    mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-    now = datetime.now(timezone.utc)
-    return (now - mtime) <= timedelta(seconds=window_seconds)
-
-
-def find_latest_xyz_file() -> Optional[str]:
-    """Find the most recently modified ``.xyz`` file in the log dir or cwd."""
-    search_dirs: list[str] = []
-    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-    if log_dir:
-        search_dirs.append(log_dir)
-    search_dirs.append(os.getcwd())
-
-    latest_path: Optional[str] = None
-    latest_mtime = -1.0
-    for base in search_dirs:
-        if not base or not os.path.isdir(base):
-            continue
-        for path in Path(base).rglob("*.xyz"):
-            try:
-                mtime = path.stat().st_mtime
-            except OSError:
-                continue
-            if mtime > latest_mtime:
-                latest_mtime = mtime
-                latest_path = str(path)
-    return latest_path
 
 
 def find_latest_xyz_file_in_dir(directory: str) -> Optional[str]:
@@ -110,6 +41,54 @@ def find_latest_xyz_file_in_dir(directory: str) -> Optional[str]:
     return latest_path
 
 
+_WINDOWS_DRIVE_RE = re.compile(r"[A-Za-z]:[\\/]")
+
+
+def _is_absolute_output_path(path: str) -> bool:
+    """Return whether *path* is absolute on the platform it came from.
+
+    Agent messages can quote paths from either path flavor (e.g. a stored
+    session moved between machines), so both flavors are checked
+    explicitly -- ``os.path.isabs`` would answer only for the platform
+    the app happens to run on. Non-existent paths are discarded by the
+    callers' existence/containment checks.
+
+    Parameters
+    ----------
+    path : str
+        Extracted path candidate.
+
+    Returns
+    -------
+    bool
+        ``True`` for POSIX-absolute or Windows drive-absolute paths.
+    """
+    return path.startswith("/") or bool(_WINDOWS_DRIVE_RE.match(path))
+
+
+def _parent_directory(path: str) -> str:
+    """Return the parent directory of *path*, honoring its path flavor.
+
+    Uses the Pure* path classes so the result keeps the flavor of the
+    input on every platform: ``pathlib.Path`` would rewrite a POSIX path
+    to backslashes when running on Windows (and cannot split a Windows
+    path when running on POSIX).
+
+    Parameters
+    ----------
+    path : str
+        Absolute file path (POSIX or Windows form).
+
+    Returns
+    -------
+    str
+        Parent directory in the same form.
+    """
+    if _WINDOWS_DRIVE_RE.match(path):
+        return str(PureWindowsPath(path).parent)
+    return str(PurePosixPath(path).parent)
+
+
 def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
     """Extract a log directory from messages that reference output files.
 
@@ -125,11 +104,16 @@ def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
     """
     if not messages:
         return None
+    # Absolute POSIX (/run/dir/file.ext) or Windows drive
+    # (C:\run\dir\file.ext, C:/run/dir/file.ext) paths. The boundary
+    # prefix keeps slashes inside relative paths and URLs from matching.
+    _abs = r"(?:/|[A-Za-z]:[\\/])"
+    _start = r"(?:^|[\s'\"`=(,])"
     patterns = [
-        r"(/[^\s'\"`]+?\.json)",
-        r"(/[^\s'\"`]+?\.xyz)",
-        r"(/[^\s'\"`]+?\.html)",
-        r"(/[^\s'\"`]+?\.csv)",
+        rf"{_start}({_abs}[^\s'\"`]+?\.json)",
+        rf"{_start}({_abs}[^\s'\"`]+?\.xyz)",
+        rf"{_start}({_abs}[^\s'\"`]+?\.html)",
+        rf"{_start}({_abs}[^\s'\"`]+?\.csv)",
     ]
 
     def _scan_value(value: Any) -> Optional[str]:
@@ -150,8 +134,8 @@ def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
                 match = re.search(pattern, value)
                 if match:
                     path = match.group(1)
-                    if os.path.isabs(path):
-                        return str(Path(path).parent)
+                    if _is_absolute_output_path(path):
+                        return _parent_directory(path)
         elif isinstance(value, dict):
             for v in value.values():
                 found = _scan_value(v)

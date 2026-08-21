@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from ase.data import chemical_symbols as _chemical_symbols
 
 from chemgraph.schemas.ase_input import ASEOutputSchema
-from chemgraph.tools.ase_core import _resolve_existing_path
+from chemgraph.tools.ase_core import _resolve_existing_path, _resolve_path
 from chemgraph.tools.ase_tools import is_linear_molecule
 
 
@@ -348,6 +348,9 @@ def generate_html(
     results_json_path = _resolve_existing_path(results_json_path)
     if xyz_path is not None:
         xyz_path = _resolve_existing_path(xyz_path)
+    # The report is a run artifact too: a bare "report.html" must land in
+    # the session log dir, not whatever directory the server started in.
+    output_path = _resolve_path(output_path)
 
     # Validate results_json_path exists
     if not os.path.isfile(results_json_path):
