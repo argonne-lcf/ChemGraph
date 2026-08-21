@@ -70,7 +70,6 @@ ARGO_MODEL_MAP = {
     "argo:gemini-3.1-flash-lite": "gemini31flashlite",
     "argo:gemini-3.5-flash": "gemini35flash",
     # Claude via Argo
-    "argo:claude-sonnet-5": "claudesonnet5",
     "argo:claude-opus-5": "claudeopus5",
     "argo:claude-opus-4.8": "claudeopus48",
     "argo:claude-opus-4.7": "claudeopus47",
