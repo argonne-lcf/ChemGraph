@@ -935,6 +935,12 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
         if html_filename:
             _render_html_report(idx, html_filename, messages, entry)
 
+        # Optimization convergence (needs the recorded trajectory artifact)
+        if artifact_kinds is not None and artifact_kinds.get(
+            artifact_utils.TRAJECTORIES
+        ):
+            _render_optimization_section(idx, entry, artifact_kinds)
+
         # IR spectrum: prefer the exchange's recorded artifacts; fall back to
         # keyword sniffing only for legacy entries without a manifest.
         if artifact_kinds is not None:
@@ -1363,24 +1369,29 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
         return
 
     # vib/thermo runs record frequencies but no spectrum -- label honestly.
+    has_spectrum_data = bool(
+        artifact_kinds and artifact_kinds.get(artifact_utils.IR_SPECTRA)
+    )
     label = (
         "\U0001f50d IR Spectrum"
-        if ir_path or artifact_kinds is None
+        if ir_path or has_spectrum_data or artifact_kinds is None
         else "\U0001f50d Vibrational Modes"
     )
     with st.expander(label, expanded=True):
         col1, col2 = st.columns(2, border=True)
 
         with col1:
-            if ir_path and os.path.exists(ir_path):
-                st.image(ir_path)
-            elif artifact_kinds is not None:
-                st.caption(
-                    "This run computed vibrational modes; no IR spectrum "
-                    "was requested."
-                )
-            else:
-                st.warning("IR spectrum plot not found.")
+            if not _render_interactive_ir_spectrum(idx, artifact_kinds, log_dir):
+                # Runs without spectrum data only produced the static image.
+                if ir_path and os.path.exists(ir_path):
+                    st.image(ir_path)
+                elif artifact_kinds is not None:
+                    st.caption(
+                        "This run computed vibrational modes; no IR spectrum "
+                        "was requested."
+                    )
+                else:
+                    st.warning("IR spectrum plot not found.")
 
         with col2:
             if not freq_path or not os.path.exists(freq_path):
@@ -1448,6 +1459,103 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
                 view = visualize_trajectory(traj)
                 view.zoomTo()
                 render_py3dmol(view)
+
+
+def _render_interactive_ir_spectrum(
+    idx: int, artifact_kinds: Optional[dict], log_dir: Optional[str]
+) -> bool:
+    """Render the exchange's IR spectrum as an interactive chart.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    artifact_kinds : dict or None
+        Classified artifacts for the exchange.
+    log_dir : str, optional
+        Run artifact directory.
+
+    Returns
+    -------
+    bool
+        ``True`` when the interactive chart was rendered.
+    """
+    if not artifact_kinds:
+        return False
+    spectra = artifact_kinds.get(artifact_utils.IR_SPECTRA, [])
+    if not spectra:
+        return False
+    try:
+        from ui import plots as ui_plots
+    except ImportError:
+        return False
+
+    csv_path = _resolve_artifact_path(spectra[-1], log_dir)
+    data = ui_plots.load_ir_spectrum_csv(csv_path)
+    if data is None:
+        return False
+    frequencies, intensities = data
+    st.plotly_chart(
+        ui_plots.ir_spectrum_figure(frequencies, intensities),
+        use_container_width=True,
+        key=f"ir_chart_{idx}",
+    )
+    return True
+
+
+def _render_optimization_section(
+    idx: int, entry: dict, artifact_kinds: dict
+) -> None:
+    """Render convergence chart and animation for an optimization run.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    entry : dict
+        Conversation-history entry.
+    artifact_kinds : dict
+        Classified artifacts for the exchange.
+    """
+    try:
+        from ui import plots as ui_plots
+    except ImportError:
+        return
+
+    traj_rel = artifact_kinds[artifact_utils.TRAJECTORIES][-1]
+    traj_path = _resolve_artifact_path(traj_rel, entry.get("log_dir"))
+    if not os.path.exists(traj_path):
+        return
+    data = ui_plots.read_optimization_trajectory(traj_path)
+    if data is None:
+        return
+    energies, fmax_values = data
+    if len(energies) < 2:
+        return
+
+    with st.expander(
+        f"\U0001f4c9 Optimization ({len(energies)} steps)", expanded=False
+    ):
+        col_chart, col_anim = st.columns(2, border=True)
+        with col_chart:
+            st.plotly_chart(
+                ui_plots.convergence_figure(energies, fmax_values),
+                use_container_width=True,
+                key=f"convergence_{idx}",
+            )
+        with col_anim:
+            if PY3DMOL_AVAILABLE:
+                try:
+                    from ase.io.trajectory import Trajectory
+
+                    view = visualize_trajectory(Trajectory(traj_path))
+                    view.zoomTo()
+                    render_py3dmol(view)
+                    st.caption("Optimization path animation")
+                except Exception as exc:
+                    st.warning(f"Could not animate trajectory: {exc}")
+            else:
+                st.info("Install py3Dmol to animate the optimization path.")
 
 
 def _render_verbose_info(idx: int, messages: list, entry: dict) -> None:
