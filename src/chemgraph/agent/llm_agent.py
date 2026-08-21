@@ -20,6 +20,10 @@ from chemgraph.memory.schemas import (
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 from chemgraph.models.openai import load_openai_model
 from chemgraph.models.alcf_endpoints import load_alcf_model
+from chemgraph.models.aurora_endpoints import (
+    AURORA_MODEL_PREFIX,
+    load_aurora_model,
+)
 from chemgraph.models.local_model import load_ollama_model
 from chemgraph.models.anthropic import load_anthropic_model
 from chemgraph.models.gemini import load_gemini_model
@@ -298,6 +302,13 @@ class ChemGraph:
 
             if model_name.startswith("codex:"):
                 llm = load_codex_model(model_name)
+            elif model_name.startswith(AURORA_MODEL_PREFIX):
+                llm = load_aurora_model(
+                    model_name=model_name,
+                    base_url=base_url,
+                    api_key=api_key,
+                    temperature=temperature,
+                )
             elif model_name.startswith("openrouter:"):
                 llm = load_openrouter_model(
                     model_name=model_name,
