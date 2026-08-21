@@ -9,7 +9,7 @@ stale artifacts from earlier sessions.  Per-exchange attribution lives in
 
 import os
 import re
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Optional
 
 
@@ -41,6 +41,49 @@ def find_latest_xyz_file_in_dir(directory: str) -> Optional[str]:
     return latest_path
 
 
+_WINDOWS_DRIVE_RE = re.compile(r"[A-Za-z]:[\\/]")
+
+
+def _is_absolute_output_path(path: str) -> bool:
+    """Return whether *path* is absolute on the platform it came from.
+
+    Agent messages can quote paths from either path flavor (e.g. a stored
+    session moved between machines), so Windows drive paths are accepted
+    even when the app runs on POSIX -- non-existent ones are discarded by
+    the callers' existence/containment checks.
+
+    Parameters
+    ----------
+    path : str
+        Extracted path candidate.
+
+    Returns
+    -------
+    bool
+        ``True`` for POSIX-absolute or Windows drive-absolute paths.
+    """
+    return os.path.isabs(path) or bool(_WINDOWS_DRIVE_RE.match(path))
+
+
+def _parent_directory(path: str) -> str:
+    """Return the parent directory of *path*, honoring its path flavor.
+
+    Parameters
+    ----------
+    path : str
+        Absolute file path (POSIX or Windows form).
+
+    Returns
+    -------
+    str
+        Parent directory in the same form.
+    """
+    if _WINDOWS_DRIVE_RE.match(path):
+        # PureWindowsPath understands backslashes on every platform.
+        return str(PureWindowsPath(path).parent)
+    return str(Path(path).parent)
+
+
 def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
     """Extract a log directory from messages that reference output files.
 
@@ -56,11 +99,16 @@ def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
     """
     if not messages:
         return None
+    # Absolute POSIX (/run/dir/file.ext) or Windows drive
+    # (C:\run\dir\file.ext, C:/run/dir/file.ext) paths. The boundary
+    # prefix keeps slashes inside relative paths and URLs from matching.
+    _abs = r"(?:/|[A-Za-z]:[\\/])"
+    _start = r"(?:^|[\s'\"`=(,])"
     patterns = [
-        r"(/[^\s'\"`]+?\.json)",
-        r"(/[^\s'\"`]+?\.xyz)",
-        r"(/[^\s'\"`]+?\.html)",
-        r"(/[^\s'\"`]+?\.csv)",
+        rf"{_start}({_abs}[^\s'\"`]+?\.json)",
+        rf"{_start}({_abs}[^\s'\"`]+?\.xyz)",
+        rf"{_start}({_abs}[^\s'\"`]+?\.html)",
+        rf"{_start}({_abs}[^\s'\"`]+?\.csv)",
     ]
 
     def _scan_value(value: Any) -> Optional[str]:
@@ -81,8 +129,8 @@ def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
                 match = re.search(pattern, value)
                 if match:
                     path = match.group(1)
-                    if os.path.isabs(path):
-                        return str(Path(path).parent)
+                    if _is_absolute_output_path(path):
+                        return _parent_directory(path)
         elif isinstance(value, dict):
             for v in value.values():
                 found = _scan_value(v)
