@@ -287,6 +287,7 @@ class ChemGraph:
                 argo_user=argo_user,
                 reasoning_effort=reasoning_effort,
             )
+
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
             raise e
