@@ -64,6 +64,15 @@ timeout = 30
 base_url = "https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1"
 timeout = 30
 
+# Aurora on-node inference (llama.cpp SYCL llama-server or vLLM-XPU), served as
+# an OpenAI-compatible /v1 endpoint. Use "aurora:<served-model-id>" models. The
+# node IP changes per job and compute nodes have no public IP, so set base_url
+# to a co-located server (127.0.0.1) or an SSH tunnel from a login node. May
+# also be set via the AURORA_BASE_URL environment variable.
+[api.aurora]
+base_url = "http://127.0.0.1:8000/v1"
+timeout = 60
+
 [api.local]
 base_url = "http://localhost:11434"
 timeout = 60

@@ -150,6 +150,27 @@ supported_openrouter_models = [
     "openrouter:minimax/minimax-m2.7",
 ]
 
+# Default Aurora inference base URL. Aurora on-node LLM servers (llama.cpp SYCL
+# `llama-server` or vLLM-XPU) expose an OpenAI-compatible ``/v1`` endpoint. The
+# node IP changes per job and compute nodes have no public IP, so callers
+# normally override this with --base-url / [api.aurora].base_url / AURORA_BASE_URL
+# (e.g. co-located on the same node, or via an SSH tunnel from a login node).
+AURORA_DEFAULT_BASE_URL = "http://127.0.0.1:8000/v1"
+
+# Aurora models -- all use the "aurora:" prefix (e.g.
+# "aurora:gpt-oss-120b"). The prefix only routes the request inside ChemGraph
+# and is stripped before the name is sent to the endpoint, where it must match
+# the server's advertised model id (llama-server ``--alias`` / vLLM
+# ``--served-model-name``). This list is for *discovery* only (--list-models,
+# UI dropdown); dispatch is by prefix, so any served model id also works.
+# The chosen model MUST support OpenAI tool calling for ChemGraph workflows.
+supported_aurora_models = [
+    "aurora:gpt-oss-120b",
+    "aurora:inkling",
+    "aurora:nemotron-3-ultra",
+    "aurora:nemotron-4-340b",
+]
+
 # Default Argo API base URL (used when no --base-url is provided).
 ARGO_DEFAULT_BASE_URL = "https://apps.inside.anl.gov/argoapi/v1"
 
@@ -233,4 +254,5 @@ all_supported_models = (
     + supported_gemini_models
     + supported_groq_models
     + supported_openrouter_models
+    + supported_aurora_models
 )
