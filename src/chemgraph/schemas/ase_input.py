@@ -100,39 +100,6 @@ def _calculator_key(name: str) -> str:
     return _CALCULATOR_ALIASES.get(normalized, normalized[:4])
 
 
-def _accepted_calculator_types(calc_class: Type[BaseModel]) -> list[str]:
-    """Return the accepted ``calculator_type`` values for a calculator class.
-
-    The agent must supply the ``calculator_type`` *field value* (e.g. ``"emt"``),
-    not the class name (``"EMTCalc"``). This reads the value(s) allowed by the
-    class's ``calculator_type`` field -- the members of a ``Literal`` when the
-    field is constrained, otherwise its default -- so error messages can name
-    what a caller should actually pass.
-    """
-    import typing
-
-    field = getattr(calc_class, "model_fields", {}).get("calculator_type")
-    if field is None:
-        return []
-    annotation = getattr(field, "annotation", None)
-    if typing.get_origin(annotation) is typing.Literal:
-        return [str(v) for v in typing.get_args(annotation)]
-    default = getattr(field, "default", None)
-    return [str(default)] if isinstance(default, str) and default else []
-
-
-def _accepted_calculator_type_hint(
-    calculator_classes: List[Type[BaseModel]],
-) -> str:
-    """Build a human/agent-friendly list of accepted ``calculator_type`` values."""
-    values: list[str] = []
-    for calc_class in calculator_classes:
-        for value in _accepted_calculator_types(calc_class):
-            if value not in values:
-                values.append(value)
-    return ", ".join(repr(v) for v in values)
-
-
 # Define all possible calculator classes
 _all_calculator_classes: List[Optional[Type[BaseModel]]] = [
     FAIRChemCalc,
@@ -204,11 +171,9 @@ def _coerce_calculator_payload(data: Any) -> Any:
 
         calc_key = _calculator_key(calc_name)
         if calc_key not in available_calcs:
-            accepted = _accepted_calculator_type_hint(available_calculator_classes)
             raise ValueError(
-                f"Calculator {calc_name!r} is not an allowed or available "
-                "calculator. Set 'calculator_type' to one of these accepted "
-                f"values: {accepted} (available calculators: {available_calc_names})."
+                f"Calculator {calc_name} is not an allowed or available calculator. "
+                f"Available calculators are: {available_calc_names}"
             )
 
         calculator_class = available_calcs[calc_key]
@@ -222,11 +187,9 @@ def _coerce_calculator_payload(data: Any) -> Any:
         calc_type_name = calc.__class__.__name__
         calc_key = _calculator_key(calc_type_name.removesuffix("Calc"))
         if calc_key not in available_calcs:
-            accepted = _accepted_calculator_type_hint(available_calculator_classes)
             raise ValueError(
-                f"Calculator {calc_type_name} is not an allowed or available "
-                "calculator. Set 'calculator_type' to one of these accepted "
-                f"values: {accepted} (available calculators: {available_calc_names})."
+                f"Calculator {calc_type_name} is not an allowed or available calculator. "
+                f"Available calculators are: {available_calc_names}"
             )
     return data
 

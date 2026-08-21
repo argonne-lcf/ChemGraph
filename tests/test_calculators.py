@@ -42,24 +42,6 @@ def test_default_calculator_is_in_detected_available_calculators():
     assert default in context
 
 
-def test_invalid_calculator_type_error_lists_accepted_values():
-    # Regression: the error used to list class names (e.g. "EMTCalc"), which
-    # misled agents into passing the class name as calculator_type. It should
-    # instead name the accepted calculator_type field values (e.g. "emt").
-    from chemgraph.schemas.ase_input import ASEInputSchema
-
-    with pytest.raises(ValidationError) as excinfo:
-        ASEInputSchema(
-            input_structure_file="water.xyz",
-            driver="opt",
-            calculator={"calculator_type": "EMTCalc"},
-        )
-
-    message = str(excinfo.value)
-    assert "accepted values" in message
-    assert "'emt'" in message
-
-
 @pytest.mark.skipif(
     importlib.util.find_spec("mace") is None, reason="MACE not installed"
 )
