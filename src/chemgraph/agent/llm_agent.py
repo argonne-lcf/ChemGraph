@@ -18,24 +18,10 @@ from chemgraph.memory.schemas import (
     SessionMessage,
 )
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
-from chemgraph.models.openai import load_openai_model
-from chemgraph.models.alcf_endpoints import load_alcf_model
-from chemgraph.models.local_model import load_ollama_model
-from chemgraph.models.anthropic import load_anthropic_model
-from chemgraph.models.gemini import load_gemini_model
-from chemgraph.models.groq import load_groq_model
-from chemgraph.models.openrouter import load_openrouter_model
-from chemgraph.models.codex import load_codex_model
+from chemgraph.models.loader import load_chat_model_prepared
 from chemgraph.models.supported_models import (
     MODELS_WITH_REASONING_EFFORT,
     SUPPORTED_REASONING_EFFORTS,
-    supported_openai_models,
-    supported_ollama_models,
-    supported_anthropic_models,
-    supported_alcf_models,
-    supported_argo_models,
-    supported_gemini_models,
-
 )
 
 from chemgraph.schemas.ase_input import (
@@ -289,93 +275,18 @@ class ChemGraph:
         self._session_title: Optional[str] = None
 
         try:
-            # Use hardcoded optimal values for tool calling
-            temperature = 0.0  # Deterministic responses
-            max_tokens = 4000  # Sufficient for most tasks
-            top_p = 1.0  # No nucleus sampling filtering
-            frequency_penalty = 0.0  # No repetition penalty
-            presence_penalty = 0.0  # No presence penalty
-
-            if model_name.startswith("codex:"):
-                llm = load_codex_model(model_name)
-            elif model_name.startswith("openrouter:"):
-                llm = load_openrouter_model(
-                    model_name=model_name,
-                    api_key=api_key,
-                    base_url=base_url,
-                    temperature=temperature,
-                )
-            elif (
-                model_name in supported_openai_models
-                or model_name in supported_argo_models
-            ):
-                openai_load_kwargs = {
-                    "model_name": model_name,
-                    "temperature": temperature,
-                    "base_url": base_url,
-                }
-                if argo_user is not None:
-                    openai_load_kwargs["argo_user"] = argo_user
-                if reasoning_effort is not None:
-                    openai_load_kwargs["reasoning_effort"] = reasoning_effort
-                llm = load_openai_model(
-                    **openai_load_kwargs,
-                )
-            elif model_name in supported_ollama_models:
-                llm = load_ollama_model(model_name=model_name, temperature=temperature)
-            elif model_name in supported_alcf_models:
-                llm = load_alcf_model(
-                    model_name=model_name, base_url=base_url, api_key=api_key
-                )
-            elif model_name in supported_anthropic_models:
-                llm = load_anthropic_model(
-                    model_name=model_name, api_key=api_key, temperature=temperature
-                )
-            elif model_name in supported_gemini_models:
-                llm = load_gemini_model(
-                    model_name=model_name, api_key=api_key, temperature=temperature
-                )
-            elif model_name.startswith("groq:"):
-                llm = load_groq_model(
-                    model_name=model_name, api_key=api_key, temperature=temperature
-                )
-
-            else:  # Assume it might be a vLLM or other custom OpenAI-compatible endpoint
-                # Use environment variables for vLLM base_url and a dummy api_key if not provided
-                # These would be set by docker-compose for the jupyter_lab service
-                vllm_base_url = os.getenv("VLLM_BASE_URL", base_url)
-                # ChatOpenAI requires an api_key, even if the endpoint doesn't use it.
-                vllm_api_key = os.getenv(
-                    "OPENAI_API_KEY", api_key if api_key else "dummy_vllm_key"
-                )
-
-                if vllm_base_url:
-                    logger.info(
-                        f"Attempting to load model '{model_name}' from custom endpoint: {vllm_base_url}"
-                    )
-                    from langchain_openai import ChatOpenAI
-
-                    llm = ChatOpenAI(
-                        model=model_name,
-                        temperature=temperature,
-                        base_url=vllm_base_url,
-                        api_key=vllm_api_key,
-                        max_tokens=max_tokens,
-                        top_p=top_p,
-                        frequency_penalty=frequency_penalty,
-                        presence_penalty=presence_penalty,
-                    )
-                    logger.info(
-                        f"Successfully initialized ChatOpenAI for model '{model_name}' at {vllm_base_url}"
-                    )
-                else:
-                    logger.error(
-                        f"Model '{model_name}' is not in any supported list and no VLLM_BASE_URL/base_url provided."
-                    )
-                    raise ValueError(
-                        f"Unsupported model or missing base URL for: {model_name}"
-                    )
-
+            # Deterministic temperature for tool calling; all other endpoint
+            # defaults (max_tokens, sampling params, custom-endpoint fallback)
+            # are owned by the endpoint specs behind load_chat_model.
+            temperature = 0.0
+            llm, prepared_model = load_chat_model_prepared(
+                model_name=model_name,
+                temperature=temperature,
+                base_url=base_url,
+                api_key=api_key,
+                argo_user=argo_user,
+                reasoning_effort=reasoning_effort,
+            )
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
             raise e
@@ -452,7 +363,10 @@ class ChemGraph:
             self.planner_prompt = append_calculator_context(self.planner_prompt)
             self.executor_prompt = append_calculator_context(self.executor_prompt)
 
-        if model_name in supported_argo_models:
+        # Structured-output capability is a resolved endpoint fact (e.g. Argo
+        # endpoints do not support it); read it back from the loader rather than
+        # re-deriving provider membership here.
+        if not prepared_model.supports_structured_output:
             self.support_structured_output = False
         else:
             self.support_structured_output = support_structured_output
