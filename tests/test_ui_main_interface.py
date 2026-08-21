@@ -476,6 +476,25 @@ def test_exchange_structure_path_legacy_entry_uses_dir_scan(monkeypatch, tmp_pat
     assert main_ui._exchange_structure_path([], entry, "") == f"{tmp_path}/found.xyz"
 
 
+def test_extract_log_dir_handles_windows_and_posix_paths():
+    from ui.file_utils import extract_log_dir_from_messages
+
+    windows_msg = [
+        {"content": r"saved to C:\Users\me\cg_logs\ui_session_1\output.json"}
+    ]
+    posix_msg = [{"content": "saved to /home/me/cg_logs/ui_session_1/output.json"}]
+    relative_msg = [{"content": "saved to cg_logs/ui_session_1/output.json"}]
+
+    assert (
+        extract_log_dir_from_messages(windows_msg)
+        == r"C:\Users\me\cg_logs\ui_session_1"
+    )
+    assert (
+        extract_log_dir_from_messages(posix_msg) == "/home/me/cg_logs/ui_session_1"
+    )
+    assert extract_log_dir_from_messages(relative_msg) is None
+
+
 def test_artifact_log_dir_rejects_fallback_outside_ui_log_root(
     monkeypatch, tmp_path
 ):
