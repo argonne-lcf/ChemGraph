@@ -1,85 +1,16 @@
 """File-system helpers for the ChemGraph Streamlit UI.
 
-Functions for resolving output paths, finding XYZ files, checking file
-recency, and extracting directory paths from agent messages.
+Functions for finding XYZ files and extracting directory paths from agent
+messages.  Helpers that searched the current working directory or the
+global ``CHEMGRAPH_LOG_DIR`` were removed on purpose: they picked up
+stale artifacts from earlier sessions.  Per-exchange attribution lives in
+:mod:`ui.artifacts`.
 """
 
 import os
 import re
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
-
-
-def resolve_output_path(path: str) -> str:
-    """Resolve output paths relative to CHEMGRAPH_LOG_DIR when set.
-
-    Parameters
-    ----------
-    path : str
-        Absolute or relative output path.
-
-    Returns
-    -------
-    str
-        Resolved output path.
-    """
-    if not path:
-        return path
-    if os.path.isabs(path):
-        return path
-    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-    if log_dir:
-        return os.path.join(log_dir, path)
-    return path
-
-
-def changed_recently(path: str = "ir_spectrum.png", window_seconds: int = 300) -> bool:
-    """Return True if a file was modified within a recent time window.
-
-    Parameters
-    ----------
-    path : str, optional
-        File path to inspect.
-    window_seconds : int, optional
-        Recency window in seconds.
-
-    Returns
-    -------
-    bool
-        ``True`` when the file exists and is recent.
-    """
-    p = Path(resolve_output_path(path))
-    if not p.exists():
-        return False
-
-    mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-    now = datetime.now(timezone.utc)
-    return (now - mtime) <= timedelta(seconds=window_seconds)
-
-
-def find_latest_xyz_file() -> Optional[str]:
-    """Find the most recently modified ``.xyz`` file in the log dir or cwd."""
-    search_dirs: list[str] = []
-    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-    if log_dir:
-        search_dirs.append(log_dir)
-    search_dirs.append(os.getcwd())
-
-    latest_path: Optional[str] = None
-    latest_mtime = -1.0
-    for base in search_dirs:
-        if not base or not os.path.isdir(base):
-            continue
-        for path in Path(base).rglob("*.xyz"):
-            try:
-                mtime = path.stat().st_mtime
-            except OSError:
-                continue
-            if mtime > latest_mtime:
-                latest_mtime = mtime
-                latest_path = str(path)
-    return latest_path
 
 
 def find_latest_xyz_file_in_dir(directory: str) -> Optional[str]:

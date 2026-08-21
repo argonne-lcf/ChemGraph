@@ -40,6 +40,8 @@ def init_session_state() -> None:
         "pending_interrupt_model": None,  # str: model active when query started
         "pending_interrupt_workflow": None,  # str: workflow active when query started
         "pending_interrupt_log_dir": None,  # str: log dir active when query started
+        "pending_interrupt_turn_dir": None,  # str: per-query artifact dir of the run
+        "pending_interrupt_artifact_snapshot": None,  # dict: log-dir snapshot at query start
         "interrupt_count": 0,  # int: safety counter for sequential interrupts
         "interrupt_exchanges": [],  # list of {"question": str, "answer": str}
     }

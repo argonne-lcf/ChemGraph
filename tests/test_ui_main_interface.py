@@ -1,5 +1,6 @@
 from contextlib import nullcontext
 import os
+from pathlib import Path
 
 from chemgraph.models.supported_models import supported_argo_models
 from ui._pages import main_interface as main_ui
@@ -428,6 +429,127 @@ def test_artifact_log_dir_prefers_conversation_entry():
     entry = {"log_dir": "/current/chat"}
 
     assert main_ui._artifact_log_dir(messages, entry) == "/current/chat"
+
+
+def test_entry_artifact_kinds_distinguishes_legacy_and_recorded_entries():
+    assert main_ui._entry_artifact_kinds({}) is None
+    assert main_ui._entry_artifact_kinds({"artifacts": []}) == {}
+
+    kinds = main_ui._entry_artifact_kinds(
+        {"artifacts": ["water.xyz", "ir_spectrum_water.png"]}
+    )
+    assert kinds["structures"] == ["water.xyz"]
+    assert kinds["ir_plots"] == ["ir_spectrum_water.png"]
+
+
+def test_exchange_structure_path_uses_own_artifacts_not_newest(tmp_path):
+    own = tmp_path / "mol.xyz"
+    own.write_text("1\n\nH 0 0 0\n")
+    stale = tmp_path / "stale.xyz"
+    stale.write_text("1\n\nHe 0 0 0\n")
+    os.utime(own, (1, 1))
+    os.utime(stale, (99, 99))  # newer file from another query
+
+    entry = {"artifacts": ["mol.xyz"], "log_dir": str(tmp_path)}
+
+    assert main_ui._exchange_structure_path([], entry, "") == str(own)
+
+
+def test_exchange_structure_path_empty_artifacts_never_falls_back(tmp_path):
+    (tmp_path / "stale.xyz").write_text("1\n\nHe 0 0 0\n")
+    entry = {
+        "artifacts": [],
+        "log_dir": str(tmp_path),
+        "query": "optimize the geometry of water",
+    }
+
+    assert main_ui._exchange_structure_path([], entry, "") is None
+
+
+def test_exchange_structure_path_legacy_entry_uses_dir_scan(monkeypatch, tmp_path):
+    monkeypatch.setattr(main_ui, "has_structure_signal", lambda *a: True)
+    monkeypatch.setattr(
+        main_ui, "find_latest_xyz_file_in_dir", lambda d: f"{d}/found.xyz"
+    )
+    entry = {"log_dir": str(tmp_path), "query": "optimize water"}
+
+    assert main_ui._exchange_structure_path([], entry, "") == f"{tmp_path}/found.xyz"
+
+
+def test_artifact_log_dir_rejects_fallback_outside_ui_log_root(
+    monkeypatch, tmp_path
+):
+    fake_st = _FakeStreamlit()
+    root = tmp_path / "cg_logs"
+    inside = root / "ui_session_1"
+    inside.mkdir(parents=True)
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    fake_st.session_state.ui_log_root = str(root)
+    monkeypatch.setattr(main_ui, "st", fake_st)
+
+    inside_msg = [{"content": f"saved to {inside / 'output.json'}"}]
+    outside_msg = [{"content": f"saved to {outside / 'output.json'}"}]
+
+    assert main_ui._artifact_log_dir(inside_msg, {}) == str(inside)
+    assert main_ui._artifact_log_dir(outside_msg, {}) is None
+    # An explicit entry log_dir always wins and is never filtered.
+    assert main_ui._artifact_log_dir(outside_msg, {"log_dir": "/current"}) == "/current"
+
+
+def test_num_nonvibrational_modes_prefers_exchange_structure(monkeypatch, tmp_path):
+    from ase import Atoms
+
+    water = Atoms("H2O", positions=[[0, 0.76, 0.59], [0, -0.76, 0.59], [0, 0, 0]])
+    co2 = Atoms("CO2", positions=[[0, 0, 0], [0, 0, 1.16], [0, 0, -1.16]])
+
+    read_paths = []
+
+    def fake_read(path):
+        read_paths.append(path)
+        return water if path == "own.xyz" else co2
+
+    monkeypatch.setattr(main_ui, "ase_read", fake_read)
+    monkeypatch.setattr(
+        main_ui, "find_latest_xyz_file_in_dir", lambda _d: "newest.xyz"
+    )
+
+    # With an exchange structure the directory is never scanned.
+    assert main_ui._num_nonvibrational_modes(9, "/logs", structure_path="own.xyz") == 6
+    assert read_paths == ["own.xyz"]
+
+
+def test_activate_turn_dir_gives_each_query_its_own_artifact_dir(
+    monkeypatch, tmp_path
+):
+    first = main_ui._activate_turn_dir(str(tmp_path), 1)
+    second = main_ui._activate_turn_dir(str(tmp_path), 2)
+
+    assert first != second
+    assert os.path.isdir(first) and os.path.isdir(second)
+    assert os.environ["CHEMGRAPH_LOG_DIR"] == second
+    assert Path(first).parent == tmp_path
+    assert main_ui._activate_turn_dir(None, 3) is None
+    monkeypatch.delenv("CHEMGRAPH_LOG_DIR", raising=False)
+
+
+def test_turn_dirs_keep_same_named_artifacts_distinct(tmp_path):
+    """Two runs producing water_opt.traj must not collide in the manifest."""
+    from ui import artifacts
+
+    chat_dir = tmp_path
+    before1 = artifacts.snapshot_mtimes(str(chat_dir))
+    (chat_dir / "turn_001").mkdir()
+    (chat_dir / "turn_001" / "water_opt.traj").write_text("run1")
+    run1 = artifacts.collect_new_files(str(chat_dir), before1)
+
+    before2 = artifacts.snapshot_mtimes(str(chat_dir))
+    (chat_dir / "turn_002").mkdir()
+    (chat_dir / "turn_002" / "water_opt.traj").write_text("run2")
+    run2 = artifacts.collect_new_files(str(chat_dir), before2)
+
+    assert run1 == ["turn_001/water_opt.traj"]
+    assert run2 == ["turn_002/water_opt.traj"]
 
 
 def test_start_new_chat_clears_history_agent_and_log_dir(monkeypatch):
