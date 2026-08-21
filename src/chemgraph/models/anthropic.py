@@ -1,80 +1,34 @@
-"""Load Anthropic models using LangChain."""
+"""Deprecated compatibility shim for Anthropic model loading.
 
-import os
-from getpass import getpass
+Construction now lives in ``chemgraph.models.endpoints.anthropic_direct`` behind
+the Anthropic-native protocol builder. Prefer
+``chemgraph.models.loader.load_chat_model``.
+"""
+
+from __future__ import annotations
+
+import warnings
+
 from langchain_anthropic import ChatAnthropic
-from chemgraph.models.supported_models import supported_anthropic_models
+
+from chemgraph.models.endpoints import ModelRequest
+from chemgraph.models.endpoints import anthropic_direct as _anthropic_direct
 from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
+
+_DEPRECATION = (
+    "load_anthropic_model is deprecated; use "
+    "chemgraph.models.loader.load_chat_model instead."
+)
 
 
 def load_anthropic_model(
     model_name: str, temperature: float, api_key: str = None, prompt: str = None
 ) -> ChatAnthropic:
-    """
-    Load an Anthropic chat model into LangChain.
-
-    Parameters
-    ----------
-    model_name : str
-        The name of the Anthropic chat model to load. See supported_anthropic_models for list
-        of supported models.
-    temperature : float
-        Controls the randomness of the generated text. A higher temperature results
-        in more random outputs, while a lower temperature results in more deterministic outputs.
-    api_key : str, optional
-        The Anthropic API key. If not provided, the function will attempt to retrieve it
-        from the environment variable `ANTHROPIC_API_KEY`.
-
-    Returns
-    -------
-    ChatAnthropic
-        An instance of LangChain's ChatAnthropic model.
-
-    Raises
-    ------
-    ValueError
-        If the API key is not provided and cannot be retrieved from the environment.
-
-    Notes
-    -----
-    Ensure the model_name provided is one of the supported models. Unsupported models
-    will result in an exception.
-    """
-
-    if api_key is None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            logger.info("Anthropic API key not found in environment variables.")
-            api_key = getpass("Please enter your Anthropic API key: ")
-            os.environ["ANTHROPIC_API_KEY"] = api_key
-
-    if model_name not in supported_anthropic_models:
-        raise ValueError(
-            f"Unsupported model '{model_name}'. Supported models are: {supported_anthropic_models}."
-        )
-
-    try:
-        logger.info(f"Loading Anthropic model: {model_name}")
-        llm = ChatAnthropic(
-            model=model_name,
-            temperature=temperature,
-            api_key=api_key,
-            max_tokens=6000,
-        )
-        # No guarantee that api_key is valid, authentication happens only during invocation
-        logger.info(f"Requested model: {model_name}")
-        logger.info("Anthropic model loaded successfully")
-        return llm
-    except Exception as e:
-        # Can remove this since authentication happens only during invocation
-        if "AuthenticationError" in str(e) or "invalid_api_key" in str(e):
-            logger.warning("Invalid Anthropic API key.")
-            api_key = getpass("Please enter a valid Anthropic API key: ")
-            os.environ["ANTHROPIC_API_KEY"] = api_key
-            # Retry with new API key
-            return load_anthropic_model(model_name, temperature, api_key, prompt)
-        else:
-            logger.error(f"Error loading Anthropic model: {str(e)}")
-            raise
+    """Load an Anthropic chat model (deprecated). Delegates to the endpoint."""
+    warnings.warn(_DEPRECATION, DeprecationWarning, stacklevel=2)
+    request = ModelRequest(
+        model=model_name, temperature=temperature, api_key=api_key
+    )
+    return _anthropic_direct.SPEC.build(request)
