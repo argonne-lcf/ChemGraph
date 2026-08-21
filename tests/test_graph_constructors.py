@@ -1,5 +1,18 @@
 import pytest
 from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.models.endpoints import PreparedModel
+
+
+def _fake_prepared(**_kwargs):
+    """Mock ``load_chat_model_prepared``: return ``(client, PreparedModel)``."""
+    return (
+        "FAKE_LLM",
+        PreparedModel(
+            endpoint_name="test",
+            protocol="openai_compatible",
+            client_kwargs={},
+        ),
+    )
 
 
 WORKFLOWS = [
@@ -43,8 +56,8 @@ def test_constructor_is_called(monkeypatch, workflow_type):
 
     # Ensure model loading is deterministic and doesn't call external APIs
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda model_name, temperature, base_url=None: "FAKE_LLM",
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        _fake_prepared,
     )
 
     # For MCP workflows some constructors expect tools; pass a non-empty list
@@ -79,8 +92,8 @@ def test_single_agent_initialization_injects_calculator_availability(monkeypatch
         fake_constructor,
     )
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda model_name, temperature, base_url=None: "FAKE_LLM",
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        _fake_prepared,
     )
 
     cg = ChemGraph(
