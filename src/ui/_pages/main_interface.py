@@ -28,6 +28,7 @@ from chemgraph.utils.config_utils import (
     get_base_url_for_model_from_nested_config,
 )
 
+from ui import artifacts as artifact_utils
 from ui.agent_manager import initialize_agent
 from ui.branding import LOGO_IMAGES, first_existing_asset
 from ui.config import load_config
@@ -117,6 +118,37 @@ def _ensure_chat_log_dir() -> str:
     os.makedirs(chat_log_dir, exist_ok=True)
     os.environ["CHEMGRAPH_LOG_DIR"] = chat_log_dir
     return chat_log_dir
+
+
+def _activate_turn_dir(chat_log_dir: Optional[str], turn_index: int) -> Optional[str]:
+    """Create and activate a per-query subdirectory for run artifacts.
+
+    Tool artifact names are deterministic per molecule
+    (``water_opt.traj``, ``frequencies_water.csv``, ...), so a later query
+    on the same molecule would overwrite an earlier query's files in a
+    shared directory and retroactively change what that exchange
+    displays. Giving every query its own subdirectory makes the recorded
+    per-exchange artifact lists permanent.
+
+    Parameters
+    ----------
+    chat_log_dir : str, optional
+        The chat's log directory.
+    turn_index : int
+        One-based index of the query within the chat.
+
+    Returns
+    -------
+    str or None
+        The activated turn directory (also set as ``CHEMGRAPH_LOG_DIR``).
+    """
+    if not chat_log_dir:
+        return None
+    suffix = str(uuid.uuid4())[:4]
+    turn_dir = str(Path(chat_log_dir) / f"turn_{turn_index:03d}_{suffix}")
+    os.makedirs(turn_dir, exist_ok=True)
+    os.environ["CHEMGRAPH_LOG_DIR"] = turn_dir
+    return turn_dir
 
 
 def _resolve_structured_output_for_model(
@@ -431,8 +463,11 @@ def _load_session(session_id: str) -> None:
         st.sidebar.error(f"Session '{session_id}' not found.")
         return
 
-    # Rebuild conversation_history from stored messages
-    st.session_state.conversation_history = session_to_conversation_history(session)
+    # Rebuild conversation_history from stored messages, then re-attach the
+    # per-exchange artifact lists recorded in the log-dir manifest.
+    history = session_to_conversation_history(session)
+    artifact_utils.attach_artifacts_to_history(history, session.log_dir)
+    st.session_state.conversation_history = history
     st.session_state.current_session_id = session.session_id
     st.session_state.session_created = True
     st.session_state.query_input = ""
@@ -442,6 +477,8 @@ def _load_session(session_id: str) -> None:
     st.session_state.current_chat_log_dir = session.log_dir
     if session.log_dir:
         os.environ["CHEMGRAPH_LOG_DIR"] = session.log_dir
+    # A pending question belongs to the abandoned chat, not this one.
+    _clear_interrupt_state()
 
 
 def _active_session_metadata() -> tuple[str, str]:
@@ -680,25 +717,68 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
     # Find final AI response
     final_answer = _extract_final_answer(messages)
 
+    # Artifact kinds recorded for this exchange (None = legacy entry)
+    artifact_kinds = _entry_artifact_kinds(entry)
+
     # Display the AI response with visualizations
     with st.chat_message("assistant"):
         if final_answer:
             _render_markdown_with_math(final_answer)
 
         # Structure visualisation
-        html_filename = find_html_filename(messages)
+        if artifact_kinds is not None:
+            reports = artifact_kinds.get(artifact_utils.REPORTS, [])
+            html_filename = reports[-1] if reports else None
+            if html_filename is None:
+                # Reports written to an absolute path outside the log dir
+                # are not in the manifest; accept them when they exist.
+                candidate = find_html_filename(messages)
+                if (
+                    candidate
+                    and os.path.isabs(candidate)
+                    and os.path.exists(candidate)
+                ):
+                    html_filename = candidate
+        else:
+            html_filename = find_html_filename(messages)
         _render_structure_section(idx, messages, final_answer, entry, html_filename)
 
         # HTML report
         if html_filename:
             _render_html_report(idx, html_filename, messages, entry)
 
-        # IR spectrum
-        if is_infrared_requested(messages):
+        # IR spectrum: prefer the exchange's recorded artifacts; fall back to
+        # keyword sniffing only for legacy entries without a manifest.
+        if artifact_kinds is not None:
+            if artifact_kinds.get(artifact_utils.IR_PLOTS) or artifact_kinds.get(
+                artifact_utils.FREQUENCY_TABLES
+            ):
+                _render_ir_spectrum(idx, messages, entry)
+        elif is_infrared_requested(messages):
             _render_ir_spectrum(idx, messages, entry)
 
         # Debug expander
         _render_verbose_info(idx, messages, entry)
+
+
+def _entry_artifact_kinds(entry: dict) -> Optional[dict[str, list[str]]]:
+    """Return classified artifacts for an exchange, or ``None`` for legacy entries.
+
+    Parameters
+    ----------
+    entry : dict
+        Conversation-history entry.
+
+    Returns
+    -------
+    dict[str, list[str]] or None
+        Artifact buckets from the run manifest, or ``None`` when the entry
+        predates per-exchange artifact tracking.
+    """
+    files = entry.get("artifacts")
+    if files is None:
+        return None
+    return artifact_utils.classify_artifacts(files)
 
 
 def _extract_final_answer(messages: list) -> str:
@@ -777,29 +857,71 @@ def _render_structure_section(
             structure["positions"],
             title=f"Molecular Structure (Query {idx})",
         )
-    else:
-        structure_from_text = extract_molecular_structure(final_answer)
-        if structure_from_text:
+        return
+
+    structure_from_text = extract_molecular_structure(final_answer)
+    if structure_from_text:
+        display_molecular_structure(
+            structure_from_text["atomic_numbers"],
+            structure_from_text["positions"],
+            title=f"Structure from Response {idx}",
+        )
+        return
+    if html_filename:
+        return
+
+    xyz_path = _exchange_structure_path(messages, entry, final_answer)
+    if xyz_path:
+        try:
+            atoms = ase_read(xyz_path)
+            # Include the exchange index: viewer widget keys derive from
+            # the title, and two exchanges can share a file basename.
             display_molecular_structure(
-                structure_from_text["atomic_numbers"],
-                structure_from_text["positions"],
-                title=f"Structure from Response {idx}",
+                atoms.get_atomic_numbers().tolist(),
+                atoms.get_positions().tolist(),
+                title=f"Structure from {Path(xyz_path).name} (Query {idx})",
             )
-        elif not html_filename:
-            if has_structure_signal(messages, entry.get("query", ""), final_answer):
-                log_dir = _artifact_log_dir(messages, entry)
-                if log_dir and os.path.isdir(log_dir):
-                    latest_xyz = find_latest_xyz_file_in_dir(log_dir)
-                    if latest_xyz:
-                        try:
-                            atoms = ase_read(latest_xyz)
-                            display_molecular_structure(
-                                atoms.get_atomic_numbers().tolist(),
-                                atoms.get_positions().tolist(),
-                                title=f"Structure from {Path(latest_xyz).name}",
-                            )
-                        except Exception as exc:
-                            st.warning(f"Failed to load XYZ structure: {exc}")
+        except Exception as exc:
+            st.warning(f"Failed to load XYZ structure: {exc}")
+
+
+def _exchange_structure_path(
+    messages: list, entry: dict, final_answer: str
+) -> Optional[str]:
+    """Return the XYZ file to show for an exchange, or ``None``.
+
+    Entries with a recorded artifact list only ever show their own
+    structures.  Legacy entries fall back to the newest XYZ in the entry's
+    log directory, gated on the old keyword heuristic.
+
+    Parameters
+    ----------
+    messages : list
+        Message-like objects from the exchange.
+    entry : dict
+        Conversation-history entry.
+    final_answer : str
+        Final assistant answer text.
+
+    Returns
+    -------
+    str or None
+        Path to the structure file for this exchange.
+    """
+    artifact_kinds = _entry_artifact_kinds(entry)
+    if artifact_kinds is not None:
+        structures = artifact_kinds.get(artifact_utils.STRUCTURES, [])
+        if not structures:
+            return None
+        path = _resolve_artifact_path(structures[-1], entry.get("log_dir"))
+        return path if os.path.exists(path) else None
+
+    if not has_structure_signal(messages, entry.get("query", ""), final_answer):
+        return None
+    log_dir = _artifact_log_dir(messages, entry)
+    if log_dir and os.path.isdir(log_dir):
+        return find_latest_xyz_file_in_dir(log_dir)
+    return None
 
 
 def _render_html_report(
@@ -868,7 +990,23 @@ def _artifact_log_dir(messages: list, entry: dict) -> Optional[str]:
     entry_log_dir = entry.get("log_dir")
     if entry_log_dir:
         return entry_log_dir
-    return extract_log_dir_from_messages(messages)
+
+    # Fallback for legacy entries: paths mentioned in messages.  Only accept
+    # directories inside the UI log root -- anything else (e.g. the launch
+    # directory) is full of files from unrelated runs and showing one of
+    # those is worse than showing nothing.
+    candidate = extract_log_dir_from_messages(messages)
+    if not candidate:
+        return None
+    root = st.session_state.get("ui_log_root")
+    if not root:
+        return None
+    try:
+        if Path(candidate).resolve().is_relative_to(Path(root).resolve()):
+            return candidate
+    except OSError:
+        return None
+    return None
 
 
 def _latest_artifact_path(directory: Optional[str], pattern: str) -> Optional[str]:
@@ -946,7 +1084,11 @@ def _is_linear_geometry(atoms) -> bool:
     return moments[0] < 1e-3 * moments[-1]
 
 
-def _num_nonvibrational_modes(total_modes: int, log_dir: Optional[str]) -> int:
+def _num_nonvibrational_modes(
+    total_modes: int,
+    log_dir: Optional[str],
+    structure_path: Optional[str] = None,
+) -> int:
     """Return how many legacy translational/rotational rows to skip.
 
     Current frequency CSV files contain only molecular vibrations.  Legacy
@@ -959,16 +1101,20 @@ def _num_nonvibrational_modes(total_modes: int, log_dir: Optional[str]) -> int:
         Total number of rows in the frequency table.
     log_dir : str, optional
         Directory to search for a structure file used to test linearity.
+    structure_path : str, optional
+        Structure file recorded for the exchange; preferred over searching
+        *log_dir* so the geometry matches the frequency table.
 
     Returns
     -------
     int
         Number of leading modes to discard.
     """
-    if not log_dir:
-        return 0
-
-    xyz = find_latest_xyz_file_in_dir(log_dir)
+    xyz = structure_path
+    if not xyz:
+        if not log_dir:
+            return 0
+        xyz = find_latest_xyz_file_in_dir(log_dir)
     if not xyz:
         return 0
 
@@ -1008,19 +1154,43 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
         Conversation-history entry.
     """
     log_dir = _artifact_log_dir(messages, entry)
-    ir_path = _latest_artifact_path(log_dir, "ir_spectrum*.png")
-    freq_path = _latest_artifact_path(log_dir, "frequencies*.csv")
+    artifact_kinds = _entry_artifact_kinds(entry)
+    if artifact_kinds is not None:
+        # Use exactly the files this exchange produced.
+        ir_files = artifact_kinds.get(artifact_utils.IR_PLOTS, [])
+        freq_files = artifact_kinds.get(artifact_utils.FREQUENCY_TABLES, [])
+        ir_path = (
+            _resolve_artifact_path(ir_files[-1], log_dir) if ir_files else None
+        )
+        freq_path = (
+            _resolve_artifact_path(freq_files[-1], log_dir) if freq_files else None
+        )
+    else:
+        # Legacy entries: newest match in the entry's own log directory.
+        ir_path = _latest_artifact_path(log_dir, "ir_spectrum*.png")
+        freq_path = _latest_artifact_path(log_dir, "frequencies*.csv")
 
     if not ir_path and not freq_path:
         st.warning("IR spectrum not found.")
         return
 
-    with st.expander("\U0001f50d IR Spectrum", expanded=True):
+    # vib/thermo runs record frequencies but no spectrum -- label honestly.
+    label = (
+        "\U0001f50d IR Spectrum"
+        if ir_path or artifact_kinds is None
+        else "\U0001f50d Vibrational Modes"
+    )
+    with st.expander(label, expanded=True):
         col1, col2 = st.columns(2, border=True)
 
         with col1:
             if ir_path and os.path.exists(ir_path):
                 st.image(ir_path)
+            elif artifact_kinds is not None:
+                st.caption(
+                    "This run computed vibrational modes; no IR spectrum "
+                    "was requested."
+                )
             else:
                 st.warning("IR spectrum plot not found.")
 
@@ -1034,7 +1204,14 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
                 index_col=False,
                 names=["filename", "frequency"],
             )
-            n_skip = _num_nonvibrational_modes(len(df), log_dir)
+            exchange_xyz = None
+            if artifact_kinds is not None:
+                structures = artifact_kinds.get(artifact_utils.STRUCTURES, [])
+                if structures:
+                    exchange_xyz = _resolve_artifact_path(structures[-1], log_dir)
+            n_skip = _num_nonvibrational_modes(
+                len(df), log_dir, structure_path=exchange_xyz
+            )
             modes = df.iloc[n_skip:] if len(df) > n_skip else df
 
             if modes.empty:
@@ -1065,7 +1242,10 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
                 key=f"ir_frequency_select_{idx}",
             )
             traj_file = str(modes.loc[freq_options[selected_freq]]["filename"])
-            traj_path = _resolve_artifact_path(traj_file, log_dir)
+            # The CSV lists bare trajectory names; they live next to the CSV
+            # (the run's own turn directory), not at the chat-dir root.
+            traj_base = str(Path(freq_path).parent) if freq_path else log_dir
+            traj_path = _resolve_artifact_path(traj_file, traj_base)
             if not os.path.exists(traj_path):
                 st.warning(f"Trajectory file '{traj_file}' not found.")
             elif not STMOL_AVAILABLE:
@@ -1184,6 +1364,8 @@ def _clear_interrupt_state() -> None:
     st.session_state.pending_interrupt_model = None
     st.session_state.pending_interrupt_workflow = None
     st.session_state.pending_interrupt_log_dir = None
+    st.session_state.pending_interrupt_turn_dir = None
+    st.session_state.pending_interrupt_artifact_snapshot = None
     st.session_state.interrupt_count = 0
     st.session_state.interrupt_exchanges = []
 
@@ -1424,9 +1606,11 @@ def _handle_query_submission(
     st.session_state.last_run_error = None
     st.session_state.last_run_result = None
 
-    # Agent setup (mirroring agent.run() preamble)
-    if agent.log_dir:
-        os.environ["CHEMGRAPH_LOG_DIR"] = agent.log_dir
+    # Agent setup (mirroring agent.run() preamble). Tools write into a
+    # per-query turn directory inside the chat log dir.
+    turn_dir = _activate_turn_dir(
+        agent.log_dir, len(st.session_state.conversation_history) + 1
+    )
     try:
         agent._ensure_session(trimmed_query)
     except Exception:
@@ -1440,6 +1624,10 @@ def _handle_query_submission(
             prev_msg_count = len(snapshot.values.get("messages", []))
     except Exception:
         pass
+
+    # Snapshot the log dir so files created by this run can be attributed
+    # to exactly this exchange.
+    artifact_snapshot = artifact_utils.snapshot_mtimes(agent.log_dir)
 
     # Show the user's message immediately
     with st.chat_message("user"):
@@ -1483,6 +1671,12 @@ def _handle_query_submission(
             except Exception:
                 pass
 
+            run_artifacts = artifact_utils.collect_new_files(
+                agent.log_dir, artifact_snapshot
+            )
+            artifact_utils.append_manifest_entry(
+                agent.log_dir, trimmed_query, run_artifacts
+            )
             st.session_state.last_run_result = result
             st.session_state.conversation_history.append(
                 {
@@ -1490,6 +1684,7 @@ def _handle_query_submission(
                     "result": result,
                     "thread_id": thread_id,
                     "log_dir": agent.log_dir,
+                    "artifacts": run_artifacts,
                 }
             )
             _save_exchange_to_store(trimmed_query, result)
@@ -1504,6 +1699,7 @@ def _handle_query_submission(
             st.session_state.pending_interrupt_query = trimmed_query
             st.session_state.pending_interrupt_thread_id = thread_id
             st.session_state.pending_interrupt_prev_msg_count = prev_msg_count
+            st.session_state.pending_interrupt_artifact_snapshot = artifact_snapshot
             st.session_state.pending_interrupt_model = st.session_state.get(
                 "active_model"
             )
@@ -1511,6 +1707,7 @@ def _handle_query_submission(
                 "active_workflow"
             )
             st.session_state.pending_interrupt_log_dir = agent.log_dir
+            st.session_state.pending_interrupt_turn_dir = turn_dir
             st.session_state.interrupt_count = 1
             st.session_state.interrupt_exchanges = []
             st.rerun()
@@ -1543,8 +1740,10 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
         st.error("Agent was re-initialized. Please submit your query again.")
         _clear_interrupt_state()
         return
-    if agent.log_dir:
-        os.environ["CHEMGRAPH_LOG_DIR"] = agent.log_dir
+    # Resume inside the same turn directory the interrupted query used.
+    resume_dir = st.session_state.get("pending_interrupt_turn_dir") or agent.log_dir
+    if resume_dir:
+        os.environ["CHEMGRAPH_LOG_DIR"] = resume_dir
 
     MAX_INTERRUPTS = 10
 
@@ -1592,6 +1791,17 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
             new_msgs = all_msgs[prev_msg_count:]
             final_result = {"messages": new_msgs}
 
+            run_log_dir = (
+                st.session_state.get("pending_interrupt_log_dir") or agent.log_dir
+            )
+            run_artifacts = artifact_utils.collect_new_files(
+                run_log_dir,
+                st.session_state.get("pending_interrupt_artifact_snapshot") or {},
+            )
+            artifact_utils.append_manifest_entry(
+                run_log_dir, original_query, run_artifacts
+            )
+
             exchanges = list(st.session_state.interrupt_exchanges)
             st.session_state.last_run_result = final_result
             st.session_state.conversation_history.append(
@@ -1599,9 +1809,9 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
                     "query": original_query,
                     "result": final_result,
                     "thread_id": thread_id,
-                    "log_dir": st.session_state.get("pending_interrupt_log_dir")
-                    or agent.log_dir,
+                    "log_dir": run_log_dir,
                     "interrupt_exchanges": exchanges,
+                    "artifacts": run_artifacts,
                 }
             )
             _save_exchange_to_store(original_query, final_result)
