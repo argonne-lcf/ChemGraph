@@ -1,0 +1,9 @@
+# Streamlit configuration for running the ChemGraph UI from the repo root.
+# Only the accent color is set so the user's light/dark preference is kept.
+# `chemgraph ui` applies the same accent from anywhere via CLI flags.
+
+[theme]
+primaryColor = "#0E8A8C"
+
+[browser]
+gatherUsageStats = false
