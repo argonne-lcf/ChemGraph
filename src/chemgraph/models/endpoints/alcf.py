@@ -74,14 +74,13 @@ def prepare(request: ModelRequest) -> PreparedModel:
     """Prepare a curated ``alcf:`` model, selecting its cluster endpoint."""
     requested_model_name = request.model
 
-    # Resolve access token before validating, matching the previous behavior.
-    api_key = resolve_api_key(ALCF_CREDENTIAL, request.api_key)
-
     if requested_model_name not in supported_alcf_models:
         raise ValueError(
             f"Model '{requested_model_name}' is not supported on ALCF. "
             f"Supported models: {supported_alcf_models}"
         )
+
+    api_key = resolve_api_key(ALCF_CREDENTIAL, request.api_key)
 
     base_url = _resolve_base_url(requested_model_name, request.base_url)
     wire_model = _normalize_alcf_model(requested_model_name)
@@ -99,7 +98,9 @@ def prepare(request: ModelRequest) -> PreparedModel:
 SPEC = EndpointSpec(
     name="alcf",
     protocol=PROTOCOL,
-    matches=lambda model: model in supported_alcf_models,
+    # Reserve the full alcf: namespace so invalid catalog entries fail here
+    # rather than falling through to a configured vLLM/custom endpoint.
+    matches=lambda model: model.startswith(ALCF_MODEL_PREFIX),
     prepare=prepare,
     protocol_build=openai_compatible.build,
     credential=ALCF_CREDENTIAL,

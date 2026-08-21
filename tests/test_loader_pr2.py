@@ -68,6 +68,7 @@ def _route(model: str, **kwargs) -> str:
         ("codex:gpt-5", "codex"),
         ("openrouter:openai/o3", "openrouter"),  # prefix wins over OpenAI catalog
         ("argo:gpt-4o", "argo"),
+        ("alcf:nemotron-3-ultra", "alcf"),
         ("gpt-4o", "openai_direct"),
         ("claude-3-5-sonnet-20241022", "anthropic_direct"),
         ("gemini-2.5-pro", "google_direct"),
@@ -94,6 +95,20 @@ def test_known_provider_error_does_not_fall_through_to_vllm(monkeypatch):
     monkeypatch.setenv("VLLM_BASE_URL", "http://localhost:8000/v1")
     with pytest.raises(ValueError, match="Anthropic|API key|ANTHROPIC"):
         load_chat_model(model_name="claude-3-5-sonnet-20241022")
+
+
+def test_invalid_alcf_model_never_falls_through_to_vllm(monkeypatch):
+    monkeypatch.setenv("VLLM_BASE_URL", "http://localhost:8000/v1")
+
+    assert _route("alcf:not-in-catalog", api_key="dummy-alcf-token") == "alcf"
+    with patch("chemgraph.models.endpoints.alcf.resolve_api_key") as resolve_key:
+        with pytest.raises(ValueError, match="not supported on ALCF"):
+            load_chat_model(
+                model_name="alcf:not-in-catalog",
+                api_key="dummy-alcf-token",
+            )
+
+    resolve_key.assert_not_called()
 
 
 # --- Credential forwarding --------------------------------------------------
