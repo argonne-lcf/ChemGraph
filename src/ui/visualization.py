@@ -11,15 +11,35 @@ from ase.data import chemical_symbols
 from chemgraph.tools.ase_core import create_ase_atoms, create_xyz_string
 
 # ---------------------------------------------------------------------------
-# Optional stmol / py3Dmol availability
+# Optional py3Dmol availability
 # ---------------------------------------------------------------------------
 
 try:
-    import stmol
+    import py3Dmol
 
-    STMOL_AVAILABLE = True
+    PY3DMOL_AVAILABLE = True
 except ImportError:
-    STMOL_AVAILABLE = False
+    py3Dmol = None
+    PY3DMOL_AVAILABLE = False
+
+# Default viewer height in pixels; width always follows the container.
+VIEWER_HEIGHT = 420
+
+
+def render_py3dmol(view, height: int = VIEWER_HEIGHT) -> None:
+    """Embed a py3Dmol view at full container width.
+
+    Replaces the unmaintained ``stmol`` shim: py3Dmol renders itself to
+    a self-contained HTML snippet that Streamlit can embed directly.
+
+    Parameters
+    ----------
+    view : py3Dmol.view
+        Configured viewer.
+    height : int, optional
+        Component height in pixels.
+    """
+    st.components.v1.html(view._make_html(), height=height + 8, scrolling=False)
 
 
 # ---------------------------------------------------------------------------
@@ -50,14 +70,14 @@ def _stable_key(prefix: str, title: str) -> str:
     return f"{prefix}_{slug}"
 
 
-def warn_stmol_unavailable() -> None:
-    """Display a one-time warning when stmol is not installed."""
-    if STMOL_AVAILABLE or st.session_state.get("_stmol_warning_shown"):
+def warn_viewer_unavailable() -> None:
+    """Display a one-time warning when py3Dmol is not installed."""
+    if PY3DMOL_AVAILABLE or st.session_state.get("_viewer_warning_shown"):
         return
 
-    st.session_state["_stmol_warning_shown"] = True
-    st.warning("**stmol** not available -- falling back to text/table view.")
-    st.info("To enable 3D visualization, install with: `pip install stmol`")
+    st.session_state["_viewer_warning_shown"] = True
+    st.warning("**py3Dmol** not available -- falling back to text/table view.")
+    st.info("To enable 3D visualization, install with: `pip install py3Dmol`")
 
 
 def create_ase_atoms_with_streamlit_error(atomic_numbers, positions):
@@ -114,7 +134,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure") ->
 
         # 3-D panel --------------------------------------------------------
         with col1:
-            if STMOL_AVAILABLE:
+            if PY3DMOL_AVAILABLE:
                 style_options = ["ball_and_stick", "stick", "sphere", "wireframe"]
                 selected_style = st.selectbox(
                     "Visualization Style",
@@ -123,9 +143,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure") ->
                 )
 
                 try:
-                    import py3Dmol
-
-                    view = py3Dmol.view(width=500, height=400)
+                    view = py3Dmol.view(width="100%", height=VIEWER_HEIGHT)
                     view.addModel(xyz_string, "xyz")
 
                     if selected_style == "ball_and_stick":
@@ -140,7 +158,7 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure") ->
                         view.setStyle({"stick": {}, "sphere": {"scale": 0.3}})
 
                     view.zoomTo()
-                    stmol.showmol(view, height=400, width=500)
+                    render_py3dmol(view)
 
                 except Exception as viz_error:
                     st.error(f"3D visualization error: {viz_error}")
@@ -175,8 +193,6 @@ def visualize_trajectory(traj):
     py3Dmol.view
         Configured animated viewer.
     """
-    import py3Dmol
-
     xyz_frames = []
     for i, atoms in enumerate(traj):
         symbols = atoms.get_chemical_symbols()
@@ -188,7 +204,7 @@ def visualize_trajectory(traj):
         xyz_frames.append("\n".join(lines))
     xyz_str = "\n".join(xyz_frames)
 
-    view = py3Dmol.view(width=500, height=400)
+    view = py3Dmol.view(width="100%", height=VIEWER_HEIGHT)
     view.addModelsAsFrames(xyz_str, "xyz")
 
     view.setViewStyle({"style": "outline", "width": 0.05})

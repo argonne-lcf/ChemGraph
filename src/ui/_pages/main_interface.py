@@ -59,8 +59,9 @@ from ui.session_utils import (
 )
 from ui.state import init_session_state
 from ui.visualization import (
-    STMOL_AVAILABLE,
+    PY3DMOL_AVAILABLE,
     display_molecular_structure,
+    render_py3dmol,
     visualize_trajectory,
 )
 
@@ -859,8 +860,14 @@ def _render_conversation_history(thread_id: int) -> None:
         _render_single_exchange(idx, entry, thread_id)
 
 
+@st.fragment
 def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
     """Render one user-query / agent-response exchange.
+
+    Runs as a fragment so widget interactions inside an exchange (viewer
+    style, vibrational-mode selection) rerun only that exchange instead
+    of the whole app -- with long chats this is the difference between
+    an instant update and re-rendering every viewer on the page.
 
     Parameters
     ----------
@@ -1418,16 +1425,18 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
             traj_path = _resolve_artifact_path(traj_file, traj_base)
             if not os.path.exists(traj_path):
                 st.warning(f"Trajectory file '{traj_file}' not found.")
-            elif not STMOL_AVAILABLE:
-                st.info("3D viewer not available; install stmol to animate trajectories.")
+            elif not PY3DMOL_AVAILABLE:
+                st.info(
+                    "3D viewer not available; install py3Dmol to animate "
+                    "trajectories."
+                )
             else:
-                import stmol
                 from ase.io.trajectory import Trajectory
 
                 traj = Trajectory(traj_path)
                 view = visualize_trajectory(traj)
                 view.zoomTo()
-                stmol.showmol(view, height=400, width=500)
+                render_py3dmol(view)
 
 
 def _render_verbose_info(idx: int, messages: list, entry: dict) -> None:

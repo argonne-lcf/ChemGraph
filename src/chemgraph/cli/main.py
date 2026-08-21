@@ -276,6 +276,30 @@ Examples:
     # ---- "models" subcommand ---------------------------------------------
     subparsers.add_parser("models", help="List all available LLM models.")
 
+    # ---- "ui" subcommand ---------------------------------------------------
+    ui_parser = subparsers.add_parser(
+        "ui",
+        help="Launch the ChemGraph web UI (Streamlit).",
+    )
+    ui_parser.add_argument(
+        "--address",
+        default="localhost",
+        help="Bind address (default: localhost).",
+    )
+    ui_parser.add_argument(
+        "--port", type=int, default=8501, help="Port (default: 8501)."
+    )
+    ui_parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Do not open a browser window.",
+    )
+    ui_parser.add_argument(
+        "ui_args",
+        nargs=argparse.REMAINDER,
+        help="Extra arguments forwarded to 'streamlit run'.",
+    )
+
     # ---- "dashboard" subcommands ----------------------------------------
     dashboard_parser = subparsers.add_parser(
         "dashboard",
@@ -744,6 +768,25 @@ def main() -> None:
 
     elif args.command == "models":
         list_models()
+
+    elif args.command == "ui":
+        # Lazy import: the ui package needs streamlit, which is optional.
+        try:
+            from ui.streamlit_launcher import launch
+        except ImportError as exc:
+            console.print(
+                f"[red]The web UI needs streamlit: {exc}. "
+                "Install with: pip install 'chemgraph[ui]'[/red]"
+            )
+            raise SystemExit(1)
+        raise SystemExit(
+            launch(
+                address=args.address,
+                port=args.port,
+                headless=args.headless,
+                extra_args=_strip_remainder_separator(args.ui_args),
+            )
+        )
 
     elif args.command == "dashboard":
         _run_module_main(

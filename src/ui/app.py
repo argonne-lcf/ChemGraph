@@ -1,10 +1,11 @@
 """ChemGraph Streamlit application entry point.
 
-Run with:  ``streamlit run src/ui/app.py``
+Run with:  ``streamlit run src/ui/app.py``  (or ``chemgraph ui``)
 
 This thin module handles page configuration (which **must** be the first
-Streamlit call), sidebar navigation, and page dispatch.  All page content
-lives in :mod:`ui.pages`.
+Streamlit call) and navigation via ``st.navigation``, which gives each
+page its own URL and a native sidebar entry.  All page content lives in
+:mod:`ui._pages`.
 """
 
 import sys
@@ -22,7 +23,7 @@ from chemgraph import __version__ as chemgraph_version  # noqa: E402
 
 from ui.branding import ICON_IMAGES, LOGO_IMAGES, first_existing_asset  # noqa: E402
 from ui.system_info import render_sidebar_host_and_build_info  # noqa: E402
-from ui.visualization import warn_stmol_unavailable  # noqa: E402
+from ui.visualization import warn_viewer_unavailable  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Page configuration -- MUST be the first Streamlit call
@@ -40,11 +41,46 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# One-time stmol availability warning
-warn_stmol_unavailable()
+# One-time 3D viewer availability warning
+warn_viewer_unavailable()
+
 
 # ---------------------------------------------------------------------------
-# Sidebar navigation
+# Pages
+# ---------------------------------------------------------------------------
+
+
+def _chat_page() -> None:
+    """Render the chat page."""
+    from ui._pages import main_interface
+
+    main_interface.render()
+
+
+def _configuration_page() -> None:
+    """Render the configuration page."""
+    from ui._pages import configuration
+
+    configuration.render()
+
+
+def _about_page() -> None:
+    """Render the about page."""
+    from ui._pages import about
+
+    about.render()
+
+
+navigation = st.navigation(
+    [
+        st.Page(_chat_page, title="Chat", icon="\U0001f9ea", default=True),
+        st.Page(_configuration_page, title="Configuration", icon="⚙️"),
+        st.Page(_about_page, title="About", icon="\U0001f4d6"),
+    ]
+)
+
+# ---------------------------------------------------------------------------
+# Sidebar chrome shared by all pages
 # ---------------------------------------------------------------------------
 logo_image = first_existing_asset(LOGO_IMAGES)
 icon_image = first_existing_asset(ICON_IMAGES)
@@ -53,30 +89,6 @@ if logo_image:
 else:
     st.sidebar.title("\U0001f9ea ChemGraph")
 
-page = st.sidebar.radio(
-    "Navigate",
-    ["\U0001f3e0 Main Interface", "\u2699\ufe0f Configuration", "\U0001f4d6 About ChemGraph"],
-    index=0,
-    key="page_navigation",
-)
 render_sidebar_host_and_build_info()
 
-# ---------------------------------------------------------------------------
-# Page dispatch
-# ---------------------------------------------------------------------------
-if page == "\U0001f4d6 About ChemGraph":
-    from ui._pages import about
-
-    about.render()
-    st.stop()
-
-elif page == "\u2699\ufe0f Configuration":
-    from ui._pages import configuration
-
-    configuration.render()
-    st.stop()
-
-else:
-    from ui._pages import main_interface
-
-    main_interface.render()
+navigation.run()
