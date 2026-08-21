@@ -43,6 +43,7 @@ def init_session_state() -> None:
         "pending_interrupt_log_dir": None,  # str: log dir active when query started
         "pending_interrupt_turn_dir": None,  # str: per-query artifact dir of the run
         "pending_interrupt_artifact_snapshot": None,  # dict: log-dir snapshot at query start
+        "pending_interrupt_attachments": None,  # list[str]: attachment names of the run
         "interrupt_count": 0,  # int: safety counter for sequential interrupts
         "interrupt_exchanges": [],  # list of {"question": str, "answer": str}
     }
