@@ -40,6 +40,7 @@ from ui.endpoint import check_local_model_endpoint
 from ui.file_utils import (
     extract_log_dir_from_messages,
     find_latest_xyz_file_in_dir,
+    persist_uploads,
 )
 from ui.message_utils import (
     extract_messages_from_result,
@@ -291,8 +292,10 @@ def render() -> None:
         (
             "Type your response..."
             if is_interrupt
-            else "Ask a computational chemistry question..."
+            else "Ask a computational chemistry question (attach structure "
+            "or data files with the paperclip)..."
         ),
+        accept_file="multiple",
     )
 
     # Check for example query submitted via button click
@@ -301,11 +304,28 @@ def render() -> None:
         prompt = example_query
 
     if prompt:
-        if is_interrupt:
-            _handle_human_response(prompt, thread_id)
+        # With accept_file, chat_input returns an object with .text/.files;
+        # example-query buttons still submit a plain string.
+        if isinstance(prompt, str):
+            prompt_text, prompt_files = prompt, []
+        else:
+            prompt_text = prompt.text or ""
+            prompt_files = list(prompt.files or [])
+
+        if prompt_files and not prompt_text.strip():
+            st.warning(
+                "Please include a message describing what to do with the "
+                "attached file(s), then send again."
+            )
+        elif is_interrupt:
+            _handle_human_response(prompt_text, thread_id, prompt_files)
         else:
             _handle_query_submission(
-                prompt, thread_id, endpoint_status, selected_base_url
+                prompt_text,
+                thread_id,
+                endpoint_status,
+                selected_base_url,
+                prompt_files,
             )
 
 
@@ -456,6 +476,40 @@ def _finish_first_run_setup(config: dict, info) -> None:
 # ---------------------------------------------------------------------------
 # Internal renderers
 # ---------------------------------------------------------------------------
+
+
+def _attachment_note(paths: list[str]) -> str:
+    """Return the prompt suffix telling the agent where attachments live.
+
+    Parameters
+    ----------
+    paths : list[str]
+        Absolute paths of the saved attachments.
+
+    Returns
+    -------
+    str
+        Note to append to the agent query (empty when no attachments).
+    """
+    if not paths:
+        return ""
+    lines = "\n".join(f"- {path}" for path in paths)
+    return (
+        "\n\n[The user attached the following file(s). "
+        "Read them from these exact paths:\n" + lines + "\n]"
+    )
+
+
+def _render_attachment_chips(names) -> None:
+    """Show compact attachment indicators under a user message.
+
+    Parameters
+    ----------
+    names : list[str] or None
+        Display names of the attached files.
+    """
+    if names:
+        st.caption("\U0001f4ce " + " · ".join(names))
 
 
 def _render_markdown_with_math(text: str) -> None:
@@ -893,6 +947,7 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
     # User message
     with st.chat_message("user"):
         st.markdown(entry["query"])
+        _render_attachment_chips(entry.get("attachments"))
 
     # Interrupt exchanges (if any occurred during this query)
     for exch in entry.get("interrupt_exchanges", []):
@@ -1836,6 +1891,7 @@ def _clear_interrupt_state() -> None:
     st.session_state.pending_interrupt_log_dir = None
     st.session_state.pending_interrupt_turn_dir = None
     st.session_state.pending_interrupt_artifact_snapshot = None
+    st.session_state.pending_interrupt_attachments = None
     st.session_state.interrupt_count = 0
     st.session_state.interrupt_exchanges = []
 
@@ -2040,6 +2096,7 @@ def _handle_query_submission(
     thread_id: int,
     endpoint_status: dict,
     selected_base_url: Optional[str],
+    attachments: Optional[list] = None,
 ) -> None:
     """Handle a submitted user query and stream the workflow response.
 
@@ -2053,6 +2110,8 @@ def _handle_query_submission(
         Local endpoint status dictionary.
     selected_base_url : str, optional
         Model endpoint URL used in error messages.
+    attachments : list, optional
+        Uploaded files from the chat input.
     """
     if not endpoint_status["ok"]:
         msg = (
@@ -2099,14 +2158,22 @@ def _handle_query_submission(
     # to exactly this exchange.
     artifact_snapshot = artifact_utils.snapshot_mtimes(agent.log_dir)
 
+    # Save attachments into the turn directory (after the snapshot, so
+    # they are recorded as this exchange's files) and hand the agent
+    # their exact paths.
+    attachment_paths = persist_uploads(attachments, turn_dir or agent.log_dir)
+    attachment_names = [Path(p).name for p in attachment_paths]
+    agent_query = trimmed_query + _attachment_note(attachment_paths)
+
     # Show the user's message immediately
     with st.chat_message("user"):
         st.markdown(trimmed_query)
+        _render_attachment_chips(attachment_names)
 
     # Stream agent response with live tool-call display
     with st.chat_message("assistant"):
         msg_q: queue.Queue = queue.Queue()
-        inputs = {"messages": trimmed_query}
+        inputs = {"messages": agent_query}
 
         stream_thread = threading.Thread(
             target=_stream_workflow,
@@ -2145,7 +2212,10 @@ def _handle_query_submission(
                 agent.log_dir, artifact_snapshot
             )
             artifact_utils.append_manifest_entry(
-                agent.log_dir, trimmed_query, run_artifacts
+                agent.log_dir,
+                trimmed_query,
+                run_artifacts,
+                attachments=attachment_names,
             )
             st.session_state.last_run_result = result
             st.session_state.conversation_history.append(
@@ -2155,6 +2225,7 @@ def _handle_query_submission(
                     "thread_id": thread_id,
                     "log_dir": agent.log_dir,
                     "artifacts": run_artifacts,
+                    "attachments": attachment_names,
                 }
             )
             _save_exchange_to_store(trimmed_query, result)
@@ -2178,6 +2249,7 @@ def _handle_query_submission(
             )
             st.session_state.pending_interrupt_log_dir = agent.log_dir
             st.session_state.pending_interrupt_turn_dir = turn_dir
+            st.session_state.pending_interrupt_attachments = attachment_names
             st.session_state.interrupt_count = 1
             st.session_state.interrupt_exchanges = []
             st.rerun()
@@ -2188,7 +2260,9 @@ def _handle_query_submission(
             st.error(f"Processing error: {event_data}")
 
 
-def _handle_human_response(answer: str, thread_id: int) -> None:
+def _handle_human_response(
+    answer: str, thread_id: int, attachments: Optional[list] = None
+) -> None:
     """Resume the agent workflow with the human's answer.
 
     Parameters
@@ -2197,6 +2271,8 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
         Human response to the pending interrupt question.
     thread_id : int
         Current LangGraph thread ID.
+    attachments : list, optional
+        Uploaded files from the chat input.
     """
     from langgraph.types import Command
 
@@ -2217,6 +2293,15 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
 
     MAX_INTERRUPTS = 10
 
+    # Attachments sent with the reply land in the run's turn directory
+    # (after the submission-time snapshot, so the manifest records them).
+    reply_paths = persist_uploads(attachments, resume_dir)
+    reply_names = [Path(p).name for p in reply_paths]
+    if reply_names:
+        st.session_state.pending_interrupt_attachments = (
+            st.session_state.get("pending_interrupt_attachments") or []
+        ) + reply_names
+
     # Record this exchange
     st.session_state.interrupt_exchanges.append(
         {"question": current_question, "answer": answer}
@@ -2225,11 +2310,12 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
     # Show the user's reply immediately
     with st.chat_message("user"):
         st.markdown(answer)
+        _render_attachment_chips(reply_names)
 
     # Stream resumed agent response
     with st.chat_message("assistant"):
         msg_q: queue.Queue = queue.Queue()
-        resume_cmd = Command(resume=answer)
+        resume_cmd = Command(resume=answer + _attachment_note(reply_paths))
 
         stream_thread = threading.Thread(
             target=_stream_workflow,
@@ -2268,8 +2354,14 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
                 run_log_dir,
                 st.session_state.get("pending_interrupt_artifact_snapshot") or {},
             )
+            all_attachments = (
+                st.session_state.get("pending_interrupt_attachments") or []
+            )
             artifact_utils.append_manifest_entry(
-                run_log_dir, original_query, run_artifacts
+                run_log_dir,
+                original_query,
+                run_artifacts,
+                attachments=all_attachments,
             )
 
             exchanges = list(st.session_state.interrupt_exchanges)
@@ -2282,6 +2374,7 @@ def _handle_human_response(answer: str, thread_id: int) -> None:
                     "log_dir": run_log_dir,
                     "interrupt_exchanges": exchanges,
                     "artifacts": run_artifacts,
+                    "attachments": all_attachments,
                 }
             )
             _save_exchange_to_store(original_query, final_result)

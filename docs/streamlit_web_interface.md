@@ -72,6 +72,13 @@ API credentials entered in the UI should be treated as secrets. Prefer
 environment variables for shared deployments, avoid placing tokens in a
 committed TOML file, and protect network access to the Streamlit server.
 
+## Attachments
+
+Attach structure or data files (XYZ, PDB, CIF, JSON, CSV, ...) with the
+paperclip in the chat box and refer to them in your message ("optimize the
+attached structure"). Files are saved into the exchange's artifact
+directory and the agent receives their exact paths.
+
 ## Sessions and artifacts
 
 The UI maintains chat state and exposes prior sessions through its session
