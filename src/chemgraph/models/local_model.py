@@ -2,7 +2,9 @@ from langchain_ollama import ChatOllama
 from chemgraph.models.supported_models import supported_ollama_models
 
 
-def load_ollama_model(model_name: str, temperature: float) -> ChatOllama:
+def load_ollama_model(
+    model_name: str, temperature: float, base_url: str = None
+) -> ChatOllama:
     """Load an Ollama chat model into LangChain.
 
     This function loads a local Ollama model and configures it for use with
@@ -18,6 +20,9 @@ def load_ollama_model(model_name: str, temperature: float) -> ChatOllama:
         Controls the randomness of the generated text. Higher values (e.g., 0.8)
         make the output more random, while lower values (e.g., 0.2) make it more
         deterministic.
+    base_url : str, optional
+        Ollama server URL (e.g. from ``[api.local]`` in config.toml).
+        Defaults to ChatOllama's built-in ``http://localhost:11434``.
 
     Returns
     -------
@@ -38,9 +43,9 @@ def load_ollama_model(model_name: str, temperature: float) -> ChatOllama:
             f"Unsupported model '{model_name}'. Supported models are: {supported_ollama_models}."
         )
 
-    llm = ChatOllama(
-        model=model_name,
-        temperature=temperature,
-    )
+    kwargs = {"model": model_name, "temperature": temperature}
+    if base_url:
+        kwargs["base_url"] = base_url
+    llm = ChatOllama(**kwargs)
     print(f"Successfully loaded model: {model_name}")
     return llm

@@ -322,7 +322,11 @@ class ChemGraph:
                     **openai_load_kwargs,
                 )
             elif model_name in supported_ollama_models:
-                llm = load_ollama_model(model_name=model_name, temperature=temperature)
+                llm = load_ollama_model(
+                    model_name=model_name,
+                    temperature=temperature,
+                    base_url=base_url,
+                )
             elif model_name in supported_alcf_models:
                 llm = load_alcf_model(
                     model_name=model_name, base_url=base_url, api_key=api_key

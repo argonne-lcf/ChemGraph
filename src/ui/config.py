@@ -126,6 +126,10 @@ def get_default_config() -> Dict[str, Any]:
                 "base_url": "https://openrouter.ai/api/v1",
                 "timeout": 60,
             },
+            "groq": {
+                "base_url": "https://api.groq.com/openai/v1",
+                "timeout": 30,
+            },
             "local": {"base_url": "http://localhost:11434", "timeout": 60},
         },
         "chemistry": {

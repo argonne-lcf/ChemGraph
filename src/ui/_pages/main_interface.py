@@ -28,10 +28,13 @@ from chemgraph.utils.config_utils import (
     get_base_url_for_model_from_nested_config,
 )
 
+from ui import alcf_auth
 from ui import artifacts as artifact_utils
+from ui import providers
 from ui.agent_manager import initialize_agent
+from ui.provider_widgets import apply_api_key, render_alcf_login
 from ui.branding import LOGO_IMAGES, first_existing_asset
-from ui.config import load_config
+from ui.config import load_config, save_config
 from ui.endpoint import check_local_model_endpoint
 from ui.file_utils import (
     extract_log_dir_from_messages,
@@ -206,6 +209,10 @@ def render() -> None:
     natural-language queries using AI agents.
     """)
 
+    # ----- First-run setup -----
+    if _render_first_run_setup(config):
+        return
+
     # ----- Calculator availability sidebar -----
     _render_available_calculators_sidebar()
     _render_chat_controls()
@@ -221,6 +228,16 @@ def render() -> None:
 
     selected_base_url = _get_base_url_for_model(selected_model, config)
     endpoint_status = check_local_model_endpoint(selected_base_url)
+
+    # Warn when the selected model's provider is not usable yet.
+    provider_info = providers.provider_for_model(selected_model)
+    if provider_info is not None:
+        provider_state = providers.provider_status(provider_info, config)
+        if not provider_state.ready:
+            st.warning(
+                f"Model **{selected_model}** needs **{provider_state.info.label}**: "
+                f"{provider_state.detail} Set it up on the ⚙️ Configuration page."
+            )
 
     # ----- Session management sidebar -----
     _render_session_sidebar()
@@ -277,6 +294,150 @@ def render() -> None:
             _handle_query_submission(
                 prompt, thread_id, endpoint_status, selected_base_url
             )
+
+
+# ---------------------------------------------------------------------------
+# First-run setup
+# ---------------------------------------------------------------------------
+
+
+def _render_first_run_setup(config: dict) -> bool:
+    """Guide new users to a working provider before showing the chat.
+
+    Rendered only while no credentialed provider is usable and the chat
+    is empty.  Returns ``True`` when the setup screen was shown (the
+    caller should stop rendering the rest of the page).
+
+    Parameters
+    ----------
+    config : dict
+        Live nested UI configuration (mutated and saved on completion).
+
+    Returns
+    -------
+    bool
+        Whether the setup screen was rendered.
+    """
+    if st.session_state.conversation_history:
+        return False
+    if st.session_state.get("_setup_skipped"):
+        return False
+    if providers.any_provider_ready(config):
+        return False
+    # A saved local-server choice counts as completed setup even though
+    # credential checks cannot prove a local server "ready".
+    configured = providers.provider_for_model(config["general"].get("model", ""))
+    if configured is not None and configured.auth_kind == "none":
+        return False
+
+    st.info(
+        "**Welcome!** Connect ChemGraph to an LLM to get started — "
+        "pick one of the options below.",
+        icon="\U0001f44b",
+    )
+
+    tab_argo, tab_key, tab_alcf, tab_local = st.tabs(
+        [
+            "\U0001f3db Argo (Argonne)",
+            "\U0001f511 Your own API key",
+            "\U0001f310 ALCF (Globus)",
+            "\U0001f4bb Local (Ollama)",
+        ]
+    )
+
+    with tab_argo:
+        info = providers.get_provider(providers.ARGO)
+        st.caption(info.help_text)
+        user = st.text_input("ANL username", key="setup_argo_user")
+        if st.button(
+            "Use Argo",
+            key="setup_argo_go",
+            type="primary",
+            disabled=not user.strip(),
+        ):
+            config["api"]["openai"]["argo_user"] = user.strip()
+            _finish_first_run_setup(config, info)
+
+    with tab_key:
+        key_providers = [
+            p for p in providers.PROVIDERS if p.auth_kind == "api_key"
+        ]
+        chosen_label = st.selectbox(
+            "Provider",
+            [p.label for p in key_providers],
+            key="setup_key_provider",
+        )
+        chosen = next(p for p in key_providers if p.label == chosen_label)
+        st.caption(chosen.help_text)
+        key_value = st.text_input(
+            f"{chosen.label} API key",
+            type="password",
+            key="setup_api_key",
+            help=(
+                f"Applied to this session as ${chosen.env_var}; "
+                "not written to config.toml."
+            ),
+        )
+        if st.button(
+            "Apply key and start",
+            key="setup_key_go",
+            type="primary",
+            disabled=not key_value.strip(),
+        ):
+            apply_api_key(chosen.env_var, key_value)
+            _finish_first_run_setup(config, chosen)
+
+    with tab_alcf:
+        info = providers.get_provider(providers.ALCF)
+        st.caption(info.help_text)
+        if render_alcf_login(key_prefix="setup"):
+            _finish_first_run_setup(config, info)
+
+    with tab_local:
+        info = providers.get_provider(providers.OLLAMA)
+        st.caption(info.help_text)
+        base_url = st.text_input(
+            "Server URL",
+            value=config["api"]["local"]["base_url"],
+            key="setup_local_url",
+        )
+        probe = check_local_model_endpoint(base_url)
+        if probe["ok"]:
+            st.success(probe["message"])
+        else:
+            st.error(probe["message"])
+        if st.button("Use local server", key="setup_local_go", type="primary"):
+            config["api"]["local"]["base_url"] = base_url.strip()
+            _finish_first_run_setup(config, info)
+
+    st.caption(
+        "You can change providers anytime on the ⚙️ Configuration page."
+    )
+    if st.button("Skip setup for now", key="setup_skip"):
+        st.session_state._setup_skipped = True
+        st.rerun()
+    return True
+
+
+def _finish_first_run_setup(config: dict, info) -> None:
+    """Persist the chosen provider/model and enter the chat.
+
+    Parameters
+    ----------
+    config : dict
+        Live nested UI configuration.
+    info : providers.ProviderInfo
+        The chosen provider.
+    """
+    config["general"]["model"] = info.default_model
+    providers.align_base_url_for_provider(config, info.id)
+    st.session_state.config = config
+    save_config(config)
+    # Local servers stay "unproven" to any_provider_ready, so remember
+    # that setup finished to avoid re-gating the chat.
+    st.session_state._setup_skipped = True
+    st.toast(f"Ready — using {info.default_model}", icon="\U0001f680")
+    st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +789,13 @@ def _auto_initialize_agent(
     selected_base_url : str, optional
         Model endpoint URL.
     """
+    # ALCF models authenticate via the exported Globus token; refresh it
+    # before the loader reads it, and re-initialize when it changes.
+    alcf_token = None
+    provider_info = providers.provider_for_model(selected_model)
+    if provider_info is not None and provider_info.auth_kind == "globus":
+        alcf_token = alcf_auth.ensure_access_token()
+
     current_config = (
         selected_model,
         selected_workflow,
@@ -639,6 +807,7 @@ def _auto_initialize_agent(
         selected_base_url,
         get_argo_user_from_nested_config(config),
         st.session_state.get("current_chat_log_dir"),
+        alcf_token,
     )
 
     if st.session_state.agent is None or st.session_state.last_config != current_config:
@@ -669,6 +838,7 @@ def _auto_initialize_agent(
                     selected_base_url,
                     get_argo_user_from_nested_config(config),
                     chat_log_dir,
+                    alcf_token,
                 )
             else:
                 st.session_state.last_config = None

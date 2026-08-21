@@ -96,7 +96,9 @@ def load_chat_model(
             kwargs["argo_user"] = argo_user
         return load_openai_model(**kwargs)
     elif model_name in supported_ollama_models:
-        return load_ollama_model(model_name=model_name, temperature=temperature)
+        return load_ollama_model(
+            model_name=model_name, temperature=temperature, base_url=base_url
+        )
     elif model_name in supported_alcf_models:
         return load_alcf_model(
             model_name=model_name, base_url=base_url, api_key=api_key
