@@ -55,6 +55,97 @@ def load_ir_spectrum_csv(
     return frequencies, intensities
 
 
+def load_ir_peaks_csv(
+    path: str,
+) -> Optional[list[dict]]:
+    """Read a ``mode,frequency_cm1,intensity`` CSV written by the IR driver.
+
+    Parameters
+    ----------
+    path : str
+        Peaks CSV path.
+
+    Returns
+    -------
+    list[dict] or None
+        One record per mode: ``{"mode": int, "frequency": float | None,
+        "intensity": float, "imaginary": bool}``; ``frequency`` is the
+        magnitude and ``None`` marks unparsable rows. ``None`` is returned
+        when the file is missing or holds no modes.
+    """
+    peaks: list[dict] = []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for row in csv.reader(f):
+                if len(row) < 3:
+                    continue
+                try:
+                    mode = int(row[0])
+                    intensity = float(row[2])
+                except ValueError:
+                    continue  # header or junk line
+                freq_text = row[1].strip()
+                imaginary = freq_text.endswith("i")
+                try:
+                    frequency = float(freq_text.rstrip("i"))
+                except ValueError:
+                    frequency = None
+                peaks.append(
+                    {
+                        "mode": mode,
+                        "frequency": frequency,
+                        "intensity": intensity,
+                        "imaginary": imaginary,
+                    }
+                )
+    except OSError:
+        return None
+    return peaks or None
+
+
+def gaussian_broadened_spectrum(
+    frequencies: list[float],
+    intensities: list[float],
+    width: float,
+    npts: int = 1200,
+) -> tuple[list[float], list[float]]:
+    """Fold peaks into a Gaussian-broadened spectrum, matching ASE.
+
+    Follows :meth:`ase.vibrations.Vibrations.fold` with
+    ``normalize=False``: each peak is an unnormalized Gaussian of height
+    ``intensity`` whose full width at half maximum is *width*.
+
+    Parameters
+    ----------
+    frequencies : list[float]
+        Peak positions in cm^-1 (real modes only).
+    intensities : list[float]
+        Peak intensities, same length as *frequencies*.
+    width : float
+        FWHM of the Gaussians in cm^-1.
+    npts : int, optional
+        Number of grid points.
+
+    Returns
+    -------
+    tuple[list[float], list[float]]
+        Grid and folded spectrum.
+    """
+    import numpy as np
+
+    freqs = np.asarray(frequencies, dtype=float)
+    intens = np.asarray(intensities, dtype=float)
+    start = max(0.0, float(freqs.min()) - max(200.0, 3.0 * width))
+    end = float(freqs.max()) + max(200.0, 3.0 * width)
+    sigma = width / 2.0 / np.sqrt(2.0 * np.log(2.0))
+    grid = np.linspace(start, end, npts)
+    spectrum = (
+        intens[None, :]
+        * np.exp(-((freqs[None, :] - grid[:, None]) ** 2) / 2.0 / sigma**2)
+    ).sum(axis=1)
+    return grid.tolist(), spectrum.tolist()
+
+
 def ir_spectrum_figure(
     frequencies: list[float], intensities: list[float]
 ) -> go.Figure:

@@ -29,6 +29,7 @@ MANIFEST_FILENAME = "ui_artifacts.json"
 STRUCTURES = "structures"
 IR_PLOTS = "ir_plots"
 IR_SPECTRA = "ir_spectra"
+IR_PEAKS = "ir_peaks"
 FREQUENCY_TABLES = "frequency_tables"
 MODE_TRAJECTORIES = "mode_trajectories"
 TRAJECTORIES = "trajectories"
@@ -118,6 +119,8 @@ def classify_artifacts(files: list[str]) -> dict[str, list[str]]:
             _add(IR_PLOTS, rel)
         elif name.endswith(".csv") and name.startswith("ir_spectrum"):
             _add(IR_SPECTRA, rel)
+        elif name.endswith(".csv") and name.startswith("ir_peaks"):
+            _add(IR_PEAKS, rel)
         elif name.endswith(".csv") and name.startswith("frequencies"):
             _add(FREQUENCY_TABLES, rel)
         elif fnmatch.fnmatch(name, "*_vib.*.traj"):
