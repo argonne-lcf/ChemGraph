@@ -9,7 +9,7 @@ stale artifacts from earlier sessions.  Per-exchange attribution lives in
 
 import os
 import re
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Optional
 
 
@@ -48,9 +48,10 @@ def _is_absolute_output_path(path: str) -> bool:
     """Return whether *path* is absolute on the platform it came from.
 
     Agent messages can quote paths from either path flavor (e.g. a stored
-    session moved between machines), so Windows drive paths are accepted
-    even when the app runs on POSIX -- non-existent ones are discarded by
-    the callers' existence/containment checks.
+    session moved between machines), so both flavors are checked
+    explicitly -- ``os.path.isabs`` would answer only for the platform
+    the app happens to run on. Non-existent paths are discarded by the
+    callers' existence/containment checks.
 
     Parameters
     ----------
@@ -62,11 +63,16 @@ def _is_absolute_output_path(path: str) -> bool:
     bool
         ``True`` for POSIX-absolute or Windows drive-absolute paths.
     """
-    return os.path.isabs(path) or bool(_WINDOWS_DRIVE_RE.match(path))
+    return path.startswith("/") or bool(_WINDOWS_DRIVE_RE.match(path))
 
 
 def _parent_directory(path: str) -> str:
     """Return the parent directory of *path*, honoring its path flavor.
+
+    Uses the Pure* path classes so the result keeps the flavor of the
+    input on every platform: ``pathlib.Path`` would rewrite a POSIX path
+    to backslashes when running on Windows (and cannot split a Windows
+    path when running on POSIX).
 
     Parameters
     ----------
@@ -79,9 +85,8 @@ def _parent_directory(path: str) -> str:
         Parent directory in the same form.
     """
     if _WINDOWS_DRIVE_RE.match(path):
-        # PureWindowsPath understands backslashes on every platform.
         return str(PureWindowsPath(path).parent)
-    return str(Path(path).parent)
+    return str(PurePosixPath(path).parent)
 
 
 def extract_log_dir_from_messages(messages: Any) -> Optional[str]:
