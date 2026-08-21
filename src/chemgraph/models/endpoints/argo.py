@@ -1,9 +1,8 @@
-"""Argo endpoints (hosted Argo API and shim/proxy/custom OpenAI-compatible).
+"""Argo endpoints for its Anthropic-native and OpenAI-compatible protocols.
 
-Owns everything Argo-specific: the wire-name maps, ``CHEMGRAPH_ARGO_MODEL_FORMAT``
-handling, localhost detection, prefix removal, Claude streaming, minimal-parameter
-models, Argo ``user`` payload, and the ``supports_structured_output=False``
-capability. All logic is moved verbatim from the previous ``models/openai.py``.
+Claude-prefixed Argo models use Anthropic Messages. Other Argo models use the
+OpenAI-compatible chat-completions interface. This module owns their shared
+wire-name mapping, credential resolution, base URLs, and endpoint quirks.
 """
 
 from __future__ import annotations
@@ -21,9 +20,11 @@ from chemgraph.models.endpoints.openai_direct import (
     assemble_client_kwargs,
     validate_reasoning_effort,
 )
-from chemgraph.models.protocols import openai_compatible
+from chemgraph.models.protocols import anthropic_native, openai_compatible
 from chemgraph.models.supported_models import (
+    ARGO_DEFAULT_ANTHROPIC_BASE_URL,
     ARGO_DEFAULT_BASE_URL,
+    MODELS_WITHOUT_TEMPERATURE,
     supported_argo_models,
 )
 from chemgraph.utils.config_utils import normalize_openai_base_url
@@ -31,7 +32,8 @@ from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
-PROTOCOL = "openai_compatible"
+OPENAI_PROTOCOL = "openai_compatible"
+ANTHROPIC_PROTOCOL = "anthropic_native"
 
 ARGO_PREFIX = "argo:"
 
@@ -68,6 +70,10 @@ ARGO_MODEL_MAP = {
     "argo:gemini-3.1-flash-lite": "gemini31flashlite",
     "argo:gemini-3.5-flash": "gemini35flash",
     # Claude via Argo
+    "argo:claude-sonnet-5": "claudesonnet5",
+    "argo:claude-opus-5": "claudeopus5",
+    "argo:claude-opus-4.8": "claudeopus48",
+    "argo:claude-opus-4.7": "claudeopus47",
     "argo:claude-opus-4.6": "claudeopus46",
     "argo:claude-opus-4.5": "claudeopus45",
     "argo:claude-opus-4.1": "claudeopus41",
@@ -83,8 +89,7 @@ ARGO_LOCAL_OPENAI_MODEL_MAP = {
     "argo:gpt-5.4": "GPT-5.4",
 }
 
-# Argo authenticates via the 'user' field, not an API key. A non-empty
-# placeholder is still required because ChatOpenAI demands a value.
+# Argo expects the Argonne username in the client library's API-key field.
 ARGO_CREDENTIAL = CredentialPolicy(env_var="OPENAI_API_KEY", required=False)
 
 
@@ -92,8 +97,8 @@ def _normalize_argo_model(model_name: str, base_url: str | None) -> str:
     """Normalize an ``argo:``-prefixed model name for the target endpoint.
 
     * Hosted Argo API endpoints use internal wire names via ``ARGO_MODEL_MAP``.
-    * Argo shim, ArgoProxy, and custom OpenAI-compatible endpoints strip the
-      ``argo:`` prefix and keep the OpenAI-style name.
+    * Argo shim, ArgoProxy, and custom endpoints strip the ``argo:`` prefix and
+      keep the client-facing model name.
     """
     if not model_name.startswith(ARGO_PREFIX):
         return model_name
@@ -111,7 +116,7 @@ def _normalize_argo_model(model_name: str, base_url: str | None) -> str:
     if is_local_http_endpoint(base_url):
         stripped = _normalize_argo_local_openai_model(model_name)
         logger.info(
-            "Using OpenAI-style Argo model for local endpoint '%s': '%s' -> '%s'",
+            "Using local Argo model for endpoint '%s': '%s' -> '%s'",
             base_url,
             model_name,
             stripped,
@@ -148,7 +153,7 @@ def _normalize_argo_wire_model(model_name: str) -> str:
 
 
 def _resolve_argo_api_key(request: ModelRequest) -> str:
-    """Resolve the value passed as the ChatOpenAI api_key for Argo routes.
+    """Resolve the value passed in the API-key field for Argo routes.
 
     Mirrors the previous ``load_openai_model``: explicit key, else
     ``OPENAI_API_KEY``, else the argo user / ``ARGO_USER`` / ``"chemgraph"``
@@ -162,8 +167,36 @@ def _resolve_argo_api_key(request: ModelRequest) -> str:
     return api_key
 
 
-def prepare(request: ModelRequest) -> PreparedModel:
-    """Prepare an ``argo:`` model for hosted, shim, or custom endpoints."""
+def _normalize_argo_anthropic_base_url(base_url: str | None) -> str:
+    """Return an API root suitable for ``ChatAnthropic``.
+
+    Existing Argo configuration commonly points at the OpenAI-compatible
+    ``/v1`` root (or the legacy resource-chat URL). Normalize those forms and
+    remove the trailing ``/v1`` because ``ChatAnthropic`` appends
+    ``/v1/messages`` itself.
+    """
+    normalized = normalize_openai_base_url(base_url)
+    if not normalized:
+        return ARGO_DEFAULT_ANTHROPIC_BASE_URL
+
+    normalized = normalized.rstrip("/")
+    if normalized.endswith("/v1"):
+        normalized = normalized.removesuffix("/v1")
+    return normalized
+
+
+def is_argo_anthropic_model(model: str) -> bool:
+    """Return whether an Argo model should use Anthropic Messages."""
+    return model.startswith("argo:claude-")
+
+
+def is_argo_openai_model(model: str) -> bool:
+    """Return whether an Argo model should use OpenAI chat completions."""
+    return model.startswith(ARGO_PREFIX) and not is_argo_anthropic_model(model)
+
+
+def prepare_openai(request: ModelRequest) -> PreparedModel:
+    """Prepare a non-Claude ``argo:`` model for OpenAI-compatible transport."""
     requested_model_name = request.model
     base_url = normalize_openai_base_url(request.base_url)
 
@@ -206,19 +239,67 @@ def prepare(request: ModelRequest) -> PreparedModel:
         argo_user_for_model_kwargs=argo_user if is_argo_endpoint else None,
     )
     return PreparedModel(
-        endpoint_name="argo",
-        protocol=PROTOCOL,
+        endpoint_name="argo_openai",
+        protocol=OPENAI_PROTOCOL,
         client_kwargs=client_kwargs,
         reasoning_effort=request.reasoning_effort,
         supports_structured_output=False,
     )
 
 
-SPEC = EndpointSpec(
-    name="argo",
-    protocol=PROTOCOL,
-    matches=lambda model: model.startswith(ARGO_PREFIX),
-    prepare=prepare,
+def prepare_anthropic(request: ModelRequest) -> PreparedModel:
+    """Prepare an Argo Claude model for Anthropic-native transport."""
+    requested_model_name = request.model
+    validate_reasoning_effort(requested_model_name, request.reasoning_effort)
+
+    if requested_model_name not in supported_argo_models:
+        raise ValueError(
+            f"Unsupported model '{requested_model_name}'. "
+            f"Supported models are: {supported_argo_models}."
+        )
+
+    base_url = _normalize_argo_anthropic_base_url(request.base_url)
+    api_key = _resolve_argo_api_key(request)
+    wire_model = _normalize_argo_model(requested_model_name, base_url)
+
+    logger.info("Using Argo Anthropic base URL: %s", base_url)
+    client_kwargs = dict(
+        model=wire_model,
+        api_key=api_key,
+        base_url=base_url,
+        max_tokens=4000,
+        streaming=True,
+    )
+    if requested_model_name not in MODELS_WITHOUT_TEMPERATURE:
+        client_kwargs["temperature"] = request.temperature
+
+    return PreparedModel(
+        endpoint_name="argo_anthropic",
+        protocol=ANTHROPIC_PROTOCOL,
+        client_kwargs=client_kwargs,
+        reasoning_effort=request.reasoning_effort,
+        supports_structured_output=False,
+    )
+
+
+ANTHROPIC_SPEC = EndpointSpec(
+    name="argo_anthropic",
+    protocol=ANTHROPIC_PROTOCOL,
+    matches=is_argo_anthropic_model,
+    prepare=prepare_anthropic,
+    protocol_build=anthropic_native.build,
+    credential=ARGO_CREDENTIAL,
+)
+
+OPENAI_SPEC = EndpointSpec(
+    name="argo_openai",
+    protocol=OPENAI_PROTOCOL,
+    matches=is_argo_openai_model,
+    prepare=prepare_openai,
     protocol_build=openai_compatible.build,
     credential=ARGO_CREDENTIAL,
 )
+
+# Backward compatibility for ``load_openai_model``, whose documented return
+# type remains ChatOpenAI for one release.
+SPEC = OPENAI_SPEC

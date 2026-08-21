@@ -28,15 +28,17 @@ from chemgraph.models.endpoints import vllm as vllm_ep
 from chemgraph.models.settings import LLMSettings
 
 # Ordered endpoint registry. Resolution preserves the historical dispatch order:
-# codex -> openrouter -> argo -> curated ALCF -> direct OpenAI -> direct
-# Anthropic -> direct Gemini -> Ollama -> groq. Prefix routes (``matches`` on a
-# prefix) run before catalog checks, so names such as ``openrouter:openai/o3``
-# cannot be misclassified. The vLLM/custom fallback is *not* in this list; it is
-# selected only via ``vllm.can_handle`` as a last resort.
+# codex -> openrouter -> Argo Anthropic -> Argo OpenAI -> curated ALCF ->
+# direct OpenAI -> direct Anthropic -> direct Gemini -> Ollama -> groq. Prefix
+# routes (``matches`` on a prefix) run before catalog checks, so names such as
+# ``openrouter:openai/o3`` cannot be misclassified. The vLLM/custom fallback is
+# *not* in this list; it is selected only via ``vllm.can_handle`` as a last
+# resort.
 _ENDPOINT_REGISTRY = (
     codex_ep.SPEC,
     openrouter_ep.SPEC,
-    argo_ep.SPEC,
+    argo_ep.ANTHROPIC_SPEC,
+    argo_ep.OPENAI_SPEC,
     alcf_ep.SPEC,
     openai_ep.SPEC,
     anthropic_ep.SPEC,

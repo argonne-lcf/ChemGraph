@@ -1,8 +1,9 @@
 """Deprecated compatibility shim for OpenAI / Argo model loading.
 
 The construction logic now lives in ``chemgraph.models.endpoints.openai_direct``
-and ``chemgraph.models.endpoints.argo`` behind the shared protocol builder.
-Prefer ``chemgraph.models.loader.load_chat_model``.
+and ``chemgraph.models.endpoints.argo`` behind shared protocol builders. Prefer
+``chemgraph.models.loader.load_chat_model``, which routes Argo Claude models
+through the Anthropic-native protocol.
 
 This module keeps the previous public surface -- ``load_openai_model`` and the
 ``_normalize_argo_model`` helper -- for one release.
@@ -46,8 +47,9 @@ def load_openai_model(
 ) -> ChatOpenAI:
     """Load an OpenAI or Argo chat model (deprecated).
 
-    Delegates to the ``openai_direct`` or ``argo`` endpoint depending on the
-    model name. The signature is preserved for backward compatibility.
+    Delegates to the ``openai_direct`` or Argo OpenAI-compatible endpoint. The
+    historical ChatOpenAI return type and signature are preserved for backward
+    compatibility.
     """
     warnings.warn(_DEPRECATION, DeprecationWarning, stacklevel=2)
 

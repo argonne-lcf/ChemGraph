@@ -67,7 +67,8 @@ def _route(model: str, **kwargs) -> str:
     [
         ("codex:gpt-5", "codex"),
         ("openrouter:openai/o3", "openrouter"),  # prefix wins over OpenAI catalog
-        ("argo:gpt-4o", "argo"),
+        ("argo:gpt-4o", "argo_openai"),
+        ("argo:claude-opus-4.8", "argo_anthropic"),
         ("alcf:nemotron-3-ultra", "alcf"),
         ("gpt-4o", "openai_direct"),
         ("claude-3-5-sonnet-20241022", "anthropic_direct"),
@@ -78,6 +79,44 @@ def _route(model: str, **kwargs) -> str:
 )
 def test_registry_resolves_expected_endpoint(model, expected_endpoint):
     assert _route(model) == expected_endpoint
+
+
+def test_argo_models_build_protocol_specific_clients():
+    from langchain_anthropic import ChatAnthropic
+    from langchain_openai import ChatOpenAI
+
+    claude_client, claude_prepared = load_chat_model_prepared(
+        model_name="argo:claude-opus-4.8",
+        argo_user="alice",
+    )
+    gpt_client, gpt_prepared = load_chat_model_prepared(
+        model_name="argo:gpt-4o",
+        argo_user="alice",
+    )
+
+    assert isinstance(claude_client, ChatAnthropic)
+    assert claude_prepared.protocol == "anthropic_native"
+    assert claude_prepared.client_kwargs["model"] == "claudeopus48"
+    assert claude_prepared.client_kwargs["base_url"].endswith("/argoapi")
+    assert isinstance(gpt_client, ChatOpenAI)
+    assert gpt_prepared.protocol == "openai_compatible"
+    assert gpt_prepared.client_kwargs["model"] == "gpt4o"
+    assert gpt_prepared.client_kwargs["base_url"].endswith("/argoapi/v1")
+
+
+def test_deprecated_openai_loader_preserves_argo_claude_chatopenai():
+    from langchain_openai import ChatOpenAI
+
+    from chemgraph.models.openai import load_openai_model
+
+    with pytest.warns(DeprecationWarning, match="load_openai_model is deprecated"):
+        client = load_openai_model(
+            model_name="argo:claude-opus-4.8",
+            temperature=0.0,
+            argo_user="alice",
+        )
+
+    assert isinstance(client, ChatOpenAI)
 
 
 def test_unknown_model_with_base_url_falls_to_vllm():
