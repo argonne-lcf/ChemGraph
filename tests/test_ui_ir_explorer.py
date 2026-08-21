@@ -35,6 +35,17 @@ def test_explorer_html_embeds_payload_and_libraries():
     assert "plotly_hover" in html and "plotly_unhover" in html
 
 
+def test_explorer_stops_previous_animation_before_starting_a_new_one():
+    html = build_ir_explorer_html(
+        [1.0], [1.0], [_peak(0, 1.0, 1.0)], selected_mode=0
+    )
+
+    # animate() stacks timers unless the previous loop is cancelled first;
+    # stacked timers made vibrations speed up on every hover.
+    assert "stopAnimate()" in html
+    assert html.index("viewer.stopAnimate()") < html.index("viewer.animate(")
+
+
 def test_explorer_html_escapes_closing_tags_in_payload():
     html = build_ir_explorer_html(
         curve_x=[1.0],
