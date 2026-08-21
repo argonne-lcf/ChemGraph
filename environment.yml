@@ -36,6 +36,7 @@ dependencies:
     - globus-sdk
     - streamlit==1.48.1
     - py3Dmol
+    - plotly
     - langsmith==0.10.10
     - mcp==1.28.1
     - fastmcp==3.4.4

@@ -216,3 +216,60 @@ def test_run_ase_thermo(thermo_ase_schema):
     assert "entropy" in data['thermochemistry']
     assert "gibbs_free_energy" in data['thermochemistry']
     assert "unit" in data['thermochemistry']
+
+
+def test_run_ase_opt_writes_trajectory_next_to_output(tmp_path):
+    """The optimizer records its path as {stem}_opt.traj beside the output."""
+    import shutil
+
+    input_xyz = tmp_path / "water.xyz"
+    shutil.copy2(TEST_DIR / "water.xyz", input_xyz)
+    schema = ASEInputSchema(
+        input_structure_file=str(input_xyz),
+        output_results_file=str(tmp_path / "water_output.json"),
+        driver="opt",
+        optimizer="bfgs",
+        fmax=0.5,
+        steps=5,
+        calculator={"calculator_type": "emt"},
+    )
+
+    result = run_ase.invoke({"params": schema})
+
+    assert result["status"] == "success"
+    traj_path = Path(result["trajectory_file"])
+    assert traj_path == tmp_path / "water_opt.traj"
+    assert traj_path.exists()
+
+    from ase.io.trajectory import Trajectory
+
+    with Trajectory(str(traj_path)) as traj:
+        energies = [float(a.get_potential_energy()) for a in traj]
+    assert len(energies) >= 1
+
+
+def test_write_ir_spectrum_csv_roundtrip(tmp_path):
+    from chemgraph.tools.ase_core import _write_ir_spectrum_csv
+
+    path = tmp_path / "ir_spectrum_water.csv"
+    _write_ir_spectrum_csv(str(path), [500.0, 1500.25], [0.0, 1.5e-3])
+
+    lines = path.read_text().splitlines()
+    assert lines[0] == "frequency_cm1,intensity"
+    assert lines[1] == "500.0000,0"
+    assert lines[2] == "1500.2500,0.0015"
+
+
+def test_write_ir_peaks_csv_roundtrip(tmp_path):
+    from chemgraph.tools.ase_core import _write_ir_peaks_csv
+
+    path = tmp_path / "ir_peaks_water.csv"
+    _write_ir_peaks_csv(
+        str(path),
+        [(0, "45.1200i", 0.001), (6, "1595.4321", 1.25)],
+    )
+
+    lines = path.read_text().splitlines()
+    assert lines[0] == "mode,frequency_cm1,intensity"
+    assert lines[1] == "0,45.1200i,0.001"
+    assert lines[2] == "6,1595.4321,1.25"
