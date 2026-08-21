@@ -139,7 +139,10 @@ def classify_artifacts(files: list[str]) -> dict[str, list[str]]:
 
 
 def append_manifest_entry(
-    log_dir: Optional[str], query: str, files: list[str]
+    log_dir: Optional[str],
+    query: str,
+    files: list[str],
+    attachments: Optional[list[str]] = None,
 ) -> None:
     """Append one exchange's artifact list to the log-dir manifest.
 
@@ -154,11 +157,16 @@ def append_manifest_entry(
         User query that produced the artifacts.
     files : list[str]
         Relative artifact paths for the exchange.
+    attachments : list[str], optional
+        Display names of files the user attached to the query.
     """
     if not log_dir:
         return
     entries = load_manifest(log_dir)
-    entries.append({"query": query, "files": list(files)})
+    record: dict = {"query": query, "files": list(files)}
+    if attachments:
+        record["attachments"] = list(attachments)
+    entries.append(record)
     try:
         os.makedirs(log_dir, exist_ok=True)
         manifest_path = Path(log_dir) / MANIFEST_FILENAME
@@ -219,3 +227,5 @@ def attach_artifacts_to_history(history: list[dict], log_dir: Optional[str]) -> 
         if entry.get("query") != record.get("query"):
             break
         entry["artifacts"] = list(record.get("files", []))
+        if record.get("attachments"):
+            entry["attachments"] = list(record["attachments"])
