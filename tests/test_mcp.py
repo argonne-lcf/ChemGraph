@@ -264,7 +264,7 @@ def test_run_ase_core_reports_optimization_completion(
             return -1.234
 
     class _FakeOptimizer:
-        def __init__(self, _atoms):
+        def __init__(self, _atoms, trajectory=None):
             self.nsteps = 0
 
         def run(self, *, fmax, steps):
