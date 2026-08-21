@@ -75,6 +75,10 @@ function showMode(mode) {
   }
   if (!viewer) return;
   try {
+    // Cancel the running animation loop first: animate() starts a new
+    // timer without stopping the old one, and stacked timers make the
+    // vibration play faster after every hover.
+    viewer.stopAnimate();
     viewer.removeAllModels();
     if (!p) { label.textContent = ""; viewer.render(); return; }
     if (!p.frames) { viewer.render(); return; }
@@ -140,6 +144,12 @@ spec.on("plotly_unhover", () => {
 });
 
 showMode(DATA.selected_mode);
+
+// Debug handle for automated checks (e.g. animation-timer counting).
+window.__cg_debug = {
+  timers: () => (viewer && viewer.animationTimers) ? viewer.animationTimers.size : -1,
+  mode: () => activeMode
+};
 </script>
 </body></html>
 """
