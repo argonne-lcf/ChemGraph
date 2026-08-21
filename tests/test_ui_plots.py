@@ -96,6 +96,66 @@ def test_convergence_figure_without_forces_is_single_panel():
     assert len(fig.data) == 1
 
 
+def test_load_ir_peaks_csv_parses_modes_and_imaginary_flags(tmp_path):
+    path = tmp_path / "ir_peaks_water.csv"
+    path.write_text(
+        "mode,frequency_cm1,intensity\n"
+        "0,45.1200i,0.001\n"
+        "6,1595.4321,1.25\n"
+        "not,a,row\n"
+        "7,3650.0000,0.8\n"
+    )
+
+    peaks = plots.load_ir_peaks_csv(str(path))
+
+    assert [p["mode"] for p in peaks] == [0, 6, 7]
+    assert peaks[0]["imaginary"] is True
+    assert peaks[0]["frequency"] == 45.12
+    assert peaks[1] == {
+        "mode": 6,
+        "frequency": 1595.4321,
+        "intensity": 1.25,
+        "imaginary": False,
+    }
+    assert plots.load_ir_peaks_csv(str(tmp_path / "missing.csv")) is None
+
+
+def test_gaussian_broadening_matches_ase_fold_semantics():
+    # ASE fold with normalize=False: each peak is an unnormalized Gaussian
+    # of height == intensity and FWHM == width.
+    freqs = [1000.0, 3000.0]
+    intens = [2.0, 0.5]
+    width = 20.0
+
+    grid, spectrum = plots.gaussian_broadened_spectrum(freqs, intens, width)
+
+    import numpy as np
+
+    grid = np.asarray(grid)
+    spectrum = np.asarray(spectrum)
+    for f, i in zip(freqs, intens):
+        peak_height = spectrum[np.argmin(abs(grid - f))]
+        assert abs(peak_height - i) < 0.01 * i  # height == intensity
+        half = spectrum[np.argmin(abs(grid - (f + width / 2)))]
+        assert abs(half - i / 2) < 0.05 * i  # FWHM == width
+    # The grid covers both peaks with margin.
+    assert grid[0] < freqs[0] and grid[-1] > freqs[-1]
+
+
+def test_gaussian_broadening_width_smooths_valleys():
+    freqs = [1000.0, 1100.0]
+    intens = [1.0, 1.0]
+
+    import numpy as np
+
+    def valley(width):
+        grid, spec = plots.gaussian_broadened_spectrum(freqs, intens, width)
+        grid = np.asarray(grid)
+        return np.asarray(spec)[np.argmin(abs(grid - 1050.0))]
+
+    assert valley(5) < valley(30) < valley(80)  # wider peaks fill the gap
+
+
 def test_trajectory_reader_roundtrip_matches_ase(emt_trajectory):
     energies, _ = plots.read_optimization_trajectory(emt_trajectory)
     with Trajectory(emt_trajectory) as traj:

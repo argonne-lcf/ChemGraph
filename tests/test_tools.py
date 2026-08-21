@@ -258,3 +258,18 @@ def test_write_ir_spectrum_csv_roundtrip(tmp_path):
     assert lines[0] == "frequency_cm1,intensity"
     assert lines[1] == "500.0000,0"
     assert lines[2] == "1500.2500,0.0015"
+
+
+def test_write_ir_peaks_csv_roundtrip(tmp_path):
+    from chemgraph.tools.ase_core import _write_ir_peaks_csv
+
+    path = tmp_path / "ir_peaks_water.csv"
+    _write_ir_peaks_csv(
+        str(path),
+        [(0, "45.1200i", 0.001), (6, "1595.4321", 1.25)],
+    )
+
+    lines = path.read_text().splitlines()
+    assert lines[0] == "mode,frequency_cm1,intensity"
+    assert lines[1] == "0,45.1200i,0.001"
+    assert lines[2] == "6,1595.4321,1.25"

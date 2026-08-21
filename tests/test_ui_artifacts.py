@@ -58,6 +58,7 @@ def test_classify_artifacts_buckets_by_kind():
             "water_opt.xyz",
             "ir_spectrum_methanol.png",
             "ir_spectrum_methanol.csv",
+            "ir_peaks_methanol.csv",
             "frequencies_methanol.csv",
             "methanol_vib.3.traj",
             "water_opt.traj",
@@ -71,6 +72,7 @@ def test_classify_artifacts_buckets_by_kind():
     assert kinds[artifacts.STRUCTURES] == ["water_opt.xyz"]
     assert kinds[artifacts.IR_PLOTS] == ["ir_spectrum_methanol.png"]
     assert kinds[artifacts.IR_SPECTRA] == ["ir_spectrum_methanol.csv"]
+    assert kinds[artifacts.IR_PEAKS] == ["ir_peaks_methanol.csv"]
     assert kinds[artifacts.FREQUENCY_TABLES] == ["frequencies_methanol.csv"]
     assert kinds[artifacts.MODE_TRAJECTORIES] == ["methanol_vib.3.traj"]
     assert kinds[artifacts.TRAJECTORIES] == ["water_opt.traj"]
