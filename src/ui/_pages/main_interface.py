@@ -18,7 +18,8 @@ from ase.io import read as ase_read
 from chemgraph.agent.llm_agent import HumanInputRequired
 from chemgraph.memory.store import SessionStore
 from chemgraph.memory.durable import delete_durable_session
-from chemgraph.models.supported_models import supported_argo_models
+from chemgraph.models.endpoints import ModelRequest
+from chemgraph.models.endpoints.registry import select_endpoint
 from chemgraph.schemas.ase_input import (
     get_available_calculator_names,
     get_default_calculator_name,
@@ -120,9 +121,11 @@ def _ensure_chat_log_dir() -> str:
 
 
 def _resolve_structured_output_for_model(
-    model_name: str, structured_output: bool
+    model_name: str,
+    structured_output: bool,
+    base_url: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
-    """Disable structured output for Argo models, including quick overrides.
+    """Apply the selected endpoint's structured-output capability.
 
     Parameters
     ----------
@@ -136,10 +139,16 @@ def _resolve_structured_output_for_model(
     tuple[bool, str | None]
         Effective structured-output setting and optional warning message.
     """
-    if model_name in supported_argo_models and structured_output:
+    try:
+        spec = select_endpoint(ModelRequest(model=model_name, base_url=base_url))
+    except ValueError:
+        return structured_output, None
+
+    if not spec.supports_structured_output and structured_output:
         return (
             False,
-            "Structured output is disabled for Argo models to avoid JSON parsing errors.",
+            "Structured output is disabled for this model endpoint to avoid "
+            "JSON parsing errors.",
         )
     return structured_output, None
 
@@ -178,8 +187,11 @@ def render() -> None:
     _render_available_calculators_sidebar()
     _render_chat_controls()
 
+    selected_base_url = _get_base_url_for_model(selected_model, config)
     structured_output, ui_notice = _resolve_structured_output_for_model(
-        selected_model, structured_output
+        selected_model,
+        structured_output,
+        selected_base_url,
     )
     st.session_state.ui_notice = ui_notice
     st.session_state.active_model = selected_model
@@ -187,7 +199,6 @@ def render() -> None:
     if ui_notice:
         st.info(ui_notice)
 
-    selected_base_url = _get_base_url_for_model(selected_model, config)
     endpoint_status = check_local_model_endpoint(selected_base_url)
 
     # ----- Session management sidebar -----

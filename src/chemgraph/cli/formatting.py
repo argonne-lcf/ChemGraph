@@ -17,7 +17,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from chemgraph.models.supported_models import all_supported_models
+from chemgraph.models.endpoints.registry import CATALOG_ENDPOINTS, catalog_entries
 
 # Shared console instance for the CLI package.
 console = Console()
@@ -54,34 +54,13 @@ def list_models() -> None:
     table.add_column("Provider", style="green")
     table.add_column("Type", style="yellow")
 
-    # Categorize models by provider
-    model_info = {
-        # Prefix-routed providers first: the lookup below breaks on the first
-        # substring match, so "openrouter:openai/gpt-oss-120b" would otherwise
-        # be claimed by the "openai" / "gpt" / "llama" keys.
-        "openrouter:": {"provider": "OpenRouter", "type": "Cloud"},
-        "openai": {"provider": "OpenAI", "type": "Cloud"},
-        "gpt": {"provider": "OpenAI", "type": "Cloud"},
-        "claude": {"provider": "Anthropic", "type": "Cloud"},
-        "gemini": {"provider": "Google", "type": "Cloud"},
-        "llama": {"provider": "Meta", "type": "Local/Cloud"},
-        "qwen": {"provider": "Alibaba", "type": "Local/Cloud"},
-        "ollama": {"provider": "Ollama", "type": "Local"},
-        "groq": {"provider": "GROQ", "type": "Cloud"},
-        "argo:": {"provider": "Argo (ANL)", "type": "Cloud"},
-    }
-
-    for model in all_supported_models:
-        provider = "Unknown"
-        model_type = "Unknown"
-
-        for key, info in model_info.items():
-            if key.lower() in model.lower():
-                provider = info["provider"]
-                model_type = info["type"]
-                break
-
-        table.add_row(model, provider, model_type)
+    entries = catalog_entries()
+    for model, spec in entries:
+        table.add_row(
+            model,
+            spec.display_name or spec.name,
+            spec.model_type,
+        )
 
     table.add_row(
         "codex:<model-id>",
@@ -91,7 +70,7 @@ def list_models() -> None:
 
     console.print(table)
     console.print(
-        f"\n[bold green]Curated models available: {len(all_supported_models)}[/bold green]"
+        f"\n[bold green]Curated models available: {len(entries)}[/bold green]"
     )
 
 
@@ -109,43 +88,21 @@ def check_api_keys_status() -> None:
     table.add_column("Status", style="white", width=15)
     table.add_column("Example Models", style="dim", width=30)
 
-    api_keys = [
-        {
-            "provider": "OpenAI",
-            "env_var": "OPENAI_API_KEY",
-            "examples": "gpt-4o, gpt-4o-mini, o1",
-        },
-        {
-            "provider": "Anthropic",
-            "env_var": "ANTHROPIC_API_KEY",
-            "examples": "claude-3-5-sonnet, claude-3-opus",
-        },
-        {
-            "provider": "Google",
-            "env_var": "GEMINI_API_KEY",
-            "examples": "gemini-pro, gemini-2.5-pro",
-        },
-        {
-            "provider": "GROQ",
-            "env_var": "GROQ_API_KEY",
-            "examples": "groq:llama-3.3-70b-versatile",
-        },
-        {
-            "provider": "OpenRouter",
-            "env_var": "OPENROUTER_API_KEY",
-            "examples": "openrouter:moonshotai/kimi-k3",
-        },
-        {
-            "provider": "ALCF",
-            "env_var": "ALCF_ACCESS_TOKEN",
-            "examples": "Llama-3.1-405B, Qwen3-32B",
-        },
-        {
-            "provider": "Local/Ollama",
-            "env_var": "Not Required",
-            "examples": "llama3.2, qwen2.5",
-        },
-    ]
+    api_keys = []
+    seen: set[tuple[str, str | None]] = set()
+    for spec in CATALOG_ENDPOINTS:
+        policy = spec.credential
+        identity = (spec.display_name or spec.name, policy.env_var)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        api_keys.append(
+            {
+                "provider": identity[0],
+                "env_var": policy.env_var or "Not Required",
+                "examples": ", ".join(spec.curated_models[:2]) or "Prefix-routed",
+            }
+        )
 
     for key_info in api_keys:
         if key_info["env_var"] == "Not Required":

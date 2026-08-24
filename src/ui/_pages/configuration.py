@@ -7,6 +7,7 @@ from typing import Any, Dict
 import streamlit as st
 import toml
 
+from chemgraph.models.supported_models import ARGO_DEFAULT_BASE_URL
 from ui.config import get_default_config, load_config, save_config
 
 # ---------------------------------------------------------------------------
@@ -379,19 +380,15 @@ def _render_api_settings(config: dict) -> None:
             st.rerun()
 
     st.markdown("---")
-    api_tabs = st.tabs(["OpenAI", "Anthropic", "Google", "ALCF", "Local"])
+    api_tabs = st.tabs(
+        ["OpenAI", "Argo", "vLLM", "Anthropic", "Google", "ALCF", "Local"]
+    )
 
     with api_tabs[0]:
         config["api"]["openai"]["base_url"] = st.text_input(
             "Base URL",
             value=config["api"]["openai"]["base_url"],
             key="config_openai_url",
-        )
-        config["api"]["openai"]["argo_user"] = st.text_input(
-            "Argo User (optional)",
-            value=config["api"]["openai"].get("argo_user", ""),
-            key="config_openai_argo_user",
-            help="ANL domain username for Argo requests. If blank, ChemGraph falls back to ARGO_USER env var.",
         )
         config["api"]["openai"]["timeout"] = st.number_input(
             "Timeout (seconds)",
@@ -402,6 +399,42 @@ def _render_api_settings(config: dict) -> None:
         )
 
     with api_tabs[1]:
+        legacy_openai = config["api"].get("openai", {})
+        argo_section = config["api"].setdefault("argo", {})
+        legacy_url = legacy_openai.get("base_url", "")
+        legacy_user = legacy_openai.get("argo_user", "")
+        argo_section["base_url"] = st.text_input(
+            "Base URL",
+            value=argo_section.get("base_url")
+            or (legacy_url if "argoapi" in legacy_url else ARGO_DEFAULT_BASE_URL),
+            key="config_argo_url",
+        )
+        argo_section["argo_user"] = st.text_input(
+            "Argo User (optional)",
+            value=argo_section.get("argo_user")
+            or argo_section.get("user")
+            or legacy_user,
+            key="config_argo_user",
+            help=(
+                "ANL domain username for Argo requests. If blank, ChemGraph "
+                "falls back to ARGO_USER."
+            ),
+        )
+
+    with api_tabs[2]:
+        vllm_section = config["api"].get("vllm", {})
+        vllm_base_url = st.text_input(
+            "Base URL (optional)",
+            value=vllm_section.get("base_url", ""),
+            key="config_vllm_url",
+            help=(
+                "Endpoint for unknown/custom OpenAI-compatible model IDs. "
+                "Leave empty to disable config-based fallback."
+            ),
+        )
+        _update_vllm_config(config["api"], vllm_base_url)
+
+    with api_tabs[3]:
         config["api"]["anthropic"]["base_url"] = st.text_input(
             "Base URL",
             value=config["api"]["anthropic"]["base_url"],
@@ -415,7 +448,7 @@ def _render_api_settings(config: dict) -> None:
             key="config_anthropic_timeout",
         )
 
-    with api_tabs[2]:
+    with api_tabs[4]:
         config["api"]["google"]["base_url"] = st.text_input(
             "Base URL",
             value=config["api"]["google"]["base_url"],
@@ -429,7 +462,7 @@ def _render_api_settings(config: dict) -> None:
             key="config_google_timeout",
         )
 
-    with api_tabs[3]:
+    with api_tabs[5]:
         alcf_section = config["api"].setdefault("alcf", {})
         alcf_section["base_url"] = st.text_input(
             "Base URL",
@@ -452,7 +485,7 @@ def _render_api_settings(config: dict) -> None:
             "in the API Keys section above, or export `ALCF_ACCESS_TOKEN` in your shell."
         )
 
-    with api_tabs[4]:
+    with api_tabs[6]:
         config["api"]["local"]["base_url"] = st.text_input(
             "Base URL",
             value=config["api"]["local"]["base_url"],
@@ -465,6 +498,12 @@ def _render_api_settings(config: dict) -> None:
             value=config["api"]["local"]["timeout"],
             key="config_local_timeout",
         )
+
+
+def _update_vllm_config(api: dict, base_url: str) -> None:
+    """Preserve an absent legacy vLLM section until a URL is supplied."""
+    if "vllm" in api or base_url.strip():
+        api.setdefault("vllm", {})["base_url"] = base_url
 
 
 def _render_raw_toml(config: dict) -> None:

@@ -1,6 +1,7 @@
 from contextlib import nullcontext
 import os
 
+from chemgraph.models.supported_models import supported_argo_models
 from ui._pages import main_interface as main_ui
 from ui.message_utils import extract_molecular_structure, normalize_latex_delimiters
 
@@ -98,7 +99,7 @@ class _FakeStreamlitRich(_FakeStreamlit):
 
 
 def test_argo_structured_output_is_disabled_after_model_selection():
-    argo_model = next(iter(main_ui.supported_argo_models))
+    argo_model = next(iter(supported_argo_models))
 
     structured, notice = main_ui._resolve_structured_output_for_model(
         argo_model, True
