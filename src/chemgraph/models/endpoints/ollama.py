@@ -21,6 +21,11 @@ PROTOCOL = "ollama"
 OLLAMA_CREDENTIAL = CredentialPolicy(required=False)
 
 
+def resolve_base_url(_model: str, base_url: str | None) -> str | None:
+    """Return an optional local Ollama URL unchanged."""
+    return base_url
+
+
 def prepare(request: ModelRequest) -> PreparedModel:
     """Prepare a curated Ollama model."""
     client_kwargs = dict(
@@ -42,4 +47,9 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=ollama_native.build,
     credential=OLLAMA_CREDENTIAL,
+    config_section="local",
+    base_url_resolver=resolve_base_url,
+    curated_models=tuple(supported_ollama_models),
+    display_name="Ollama",
+    model_type="Local",
 )

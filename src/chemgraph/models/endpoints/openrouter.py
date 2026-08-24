@@ -18,6 +18,7 @@ from chemgraph.models.protocols import openai_compatible
 from chemgraph.models.supported_models import (
     MODELS_WITHOUT_TEMPERATURE,
     OPENROUTER_DEFAULT_BASE_URL,
+    supported_openrouter_models,
 )
 from chemgraph.utils.logging_config import setup_logger
 
@@ -49,6 +50,11 @@ OPENROUTER_CREDENTIAL = CredentialPolicy(
 )
 
 
+def resolve_base_url(_model: str, base_url: str | None) -> str:
+    """Resolve an explicit or default OpenRouter API URL."""
+    return base_url or OPENROUTER_DEFAULT_BASE_URL
+
+
 def prepare(request: ModelRequest) -> PreparedModel:
     """Prepare an ``openrouter:`` model. The slug is sent verbatim."""
     # Keep the prefixed name -- it is what the quirk sets are keyed on.
@@ -61,7 +67,7 @@ def prepare(request: ModelRequest) -> PreparedModel:
     client_kwargs = dict(
         model=model_name,
         api_key=api_key,
-        base_url=request.base_url or OPENROUTER_DEFAULT_BASE_URL,
+        base_url=resolve_base_url(requested_model_name, request.base_url),
         max_tokens=OPENROUTER_DEFAULT_MAX_TOKENS,
     )
     # top_p / frequency_penalty / presence_penalty are deliberately not sent:
@@ -86,4 +92,9 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=openai_compatible.build,
     credential=OPENROUTER_CREDENTIAL,
+    config_section="openrouter",
+    base_url_resolver=resolve_base_url,
+    curated_models=tuple(supported_openrouter_models),
+    accepted_prefix=OPENROUTER_PREFIX,
+    display_name="OpenRouter",
 )

@@ -28,6 +28,11 @@ ANTHROPIC_CREDENTIAL = CredentialPolicy(
 )
 
 
+def resolve_base_url(_model: str, base_url: str | None) -> str | None:
+    """Return an optional Anthropic API URL unchanged."""
+    return base_url
+
+
 def prepare(request: ModelRequest) -> PreparedModel:
     """Prepare a curated Anthropic model."""
     model_name = request.model
@@ -61,4 +66,8 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=anthropic_native.build,
     credential=ANTHROPIC_CREDENTIAL,
+    config_section="anthropic",
+    base_url_resolver=resolve_base_url,
+    curated_models=tuple(supported_anthropic_models),
+    display_name="Anthropic",
 )

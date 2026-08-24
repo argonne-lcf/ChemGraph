@@ -15,6 +15,7 @@ from chemgraph.models.endpoints.base import (
     ModelRequest,
     PreparedModel,
     is_local_http_endpoint,
+    normalize_openai_base_url,
 )
 from chemgraph.models.endpoints.openai_direct import (
     assemble_client_kwargs,
@@ -27,7 +28,6 @@ from chemgraph.models.supported_models import (
     MODELS_WITHOUT_TEMPERATURE,
     supported_argo_models,
 )
-from chemgraph.utils.config_utils import normalize_openai_base_url
 from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
@@ -89,7 +89,7 @@ ARGO_LOCAL_OPENAI_MODEL_MAP = {
 }
 
 # Argo expects the Argonne username in the client library's API-key field.
-ARGO_CREDENTIAL = CredentialPolicy(env_var="OPENAI_API_KEY", required=False)
+ARGO_CREDENTIAL = CredentialPolicy(required=False)
 
 
 def _normalize_argo_model(model_name: str, base_url: str | None) -> str:
@@ -184,6 +184,16 @@ def _normalize_argo_anthropic_base_url(base_url: str | None) -> str:
     return normalized
 
 
+def resolve_openai_base_url(_model: str, base_url: str | None) -> str:
+    """Resolve the normalized OpenAI-compatible Argo API URL."""
+    return normalize_openai_base_url(base_url) or ARGO_DEFAULT_BASE_URL
+
+
+def resolve_anthropic_base_url(_model: str, base_url: str | None) -> str:
+    """Resolve the Anthropic-native Argo API root."""
+    return _normalize_argo_anthropic_base_url(base_url)
+
+
 def is_argo_anthropic_model(model: str) -> bool:
     """Return whether an Argo model should use Anthropic Messages."""
     return model.startswith("argo:claude-")
@@ -197,13 +207,11 @@ def is_argo_openai_model(model: str) -> bool:
 def prepare_openai(request: ModelRequest) -> PreparedModel:
     """Prepare a non-Claude ``argo:`` model for OpenAI-compatible transport."""
     requested_model_name = request.model
-    base_url = normalize_openai_base_url(request.base_url)
+    base_url = resolve_openai_base_url(requested_model_name, request.base_url)
 
     validate_reasoning_effort(requested_model_name, request.reasoning_effort)
 
-    # Apply default Argo base URL for argo: models when none is specified.
-    if not base_url:
-        base_url = ARGO_DEFAULT_BASE_URL
+    if request.base_url is None:
         logger.info("Using default Argo base URL: %s", base_url)
 
     api_key = _resolve_argo_api_key(request)
@@ -257,7 +265,7 @@ def prepare_anthropic(request: ModelRequest) -> PreparedModel:
             f"Supported models are: {supported_argo_models}."
         )
 
-    base_url = _normalize_argo_anthropic_base_url(request.base_url)
+    base_url = resolve_anthropic_base_url(requested_model_name, request.base_url)
     api_key = _resolve_argo_api_key(request)
     wire_model = _normalize_argo_model(requested_model_name, base_url)
 
@@ -288,6 +296,13 @@ ANTHROPIC_SPEC = EndpointSpec(
     prepare=prepare_anthropic,
     protocol_build=anthropic_native.build,
     credential=ARGO_CREDENTIAL,
+    config_section="argo",
+    legacy_config_sections=("openai",),
+    base_url_resolver=resolve_anthropic_base_url,
+    curated_models=tuple(supported_argo_models),
+    accepted_prefix=ARGO_PREFIX,
+    display_name="Argo (ANL)",
+    supports_structured_output=False,
 )
 
 OPENAI_SPEC = EndpointSpec(
@@ -297,6 +312,13 @@ OPENAI_SPEC = EndpointSpec(
     prepare=prepare_openai,
     protocol_build=openai_compatible.build,
     credential=ARGO_CREDENTIAL,
+    config_section="argo",
+    legacy_config_sections=("openai",),
+    base_url_resolver=resolve_openai_base_url,
+    curated_models=tuple(supported_argo_models),
+    accepted_prefix=ARGO_PREFIX,
+    display_name="Argo (ANL)",
+    supports_structured_output=False,
 )
 
 # Backward compatibility for ``load_openai_model``, whose documented return
