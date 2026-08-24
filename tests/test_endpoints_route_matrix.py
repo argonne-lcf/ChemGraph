@@ -108,7 +108,6 @@ def test_argo_claude_uses_anthropic_protocol_and_wire_name():
         "base_url": ARGO_DEFAULT_ANTHROPIC_BASE_URL,
         "max_tokens": 4000,
         "streaming": True,
-        "temperature": 0.0,
     }
 
 
