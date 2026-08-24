@@ -3,6 +3,19 @@ import shutil
 import pytest
 from unittest.mock import patch, Mock
 from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.models.endpoints import PreparedModel
+
+
+def _prepared():
+    """Mock ``load_chat_model_prepared``: return ``(client, PreparedModel)``."""
+    return (
+        Mock(),
+        PreparedModel(
+            endpoint_name="test",
+            protocol="openai_compatible",
+            client_kwargs={},
+        ),
+    )
 
 
 @pytest.fixture
@@ -24,10 +37,10 @@ def clean_env():
 
 def test_init_generates_log_dir(clean_env):
     with (
-        patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load,
+        patch("chemgraph.agent.llm_agent.load_chat_model_prepared") as mock_load,
         patch("chemgraph.agent.llm_agent.construct_single_agent_graph") as mock_graph,
     ):
-        mock_load.return_value = Mock()
+        mock_load.return_value = _prepared()
         mock_graph.return_value = Mock()
 
         agent = ChemGraph()
@@ -44,10 +57,10 @@ def test_init_generates_log_dir(clean_env):
 
 def test_init_respects_env_var(clean_env):
     with (
-        patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load,
+        patch("chemgraph.agent.llm_agent.load_chat_model_prepared") as mock_load,
         patch("chemgraph.agent.llm_agent.construct_single_agent_graph") as mock_graph,
     ):
-        mock_load.return_value = Mock()
+        mock_load.return_value = _prepared()
         mock_graph.return_value = Mock()
 
         test_dir = "/tmp/test_chemgraph_logs_custom"

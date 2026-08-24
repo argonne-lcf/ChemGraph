@@ -20,6 +20,7 @@ from unittest.mock import Mock, patch
 from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.agent.turn import TurnResult, serialize_state
 from chemgraph.memory.store import SessionStore
+from chemgraph.models.endpoints import PreparedModel
 
 
 # ------------------------------------------------------------------
@@ -80,10 +81,17 @@ class _GraphStreamCompatibleWorkflow:
 def mock_agent_patches():
     """Patch LLM loading and graph streaming for fast agent creation."""
     with (
-        patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load,
+        patch("chemgraph.agent.llm_agent.load_chat_model_prepared") as mock_load,
         patch("chemgraph.agent.llm_agent.construct_single_agent_graph") as mock_constructor,
     ):
-        mock_load.return_value = Mock()
+        mock_load.return_value = (
+            Mock(),
+            PreparedModel(
+                endpoint_name="test",
+                protocol="openai_compatible",
+                client_kwargs={},
+            ),
+        )
         workflow = _GraphStreamCompatibleWorkflow()
         mock_constructor.return_value = workflow
         yield mock_load, workflow

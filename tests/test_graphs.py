@@ -5,6 +5,19 @@ from langchain_core.messages import AIMessage
 
 from chemgraph.agent import llm_agent
 from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
+from chemgraph.models.endpoints import PreparedModel
+
+
+def _fake_prepared(**_kwargs):
+    """Mock ``load_chat_model_prepared``: return ``(client, PreparedModel)``."""
+    return (
+        "FAKE_LLM",
+        PreparedModel(
+            endpoint_name="test",
+            protocol="openai_compatible",
+            client_kwargs={},
+        ),
+    )
 
 
 class _DummyTool:
@@ -66,8 +79,8 @@ def test_graph_constructor_is_called(
 
     monkeypatch.setattr(f"chemgraph.agent.llm_agent.{constructor_attr}", fake_constructor)
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda **_kwargs: "FAKE_LLM",
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        _fake_prepared,
     )
 
     cg = ChemGraph(
@@ -94,8 +107,8 @@ async def test_graph_backed_run_uses_astream_and_emits_events(monkeypatch, tmp_p
         lambda *_args, **_kwargs: workflow,
     )
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda **_kwargs: "FAKE_LLM",
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        _fake_prepared,
     )
 
     cg = ChemGraph(
@@ -132,8 +145,8 @@ def test_single_agent_initialization_injects_calculator_availability(monkeypatch
         fake_constructor,
     )
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda **_kwargs: "FAKE_LLM",
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        _fake_prepared,
     )
 
     cg = ChemGraph(
@@ -166,8 +179,8 @@ def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tm
         fake_constructor,
     )
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda **_kwargs: "FAKE_LLM",
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        _fake_prepared,
     )
 
     cg = ChemGraph(
@@ -214,8 +227,8 @@ async def test_main_agent_rejects_one_shot_run(monkeypatch, tmp_path):
         lambda *_args, **_kwargs: _FakeWorkflow(),
     )
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda **_kwargs: "FAKE_LLM",
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        _fake_prepared,
     )
     cg = ChemGraph(
         model_name="gpt-4o-mini",
@@ -238,8 +251,8 @@ def test_rag_and_xanes_default_prompts_are_preserved(monkeypatch, tmp_path):
     monkeypatch.setattr("chemgraph.agent.llm_agent.construct_rag_agent_graph", fake_constructor)
     monkeypatch.setattr("chemgraph.agent.llm_agent.construct_single_agent_xanes_graph", fake_constructor)
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda **_kwargs: "FAKE_LLM",
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        _fake_prepared,
     )
 
     ChemGraph(

@@ -150,12 +150,16 @@ supported_openrouter_models = [
     "openrouter:minimax/minimax-m2.7",
 ]
 
-# Default Argo API base URL (used when no --base-url is provided).
+# Default Argo OpenAI-compatible API base URL.
 ARGO_DEFAULT_BASE_URL = "https://apps.inside.anl.gov/argoapi/v1"
 
+# Default Argo Anthropic-native API base URL. ChatAnthropic appends
+# ``/v1/messages`` to this root.
+ARGO_DEFAULT_ANTHROPIC_BASE_URL = "https://apps.inside.anl.gov/argoapi"
+
 # Argo models -- all use the "argo:" prefix.
-# Which endpoint they hit depends on --base-url / config.
-# Default: ARGO_DEFAULT_BASE_URL (Argo API).
+# Claude models use the Anthropic-native protocol; all others use the
+# OpenAI-compatible protocol. ``--base-url`` / config may override either URL.
 supported_argo_models = [
     # GPT family
     "argo:gpt-4o",
@@ -197,7 +201,7 @@ supported_argo_models = [
     "argo:claude-sonnet-4.5",
 ]
 
-# Exact Argo model routes that require minimal ChatOpenAI construction.
+# Exact Argo model routes that require minimal client construction.
 # Optional sampling parameters are omitted for every entry in this set. Add
 # entries only after validating them against the deployed endpoint.
 MODELS_WITHOUT_TEMPERATURE = frozenset(
@@ -210,6 +214,9 @@ MODELS_WITHOUT_TEMPERATURE = frozenset(
         "argo:gpt-5",
         "argo:gpt-5-mini",
         "argo:gpt-5-nano",
+        "argo:claude-opus-5",
+        "argo:claude-opus-4.8",
+        "argo:claude-opus-4.7",
 
     }
 )

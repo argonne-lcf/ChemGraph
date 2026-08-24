@@ -1,9 +1,8 @@
-"""Route-matrix parity tests for the endpoint × protocol layer (PR 1).
+"""Route-matrix tests for the endpoint × protocol layer.
 
 Each case exercises an endpoint's ``prepare`` directly and asserts the resolved
 endpoint name, protocol, base URL, wire model name, credential source, and
-final client kwargs. These lock in behavior parity with the pre-refactor
-provider loaders before the loader and agent are migrated in PR 2.
+final client kwargs, including protocol-specific Argo routing.
 """
 
 from __future__ import annotations
@@ -22,6 +21,7 @@ from chemgraph.models.supported_models import (
     ALCF_DEFAULT_BASE_URL,
     ALCF_METIS_BASE_URL,
     ALCF_MINERVA_BASE_URL,
+    ARGO_DEFAULT_ANTHROPIC_BASE_URL,
     ARGO_DEFAULT_BASE_URL,
     OPENROUTER_DEFAULT_BASE_URL,
 )
@@ -73,10 +73,10 @@ def test_openai_direct_rejects_unknown_model():
 
 
 def test_argo_hosted_route_uses_wire_name_and_user_payload():
-    prepared = argo_ep.prepare(
+    prepared = argo_ep.prepare_openai(
         ModelRequest(model="argo:gpt-4o", base_url=ARGO_HOSTED_URL, argo_user="alice")
     )
-    assert prepared.endpoint_name == "argo"
+    assert prepared.endpoint_name == "argo_openai"
     assert prepared.protocol == "openai_compatible"
     assert prepared.supports_structured_output is False
     kwargs = prepared.client_kwargs
@@ -87,19 +87,62 @@ def test_argo_hosted_route_uses_wire_name_and_user_payload():
 
 
 def test_argo_defaults_base_url_when_absent():
-    prepared = argo_ep.prepare(ModelRequest(model="argo:gpt-4o"))
+    prepared = argo_ep.prepare_openai(ModelRequest(model="argo:gpt-4o"))
     assert prepared.client_kwargs["base_url"] == ARGO_DEFAULT_BASE_URL
 
 
-def test_argo_claude_model_streams():
-    prepared = argo_ep.prepare(
-        ModelRequest(model="argo:claude-sonnet-4.6", base_url=ARGO_HOSTED_URL)
+def test_argo_claude_uses_anthropic_protocol_and_wire_name():
+    prepared = argo_ep.prepare_anthropic(
+        ModelRequest(
+            model="argo:claude-opus-4.8",
+            base_url=ARGO_HOSTED_URL,
+            argo_user="alice",
+        )
     )
-    assert prepared.client_kwargs["streaming"] is True
+    assert prepared.endpoint_name == "argo_anthropic"
+    assert prepared.protocol == "anthropic_native"
+    assert prepared.supports_structured_output is False
+    assert prepared.client_kwargs == {
+        "model": "claudeopus48",
+        "api_key": "alice",
+        "base_url": ARGO_DEFAULT_ANTHROPIC_BASE_URL,
+        "max_tokens": 4000,
+        "streaming": True,
+    }
+
+
+@pytest.mark.parametrize(
+    "configured_url, expected_url",
+    [
+        (ARGO_HOSTED_URL, ARGO_DEFAULT_ANTHROPIC_BASE_URL),
+        (
+            "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat/",
+            ARGO_DEFAULT_ANTHROPIC_BASE_URL,
+        ),
+        ("http://localhost:8080/v1", "http://localhost:8080"),
+    ],
+)
+def test_argo_anthropic_normalizes_base_url(configured_url, expected_url):
+    prepared = argo_ep.prepare_anthropic(
+        ModelRequest(
+            model="argo:claude-opus-4.8",
+            base_url=configured_url,
+            argo_user="alice",
+        )
+    )
+    assert prepared.client_kwargs["base_url"] == expected_url
+
+
+def test_argo_anthropic_never_uses_anthropic_api_key(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-secret")
+    prepared = argo_ep.prepare_anthropic(
+        ModelRequest(model="argo:claude-opus-4.8", argo_user="alice")
+    )
+    assert prepared.client_kwargs["api_key"] == "alice"
 
 
 def test_argo_minimal_parameter_model_omits_sampling():
-    prepared = argo_ep.prepare(
+    prepared = argo_ep.prepare_openai(
         ModelRequest(model="argo:gpt-5", base_url=ARGO_HOSTED_URL)
     )
     kwargs = prepared.client_kwargs
@@ -111,7 +154,7 @@ def test_argo_minimal_parameter_model_omits_sampling():
 
 
 def test_argo_compatible_route_strips_prefix_for_local_shim():
-    prepared = argo_ep.prepare(
+    prepared = argo_ep.prepare_openai(
         ModelRequest(model="argo:gpt-4.1-mini", base_url="http://localhost:8080/v1")
     )
     # A non-argoapi custom endpoint keeps the OpenAI-style name (prefix

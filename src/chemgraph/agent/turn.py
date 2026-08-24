@@ -3,7 +3,6 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import logging
-import os
 import time
 import uuid
 from typing import Any, Collection
@@ -142,34 +141,6 @@ def serialize_state(state, *, max_depth: int = 50, _seen: set[int] | None = None
     return str(state)
 
 
-def _custom_openai_compatible_kwargs(
-    *,
-    model_name: str,
-    temperature: float,
-    base_url: str,
-    api_key: str,
-    max_tokens: int,
-    top_p: float,
-    frequency_penalty: float,
-    presence_penalty: float,
-    argo_user: str | None,
-) -> dict:
-    kwargs = {
-        "model": model_name,
-        "temperature": temperature,
-        "base_url": base_url,
-        "api_key": api_key,
-        "max_tokens": max_tokens,
-        "top_p": top_p,
-        "frequency_penalty": frequency_penalty,
-        "presence_penalty": presence_penalty,
-    }
-    user = argo_user or os.getenv("ARGO_USER")
-    if base_url and "argoapi" in base_url and user:
-        kwargs["model_kwargs"] = {"user": user}
-    return kwargs
-
-
 @dataclasses.dataclass(frozen=True)
 class TurnResult:
     """Result of one bounded ChemGraph single-agent turn."""
@@ -272,36 +243,17 @@ def _load_turn_llm(
     argo_user: str | None,
 ) -> Any:
     temperature = 0.0
-    try:
-        return load_chat_model(
-            settings=LLMSettings(
-                model=model_name,
-                base_url=base_url,
-                api_key=api_key,
-                argo_user=argo_user,
-                temperature=temperature,
-            ),
-        )
-    except ValueError:
-        pass
-
-    endpoint = os.getenv("VLLM_BASE_URL", base_url or "")
-    key = os.getenv("OPENAI_API_KEY", api_key or "dummy_vllm_key")
-    if not endpoint:
-        raise ValueError(f"Unsupported model or missing base URL for: {model_name}")
-    from langchain_openai import ChatOpenAI
-
-    return ChatOpenAI(
-        **_custom_openai_compatible_kwargs(
-            model_name=model_name,
-            temperature=temperature,
-            base_url=endpoint,
-            api_key=key,
-            max_tokens=4000,
-            top_p=1.0,
-            frequency_penalty=0.0,
-            presence_penalty=0.0,
+    # load_chat_model owns endpoint resolution, including the vLLM/custom
+    # OpenAI-compatible fallback (via the ``vllm`` endpoint). Missing
+    # credentials and invalid recognized-provider settings propagate as their
+    # actual errors rather than being swallowed and retried as a custom endpoint.
+    return load_chat_model(
+        settings=LLMSettings(
+            model=model_name,
+            base_url=base_url,
+            api_key=api_key,
             argo_user=argo_user,
+            temperature=temperature,
         ),
     )
 

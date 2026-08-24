@@ -8,6 +8,24 @@ from langchain_core.messages import AIMessage
 from chemgraph.agent.events import SUBAGENT_METADATA_KEY
 from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.agent.turn import _TurnEventCallback
+from chemgraph.models.endpoints import PreparedModel
+
+
+def _prepared(llm=None, *, supports_structured_output=True):
+    """Return a ``(client, PreparedModel)`` tuple matching the loader seam.
+
+    ``ChemGraph.__init__`` now calls ``load_chat_model_prepared``; tests mock
+    that seam and must return the same 2-tuple shape.
+    """
+    return (
+        llm if llm is not None else Mock(),
+        PreparedModel(
+            endpoint_name="test",
+            protocol="openai_compatible",
+            client_kwargs={},
+            supports_structured_output=supports_structured_output,
+        ),
+    )
 
 
 @pytest.fixture
@@ -16,8 +34,8 @@ def mock_llm():
 
 
 def test_chemgraph_initialization(tmp_path):
-    with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
-        mock_load.return_value = Mock()
+    with patch("chemgraph.agent.llm_agent.load_chat_model_prepared") as mock_load:
+        mock_load.return_value = _prepared()
         agent = ChemGraph(
             model_name="gpt-4o-mini",
             enable_memory=False,
@@ -37,8 +55,8 @@ def test_chemgraph_initialization(tmp_path):
 def test_gpt56_reasoning_effort_is_passed_to_loader(
     tmp_path, model_name, reasoning_effort, expected_effort
 ):
-    with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
-        mock_load.return_value = Mock()
+    with patch("chemgraph.agent.llm_agent.load_chat_model_prepared") as mock_load:
+        mock_load.return_value = _prepared()
         agent = ChemGraph(
             model_name=model_name,
             reasoning_effort=reasoning_effort,
@@ -51,15 +69,15 @@ def test_gpt56_reasoning_effort_is_passed_to_loader(
 
 
 def test_reasoning_effort_is_not_passed_to_sonnet5(tmp_path):
-    with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_load:
-        mock_load.return_value = Mock()
+    with patch("chemgraph.agent.llm_agent.load_chat_model_prepared") as mock_load:
+        mock_load.return_value = _prepared()
         agent = ChemGraph(
             model_name="argo:claude-sonnet-5",
             enable_memory=False,
             log_dir=str(tmp_path / "logs"),
         )
 
-    assert "reasoning_effort" not in mock_load.call_args.kwargs
+    assert mock_load.call_args.kwargs["reasoning_effort"] is None
     assert agent.reasoning_effort is None
 
 
@@ -77,14 +95,16 @@ def test_reasoning_effort_rejects_invalid_value(reasoning_effort):
 
 
 def test_agent_query(mock_llm, tmp_path):
-    with patch("chemgraph.agent.llm_agent.load_openai_model") as mock_init_load, patch(
-        "chemgraph.models.loader.load_openai_model"
+    with patch(
+        "chemgraph.agent.llm_agent.load_chat_model_prepared"
+    ) as mock_init_load, patch(
+        "chemgraph.agent.turn.load_chat_model"
     ) as mock_turn_load:
         # Set up the mock chain
         mock_chain = Mock()
         mock_chain.invoke.return_value = AIMessage(content="Test response")
         mock_llm.bind_tools.return_value = mock_chain
-        mock_init_load.return_value = mock_llm
+        mock_init_load.return_value = _prepared(mock_llm)
         mock_turn_load.return_value = mock_llm
 
         agent = ChemGraph(
@@ -268,8 +288,8 @@ async def test_cli_trace_events_are_emitted_from_astream_path(monkeypatch, tmp_p
         lambda *_args, **_kwargs: FakeWorkflow(),
     )
     monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.load_openai_model",
-        lambda **_kwargs: Mock(),
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        lambda **_kwargs: _prepared(),
     )
 
     trace = CLIRunTrace(

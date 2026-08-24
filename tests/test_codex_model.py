@@ -21,6 +21,7 @@ from chemgraph.models.codex import (
     _strip_codex_prefix,
 )
 from chemgraph.models import loader
+from chemgraph.models.protocols import codex_native
 
 
 class _FakeCodexConfig:
@@ -261,7 +262,7 @@ def test_codex_adapter_runs_existing_single_agent_tool_loop(fake_codex_sdk):
 
 def test_shared_loader_routes_codex_prefix(monkeypatch):
     monkeypatch.setattr(
-        loader,
+        codex_native,
         "load_codex_model",
         lambda model_name: ("codex-model", model_name),
     )
@@ -287,7 +288,7 @@ def test_chemgraph_routes_codex_to_supported_workflow(
 ):
     captured = {}
     monkeypatch.setattr(
-        llm_agent,
+        codex_native,
         "load_codex_model",
         lambda model_name: ("codex-model", model_name),
     )
