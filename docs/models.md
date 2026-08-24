@@ -11,9 +11,11 @@ to see the identifiers registered by your installed version.
 | Anthropic | `claude-...` | `ANTHROPIC_API_KEY` |
 | Google Gemini | `gemini-...` | `GEMINI_API_KEY` |
 | Groq | `groq:<model-id>` | `GROQ_API_KEY` |
+| OpenRouter | `openrouter:<model-id>` | `OPENROUTER_API_KEY` |
 | Argo | `argo:<model-id>` | `ARGO_USER` or `argo_user` in config |
 | ALCF endpoints | Listed by `chemgraph models` | `ALCF_ACCESS_TOKEN` |
 | Ollama | Curated local ID such as `llama3.2` | Running Ollama server; no key |
+| vLLM/custom | Custom ID plus a configured base URL | `VLLM_API_KEY` or placeholder |
 | Codex | `codex:<model-id>` | Experimental subscription setup |
 
 Only set credentials for providers you use. Do not commit secrets to
@@ -75,7 +77,10 @@ Local models vary substantially in tool-calling reliability. See
 
 ## Configuration file
 
-Non-secret endpoint settings and `argo_user` can be placed in `config.toml`.
+Non-secret endpoint settings and `[api.argo].argo_user` can be placed in
+`config.toml`. Use `[api.vllm].base_url` for an otherwise unknown custom model;
+leaving that canonical value empty prevents the direct OpenAI URL from becoming
+an accidental custom-model fallback.
 Choose the CLI model with `--model`; Streamlit reads its model default from the
 configuration file. Environment variables remain the recommended place for tokens.
 See [Configuration](configuration_with_toml.md) for supported sections and

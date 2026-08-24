@@ -40,9 +40,15 @@ max_requests_per_minute = 60
 default_profile = "standard"
 
 [api.openai]
-base_url = "https://apps.inside.anl.gov/argoapi/api/v1/resource/chat/"
+base_url = "https://api.openai.com/v1"
 timeout = 30
+
+[api.argo]
+base_url = "https://apps.inside.anl.gov/argoapi/v1"
 argo_user = ""
+
+[api.vllm]
+base_url = ""
 
 [api.groq]
 base_url = "https://api.groq.com/openai/v1"
