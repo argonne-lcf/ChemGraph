@@ -8,6 +8,7 @@ from chemgraph.models.endpoints import (
     normalize_openai_base_url as _normalize_openai_base_url,
 )
 from chemgraph.models.endpoints.configuration import (
+    has_config_section,
     resolve_argo_user,
     resolve_base_url_for_model,
 )
@@ -15,6 +16,7 @@ from chemgraph.models.endpoints.registry import (
     catalog_entries,
     catalog_models,
     config_sections,
+    match_endpoint,
 )
 
 
@@ -128,7 +130,8 @@ def get_model_options_for_nested_config(config: Dict[str, Any]) -> list[str]:
     """Return model options for UI selection.
 
     Always show all curated models so users can switch providers from the UI.
-    If Argo endpoint is configured, prioritize Argo model IDs at the top.
+    Prioritize Argo when it is selected or a legacy Argo configuration signals
+    that intent.
 
     Parameters
     ----------
@@ -150,15 +153,26 @@ def get_model_options_for_nested_config(config: Dict[str, Any]) -> list[str]:
     if not isinstance(api, dict):
         return models
 
-    argo = api.get("argo")
-    canonical_url = argo.get("base_url") if isinstance(argo, dict) else None
+    general = config.get("general", {})
+    selected_model = general.get("model") if isinstance(general, dict) else None
+    selected_spec = (
+        match_endpoint(selected_model) if isinstance(selected_model, str) else None
+    )
+    selected_argo = bool(
+        selected_spec and selected_spec.config_section == "argo"
+    )
+
     openai = api.get("openai")
     legacy_url = openai.get("base_url") if isinstance(openai, dict) else None
-    legacy_argo = "argo" not in api and legacy_url and "argoapi" in legacy_url
+    legacy_argo = bool(
+        not has_config_section(api, "argo")
+        and legacy_url
+        and "argoapi" in legacy_url
+    )
     if legacy_argo and argo_models:
         resolve_base_url_for_model(argo_models[0], api)
 
-    if canonical_url or legacy_argo:
+    if selected_argo or legacy_argo:
         remaining = [model for model in models if model not in argo_models]
         return argo_models + remaining
     return models

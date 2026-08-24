@@ -20,6 +20,11 @@ def _section(api: Mapping[str, Any], name: str | None) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def has_config_section(api: Mapping[str, Any], name: str | None) -> bool:
+    """Return whether an endpoint section is a valid mapping."""
+    return bool(name and isinstance(api.get(name), Mapping))
+
+
 def _text(value: Any) -> str | None:
     if value is None:
         return None
@@ -41,9 +46,17 @@ def resolve_base_url_for_spec(
         return spec.resolve_base_url(model, explicit)
 
     canonical = spec.config_section
-    if canonical and canonical in api:
+    if has_config_section(api, canonical):
         configured = _text(_section(api, canonical).get("base_url"))
         return spec.resolve_base_url(model, configured, from_config=True)
+
+    if canonical and canonical in api:
+        logger.warning(
+            "Ignoring malformed [api.%s] section for endpoint '%s'; "
+            "expected a table/mapping.",
+            canonical,
+            spec.name,
+        )
 
     for legacy in spec.legacy_config_sections:
         configured = _text(_section(api, legacy).get("base_url"))

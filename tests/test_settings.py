@@ -264,6 +264,25 @@ def test_flat_config_argo_legacy_fallback_warns(caplog, _propagate_logs):
     assert any("legacy [api.openai]" in r.message for r in caplog.records)
 
 
+def test_malformed_argo_section_uses_warned_legacy_fallback(
+    caplog, _propagate_logs
+):
+    raw = {
+        "general": {"model": "argo:gpt-4o"},
+        "api": {
+            "argo": None,
+            "openai": {"base_url": "https://legacy.example/argo/v1"},
+        },
+    }
+
+    with caplog.at_level(logging.WARNING):
+        resolved = _extract_endpoint_from_cli_toml(raw)
+
+    assert resolved["base_url"] == "https://legacy.example/argo/v1"
+    assert any("malformed [api.argo]" in r.message for r in caplog.records)
+    assert any("legacy [api.openai]" in r.message for r in caplog.records)
+
+
 def test_empty_vllm_section_suppresses_openai_fallback(monkeypatch):
     monkeypatch.delenv("VLLM_BASE_URL", raising=False)
     raw = {
@@ -366,6 +385,26 @@ def test_absent_vllm_section_uses_warned_legacy_fallback(
     assert any("legacy [api.openai]" in r.message for r in caplog.records)
 
 
+def test_malformed_vllm_section_uses_legacy_fallback(
+    monkeypatch, caplog, _propagate_logs
+):
+    monkeypatch.delenv("VLLM_BASE_URL", raising=False)
+    raw = {
+        "general": {"model": "custom-model"},
+        "api": {
+            "vllm": None,
+            "openai": {"base_url": "https://legacy.example/v1"},
+        },
+    }
+
+    with caplog.at_level(logging.WARNING):
+        resolved = _extract_endpoint_from_cli_toml(raw)
+
+    assert resolved["base_url"] == "https://legacy.example/v1"
+    assert any("malformed [api.vllm]" in r.message for r in caplog.records)
+    assert any("legacy [api.openai]" in r.message for r in caplog.records)
+
+
 def test_ui_loader_preserves_absent_canonical_sections(tmp_path):
     from chemgraph.utils.config_utils import (
         get_base_url_for_model_from_nested_config as nested,
@@ -447,6 +486,58 @@ def test_check_api_keys_custom_model_uses_resolved_vllm_policy(_clear_keys):
     ) == (True, "")
 
 
+def test_check_api_keys_unknown_model_requires_custom_endpoint(_clear_keys):
+    from chemgraph.cli.commands import check_api_keys
+
+    ok, message = check_api_keys("custom-model")
+
+    assert ok is False
+    assert "base URL" in message
+    assert "[api.vllm].base_url" in message
+
+
+def test_api_key_status_keeps_distinct_keyless_providers(monkeypatch):
+    from io import StringIO
+    from types import SimpleNamespace
+
+    from rich.console import Console
+
+    from chemgraph.cli import formatting
+
+    output = StringIO()
+    monkeypatch.setattr(
+        formatting,
+        "console",
+        Console(file=output, color_system=None, width=160),
+    )
+    monkeypatch.setattr(
+        formatting,
+        "CATALOG_ENDPOINTS",
+        (
+            SimpleNamespace(
+                name="keyless_a",
+                display_name="Keyless",
+                config_section="keyless_a",
+                credential=SimpleNamespace(env_var=None),
+                curated_models=("keyless-a-model",),
+            ),
+            SimpleNamespace(
+                name="keyless_b",
+                display_name="Keyless",
+                config_section="keyless_b",
+                credential=SimpleNamespace(env_var=None),
+                curated_models=("keyless-b-model",),
+            ),
+        ),
+    )
+
+    formatting.check_api_keys_status()
+
+    rendered = output.getvalue()
+    assert "keyless-a-model" in rendered
+    assert "keyless-b-model" in rendered
+
+
 def test_vllm_api_key_precedence(monkeypatch):
     from chemgraph.models.endpoints import ModelRequest
     from chemgraph.models.endpoints.vllm import resolve_api_key
@@ -526,14 +617,28 @@ def test_argo_user_compatibility_alias_still_works():
 # ---------------------------------------------------------------------------
 
 
-def test_model_options_prioritize_argo_from_canonical_section():
+def test_model_options_prioritize_selected_argo_model():
     from chemgraph.utils.config_utils import get_model_options_for_nested_config
     from chemgraph.models.supported_models import supported_argo_models
 
-    cfg = {"api": {"argo": {"base_url": "https://apps.inside.anl.gov/argoapi/v1"}}}
+    cfg = {
+        "general": {"model": "argo:gpt-4o"},
+        "api": {
+            "argo": {"base_url": "https://apps.inside.anl.gov/argoapi/v1"}
+        },
+    }
     assert (
         get_model_options_for_nested_config(cfg)[0] == supported_argo_models[0]
     )
+
+
+def test_model_options_do_not_prioritize_unselected_default_argo():
+    from chemgraph.models.supported_models import supported_argo_models
+    from chemgraph.utils.config_utils import get_model_options_for_nested_config
+    from ui.config import get_default_config
+
+    options = get_model_options_for_nested_config(get_default_config())
+    assert options[0] not in supported_argo_models
 
 
 def test_model_options_prioritize_argo_from_legacy_openai():
@@ -550,6 +655,25 @@ def test_model_options_prioritize_argo_from_legacy_openai():
     assert (
         get_model_options_for_nested_config(cfg)[0] == supported_argo_models[0]
     )
+
+
+def test_model_options_use_legacy_argo_when_canonical_is_malformed():
+    from chemgraph.models.supported_models import supported_argo_models
+    from chemgraph.utils.config_utils import get_model_options_for_nested_config
+
+    cfg = {
+        "general": {"model": "gpt-4o-mini"},
+        "api": {
+            "argo": None,
+            "openai": {
+                "base_url": (
+                    "https://apps.inside.anl.gov/argoapi/"
+                    "api/v1/resource/chat/"
+                )
+            },
+        },
+    }
+    assert get_model_options_for_nested_config(cfg)[0] == supported_argo_models[0]
 
 
 def test_model_options_no_argo_when_openai_is_direct():

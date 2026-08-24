@@ -90,7 +90,6 @@ def check_api_keys(
     model_name: str,
     *,
     base_url: str | None = None,
-    api_key: str | None = None,
 ) -> tuple[bool, str]:
     """Check if required API keys are available for *model_name*.
 
@@ -111,7 +110,7 @@ def check_api_keys(
         return False, str(exc)
 
     policy = spec.credential
-    if api_key or not policy.required:
+    if not policy.required:
         return True, ""
     if policy.env_var and os.getenv(policy.env_var):
         return True, ""
@@ -272,12 +271,6 @@ def initialize_agent(
     api_key_available, error_msg = check_api_keys(model_name, base_url=base_url)
     if not api_key_available:
         console.print(f"[red]{error_msg}[/red]")
-        console.print(
-            "[dim]Tip: Set environment variables in your shell or .env file[/dim]"
-        )
-        console.print(
-            "[dim]  Example: export OPENAI_API_KEY='your_api_key_here'[/dim]"
-        )
         return None
 
     with Progress(

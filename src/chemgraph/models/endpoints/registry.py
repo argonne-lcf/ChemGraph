@@ -61,7 +61,9 @@ def select_endpoint(request: ModelRequest) -> EndpointSpec:
     raise ValueError(
         f"Model '{request.model}' not found in any supported model list. "
         "Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, "
-        "openrouter:<model>, codex:<model>, argo:<model>, ALCF, or Ollama."
+        "openrouter:<model>, codex:<model>, argo:<model>, ALCF, or Ollama. "
+        "For a custom OpenAI-compatible model, provide a base URL or configure "
+        "[api.vllm].base_url."
     )
 
 

@@ -92,13 +92,13 @@ def check_api_keys_status() -> None:
     seen: set[tuple[str, str | None]] = set()
     for spec in CATALOG_ENDPOINTS:
         policy = spec.credential
-        identity = (spec.display_name or spec.name, policy.env_var)
+        identity = (spec.config_section or spec.name, policy.env_var)
         if identity in seen:
             continue
         seen.add(identity)
         api_keys.append(
             {
-                "provider": identity[0],
+                "provider": spec.display_name or spec.name,
                 "env_var": policy.env_var or "Not Required",
                 "examples": ", ".join(spec.curated_models[:2]) or "Prefix-routed",
             }
