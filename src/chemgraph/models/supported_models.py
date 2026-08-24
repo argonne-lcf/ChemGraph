@@ -214,6 +214,9 @@ MODELS_WITHOUT_TEMPERATURE = frozenset(
         "argo:gpt-5",
         "argo:gpt-5-mini",
         "argo:gpt-5-nano",
+        "argo:claude-opus-5",
+        "argo:claude-opus-4.8",
+        "argo:claude-opus-4.7",
 
     }
 )
