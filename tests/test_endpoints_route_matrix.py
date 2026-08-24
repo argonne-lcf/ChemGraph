@@ -16,6 +16,7 @@ from chemgraph.models.endpoints import argo as argo_ep
 from chemgraph.models.endpoints import google_direct as google_ep
 from chemgraph.models.endpoints import openai_direct as openai_ep
 from chemgraph.models.endpoints import openrouter as openrouter_ep
+from chemgraph.models.endpoints import aurora as aurora_ep
 from chemgraph.models.endpoints import vllm as vllm_ep
 from chemgraph.models.supported_models import (
     ALCF_DEFAULT_BASE_URL,
@@ -23,6 +24,7 @@ from chemgraph.models.supported_models import (
     ALCF_MINERVA_BASE_URL,
     ARGO_DEFAULT_ANTHROPIC_BASE_URL,
     ARGO_DEFAULT_BASE_URL,
+    AURORA_DEFAULT_BASE_URL,
     OPENROUTER_DEFAULT_BASE_URL,
 )
 
@@ -38,6 +40,8 @@ def _clear_provider_env(monkeypatch):
         "GEMINI_API_KEY",
         "ALCF_ACCESS_TOKEN",
         "OPENROUTER_API_KEY",
+        "AURORA_API_KEY",
+        "AURORA_BASE_URL",
         "VLLM_API_KEY",
         "VLLM_BASE_URL",
         "ARGO_USER",
@@ -247,6 +251,48 @@ def test_google_direct_route():
     kwargs = prepared.client_kwargs
     assert kwargs["model"] == "gemini-2.5-pro"
     assert kwargs["max_output_tokens"] == 6000
+
+
+# --- Aurora on-node ---------------------------------------------------------
+
+
+def test_aurora_route_strips_prefix_and_uses_configured_base_url():
+    prepared = aurora_ep.prepare(
+        ModelRequest(
+            model="aurora:gpt-oss-120b",
+            base_url="http://x4000c0s0b0n0:8000/v1",
+            api_key="dummy",
+        )
+    )
+    assert prepared.endpoint_name == "aurora"
+    assert prepared.protocol == "openai_compatible"
+    kwargs = prepared.client_kwargs
+    assert kwargs["model"] == "gpt-oss-120b"
+    assert kwargs["base_url"] == "http://x4000c0s0b0n0:8000/v1"
+    assert kwargs["api_key"] == "dummy"
+    assert kwargs["temperature"] == 0.0
+
+
+def test_aurora_route_falls_back_to_default_base_url_and_dummy_key():
+    prepared = aurora_ep.prepare(ModelRequest(model="aurora:gpt-oss-120b"))
+    kwargs = prepared.client_kwargs
+    assert kwargs["base_url"] == AURORA_DEFAULT_BASE_URL
+    assert kwargs["api_key"] == "dummy"  # placeholder when no key set
+
+
+def test_aurora_route_env_base_url_used_when_no_explicit(monkeypatch):
+    monkeypatch.setenv("AURORA_BASE_URL", "http://x4000c0s0b0n0:8000/v1")
+    prepared = aurora_ep.prepare(ModelRequest(model="aurora:nemotron-3-ultra"))
+    kwargs = prepared.client_kwargs
+    assert kwargs["base_url"] == "http://x4000c0s0b0n0:8000/v1"
+    assert kwargs["model"] == "nemotron-3-ultra"
+
+
+def test_aurora_spec_matches_only_aurora_prefix():
+    assert aurora_ep.SPEC.matches("aurora:gpt-oss-120b") is True
+    assert aurora_ep.SPEC.matches("aurora:some-served-id") is True
+    assert aurora_ep.SPEC.matches("openai:gpt-4o") is False
+    assert aurora_ep.SPEC.matches("openrouter:x/y") is False
 
 
 # --- vLLM / custom fallback -------------------------------------------------

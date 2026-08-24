@@ -18,6 +18,7 @@ from chemgraph.models.endpoints import ModelRequest, PreparedModel
 from chemgraph.models.endpoints import alcf as alcf_ep
 from chemgraph.models.endpoints import anthropic_direct as anthropic_ep
 from chemgraph.models.endpoints import argo as argo_ep
+from chemgraph.models.endpoints import aurora as aurora_ep
 from chemgraph.models.endpoints import codex as codex_ep
 from chemgraph.models.endpoints import google_direct as google_ep
 from chemgraph.models.endpoints import groq as groq_ep
@@ -28,15 +29,18 @@ from chemgraph.models.endpoints import vllm as vllm_ep
 from chemgraph.models.settings import LLMSettings
 
 # Ordered endpoint registry. Resolution preserves the historical dispatch order:
-# codex -> openrouter -> Argo Anthropic -> Argo OpenAI -> curated ALCF ->
-# direct OpenAI -> direct Anthropic -> direct Gemini -> Ollama -> groq. Prefix
-# routes (``matches`` on a prefix) run before catalog checks, so names such as
-# ``openrouter:openai/o3`` cannot be misclassified. The vLLM/custom fallback is
-# *not* in this list; it is selected only via ``vllm.can_handle`` as a last
-# resort.
+# codex -> openrouter -> aurora -> Argo Anthropic -> Argo OpenAI -> curated ALCF
+# -> direct OpenAI -> direct Anthropic -> direct Gemini -> Ollama -> groq.
+# Prefix routes (``matches`` on a prefix) run before catalog checks, so names
+# such as ``openrouter:openai/o3`` or ``aurora:gpt-oss-120b`` cannot be
+# misclassified. The vLLM/custom fallback is *not* in this list; it is selected
+# only via ``vllm.can_handle`` as a last resort -- registering ``aurora`` here
+# ensures ``aurora:`` models are not diverted to the vLLM fallback when
+# ``VLLM_BASE_URL`` happens to be set.
 _ENDPOINT_REGISTRY = (
     codex_ep.SPEC,
     openrouter_ep.SPEC,
+    aurora_ep.SPEC,
     argo_ep.ANTHROPIC_SPEC,
     argo_ep.OPENAI_SPEC,
     alcf_ep.SPEC,
