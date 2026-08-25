@@ -5,9 +5,8 @@ Consolidates the two ad-hoc fallbacks that previously lived in
 ``_custom_openai_compatible_kwargs``). Selected only for an otherwise unknown
 model when a base URL is available.
 
-PR 1 preserves the current env-first precedence (``VLLM_BASE_URL`` /
-``OPENAI_API_KEY`` win over explicit arguments). The richer ``[api.vllm]``
-precedence and deprecation warnings are introduced in PR 3.
+Configuration and credential precedence is owned here so every caller observes
+the same explicit/canonical/environment/legacy behavior.
 """
 
 from __future__ import annotations
@@ -39,14 +38,29 @@ VLLM_CREDENTIAL = CredentialPolicy(
 )
 
 
+def resolve_configured_base_url(_model: str, base_url: str | None) -> str | None:
+    """Resolve explicit/configured URL before the vLLM environment variable."""
+    return base_url or os.getenv("VLLM_BASE_URL") or None
+
+
 def resolve_base_url(request: ModelRequest) -> str | None:
-    """Resolve the custom endpoint URL (env-first, matching current behavior)."""
-    return os.getenv("VLLM_BASE_URL", request.base_url or "") or None
+    """Resolve an explicit/configured URL before the vLLM environment value."""
+    return resolve_configured_base_url(request.model, request.base_url)
 
 
 def resolve_api_key(request: ModelRequest) -> str:
-    """Resolve the key: OPENAI_API_KEY (deprecated) -> explicit -> dummy."""
-    return os.getenv("OPENAI_API_KEY", request.api_key or DUMMY_KEY)
+    """Resolve explicit, vLLM, deprecated OpenAI, then placeholder credentials."""
+    if request.api_key:
+        return request.api_key
+    if api_key := os.getenv("VLLM_API_KEY"):
+        return api_key
+    if api_key := os.getenv("OPENAI_API_KEY"):
+        logger.warning(
+            "Using deprecated OPENAI_API_KEY for a vLLM/custom endpoint; "
+            "set VLLM_API_KEY instead."
+        )
+        return api_key
+    return DUMMY_KEY
 
 
 def prepare(request: ModelRequest) -> PreparedModel:
@@ -98,4 +112,8 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=openai_compatible.build,
     credential=VLLM_CREDENTIAL,
+    config_section="vllm",
+    legacy_config_sections=("openai",),
+    base_url_resolver=resolve_configured_base_url,
+    display_name="vLLM / Custom",
 )

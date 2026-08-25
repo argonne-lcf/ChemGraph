@@ -70,6 +70,19 @@ def _resolve_base_url(model_name: str, base_url: str | None) -> str:
     return ALCF_DEFAULT_BASE_URL
 
 
+def resolve_base_url(model_name: str, base_url: str | None) -> str:
+    """Resolve the explicit or serving-cluster ALCF URL."""
+    return _resolve_base_url(model_name, base_url)
+
+
+def config_url_applies(model_name: str) -> bool:
+    """Return whether [api.alcf] may override the Sophia route for a model."""
+    return (
+        model_name not in supported_alcf_minerva_models
+        and model_name not in supported_alcf_metis_models
+    )
+
+
 def prepare(request: ModelRequest) -> PreparedModel:
     """Prepare a curated ``alcf:`` model, selecting its cluster endpoint."""
     requested_model_name = request.model
@@ -82,7 +95,7 @@ def prepare(request: ModelRequest) -> PreparedModel:
 
     api_key = resolve_api_key(ALCF_CREDENTIAL, request.api_key)
 
-    base_url = _resolve_base_url(requested_model_name, request.base_url)
+    base_url = resolve_base_url(requested_model_name, request.base_url)
     wire_model = _normalize_alcf_model(requested_model_name)
 
     client_kwargs = dict(model=wire_model, base_url=base_url, api_key=api_key)
@@ -104,4 +117,10 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=openai_compatible.build,
     credential=ALCF_CREDENTIAL,
+    config_section="alcf",
+    base_url_resolver=resolve_base_url,
+    config_url_applies=config_url_applies,
+    curated_models=tuple(supported_alcf_models),
+    accepted_prefix=ALCF_MODEL_PREFIX,
+    display_name="ALCF",
 )

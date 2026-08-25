@@ -24,15 +24,12 @@ from chemgraph.cli.checkpoint_runtime import (
     DEFAULT_CHECKPOINT_DB,
     CheckpointRuntime,
 )
-from chemgraph.models.supported_models import (
-    MODELS_WITH_REASONING_EFFORT,
-    supported_alcf_models,
-    supported_anthropic_models,
-    supported_gemini_models,
-    supported_ollama_models,
-    supported_openai_models,
-    supported_argo_models,
+from chemgraph.models.endpoints import (
+    ModelRequest,
+    missing_credential_help,
 )
+from chemgraph.models.endpoints.registry import select_endpoint
+from chemgraph.models.supported_models import MODELS_WITH_REASONING_EFFORT
 from chemgraph.utils.async_utils import run_async_callable
 
 from chemgraph.cli.formatting import (
@@ -89,7 +86,11 @@ def resolve_workflow(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def check_api_keys(model_name: str) -> tuple[bool, str]:
+def check_api_keys(
+    model_name: str,
+    *,
+    base_url: str | None = None,
+) -> tuple[bool, str]:
     """Check if required API keys are available for *model_name*.
 
     Parameters
@@ -103,88 +104,17 @@ def check_api_keys(model_name: str) -> tuple[bool, str]:
         ``(is_available, error_message)``. The message is empty when the
         required credentials are available or not required.
     """
-    model_lower = model_name.lower()
+    try:
+        spec = select_endpoint(ModelRequest(model=model_name, base_url=base_url))
+    except ValueError as exc:
+        return False, str(exc)
 
-    # Codex subscription models reuse the user's ChatGPT-backed Codex login.
-    # They must never fall through to OpenAI Platform API-key validation.
-    if model_name.startswith("codex:"):
+    policy = spec.credential
+    if not policy.required:
         return True, ""
-
-    # OpenRouter models. Checked before the OpenAI branch below, whose
-    # ``"o1"/"o3"/"o4" in model_lower`` test is a substring match that would
-    # otherwise claim slugs like ``openrouter:openai/o3``, and before the
-    # local-model branch, which would claim ``openrouter:meta-llama/...``.
-    if model_name.startswith("openrouter:"):
-        if not os.getenv("OPENROUTER_API_KEY"):
-            return (
-                False,
-                "OpenRouter API key not found. Set the OPENROUTER_API_KEY "
-                "environment variable. Get a key at https://openrouter.ai/keys",
-            )
+    if policy.env_var and os.getenv(policy.env_var):
         return True, ""
-
-    # OpenAI models (including GPT family, o-series, and Argo OpenAI)
-    if (
-        model_name in supported_openai_models
-        or model_name in supported_argo_models
-        or model_lower.startswith("gpt")
-        or any(prefix in model_lower for prefix in ["o1", "o3", "o4"])
-    ):
-        # Argo models use a different auth mechanism; skip key check.
-        if model_name in supported_argo_models:
-            pass
-        elif not os.getenv("OPENAI_API_KEY"):
-            return (
-                False,
-                "OpenAI API key not found. Set the OPENAI_API_KEY environment variable.",
-            )
-
-    # Anthropic models
-    elif "claude" in model_lower or model_name in supported_anthropic_models:
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            return (
-                False,
-                "Anthropic API key not found. Set the ANTHROPIC_API_KEY environment variable.",
-            )
-
-    # Google models
-    elif "gemini" in model_lower or model_name in supported_gemini_models:
-        if not os.getenv("GEMINI_API_KEY"):
-            return (
-                False,
-                "Gemini API key not found. Set the GEMINI_API_KEY environment variable.",
-            )
-
-    # GROQ models (groq: prefix)
-    elif model_name.startswith("groq:"):
-        if not os.getenv("GROQ_API_KEY"):
-            return (
-                False,
-                "GROQ API key not found. Set the GROQ_API_KEY environment variable.",
-            )
-
-    # ALCF models (Globus OAuth access token)
-    elif model_name in supported_alcf_models:
-        if not os.getenv("ALCF_ACCESS_TOKEN"):
-            return (
-                False,
-                "ALCF access token not found. To authenticate with ALCF:\n"
-                "  1. pip install globus_sdk\n"
-                "  2. wget https://raw.githubusercontent.com/argonne-lcf/"
-                "inference-endpoints/refs/heads/main/inference_auth_token.py\n"
-                "  3. python inference_auth_token.py authenticate\n"
-                "  4. export ALCF_ACCESS_TOKEN=$(python inference_auth_token.py get_access_token)\n"
-                "\n"
-                "  See: https://docs.alcf.anl.gov/services/inference-endpoints/#api-access",
-            )
-
-    # Local models (no API key needed)
-    elif model_name in supported_ollama_models or any(
-        local in model_lower for local in ["llama", "qwen", "ollama"]
-    ):
-        pass
-
-    return True, ""
+    return False, missing_credential_help(policy)
 
 
 # ---------------------------------------------------------------------------
@@ -338,21 +268,10 @@ def initialize_agent(
             console.print(f"  MCP Tools: {len(tools)} loaded")
 
     # Check API keys before attempting initialization
-    api_key_available, error_msg = check_api_keys(model_name)
+    api_key_available, error_msg = check_api_keys(model_name, base_url=base_url)
     if not api_key_available:
         console.print(f"[red]{error_msg}[/red]")
-        console.print(
-            "[dim]Tip: Set environment variables in your shell or .env file[/dim]"
-        )
-        console.print(
-            "[dim]  Example: export OPENAI_API_KEY='your_api_key_here'[/dim]"
-        )
         return None
-
-    # Resolve API key for providers that need one passed explicitly.
-    api_key: Optional[str] = None
-    if model_name in supported_alcf_models:
-        api_key = os.getenv("ALCF_ACCESS_TOKEN")
 
     with Progress(
         SpinnerColumn(),
@@ -376,7 +295,6 @@ def initialize_agent(
                 model_name=model_name,
                 workflow_type=workflow_type,
                 base_url=base_url,
-                api_key=api_key,
                 argo_user=argo_user,
                 generate_report=generate_report,
                 return_option=return_option,

@@ -6,6 +6,14 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from chemgraph.models.endpoints.configuration import (
+    endpoint_api_key,
+    resolve_argo_user,
+    resolve_base_url_for_spec,
+    select_endpoint_for_config,
+)
+from chemgraph.models.endpoints.registry import match_endpoint
+
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -21,6 +29,7 @@ class LLMSettings:
     api_key: str | None = None
     argo_user: str | None = None
     provider: str | None = None
+    reasoning_effort: str | None = None
     timeout_s: float | None = None
     temperature: float | None = None
     max_tokens: int | None = None
@@ -40,12 +49,14 @@ class LLMSettings:
         max_retries: int | None = None,
         retry_delay_s: float | None = None,
         user: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         object.__setattr__(self, "model", model)
         object.__setattr__(self, "base_url", base_url)
         object.__setattr__(self, "api_key", api_key)
         object.__setattr__(self, "argo_user", argo_user or user)
         object.__setattr__(self, "provider", provider)
+        object.__setattr__(self, "reasoning_effort", reasoning_effort)
         object.__setattr__(self, "timeout_s", timeout_s)
         object.__setattr__(self, "temperature", temperature)
         object.__setattr__(self, "max_tokens", max_tokens)
@@ -96,8 +107,9 @@ def _from_mapping(data: Mapping[str, Any]) -> LLMSettings:
         model=str(model),
         base_url=_str_or_none(data.get("base_url")),
         api_key=_str_or_none(api_key),
-        argo_user=_str_or_none(data.get("user") or data.get("argo_user")),
+        argo_user=_str_or_none(data.get("argo_user") or data.get("user")),
         provider=_str_or_none(provider),
+        reasoning_effort=_str_or_none(data.get("reasoning_effort")),
         timeout_s=_float_or_none(data.get("timeout_s")),
         temperature=_float_or_none(data.get("temperature")),
         max_tokens=_int_or_none(data.get("max_tokens")),
@@ -108,41 +120,59 @@ def _from_mapping(data: Mapping[str, Any]) -> LLMSettings:
 
 def _extract_endpoint_from_cli_toml(raw: Mapping[str, Any]) -> dict[str, Any]:
     """Pull LLM endpoint fields out of the CLI's nested TOML structure."""
-    general = raw.get("general") or {}
-    api = raw.get("api") or {}
+    general_value = raw.get("general") or {}
+    api_value = raw.get("api") or {}
+    general = general_value if isinstance(general_value, Mapping) else {}
+    api = api_value if isinstance(api_value, Mapping) else {}
     model = general.get("model")
-    argo_user = general.get("argo_user") or (api.get("argo") or {}).get("user")
+    provider = general.get("provider") or raw.get("provider")
+    explicit_base_url = _str_or_none(
+        general.get("base_url") or raw.get("base_url")
+    )
+    explicit_api_key = _str_or_none(general.get("api_key") or raw.get("api_key"))
 
-    base_url = None
+    spec = None
     if isinstance(model, str):
-        if model.startswith("argo:"):
-            base_url = (api.get("argo") or {}).get("base_url")
-        elif model.startswith("openrouter:"):
-            base_url = (api.get("openrouter") or {}).get("base_url")
-        else:
-            for section_name in ("openai", "anthropic", "gemini", "alcf", "ollama"):
-                section = api.get(section_name) or {}
-                if section.get("base_url"):
-                    base_url = section["base_url"]
-                    break
+        try:
+            spec = select_endpoint_for_config(
+                model,
+                api,
+                explicit_base_url=explicit_base_url,
+            )
+        except ValueError:
+            pass
+
+    base_url = explicit_base_url
+    api_key = explicit_api_key
+    if spec is not None and isinstance(model, str):
+        base_url = resolve_base_url_for_spec(
+            spec,
+            model,
+            api,
+            explicit=explicit_base_url,
+        )
+        api_key = explicit_api_key or endpoint_api_key(spec, api)
 
     return {
         "model": model,
         "base_url": base_url,
-        "argo_user": argo_user,
-        "api_key": (api.get(_provider_section_for(model)) or {}).get("api_key"),
+        "argo_user": resolve_argo_user(
+            api,
+            explicit=general.get("argo_user") or general.get("user"),
+        ),
+        "api_key": api_key,
+        "provider": provider,
+        "reasoning_effort": general.get("reasoning_effort"),
     }
 
 
 def _provider_section_for(model: Any) -> str:
+    """Return the canonical config section for a model identifier."""
     if isinstance(model, str):
-        if model.startswith("argo:"):
-            return "argo"
-        if model.startswith("groq:"):
-            return "groq"
-        if model.startswith("openrouter:"):
-            return "openrouter"
-    return "openai"
+        spec = match_endpoint(model)
+        if spec is not None and spec.config_section:
+            return spec.config_section
+    return "vllm"
 
 
 def _str_or_none(value: Any) -> str | None:

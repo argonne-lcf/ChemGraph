@@ -40,4 +40,7 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=codex_native.build,
     credential=CODEX_CREDENTIAL,
+    accepted_prefix="codex:",
+    display_name="Codex / ChatGPT",
+    model_type="Experimental",
 )

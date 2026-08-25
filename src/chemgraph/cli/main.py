@@ -16,7 +16,7 @@ from typing import Any, Dict
 
 import toml
 
-from chemgraph.models.supported_models import all_supported_models
+from chemgraph.models.endpoints.registry import match_endpoint
 from chemgraph.utils.config_utils import (
     flatten_config,
     get_argo_user_from_flat_config,
@@ -559,7 +559,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         console.print(
             "[yellow]Using experimental Codex subscription support.[/yellow]"
         )
-    elif args.model not in all_supported_models:
+    elif match_endpoint(args.model) is None:
         console.print(
             f"[yellow]Using custom model ID: {args.model} (not in curated list)[/yellow]"
         )

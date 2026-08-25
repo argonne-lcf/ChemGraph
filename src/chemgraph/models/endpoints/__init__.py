@@ -10,6 +10,8 @@ from chemgraph.models.endpoints.base import (
     ModelRequest,
     PreparedModel,
     is_local_http_endpoint,
+    missing_credential_help,
+    normalize_openai_base_url,
     resolve_api_key,
 )
 
@@ -19,5 +21,7 @@ __all__ = [
     "ModelRequest",
     "PreparedModel",
     "is_local_http_endpoint",
+    "missing_credential_help",
+    "normalize_openai_base_url",
     "resolve_api_key",
 ]

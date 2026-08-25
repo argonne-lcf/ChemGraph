@@ -48,6 +48,8 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
                         # Merge missing keys from default
                         for key, value in default_config[section].items():
                             if key not in config[section]:
+                                if section == "api" and key in {"argo", "vllm"}:
+                                    continue
                                 config[section][key] = value
                             elif isinstance(config[section][key], dict) and isinstance(
                                 value, dict
@@ -111,8 +113,12 @@ def get_default_config() -> Dict[str, Any]:
             "openai": {
                 "base_url": "https://api.openai.com/v1",
                 "timeout": 30,
+            },
+            "argo": {
+                "base_url": "https://apps.inside.anl.gov/argoapi/v1",
                 "argo_user": "",
             },
+            "vllm": {"base_url": ""},
             "anthropic": {"base_url": "https://api.anthropic.com", "timeout": 30},
             "google": {
                 "base_url": "https://generativelanguage.googleapis.com/v1beta",

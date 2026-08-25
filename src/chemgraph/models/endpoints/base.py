@@ -16,8 +16,9 @@ Everything in this module is internal. The public model-loading surface remains
 from __future__ import annotations
 
 import os
+import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from getpass import getpass
 from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import urlparse
@@ -95,10 +96,47 @@ class EndpointSpec:
     prepare: Callable[[ModelRequest], PreparedModel]
     protocol_build: Callable[[dict[str, Any]], "BaseChatModel"]
     credential: CredentialPolicy = field(default_factory=CredentialPolicy)
+    config_section: str | None = None
+    legacy_config_sections: tuple[str, ...] = ()
+    base_url_resolver: Callable[[str, str | None], str | None] | None = None
+    config_url_applies: Callable[[str], bool] = field(
+        default=lambda _model: True,
+        repr=False,
+        compare=False,
+    )
+    curated_models: tuple[str, ...] = ()
+    accepted_prefix: str | None = None
+    display_name: str | None = None
+    model_type: str = "Cloud"
+    supports_structured_output: bool = True
+
+    def resolve_base_url(
+        self,
+        model: str,
+        base_url: str | None,
+        *,
+        from_config: bool = False,
+    ) -> str | None:
+        """Resolve a URL using this endpoint's normalization and defaults."""
+        if from_config and not self.config_url_applies(model):
+            base_url = None
+        if self.base_url_resolver is None:
+            return base_url
+        return self.base_url_resolver(model, base_url)
+
+    def prepare_request(self, request: ModelRequest) -> PreparedModel:
+        """Prepare a request and attach capabilities declared by the spec."""
+        prepared = self.prepare(request)
+        if prepared.supports_structured_output != self.supports_structured_output:
+            prepared = replace(
+                prepared,
+                supports_structured_output=self.supports_structured_output,
+            )
+        return prepared
 
     def build(self, request: ModelRequest) -> "BaseChatModel":
         """Prepare the request and construct the client."""
-        prepared = self.prepare(request)
+        prepared = self.prepare_request(request)
         return self.protocol_build(prepared.client_kwargs)
 
 
@@ -117,6 +155,21 @@ def is_local_http_endpoint(base_url: str | None) -> bool:
         "::1",
         "0.0.0.0",
     }
+
+
+def normalize_openai_base_url(base_url: str | None) -> str | None:
+    """Normalize legacy Argo resource URLs to OpenAI-compatible roots."""
+    if not base_url:
+        return base_url
+    if (
+        "apps-dev.inside.anl.gov/argoapi" in base_url
+        or "apps.inside.anl.gov/argoapi" in base_url
+    ):
+        base_url = re.sub(r"/api/v1/resource/(chat|embed)/?$", "/v1", base_url)
+        base_url = re.sub(r"/docs/?$", "", base_url)
+        base_url = re.sub(r"/api/v1/?$", "/v1", base_url)
+        base_url = base_url.rstrip("/")
+    return base_url
 
 
 def resolve_api_key(
@@ -167,3 +220,8 @@ def _default_missing_help(policy: CredentialPolicy) -> str:
             f"API key not found. Set the {policy.env_var} environment variable."
         )
     return "API key not found."
+
+
+def missing_credential_help(policy: CredentialPolicy) -> str:
+    """Return endpoint-provided or generic missing-credential guidance."""
+    return policy.missing_key_help or _default_missing_help(policy)

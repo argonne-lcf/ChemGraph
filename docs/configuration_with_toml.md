@@ -46,7 +46,15 @@ TOML provider sections configure endpoints and an optional Argo username:
 ```toml
 [api.openai]
 base_url = "https://api.openai.com/v1"
+
+[api.argo]
+base_url = "https://apps.inside.anl.gov/argoapi/v1"
 argo_user = ""
+
+[api.vllm]
+# Set this for custom OpenAI-compatible model IDs. An explicit empty value
+# disables the one-release [api.openai] custom-endpoint fallback.
+base_url = ""
 
 [api.anthropic]
 base_url = "https://api.anthropic.com"
@@ -63,6 +71,17 @@ base_url = "http://localhost:11434"
 
 The selected model determines which section is consulted. See
 [Models and authentication](models.md).
+
+Base URLs resolve in this order: an explicit CLI/Python argument, the selected
+endpoint's canonical section, a supported legacy section, its environment
+variable, and finally its built-in default. For one release, `argo:` and custom
+model routes can read a legacy `[api.openai].base_url` when their canonical
+section is absent; ChemGraph logs migration guidance whenever it does so.
+
+`[api.argo].argo_user` is the canonical Argo identity setting. The historical
+`[api.openai].argo_user` spelling remains supported for one release with a
+warning. Keep API keys and access tokens in endpoint-specific environment
+variables rather than TOML.
 
 ## MCP connection
 

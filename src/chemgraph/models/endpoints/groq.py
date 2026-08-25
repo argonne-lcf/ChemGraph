@@ -28,6 +28,11 @@ GROQ_CREDENTIAL = CredentialPolicy(
 )
 
 
+def resolve_base_url(_model: str, base_url: str | None) -> str | None:
+    """Return an optional Groq-compatible API URL unchanged."""
+    return base_url
+
+
 def prepare(request: ModelRequest) -> PreparedModel:
     """Prepare a ``groq:`` model. Key handling stays inside the loader."""
     client_kwargs = dict(
@@ -54,4 +59,8 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=groq_native.build,
     credential=GROQ_CREDENTIAL,
+    config_section="groq",
+    base_url_resolver=resolve_base_url,
+    accepted_prefix=GROQ_PREFIX,
+    display_name="GROQ",
 )

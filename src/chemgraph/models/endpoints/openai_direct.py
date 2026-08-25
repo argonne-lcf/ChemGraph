@@ -16,6 +16,7 @@ from chemgraph.models.endpoints.base import (
     EndpointSpec,
     ModelRequest,
     PreparedModel,
+    normalize_openai_base_url,
     resolve_api_key,
 )
 from chemgraph.models.protocols import openai_compatible
@@ -25,7 +26,6 @@ from chemgraph.models.supported_models import (
     SUPPORTED_REASONING_EFFORTS,
     supported_openai_models,
 )
-from chemgraph.utils.config_utils import normalize_openai_base_url
 from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
@@ -38,6 +38,11 @@ OPENAI_CREDENTIAL = CredentialPolicy(
     interactive_prompt=True,
     missing_key_help="OPENAI_API_KEY not set. Please provide an OpenAI API key.",
 )
+
+
+def resolve_base_url(_model: str, base_url: str | None) -> str | None:
+    """Normalize an optional direct OpenAI-compatible endpoint URL."""
+    return normalize_openai_base_url(base_url)
 
 
 def validate_reasoning_effort(requested_model_name: str, reasoning_effort: str | None) -> None:
@@ -118,7 +123,7 @@ def assemble_client_kwargs(
 def prepare(request: ModelRequest) -> PreparedModel:
     """Prepare a direct (unprefixed, curated) OpenAI model."""
     requested_model_name = request.model
-    base_url = normalize_openai_base_url(request.base_url)
+    base_url = resolve_base_url(requested_model_name, request.base_url)
 
     validate_reasoning_effort(requested_model_name, request.reasoning_effort)
 
@@ -155,4 +160,8 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=openai_compatible.build,
     credential=OPENAI_CREDENTIAL,
+    config_section="openai",
+    base_url_resolver=resolve_base_url,
+    curated_models=tuple(supported_openai_models),
+    display_name="OpenAI",
 )

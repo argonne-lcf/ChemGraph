@@ -15,37 +15,8 @@ from __future__ import annotations
 from typing import Optional
 
 from chemgraph.models.endpoints import ModelRequest, PreparedModel
-from chemgraph.models.endpoints import alcf as alcf_ep
-from chemgraph.models.endpoints import anthropic_direct as anthropic_ep
-from chemgraph.models.endpoints import argo as argo_ep
-from chemgraph.models.endpoints import codex as codex_ep
-from chemgraph.models.endpoints import google_direct as google_ep
-from chemgraph.models.endpoints import groq as groq_ep
-from chemgraph.models.endpoints import ollama as ollama_ep
-from chemgraph.models.endpoints import openai_direct as openai_ep
-from chemgraph.models.endpoints import openrouter as openrouter_ep
-from chemgraph.models.endpoints import vllm as vllm_ep
+from chemgraph.models.endpoints.registry import select_endpoint
 from chemgraph.models.settings import LLMSettings
-
-# Ordered endpoint registry. Resolution preserves the historical dispatch order:
-# codex -> openrouter -> Argo Anthropic -> Argo OpenAI -> curated ALCF ->
-# direct OpenAI -> direct Anthropic -> direct Gemini -> Ollama -> groq. Prefix
-# routes (``matches`` on a prefix) run before catalog checks, so names such as
-# ``openrouter:openai/o3`` cannot be misclassified. The vLLM/custom fallback is
-# *not* in this list; it is selected only via ``vllm.can_handle`` as a last
-# resort.
-_ENDPOINT_REGISTRY = (
-    codex_ep.SPEC,
-    openrouter_ep.SPEC,
-    argo_ep.ANTHROPIC_SPEC,
-    argo_ep.OPENAI_SPEC,
-    alcf_ep.SPEC,
-    openai_ep.SPEC,
-    anthropic_ep.SPEC,
-    google_ep.SPEC,
-    ollama_ep.SPEC,
-    groq_ep.SPEC,
-)
 
 
 def _build_request(
@@ -69,7 +40,7 @@ def _build_request(
         argo_user = settings.argo_user
         if settings.temperature is not None:
             temperature = settings.temperature
-        settings_reasoning = getattr(settings, "reasoning_effort", None)
+        settings_reasoning = settings.reasoning_effort
         if settings_reasoning is not None:
             reasoning_effort = settings_reasoning
 
@@ -88,23 +59,8 @@ def _build_request(
 
 
 def _select_endpoint(request: ModelRequest):
-    """Return the first endpoint spec whose ``matches`` accepts the model.
-
-    Falls back to the vLLM/custom endpoint only when a custom base URL is
-    available. Raises ``ValueError`` for an otherwise unknown model.
-    """
-    for spec in _ENDPOINT_REGISTRY:
-        if spec.matches(request.model):
-            return spec
-
-    if vllm_ep.can_handle(request):
-        return vllm_ep.SPEC
-
-    raise ValueError(
-        f"Model '{request.model}' not found in any supported model list. "
-        "Use a model from: OpenAI, Anthropic, Gemini, groq:<model>, "
-        "openrouter:<model>, codex:<model>, argo:<model>, ALCF, or Ollama."
-    )
+    """Backward-compatible alias for the shared endpoint selector."""
+    return select_endpoint(request)
 
 
 def load_chat_model_prepared(
@@ -134,7 +90,7 @@ def load_chat_model_prepared(
         settings,
     )
     spec = _select_endpoint(request)
-    prepared = spec.prepare(request)
+    prepared = spec.prepare_request(request)
     client = spec.protocol_build(prepared.client_kwargs)
     return client, prepared
 

@@ -2,25 +2,27 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Dict, Optional
 
-from chemgraph.models.supported_models import (
-    ALCF_DEFAULT_BASE_URL,
-    ALCF_METIS_BASE_URL,
-    ALCF_MINERVA_BASE_URL,
-    ARGO_DEFAULT_BASE_URL,
-    OPENROUTER_DEFAULT_BASE_URL,
-    all_supported_models,
-    supported_alcf_metis_models,
-    supported_alcf_minerva_models,
-    supported_alcf_models,
-    supported_anthropic_models,
-    supported_argo_models,
-    supported_gemini_models,
-    supported_ollama_models,
-    supported_openai_models,
+from chemgraph.models.endpoints import (
+    normalize_openai_base_url as _normalize_openai_base_url,
 )
+from chemgraph.models.endpoints.configuration import (
+    has_config_section,
+    resolve_argo_user,
+    resolve_base_url_for_model,
+)
+from chemgraph.models.endpoints.registry import (
+    catalog_entries,
+    catalog_models,
+    config_sections,
+    match_endpoint,
+)
+
+
+def normalize_openai_base_url(base_url: Optional[str]) -> Optional[str]:
+    """Backward-compatible wrapper for endpoint URL normalization."""
+    return _normalize_openai_base_url(base_url)
 
 
 def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -47,6 +49,8 @@ def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
                 if isinstance(value, dict):
                     for subkey, subvalue in value.items():
                         flattened[f"{section}_{key}_{subkey}"] = subvalue
+                    if section == "api" and key == "vllm" and "base_url" not in value:
+                        flattened["api_vllm_base_url"] = ""
                 else:
                     flattened[f"{section}_{key}"] = value
 
@@ -65,30 +69,19 @@ def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return flattened
 
 
-def normalize_openai_base_url(base_url: Optional[str]) -> Optional[str]:
-    """Normalize Argo-style URLs to OpenAI-compatible /v1 URLs.
-
-    Parameters
-    ----------
-    base_url : str, optional
-        Provider base URL.
-
-    Returns
-    -------
-    str or None
-        Normalized URL, or ``None`` when no URL was provided.
-    """
-    if not base_url:
-        return base_url
-    if (
-        "apps-dev.inside.anl.gov/argoapi" in base_url
-        or "apps.inside.anl.gov/argoapi" in base_url
-    ):
-        base_url = re.sub(r"/api/v1/resource/(chat|embed)/?$", "/v1", base_url)
-        base_url = re.sub(r"/docs/?$", "", base_url)
-        base_url = re.sub(r"/api/v1/?$", "/v1", base_url)
-        base_url = base_url.rstrip("/")
-    return base_url
+def _api_from_flat_config(config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Reconstruct endpoint sections while preserving explicit empty values."""
+    api: Dict[str, Dict[str, Any]] = {}
+    for section in config_sections():
+        prefix = f"api_{section}_"
+        values = {
+            key.removeprefix(prefix): value
+            for key, value in config.items()
+            if key.startswith(prefix)
+        }
+        if values:
+            api[section] = values
+    return api
 
 
 def get_base_url_for_model_from_nested_config(
@@ -108,35 +101,9 @@ def get_base_url_for_model_from_nested_config(
     str or None
         Matching provider base URL, or ``None`` when not configured.
     """
-    api = config.get("api", {})
-
-    if model_name in supported_argo_models:
-        return normalize_openai_base_url(
-            api.get("openai", {}).get("base_url") or ARGO_DEFAULT_BASE_URL
-        )
-    # Prefix-routed, and matched before any list lookup: the fallthrough at the
-    # end of this function returns [api.openai].base_url, so an uncurated
-    # openrouter: slug would otherwise be sent to whatever OpenAI-compatible
-    # endpoint is configured there (the Argo gateway, by default).
-    if model_name.startswith("openrouter:"):
-        return api.get("openrouter", {}).get("base_url") or OPENROUTER_DEFAULT_BASE_URL
-    if model_name in supported_openai_models:
-        return normalize_openai_base_url(api.get("openai", {}).get("base_url"))
-    # Minerva and Metis have their own endpoints, and [api.alcf] base_url
-    # describes the Sophia default, so it must not be applied to them.
-    if model_name in supported_alcf_minerva_models:
-        return ALCF_MINERVA_BASE_URL
-    if model_name in supported_alcf_metis_models:
-        return ALCF_METIS_BASE_URL
-    if model_name in supported_alcf_models:
-        return api.get("alcf", {}).get("base_url") or ALCF_DEFAULT_BASE_URL
-    if model_name in supported_anthropic_models:
-        return api.get("anthropic", {}).get("base_url")
-    if model_name in supported_gemini_models:
-        return api.get("google", {}).get("base_url")
-    if model_name in supported_ollama_models:
-        return api.get("local", {}).get("base_url")
-    return normalize_openai_base_url(api.get("openai", {}).get("base_url"))
+    api_value = config.get("api", {})
+    api = api_value if isinstance(api_value, dict) else {}
+    return resolve_base_url_for_model(model_name, api)
 
 
 def get_base_url_for_model_from_flat_config(
@@ -156,36 +123,15 @@ def get_base_url_for_model_from_flat_config(
     str or None
         Matching provider base URL, or ``None`` when not configured.
     """
-    if model_name in supported_argo_models:
-        return normalize_openai_base_url(
-            config.get("api_openai_base_url") or ARGO_DEFAULT_BASE_URL
-        )
-    # See the note in get_base_url_for_model_from_nested_config.
-    if model_name.startswith("openrouter:"):
-        return config.get("api_openrouter_base_url") or OPENROUTER_DEFAULT_BASE_URL
-    if model_name in supported_openai_models:
-        return normalize_openai_base_url(config.get("api_openai_base_url"))
-    # See the note in get_base_url_for_model_from_nested_config.
-    if model_name in supported_alcf_minerva_models:
-        return ALCF_MINERVA_BASE_URL
-    if model_name in supported_alcf_metis_models:
-        return ALCF_METIS_BASE_URL
-    if model_name in supported_alcf_models:
-        return config.get("api_alcf_base_url") or ALCF_DEFAULT_BASE_URL
-    if model_name in supported_anthropic_models:
-        return config.get("api_anthropic_base_url")
-    if model_name in supported_gemini_models:
-        return config.get("api_google_base_url")
-    if model_name in supported_ollama_models:
-        return config.get("api_local_base_url")
-    return normalize_openai_base_url(config.get("api_openai_base_url"))
+    return resolve_base_url_for_model(model_name, _api_from_flat_config(config))
 
 
 def get_model_options_for_nested_config(config: Dict[str, Any]) -> list[str]:
     """Return model options for UI selection.
 
     Always show all curated models so users can switch providers from the UI.
-    If Argo endpoint is configured, prioritize Argo model IDs at the top.
+    Prioritize Argo when it is selected or a legacy Argo configuration signals
+    that intent.
 
     Parameters
     ----------
@@ -197,11 +143,39 @@ def get_model_options_for_nested_config(config: Dict[str, Any]) -> list[str]:
     list[str]
         Model identifiers for UI selection.
     """
-    base_url = config.get("api", {}).get("openai", {}).get("base_url")
-    if base_url and "argoapi" in base_url:
-        remaining = [m for m in all_supported_models if m not in supported_argo_models]
-        return supported_argo_models + remaining
-    return all_supported_models
+    models = catalog_models()
+    argo_models = [
+        model
+        for model, spec in catalog_entries()
+        if spec.config_section == "argo"
+    ]
+    api = config.get("api", {})
+    if not isinstance(api, dict):
+        return models
+
+    general = config.get("general", {})
+    selected_model = general.get("model") if isinstance(general, dict) else None
+    selected_spec = (
+        match_endpoint(selected_model) if isinstance(selected_model, str) else None
+    )
+    selected_argo = bool(
+        selected_spec and selected_spec.config_section == "argo"
+    )
+
+    openai = api.get("openai")
+    legacy_url = openai.get("base_url") if isinstance(openai, dict) else None
+    legacy_argo = bool(
+        not has_config_section(api, "argo")
+        and legacy_url
+        and "argoapi" in legacy_url
+    )
+    if legacy_argo and argo_models:
+        resolve_base_url_for_model(argo_models[0], api)
+
+    if selected_argo or legacy_argo:
+        remaining = [model for model in models if model not in argo_models]
+        return argo_models + remaining
+    return models
 
 
 def get_argo_user_from_nested_config(config: Dict[str, Any]) -> Optional[str]:
@@ -217,10 +191,8 @@ def get_argo_user_from_nested_config(config: Dict[str, Any]) -> Optional[str]:
     str or None
         Configured Argo username, or ``None``.
     """
-    value = config.get("api", {}).get("openai", {}).get("argo_user")
-    if isinstance(value, str):
-        value = value.strip()
-    return value or None
+    api = config.get("api", {})
+    return resolve_argo_user(api if isinstance(api, dict) else {})
 
 
 def get_argo_user_from_flat_config(config: Dict[str, Any]) -> Optional[str]:
@@ -236,7 +208,4 @@ def get_argo_user_from_flat_config(config: Dict[str, Any]) -> Optional[str]:
     str or None
         Configured Argo username, or ``None``.
     """
-    value = config.get("api_openai_argo_user")
-    if isinstance(value, str):
-        value = value.strip()
-    return value or None
+    return resolve_argo_user(_api_from_flat_config(config))

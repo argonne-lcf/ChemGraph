@@ -28,6 +28,11 @@ GOOGLE_CREDENTIAL = CredentialPolicy(
 )
 
 
+def resolve_base_url(_model: str, base_url: str | None) -> str | None:
+    """Return an optional Google API URL unchanged."""
+    return base_url
+
+
 def prepare(request: ModelRequest) -> PreparedModel:
     """Prepare a curated Gemini model."""
     model_name = request.model
@@ -61,4 +66,8 @@ SPEC = EndpointSpec(
     prepare=prepare,
     protocol_build=google_native.build,
     credential=GOOGLE_CREDENTIAL,
+    config_section="google",
+    base_url_resolver=resolve_base_url,
+    curated_models=tuple(supported_gemini_models),
+    display_name="Google",
 )
