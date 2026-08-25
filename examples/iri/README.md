@@ -143,14 +143,22 @@ directly, without ChemGraph tools or the MCP server. Includes:
 - Write-safety notes for `submit_job` / `cancel_job` / `mkdir` / `rm`
 
 A benchmark harness ([`bench_claude_code.py`](bench_claude_code.py))
-drives headless Claude Code against the same 15-question benchmark used
-for `single_agent_iri`, writing a JSONL that the notebook's binary judge
-can score. See the module docstring for how to run and re-judge.
+drives headless Claude Code against the same 16-question benchmark used
+for `single_agent_iri`, writing a JSONL of answers + tool-call traces.
+
+**Easiest way to run it:** open
+[`bench_claude_code.ipynb`](bench_claude_code.ipynb) and Run All. The
+notebook preflights the environment, runs the sweep, scores each
+answer with a strict binary judge (0 or 1, style-blind), and prints a
+per-question summary. No manual copy-paste.
+
+Or drive it from the CLI:
 
 ```bash
 cd examples/iri/
 python bench_claude_code.py --qids q1 --trials 1        # one-question smoke
-python bench_claude_code.py --trials 1 --concurrency 2  # full 15-question sweep
+python bench_claude_code.py --trials 1 --concurrency 2  # full 16-question sweep
+# then feed bench_claude_code.jsonl into the notebook's binary judge
 ```
 
 ## Also available as an MCP server

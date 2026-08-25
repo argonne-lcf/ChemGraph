@@ -67,26 +67,38 @@ ALLOWED_TOOLS = ["Bash"]
 MAX_BUDGET_USD = 1.50
 
 
-def build_claude_cmd(question: str, skill_body: str) -> list[str]:
-    return [
-        "claude", "-p",
+def build_claude_cmd(question: str, skill_body: str,
+                      bare: bool = True) -> list[str]:
+    """Build the argv to launch one headless Claude Code subprocess.
+
+    ``bare=True`` isolates the run from ambient project state (memory,
+    CLAUDE.md, hooks, plugins) so the ONLY IRI knowledge Claude Code
+    has is what the appended skill teaches it. That's the fair test.
+    Set False if you deliberately want to measure skill+ambient.
+    """
+    cmd = ["claude", "-p"]
+    if bare:
+        cmd.append("--bare")
+    cmd += [
         "--output-format", "json",
         "--allowed-tools", *ALLOWED_TOOLS,
         # Append the entire skill as extra system context. The CLI's
         # --append-system-prompt takes a raw string (no -file variant in
-        # 2.1.x), so we cat the file into the arg.
+        # 2.1.x), so we pass the file body directly.
         "--append-system-prompt", skill_body,
         "--max-budget-usd", str(MAX_BUDGET_USD),
         "--allow-dangerously-skip-permissions",  # no tty prompts; we already restricted tools
         question,
     ]
+    return cmd
 
 
 async def run_one(qid: str, question: str, trial: int,
                    skill_body: str, *,
-                   timeout_s: int = 240) -> dict:
+                   timeout_s: int = 240,
+                   bare: bool = True) -> dict:
     t0 = time.perf_counter()
-    cmd = build_claude_cmd(question, skill_body)
+    cmd = build_claude_cmd(question, skill_body, bare=bare)
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -202,56 +214,102 @@ def _row(qid, question, trial, t0, **extra) -> dict:
     return base
 
 
-async def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--trials", type=int, default=1)
-    parser.add_argument("--concurrency", type=int, default=2,
-                        help="parallel claude subprocesses (default 2; "
-                             "raise cautiously -- Claude Code isn't cheap)")
-    parser.add_argument("--out", type=Path, default=Path("iri_bench_claude_code.jsonl"))
-    parser.add_argument("--qids", nargs="+", default=None,
-                        help="subset of qids to run (default: all)")
-    args = parser.parse_args()
+async def run_all(*, qids: list[str] | None = None,
+                    trials: int = 1,
+                    concurrency: int = 2,
+                    bare: bool = True,
+                    out_path: Path | None = None,
+                    on_progress=None) -> list[dict]:
+    """Async entrypoint usable from notebooks and scripts.
 
+    Runs the selected questions x trials, writes an optional JSONL,
+    and returns the list of result rows. Suitable for
+    ``await run_all(...)`` inside a Jupyter cell.
+
+    Parameters
+    ----------
+    qids : list of str, optional
+        Subset of question IDs (e.g. ["q1", "q2"]). Default: all 15.
+    trials : int
+        Runs per question. Default 1.
+    concurrency : int
+        Parallel claude subprocesses. Default 2. Claude Code isn't
+        cheap; raise cautiously.
+    bare : bool
+        If True (default), pass ``--bare`` so ambient project state
+        (memory, CLAUDE.md, hooks) can't influence the run.
+    out_path : Path, optional
+        Write a JSONL to this path if given.
+    on_progress : callable(done_count, total, row), optional
+        Called after each row finishes. Useful for tqdm/log updates.
+    """
     if not SKILL_PATH.exists():
-        sys.exit(f"skill file not found: {SKILL_PATH}")
+        raise FileNotFoundError(f"skill file not found: {SKILL_PATH}")
     skill_body = SKILL_PATH.read_text()
 
     qs = QUESTIONS
-    if args.qids:
-        keep = set(args.qids)
+    if qids:
+        keep = set(qids)
         qs = [(q, t) for q, t in QUESTIONS if q in keep]
         if not qs:
-            sys.exit(f"no matching qids from {sorted(keep)}")
+            raise ValueError(f"no matching qids from {sorted(keep)}")
 
-    jobs = [(qid, q, trial) for qid, q in qs for trial in range(args.trials)]
-    print(f"[bench] {len(jobs)} runs "
-           f"({len(qs)} questions x {args.trials} trials), "
-           f"concurrency={args.concurrency}, out={args.out}",
-           file=sys.stderr)
-
-    sem = asyncio.Semaphore(args.concurrency)
+    jobs = [(qid, q, trial) for qid, q in qs for trial in range(trials)]
+    total = len(jobs)
+    sem = asyncio.Semaphore(concurrency)
     done = 0
 
     async def _wrap(job):
         nonlocal done
         async with sem:
-            row = await run_one(*job, skill_body=skill_body)
+            row = await run_one(*job, skill_body=skill_body, bare=bare)
             done += 1
-            print(f"[{done}/{len(jobs)}] {row['qid']} trial={row['trial']} "
-                  f"ok={row['ok']} wall={row['wall_ms']}ms",
-                  file=sys.stderr)
+            if on_progress is not None:
+                try:
+                    on_progress(done, total, row)
+                except Exception:
+                    pass
             return row
 
-    rows = await asyncio.gather(*[_wrap(j) for j in jobs])
-    with args.out.open("w") as f:
-        for r in rows:
-            f.write(json.dumps(r) + "\n")
+    rows = list(await asyncio.gather(*[_wrap(j) for j in jobs]))
+
+    if out_path is not None:
+        with Path(out_path).open("w") as f:
+            for r in rows:
+                f.write(json.dumps(r) + "\n")
+
+    return rows
+
+
+async def _main_cli():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--trials", type=int, default=1)
+    parser.add_argument("--concurrency", type=int, default=2,
+                        help="parallel claude subprocesses (default 2)")
+    parser.add_argument("--out", type=Path, default=Path("iri_bench_claude_code.jsonl"))
+    parser.add_argument("--qids", nargs="+", default=None,
+                        help="subset of qids to run (default: all)")
+    parser.add_argument("--no-bare", action="store_true",
+                        help="drop --bare so Claude Code reads memory + CLAUDE.md")
+    args = parser.parse_args()
+
+    def _log(done, total, row):
+        print(f"[{done}/{total}] {row['qid']} trial={row['trial']} "
+              f"ok={row['ok']} wall={row['wall_ms']}ms", file=sys.stderr)
+
+    rows = await run_all(
+        qids=args.qids,
+        trials=args.trials,
+        concurrency=args.concurrency,
+        bare=not args.no_bare,
+        out_path=args.out,
+        on_progress=_log,
+    )
     print(f"[bench] wrote {len(rows)} rows to {args.out}", file=sys.stderr)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(_main_cli())
 
 
 # ---------------------------------------------------------------------------
