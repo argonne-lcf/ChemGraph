@@ -131,6 +131,28 @@ turn; the model picks the tool by name.
 extra LLM turn on cold action lookups (`list_actions` / `describe`). Useful
 when the flat 43-tool surface is prohibitive.
 
+## Also usable from a bash-capable coding agent (Claude Code, deepagents, ...)
+
+A curl-oriented skill card at `src/chemgraph/skills/alcf_iri_bash.md`
+teaches any agent whose primary tool is `bash` how to hit the IRI API
+directly, without ChemGraph tools or the MCP server. Includes:
+
+- Auth (env var / on-disk Globus cache / ALCF helper CLI)
+- Endpoint recipes for every category with runnable curl + jq snippets
+- Multi-hop patterns (resolve machine names to UUIDs, paginate list_jobs, ...)
+- Write-safety notes for `submit_job` / `cancel_job` / `mkdir` / `rm`
+
+A benchmark harness ([`bench_claude_code.py`](bench_claude_code.py))
+drives headless Claude Code against the same 15-question benchmark used
+for `single_agent_iri`, writing a JSONL that the notebook's binary judge
+can score. See the module docstring for how to run and re-judge.
+
+```bash
+cd examples/iri/
+python bench_claude_code.py --qids q1 --trials 1        # one-question smoke
+python bench_claude_code.py --trials 1 --concurrency 2  # full 15-question sweep
+```
+
 ## Also available as an MCP server
 
 The same tools ship as a standalone MCP server for use with
