@@ -71,6 +71,12 @@ def build_claude_cmd(question: str, skill_body: str,
                       bare: bool = True) -> list[str]:
     """Build the argv to launch one headless Claude Code subprocess.
 
+    Uses ``--output-format stream-json --verbose`` so we get the full
+    per-turn message stream, including ``tool_use`` and ``tool_result``
+    events. ``--output-format json`` (the terminal-only alternative)
+    only emits ``result`` + summary metadata -- no message history --
+    which makes the judge blind to whether tools actually ran.
+
     ``bare=True`` isolates the run from ambient project state (memory,
     CLAUDE.md, hooks, plugins) so the ONLY IRI knowledge Claude Code
     has is what the appended skill teaches it. That's the fair test.
@@ -80,7 +86,8 @@ def build_claude_cmd(question: str, skill_body: str,
     if bare:
         cmd.append("--bare")
     cmd += [
-        "--output-format", "json",
+        "--output-format", "stream-json",
+        "--verbose",  # required by claude for stream-json with --print
         "--allowed-tools", *ALLOWED_TOOLS,
         # Append the entire skill as extra system context. The CLI's
         # --append-system-prompt takes a raw string (no -file variant in
@@ -88,6 +95,8 @@ def build_claude_cmd(question: str, skill_body: str,
         "--append-system-prompt", skill_body,
         "--max-budget-usd", str(MAX_BUDGET_USD),
         "--allow-dangerously-skip-permissions",  # no tty prompts; we already restricted tools
+        "--",  # separator: prompt starts here (avoids "no input" errors when
+               # the question begins with a shell metacharacter)
         question,
     ]
     return cmd
@@ -128,25 +137,36 @@ async def run_one(qid: str, question: str, trial: int,
                     error=f"claude exit {proc.returncode}: {stderr.decode()[:500]}",
                     wall_ms=wall_ms)
 
-    try:
-        parsed = json.loads(stdout.decode())
-    except Exception as e:
+    # stream-json output: one JSON object per line. Types we care about:
+    #   {"type": "assistant", "message": {"content": [{"type": "tool_use", ...}, ...]}}
+    #   {"type": "user",      "message": {"content": [{"type": "tool_result", ...}, ...]}}
+    #   {"type": "result", "subtype": "success"|..., "result": "...", "usage": {...},
+    #    "num_turns": N, "total_cost_usd": X, "is_error": bool}
+    # Everything else (system/init/hook_started/hook_response) is ignored.
+    events = []
+    result_event = None
+    for line in stdout.decode(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            events.append(json.loads(line))
+        except Exception:
+            continue
+    for e in events:
+        if e.get("type") == "result":
+            result_event = e
+            break  # first result event wins; there is only one
+
+    if result_event is None:
         return _row(qid, question, trial, t0, ok=False,
-                    error=f"stdout parse failed: {e!r}",
-                    wall_ms=wall_ms,
-                    raw_stdout=stdout.decode()[:2000])
+                    error=f"no result event in stream-json ({len(events)} events); stderr: {stderr.decode()[:300]}",
+                    wall_ms=wall_ms)
 
-    # Claude Code's --output-format json returns a dict with 'result'
-    # (final assistant text), 'messages' (full turn log incl. tool
-    # calls), 'total_cost_usd', 'usage', etc. Extract what we need.
-    answer = parsed.get("result", "")
-    trace = _render_trace(parsed.get("messages", []))
-    usage = parsed.get("usage", {}) or {}
-
-    # Claude Code can exit 0 with is_error=true (auth failed, tool
-    # denied, etc.) -- treat that as a failure so the row surfaces
-    # the real cause instead of ok=True with an empty trace.
-    cc_is_error = bool(parsed.get("is_error"))
+    answer = result_event.get("result", "") or ""
+    trace = _render_trace(events)
+    usage = result_event.get("usage", {}) or {}
+    cc_is_error = bool(result_event.get("is_error"))
 
     return _row(
         qid, question, trial, t0,
@@ -159,25 +179,30 @@ async def run_one(qid: str, question: str, trial: int,
         output_tokens=usage.get("output_tokens", 0),
         total_tokens=(usage.get("input_tokens", 0)
                        + usage.get("output_tokens", 0)),
-        turns=parsed.get("num_turns", 0),
-        cost_usd=parsed.get("total_cost_usd"),
+        turns=result_event.get("num_turns", 0),
+        cost_usd=result_event.get("total_cost_usd"),
     )
 
 
-def _render_trace(messages: list) -> str:
-    """Flatten Claude Code's messages array into a compact text trace
-    the binary judge can read. Same shape as the notebook's
-    _trace_from_state output: CALL <tool>(args) / RESULT[<tool>]: ..."""
+def _render_trace(events: list) -> str:
+    """Flatten Claude Code's stream-json events into a compact text trace
+    the binary judge can read. Format: CALL <tool>(args) / RESULT: ...
+    matching iri_qeval.ipynb's _trace_from_state output.
+
+    Events shape (one per line in the stream):
+      {"type": "assistant", "message": {"role": "assistant",
+          "content": [{"type": "text"|"thinking"|"tool_use", ...}, ...]}}
+      {"type": "user", "message": {"role": "user",
+          "content": [{"type": "tool_result", "content": [...]}, ...]}}
+    Everything else (system/init/hook_*/result) is ignored here.
+    """
     lines = []
-    for m in messages:
-        # Claude Code emits messages in the Anthropic API shape:
-        # {role: 'assistant', content: [{type: 'tool_use', name, input}, ...]}
-        # {role: 'user',      content: [{type: 'tool_result', tool_use_id, content}, ...]}
-        if not isinstance(m, dict):
+    for e in events:
+        if not isinstance(e, dict):
             continue
-        content = m.get("content") or m.get("message", {}).get("content", [])
-        if isinstance(content, str):
+        if e.get("type") not in ("assistant", "user"):
             continue
+        content = (e.get("message") or {}).get("content") or []
         if not isinstance(content, list):
             continue
         for part in content:
@@ -187,7 +212,7 @@ def _render_trace(messages: list) -> str:
             if t == "tool_use":
                 name = part.get("name", "?")
                 inp = json.dumps(part.get("input", {}), default=str)
-                lines.append(f"CALL {name}({inp[:400]})")
+                lines.append(f"CALL {name}({inp[:500]})")
             elif t == "tool_result":
                 inner = part.get("content", "")
                 if isinstance(inner, list):
@@ -199,6 +224,8 @@ def _render_trace(messages: list) -> str:
                 if len(inner) > 4000:
                     inner = inner[:4000] + f" ... (truncated, {len(inner)} total chars)"
                 lines.append(f"RESULT: {inner}")
+            # 'text' (final assistant prose) and 'thinking' are handled
+            # elsewhere via the result event's `result` field; skip here.
     return "\n".join(lines) if lines else "(no tool calls)"
 
 
