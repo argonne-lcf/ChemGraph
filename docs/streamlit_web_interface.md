@@ -14,10 +14,12 @@ cd ChemGraph
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-streamlit run src/ui/app.py
+chemgraph ui
 ```
 
-Open `http://localhost:8501`.
+Open `http://localhost:8501`. `chemgraph ui` works from any directory
+(`--address`, `--port`, and `--headless` are supported); from the repo root
+you can also run `streamlit run src/ui/app.py` directly.
 
 ## Run with Docker
 

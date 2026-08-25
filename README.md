@@ -190,7 +190,7 @@ cd ChemGraph
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-streamlit run src/ui/app.py
+chemgraph ui
 ```
 
 Open `http://localhost:8501`. For an image-based setup, use the Docker command
