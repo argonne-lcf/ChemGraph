@@ -1727,9 +1727,24 @@ tree rather than as a standalone console script:</p>
 <p>Set the credential in the host environment first. See <a href="../docker_support/">Docker</a>
 for artifact volumes and other modes.</p>
 <h2 id="configure-the-interface">Configure the interface<a class="headerlink" href="#configure-the-interface" title="Permanent link">&para;</a></h2>
+<p>On first launch (no provider configured) the chat page shows a setup screen
+with four paths:</p>
+<ul>
+<li><strong>Argo (Argonne)</strong> — enter your ANL domain username; no API key. Works on
+  the lab network or VPN.</li>
+<li><strong>Your own API key</strong> — OpenAI, Anthropic, Google Gemini, Groq, or
+  OpenRouter; the key is applied to the server process environment only.</li>
+<li><strong>ALCF Inference</strong> — click <em>Log in with Globus</em>, sign in, and paste the
+  authorization code back; tokens are cached under <code>~/.chemgraph/</code> and
+  refreshed automatically. A token from ALCF's <code>inference_auth_token.py</code>
+  helper (or an exported <code>ALCF_ACCESS_TOKEN</code>) is picked up automatically.</li>
+<li><strong>Local (Ollama)</strong> — point at a running OpenAI-compatible server.</li>
+</ul>
+<p>The <strong>Configuration → Providers</strong> tab offers the same per-provider cards
+afterwards: readiness status, credentials, endpoint settings, and a model
+picker with one-click activation.</p>
 <p>When started from the checkout, the app's default configuration path is the
-repository-root <code>config.toml</code>. The model and workflow can then be changed in the
-sidebar. The interface exposes these workflow choices:</p>
+repository-root <code>config.toml</code>. The interface exposes these workflow choices:</p>
 <ul>
 <li><code>single_agent</code></li>
 <li><code>multi_agent</code></li>
