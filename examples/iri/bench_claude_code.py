@@ -102,6 +102,10 @@ async def run_one(qid: str, question: str, trial: int,
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
+            # Explicitly close stdin. Without this, `claude -p` waits
+            # up to 3s for piped input, then warns and exits 1 without
+            # processing the prompt -- silently killing the benchmark.
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env={**os.environ},
