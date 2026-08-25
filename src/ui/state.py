@@ -27,6 +27,7 @@ def init_session_state() -> None:
         "active_workflow": None,
         "ui_log_root": None,
         "current_chat_log_dir": None,
+        "_setup_skipped": False,  # True once first-run setup finished/skipped
         # Session persistence
         "session_store": None,  # SessionStore instance (created lazily)
         "current_session_id": None,  # active session ID (str or None)
