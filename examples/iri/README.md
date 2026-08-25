@@ -152,6 +152,13 @@ notebook preflights the environment, runs the sweep, scores each
 answer with a strict binary judge (0 or 1, style-blind), and prints a
 per-question summary. No manual copy-paste.
 
+Judge model auto-detects between the argo shim (if `ARGO_USER` is set
+or the local proxy responds) and the direct Anthropic API (if
+`ANTHROPIC_API_KEY` is set). Override with
+`BENCH_JUDGE_PROVIDER=argo|anthropic`. Claude Code itself is
+independent -- it uses whatever auth `claude login` set up, or
+`ANTHROPIC_API_KEY` if present.
+
 Or drive it from the CLI:
 
 ```bash
