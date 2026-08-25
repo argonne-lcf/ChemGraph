@@ -143,9 +143,15 @@ async def run_one(qid: str, question: str, trial: int,
     trace = _render_trace(parsed.get("messages", []))
     usage = parsed.get("usage", {}) or {}
 
+    # Claude Code can exit 0 with is_error=true (auth failed, tool
+    # denied, etc.) -- treat that as a failure so the row surfaces
+    # the real cause instead of ok=True with an empty trace.
+    cc_is_error = bool(parsed.get("is_error"))
+
     return _row(
         qid, question, trial, t0,
-        ok=True, error=None,
+        ok=(not cc_is_error),
+        error=(answer if cc_is_error else None),
         wall_ms=wall_ms,
         answer=answer,
         trace_rendered=trace,
