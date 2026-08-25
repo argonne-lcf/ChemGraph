@@ -74,6 +74,76 @@ def test_multiple_prompts_not_alternative_generations_are_added():
     assert response_usage(result)["partial"] is True
 
 
+@pytest.mark.parametrize("source", ["canonical", "response_metadata", "llm_output"])
+def test_anthropic_cache_usage_preserves_total_input(source):
+    native = {
+        "input_tokens": 10, "output_tokens": 5,
+        "cache_read_input_tokens": 100, "cache_creation_input_tokens": 20,
+    }
+    canonical = {
+        "input_tokens": 130, "output_tokens": 5, "total_tokens": 135,
+        "input_token_details": {"cache_read": 100, "cache_creation": 20},
+    }
+    if source == "canonical":
+        result = response(AIMessage(content="done", usage_metadata=canonical))
+        raw = [canonical]
+    elif source == "response_metadata":
+        result = response(AIMessage(content="done", response_metadata={"usage": native}))
+        raw = [native]
+    else:
+        result = LLMResult(generations=[], llm_output={"usage": native})
+        raw = native
+    counts = response_usage(result)
+    assert (counts["input_tokens"], counts["output_tokens"], counts["total_tokens"]) == (130, 5, 135)
+    assert counts["cached_input_tokens"] == counts["cache_read_input_tokens"] == 100
+    assert counts["cache_creation_input_tokens"] == 20
+    assert counts["raw_usage"] == raw
+
+
+@pytest.mark.parametrize("details,expected", [
+    ({"cache_creation": 100}, 100),
+    ({"cache_creation": 100, "ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 0}, 100),
+    ({"cache_creation": 0, "ephemeral_5m_input_tokens": 40, "ephemeral_1h_input_tokens": 60}, 100),
+    ({"cache_creation": 100, "ephemeral_5m_input_tokens": 40, "ephemeral_1h_input_tokens": 60}, 100),
+    ({"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 0}, 0),
+    ({}, None),
+])
+def test_cache_creation_ttl_breakdown_preserves_aggregate(details, expected):
+    message = answer(inputs=150)
+    message.usage_metadata["input_token_details"] = details
+    counts = response_usage(response(message))
+    if expected is None:
+        assert "cache_creation_input_tokens" not in counts
+    else:
+        assert counts["cache_creation_input_tokens"] == expected
+    assert counts["input_tokens"] == 150
+
+
+def test_cache_details_follow_batch_accounting():
+    message = answer(inputs=150)
+    message.usage_metadata["input_token_details"] = {"cache_creation": 100, "cache_read": 20}
+    result = LLMResult(generations=[
+        [ChatGeneration(message=message), ChatGeneration(message=message)],
+        [ChatGeneration(message=message)],
+    ])
+    counts = response_usage(result)
+    assert counts["input_tokens"] == 300
+    assert counts["cache_creation_input_tokens"] == 200
+    assert counts["cache_read_input_tokens"] == counts["cached_input_tokens"] == 40
+    result.generations.append([ChatGeneration(message=AIMessage(content="unknown"))])
+    partial = response_usage(result)
+    assert partial["cache_creation_input_tokens"] == 200
+    assert partial["partial"] is True
+
+
+@pytest.mark.parametrize("usage", [{"input_tokens": 10}, {"output_tokens": 5}])
+def test_response_usage_does_not_invent_missing_totals_or_cache_counts(usage):
+    counts = response_usage(LLMResult(generations=[], llm_output={"usage": usage}))
+    assert counts["total_tokens"] is None
+    assert "cache_read_input_tokens" not in counts
+    assert "cache_creation_input_tokens" not in counts
+
+
 @pytest.fixture
 def store(tmp_path):
     store = SessionStore(str(tmp_path / "sessions.db"))
