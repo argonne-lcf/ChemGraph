@@ -212,7 +212,11 @@ def _render_trace(events: list) -> str:
             if t == "tool_use":
                 name = part.get("name", "?")
                 inp = json.dumps(part.get("input", {}), default=str)
-                lines.append(f"CALL {name}({inp[:500]})")
+                # Bash commands for multi-hop questions can be 1-2kB
+                # (compound shell with env setup + curl + jq). 500 chars
+                # loses the actual jq filter; 2500 covers everything
+                # we've seen without bloating the judge prompt.
+                lines.append(f"CALL {name}({inp[:2500]})")
             elif t == "tool_result":
                 inner = part.get("content", "")
                 if isinstance(inner, list):
