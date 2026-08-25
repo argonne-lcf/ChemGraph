@@ -41,6 +41,47 @@ def find_latest_xyz_file_in_dir(directory: str) -> Optional[str]:
     return latest_path
 
 
+def persist_uploads(uploaded_files, directory: Optional[str]) -> list[str]:
+    """Save chat attachments into a run directory.
+
+    Names are reduced to a safe basename (no path components) and
+    deduplicated against the batch and existing files, so an upload can
+    never overwrite an artifact the run already produced.
+
+    Parameters
+    ----------
+    uploaded_files : sequence
+        Streamlit ``UploadedFile`` objects (anything with ``name`` and
+        ``getvalue()``).
+    directory : str, optional
+        Destination directory (the exchange's artifact dir).
+
+    Returns
+    -------
+    list[str]
+        Absolute paths of the saved files, in input order.
+    """
+    if not uploaded_files or not directory:
+        return []
+    os.makedirs(directory, exist_ok=True)
+    saved: list[str] = []
+    for uploaded in uploaded_files:
+        name = Path(str(getattr(uploaded, "name", "") or "attachment")).name
+        if not name or name in (".", ".."):
+            name = "attachment"
+        candidate = name
+        counter = 1
+        while os.path.exists(os.path.join(directory, candidate)):
+            base = Path(name)
+            candidate = f"{base.stem}_{counter}{base.suffix}"
+            counter += 1
+        path = os.path.abspath(os.path.join(directory, candidate))
+        with open(path, "wb") as f:
+            f.write(uploaded.getvalue())
+        saved.append(path)
+    return saved
+
+
 _WINDOWS_DRIVE_RE = re.compile(r"[A-Za-z]:[\\/]")
 
 
