@@ -1779,6 +1779,11 @@ to see the identifiers registered by your installed version.</p>
 <td><code>GROQ_API_KEY</code></td>
 </tr>
 <tr>
+<td>OpenRouter</td>
+<td><code>openrouter:&lt;model-id&gt;</code></td>
+<td><code>OPENROUTER_API_KEY</code></td>
+</tr>
+<tr>
 <td>Argo</td>
 <td><code>argo:&lt;model-id&gt;</code></td>
 <td><code>ARGO_USER</code> or <code>argo_user</code> in config</td>
@@ -1792,6 +1797,11 @@ to see the identifiers registered by your installed version.</p>
 <td>Ollama</td>
 <td>Curated local ID such as <code>llama3.2</code></td>
 <td>Running Ollama server; no key</td>
+</tr>
+<tr>
+<td>vLLM/custom</td>
+<td>Custom ID plus a configured base URL</td>
+<td><code>VLLM_API_KEY</code> or placeholder</td>
 </tr>
 <tr>
 <td>Codex</td>
@@ -1835,7 +1845,10 @@ ALCF service instructions rather than copying an old model name.</p>
 <p>Local models vary substantially in tool-calling reliability. See
 <a href="../running_local_models/">Local models</a> for limitations and advanced endpoints.</p>
 <h2 id="configuration-file">Configuration file<a class="headerlink" href="#configuration-file" title="Permanent link">&para;</a></h2>
-<p>Non-secret endpoint settings and <code>argo_user</code> can be placed in <code>config.toml</code>.
+<p>Non-secret endpoint settings and <code>[api.argo].argo_user</code> can be placed in
+<code>config.toml</code>. Use <code>[api.vllm].base_url</code> for an otherwise unknown custom model;
+leaving that canonical value empty prevents the direct OpenAI URL from becoming
+an accidental custom-model fallback.
 Choose the CLI model with <code>--model</code>; Streamlit reads its model default from the
 configuration file. Environment variables remain the recommended place for tokens.
 See <a href="../configuration_with_toml/">Configuration</a> for supported sections and
