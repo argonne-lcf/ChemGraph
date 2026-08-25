@@ -349,14 +349,14 @@ def _start_reauth() -> dict:
     if variant == "flat":
         next_step = (
             "Ask the user to open this URL in a browser, sign in with "
-            "their jinchuli@alcf.anl.gov identity, copy the resulting "
+            "their <user>@alcf.anl.gov identity, copy the resulting "
             "authorization code, and paste it into the next message. "
             "Then call alcf_auth_complete_reauth with auth_code='<the code>'."
         )
     else:
         next_step = (
             "Ask the user to open this URL in a browser, sign in with "
-            "their jinchuli@alcf.anl.gov identity, copy the resulting "
+            "their <user>@alcf.anl.gov identity, copy the resulting "
             "authorization code, and paste it into the next message. "
             "Then invoke alcf_auth with action='complete_reauth', "
             "params={'auth_code': '<the code>'}."
