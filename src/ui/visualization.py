@@ -180,6 +180,41 @@ def display_molecular_structure(atomic_numbers, positions, title="Structure") ->
     return False
 
 
+def trajectory_to_xyz_frames(traj, max_frames: int = 40) -> str:
+    """Serialize trajectory frames to multi-model XYZ text.
+
+    The format is what 3Dmol.js consumes via ``addModelsAsFrames`` --
+    both the Streamlit-side viewer and the combined IR explorer embed it.
+
+    Parameters
+    ----------
+    traj : Iterable[ase.Atoms]
+        Trajectory frames.
+    max_frames : int, optional
+        Downsample evenly to at most this many frames to bound the
+        payload size when many modes are embedded at once.
+
+    Returns
+    -------
+    str
+        Concatenated XYZ blocks, one per frame.
+    """
+    frames = list(traj)
+    if max_frames and len(frames) > max_frames:
+        step = -(-len(frames) // max_frames)  # ceil division
+        frames = frames[::step]
+    xyz_frames = []
+    for i, atoms in enumerate(frames):
+        symbols = atoms.get_chemical_symbols()
+        pos = atoms.get_positions()
+        lines = [str(len(symbols)), f"Frame {i}"]
+        lines += [
+            f"{s} {x:.6f} {y:.6f} {z:.6f}" for s, (x, y, z) in zip(symbols, pos)
+        ]
+        xyz_frames.append("\n".join(lines))
+    return "\n".join(xyz_frames)
+
+
 def visualize_trajectory(traj):
     """Create an animated py3Dmol view from an ASE trajectory.
 
@@ -193,16 +228,7 @@ def visualize_trajectory(traj):
     py3Dmol.view
         Configured animated viewer.
     """
-    xyz_frames = []
-    for i, atoms in enumerate(traj):
-        symbols = atoms.get_chemical_symbols()
-        pos = atoms.get_positions()
-        lines = [str(len(symbols)), f"Frame {i}"]
-        lines += [
-            f"{s} {x:.6f} {y:.6f} {z:.6f}" for s, (x, y, z) in zip(symbols, pos)
-        ]
-        xyz_frames.append("\n".join(lines))
-    xyz_str = "\n".join(xyz_frames)
+    xyz_str = trajectory_to_xyz_frames(traj)
 
     view = py3Dmol.view(width="100%", height=VIEWER_HEIGHT)
     view.addModelsAsFrames(xyz_str, "xyz")

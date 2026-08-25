@@ -63,6 +63,7 @@ from ui.visualization import (
     PY3DMOL_AVAILABLE,
     display_molecular_structure,
     render_py3dmol,
+    trajectory_to_xyz_frames,
     visualize_trajectory,
 )
 
@@ -935,6 +936,12 @@ def _render_single_exchange(idx: int, entry: dict, thread_id: int) -> None:
         if html_filename:
             _render_html_report(idx, html_filename, messages, entry)
 
+        # Optimization convergence (needs the recorded trajectory artifact)
+        if artifact_kinds is not None and artifact_kinds.get(
+            artifact_utils.TRAJECTORIES
+        ):
+            _render_optimization_section(idx, entry, artifact_kinds)
+
         # IR spectrum: prefer the exchange's recorded artifacts; fall back to
         # keyword sniffing only for legacy entries without a manifest.
         if artifact_kinds is not None:
@@ -1329,6 +1336,168 @@ def _trajectory_mode_index(filename: str, fallback: int) -> int:
         return fallback
 
 
+@st.cache_data(show_spinner=False)
+def _cached_mode_frames(traj_path: str, mtime: float) -> Optional[str]:
+    """Load a normal-mode trajectory as multi-model XYZ text (cached).
+
+    Parameters
+    ----------
+    traj_path : str
+        Path to the mode's ``.traj`` file.
+    mtime : float
+        File modification time; part of the cache key so rewritten
+        files re-load.
+
+    Returns
+    -------
+    str or None
+        XYZ frame text, or ``None`` when the file cannot be read.
+    """
+    try:
+        from ase.io.trajectory import Trajectory
+
+        with Trajectory(traj_path) as traj:
+            return trajectory_to_xyz_frames(traj)
+    except Exception:
+        return None
+
+
+def _render_ir_explorer_panel(
+    idx: int,
+    peaks_path: Optional[str],
+    freq_path: Optional[str],
+    log_dir: Optional[str],
+) -> bool:
+    """Render the linked viewer + spectrum explorer for an IR run.
+
+    Needs the per-mode peak data (``ir_peaks_*.csv``); returns ``False``
+    so the caller falls back to the static layout when it is missing.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    peaks_path : str, optional
+        Resolved ``ir_peaks_*.csv`` path.
+    freq_path : str, optional
+        Resolved ``frequencies_*.csv`` path (maps modes to trajectories).
+    log_dir : str, optional
+        Run artifact directory.
+
+    Returns
+    -------
+    bool
+        ``True`` when the explorer was rendered.
+    """
+    if not peaks_path or not os.path.exists(peaks_path):
+        return False
+    if not freq_path or not os.path.exists(freq_path):
+        return False
+    try:
+        from ui import plots as ui_plots
+        from ui.ir_explorer import render_ir_explorer
+    except ImportError:
+        return False
+
+    peak_records = ui_plots.load_ir_peaks_csv(peaks_path)
+    if not peak_records:
+        return False
+    real_peaks = [
+        p
+        for p in peak_records
+        if not p["imaginary"] and p["frequency"] is not None
+    ]
+    if not real_peaks:
+        return False
+
+    # Map mode index -> trajectory filename via the frequencies table.
+    traj_names: dict[int, str] = {}
+    try:
+        df = pd.read_csv(freq_path, index_col=False, names=["filename", "frequency"])
+        for row_idx, row in df.iterrows():
+            name = str(row["filename"])
+            traj_names[_trajectory_mode_index(name, row_idx)] = name
+    except Exception:
+        pass
+
+    # ----- Controls: mode dropdown + Gaussian width slider -----
+    col_mode, col_width = st.columns([3, 2], vertical_alignment="bottom")
+    with col_mode:
+        option_labels: dict[str, int] = {}
+        for p in peak_records:
+            suffix = "i" if p["imaginary"] else ""
+            freq_value = p["frequency"] if p["frequency"] is not None else 0.0
+            option_label = (
+                f"Mode {p['mode']}: {freq_value:.2f}{suffix} cm⁻¹"
+            )
+            option_labels[option_label] = p["mode"]
+        selected_label = st.selectbox(
+            "Normal mode",
+            list(option_labels.keys()),
+            index=0,
+            key=f"ir_frequency_select_{idx}",
+        )
+        selected_mode = option_labels[selected_label]
+    with col_width:
+        width = st.slider(
+            "Peak width (FWHM, cm⁻¹)",
+            min_value=1,
+            max_value=100,
+            value=8,
+            key=f"ir_width_{idx}",
+        )
+
+    curve_x, curve_y = ui_plots.gaussian_broadened_spectrum(
+        [p["frequency"] for p in real_peaks],
+        [p["intensity"] for p in real_peaks],
+        float(width),
+    )
+
+    import numpy as np
+
+    traj_base = str(Path(freq_path).parent)
+    peaks_payload = []
+    for p in peak_records:
+        frames = None
+        traj_name = traj_names.get(p["mode"])
+        if traj_name:
+            traj_path = _resolve_artifact_path(traj_name, traj_base)
+            if os.path.exists(traj_path):
+                frames = _cached_mode_frames(
+                    traj_path, os.path.getmtime(traj_path)
+                )
+        freq_value = p["frequency"] if p["frequency"] is not None else 0.0
+        marker_y = (
+            float(np.interp(freq_value, curve_x, curve_y))
+            if not p["imaginary"]
+            else 0.0
+        )
+        peaks_payload.append(
+            {
+                "mode": p["mode"],
+                "freq": freq_value,
+                "intensity": p["intensity"],
+                "imaginary": p["imaginary"],
+                "y": marker_y,
+                "frames": frames,
+            }
+        )
+
+    render_ir_explorer(curve_x, curve_y, peaks_payload, selected_mode)
+    selected_record = next(
+        (p for p in peak_records if p["mode"] == selected_mode), None
+    )
+    if selected_record is not None and selected_record["imaginary"]:
+        st.caption(
+            "The selected mode is imaginary and not part of the spectrum."
+        )
+    st.caption(
+        "Hover a peak to preview its normal mode; the dropdown selection "
+        "stays highlighted."
+    )
+    return True
+
+
 def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
     """Render IR spectrum plot, frequency table, and trajectory viewer.
 
@@ -1343,16 +1512,20 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
     """
     log_dir = _artifact_log_dir(messages, entry)
     artifact_kinds = _entry_artifact_kinds(entry)
+    peaks_path = None
     if artifact_kinds is not None:
         # Use exactly the files this exchange produced.
         ir_files = artifact_kinds.get(artifact_utils.IR_PLOTS, [])
         freq_files = artifact_kinds.get(artifact_utils.FREQUENCY_TABLES, [])
+        peaks_files = artifact_kinds.get(artifact_utils.IR_PEAKS, [])
         ir_path = (
             _resolve_artifact_path(ir_files[-1], log_dir) if ir_files else None
         )
         freq_path = (
             _resolve_artifact_path(freq_files[-1], log_dir) if freq_files else None
         )
+        if peaks_files:
+            peaks_path = _resolve_artifact_path(peaks_files[-1], log_dir)
     else:
         # Legacy entries: newest match in the entry's own log directory.
         ir_path = _latest_artifact_path(log_dir, "ir_spectrum*.png")
@@ -1363,24 +1536,34 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
         return
 
     # vib/thermo runs record frequencies but no spectrum -- label honestly.
+    has_spectrum_data = bool(
+        artifact_kinds and artifact_kinds.get(artifact_utils.IR_SPECTRA)
+    )
     label = (
         "\U0001f50d IR Spectrum"
-        if ir_path or artifact_kinds is None
+        if ir_path or has_spectrum_data or artifact_kinds is None
         else "\U0001f50d Vibrational Modes"
     )
     with st.expander(label, expanded=True):
+        # Runs with per-mode peak data get the linked explorer: hover a
+        # peak to see its mode animate, re-broaden with the width slider.
+        if _render_ir_explorer_panel(idx, peaks_path, freq_path, log_dir):
+            return
+
         col1, col2 = st.columns(2, border=True)
 
         with col1:
-            if ir_path and os.path.exists(ir_path):
-                st.image(ir_path)
-            elif artifact_kinds is not None:
-                st.caption(
-                    "This run computed vibrational modes; no IR spectrum "
-                    "was requested."
-                )
-            else:
-                st.warning("IR spectrum plot not found.")
+            if not _render_interactive_ir_spectrum(idx, artifact_kinds, log_dir):
+                # Runs without spectrum data only produced the static image.
+                if ir_path and os.path.exists(ir_path):
+                    st.image(ir_path)
+                elif artifact_kinds is not None:
+                    st.caption(
+                        "This run computed vibrational modes; no IR spectrum "
+                        "was requested."
+                    )
+                else:
+                    st.warning("IR spectrum plot not found.")
 
         with col2:
             if not freq_path or not os.path.exists(freq_path):
@@ -1448,6 +1631,103 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
                 view = visualize_trajectory(traj)
                 view.zoomTo()
                 render_py3dmol(view)
+
+
+def _render_interactive_ir_spectrum(
+    idx: int, artifact_kinds: Optional[dict], log_dir: Optional[str]
+) -> bool:
+    """Render the exchange's IR spectrum as an interactive chart.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    artifact_kinds : dict or None
+        Classified artifacts for the exchange.
+    log_dir : str, optional
+        Run artifact directory.
+
+    Returns
+    -------
+    bool
+        ``True`` when the interactive chart was rendered.
+    """
+    if not artifact_kinds:
+        return False
+    spectra = artifact_kinds.get(artifact_utils.IR_SPECTRA, [])
+    if not spectra:
+        return False
+    try:
+        from ui import plots as ui_plots
+    except ImportError:
+        return False
+
+    csv_path = _resolve_artifact_path(spectra[-1], log_dir)
+    data = ui_plots.load_ir_spectrum_csv(csv_path)
+    if data is None:
+        return False
+    frequencies, intensities = data
+    st.plotly_chart(
+        ui_plots.ir_spectrum_figure(frequencies, intensities),
+        use_container_width=True,
+        key=f"ir_chart_{idx}",
+    )
+    return True
+
+
+def _render_optimization_section(
+    idx: int, entry: dict, artifact_kinds: dict
+) -> None:
+    """Render convergence chart and animation for an optimization run.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    entry : dict
+        Conversation-history entry.
+    artifact_kinds : dict
+        Classified artifacts for the exchange.
+    """
+    try:
+        from ui import plots as ui_plots
+    except ImportError:
+        return
+
+    traj_rel = artifact_kinds[artifact_utils.TRAJECTORIES][-1]
+    traj_path = _resolve_artifact_path(traj_rel, entry.get("log_dir"))
+    if not os.path.exists(traj_path):
+        return
+    data = ui_plots.read_optimization_trajectory(traj_path)
+    if data is None:
+        return
+    energies, fmax_values = data
+    if len(energies) < 2:
+        return
+
+    with st.expander(
+        f"\U0001f4c9 Optimization ({len(energies)} steps)", expanded=False
+    ):
+        col_chart, col_anim = st.columns(2, border=True)
+        with col_chart:
+            st.plotly_chart(
+                ui_plots.convergence_figure(energies, fmax_values),
+                use_container_width=True,
+                key=f"convergence_{idx}",
+            )
+        with col_anim:
+            if PY3DMOL_AVAILABLE:
+                try:
+                    from ase.io.trajectory import Trajectory
+
+                    view = visualize_trajectory(Trajectory(traj_path))
+                    view.zoomTo()
+                    render_py3dmol(view)
+                    st.caption("Optimization path animation")
+                except Exception as exc:
+                    st.warning(f"Could not animate trajectory: {exc}")
+            else:
+                st.info("Install py3Dmol to animate the optimization path.")
 
 
 def _render_verbose_info(idx: int, messages: list, entry: dict) -> None:

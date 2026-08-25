@@ -41,6 +41,7 @@ dependencies = [
     "globus_sdk",
     "streamlit==1.48.1",
     "py3Dmol",
+    "plotly",
     "langsmith==0.10.10",
     "rich==14.1.0",
     "toml==0.10.2",
@@ -80,6 +81,7 @@ uma = [
 ui = [
     "streamlit",
     "py3Dmol",
+    "plotly",
 ]
 parsl = [
     "parsl",
