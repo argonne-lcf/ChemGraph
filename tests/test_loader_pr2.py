@@ -180,6 +180,33 @@ def test_reasoning_effort_flows_to_argo_reasoning_model():
     assert prepared.client_kwargs.get("reasoning_effort") == "high"
 
 
+@pytest.mark.parametrize(
+    "model_name",
+    ["argo:claude-opus-4.8", "argo:claude-opus-5"],
+)
+def test_reasoning_effort_flows_to_argo_claude(model_name):
+    client, prepared = load_chat_model_prepared(
+        model_name=model_name,
+        argo_user="alice",
+        reasoning_effort="xhigh",
+    )
+
+    assert prepared.reasoning_effort == "xhigh"
+    assert prepared.client_kwargs["reasoning_effort"] == "xhigh"
+    payload = client._get_request_payload("Analyze this molecule")
+    assert payload["output_config"] == {"effort": "xhigh"}
+    assert "thinking" not in payload
+
+
+def test_argo_claude_rejects_none_reasoning_effort():
+    with pytest.raises(ValueError, match="supports: low, medium, high, xhigh, max"):
+        load_chat_model_prepared(
+            model_name="argo:claude-opus-5",
+            argo_user="alice",
+            reasoning_effort="none",
+        )
+
+
 # --- ChemGraph forwards explicit OpenAI api_key ----------------------------
 
 

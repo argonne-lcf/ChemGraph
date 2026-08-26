@@ -1,5 +1,6 @@
 [general]
 model = "argo:gpt-4o"
+# reasoning_effort = "medium"  # Supported Argo GPT-5.6 and Claude Opus models only
 workflow = "single_agent"
 output = "state"
 structured = true

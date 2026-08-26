@@ -47,12 +47,16 @@ def test_chemgraph_initialization(tmp_path):
 @pytest.mark.parametrize(
     ("model_name", "reasoning_effort", "expected_effort"),
     [
-        ("argo:gpt-5.6-luna", None, "none"),
+        ("argo:gpt-5.6-luna", None, "medium"),
+        ("argo:gpt-5.6-sol", None, "medium"),
+        ("argo:gpt-5.6-terra", None, "medium"),
+        ("argo:claude-opus-4.8", None, "medium"),
+        ("argo:claude-opus-5", None, "medium"),
         ("argo:gpt-5.6-sol", "high", "high"),
-        ("argo:gpt-5.6-terra", None, "none"),
+        ("argo:claude-opus-5", "xhigh", "xhigh"),
     ],
 )
-def test_gpt56_reasoning_effort_is_passed_to_loader(
+def test_reasoning_effort_is_passed_to_loader(
     tmp_path, model_name, reasoning_effort, expected_effort
 ):
     with patch("chemgraph.agent.llm_agent.load_chat_model_prepared") as mock_load:
@@ -84,6 +88,11 @@ def test_reasoning_effort_is_not_passed_to_sonnet5(tmp_path):
 def test_reasoning_effort_rejects_unverified_model():
     with pytest.raises(ValueError, match="does not have verified"):
         ChemGraph(model_name="argo:gpt-5.4", reasoning_effort="none")
+
+
+def test_claude_reasoning_effort_rejects_none():
+    with pytest.raises(ValueError, match="supports: low, medium, high, xhigh, max"):
+        ChemGraph(model_name="argo:claude-opus-4.8", reasoning_effort="none")
 
 
 @pytest.mark.parametrize("reasoning_effort", ["fast", ""])

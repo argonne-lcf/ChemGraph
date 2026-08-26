@@ -29,7 +29,10 @@ from chemgraph.models.endpoints import (
     missing_credential_help,
 )
 from chemgraph.models.endpoints.registry import select_endpoint
-from chemgraph.models.supported_models import MODELS_WITH_REASONING_EFFORT
+from chemgraph.models.supported_models import (
+    DEFAULT_REASONING_EFFORT_BY_MODEL,
+    REASONING_EFFORTS_BY_MODEL,
+)
 from chemgraph.utils.async_utils import run_async_callable
 
 from chemgraph.cli.formatting import (
@@ -264,6 +267,8 @@ def initialize_agent(
             console.print(f"  Base URL: {base_url}")
         if argo_user:
             console.print(f"  Argo User: {argo_user}")
+        if reasoning_effort:
+            console.print(f"  Reasoning Effort: {reasoning_effort}")
         if tools:
             console.print(f"  MCP Tools: {len(tools)} loaded")
 
@@ -1011,6 +1016,7 @@ def interactive_mode(
     deepagent_workspace: str | None = None,
     checkpoint_db: str | None = None,
     resume_session: str | None = None,
+    reasoning_effort: str | None = None,
 ) -> None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -1047,6 +1053,8 @@ def interactive_mode(
         selected workflow is ``main_agent``.
     deepagent_workspace : str, optional
         Local workspace used by the experimental host-shell backend.
+    reasoning_effort : str, optional
+        Reasoning effort for models with verified support.
     """
     console.print(create_banner())
     console.print("[bold green]Welcome to ChemGraph Interactive Mode![/bold green]")
@@ -1062,7 +1070,6 @@ def interactive_mode(
     checkpoint_saver = None
     restored_thread_id: str | None = None
     stored_graph_config = None
-    reasoning_effort: str | None = None
     max_retries = 1
     terminal_tool_names: tuple[str, ...] = ()
     if resume_session:
@@ -1154,6 +1161,7 @@ def interactive_mode(
         if checkpoint_runtime is not None:
             checkpoint_runtime.close()
         return
+    reasoning_effort = getattr(agent, "reasoning_effort", reasoning_effort)
 
     main_session = (
         create_main_agent_session(
@@ -1449,11 +1457,15 @@ Example queries:
                     console.print("[red]Usage: /model <name>[/red]")
                     continue
                 new_model = argument
-                new_reasoning_effort = (
-                    reasoning_effort
-                    if new_model in MODELS_WITH_REASONING_EFFORT
-                    else None
-                )
+                supported_efforts = REASONING_EFFORTS_BY_MODEL.get(new_model)
+                if supported_efforts is None:
+                    new_reasoning_effort = None
+                elif reasoning_effort in supported_efforts:
+                    new_reasoning_effort = reasoning_effort
+                else:
+                    new_reasoning_effort = DEFAULT_REASONING_EFFORT_BY_MODEL[
+                        new_model
+                    ]
                 new_agent = initialize_agent(
                     new_model,
                     workflow,
@@ -1482,8 +1494,16 @@ Example queries:
                             "[yellow]Reasoning effort was reset because the new "
                             "model does not support it.[/yellow]"
                         )
+                    elif reasoning_effort != new_reasoning_effort:
+                        console.print(
+                            "[yellow]Reasoning effort changed to "
+                            f"'{new_reasoning_effort}' because the new model does "
+                            "not support the previous value.[/yellow]"
+                        )
                     model = new_model
-                    reasoning_effort = new_reasoning_effort
+                    reasoning_effort = getattr(
+                        new_agent, "reasoning_effort", new_reasoning_effort
+                    )
                     agent = new_agent
                     main_session = (
                         create_main_agent_session(

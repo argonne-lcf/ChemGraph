@@ -21,9 +21,9 @@ from chemgraph.models.endpoints.base import (
 )
 from chemgraph.models.protocols import openai_compatible
 from chemgraph.models.supported_models import (
-    MODELS_WITH_REASONING_EFFORT,
     MODELS_WITHOUT_TEMPERATURE,
-    SUPPORTED_REASONING_EFFORTS,
+    REASONING_EFFORT_CHOICES,
+    REASONING_EFFORTS_BY_MODEL,
     supported_openai_models,
 )
 from chemgraph.utils.logging_config import setup_logger
@@ -49,16 +49,19 @@ def validate_reasoning_effort(requested_model_name: str, reasoning_effort: str |
     """Validate reasoning-effort support for a model. Moved from ``openai.py``."""
     if reasoning_effort is None:
         return
-    if requested_model_name not in MODELS_WITH_REASONING_EFFORT:
+    supported_efforts = REASONING_EFFORTS_BY_MODEL.get(requested_model_name)
+    if supported_efforts is None:
         raise ValueError(
             f"Model '{requested_model_name}' does not have verified "
             "reasoning-effort support."
         )
-    if reasoning_effort not in SUPPORTED_REASONING_EFFORTS:
-        supported = ", ".join(sorted(SUPPORTED_REASONING_EFFORTS))
+    if reasoning_effort not in supported_efforts:
+        supported = ", ".join(
+            effort for effort in REASONING_EFFORT_CHOICES if effort in supported_efforts
+        )
         raise ValueError(
             f"Unsupported reasoning effort '{reasoning_effort}'. "
-            f"Choose one of: {supported}."
+            f"Model '{requested_model_name}' supports: {supported}."
         )
 
 
