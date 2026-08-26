@@ -53,7 +53,10 @@ from chemgraph.models.endpoints import (
     missing_credential_help,
 )
 from chemgraph.models.endpoints.registry import select_endpoint
-from chemgraph.models.supported_models import MODELS_WITH_REASONING_EFFORT
+from chemgraph.models.supported_models import (
+    DEFAULT_REASONING_EFFORT_BY_MODEL,
+    REASONING_EFFORTS_BY_MODEL,
+)
 from chemgraph.utils.async_utils import run_async_callable
 from chemgraph.utils.workflow_utils import get_removed_workflow_message
 
@@ -404,6 +407,8 @@ def initialize_agent(
             console.print(f"  Base URL: {base_url}")
         if argo_user:
             console.print(f"  Argo User: {argo_user}")
+        if reasoning_effort:
+            console.print(f"  Reasoning Effort: {reasoning_effort}")
         if tools:
             console.print(f"  MCP Tools: {len(tools)} loaded")
 
@@ -1427,6 +1432,7 @@ def interactive_mode(
     main_agent_prompt: str | None = None,
     configuration_id: str | None = None,
     approval_mode: ApprovalMode | None = None,
+    reasoning_effort: str | None = None,
 ) -> int | None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -1477,6 +1483,8 @@ def interactive_mode(
     deepagent_auto_approve : bool, optional
         Disable action approvals for a standalone Deep Agent. The CLI rejects
         this option in interactive mode.
+    reasoning_effort : str, optional
+        Reasoning effort for models with verified support.
     """
     console.print(create_banner())
     console.print("[bold green]Welcome to ChemGraph Interactive Mode![/bold green]")
@@ -1514,7 +1522,6 @@ def interactive_mode(
     checkpoint_saver = None
     restored_thread_id: str | None = None
     stored_graph_config = None
-    reasoning_effort: str | None = None
     max_retries = 1
     terminal_tool_names: tuple[str, ...] = ()
     if resume_session:
@@ -1667,6 +1674,7 @@ def interactive_mode(
         main_options["user_skills_dir"] = getattr(agent, "user_skills_dir", main_options["user_skills_dir"])
     if workflow == "deep_agent" or (enable_deepagent and workflow == "main_agent"):
         deepagent_skill_dirs = getattr(agent, "deepagent_skill_dirs", deepagent_skill_dirs)
+    reasoning_effort = getattr(agent, "reasoning_effort", reasoning_effort)
 
     main_session = (
         create_main_agent_session(
@@ -1978,11 +1986,15 @@ Example queries:
                     console.print("[red]Usage: /model <name>[/red]")
                     continue
                 new_model = argument
-                new_reasoning_effort = (
-                    reasoning_effort
-                    if new_model in MODELS_WITH_REASONING_EFFORT
-                    else None
-                )
+                supported_efforts = REASONING_EFFORTS_BY_MODEL.get(new_model)
+                if supported_efforts is None:
+                    new_reasoning_effort = None
+                elif reasoning_effort in supported_efforts:
+                    new_reasoning_effort = reasoning_effort
+                else:
+                    new_reasoning_effort = DEFAULT_REASONING_EFFORT_BY_MODEL[
+                        new_model
+                    ]
                 new_agent = initialize_selection(new_model, workflow, new_reasoning_effort)
                 if new_agent:
                     if reasoning_effort is not None and new_reasoning_effort is None:
@@ -1990,8 +2002,16 @@ Example queries:
                             "[yellow]Reasoning effort was reset because the new "
                             "model does not support it.[/yellow]"
                         )
+                    elif reasoning_effort not in (None, new_reasoning_effort):
+                        console.print(
+                            "[yellow]Reasoning effort changed to "
+                            f"'{new_reasoning_effort}' because the new model does "
+                            "not support the previous value.[/yellow]"
+                        )
                     model = new_model
-                    reasoning_effort = new_reasoning_effort
+                    reasoning_effort = getattr(
+                        new_agent, "reasoning_effort", new_reasoning_effort
+                    )
                     agent = new_agent
                     if workflow == "main_agent":
                         main_configuration = getattr(getattr(agent, "runtime_config", None), "saved", main_configuration)
