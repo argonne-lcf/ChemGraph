@@ -549,11 +549,13 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(monkeypatch):
         subagents=[_subagent(_answering_subgraph("chemistry"), name="chemgraph")],
         enable_deepagent=True,
         deepagent_backend=backend,
+        deepagent_skills=["/workspace/skills/"],
         deepagent_recursion_limit=17,
     )
 
     assert captured["kwargs"]["backend"] is backend
     assert captured["kwargs"]["tools"] == []
+    assert captured["kwargs"]["skills"] == ["/workspace/skills/"]
     assert captured["kwargs"]["checkpointer"] is None
     assert captured["kwargs"]["recursion_limit"] == 17
     assert captured["kwargs"]["name"] == "deepagent"
@@ -563,6 +565,7 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(monkeypatch):
     ("kwargs", "match"),
     [
         ({"deepagent_backend": object()}, "requires enable_deepagent"),
+        ({"deepagent_skills": ["/skills/"]}, "requires enable_deepagent"),
         (
             {"enable_deepagent": True, "deepagent_recursion_limit": 0},
             "must be positive",

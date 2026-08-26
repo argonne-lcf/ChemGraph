@@ -55,7 +55,8 @@ chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
 
 # The same worker delegated by the durable supervisor.
 chemgraph run --interactive --workflow main_agent --deepagent \
-  --deepagent-workspace .
+  --deepagent-workspace . \
+  --deepagent-skill /workspace/.agents/skills/
 ```
 
 The standalone interactive workflow keeps one thread while that CLI process is
@@ -63,6 +64,13 @@ open; it does not provide cross-process restoration in this first version.
 File mutations and shell commands require structured approve/reject decisions.
 Headless execution is rejected unless both an explicit workspace and
 `--deepagent-dangerously-skip-approvals` are supplied.
+
+Agent Skills are loaded only from explicitly supplied backend-relative source
+directories. Repeat `--deepagent-skill` to layer sources; the later source wins
+for duplicate skill names. The equivalent Python options are `skills=` on
+`construct_deep_agent_graph` and `deepagent_skills=` on `ChemGraph` or
+`construct_main_agent_graph`. Skill metadata uses progressive disclosure and
+is cached for the thread after its first load.
 
 With the CLI's virtual local backend, `/workspace` is the project root exposed
 to the Deep Agent. For example, `--deepagent-workspace test/` maps

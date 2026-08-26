@@ -6,10 +6,16 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 import time
-from typing import Any, Callable, Collection, List, Optional
+from typing import Any, Callable, Collection, List, Optional, Sequence
 import uuid
 
 from chemgraph.agent.events import EventCallback, _AstreamEventCallback
+from chemgraph.agent.interrupts import (
+    PendingInterrupt,
+    deduplicate_interrupts,
+    interrupt_question,
+    normalize_interrupts,
+)
 from chemgraph.memory.store import SessionStore
 from chemgraph import __version__
 from chemgraph.memory.schemas import (
@@ -50,6 +56,7 @@ from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.graphs.deep_agent import (
     DEFAULT_DEEPAGENT_PROMPT,
+    _normalize_skill_sources,
     construct_deep_agent_graph,
 )
 from chemgraph.agent.turn import serialize_state
@@ -195,6 +202,9 @@ class ChemGraph:
     deepagent_backend : BackendProtocol, optional
         Backend used by the workspace Deep Agent. When omitted, its files are
         stored in checkpointed agent state.
+    deepagent_skills : sequence of str, optional
+        Ordered backend-relative directories containing Agent Skills. Later
+        sources override earlier sources with the same skill name.
     deepagent_auto_approve : bool, optional
         Disable Deep Agent tool-review interrupts for a standalone
         ``deep_agent`` workflow. This permits unreviewed file mutations and
@@ -236,11 +246,13 @@ class ChemGraph:
         terminal_tool_names: Collection[str] = (),
         enable_deepagent: bool = False,
         deepagent_backend: Any | None = None,
+        deepagent_skills: Sequence[str] | None = None,
         deepagent_auto_approve: bool = False,
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
         checkpointer: BaseCheckpointSaver | None = None,
     ):
+        normalized_deepagent_skills = _normalize_skill_sources(deepagent_skills)
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."
@@ -250,6 +262,13 @@ class ChemGraph:
         ):
             raise ValueError(
                 "deepagent_backend requires enable_deepagent=True or "
+                "workflow_type='deep_agent'."
+            )
+        if normalized_deepagent_skills and not (
+            enable_deepagent or workflow_type == "deep_agent"
+        ):
+            raise ValueError(
+                "deepagent_skills requires enable_deepagent=True or "
                 "workflow_type='deep_agent'."
             )
         if deepagent_auto_approve and workflow_type != "deep_agent":
@@ -350,6 +369,7 @@ class ChemGraph:
         self.terminal_tool_names = tuple(terminal_tool_names)
         self.enable_deepagent = enable_deepagent
         self.deepagent_backend = deepagent_backend
+        self.deepagent_skills = normalized_deepagent_skills
         self.deepagent_auto_approve = deepagent_auto_approve
         self.checkpointer = checkpointer
         self.on_event = on_event
@@ -426,6 +446,9 @@ class ChemGraph:
             "terminal_tool_names": self.terminal_tool_names,
             "enable_deepagent": self.enable_deepagent,
             "workspace": str(workspace) if workspace is not None else None,
+            "deepagent_skills": (
+                self.deepagent_skills if self.enable_deepagent else ()
+            ),
             "tool_signatures": tool_signatures,
             "system_prompt": self.system_prompt,
             "formatter_prompt": self.formatter_prompt,
@@ -453,6 +476,7 @@ class ChemGraph:
                 deepagent_workspace=(
                     str(Path(workspace).resolve()) if workspace is not None else None
                 ),
+                deepagent_skills=self.deepagent_skills,
                 subagent_names=(
                     ("chemgraph", "deepagent")
                     if self.enable_deepagent
@@ -515,6 +539,7 @@ class ChemGraph:
                 subagent_terminal_tool_names=self.terminal_tool_names,
                 enable_deepagent=self.enable_deepagent,
                 deepagent_backend=self.deepagent_backend,
+                deepagent_skills=self.deepagent_skills,
                 deepagent_recursion_limit=self.recursion_limit,
                 deepagent_system_prompt=self.deepagent_prompt,
                 checkpointer=self.checkpointer,
@@ -533,6 +558,7 @@ class ChemGraph:
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 tools=self.tools,
+                skills=self.deepagent_skills,
                 system_prompt=self.deepagent_prompt,
                 backend=self.deepagent_backend,
                 recursion_limit=self.recursion_limit,
@@ -920,6 +946,7 @@ class ChemGraph:
         question: str,
         *,
         payload: Any = None,
+        interrupts: Sequence[PendingInterrupt] = (),
     ) -> Any:
         """Invoke the human_input_handler, supporting both sync and async callables.
 
@@ -929,7 +956,11 @@ class ChemGraph:
         """
         handler = self.human_input_handler
         if handler is None:
-            raise HumanInputRequired(question, payload=payload)
+            raise HumanInputRequired(
+                question,
+                payload=payload,
+                interrupts=interrupts,
+            )
         if asyncio.iscoroutinefunction(handler):
             return await handler(question)
         return handler(question)
@@ -989,9 +1020,8 @@ class ChemGraph:
         async def _stream_until_interrupt(stream_input, cfg):
             """Stream the workflow until completion or an interrupt.
 
-            Returns ``(last_state, interrupt_value)`` where
-            ``interrupt_value`` is ``None`` when the graph completed
-            normally.
+            Returns ``(last_state, pending_interrupts)``. The interrupt tuple
+            is empty when the graph completed normally.
 
             LangGraph's ``astream(stream_mode="values")`` does **not**
             raise ``GraphInterrupt``.  Instead the stream emits a state
@@ -1004,22 +1034,16 @@ class ChemGraph:
             """
             prev_msgs: list = []
             last_st = None
-            interrupt_val = None
+            found_interrupts: list[PendingInterrupt] = []
             try:
                 async for s in self.workflow.astream(
                     stream_input, stream_mode="values", config=cfg
                 ):
                     # Detect inline interrupt marker emitted by astream.
                     if "__interrupt__" in s:
-                        int_data = s["__interrupt__"]
-                        if isinstance(int_data, (list, tuple)) and int_data:
-                            interrupt_val = int_data[0].value
-                        elif hasattr(int_data, "value"):
-                            interrupt_val = int_data.value
-                        else:
-                            interrupt_val = {
-                                "question": "The workflow needs your input."
-                            }
+                        found_interrupts.extend(
+                            normalize_interrupts(s["__interrupt__"])
+                        )
 
                     if "messages" in s and s["messages"] != prev_msgs:
                         new_message = s["messages"][-1]
@@ -1034,37 +1058,44 @@ class ChemGraph:
                 # Fallback: some LangGraph versions may still raise.
                 interrupts = gi.args[0] if gi.args else []
                 if interrupts:
-                    interrupt_val = interrupts[0].value
+                    found_interrupts.extend(normalize_interrupts(interrupts))
                 else:
-                    interrupt_val = {
-                        "question": "The workflow needs your input."
-                    }
+                    found_interrupts.append(
+                        PendingInterrupt(
+                            id="",
+                            payload={
+                                "question": "The workflow needs your input."
+                            },
+                        )
+                    )
 
             # Double-check the checkpoint for pending interrupts that
             # the stream may not have surfaced explicitly.
-            if interrupt_val is None:
-                try:
-                    snapshot = self.workflow.get_state(cfg)
-                    if snapshot and snapshot.tasks:
-                        for t in snapshot.tasks:
-                            t_interrupts = getattr(t, "interrupts", None)
-                            if t_interrupts:
-                                interrupt_val = t_interrupts[0].value
-                                break
-                except Exception:
-                    pass
+            try:
+                snapshot = self.workflow.get_state(cfg)
+                if snapshot:
+                    found_interrupts.extend(
+                        normalize_interrupts(
+                            getattr(snapshot, "interrupts", ())
+                        )
+                    )
+                    for task in getattr(snapshot, "tasks", ()):
+                        found_interrupts.extend(
+                            normalize_interrupts(
+                                getattr(task, "interrupts", ())
+                            )
+                        )
+            except Exception:
+                snapshot = None
 
-            if interrupt_val is not None:
-                logger.info("Graph interrupted: %s", interrupt_val)
+            pending_interrupts = deduplicate_interrupts(found_interrupts)
+            if pending_interrupts:
+                logger.info("Graph interrupted: %s", pending_interrupts)
                 # Refresh state from checkpoint for consistency.
-                try:
-                    snapshot = self.workflow.get_state(cfg)
-                    if snapshot:
-                        last_st = snapshot.values
-                except Exception:
-                    pass
+                if snapshot:
+                    last_st = snapshot.values
 
-            return last_st, interrupt_val
+            return last_st, pending_interrupts
 
         logger.debug("run called with config=%s", config)
         config = _validate_config(config)
@@ -1109,7 +1140,10 @@ class ChemGraph:
         )
 
         try:
-            last_state, interrupt_value = await _stream_until_interrupt(inputs, config)
+            last_state, pending_interrupts = await _stream_until_interrupt(
+                inputs,
+                config,
+            )
 
             # --- Human-in-the-loop resume loop ---
             # When the graph pauses with an interrupt, ask the human and
@@ -1118,8 +1152,8 @@ class ChemGraph:
             # the first answer).
             max_interrupts = 10  # safety guard against infinite interrupt loops
             interrupt_count = 0
-            while interrupt_value is not None:
-                interrupt_count += 1
+            while pending_interrupts:
+                interrupt_count += len(pending_interrupts)
                 if interrupt_count > max_interrupts:
                     logger.error(
                         "Exceeded maximum number of human interrupts (%d); "
@@ -1131,25 +1165,40 @@ class ChemGraph:
                         f"human interrupts."
                     )
 
-                # Extract the question text from the interrupt value.
-                if isinstance(interrupt_value, dict):
-                    question = interrupt_value.get(
-                        "question",
-                        interrupt_value.get("message", str(interrupt_value)),
+                if len(pending_interrupts) > 1 and any(
+                    not pending.id for pending in pending_interrupts
+                ):
+                    raise RuntimeError(
+                        "Multiple pending interrupts require stable IDs."
                     )
-                else:
-                    question = str(interrupt_value)
 
-                logger.info("Requesting human input: %s", question)
-                human_answer = await self._call_human_input_handler(
-                    question,
-                    payload=interrupt_value,
-                )
-                logger.info("Human responded: %s", human_answer)
+                answers: list[Any] = []
+                for pending in pending_interrupts:
+                    question = interrupt_question(pending.payload)
+                    logger.info("Requesting human input: %s", question)
+                    answer = await self._call_human_input_handler(
+                        question,
+                        payload=pending.payload,
+                        interrupts=pending_interrupts,
+                    )
+                    logger.info("Human responded: %s", answer)
+                    answers.append(answer)
+
+                if len(pending_interrupts) == 1:
+                    resume_value = answers[0]
+                else:
+                    resume_value = {
+                        pending.id: answer
+                        for pending, answer in zip(
+                            pending_interrupts,
+                            answers,
+                            strict=True,
+                        )
+                    }
 
                 # Resume the graph from the checkpoint with the human's answer.
-                resume_cmd = Command(resume=human_answer)
-                last_state, interrupt_value = await _stream_until_interrupt(
+                resume_cmd = Command(resume=resume_value)
+                last_state, pending_interrupts = await _stream_until_interrupt(
                     resume_cmd, config
                 )
 
@@ -1199,12 +1248,21 @@ class ChemGraph:
 class HumanInputRequired(Exception):
     """Raised when the graph needs human input but no handler is configured.
 
-    Carries the question text so that external callers (CLI, UI) can
-    present it to the user and resume the graph with
-    ``Command(resume=answer)``.
+    ``question`` and ``payload`` describe the first request for compatibility.
+    ``interrupts`` retains every pending request so concurrent pauses can be
+    resumed with an interrupt-ID mapping.
     """
 
-    def __init__(self, question: str, *, payload: Any = None):
+    def __init__(
+        self,
+        question: str,
+        *,
+        payload: Any = None,
+        interrupts: Sequence[PendingInterrupt] = (),
+    ):
         self.question = question
         self.payload = question if payload is None else payload
+        self.interrupts = tuple(interrupts) or (
+            PendingInterrupt(id="", payload=self.payload),
+        )
         super().__init__(question)

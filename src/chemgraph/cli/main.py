@@ -122,6 +122,17 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         help="Workspace root for the experimental local-shell Deep Agent",
     )
     parser.add_argument(
+        "--deepagent-skill",
+        dest="deepagent_skills",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Backend-relative Agent Skills directory for the Deep Agent; "
+            "repeat to layer multiple sources"
+        ),
+    )
+    parser.add_argument(
         "--deepagent-dangerously-skip-approvals",
         action="store_true",
         help=(
@@ -385,6 +396,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 "human_supervised": False,
                 "enable_deepagent": False,
                 "deepagent_workspace": None,
+                "deepagent_skills": None,
                 "checkpoint_db": None,
                 "verbose": False,
             },
@@ -433,6 +445,7 @@ def _handle_run(args: argparse.Namespace) -> None:
     """
     cli_deepagent = getattr(args, "deepagent", None)
     cli_deepagent_workspace = getattr(args, "deepagent_workspace", None)
+    cli_deepagent_skills = getattr(args, "deepagent_skills", None)
 
     # Handle special commands first
     if getattr(args, "list_models", False):
@@ -496,6 +509,7 @@ def _handle_run(args: argparse.Namespace) -> None:
     args.workflow = resolve_workflow(args.workflow)
     enable_deepagent = bool(getattr(args, "deepagent", False))
     deepagent_workspace = getattr(args, "deepagent_workspace", None)
+    deepagent_skills = getattr(args, "deepagent_skills", None)
     deepagent_auto_approve = bool(
         getattr(args, "deepagent_dangerously_skip_approvals", False)
     )
@@ -513,6 +527,17 @@ def _handle_run(args: argparse.Namespace) -> None:
         else:
             console.print(
                 "[red]--deepagent-workspace requires --deepagent or "
+                "-w deep_agent.[/red]"
+            )
+            sys.exit(2)
+    if deepagent_skills and not (
+        enable_deepagent or args.workflow == "deep_agent"
+    ):
+        if cli_deepagent is False and cli_deepagent_skills is None:
+            deepagent_skills = None
+        else:
+            console.print(
+                "[red]--deepagent-skill requires --deepagent or "
                 "-w deep_agent.[/red]"
             )
             sys.exit(2)
@@ -587,6 +612,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             tools=mcp_tools,
             enable_deepagent=enable_deepagent,
             deepagent_workspace=deepagent_workspace,
+            deepagent_skills=deepagent_skills,
             checkpoint_db=(
                 getattr(args, "checkpoint_db", None) or config.get("checkpoint_db")
             ),
@@ -660,6 +686,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         tools=mcp_tools,
         on_event=trace.on_event if trace else None,
         deepagent_workspace=deepagent_workspace,
+        deepagent_skills=deepagent_skills,
         deepagent_auto_approve=deepagent_auto_approve,
     )
 

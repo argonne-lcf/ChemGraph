@@ -13,6 +13,11 @@ from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 
 from chemgraph.agent.events import EventCallback, _AstreamEventCallback
+from chemgraph.agent.interrupts import (
+    PendingInterrupt,
+    deduplicate_interrupts,
+    normalize_interrupts,
+)
 from chemgraph.agent.turn import serialize_state
 from chemgraph.graphs.main_agent import latest_assistant_text
 from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
@@ -38,14 +43,6 @@ class IncompatibleCheckpointError(MainAgentRestoreError):
 
 
 @dataclass(frozen=True)
-class PendingInterrupt:
-    """One pending request for user input."""
-
-    id: str
-    payload: Any
-
-
-@dataclass(frozen=True)
 class MainAgentTurnResult:
     """Result returned when a supervisor turn completes or pauses."""
 
@@ -54,35 +51,6 @@ class MainAgentTurnResult:
     assistant_response: str
     interrupts: tuple[PendingInterrupt, ...]
     state: dict[str, Any]
-
-
-def _pending_interrupts(values: Any) -> list[PendingInterrupt]:
-    if values is None:
-        return []
-    if not isinstance(values, (list, tuple)):
-        values = [values]
-
-    return [
-        PendingInterrupt(
-            id=str(getattr(item, "id", "") or ""),
-            payload=getattr(item, "value", item),
-        )
-        for item in values
-    ]
-
-
-def _deduplicate_interrupts(
-    interrupts: list[PendingInterrupt],
-) -> tuple[PendingInterrupt, ...]:
-    unique: list[PendingInterrupt] = []
-    seen: set[str] = set()
-    for item in interrupts:
-        key = item.id or repr(item.payload)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(item)
-    return tuple(unique)
 
 
 class MainAgentSession:
@@ -276,18 +244,23 @@ class MainAgentSession:
                 config=self.config,
             ):
                 last_state = state
-                found.extend(_pending_interrupts(state.get("__interrupt__")))
+                found.extend(normalize_interrupts(state.get("__interrupt__")))
         except GraphInterrupt as exc:
             raw_interrupts = exc.args[0] if exc.args else []
-            found.extend(_pending_interrupts(raw_interrupts))
+            found.extend(normalize_interrupts(raw_interrupts))
 
         snapshot = await self.workflow.aget_state(self.config)
         state_values = snapshot.values if snapshot else (last_state or {})
         if snapshot:
+            found.extend(
+                normalize_interrupts(getattr(snapshot, "interrupts", ()))
+            )
             for task in snapshot.tasks:
-                found.extend(_pending_interrupts(getattr(task, "interrupts", ())))
+                found.extend(
+                    normalize_interrupts(getattr(task, "interrupts", ()))
+                )
 
-        pending = _deduplicate_interrupts(found)
+        pending = deduplicate_interrupts(found)
         self._pending = pending
         result = MainAgentTurnResult(
             thread_id=self.thread_id,
@@ -366,12 +339,12 @@ class MainAgentSession:
             )
 
     def _result_from_snapshot(self, snapshot: Any) -> MainAgentTurnResult:
-        found = list(_pending_interrupts(getattr(snapshot, "interrupts", ())))
+        found = list(normalize_interrupts(getattr(snapshot, "interrupts", ())))
         failed = bool(getattr(snapshot, "next", ()))
         for task in snapshot.tasks:
-            found.extend(_pending_interrupts(getattr(task, "interrupts", ())))
+            found.extend(normalize_interrupts(getattr(task, "interrupts", ())))
             failed = failed or bool(getattr(task, "error", None))
-        pending = _deduplicate_interrupts(found)
+        pending = deduplicate_interrupts(found)
         status: SessionStatus
         if pending:
             status = "waiting_for_user"

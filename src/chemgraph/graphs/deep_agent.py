@@ -41,6 +41,23 @@ _DEFAULT_INTERRUPT_POLICY = object()
 _WORKSPACE_MOUNT = "/workspace/"
 
 
+def _normalize_skill_sources(skills: Sequence[str] | None) -> tuple[str, ...]:
+    """Validate and freeze ordered backend-relative skill source paths."""
+    if skills is None:
+        return ()
+    if isinstance(skills, (str, bytes)):
+        raise TypeError("skills must be a sequence of path strings, not a string.")
+
+    normalized: list[str] = []
+    for source in skills:
+        if not isinstance(source, str):
+            raise TypeError("Every skill source must be a string.")
+        if not source.strip():
+            raise ValueError("Skill source paths must not be empty.")
+        normalized.append(source)
+    return tuple(normalized)
+
+
 def _normalize_backend(backend: BackendProtocol) -> BackendProtocol:
     """Mount a virtual local workspace at the path Deep Agent expects."""
     if isinstance(backend, LocalShellBackend) and backend.virtual_mode:
@@ -55,6 +72,7 @@ def construct_deep_agent_graph(
     llm: Any,
     *,
     tools: Sequence[Any] | None = None,
+    skills: Sequence[str] | None = None,
     system_prompt: str = DEFAULT_DEEPAGENT_PROMPT,
     backend: BackendProtocol | None = None,
     interrupt_on: dict[str, Any] | None | object = _DEFAULT_INTERRUPT_POLICY,
@@ -67,6 +85,8 @@ def construct_deep_agent_graph(
     Standalone construction receives an in-memory checkpointer so approval
     interrupts can be resumed. Orchestrators should explicitly pass
     ``checkpointer=None`` so the worker inherits the parent graph's checkpoint.
+    ``skills`` contains ordered, backend-relative Agent Skills directories;
+    later sources override earlier sources with the same skill name.
     Passing ``interrupt_on=None`` disables approval interrupts and should be
     reserved for an externally isolated, explicitly trusted execution context.
     """
@@ -86,9 +106,11 @@ def construct_deep_agent_graph(
     effective_backend = _normalize_backend(
         backend if backend is not None else StateBackend()
     )
+    skill_sources = _normalize_skill_sources(skills)
     workflow = create_deep_agent(
         model=llm,
         tools=list(tools or []),
+        skills=list(skill_sources) if skill_sources else None,
         system_prompt=system_prompt,
         backend=effective_backend,
         interrupt_on=effective_interrupt_on,

@@ -62,12 +62,70 @@ def test_constructor_builds_safe_standalone_graph(monkeypatch):
 
     assert result is workflow
     assert captured["tools"] == []
+    assert captured["skills"] is None
     assert isinstance(captured["backend"], StateBackend)
     assert isinstance(captured["checkpointer"], MemorySaver)
     assert captured["interrupt_on"] == DEFAULT_DEEPAGENT_INTERRUPT_ON
     assert captured["interrupt_on"] is not DEFAULT_DEEPAGENT_INTERRUPT_ON
     assert captured["name"] == "deepagent"
     assert workflow.config == {"recursion_limit": 17}
+
+
+def test_constructor_loads_ordered_workspace_skills(tmp_path):
+    base_skill = tmp_path / "base-skills" / "review-workflow"
+    project_skill = tmp_path / "project-skills" / "review-workflow"
+    base_skill.mkdir(parents=True)
+    project_skill.mkdir(parents=True)
+    base_skill.joinpath("SKILL.md").write_text(
+        "---\n"
+        "name: review-workflow\n"
+        "description: Base review workflow.\n"
+        "---\n\n"
+        "# Base Review\n",
+    )
+    project_skill.joinpath("SKILL.md").write_text(
+        "---\n"
+        "name: review-workflow\n"
+        "description: Project-specific review workflow.\n"
+        "---\n\n"
+        "# Project Review\n",
+    )
+    model = _RecordingChatModel(responses=[AIMessage(content="reviewed")])
+    workflow = construct_deep_agent_graph(
+        model,
+        backend=LocalShellBackend(root_dir=tmp_path, virtual_mode=True, env={}),
+        skills=[
+            "/workspace/base-skills/",
+            "/workspace/project-skills/",
+        ],
+    )
+
+    workflow.invoke(
+        {"messages": [HumanMessage(content="Review the project")]},
+        config={"configurable": {"thread_id": "skill-loading"}},
+    )
+
+    system_prompt = "\n".join(
+        str(message.content)
+        for message in model.received_messages
+        if message.type == "system"
+    )
+    assert "Project-specific review workflow." in system_prompt
+    assert "Base review workflow." not in system_prompt
+    assert "/workspace/project-skills/review-workflow/SKILL.md" in system_prompt
+
+
+@pytest.mark.parametrize(
+    ("skills", "error"),
+    [
+        ("/skills/", TypeError),
+        ([""], ValueError),
+        ([object()], TypeError),
+    ],
+)
+def test_constructor_rejects_invalid_skill_sources(skills, error):
+    with pytest.raises(error, match="[Ss]kill"):
+        construct_deep_agent_graph(object(), skills=skills)
 
 
 def test_constructor_mounts_virtual_local_backend_at_workspace(
@@ -223,6 +281,7 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
         prompts=PromptConfig(deepagent="custom workspace prompt"),
         tools=[tool],
         deepagent_backend=backend,
+        deepagent_skills=["/workspace/base/", "/workspace/project/"],
         deepagent_auto_approve=True,
         checkpointer=checkpointer,
         enable_memory=False,
@@ -233,6 +292,7 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
     assert captured["args"] == ("fake-llm",)
     assert captured["kwargs"] == {
         "tools": [tool],
+        "skills": ("/workspace/base/", "/workspace/project/"),
         "system_prompt": "custom workspace prompt",
         "backend": backend,
         "recursion_limit": 50,
@@ -240,6 +300,116 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
         "checkpointer": checkpointer,
         "interrupt_on": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_chemgraph_resumes_all_pending_interrupt_ids(monkeypatch, tmp_path):
+    first = SimpleNamespace(id="first-id", value={"question": "First?"})
+    second = SimpleNamespace(id="second-id", value={"question": "Second?"})
+
+    class MultiInterruptWorkflow:
+        def __init__(self):
+            self.pending = True
+            self.resume_value = None
+            self.state = {"messages": [HumanMessage(content="Continue")]}
+
+        async def astream(self, stream_input, **_kwargs):
+            if isinstance(stream_input, Command):
+                self.resume_value = stream_input.resume
+                self.pending = False
+                self.state = {
+                    "messages": [
+                        HumanMessage(content="Continue"),
+                        AIMessage(content="Completed."),
+                    ]
+                }
+                yield self.state
+                return
+            yield {**self.state, "__interrupt__": [first, second]}
+
+        def get_state(self, _config):
+            tasks = (
+                (SimpleNamespace(interrupts=(first, second)),)
+                if self.pending
+                else ()
+            )
+            return SimpleNamespace(
+                values=self.state,
+                tasks=tasks,
+                interrupts=(),
+            )
+
+    workflow = MultiInterruptWorkflow()
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        lambda **_kwargs: (
+            "fake-llm",
+            PreparedModel(
+                endpoint_name="test",
+                protocol="openai_compatible",
+                client_kwargs={},
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.construct_deep_agent_graph",
+        lambda *_args, **_kwargs: workflow,
+    )
+    questions = []
+    agent = ChemGraph(
+        workflow_type="deep_agent",
+        human_input_handler=lambda question: questions.append(question)
+        or f"answer-{len(questions)}",
+        enable_memory=False,
+        log_dir=str(tmp_path),
+    )
+
+    result = await agent.run(
+        "Continue",
+        config={"configurable": {"thread_id": "multi-interrupt"}},
+    )
+
+    assert result.content == "Completed."
+    assert questions == ["First?", "Second?"]
+    assert workflow.resume_value == {
+        "first-id": "answer-1",
+        "second-id": "answer-2",
+    }
+
+
+def test_main_agent_metadata_persists_skills_in_topology(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        lambda **_kwargs: (
+            "fake-llm",
+            PreparedModel(
+                endpoint_name="test",
+                protocol="openai_compatible",
+                client_kwargs={},
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.construct_main_agent_graph",
+        lambda *_args, **_kwargs: SimpleNamespace(),
+    )
+
+    agents = [
+        ChemGraph(
+            workflow_type="main_agent",
+            enable_deepagent=True,
+            deepagent_backend=SimpleNamespace(cwd=tmp_path),
+            deepagent_skills=[skill],
+            enable_memory=False,
+            log_dir=str(tmp_path),
+        )
+        for skill in ("/workspace/base/", "/workspace/project/")
+    ]
+
+    configs = [agent.main_agent_metadata.graph_config for agent in agents]
+    assert configs[0].deepagent_skills == ("/workspace/base/",)
+    assert configs[1].deepagent_skills == ("/workspace/project/",)
+    assert configs[0].topology_fingerprint != configs[1].topology_fingerprint
 
 
 def test_cli_resume_persists_deepagent_logs_and_session(
@@ -357,6 +527,10 @@ def test_cli_resume_persists_deepagent_logs_and_session(
         (
             {"workflow_type": "main_agent", "deepagent_auto_approve": True},
             "deepagent_auto_approve",
+        ),
+        (
+            {"workflow_type": "single_agent", "deepagent_skills": ["/skills/"]},
+            "deepagent_skills",
         ),
     ],
 )

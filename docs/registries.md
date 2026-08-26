@@ -86,7 +86,9 @@ main_graph = construct_main_agent_graph(model, subagents=workers)
 
 The built-in `deep_agent` entry is the same workspace graph used by
 `main_agent`'s optional `deepagent` worker. Supply its backend through worker
-options when local filesystem or shell access is intended.
+options when local filesystem or shell access is intended. Explicit Agent
+Skills sources can be supplied alongside it with
+`skills=["/workspace/.agents/skills/"]`; source order is preserved.
 
 `as_subagents()` validates names, availability, constructor loading, and
 constructor options for the whole requested set before invoking any constructor.

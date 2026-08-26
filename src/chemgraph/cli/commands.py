@@ -10,7 +10,7 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from rich.panel import Panel
 from rich.markup import escape
@@ -18,6 +18,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from chemgraph.agent.interrupts import (
+    deduplicate_interrupts,
+    interrupt_question as _interrupt_question,
+    normalize_interrupts,
+)
+from chemgraph.graphs.deep_agent import _normalize_skill_sources
 from chemgraph.memory.store import SessionStore
 from chemgraph.memory.durable import delete_durable_session
 from chemgraph.cli.checkpoint_runtime import (
@@ -195,6 +201,7 @@ def initialize_agent(
     on_event: Optional[Any] = None,
     enable_deepagent: bool = False,
     deepagent_workspace: str | None = None,
+    deepagent_skills: Sequence[str] | None = None,
     deepagent_auto_approve: bool = False,
     checkpointer: Any | None = None,
     reasoning_effort: str | None = None,
@@ -235,6 +242,8 @@ def initialize_agent(
         Enable the development-only workspace worker for ``main_agent``.
     deepagent_workspace : str, optional
         Root directory exposed to the development-only local backend.
+    deepagent_skills : sequence of str, optional
+        Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
         Disable tool-review interrupts for standalone ``deep_agent``. This is
         intended only for explicitly trusted, isolated headless runs.
@@ -247,6 +256,7 @@ def initialize_agent(
     """
     # Resolve workflow alias before initializing.
     workflow_type = resolve_workflow(workflow_type)
+    deepagent_skills = _normalize_skill_sources(deepagent_skills)
     if enable_deepagent and workflow_type != "main_agent":
         raise ValueError(
             "The experimental Deep Agent is available only with main_agent."
@@ -255,6 +265,11 @@ def initialize_agent(
     if deepagent_workspace is not None and not uses_deepagent:
         raise ValueError(
             "deepagent_workspace requires enable_deepagent=True or the "
+            "deep_agent workflow."
+        )
+    if deepagent_skills and not uses_deepagent:
+        raise ValueError(
+            "deepagent_skills requires enable_deepagent=True or the "
             "deep_agent workflow."
         )
     if deepagent_auto_approve and workflow_type != "deep_agent":
@@ -287,6 +302,8 @@ def initialize_agent(
         console.print(f"  Human Supervised: {human_supervised}")
         console.print(f"  Recursion Limit: {recursion_limit}")
         console.print(f"  Deep Agent: {uses_deepagent}")
+        if deepagent_skills:
+            console.print(f"  Deep Agent Skills: {len(deepagent_skills)} source(s)")
         if base_url:
             console.print(f"  Base URL: {base_url}")
         if argo_user:
@@ -332,6 +349,7 @@ def initialize_agent(
                 on_event=on_event,
                 enable_deepagent=enable_deepagent,
                 deepagent_backend=deepagent_backend,
+                deepagent_skills=deepagent_skills,
                 deepagent_auto_approve=deepagent_auto_approve,
                 checkpointer=checkpointer,
                 reasoning_effort=reasoning_effort,
@@ -467,7 +485,7 @@ def run_query(
         except HumanInputRequired as hir:
             progress.update(task, description="[yellow]Agent needs your input")
             time.sleep(0.2)
-            interrupt_payload = hir.payload
+            pending_interrupts = hir.interrupts
         except Exception as e:
             progress.update(task, description="[red]Query failed!")
             console.print(f"[red]Error processing query: {e}[/red]")
@@ -476,15 +494,37 @@ def run_query(
     # --- Interrupt-resume loop ---
     # The spinner's `with` block has exited, so the terminal is free
     # for interactive user input.
-    while interrupt_payload is not None:
-        interrupt_count += 1
+    while pending_interrupts:
+        interrupt_count += len(pending_interrupts)
         if interrupt_count > max_interrupts:
             console.print(
                 "[red]Exceeded maximum number of human interrupts. Aborting.[/red]"
             )
             return None
 
-        human_answer = _prompt_for_interrupt(interrupt_payload)
+        if len(pending_interrupts) > 1:
+            if any(not pending.id for pending in pending_interrupts):
+                console.print(
+                    "[red]Multiple pending interrupts do not expose stable "
+                    "IDs and cannot be resumed safely.[/red]"
+                )
+                return None
+
+        answers = [
+            _prompt_for_interrupt(pending.payload)
+            for pending in pending_interrupts
+        ]
+        if len(pending_interrupts) == 1:
+            human_answer = answers[0]
+        else:
+            human_answer = {
+                pending.id: answer
+                for pending, answer in zip(
+                    pending_interrupts,
+                    answers,
+                    strict=True,
+                )
+            }
 
         # Resume the graph, streaming messages so tool-call parameters
         # are printed just like the initial invocation.
@@ -501,20 +541,16 @@ def run_query(
             """
             prev_msgs: list = []
             last_st = None
-            next_interrupt = None
+            found_interrupts = []
             async for s in agent.workflow.astream(
                 Command(resume=human_answer),
                 stream_mode="values",
                 config=resume_config,
             ):
                 if "__interrupt__" in s:
-                    interrupt_data = s["__interrupt__"]
-                    if isinstance(interrupt_data, (list, tuple)) and interrupt_data:
-                        next_interrupt = getattr(
-                            interrupt_data[0], "value", interrupt_data[0]
-                        )
-                    elif hasattr(interrupt_data, "value"):
-                        next_interrupt = interrupt_data.value
+                    found_interrupts.extend(
+                        normalize_interrupts(s["__interrupt__"])
+                    )
                 if "messages" in s and s["messages"] != prev_msgs:
                     new_message = s["messages"][-1]
                     try:
@@ -523,22 +559,27 @@ def run_query(
                         pass
                     prev_msgs = s["messages"]
                 last_st = s
-            if next_interrupt is None:
-                try:
-                    snapshot = agent.workflow.get_state(resume_config)
-                    for pending_task in getattr(snapshot, "tasks", ()):
-                        interrupts = getattr(pending_task, "interrupts", ())
-                        if interrupts:
-                            next_interrupt = getattr(
-                                interrupts[0], "value", interrupts[0]
-                            )
-                            break
-                except Exception:
-                    pass
-            if next_interrupt is not None:
+            try:
+                snapshot = agent.workflow.get_state(resume_config)
+                found_interrupts.extend(
+                    normalize_interrupts(
+                        getattr(snapshot, "interrupts", ())
+                    )
+                )
+                for pending_task in getattr(snapshot, "tasks", ()):
+                    found_interrupts.extend(
+                        normalize_interrupts(
+                            getattr(pending_task, "interrupts", ())
+                        )
+                    )
+            except Exception:
+                pass
+            next_interrupts = deduplicate_interrupts(found_interrupts)
+            if next_interrupts:
                 raise HumanInputRequired(
-                    _interrupt_question(next_interrupt),
-                    payload=next_interrupt,
+                    _interrupt_question(next_interrupts[0].payload),
+                    payload=next_interrupts[0].payload,
+                    interrupts=next_interrupts,
                 )
             return last_st
 
@@ -556,7 +597,7 @@ def run_query(
             )
         except HumanInputRequired as hir:
             agent._persist_run_state(resume_config)
-            interrupt_payload = hir.payload
+            pending_interrupts = hir.interrupts
         except Exception as e:
             console.print(f"[red]Error processing query: {e}[/red]")
             return None
@@ -601,18 +642,6 @@ def _render_main_agent_event(event: str, payload: dict[str, Any]) -> None:
         f"[dim]→[/dim] [bold]{escape(str(tool_name))}[/bold]"
         f"({escape(str(arguments))})"
     )
-
-
-def _interrupt_question(payload: Any) -> str:
-    """Extract readable question text from an interrupt payload."""
-    if isinstance(payload, dict):
-        return str(
-            payload.get(
-                "question",
-                payload.get("message", payload.get("instruction", payload)),
-            )
-        )
-    return str(payload)
 
 
 def _is_tool_review(payload: Any) -> bool:
@@ -1055,6 +1084,7 @@ def interactive_mode(
     tools: Optional[list] = None,
     enable_deepagent: bool = False,
     deepagent_workspace: str | None = None,
+    deepagent_skills: Sequence[str] | None = None,
     deepagent_auto_approve: bool = False,
     checkpoint_db: str | None = None,
     resume_session: str | None = None,
@@ -1094,6 +1124,8 @@ def interactive_mode(
         selected workflow is ``main_agent``.
     deepagent_workspace : str, optional
         Local workspace used by the experimental host-shell backend.
+    deepagent_skills : sequence of str, optional
+        Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
         Disable action approvals for a standalone Deep Agent. The CLI rejects
         this option in interactive mode.
@@ -1150,6 +1182,7 @@ def interactive_mode(
         human_supervised = stored_graph_config.human_supervised
         enable_deepagent = stored_graph_config.enable_deepagent
         deepagent_workspace = stored_graph_config.deepagent_workspace
+        deepagent_skills = stored_graph_config.deepagent_skills
         reasoning_effort = stored_graph_config.reasoning_effort
         max_retries = stored_graph_config.max_retries
         terminal_tool_names = stored_graph_config.terminal_tool_names
@@ -1192,6 +1225,12 @@ def interactive_mode(
         enable_deepagent=enable_deepagent and workflow == "main_agent",
         deepagent_workspace=(
             deepagent_workspace
+            if workflow == "deep_agent"
+            or (enable_deepagent and workflow == "main_agent")
+            else None
+        ),
+        deepagent_skills=(
+            deepagent_skills
             if workflow == "deep_agent"
             or (enable_deepagent and workflow == "main_agent")
             else None
@@ -1391,6 +1430,7 @@ Example queries:
                             tools=tools,
                             enable_deepagent=target_config.enable_deepagent,
                             deepagent_workspace=target_config.deepagent_workspace,
+                            deepagent_skills=target_config.deepagent_skills,
                             checkpointer=candidate_saver,
                             reasoning_effort=target_config.reasoning_effort,
                             max_retries=target_config.max_retries,
@@ -1439,6 +1479,7 @@ Example queries:
                     terminal_tool_names = target_config.terminal_tool_names
                     enable_deepagent = target_config.enable_deepagent
                     deepagent_workspace = target_config.deepagent_workspace
+                    deepagent_skills = target_config.deepagent_skills
                     if (
                         previous_db is not None
                         and os.path.abspath(os.path.expanduser(previous_db))
@@ -1531,6 +1572,12 @@ Example queries:
                         or (enable_deepagent and workflow == "main_agent")
                         else None
                     ),
+                    deepagent_skills=(
+                        deepagent_skills
+                        if workflow == "deep_agent"
+                        or (enable_deepagent and workflow == "main_agent")
+                        else None
+                    ),
                     deepagent_auto_approve=(
                         deepagent_auto_approve and workflow == "deep_agent"
                     ),
@@ -1602,6 +1649,12 @@ Example queries:
                         ),
                         deepagent_workspace=(
                             deepagent_workspace
+                            if new_workflow == "deep_agent"
+                            or (enable_deepagent and new_workflow == "main_agent")
+                            else None
+                        ),
+                        deepagent_skills=(
+                            deepagent_skills
                             if new_workflow == "deep_agent"
                             or (enable_deepagent and new_workflow == "main_agent")
                             else None

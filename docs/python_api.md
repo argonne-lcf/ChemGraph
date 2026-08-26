@@ -89,6 +89,10 @@ agent = ChemGraph(
         root_dir="/path/to/checkout",
         virtual_mode=True,
     ),
+    deepagent_skills=[
+        "/workspace/shared-skills/",
+        "/workspace/.agents/skills/",
+    ],
 )
 result = await agent.run(
     "Review the test failures.",
@@ -102,10 +106,21 @@ tool path `/workspace/src/example.py` maps directly to
 also supplies that host path for shell commands. Custom backends, existing
 composite backends, and non-virtual local backends are passed through unchanged.
 
+`deepagent_skills` contains ordered POSIX paths interpreted by that same
+backend. ChemGraph passes them to Deep Agents without scanning any implicit
+user or project locations. Each source contains skill directories with a
+required `SKILL.md`; later sources override earlier sources with the same
+skill name. With `StateBackend`, callers invoking the graph directly must seed
+the corresponding files in graph state before the skills can load.
+
 The default approval policy interrupts before shell commands and file
 mutations. Without a `human_input_handler`, `run()` raises
 `HumanInputRequired`; its `payload` retains the structured Deep Agents action
-requests and must be resumed with matching structured decisions. Setting
+requests and must be resumed with matching structured decisions. Its
+`interrupts` tuple retains every pending request and its LangGraph interrupt
+ID; callers must resume concurrent requests with an exact mapping from those
+IDs to responses. `question` and `payload` continue to describe the first
+request for compatibility. Setting
 `deepagent_auto_approve=True` removes this boundary and should be limited to an
 externally isolated, explicitly trusted workspace.
 
@@ -116,7 +131,12 @@ from chemgraph.graphs.deep_agent import construct_deep_agent_graph
 from chemgraph.registry import AgentRegistry
 
 standalone_graph = construct_deep_agent_graph(model, backend=backend)
-worker = AgentRegistry().as_subagent("deepagent", llm=model, backend=backend)
+worker = AgentRegistry().as_subagent(
+    "deepagent",
+    llm=model,
+    backend=backend,
+    skills=["/workspace/.agents/skills/"],
+)
 ```
 
 `as_subagent()` compiles the graph with `checkpointer=None` so it inherits its

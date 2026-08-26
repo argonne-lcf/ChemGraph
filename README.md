@@ -119,6 +119,7 @@ Useful run options include:
 | `-r`, `--report` | Allow generation of an HTML report |
 | `--human-supervised` | Allow supported workflows to pause for input |
 | `--deepagent-workspace PATH` | Set the workspace for `deep_agent` or the optional main-agent worker |
+| `--deepagent-skill PATH` | Add an explicit backend-relative Agent Skills directory; repeat to layer sources |
 | `--output-file` | Save the CLI response to a file |
 | `-v` / `-vv` | Enable INFO / DEBUG diagnostics |
 
@@ -159,8 +160,13 @@ subagent:
 ```bash
 chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
 chemgraph run --interactive --workflow main_agent --deepagent \
-  --deepagent-workspace .
+  --deepagent-workspace . \
+  --deepagent-skill /workspace/.agents/skills/
 ```
+
+Skill directories are never discovered automatically. Each source contains
+one directory per skill with a `SKILL.md`; when names collide, the source from
+the later `--deepagent-skill` occurrence wins.
 
 Headless workspace mutation is disabled unless the command includes an
 explicit workspace and `--deepagent-dangerously-skip-approvals`. Use that mode
