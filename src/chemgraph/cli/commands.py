@@ -46,6 +46,7 @@ from chemgraph.cli.formatting import (
 ALL_WORKFLOW_TYPES = [
     "single_agent",
     "main_agent",
+    "deep_agent",
     "multi_agent",
     "python_relp",
     "graspa",
@@ -59,6 +60,7 @@ ALL_WORKFLOW_TYPES = [
 
 # Common aliases so users can type the "obvious" name.
 WORKFLOW_ALIASES: Dict[str, str] = {
+    "deepagent": "deep_agent",
     "python_repl": "python_relp",
     "graspa_agent": "graspa",
     "iri": "single_agent_iri",
@@ -133,7 +135,11 @@ _DEEPAGENT_ENV_ALLOWLIST = (
 )
 
 
-def _create_experimental_deepagent_backend(workspace: str | None):
+def _create_experimental_deepagent_backend(
+    workspace: str | None,
+    *,
+    require_confirmation: bool = True,
+):
     """Create the explicitly approved development-only host-shell backend."""
     from deepagents.backends import LocalShellBackend
 
@@ -145,13 +151,17 @@ def _create_experimental_deepagent_backend(workspace: str | None):
         Panel(
             "The experimental Deep Agent can read and modify files under "
             f"{root} and can run arbitrary shell commands on this host. The "
-            "shell is not confined to that directory. Every shell command and "
-            "file mutation will require approval.",
+            "shell is not confined to that directory. "
+            + (
+                "Every shell command and file mutation will require approval."
+                if require_confirmation
+                else "Tool approvals are disabled for this run."
+            ),
             title="[bold red]Experimental host-shell access[/bold red]",
             style="red",
         )
     )
-    if not Confirm.ask(
+    if require_confirmation and not Confirm.ask(
         "Enable this development-only capability?",
         default=False,
     ):
@@ -185,6 +195,7 @@ def initialize_agent(
     on_event: Optional[Any] = None,
     enable_deepagent: bool = False,
     deepagent_workspace: str | None = None,
+    deepagent_auto_approve: bool = False,
     checkpointer: Any | None = None,
     reasoning_effort: str | None = None,
     max_retries: int = 1,
@@ -224,6 +235,9 @@ def initialize_agent(
         Enable the development-only workspace worker for ``main_agent``.
     deepagent_workspace : str, optional
         Root directory exposed to the development-only local backend.
+    deepagent_auto_approve : bool, optional
+        Disable tool-review interrupts for standalone ``deep_agent``. This is
+        intended only for explicitly trusted, isolated headless runs.
 
     Returns
     -------
@@ -237,14 +251,27 @@ def initialize_agent(
         raise ValueError(
             "The experimental Deep Agent is available only with main_agent."
         )
-    if deepagent_workspace is not None and not enable_deepagent:
-        raise ValueError("--deepagent-workspace requires --deepagent.")
+    uses_deepagent = enable_deepagent or workflow_type == "deep_agent"
+    if deepagent_workspace is not None and not uses_deepagent:
+        raise ValueError(
+            "deepagent_workspace requires enable_deepagent=True or the "
+            "deep_agent workflow."
+        )
+    if deepagent_auto_approve and workflow_type != "deep_agent":
+        raise ValueError(
+            "deepagent_auto_approve is available only for the deep_agent workflow."
+        )
+    if deepagent_auto_approve and not deepagent_workspace:
+        raise ValueError(
+            "deepagent_auto_approve requires an explicit deepagent_workspace."
+        )
 
     deepagent_backend = None
-    if enable_deepagent:
+    if uses_deepagent:
         try:
             deepagent_backend = _create_experimental_deepagent_backend(
-                deepagent_workspace
+                deepagent_workspace,
+                require_confirmation=not deepagent_auto_approve,
             )
         except (RuntimeError, ValueError) as exc:
             console.print(f"[red]{escape(str(exc))}[/red]")
@@ -259,7 +286,7 @@ def initialize_agent(
         console.print(f"  Generate Report: {generate_report}")
         console.print(f"  Human Supervised: {human_supervised}")
         console.print(f"  Recursion Limit: {recursion_limit}")
-        console.print(f"  Deep Agent: {enable_deepagent}")
+        console.print(f"  Deep Agent: {uses_deepagent}")
         if base_url:
             console.print(f"  Base URL: {base_url}")
         if argo_user:
@@ -305,6 +332,7 @@ def initialize_agent(
                 on_event=on_event,
                 enable_deepagent=enable_deepagent,
                 deepagent_backend=deepagent_backend,
+                deepagent_auto_approve=deepagent_auto_approve,
                 checkpointer=checkpointer,
                 reasoning_effort=reasoning_effort,
                 max_retries=max_retries,
@@ -439,7 +467,7 @@ def run_query(
         except HumanInputRequired as hir:
             progress.update(task, description="[yellow]Agent needs your input")
             time.sleep(0.2)
-            question = hir.question
+            interrupt_payload = hir.payload
         except Exception as e:
             progress.update(task, description="[red]Query failed!")
             console.print(f"[red]Error processing query: {e}[/red]")
@@ -448,7 +476,7 @@ def run_query(
     # --- Interrupt-resume loop ---
     # The spinner's `with` block has exited, so the terminal is free
     # for interactive user input.
-    while question is not None:
+    while interrupt_payload is not None:
         interrupt_count += 1
         if interrupt_count > max_interrupts:
             console.print(
@@ -456,14 +484,7 @@ def run_query(
             )
             return None
 
-        console.print(
-            Panel(
-                question,
-                title="[bold yellow]Agent needs your input[/bold yellow]",
-                style="yellow",
-            )
-        )
-        human_answer = Prompt.ask("[bold cyan]Your response[/bold cyan]")
+        human_answer = _prompt_for_interrupt(interrupt_payload)
 
         # Resume the graph, streaming messages so tool-call parameters
         # are printed just like the initial invocation.
@@ -480,11 +501,20 @@ def run_query(
             """
             prev_msgs: list = []
             last_st = None
+            next_interrupt = None
             async for s in agent.workflow.astream(
                 Command(resume=human_answer),
                 stream_mode="values",
                 config=resume_config,
             ):
+                if "__interrupt__" in s:
+                    interrupt_data = s["__interrupt__"]
+                    if isinstance(interrupt_data, (list, tuple)) and interrupt_data:
+                        next_interrupt = getattr(
+                            interrupt_data[0], "value", interrupt_data[0]
+                        )
+                    elif hasattr(interrupt_data, "value"):
+                        next_interrupt = interrupt_data.value
                 if "messages" in s and s["messages"] != prev_msgs:
                     new_message = s["messages"][-1]
                     try:
@@ -493,6 +523,23 @@ def run_query(
                         pass
                     prev_msgs = s["messages"]
                 last_st = s
+            if next_interrupt is None:
+                try:
+                    snapshot = agent.workflow.get_state(resume_config)
+                    for pending_task in getattr(snapshot, "tasks", ()):
+                        interrupts = getattr(pending_task, "interrupts", ())
+                        if interrupts:
+                            next_interrupt = getattr(
+                                interrupts[0], "value", interrupts[0]
+                            )
+                            break
+                except Exception:
+                    pass
+            if next_interrupt is not None:
+                raise HumanInputRequired(
+                    _interrupt_question(next_interrupt),
+                    payload=next_interrupt,
+                )
             return last_st
 
         try:
@@ -502,15 +549,14 @@ def run_query(
                 console.print("[red]Resume produced no output.[/red]")
                 return None
 
-            if agent.return_option == "last_message":
-                return result["messages"][-1] if result else None
-            elif agent.return_option == "state":
-                from chemgraph.agent.llm_agent import serialize_state
-
-                return serialize_state(agent.get_state(config=config))
-            return result
+            return agent._finalize_completed_run(
+                result,
+                resume_config,
+                query,
+            )
         except HumanInputRequired as hir:
-            question = hir.question
+            agent._persist_run_state(resume_config)
+            interrupt_payload = hir.payload
         except Exception as e:
             console.print(f"[red]Error processing query: {e}[/red]")
             return None
@@ -1009,6 +1055,7 @@ def interactive_mode(
     tools: Optional[list] = None,
     enable_deepagent: bool = False,
     deepagent_workspace: str | None = None,
+    deepagent_auto_approve: bool = False,
     checkpoint_db: str | None = None,
     resume_session: str | None = None,
 ) -> None:
@@ -1047,6 +1094,9 @@ def interactive_mode(
         selected workflow is ``main_agent``.
     deepagent_workspace : str, optional
         Local workspace used by the experimental host-shell backend.
+    deepagent_auto_approve : bool, optional
+        Disable action approvals for a standalone Deep Agent. The CLI rejects
+        this option in interactive mode.
     """
     console.print(create_banner())
     console.print("[bold green]Welcome to ChemGraph Interactive Mode![/bold green]")
@@ -1142,8 +1192,12 @@ def interactive_mode(
         enable_deepagent=enable_deepagent and workflow == "main_agent",
         deepagent_workspace=(
             deepagent_workspace
-            if enable_deepagent and workflow == "main_agent"
+            if workflow == "deep_agent"
+            or (enable_deepagent and workflow == "main_agent")
             else None
+        ),
+        deepagent_auto_approve=(
+            deepagent_auto_approve and workflow == "deep_agent"
         ),
         checkpointer=checkpoint_saver,
         reasoning_effort=reasoning_effort,
@@ -1164,6 +1218,7 @@ def interactive_mode(
         if workflow == "main_agent"
         else None
     )
+    standalone_thread_id = _next_thread_id() if workflow == "deep_agent" else None
 
     if restored_thread_id and main_session is not None:
         result = restore_main_agent_session(
@@ -1265,7 +1320,7 @@ Example queries:
                 console.print(f"Workflow: {workflow}")
                 console.print(
                     "Deep Agent: "
-                    f"{'enabled' if enable_deepagent and workflow == 'main_agent' else 'disabled'}"
+                    f"{'enabled' if workflow == 'deep_agent' or (enable_deepagent and workflow == 'main_agent') else 'disabled'}"
                 )
                 if main_session is not None:
                     console.print(f"Thread ID: {main_session.thread_id}")
@@ -1413,11 +1468,15 @@ Example queries:
                     "[bold cyan]Enter query to continue with[/bold cyan]"
                 )
                 if resume_query.strip():
+                    run_options = {}
+                    if standalone_thread_id is not None:
+                        run_options["thread_id"] = standalone_thread_id
                     result = run_query(
                         agent,
                         resume_query,
                         verbose=verbose,
                         resume_from=argument,
+                        **run_options,
                     )
                     if result:
                         format_response(result, verbose=verbose)
@@ -1468,8 +1527,12 @@ Example queries:
                     enable_deepagent=enable_deepagent and workflow == "main_agent",
                     deepagent_workspace=(
                         deepagent_workspace
-                        if enable_deepagent and workflow == "main_agent"
+                        if workflow == "deep_agent"
+                        or (enable_deepagent and workflow == "main_agent")
                         else None
+                    ),
+                    deepagent_auto_approve=(
+                        deepagent_auto_approve and workflow == "deep_agent"
                     ),
                     checkpointer=(checkpoint_saver if workflow == "main_agent" else None),
                     reasoning_effort=new_reasoning_effort,
@@ -1492,6 +1555,9 @@ Example queries:
                         )
                         if workflow == "main_agent"
                         else None
+                    )
+                    standalone_thread_id = (
+                        _next_thread_id() if workflow == "deep_agent" else None
                     )
                     console.print(f"[green]Model changed to: {model}[/green]")
                 continue
@@ -1536,8 +1602,12 @@ Example queries:
                         ),
                         deepagent_workspace=(
                             deepagent_workspace
-                            if enable_deepagent and new_workflow == "main_agent"
+                            if new_workflow == "deep_agent"
+                            or (enable_deepagent and new_workflow == "main_agent")
                             else None
+                        ),
+                        deepagent_auto_approve=(
+                            deepagent_auto_approve and new_workflow == "deep_agent"
                         ),
                         checkpointer=(
                             checkpoint_saver if new_workflow == "main_agent" else None
@@ -1555,6 +1625,11 @@ Example queries:
                                 checkpoint_db=checkpoint_db or DEFAULT_CHECKPOINT_DB,
                             )
                             if workflow == "main_agent"
+                            else None
+                        )
+                        standalone_thread_id = (
+                            _next_thread_id()
+                            if workflow == "deep_agent"
                             else None
                         )
                         console.print(
@@ -1582,8 +1657,17 @@ Example queries:
                         checkpoint_runtime=checkpoint_runtime,
                     )
             else:
-                # Existing workflows use a fresh thread for each query.
-                result = run_query(agent, query, verbose=verbose)
+                # Deep Agent keeps process-local context for this REPL; other
+                # standalone workflows use a fresh thread for each query.
+                run_options = {}
+                if standalone_thread_id is not None:
+                    run_options["thread_id"] = standalone_thread_id
+                result = run_query(
+                    agent,
+                    query,
+                    verbose=verbose,
+                    **run_options,
+                )
             if result:
                 format_response(result, verbose=verbose)
                 if main_session is not None:
