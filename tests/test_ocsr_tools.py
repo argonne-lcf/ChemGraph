@@ -6,6 +6,8 @@ shape of the result contract. Whether a model reads an image correctly is the mo
 business and is checked by `examples/ocsr/run_ocsr.py` against known structures.
 """
 
+import json
+
 import pytest
 
 pytest.importorskip("rdkit")
@@ -416,3 +418,503 @@ def test_an_unparseable_smiles_is_still_reported(monkeypatch, image):
     result = tools.image_to_smiles_core(image)
 
     assert result["smiles"] == "C1CC" and not result["valid"]
+
+
+# --------------------------------------------------------------------------- #
+# Committee runs
+# --------------------------------------------------------------------------- #
+
+
+def _committee(monkeypatch, answers: dict):
+    """Make each specialist return its own SMILES, or None to abstain."""
+    monkeypatch.setattr(backends, "available_specialists", lambda: list(answers))
+
+    def one(name, path):
+        smiles = answers[name]
+        return {"ok": smiles is not None, "smiles": smiles, "raw": "",
+                "model_used": name, "cold_start": False, "latency_s": 0.1,
+                "error": "" if smiles else "unreadable"}
+
+    monkeypatch.setattr(backends, "smiles_from_specialist", one)
+
+
+ALL_FOUR = ["decimer", "molnextr", "molscribe", "ocsrglyph"]
+
+
+def test_a_unanimous_committee_earns_the_top_confidence(monkeypatch, image):
+    """What the whole feature is for: agreement the caller can act on."""
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, ASPIRIN))
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["ok"] and result["agreement"] == "4"
+    assert result["confidence"] > 0.99
+    assert result["confidence_label"] == "unanimous"
+    assert result["backend_used"] == "ensemble"
+    assert result["model_used"] == "+".join(ALL_FOUR)
+
+
+def test_a_split_committee_reports_the_lower_number(monkeypatch, image):
+    _committee(monkeypatch, {"decimer": ASPIRIN, "molnextr": ASPIRIN,
+                             "molscribe": ASPIRIN, "ocsrglyph": "CCO"})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["agreement"] == "3/1"
+    assert result["smiles"] == core.canonicalize(ASPIRIN)
+    assert 0.9 < result["confidence"] < 0.99
+    assert result["abstained"] == {}
+    assert set(result["votes"]) == {core.canonicalize(ASPIRIN), core.canonicalize("CCO")}
+
+
+def test_a_committee_that_all_failed_returns_no_molecule(monkeypatch, image):
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, None))
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert not result["ok"]
+    assert result["smiles"] is None
+    assert result["confidence_unavailable_reason"] == "no_prediction"
+    assert len(result["abstained"]) == 4
+
+
+def test_a_partial_install_gets_no_number_and_is_told_why(monkeypatch, image):
+    """Silent when broken: the caller paid for an ensemble and gets a bare None."""
+    _committee(monkeypatch, {"decimer": ASPIRIN, "molnextr": ASPIRIN})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["ok"] and result["smiles"] == core.canonicalize(ASPIRIN)
+    assert result["confidence"] is None
+    assert "committee_mismatch" in result["confidence_unavailable_reason"]
+    assert "committee_mismatch" in result["warning"]
+
+
+def test_an_unreadable_table_keeps_the_prediction(monkeypatch, image, tmp_path):
+    """A typo in the path must not throw away four inferences."""
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, ASPIRIN))
+
+    result = tools.image_to_smiles_core(image, ensemble=True,
+                                        calibration=str(tmp_path / "nope.json"))
+
+    assert result["ok"] and result["smiles"] == core.canonicalize(ASPIRIN)
+    assert result["agreement"] == "4"
+    assert result["confidence"] is None
+    assert result["confidence_unavailable_reason"].startswith("calibration_unreadable")
+    assert "could not be read" in result["warning"]
+
+
+def test_models_wanted_votes_the_subset_a_table_describes(monkeypatch, image,
+                                                          tmp_path):
+    """Someone with four installed but a two-model table can still get a number."""
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, ASPIRIN))
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer", "molnextr"],
+        "tie_break": "model-priority: decimer,molnextr",
+        "patterns": {"2": {"k": 19, "n": 20, "p": 0.9286}},
+    }))
+
+    result = tools.image_to_smiles_core(
+        image, ensemble=True, calibration=str(table),
+        models_wanted=["decimer", "molnextr"])
+
+    assert result["agreement"] == "2"
+    assert result["confidence"] == 0.9286
+    assert result["model_used"] == "decimer+molnextr"
+
+
+@pytest.mark.parametrize("wanted, expect", [
+    ("decimer", "must be a list"),
+    ([], "is empty"),
+    (["nosuch"], "not OCSR specialists"),
+    (["decimer", "molscribe"], "not installed"),
+])
+def test_an_unusable_models_wanted_says_what_to_pass_instead(monkeypatch, image,
+                                                             wanted, expect):
+    """Silent when broken: a bare string iterates per character and votes nothing."""
+    _committee(monkeypatch, {"decimer": ASPIRIN, "molnextr": ASPIRIN})
+
+    result = tools.image_to_smiles_core(image, ensemble=True, models_wanted=wanted)
+
+    assert not result["ok"]
+    assert expect in result["error"]
+
+
+def test_the_tool_exposes_the_committee_to_an_agent():
+    """The flag has to be callable and the description has to recommend it.
+
+    Silent when broken: the argument is invisible to the agent, or the description
+    tells it no confidence number exists, and the feature is never reached.
+    """
+    built = tools.make_ocsr_tools(llm=None)[0]
+    schema = built.args_schema.model_json_schema()
+
+    assert "ensemble" in schema["properties"]
+    assert "models_wanted" in schema["properties"]
+    assert "No confidence number is reported" not in built.description
+    assert "ensemble" in built.description and "confidence" in built.description
+
+
+def test_the_tie_break_comes_from_the_table_and_not_the_registry(monkeypatch, image,
+                                                                 tmp_path):
+    """An all-different vote must be decided by the order the table was fit under.
+
+    Silent when broken: the registry's order wins the tie, so the answer comes from
+    one model while the number quoted for it was measured for another's. A committee
+    check cannot see this, because it compares sorted names.
+    """
+    _committee(monkeypatch, {"decimer": "CCO", "molnextr": "CCN",
+                             "molscribe": "CCC", "ocsrglyph": "CCF"})
+    table = tmp_path / "cal.json"
+    # Reverse of the registry order, so the two disagree about who wins.
+    table.write_text(json.dumps({
+        "committee": ALL_FOUR,
+        "tie_break": "model-priority: ocsrglyph,molscribe,molnextr,decimer",
+        "patterns": {"1/1/1/1": {"k": 5, "n": 20, "p": 0.2619}},
+    }))
+
+    result = tools.image_to_smiles_core(image, ensemble=True,
+                                        calibration=str(table))
+
+    assert result["agreement"] == "1/1/1/1"
+    assert result["smiles"] == core.canonicalize("CCF")
+
+
+def test_an_unreadable_table_still_lists_the_models(monkeypatch, tmp_path):
+    """The listing is how a user finds out what they have; it must not depend on it."""
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(tmp_path / "nope.json"))
+
+    listing = tools.list_ocsr_models.func()
+
+    assert "decimer" in listing and "ocsrglyph" in listing
+
+
+PENICILLIN = "CC1(C)S[C@@H]2[C@H](NC(=O)Cc3ccccc3)C(=O)N2[C@H]1C(=O)O"
+
+
+def test_a_unanimous_committee_keeps_the_stereochemistry_it_read(monkeypatch, image):
+    """Four models reading one enantiomer must not answer with the racemate.
+
+    Silent when broken: vote() groups stereo-blind, so its winner is the stripped
+    key. Returning that directly hands back less chemistry than a single-model call
+    does, with 0.9989 confidence attached and nothing in the result to show it.
+    """
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, PENICILLIN))
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["agreement"] == "4"
+    assert result["smiles"] == core.canonicalize(PENICILLIN, stereo=True)
+    assert "@" in result["smiles"]
+    # The same molecule a single model would have returned for the same reading.
+    assert result["smiles"] == tools.image_to_smiles_core(image)["smiles"]
+
+
+def test_the_strongest_model_in_the_group_supplies_the_stereochemistry(monkeypatch,
+                                                                       image,
+                                                                       tmp_path):
+    """Members of one group can agree on the skeleton and differ on the wedges.
+
+    Silent when broken: which enantiomer comes back depends on dict ordering.
+    """
+    flat = core.canonicalize(PENICILLIN)  # same skeleton, no stereocentres marked
+    _committee(monkeypatch, {"decimer": flat, "molnextr": PENICILLIN,
+                             "molscribe": PENICILLIN, "ocsrglyph": flat})
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ALL_FOUR,
+        "tie_break": "model-priority: molnextr,molscribe,decimer,ocsrglyph",
+        "patterns": {"4": {"k": 99, "n": 100, "p": 0.9851}},
+    }))
+
+    result = tools.image_to_smiles_core(image, ensemble=True,
+                                        calibration=str(table))
+
+    assert result["agreement"] == "4"
+    # molnextr leads this table's priority and read the wedges.
+    assert result["smiles"] == core.canonicalize(PENICILLIN, stereo=True)
+
+
+def test_a_fragment_warning_does_not_hide_the_calibration_warning(monkeypatch,
+                                                                  image, tmp_path):
+    """Both conditions are independent, so both caveats have to survive.
+
+    Silent when broken: a salt read against a missing table looks like a normal
+    fragment warning, and the missing confidence shows only as a bare None.
+    """
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, "[Na+].CC(=O)[O-]"))
+
+    result = tools.image_to_smiles_core(image, ensemble=True,
+                                        calibration=str(tmp_path / "nope.json"))
+
+    assert result["n_fragments"] == 2
+    assert "disconnected" in result["warning"]
+    assert "could not be read" in result["warning"]
+
+
+def test_a_single_model_label_bands_its_measured_accuracy(monkeypatch, image,
+                                                          tmp_path):
+    """The one confidence question a single read can answer.
+
+    Silent when broken: the field is always 'unavailable', so it carries nothing
+    and an agent has no way to tell a strong model from a weak one at the call site.
+    """
+    _stub(monkeypatch, ok=True, smiles=ASPIRIN)
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
+        "model_performance": {"decimer": {"accuracy": 0.996, "n": 500}},
+    }))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
+
+    result = tools.image_to_smiles_core(image, model="decimer")
+
+    assert result["confidence"] is None  # still no per-image number
+    assert result["confidence_label"] == "unanimous"  # the model's own accuracy
+
+
+def test_both_backends_word_the_fragment_warning_the_same(monkeypatch, image):
+    """An agent that learns to act on one wording must see it from the other.
+
+    Silent when broken: the two copies drift and a committee's salt warning stops
+    matching whatever the agent was told to look for.
+    """
+    salt = "[Na+].CC(=O)[O-]"
+    _stub(monkeypatch, ok=True, smiles=salt)
+    single = tools.image_to_smiles_core(image)
+
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, salt))
+    committee = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert "disconnected" in single["warning"]
+    assert single["warning"] == committee["warning"]
+
+
+def test_both_tools_of_the_same_name_offer_the_committee(monkeypatch, image):
+    """A static binding must not silently lack the feature the factory has.
+
+    Silent when broken: two tools called image_to_smiles take different arguments,
+    and which one an agent got decides whether ensemble=True is even accepted.
+    """
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, ASPIRIN))
+
+    static = tools.image_to_smiles.func(image, ensemble=True)
+    built = tools.make_ocsr_tools(llm=None)[0].func(image, ensemble=True)
+
+    assert static["agreement"] == built["agreement"] == "4"
+    assert static["smiles"] == built["smiles"]
+
+    # Every committee argument, not only the flag that turns it on.
+    committee_args = {"ensemble", "models_wanted"}
+    static_schema = tools.image_to_smiles.args_schema.model_json_schema()
+    built_schema = tools.make_ocsr_tools(llm=None)[0].args_schema.model_json_schema()
+    assert committee_args <= set(static_schema["properties"])
+    assert committee_args <= set(built_schema["properties"])
+
+
+def test_a_model_that_never_ran_is_not_a_dissenting_vote(monkeypatch, image,
+                                                         tmp_path):
+    """A missing checkpoint is not evidence about the image.
+
+    Silent when broken: three specialists install without their checkpoints, the
+    fourth reads the image correctly, and the pattern is 1/1/1/1, so the tool
+    reports 0.3772 for an answer its own table measures at 0.8989.
+    """
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+
+    def one(name, path):
+        if name == "decimer":
+            return {"ok": True, "smiles": ASPIRIN, "raw": "", "model_used": name,
+                    "cold_start": False, "latency_s": 0.1, "error": "", "ran": True}
+        return {"ok": False, "smiles": None, "raw": "", "model_used": name,
+                "cold_start": False, "latency_s": 0.0, "ran": False,
+                "error": "checkpoint not found"}
+
+    monkeypatch.setattr(backends, "smiles_from_specialist", one)
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["ok"] and result["smiles"] == core.canonicalize(ASPIRIN)
+    assert result["agreement"] == "1"  # one voter, not four
+    assert result["confidence"] is None
+    assert "committee_mismatch" in result["confidence_unavailable_reason"]
+
+
+def test_no_specialist_able_to_run_says_which_and_why(monkeypatch, image):
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+    monkeypatch.setattr(backends, "smiles_from_specialist", lambda n, p: {
+        "ok": False, "smiles": None, "raw": "", "model_used": n, "cold_start": False,
+        "latency_s": 0.0, "ran": False, "error": "checkpoint not found"})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert not result["ok"]
+    assert "no specialist could run" in result["error"]
+    assert "checkpoint not found" in result["error"]
+    # Distinct from nothing being pip-installed: the remedy is a download, not
+    # an install, and a caller branching on the reason has to tell them apart.
+    assert result["confidence_unavailable_reason"] == "no_specialist_could_run"
+
+
+def test_a_prefixed_priority_still_picks_the_strongest_model(monkeypatch, image,
+                                                             tmp_path):
+    """vote() stores bare names, so the tie-break order has to be compared bare.
+
+    Silent when broken: the membership test matches nothing and the stereo answer
+    falls back to dict insertion order, which is the arbitrary choice the
+    tie-break exists to replace.
+    """
+    flat = core.canonicalize(PENICILLIN)
+    _committee(monkeypatch, {"decimer": flat, "molnextr": PENICILLIN,
+                             "molscribe": flat, "ocsrglyph": flat})
+    table = tmp_path / "cal.json"
+    # A table has to prefix both fields to load: the validator makes tie_break name
+    # exactly the committee. It then reports a mismatch, since vote() bares the
+    # names, but the stereo pick still runs and must not fall back to dict order.
+    prefixed = ["local:" + m for m in ALL_FOUR]
+    table.write_text(json.dumps({
+        "committee": prefixed,
+        "tie_break": "model-priority: " + ",".join(
+            ["local:molnextr", "local:decimer", "local:molscribe",
+             "local:ocsrglyph"]),
+        "patterns": {"4": {"k": 99, "n": 100, "p": 0.9851}},
+    }))
+
+    result = tools.image_to_smiles_core(image, ensemble=True,
+                                        calibration=str(table))
+
+    assert result["smiles"] == core.canonicalize(PENICILLIN, stereo=True)
+
+
+def test_a_single_model_label_uses_the_table_the_caller_named(monkeypatch, image,
+                                                              tmp_path):
+    """An explicit calibration path outranks the env var and the packaged table.
+
+    Silent when broken: a caller who refit gets their own numbers from a committee
+    and someone else's from every single-model read.
+    """
+    _stub(monkeypatch, ok=True, smiles=ASPIRIN)
+    mine = tmp_path / "mine.json"
+    mine.write_text(json.dumps({
+        "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
+        "model_performance": {"decimer": {"accuracy": 0.55, "n": 200}},
+    }))
+
+    result = tools.image_to_smiles_core(image, model="decimer",
+                                        calibration=str(mine))
+
+    assert result["confidence_label"] == "conflicting"  # 0.55, from the given table
+
+
+def test_a_shrunken_committee_says_what_stopped_the_others(monkeypatch, image):
+    """The mismatch text advises an install that is already done.
+
+    Silent when broken: three models are installed and cannot load, the warning
+    tells the user to install them, and the checkpoint path that would actually
+    fix it is collected and then dropped.
+    """
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+
+    def one(name, path):
+        if name == "decimer":
+            return {"ok": True, "smiles": ASPIRIN, "raw": "", "model_used": name,
+                    "cold_start": False, "latency_s": 0.5, "error": "", "ran": True}
+        return {"ok": False, "smiles": None, "raw": "", "model_used": name,
+                "cold_start": True, "latency_s": 3.0, "ran": False,
+                "error": f"{name} checkpoint is missing at /weights/{name}"}
+
+    monkeypatch.setattr(backends, "smiles_from_specialist", one)
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert "checkpoint is missing" in result["warning"]
+    for name in ["molnextr", "molscribe", "ocsrglyph"]:
+        assert name in result["warning"]
+
+
+def test_a_split_the_table_never_measured_says_so(monkeypatch, image, tmp_path):
+    """The third confidence-less path, which used to surface as a bare None.
+
+    Silent when broken: an agent sees no number, no warning, and a label of
+    'unknown' that no document explains.
+    """
+    _committee(monkeypatch, {"decimer": ASPIRIN, "molnextr": "CCO"})
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer", "molnextr"],
+        "patterns": {"2": {"k": 19, "n": 20, "p": 0.9286}},
+    }))
+
+    result = tools.image_to_smiles_core(image, ensemble=True,
+                                        calibration=str(table))
+
+    assert result["confidence_unavailable_reason"] == "unknown_pattern"
+    assert result["confidence_label"] == "unknown"
+    assert "no '1/1' bucket" in result["warning"]
+
+
+def test_a_thin_bucket_still_hands_back_its_interval(monkeypatch, image, tmp_path):
+    """Withholding the number is only defensible if the interval survives.
+
+    Silent when broken: the docs offer the interval as what a thin bucket gives
+    instead of a point estimate, and the caller receives neither.
+    """
+    _committee(monkeypatch, {"decimer": ASPIRIN, "molnextr": ASPIRIN,
+                             "molscribe": "CCO", "ocsrglyph": "CCO"})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["agreement"] == "2/2"
+    assert result["confidence"] is None
+    assert result["confidence_interval"] == [0.3119, 0.8195]
+
+
+def test_a_shrunken_committee_that_finds_a_fitting_table_still_says_so(monkeypatch,
+                                                                       image,
+                                                                       tmp_path):
+    """A table can describe the survivors, so no mismatch fires to carry the news.
+
+    Silent when broken: three of four models never ran, the answer comes back with
+    a real confidence and an empty warning, and the only trace is a latency nobody
+    reads.
+    """
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+
+    def one(name, path):
+        if name == "decimer":
+            return {"ok": True, "smiles": ASPIRIN, "raw": "", "model_used": name,
+                    "cold_start": False, "latency_s": 0.5, "error": "", "ran": True}
+        return {"ok": False, "smiles": None, "raw": "", "model_used": name,
+                "cold_start": True, "latency_s": 3.0, "ran": False,
+                "error": f"{name} checkpoint is missing"}
+
+    monkeypatch.setattr(backends, "smiles_from_specialist", one)
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer"],
+        "patterns": {"1": {"k": 88, "n": 100, "p": round(88.5 / 101, 4)}},
+    }))
+
+    result = tools.image_to_smiles_core(image, ensemble=True,
+                                        calibration=str(table))
+
+    assert result["confidence"] is not None  # the table fits the one that ran
+    assert "could not run" in result["warning"]
+    assert "molscribe" in result["warning"]
+
+
+def test_the_failure_list_in_a_warning_is_bounded(monkeypatch, image):
+    """The errors are joined per model and go back into an agent's context.
+
+    Silent when broken: a long weights directory pushes the warning past 6 kB.
+    """
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+    monkeypatch.setattr(backends, "smiles_from_specialist", lambda n, p: {
+        "ok": n == "decimer", "smiles": ASPIRIN if n == "decimer" else None,
+        "raw": "", "model_used": n, "cold_start": False, "latency_s": 0.1,
+        "ran": n == "decimer", "error": "" if n == "decimer" else "x" * 3000})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert len(result["warning"]) < 1000

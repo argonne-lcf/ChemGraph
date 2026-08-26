@@ -56,6 +56,42 @@ def _resolve_model(model: str | None) -> tuple[str, str]:
     return name, ""
 
 
+def _validate_models_wanted(wanted, installed: list[str]) -> str:
+    """Return an error string for an unusable models_wanted, or "" when it is fine.
+
+    A bare string iterates per character, and a non-string element blows up the join
+    below with a TypeError naming neither the argument nor the valid names. An empty
+    list is a caller who filtered down to nothing, which must not silently become
+    "run everything".
+    """
+    choices = ", ".join(models.SPECIALIST_MODELS)
+    if isinstance(wanted, str) or not isinstance(wanted, (list, tuple, set, frozenset)):
+        return (f"models_wanted must be a list of specialist names, got "
+                f"{type(wanted).__name__}. Choose from: {choices}")
+    if not wanted:
+        return (f"models_wanted is empty. Omit it to vote every installed "
+                f"specialist, or name some of: {choices}")
+    unknown = [m for m in wanted if m not in models.SPECIALIST_MODELS]
+    if unknown:
+        return (f"not OCSR specialists: {', '.join(repr(m) for m in unknown)}. "
+                f"Choose from: {choices}")
+    absent = [m for m in wanted if m not in installed]
+    if absent:
+        return (f"requested but not installed: {', '.join(absent)}. Install with: "
+                f"pip install 'chemgraph[ocsr]'")
+    return ""
+
+
+def _trim(text: str, limit: int = 400) -> str:
+    """Cap a message assembled from backend errors.
+
+    Every warning the tool produces is bounded except this one: the errors are
+    joined from as many models as ran, and a long weights directory pushed one past
+    6 kB in testing. The whole result dict goes back into an agent's context.
+    """
+    return text if len(text) <= limit else text[:limit - 3] + "..."
+
+
 def _prior_label(model: str, calibration: str | None) -> str:
     """Band a model's measured accuracy, from the table the caller named.
 
@@ -69,6 +105,154 @@ def _prior_label(model: str, calibration: str | None) -> str:
     except (OSError, ValueError, TypeError):
         return "unavailable"
     return core.prior_confidence(model, table)["label"]
+
+
+def _run_ensemble(resolved: str, calibration: str | None,
+                  models_wanted: list[str] | None) -> dict:
+    """Vote a committee of specialists and attach a calibrated confidence.
+
+    Runs every installed specialist unless ``models_wanted`` names a subset. A subset
+    is worth supporting because the committee is what a table describes: someone who
+    has all four installed but fitted a table on two of them can only get a number by
+    running exactly those two.
+    """
+    installed = backends.available_specialists()
+    if not installed:
+        return core.build_result(
+            ok=False, backend_used="none", error=backends._install_hint(),
+            confidence_unavailable_reason="no_specialists_installed",
+        )
+
+    if models_wanted is not None:
+        error = _validate_models_wanted(models_wanted, installed)
+        if error:
+            return core.build_result(ok=False, backend_used="ensemble", error=error)
+        installed = [m for m in installed if m in models_wanted]
+
+    results, absent, cold, total = [], [], False, 0.0
+    for name in installed:
+        r = backends.smiles_from_specialist(name, resolved)
+        cold = cold or r["cold_start"]
+        total += r["latency_s"]
+        if not r.get("ran", True):
+            # It never saw the image: no checkpoint, or the load failed. Voting it
+            # as a dissenting singleton would read as disagreement about the
+            # picture, and a table fit on four working models would score three
+            # such entries at the all-different rate. Drop it from the committee
+            # and let check_committee report the smaller set.
+            absent.append((name, r["error"]))
+            continue
+        results.append({"model": name, "smiles": r["smiles"], "ok": r["ok"],
+                        "error": r["error"]})
+
+    if not results:
+        # A separate reason from no_specialists_installed: the extra is installed
+        # here and the remedy is whatever each error names, usually a checkpoint to
+        # download. Telling this caller to pip install would send them to a no-op.
+        return core.build_result(
+            ok=False, backend_used="ensemble", cold_start=cold,
+            latency_s=round(total, 3),
+            error="no specialist could run: " + "; ".join(
+                f"{n}: {e}" for n, e in absent),
+            confidence_unavailable_reason="no_specialist_could_run",
+        )
+
+    # Load before voting: the table records the model priority it was fitted under,
+    # and that order decides which answer wins a tie. Voting by the registry's order
+    # would attach a number measured for one model's answer to a different model's
+    # answer, which check_committee cannot detect because it compares sorted names.
+    # A typo in the path must still not throw the prediction away, so an unreadable
+    # table falls back to the registry order and reports no confidence.
+    try:
+        table = core.load_calibration(calibration)
+    except (OSError, ValueError, TypeError) as exc:
+        table, unreadable = None, f"calibration_unreadable: {type(exc).__name__}"
+    else:
+        unreadable = None
+
+    priority = core.tie_break_order(table) if table else list(models.SPECIALIST_MODELS)
+    v = core.vote(results, priority=priority)
+    if v["winner"] is None:
+        return core.build_result(
+            ok=False, backend_used="ensemble", cold_start=cold,
+            latency_s=round(total, 3), abstained=v["abstained"],
+            error="every specialist failed or returned an unparseable SMILES",
+            confidence_unavailable_reason="no_prediction",
+        )
+
+    mismatch = None if table is None else core.check_committee(v, table)
+    if unreadable:
+        conf = {"p": None, "label": "unavailable", "reason": unreadable}
+    elif mismatch:
+        # Do not silently drop the confidence: the caller asked for the ensemble
+        # precisely to get a number, and a partial install is invisible otherwise.
+        conf = {"p": None, "label": "unavailable", "reason": mismatch}
+    else:
+        conf = core.confidence(v["pattern"], table)
+
+    # vote() groups stereo-blind, because that is how the table was fit, so its
+    # winner is the stereo-stripped key. Return a form that keeps the wedge bonds a
+    # model resolved: a unanimous committee must not answer with a racemate where
+    # the single-model path answers with one enantiomer. The strongest model in the
+    # winning group decides, by the same priority that breaks ties, since members
+    # can disagree on stereochemistry while agreeing on the skeleton.
+    winners = v["votes"][v["winner"]]
+    # vote() stores bare names, so the priority has to be bare too. A table writing
+    # "local:molnextr" would otherwise match nothing and fall through to insertion
+    # order, which is the arbitrary choice this whole block exists to avoid.
+    best = next((m for m in (n.removeprefix("local:") for n in priority)
+                 if m in winners), winners[0])
+    raw = next(r["smiles"] for r in results
+               if r["model"].removeprefix("local:") == best)
+    smiles = core.canonicalize(raw, stereo=True) or v["winner"]
+
+    validation = core.validate_smiles_core(smiles)
+    # Both can be true at once: a salt read by a committee whose table is missing
+    # needs both caveats, so they accumulate rather than shadowing each other.
+    warnings = [w for w in [core.fragment_warning(validation)] if w]
+    if absent:
+        # Independent of everything below: a committee can shrink and still find a
+        # table that fits the survivors, which reports a confidence and no mismatch.
+        # Nested under one of those branches, the only sign that three of four
+        # models never ran would be a latency nobody reads.
+        warnings.append("These were installed but could not run: " + _trim(
+            "; ".join(f"{n}: {e}" for n, e in absent)))
+    if mismatch:
+        # Surface this in warning too: the reason alone names a Python exception
+        # class, and anything that prints the result shows a bare missing number.
+        warnings.append(mismatch)
+    elif unreadable:
+        warnings.append(f"the calibration table at {calibration!r} could not be "
+                        f"read, so this answer carries no confidence")
+    elif conf.get("reason") == "unknown_pattern":
+        # The third confidence-less path. Without this it is the only one that
+        # surfaces as a bare missing number, which is what the other two get a
+        # warning to prevent.
+        warnings.append(f"the calibration table has no {v['pattern']!r} bucket, so "
+                        f"this split carries no measured confidence")
+    warning = " ".join(warnings)
+
+    return core.build_result(
+        ok=True,
+        smiles=smiles,
+        valid=validation.get("valid", False),
+        formula=validation.get("formula"),
+        n_fragments=validation.get("n_fragments", 0),
+        confidence=conf["p"],
+        # Carried even where p is withheld: below the sample floor the interval is
+        # the only quantitative thing a thin bucket can honestly offer.
+        confidence_interval=conf.get("ci"),
+        confidence_label=conf["label"],
+        confidence_unavailable_reason=conf.get("reason"),
+        agreement=v["pattern"],
+        backend_used="ensemble",
+        model_used="+".join(v["voters"]),
+        cold_start=cold,
+        latency_s=round(total, 3),
+        warning=warning,
+        votes=v["votes"],
+        abstained=v["abstained"],
+    )
 
 
 def image_to_smiles_core(image_path: str, model: str | None = None,
@@ -120,6 +304,11 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
         return core.build_result(model_used=name, error=str(e))
     except OSError as e:
         return core.build_result(model_used=name, error=f"cannot read {image_path}: {e}")
+
+    if ensemble:
+        # Dispatched after the image checks above, so a committee run rejects a bad
+        # file once instead of once per model.
+        return _run_ensemble(resolved, calibration, models_wanted)
 
     if name == models.LLM_MODEL:
         narrow = backends.smiles_from_llm(image_bytes, mime, llm,
@@ -180,7 +369,7 @@ _TOOL_DOC = """Read a molecule's 2D structure diagram from an image and return i
       - no specialist is installed: use model='llm', which reads the image with the
         agent's own model and needs no installation.
 
-    Do NOT loop through every model hoping one succeeds. A cold model costs 5-60 s to
+    Do NOT loop through every model hoping one succeeds. A cold model costs 9-170 s to
     load, and if the image is unreadable they usually all fail the same way. Two
     attempts is a reasonable ceiling.
 
@@ -190,9 +379,11 @@ _TOOL_DOC = """Read a molecule's 2D structure diagram from an image and return i
     user which one they meant instead of passing the SMILES to a geometry or energy
     calculation.
 
-    No confidence number is reported. A single model cannot say how likely it is to
-    be right about this particular image, and the per-model benchmark accuracy
-    describes someone else's images, so quoting it here would be misleading.
+    A single-model call reports no confidence: one model cannot say how likely it is
+    to be right about this particular image, and its benchmark accuracy describes
+    someone else's images. `ensemble=True` measures it instead, by reading the image
+    with every installed specialist and looking up how often a committee splitting
+    that way was right.
 
     Timing. The first call for a model loads it, which cost 9-170 s when measured on
     a shared CPU node, DECIMER being the slowest. Later calls in the same process are
@@ -212,6 +403,14 @@ _TOOL_DOC = """Read a molecule's 2D structure diagram from an image and return i
     structured : bool, optional
         With model='llm', ask for a JSON reply. Leave it off unless the model is
         returning prose the tool cannot read. No effect on the specialists.
+    ensemble : bool, optional
+        Read the image with every installed specialist and vote. Returns a measured
+        confidence in `confidence`, which a single model cannot give. Costs one
+        inference per model, so use it when the answer matters more than the time:
+        before a calculation, or after a plain call returned something doubtful.
+        Ignores `model`.
+    models_wanted : list of str, optional
+        With ensemble, vote only these specialists. Omit it to vote all installed.
 
     Returns
     -------
@@ -227,6 +426,29 @@ _TOOL_DOC = """Read a molecule's 2D structure diagram from an image and return i
             Molecular formula, when valid.
         n_fragments : int
             Disconnected components; above 1 means more than one molecule.
+        confidence : float or None
+            P(this answer is correct), when a committee measured it. None from a
+            single model, which has no agreement to score.
+        confidence_interval : list or None
+            The 95% interval behind that number. Present even where `confidence`
+            is withheld for a thin bucket, which is the case it matters most in.
+        confidence_label : str
+            One of 'unanimous' (p >= 0.99), 'strong' (>= 0.95), 'weak' (>= 0.70),
+            or 'conflicting' below that, prefixed 'low_n_' when the bucket is too
+            thin to quote a number. 'unknown' means the table has no bucket for
+            this split, and 'unavailable' that no number applies at all. On a
+            single-model call it bands that model's measured solo accuracy, since
+            there is no per-image number to band.
+        confidence_unavailable_reason : str or None
+            Why there is no number, when there is none.
+        agreement : str or None
+            How a committee split, as 'majority/rest', e.g. '4' or '3/1'.
+        votes : dict or None
+            Which models produced which SMILES.
+        abstained : dict or None
+            Models that ran and returned nothing usable.
+        backend_used : str or None
+            'specialist', 'llm', or 'ensemble'.
         model_used : str
             Which model answered.
         cold_start : bool
@@ -250,9 +472,11 @@ def make_ocsr_tools(llm: Any = None) -> list:
     """
 
     def _run(image_path: str, model: str | None = None,
-             structured: bool = False) -> dict:
-        return image_to_smiles_core(image_path, model=model,
-                                    structured=structured, llm=llm)
+             structured: bool = False, ensemble: bool = False,
+             models_wanted: list[str] | None = None) -> dict:
+        return image_to_smiles_core(image_path, model=model, structured=structured,
+                                    ensemble=ensemble, models_wanted=models_wanted,
+                                    llm=llm)
 
     _run.__doc__ = _TOOL_DOC
     return [StructuredTool.from_function(
@@ -263,12 +487,15 @@ def make_ocsr_tools(llm: Any = None) -> list:
 
 
 @tool
-def image_to_smiles(image_path: str, model: str | None = None) -> dict:
+def image_to_smiles(image_path: str, model: str | None = None,
+                    ensemble: bool = False,
+                    models_wanted: list[str] | None = None) -> dict:
     """Read a molecule's 2D structure diagram from an image and return its SMILES.
 
     Module-level tool for callers that bind tools statically. It has no LLM bound, so
     `model='llm'` reports the fallback as unavailable; use `make_ocsr_tools(llm)` to
-    get a version with the agent's model wired in. Every other model works here.
+    get a version with the agent's model wired in. Every other model works here,
+    committee voting included: the committee is specialists only.
 
     See `make_ocsr_tools` for the full contract.
 
@@ -278,8 +505,13 @@ def image_to_smiles(image_path: str, model: str | None = None) -> dict:
         Path to a PNG, JPEG, GIF or WEBP showing ONE molecule's 2D structure.
     model : str, optional
         'decimer', 'molnextr', 'molscribe', 'ocsrglyph', or 'llm'.
+    ensemble : bool, optional
+        Vote every installed specialist and return a measured confidence.
+    models_wanted : list of str, optional
+        With ensemble, vote only these specialists. Omit it to vote all installed.
     """
-    return image_to_smiles_core(image_path, model=model, llm=None)
+    return image_to_smiles_core(image_path, model=model, ensemble=ensemble,
+                                models_wanted=models_wanted, llm=None)
 
 
 @tool
