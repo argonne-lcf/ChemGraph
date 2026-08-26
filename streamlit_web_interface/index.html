@@ -937,6 +937,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attachments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sessions-and-artifacts" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1660,6 +1671,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#attachments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Attachments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sessions-and-artifacts" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1712,9 +1734,11 @@ tree rather than as a standalone console script:</p>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>.venv
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>streamlit<span class="w"> </span>run<span class="w"> </span>src/ui/app.py
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>chemgraph<span class="w"> </span>ui
 </code></pre></div>
-<p>Open <code>http://localhost:8501</code>.</p>
+<p>Open <code>http://localhost:8501</code>. <code>chemgraph ui</code> works from any directory
+(<code>--address</code>, <code>--port</code>, and <code>--headless</code> are supported); from the repo root
+you can also run <code>streamlit run src/ui/app.py</code> directly.</p>
 <h2 id="run-with-docker">Run with Docker<a class="headerlink" href="#run-with-docker" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-it<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>-e<span class="w"> </span>OPENAI_API_KEY<span class="w"> </span><span class="se">\</span>
@@ -1758,6 +1782,11 @@ need their dependencies and external programs.</p>
 <p>API credentials entered in the UI should be treated as secrets. Prefer
 environment variables for shared deployments, avoid placing tokens in a
 committed TOML file, and protect network access to the Streamlit server.</p>
+<h2 id="attachments">Attachments<a class="headerlink" href="#attachments" title="Permanent link">&para;</a></h2>
+<p>Attach structure or data files (XYZ, PDB, CIF, JSON, CSV, ...) with the
+paperclip in the chat box and refer to them in your message ("optimize the
+attached structure"). Files are saved into the exchange's artifact
+directory and the agent receives their exact paths.</p>
 <h2 id="sessions-and-artifacts">Sessions and artifacts<a class="headerlink" href="#sessions-and-artifacts" title="Permanent link">&para;</a></h2>
 <p>The UI maintains chat state and exposes prior sessions through its session
 controls. Chemistry tools write artifacts to the same session-aware log layout
