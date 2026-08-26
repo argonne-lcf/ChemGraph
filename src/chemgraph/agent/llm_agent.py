@@ -48,6 +48,10 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.main_agent import construct_main_agent_graph
+from chemgraph.graphs.deep_agent import (
+    DEFAULT_DEEPAGENT_PROMPT,
+    construct_deep_agent_graph,
+)
 from chemgraph.agent.turn import serialize_state
 
 
@@ -81,6 +85,7 @@ class PromptConfig:
     override the fields relevant to the active ``workflow_type``:
 
     - ``system``/``formatter``/``report``: single_agent, main_agent, mock_agent.
+    - ``deepagent``: deep_agent and the optional main_agent workspace worker.
     - ``planner``/``executor``/``aggregator``/``formatter_multi``: multi_agent.
     """
 
@@ -91,6 +96,7 @@ class PromptConfig:
     executor: str = default_executor_prompt
     aggregator: str = default_aggregator_prompt
     formatter_multi: str = default_formatter_multi_prompt
+    deepagent: str = DEFAULT_DEEPAGENT_PROMPT
 
 
 def _resolve_reasoning_effort(
@@ -127,12 +133,13 @@ class ChemGraph:
     model_name : str, optional
         Name of the language model to use, by default "gpt-4o-mini".
         Experimental ChatGPT subscription-backed Codex models use the
-        ``codex:<model-id>`` prefix and support ``single_agent`` and
-        ``main_agent``.
+        ``codex:<model-id>`` prefix and support ``single_agent``,
+        ``main_agent``, and ``deep_agent``.
     workflow_type : str, optional
         Type of workflow to use. Options:
         - "single_agent"
         - "main_agent" (drive with ``MainAgentSession``, not ``run``)
+        - "deep_agent"
         - "multi_agent"
         - "python_relp"
         - "graspa_agent"
@@ -164,11 +171,13 @@ class ChemGraph:
         Maximum number of LLM retry attempts when an agent
         fails to parse its output, by default 1
     human_input_handler : callable, optional
-        A callback ``f(question: str) -> str`` invoked when the graph
+        A callback ``f(question: str) -> Any`` invoked when the graph
         pauses for human input (via ``interrupt()``).  Receives the
-        question text and must return the human's answer as a string.
-        If ``None`` (default), interrupts will propagate as
-        ``GraphInterrupt`` exceptions.  The handler may also be an
+        question text and returns the resume value. Deep Agent action reviews
+        require a structured decision mapping rather than a string.
+        If ``None`` (default), interrupts propagate as
+        ``HumanInputRequired`` exceptions whose ``payload`` retains the raw
+        interrupt value. The handler may also be an
         ``async`` callable.
     human_supervised : bool, optional
         Whether to include the ``ask_human`` tool so the agent can
@@ -184,6 +193,11 @@ class ChemGraph:
     deepagent_backend : BackendProtocol, optional
         Backend used by the workspace Deep Agent. When omitted, its files are
         stored in checkpointed agent state.
+    deepagent_auto_approve : bool, optional
+        Disable Deep Agent tool-review interrupts for a standalone
+        ``deep_agent`` workflow. This permits unreviewed file mutations and
+        command execution and should be used only in an isolated, explicitly
+        trusted workspace, by default False.
     on_event : callable, optional
         Callback invoked with dashboard workflow events, by default None.
 
@@ -215,11 +229,12 @@ class ChemGraph:
         memory_db_path: Optional[str] = None,
         log_dir: Optional[str] = None,
         max_retries: int = 1,
-        human_input_handler: Optional[Callable[[str], str]] = None,
+        human_input_handler: Optional[Callable[[str], Any]] = None,
         human_supervised: bool = False,
         terminal_tool_names: Collection[str] = (),
         enable_deepagent: bool = False,
         deepagent_backend: Any | None = None,
+        deepagent_auto_approve: bool = False,
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
         checkpointer: BaseCheckpointSaver | None = None,
@@ -228,17 +243,34 @@ class ChemGraph:
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."
             )
-        if deepagent_backend is not None and not enable_deepagent:
-            raise ValueError("deepagent_backend requires enable_deepagent=True.")
-        if checkpointer is not None and workflow_type != "main_agent":
-            raise ValueError("checkpointer is supported only for the main_agent workflow.")
+        if deepagent_backend is not None and not (
+            enable_deepagent or workflow_type == "deep_agent"
+        ):
+            raise ValueError(
+                "deepagent_backend requires enable_deepagent=True or "
+                "workflow_type='deep_agent'."
+            )
+        if deepagent_auto_approve and workflow_type != "deep_agent":
+            raise ValueError(
+                "deepagent_auto_approve is supported only for the deep_agent "
+                "workflow."
+            )
+        if checkpointer is not None and workflow_type not in {
+            "main_agent",
+            "deep_agent",
+        }:
+            raise ValueError(
+                "checkpointer is supported only for the main_agent and "
+                "deep_agent workflows."
+            )
         if model_name.startswith("codex:") and workflow_type not in {
             "single_agent",
             "main_agent",
+            "deep_agent",
         }:
             raise ValueError(
                 "Experimental codex: models currently support only the "
-                "single_agent and main_agent workflows."
+                "single_agent, main_agent, and deep_agent workflows."
             )
         reasoning_effort = _resolve_reasoning_effort(model_name, reasoning_effort)
 
@@ -307,6 +339,7 @@ class ChemGraph:
         self.executor_prompt = prompts.executor
         self.aggregator_prompt = prompts.aggregator
         self.formatter_multi_prompt = prompts.formatter_multi
+        self.deepagent_prompt = prompts.deepagent
         self.tools = tools
         self.data_tools = data_tools
         self.max_retries = max_retries
@@ -315,6 +348,7 @@ class ChemGraph:
         self.terminal_tool_names = tuple(terminal_tool_names)
         self.enable_deepagent = enable_deepagent
         self.deepagent_backend = deepagent_backend
+        self.deepagent_auto_approve = deepagent_auto_approve
         self.checkpointer = checkpointer
         self.on_event = on_event
 
@@ -395,6 +429,11 @@ class ChemGraph:
             "formatter_prompt": self.formatter_prompt,
             "report_prompt": self.report_prompt,
         }
+        if (
+            self.enable_deepagent
+            and self.deepagent_prompt != DEFAULT_DEEPAGENT_PROMPT
+        ):
+            topology_payload["deepagent_prompt"] = self.deepagent_prompt
         topology_fingerprint = hashlib.sha256(
             json.dumps(topology_payload, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()
@@ -429,6 +468,7 @@ class ChemGraph:
         self.workflow_map = {
             "single_agent": {"constructor": construct_single_agent_graph},
             "main_agent": {"constructor": construct_main_agent_graph},
+            "deep_agent": {"constructor": construct_deep_agent_graph},
             "multi_agent": {"constructor": construct_multi_agent_graph},
             "python_relp": {"constructor": construct_relp_graph},
             "graspa": {"constructor": construct_graspa_graph},
@@ -473,12 +513,28 @@ class ChemGraph:
                 enable_deepagent=self.enable_deepagent,
                 deepagent_backend=self.deepagent_backend,
                 deepagent_recursion_limit=self.recursion_limit,
+                deepagent_system_prompt=self.deepagent_prompt,
                 checkpointer=self.checkpointer,
                 subagent_recorder=(
                     SubagentRunRecorder(self.session_store)
                     if self.session_store is not None
                     else None
                 ),
+            )
+        elif self.workflow_type == "deep_agent":
+            deepagent_options: dict[str, Any] = {}
+            if self.checkpointer is not None:
+                deepagent_options["checkpointer"] = self.checkpointer
+            if self.deepagent_auto_approve:
+                deepagent_options["interrupt_on"] = None
+            self.workflow = self.workflow_map[workflow_type]["constructor"](
+                llm,
+                tools=self.tools,
+                system_prompt=self.deepagent_prompt,
+                backend=self.deepagent_backend,
+                recursion_limit=self.recursion_limit,
+                name="deepagent",
+                **deepagent_options,
             )
         elif self.workflow_type == "multi_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -615,7 +671,9 @@ class ChemGraph:
         try:
             if config is None:
                 config = {"configurable": {"thread_id": "1"}}
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            timestamp = datetime.datetime.now().strftime(
+                "%Y-%m-%d_%H-%M-%S_%f"
+            )
             thread_id = config["configurable"]["thread_id"]
             if not file_path:
                 log_dir = getattr(self, "log_dir", None) or os.environ.get(
@@ -663,6 +721,9 @@ class ChemGraph:
                         "formatter_prompt": self.formatter_prompt,
                     }
                 )
+
+            elif self.workflow_type == "deep_agent":
+                output_data.update({"system_prompt": self.deepagent_prompt})
 
             elif self.workflow_type == "graspa_mcp":
                 output_data.update(
@@ -786,6 +847,31 @@ class ChemGraph:
         except Exception as e:
             logger.warning(f"Failed to save messages to session store: {e}")
 
+    def _persist_run_state(self, config: dict) -> None:
+        """Write the current checkpoint state to the configured log directory."""
+        log_dir = self.log_dir or "cg_logs"
+        os.makedirs(log_dir, exist_ok=True)
+        self.write_state(config=config)
+
+    def _finalize_completed_run(
+        self,
+        last_state: dict,
+        config: dict,
+        query: str,
+    ) -> Any:
+        """Persist a completed run and return the configured result shape."""
+        self._save_messages_to_store(last_state, query)
+        self._persist_run_state(config)
+
+        if self.return_option == "last_message":
+            return last_state["messages"][-1]
+        if self.return_option == "state":
+            return serialize_state(self.get_state(config=config))
+        raise ValueError(
+            f"Unsupported return_option: {self.return_option}. "
+            "Use 'last_message' or 'state'."
+        )
+
     def load_previous_context(
         self,
         session_id: str,
@@ -813,7 +899,12 @@ class ChemGraph:
             return ""
         return self.session_store.build_context_summary(session_id)
 
-    async def _call_human_input_handler(self, question: str) -> str:
+    async def _call_human_input_handler(
+        self,
+        question: str,
+        *,
+        payload: Any = None,
+    ) -> Any:
         """Invoke the human_input_handler, supporting both sync and async callables.
 
         Raises :class:`HumanInputRequired` when no handler is configured,
@@ -822,7 +913,7 @@ class ChemGraph:
         """
         handler = self.human_input_handler
         if handler is None:
-            raise HumanInputRequired(question)
+            raise HumanInputRequired(question, payload=payload)
         if asyncio.iscoroutinefunction(handler):
             return await handler(question)
         return handler(question)
@@ -878,24 +969,6 @@ class ChemGraph:
             cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
             cfg["recursion_limit"] = self.recursion_limit
             return cfg
-
-        def _save_state_and_select_return(last_state, cfg):
-            log_dir = self.log_dir
-            if not log_dir:
-                log_dir = "cg_logs"
-
-            os.makedirs(log_dir, exist_ok=True)
-            log_path = None
-            self.write_state(config=cfg, file_path=log_path)
-
-            if self.return_option == "last_message":
-                return last_state["messages"][-1]
-            elif self.return_option == "state":
-                return serialize_state(self.get_state(config=cfg))
-            else:
-                raise ValueError(
-                    f"Unsupported return_option: {self.return_option}. Use 'last_message' or 'state'."
-                )
 
         async def _stream_until_interrupt(stream_input, cfg):
             """Stream the workflow until completion or an interrupt.
@@ -1052,7 +1125,10 @@ class ChemGraph:
                     question = str(interrupt_value)
 
                 logger.info("Requesting human input: %s", question)
-                human_answer = await self._call_human_input_handler(question)
+                human_answer = await self._call_human_input_handler(
+                    question,
+                    payload=interrupt_value,
+                )
                 logger.info("Human responded: %s", human_answer)
 
                 # Resume the graph from the checkpoint with the human's answer.
@@ -1063,9 +1139,6 @@ class ChemGraph:
 
             if last_state is None:
                 raise RuntimeError("Workflow produced no states.")
-
-            # Save messages to persistent session store
-            self._save_messages_to_store(last_state, query)
 
             messages = _state_messages(last_state)
             executed_tools = _executed_tool_names(messages)
@@ -1085,11 +1158,12 @@ class ChemGraph:
                 },
             )
 
-            return _save_state_and_select_return(last_state, config)
+            return self._finalize_completed_run(last_state, config, query)
 
         except HumanInputRequired:
             # No human_input_handler configured — propagate so the
             # caller (CLI / UI) can prompt the user and resume.
+            self._persist_run_state(config)
             raise
         except Exception as e:
             event(
@@ -1105,6 +1179,7 @@ class ChemGraph:
             logger.error(f"Error running workflow {self.workflow_type}: {e}")
             raise
 
+
 class HumanInputRequired(Exception):
     """Raised when the graph needs human input but no handler is configured.
 
@@ -1113,6 +1188,7 @@ class HumanInputRequired(Exception):
     ``Command(resume=answer)``.
     """
 
-    def __init__(self, question: str):
+    def __init__(self, question: str, *, payload: Any = None):
         self.question = question
+        self.payload = question if payload is None else payload
         super().__init__(question)

@@ -1,4 +1,5 @@
 import pytest
+from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 
 from chemgraph.cli.commands import ALL_WORKFLOW_TYPES
@@ -10,10 +11,12 @@ from chemgraph.registry import (
     UnknownRegistryEntryError,
 )
 from chemgraph.tools.generic_tools import calculator
+from tests.test_main_agent import _ScriptedChatModel
 
 
 EXPECTED_WORKERS = (
     "single_agent",
+    "deep_agent",
     "multi_agent",
     "python_relp",
     "graspa",
@@ -54,6 +57,7 @@ def test_existing_workflow_aliases_resolve_to_canonical_workers():
     registry = AgentRegistry()
 
     assert registry.resolve_name("python_repl") == "python_relp"
+    assert registry.resolve_name("deepagent") == "deep_agent"
     assert registry.resolve_name("graspa_agent") == "graspa"
     assert registry.resolve_name("iri") == "single_agent_iri"
     assert registry.get_spec("python_repl").name == "python_relp"
@@ -183,7 +187,7 @@ def test_all_workers_build_standalone_with_default_memory_checkpointer():
         kwargs = _graspa_mcp_options() if name == "graspa_mcp" else {}
         graph = registry.build(
             name,
-            llm=object(),
+            llm=_ScriptedChatModel(responses=[AIMessage(content="done")]),
             require_available=False,
             **kwargs,
         )
@@ -194,7 +198,7 @@ def test_all_workers_adapt_to_parent_checkpointed_subagents():
     registry = AgentRegistry()
     workers = registry.as_subagents(
         registry.names(),
-        llm=object(),
+        llm=_ScriptedChatModel(responses=[AIMessage(content="done")]),
         options={"graspa_mcp": _graspa_mcp_options()},
         require_available=False,
     )
