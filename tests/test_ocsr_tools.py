@@ -918,3 +918,90 @@ def test_the_failure_list_in_a_warning_is_bounded(monkeypatch, image):
     result = tools.image_to_smiles_core(image, ensemble=True)
 
     assert len(result["warning"]) < 1000
+
+
+def test_the_model_listing_reports_the_table_and_not_the_registry(monkeypatch,
+                                                                  tmp_path):
+    """A user who refit on their own images must see their own accuracies.
+
+    Silent when broken: the listing quotes the benchmark figures compiled into the
+    registry, which say nothing about the images this install actually reads.
+    """
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
+        "model_performance": {"decimer": {"accuracy": 0.123, "n": 50}},
+    }))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
+
+    listing = tools.list_ocsr_models.func()
+
+    assert "0.123 exact match" in listing
+    assert "0.899" not in listing  # the registry figure
+
+
+def test_an_unreadable_table_still_returns_the_read(monkeypatch, image, tmp_path):
+    """The label degrades; the SMILES the model produced still comes back."""
+    _stub(monkeypatch, ok=True, smiles=ASPIRIN)
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(tmp_path / "nope.json"))
+
+    result = tools.image_to_smiles_core(image, model="decimer")
+
+    assert result["ok"]
+    assert result["confidence_label"] == "unavailable"
+
+
+def test_the_example_script_prints_what_the_tool_reports(monkeypatch, tmp_path):
+    """Both read accuracies through the same call, so a refit moves both.
+
+    Silent when broken: the example prints the registry's benchmark figures while
+    the tool prints the user's own, and nothing says why they differ.
+    """
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
+        "model_performance": {"decimer": {"accuracy": 0.42, "n": 99}},
+    }))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
+
+    assert tools.measured_accuracies()["decimer"]["accuracy"] == 0.42
+    assert "0.420 exact match" in tools.list_ocsr_models.func()
+
+
+def test_the_listing_separates_installed_from_ready(monkeypatch, tmp_path):
+    """Three of four need a checkpoint the extra cannot fetch.
+
+    Silent when broken: the listing says "installed", the user believes setup is
+    finished, and the next call fails on a missing 1.1 GB file.
+    """
+    monkeypatch.setenv("CHEMGRAPH_OCSR_WEIGHTS_DIR", str(tmp_path))
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+
+    listing = tools.list_ocsr_models.func()
+
+    assert "decimer [default]" in listing and "(ready)" in listing
+    assert listing.count("installed, checkpoint missing") == 3
+
+
+def test_a_missing_checkpoint_error_quotes_a_command_that_downloads_it(monkeypatch,
+                                                                       tmp_path):
+    """The one install step the extra cannot do, so most first runs stop here.
+
+    Silent when broken: the error points at a README the user then has to find,
+    parse, and adapt to their own weights directory.
+    """
+    monkeypatch.setenv("CHEMGRAPH_OCSR_WEIGHTS_DIR", str(tmp_path))
+
+    _, error = backends._resolve_weights("molnextr")
+
+    assert "hf download" in error
+    assert f"--local-dir {tmp_path}/molnextr" in error
+
+
+def test_decimer_needs_no_checkpoint_and_is_never_called_unready(monkeypatch,
+                                                                 tmp_path):
+    """It caches its own weights, so a weights directory says nothing about it."""
+    monkeypatch.setenv("CHEMGRAPH_OCSR_WEIGHTS_DIR", str(tmp_path))
+    monkeypatch.setattr(backends, "available_specialists", lambda: ["decimer"])
+
+    assert backends.usable_specialists() == ["decimer"]

@@ -32,11 +32,26 @@ from chemgraph.tools import ocsr_models as models
 logger = logging.getLogger(__name__)
 
 
+def measured_accuracies() -> dict[str, dict]:
+    """Solo accuracy per model, from the calibration table rather than the registry.
+
+    The registry describes what a model is: how to run it, how fast, what it needs.
+    How well it did is a measurement, and it belongs with the data that produced it,
+    so a user who refits on their own images sees their own numbers here. An
+    unreadable table costs the accuracies and not the listing.
+    """
+    try:
+        table = core.load_calibration()
+    except (OSError, ValueError, TypeError):
+        return {}
+    return {m: core.model_performance(m, table) for m in models.SPECIALIST_MODELS}
+
+
 def _unknown_model_error(model: str) -> str:
     installed = backends.available_specialists()
     return (f"unknown model {model!r}. Choose one of: "
             f"{', '.join(models.MODEL_CHOICES)}.\n\n"
-            f"{models.describe_models(installed)}")
+            f"{models.describe_models(installed, measured_accuracies(), backends.usable_specialists())}")
 
 
 def _resolve_model(model: str | None) -> tuple[str, str]:
@@ -516,12 +531,14 @@ def image_to_smiles(image_path: str, model: str | None = None,
 
 @tool
 def list_ocsr_models() -> str:
-    """List the OCSR models, their benchmark accuracy, and which are installed here.
+    """List the OCSR models, their measured accuracy, and which are installed here.
 
     Use this when the user asks what models are available, or after an install error,
     so the answer names what this machine actually has instead of guessing.
     """
-    return models.describe_models(backends.available_specialists())
+    return models.describe_models(backends.available_specialists(),
+                                  measured_accuracies(),
+                                  backends.usable_specialists())
 
 
 @tool

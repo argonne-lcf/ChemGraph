@@ -107,20 +107,45 @@ LLM_MODEL = "llm"
 MODEL_CHOICES = (*SPECIALIST_MODELS, LLM_MODEL)
 
 
-def describe_models(installed: list[str] | None = None) -> str:
+def describe_models(installed: list[str] | None = None,
+                    measured: dict[str, dict] | None = None,
+                    ready: list[str] | None = None) -> str:
     """A human-readable listing of the models, for docs and error messages.
 
     ``installed`` marks which ones are importable here. Pass
     :func:`chemgraph.tools.ocsr_backends.available_specialists`; it lives there
     because probing imports is not this module's job.
+
+    ``measured`` supplies accuracies from a calibration table, so a user who refit
+    on their own images is shown their own numbers. Omitting it falls back to the
+    registry's figures, which were measured on the shipped benchmark.
+
+    ``ready`` names the ones whose checkpoint is also present. Three of the four
+    need a download the extra cannot do, so "installed" alone tells a user their
+    setup is finished when the next call will still fail. Pass
+    :func:`chemgraph.tools.ocsr_backends.usable_specialists`.
     """
     installed = set(installed or [])
+    ready = set(ready) if ready is not None else installed
+    measured = measured or {}
     lines = ["OCSR models (model=):"]
     for name, m in SPECIALIST_MODELS.items():
-        mark = "installed" if name in installed else "not installed"
+        if name not in installed:
+            mark = "not installed"
+        elif name in ready:
+            mark = "ready"
+        else:
+            mark = "installed, checkpoint missing"
         default = " [default]" if name == DEFAULT_SPECIALIST else ""
-        accuracy = m.get("accuracy")
-        score = f"{accuracy:.3f} exact match" if accuracy is not None else "unmeasured"
+        # Mark which source each number came from. A table covering a subset of the
+        # installed models leaves the rest on the registry's figures, and a listing
+        # mixing the two without saying so cannot be read: the model labelled most
+        # accurate can show the lowest number.
+        refit = (measured.get(name) or {}).get("accuracy")
+        accuracy = refit if refit is not None else m.get("accuracy")
+        source = " (your table)" if refit is not None else ""
+        score = (f"{accuracy:.3f} exact match{source}" if accuracy is not None
+                 else "unmeasured")
         latency = m.get("latency_s")
         speed = f", {latency:g}s/image" if latency else ""
         lines.append(f"  {name}{default}: {score}{speed} ({mark})")

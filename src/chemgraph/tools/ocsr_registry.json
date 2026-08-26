@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "_comment": "OCSR specialist models. All four install from the ocsr extra into ChemGraph's own environment; see examples/ocsr/README.md. accuracy is exact match over the 722-image benchmark (n=722 for each). import_name is what ocsr_backends probes to decide whether a model is installed. weights is where a checkpoint is cached; DECIMER manages its own cache and has none.",
+  "_comment": "OCSR specialist models. All four install from the ocsr extra into ChemGraph's own environment; see examples/ocsr/README.md. accuracy is exact match over the 722-image benchmark (n=722 for each). import_name is what ocsr_backends probes to decide whether a model is installed. weights is where a checkpoint is cached and download is the command that fetches it, which the missing-checkpoint error quotes; DECIMER manages its own cache and has neither.",
   "specialists": {
     "decimer": {
       "import_name": "DECIMER",
@@ -16,7 +16,8 @@
       "note": "Second by exact match. Needs the timm compatibility shim.",
       "install": {
         "weights": "~/ocsr-weights/molnextr/molnextr_best.pth",
-        "weights_gb": 1.1
+        "weights_gb": 1.1,
+        "download": "hf download CYF200127/MolNexTR molnextr_best.pth --repo-type dataset"
       }
     },
     "molscribe": {
@@ -26,7 +27,8 @@
       "note": "Needs the timm compatibility shim.",
       "install": {
         "weights": "~/ocsr-weights/molscribe/swin_base_char_aux_1m.pth",
-        "weights_gb": 1.1
+        "weights_gb": 1.1,
+        "download": "hf download yujieq/MolScribe swin_base_char_aux_1m.pth"
       }
     },
     "ocsrglyph": {
@@ -36,7 +38,8 @@
       "note": "Fastest of the four. Lowest exact match on this benchmark.",
       "install": {
         "weights": "~/ocsr-weights/ocsrglyph/model.pth",
-        "weights_gb": 0.37
+        "weights_gb": 0.37,
+        "download": "hf download EdisonScientific/OCSRGlyph model.pth"
       }
     }
   },
