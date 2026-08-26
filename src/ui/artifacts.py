@@ -125,8 +125,13 @@ def classify_artifacts(files: list[str]) -> dict[str, list[str]]:
             _add(FREQUENCY_TABLES, rel)
         elif fnmatch.fnmatch(name, "*_vib.*.traj"):
             _add(MODE_TRAJECTORIES, rel)
-        elif name.endswith(".traj"):
+        elif name.endswith("_opt.traj"):
+            # Only optimization trajectories are rendered as convergence plots;
+            # matching the ``<stem>_opt.traj`` name the optimizer writes keeps an
+            # unrelated .traj (e.g. an uploaded MD run) from being mislabeled.
             _add(TRAJECTORIES, rel)
+        elif name.endswith(".traj"):
+            _add(OTHER, rel)
         elif name.endswith((".html", ".htm")):
             _add(REPORTS, rel)
         elif name.endswith(".png"):

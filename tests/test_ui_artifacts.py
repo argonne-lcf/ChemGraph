@@ -62,6 +62,7 @@ def test_classify_artifacts_buckets_by_kind():
             "frequencies_methanol.csv",
             "methanol_vib.3.traj",
             "water_opt.traj",
+            "dynamics.traj",
             "report.html",
             "convergence.png",
             "output.json",
@@ -75,11 +76,13 @@ def test_classify_artifacts_buckets_by_kind():
     assert kinds[artifacts.IR_PEAKS] == ["ir_peaks_methanol.csv"]
     assert kinds[artifacts.FREQUENCY_TABLES] == ["frequencies_methanol.csv"]
     assert kinds[artifacts.MODE_TRAJECTORIES] == ["methanol_vib.3.traj"]
+    # Only *_opt.traj is treated as optimization convergence data; an
+    # unrelated trajectory must not be mislabeled as an optimization.
     assert kinds[artifacts.TRAJECTORIES] == ["water_opt.traj"]
     assert kinds[artifacts.REPORTS] == ["report.html"]
     assert kinds[artifacts.IMAGES] == ["convergence.png"]
     assert kinds[artifacts.DATA] == ["output.json"]
-    assert kinds[artifacts.OTHER] == ["notes.txt"]
+    assert kinds[artifacts.OTHER] == ["dynamics.traj", "notes.txt"]
 
 
 def test_manifest_round_trip(tmp_path):
