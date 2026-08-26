@@ -780,3 +780,71 @@ def test_a_floor_written_as_a_json_decimal_still_holds(tmp_path):
                                   "patterns": {"1": {"k": 4, "n": 4, "p": 0.9}}}))
 
     assert core.confidence("1", core.load_calibration(str(custom)))["p"] is None
+
+
+# ---------------------------------------------------------------------------
+# Single-model priors
+# ---------------------------------------------------------------------------
+
+
+def test_single_model_must_not_be_routed_through_vote():
+    """The trap prior_confidence exists to avoid.
+
+    Silent when broken: a one-model vote yields pattern "1", which a four-model
+    table does not contain, so the strongest model reports unknown_pattern instead
+    of its measured accuracy.
+    """
+    from chemgraph.tools.ocsr_models import DEFAULT_SPECIALIST
+
+    t = core.load_calibration()
+    assert core.vote(_results(("decimer", "CCO")))["pattern"] == "1"
+    assert core.confidence("1", t)["reason"] == "unknown_pattern"
+    assert core.prior_confidence(DEFAULT_SPECIALIST, t)["p"] is not None
+
+
+def test_every_registered_specialist_has_a_prior():
+    """A model the registry offers must have a measured accuracy to report."""
+    from chemgraph.tools.ocsr_models import SPECIALIST_MODELS
+
+    t = core.load_calibration()
+    for name in SPECIALIST_MODELS:
+        assert core.prior_confidence(name, t)["p"] is not None, name
+
+
+def test_a_prior_reads_the_table_and_not_a_constant(tmp_path):
+    """Refitting on other images must move the priors.
+
+    Silent when broken: a figure compiled into the source outlives the table it was
+    measured on and reports another dataset's accuracy.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({
+        "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
+        "model_performance": {"decimer": {"accuracy": 0.5, "n": 10}},
+    }))
+    t = core.load_calibration(str(custom))
+    assert core.prior_confidence("decimer", t)["p"] == 0.5
+    assert core.prior_confidence("local:decimer", t)["p"] == 0.5
+
+
+def test_an_unmeasured_model_reports_why_it_has_no_prior():
+    got = core.prior_confidence("nosuchmodel", core.load_calibration())
+    assert (got["p"], got["reason"]) == (None, "no_prior_for_model")
+
+
+def test_an_unreadable_table_costs_the_prior_and_not_the_run(tmp_path, monkeypatch):
+    """A broken table must not raise out of a call that already read the image."""
+    bad = tmp_path / "cal.json"
+    bad.write_text("{not json")
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(bad))
+    got = core.prior_confidence("decimer")
+    assert got["p"] is None
+    assert got["reason"].startswith("calibration_unreadable")
+    assert core.model_performance("decimer") == {}
+
+
+def test_model_performance_reports_the_counts_behind_an_accuracy():
+    got = core.model_performance("decimer", core.load_calibration())
+    assert got["k"] == 649 and got["n"] == 722
+    assert got["ci"][0] < got["accuracy"] < got["ci"][1]
+

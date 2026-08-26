@@ -811,3 +811,55 @@ def confidence(pattern: str | None, table: dict) -> dict:
                 "reason": "below_n_floor"}
     return {"p": p, "label": entry.get("label") or _label_for(p), "n": n, "ci": ci,
             "reason": None}
+
+
+
+def prior_confidence(model: str, table: dict | None = None) -> dict:
+    """Confidence for a single-model backend, from that model's measured solo accuracy.
+
+    A single model has no consensus to measure, so the agreement table does not apply.
+    Do **not** route a one-model result through :func:`vote` and :func:`confidence`:
+    that yields pattern "1", which a four-model table does not contain at all, so the
+    lookup misses and reports unknown_pattern. It would also trip
+    :func:`check_committee`. Use this instead.
+
+    Returns the same shape as :func:`confidence` so callers have one code path.
+
+    Every number here comes from the calibration table's ``model_performance`` section, never from
+    a constant in this file. Measurements belong with the data that produced them: a
+    user who refits on their own images gets priors for their images, and a stale
+    figure cannot outlive the table it was measured on. The registry in ocsr_models
+    describes what a model *is* (how to run it, how fast, what it needs); the table
+    records how well it *did*.
+
+    Passing ``table`` lets a caller that already loaded one avoid a second read.
+    """
+    bare = model.removeprefix("local:")
+    try:
+        t = table if table is not None else load_calibration()
+    except (OSError, ValueError, TypeError) as exc:
+        return {"p": None, "label": "unavailable", "n": 0, "ci": None,
+                "reason": f"calibration_unreadable: {type(exc).__name__}"}
+
+    entry = (t.get("model_performance") or {}).get(bare)
+    if not entry or entry.get("accuracy") is None:
+        return {"p": None, "label": "unavailable", "n": 0, "ci": None,
+                "reason": "no_prior_for_model"}
+    p = entry["accuracy"]
+    return {"p": p, "label": _label_for(p), "n": entry.get("n", 0),
+            "ci": entry.get("ci"), "reason": None}
+
+
+
+def model_performance(model: str, table: dict | None = None) -> dict:
+    """Measured single-model performance from a calibration table, or {} if absent.
+
+    The one place to ask "how good is this model": accuracy, the k and n behind it,
+    a 95% interval, and how often it abstains. Nothing here is compiled into the
+    source, so a table refitted on other images reports that table's numbers.
+    """
+    try:
+        t = table if table is not None else load_calibration()
+    except (OSError, ValueError, TypeError):
+        return {}
+    return dict((t.get("model_performance") or {}).get(model.removeprefix("local:")) or {})
