@@ -12,7 +12,10 @@ import glob
 import json
 import logging
 import os
+import signal
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -452,6 +455,111 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     dict
         Minimal result payload (status, message, key numbers).
     """
+    calculator_type = str(
+        getattr(params.calculator, "calculator_type", "")
+    ).lower()
+
+    try:
+        # The macOS TBLite and PyTorch wheels each bundle libomp.dylib. Loading
+        # both copies in one interpreter raises SIGABRT, which no Python
+        # try/except can catch. Keep TBLite in a fresh interpreter so a native
+        # loader failure is contained and reported to the caller.
+        if calculator_type == "tblite":
+            return _run_ase_core_isolated(params)
+        return _run_ase_core_in_process(params)
+    except Exception as exc:
+        logger.exception("run_ase_core failed with %s: %s", type(exc).__name__, exc)
+        return {
+            "status": "failure",
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        }
+
+
+def _run_ase_core_isolated(params: ASEInputSchema) -> dict:
+    """Run a native calculator in a child process and contain hard crashes."""
+    env = os.environ.copy()
+    source_root = str(Path(__file__).resolve().parents[2])
+    existing_pythonpath = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        os.pathsep.join((source_root, existing_pythonpath))
+        if existing_pythonpath
+        else source_root
+    )
+
+    with tempfile.TemporaryDirectory(prefix="chemgraph_ase_worker_") as tmpdir:
+        env.setdefault("MPLCONFIGDIR", os.path.join(tmpdir, "matplotlib"))
+        env.setdefault("XDG_CACHE_HOME", os.path.join(tmpdir, "cache"))
+        result_path = Path(tmpdir) / "result.json"
+        command = [
+            sys.executable,
+            "-m",
+            "chemgraph.tools._ase_worker",
+            str(result_path),
+        ]
+        completed = subprocess.run(
+            command,
+            input=params.model_dump_json(),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            check=False,
+        )
+
+        if completed.returncode != 0:
+            if completed.returncode < 0:
+                signal_number = -completed.returncode
+                try:
+                    signal_name = signal.Signals(signal_number).name
+                except ValueError:
+                    signal_name = f"signal {signal_number}"
+                termination = f"terminated by {signal_name}"
+            else:
+                termination = f"exited with status {completed.returncode}"
+
+            calculator_name = getattr(
+                params.calculator, "calculator_type", "native calculator"
+            )
+            message = f"{calculator_name} worker {termination}."
+            if "OMP: Error #15" in completed.stderr or "libomp" in completed.stderr:
+                message += (
+                    " A conflicting OpenMP runtime was detected and contained; "
+                    "the ChemGraph process is still running."
+                )
+            logger.error(
+                "%s Worker stderr: %s",
+                message,
+                completed.stderr.strip() or "<empty>",
+            )
+            return {
+                "status": "failure",
+                "error_type": "CalculatorProcessError",
+                "message": message,
+                "returncode": completed.returncode,
+            }
+
+        try:
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.error("Calculator worker returned no valid result: %s", exc)
+            return {
+                "status": "failure",
+                "error_type": "CalculatorProcessError",
+                "message": f"Calculator worker returned no valid result: {exc}",
+            }
+
+        if not isinstance(result, dict):
+            return {
+                "status": "failure",
+                "error_type": "CalculatorProcessError",
+                "message": "Calculator worker returned a non-object result.",
+            }
+        return result
+
+
+def _run_ase_core_in_process(params: ASEInputSchema) -> dict:
+    """Execute the ASE simulation in the current interpreter."""
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
@@ -530,6 +638,18 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         }
     logger.info("Calculator loaded successfully: %s", type(calc).__name__)
     simulation_input = _simulation_input_for_output(params, calc_model)
+
+    if driver == "ir" and "dipole" not in getattr(
+        calc, "implemented_properties", ()
+    ):
+        return {
+            "status": "failure",
+            "error_type": "PropertyNotImplementedError",
+            "message": (
+                "IR calculations require a calculator that implements dipole "
+                f"moments; {type(calc).__name__} does not provide the dipole property."
+            ),
+        }
 
     try:
         atoms = read(input_structure_file)
