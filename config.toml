@@ -11,6 +11,8 @@ human_supervised = false
 # To call it directly, set workflow = "deep_agent" instead.
 enable_deepagent = false
 # deepagent_workspace = "."
+# Ordered backend-relative Agent Skills directories (later entries win).
+# deepagent_skills = ["/workspace/.agents/skills/"]
 # Durable main-agent checkpoint database.
 # checkpoint_db = "~/.chemgraph/checkpoints.db"
 verbose = false

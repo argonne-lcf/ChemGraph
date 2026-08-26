@@ -50,6 +50,7 @@ class MainAgentGraphConfig(BaseModel):
     terminal_tool_names: tuple[str, ...] = ()
     enable_deepagent: bool = False
     deepagent_workspace: Optional[str] = None
+    deepagent_skills: tuple[str, ...] = ()
     subagent_names: tuple[str, ...] = ("chemgraph",)
     tool_signatures: tuple[str, ...] = ()
     package_version: str = ""
