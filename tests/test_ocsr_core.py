@@ -232,8 +232,25 @@ def test_build_result_has_every_contract_key():
     r = core.build_result()
     assert set(r) == {
         "ok", "smiles", "valid", "formula", "n_fragments",
+        "confidence", "confidence_interval", "confidence_label",
+        "confidence_unavailable_reason",
+        "agreement", "backend_used",
         "model_used", "cold_start", "latency_s", "error", "warning",
+        "votes", "abstained",
     }
+
+
+def test_the_committee_keys_are_empty_until_a_committee_runs():
+    """A single model has no agreement to report, and says so rather than omitting.
+
+    Silent when broken: an agent reading `confidence` from a one-model call would
+    get None with no reason, indistinguishable from a committee whose table failed
+    to load.
+    """
+    r = core.build_result()
+    assert (r["agreement"], r["votes"], r["abstained"]) == (None, None, None)
+    assert r["confidence"] is None
+    assert r["confidence_label"] == "unavailable"
 
 
 # ---------------------------------------------------------------------------

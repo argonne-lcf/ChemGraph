@@ -56,8 +56,25 @@ def _resolve_model(model: str | None) -> tuple[str, str]:
     return name, ""
 
 
+def _prior_label(model: str, calibration: str | None) -> str:
+    """Band a model's measured accuracy, from the table the caller named.
+
+    Without threading ``calibration`` through, a user who refit on their own images
+    and passed the path would get their own numbers from a committee and the
+    packaged ones from every single-model read, with nothing in the result to show
+    the two came from different data.
+    """
+    try:
+        table = core.load_calibration(calibration)
+    except (OSError, ValueError, TypeError):
+        return "unavailable"
+    return core.prior_confidence(model, table)["label"]
+
+
 def image_to_smiles_core(image_path: str, model: str | None = None,
-                         structured: bool = False,
+                         structured: bool = False, ensemble: bool = False,
+                         calibration: str | None = None,
+                         models_wanted: list[str] | None = None,
                          llm: Any = None) -> dict:
     """Read a molecule's 2D structure diagram and return its SMILES.
 
@@ -73,6 +90,15 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
         ``decimer``, ``molnextr``, ``molscribe``, ``ocsrglyph``, or ``llm`` for the
         agent's own model. ``None`` picks the default specialist, or the LLM when no
         specialist is installed.
+    ensemble : bool, optional
+        Run every installed specialist and vote, attaching a measured confidence.
+        Costs one inference per model. ``model`` is ignored when this is set.
+    calibration : str, optional
+        Path to a calibration table. Defaults to ``CHEMGRAPH_OCSR_CALIBRATION``,
+        then the packaged four-model table.
+    models_wanted : list of str, optional
+        With ``ensemble``, vote only these specialists instead of every installed
+        one. Needed when the table describes a subset of what is installed.
     structured : bool, optional
         With ``model="llm"``, ask for a JSON reply. Ignored by the specialists,
         which take no prompt.
@@ -119,11 +145,7 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
     # parse it, since an unparseable answer is still worth reporting with valid=False.
     smiles = core.canonicalize(narrow["smiles"], stereo=True) or narrow["smiles"]
 
-    warning = ""
-    if validation.get("n_fragments", 0) > 1:
-        warning = (f"the image contains {validation['n_fragments']} disconnected "
-                   f"fragments (a salt, a mixture, or a reaction scheme). Ask which "
-                   f"one is meant before using this SMILES.")
+    warning = core.fragment_warning(validation)
 
     return core.build_result(
         ok=True,
@@ -131,6 +153,14 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
         valid=validation.get("valid", False),
         formula=validation.get("formula"),
         n_fragments=validation.get("n_fragments", 0),
+        # One model produced one answer, so there is no agreement to score, and
+        # confidence stays None. Naming the reason keeps this apart from a committee
+        # whose table failed to load, which also reports no number. The label still
+        # carries the model's measured solo accuracy, which is the question a caller
+        # asks next and the only one a single read can answer.
+        confidence_label=_prior_label(narrow.get("model_used") or name, calibration),
+        confidence_unavailable_reason="single_model_has_no_per_image_confidence",
+        backend_used="llm" if name == models.LLM_MODEL else "specialist",
         model_used=narrow.get("model_used") or name,
         cold_start=narrow.get("cold_start", False),
         latency_s=narrow.get("latency_s", 0.0),

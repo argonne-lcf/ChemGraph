@@ -188,16 +188,21 @@ def test_result_keys_match_the_contract(monkeypatch, image):
     assert set(result) == set(core.build_result())
 
 
-def test_committee_keys_are_gone():
-    """The ensemble surface belongs to the follow-up PR, not this contract."""
-    contract = set(core.build_result())
-    assert not contract & {"votes", "abstained", "agreement", "confidence"}
+def test_a_single_model_result_says_why_it_carries_no_confidence(monkeypatch, image):
+    """The reason distinguishes "nothing to measure" from "the table failed".
 
+    Silent when broken: an agent sees confidence=None on a perfectly good read and
+    cannot tell whether to retry with a committee or to fix its calibration table.
+    """
+    _stub(monkeypatch, ok=True, smiles=ASPIRIN)
 
-# --------------------------------------------------------------------------- #
-# Tool wiring
-# --------------------------------------------------------------------------- #
+    result = tools.image_to_smiles_core(image)
 
+    assert result["confidence"] is None
+    assert result["confidence_unavailable_reason"] == (
+        "single_model_has_no_per_image_confidence")
+    assert result["backend_used"] == "specialist"
+    assert result["agreement"] is None
 
 def test_make_ocsr_tools_binds_the_llm(monkeypatch, image):
     """The whole point of the factory: model='llm' reaches the agent's own model."""

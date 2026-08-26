@@ -45,6 +45,7 @@ _MAX_SMILES_CHARS = 4000
 # deserve a decimal.
 _LABEL_BANDS = ((0.99, "unanimous"), (0.95, "strong"), (0.70, "weak"))
 
+
 # The optional quotes around the key let a JSON reply be read at the line level:
 # '"smiles": "CCO"' is the single most common structured form a vision LLM returns,
 # and reaching it here keeps the word-by-word fallback from matching an element
@@ -384,8 +385,11 @@ def build_result(**overrides) -> dict:
     never has to test for a missing key. The docstring of ``image_to_smiles`` promises
     these exact fields; changing the set means changing both together.
 
-    The committee keys (agreement, votes, abstained) belong to the ensemble work and
-    are not part of this contract; a single model has nothing to report for them.
+    The committee keys stay None outside an ensemble call, where a single model has
+    nothing to report: it produced one answer and there is no agreement to measure.
+    A single model still carries no per-image confidence, so ``confidence`` is None
+    there and ``confidence_unavailable_reason`` says why; :func:`prior_confidence`
+    is the way to ask how accurate that model is in general.
     """
     result = {
         "ok": False,
@@ -393,18 +397,25 @@ def build_result(**overrides) -> dict:
         "valid": False,
         "formula": None,
         "n_fragments": 0,
+        "confidence": None,
+        "confidence_interval": None,
+        "confidence_label": "unavailable",
+        "confidence_unavailable_reason": None,
+        "agreement": None,
+        "backend_used": None,
         "model_used": None,
         "cold_start": False,
         "latency_s": 0.0,
         "error": "",
         "warning": "",
+        "votes": None,
+        "abstained": None,
     }
     unknown = set(overrides) - set(result)
     if unknown:
         raise KeyError(f"not part of the OCSR result contract: {sorted(unknown)}")
     result.update(overrides)
     return result
-
 
 
 def fragment_warning(validation: dict) -> str:
@@ -418,7 +429,6 @@ def fragment_warning(validation: dict) -> str:
         return ""
     return (f"the image contains {n} disconnected fragments (a salt, a mixture, or "
             f"a reaction scheme). Ask which one is meant before using this SMILES.")
-
 
 
 def vote(results: list[dict], priority: list[str] | None = None) -> dict:
@@ -502,7 +512,6 @@ def vote(results: list[dict], priority: list[str] | None = None) -> dict:
         "committee": committee,
         "voters": [m for models in groups.values() for m in models],
     }
-
 
 
 def load_calibration(path: str | None = None) -> dict:
@@ -742,7 +751,6 @@ def _parse_tie_break(value: object) -> list[str] | None:
     return [n.strip() for n in names.split(",") if n.strip()]
 
 
-
 def _label_for(p: float, low_n: bool = False) -> str:
     """Map a probability to a coarse label, prefixed when the bucket is small."""
     name = "conflicting"
@@ -751,7 +759,6 @@ def _label_for(p: float, low_n: bool = False) -> str:
             name = band
             break
     return f"low_n_{name}" if low_n else name
-
 
 
 def confidence(pattern: str | None, table: dict) -> dict:
@@ -813,7 +820,6 @@ def confidence(pattern: str | None, table: dict) -> dict:
             "reason": None}
 
 
-
 def prior_confidence(model: str, table: dict | None = None) -> dict:
     """Confidence for a single-model backend, from that model's measured solo accuracy.
 
@@ -848,7 +854,6 @@ def prior_confidence(model: str, table: dict | None = None) -> dict:
     p = entry["accuracy"]
     return {"p": p, "label": _label_for(p), "n": entry.get("n", 0),
             "ci": entry.get("ci"), "reason": None}
-
 
 
 def model_performance(model: str, table: dict | None = None) -> dict:
