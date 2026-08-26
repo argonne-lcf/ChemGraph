@@ -863,3 +863,44 @@ def model_performance(model: str, table: dict | None = None) -> dict:
     except (OSError, ValueError, TypeError):
         return {}
     return dict((t.get("model_performance") or {}).get(model.removeprefix("local:")) or {})
+
+
+def check_committee(vote_result: dict, table: dict) -> str | None:
+    """Return a reason string if the table does not describe this committee, else None.
+
+    Compares the models that were *asked*, not the ones that voted, since abstention
+    is normal and does not change which table applies.
+    """
+    ran = sorted(vote_result.get("committee") or [])
+    fit = sorted(table.get("committee") or [])
+    if not ran or not fit or ran == fit:
+        return None
+
+    # Name the missing models and how to get them. A partial install is the common
+    # case here, and "committee_mismatch: [...] vs [...]" tells a user their answer
+    # has no confidence without telling them what to do about it.
+    absent = [m for m in fit if m not in ran]
+    extra = [m for m in ran if m not in fit]
+    if absent and not extra:
+        return (
+            f"committee_mismatch: the table was fit on {fit} and this machine ran "
+            f"{ran}, so no calibrated number applies. Install the rest with: "
+            f"pip install 'chemgraph[ocsr]'; or refit for the models you have with "
+            f"python -m chemgraph.tools.ocsr_calibrate --labels YOUR_LABELS.csv "
+            f"--models {','.join(ran)}"
+        )
+    if extra and not absent:
+        return (
+            f"committee_mismatch: the table was fit on {fit} and this machine ran "
+            f"the larger set {ran}. Vote only the committee the table describes with "
+            f"models_wanted={fit}."
+        )
+    # Both sets differ. Neither installing nor subsetting alone fixes it, so name the
+    # only two things that do.
+    return (
+        f"committee_mismatch: the table was fit on {fit} and this machine ran {ran}, "
+        f"which is a different set, so no calibrated number applies. Either install "
+        f"{', '.join(absent)} and vote the table's committee, or refit for what you "
+        f"have with python -m chemgraph.tools.ocsr_calibrate --labels YOUR_LABELS.csv "
+        f"--models {','.join(ran)}"
+    )

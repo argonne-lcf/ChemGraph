@@ -848,3 +848,81 @@ def test_model_performance_reports_the_counts_behind_an_accuracy():
     assert got["k"] == 649 and got["n"] == 722
     assert got["ci"][0] < got["accuracy"] < got["ci"][1]
 
+
+# ---------------------------------------------------------------------------
+# Committee mismatch
+# ---------------------------------------------------------------------------
+
+
+def test_a_matching_committee_reports_no_problem():
+    t = core.load_calibration()
+    v = core.vote(_results(*[(m, "CCO") for m in t["committee"]]))
+    assert core.check_committee(v, t) is None
+
+
+def test_a_partial_install_is_told_how_to_complete_itself():
+    """The common case: fewer models installed than the table was fit on.
+
+    Silent when broken: every ensemble call reports no confidence, and the message
+    that says so does not say what to do about it.
+    """
+    t = core.load_calibration()
+    v = core.vote(_results(("decimer", "CCO"), ("molnextr", "CCO")))
+    why = core.check_committee(v, t)
+    assert "committee_mismatch" in why
+    assert "pip install 'chemgraph[ocsr]'" in why
+    assert "molscribe" in why and "ocsrglyph" in why
+    # The command has to exist: an earlier version named a module this repo does
+    # not ship, so following the instruction gave ModuleNotFoundError.
+    assert "ocsr_setup" not in why and "ocsr_download" not in why
+
+
+def test_running_more_models_than_the_table_describes_is_also_a_mismatch():
+    """A larger set is told to subset rather than to install."""
+    t = core.load_calibration()
+    v = core.vote(_results(*[(m, "CCO") for m in t["committee"] + ["extra"]]))
+    why = core.check_committee(v, t)
+    assert "models_wanted" in why
+
+
+def test_abstention_does_not_change_which_table_applies():
+    """The check compares the models asked, not the ones that voted.
+
+    Silent when broken: a model that failed to read one image would look like a
+    partial install and null the confidence for that image alone.
+    """
+    t = core.load_calibration()
+    v = core.vote([{"model": m, "smiles": "CCO", "ok": m != "ocsrglyph"}
+                   for m in t["committee"]])
+    assert "ocsrglyph" in v["abstained"]
+    assert core.check_committee(v, t) is None
+
+
+def test_an_integer_too_large_for_float_is_refused_at_load(tmp_path):
+    """A 400-digit k passes every isinstance check and then breaks the arithmetic.
+
+    Silent when broken: float() raises OverflowError, which is neither ValueError
+    nor TypeError, so it escapes the guard at every call site and surfaces from
+    inside a lookup instead of from the load.
+    """
+    huge = 10 ** 400
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({"committee": ["a"],
+                                  "patterns": {"1": {"k": huge, "n": huge}}}))
+    with pytest.raises(ValueError, match="not a usable number"):
+        core.load_calibration(str(custom))
+
+
+def test_a_committee_differing_both_ways_is_told_both_remedies():
+    """Neither installing nor subsetting alone fixes this, so the message says both.
+
+    Silent when broken: the user follows one instruction and still gets no number.
+    """
+    t = {"committee": ["a", "b"], "patterns": {"2": {"k": 1, "n": 1}}}
+    v = core.vote(_results(("b", "CCO"), ("c", "CCO")))
+
+    why = core.check_committee(v, t)
+
+    assert "install a" in why
+    assert "ocsr_calibrate" in why
+
