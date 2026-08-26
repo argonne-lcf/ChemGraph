@@ -1,15 +1,14 @@
+import logging
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel, Field, model_validator
 
-from typing import Any, Optional, Dict
-import torch
-import logging
 
-try:
-    from fairchem.core import FAIRChemCalculator, pretrained_mlip
-except ImportError:
-    logging.warning("fairchem is not installed. .")
-    FAIRChemCalculator = None
-    pretrained_mlip = None
+def _default_device() -> str:
+    """Choose a FairChem device without importing PyTorch at module import time."""
+    import torch
+
+    return "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class FAIRChemCalc(BaseModel):
@@ -57,7 +56,7 @@ class FAIRChemCalc(BaseModel):
         default="uma-s-1p1", description="Model names. Options are 'uma-s-1p1' and 'uma-m-1'"
     )
     device: str = Field(
-        default="cuda" if torch.cuda.is_available() else "cpu",
+        default_factory=_default_device,
         description="Computation device to use, either 'cpu' or 'cuda'.",
     )
     inference_settings: str = Field(
@@ -100,8 +99,12 @@ class FAIRChemCalc(BaseModel):
             ASE-compatible calculator instance.
         """
 
-        if pretrained_mlip is None or FAIRChemCalculator is None:
-            raise ImportError("fairchem is not installed.")
+        try:
+            from fairchem.core import FAIRChemCalculator, pretrained_mlip
+        except ImportError as exc:
+            raise ImportError(
+                "FairChem is not installed. Install the 'uma' extra to use it."
+            ) from exc
 
         predict_unit = pretrained_mlip.get_predict_unit(
             model_name=self.model_name,

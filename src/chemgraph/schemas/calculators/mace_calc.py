@@ -10,7 +10,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal, Optional, Union
 from pydantic import BaseModel, Field
-import torch
 
 _logger = logging.getLogger(__name__)
 
@@ -195,6 +194,7 @@ class MaceCalc(BaseModel):
         ValueError
             If an invalid calculator_type is specified
         """
+        import torch
         from mace.modules.models import ScaleShiftMACE
 
         # Allow loading slice and ScaleShiftMACE objects for compatibility with older model files

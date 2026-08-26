@@ -2,14 +2,6 @@
 # TBLite calculator parameters for CompChemAgent
 from pydantic import BaseModel, Field
 from typing import List, Optional
-import logging
-
-try:
-    from tblite.ase import TBLite
-except ImportError:
-    logging.warning(
-        "tblite is not installed. If you want to use tblite, please install it using 'pip install tblite'."
-    )
 
 
 class TBLiteCalc(BaseModel):
@@ -96,6 +88,13 @@ class TBLiteCalc(BaseModel):
             An ASE-compatible TBLite calculator instance with the specified
             configuration parameters
         """
+        try:
+            from tblite.ase import TBLite
+        except ImportError as exc:
+            raise ImportError(
+                "TBLite is not installed. Install the 'calculators' extra to use it."
+            ) from exc
+
         return TBLite(
             method=self.method,
             charge=self.charge,

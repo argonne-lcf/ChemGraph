@@ -57,7 +57,7 @@ def _command_available(command_name: str, env_var_name: str) -> bool:
     return bool(os.environ.get(env_var_name)) or shutil.which(command_name) is not None
 
 
-if not _engine_available("fairchem.core"):
+if not _engine_available("fairchem"):
     FAIRChemCalc = None
 
 if not _engine_available("mace"):
