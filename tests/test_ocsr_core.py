@@ -651,6 +651,69 @@ def test_unparseable_json_is_a_valueerror_not_a_recursionerror(tmp_path):
         core.load_calibration(str(custom))
 
 
+# ---------------------------------------------------------------------------
+# Confidence lookup
+# ---------------------------------------------------------------------------
+
+
+def test_agreement_is_worth_more_than_any_single_model():
+    """The measurement the whole committee exists for.
+
+    Four agreeing models beat the strongest model alone, and four disagreeing ones
+    are worse than a coin flip. An agent that cannot see this difference has no
+    reason to pay for four inferences.
+    """
+    t = core.load_calibration()
+    assert core.confidence("4", t)["p"] > t["model_performance"]["decimer"]["accuracy"]
+    assert core.confidence("1/1/1/1", t)["p"] < 0.5
+
+
+@pytest.mark.parametrize("pattern, label", [
+    ("4", "unanimous"),
+    ("3/1", "strong"),
+    ("2/1/1", "weak"),
+    ("1/1/1/1", "conflicting"),
+])
+def test_each_shipped_pattern_gets_its_band(pattern, label):
+    assert core.confidence(pattern, core.load_calibration())["label"] == label
+
+
+def test_a_thin_bucket_reports_a_label_but_no_number():
+    """Below the sample floor the interval spans tens of points.
+
+    Silent when broken: quoting a decimal from twelve items reads as a measurement.
+    """
+    got = core.confidence("2/2", core.load_calibration())
+    assert got["p"] is None
+    assert got["reason"] == "below_n_floor"
+    assert got["label"].startswith("low_n_")
+    assert got["n"] == 12
+
+
+def test_a_thin_bucket_label_comes_from_the_jeffreys_estimate(tmp_path):
+    """7/7 is low_n_weak: thin evidence pointing one way.
+
+    The raw estimate would call it unanimous, claiming certainty from seven items;
+    the interval's lower bound would call it conflicting, overstating the doubt.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({"committee": ["a", "b"],
+                                  "patterns": {"2": {"k": 7, "n": 7}}}))
+    got = core.confidence("2", core.load_calibration(str(custom)))
+    assert got["label"] == "low_n_weak"
+
+
+def test_an_unknown_pattern_gets_no_number_at_all():
+    """A pattern the table never measured must not borrow another bucket's number."""
+    got = core.confidence("5/5", core.load_calibration())
+    assert (got["p"], got["reason"]) == (None, "unknown_pattern")
+
+
+def test_no_prediction_is_distinct_from_an_unknown_pattern():
+    got = core.confidence(None, core.load_calibration())
+    assert (got["p"], got["reason"]) == (None, "no_prediction")
+
+
 @pytest.mark.parametrize("floor, why", [
     ("20", "a string floor silently disables the check"),
     (True, "bool is an int in Python, so isinstance alone lets it through"),
@@ -685,3 +748,35 @@ def test_a_non_finite_sample_floor_is_refused(tmp_path, literal, why):
                       + literal + ', "patterns": {"1": {"k": 990, "n": 1000}}}')
     with pytest.raises(ValueError, match="min_n_for_point_estimate"):
         core.load_calibration(str(custom))
+
+
+
+
+
+def test_a_table_declaring_a_floor_is_held_to_it(tmp_path):
+    """A point estimate over fewer images than the table's own floor is withheld.
+
+    Silent when broken: a hand-written table, or one fitted with a lower --min-n
+    than it records, quotes a hard number from four images with a 45 pp interval.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({
+        "committee": ["a", "b"], "min_n_for_point_estimate": 20,
+        "patterns": {"2": {"k": 4, "n": 4, "p": 0.9}},
+    }))
+
+    got = core.confidence("2", core.load_calibration(str(custom)))
+
+    assert got["p"] is None
+    assert got["reason"] == "below_n_floor"
+    assert got["label"].startswith("low_n_")
+
+
+def test_a_floor_written_as_a_json_decimal_still_holds(tmp_path):
+    """JSON 20.0 deserializes to float, which an int-only check would skip."""
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({"committee": ["a"],
+                                  "min_n_for_point_estimate": 20.0,
+                                  "patterns": {"1": {"k": 4, "n": 4, "p": 0.9}}}))
+
+    assert core.confidence("1", core.load_calibration(str(custom)))["p"] is None

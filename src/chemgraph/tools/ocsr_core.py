@@ -40,6 +40,11 @@ _MAX_IMAGE_BYTES = 8_000_000
 # longest in the OCSR benchmark is 224.
 _MAX_SMILES_CHARS = 4000
 
+# Confidence label cut-points, applied to the point estimate. Below the calibration
+# table's n floor these are prefixed "low_n_", because a 30-60 pp interval does not
+# deserve a decimal.
+_LABEL_BANDS = ((0.99, "unanimous"), (0.95, "strong"), (0.70, "weak"))
+
 # The optional quotes around the key let a JSON reply be read at the line level:
 # '"smiles": "CCO"' is the single most common structured form a vision LLM returns,
 # and reaching it here keeps the word-by-word fallback from matching an element
@@ -735,3 +740,74 @@ def _parse_tie_break(value: object) -> list[str] | None:
         return []
     _, _, names = value.partition("model-priority:")
     return [n.strip() for n in names.split(",") if n.strip()]
+
+
+
+def _label_for(p: float, low_n: bool = False) -> str:
+    """Map a probability to a coarse label, prefixed when the bucket is small."""
+    name = "conflicting"
+    for threshold, band in _LABEL_BANDS:
+        if p >= threshold:
+            name = band
+            break
+    return f"low_n_{name}" if low_n else name
+
+
+
+def confidence(pattern: str | None, table: dict) -> dict:
+    """Look up P(majority correct) for an agreement pattern.
+
+    Takes the table as an argument rather than reading a module global, so the tool
+    and the recalibration script share one code path.
+
+    Reports a point estimate only where the bucket cleared the table's sample floor.
+    Below it the 95% interval spans 30-60 pp, so a decimal would be false precision;
+    the label and the interval still carry the actionable part. An unknown pattern
+    gets no number at all rather than a guess.
+
+    Returns
+    -------
+    dict
+        p, label, n, ci, reason
+    """
+    if pattern is None:
+        return {"p": None, "label": "unavailable", "n": 0, "ci": None,
+                "reason": "no_prediction"}
+
+    entry = (table.get("patterns") or {}).get(pattern)
+    if entry is None:
+        return {"p": None, "label": "unknown", "n": 0, "ci": None,
+                "reason": "unknown_pattern"}
+
+    p, n, ci = entry.get("p"), entry.get("n", 0), entry.get("ci")
+    # Honour the floor the table declares, not only the producer's decision to leave
+    # p out. A table written by hand, or fitted with a --min-n lower than the one
+    # recorded, can carry a point estimate over a handful of images; quoting it
+    # would be the false precision the floor exists to prevent.
+    # A JSON 20.0 deserializes to float, and bool is an int in Python, so neither
+    # isinstance(floor, int) alone nor a bare truth test gets this right.
+    floor = table.get("min_n_for_point_estimate")
+    if isinstance(floor, bool) or not isinstance(floor, (int, float)):
+        floor = None
+    if p is not None and floor is not None and n < floor:
+        p = None
+    if p is None:
+        # Below the floor we withhold the number but still owe a useful label, so it
+        # is derived from the Jeffreys estimate: the same quantity the `p` column
+        # reports above the floor, which keeps one rule across the whole table.
+        #
+        # The raw point estimate k/n would call a 7/7 bucket "unanimous", claiming
+        # certainty from seven items. Jeffreys shrinks toward 0.5 in proportion to
+        # how thin the bucket is, putting 7/7 at 0.938 and so at low_n_weak, one
+        # band below the 0.95 cut.
+        # The stored label is ignored here: a producer writes it beside a point
+        # estimate, so it names a full-confidence band. Carrying it through would
+        # report "unanimous" from four images, which is the claim the floor exists
+        # to refuse, and the low_n_ prefix a caller bands on would be missing.
+        k = entry.get("k")
+        est = ((k + 0.5) / (n + 1.0)) if (k is not None and n) else (ci[0] if ci else 0.0)
+        label = _label_for(est, low_n=True)
+        return {"p": None, "label": label, "n": n, "ci": ci,
+                "reason": "below_n_floor"}
+    return {"p": p, "label": entry.get("label") or _label_for(p), "n": n, "ci": ci,
+            "reason": None}
