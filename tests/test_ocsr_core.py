@@ -943,3 +943,20 @@ def test_a_committee_differing_both_ways_is_told_both_remedies():
     assert "install a" in why
     assert "ocsr_calibrate" in why
 
+
+def test_a_thin_bucket_cannot_keep_a_full_confidence_label(tmp_path):
+    """A stored label names a band measured with a point estimate behind it.
+
+    Silent when broken: a bucket of four reports "unanimous" with no low_n_ prefix,
+    so a caller banding on the label string never learns the number was withheld.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({
+        "committee": ["a", "b"], "min_n_for_point_estimate": 20,
+        "patterns": {"2": {"k": 4, "n": 4, "p": 0.9, "label": "unanimous"}},
+    }))
+
+    got = core.confidence("2", core.load_calibration(str(custom)))
+
+    assert got["p"] is None
+    assert got["label"] == "low_n_weak"

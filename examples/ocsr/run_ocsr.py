@@ -3,6 +3,7 @@
 Two ways to use the OCSR tools, both runnable from this directory:
 
     python run_ocsr.py                  # call the tool directly, no agent, no LLM
+    python run_ocsr.py --ensemble       # vote every specialist, with a confidence
     python run_ocsr.py --agent          # drive it through a ChemGraph agent
 
 The direct path needs no API key. It calls ``image_to_smiles_core``, the same
@@ -50,27 +51,35 @@ def _same_molecule(a: str | None, b: str) -> bool:
     )
 
 
-def run_direct(model: str | None) -> int:
+def run_direct(model: str | None, ensemble: bool = False) -> int:
     """Call the tool on every image and report agreement with the known answer."""
     from chemgraph.tools.ocsr_backends import available_specialists
     from chemgraph.tools.ocsr_models import describe_models
-    from chemgraph.tools.ocsr_tools import image_to_smiles_core
+    from chemgraph.tools.ocsr_tools import (image_to_smiles_core,
+                                            measured_accuracies)
 
     installed = available_specialists()
-    if not installed and model != "llm":
-        print(describe_models(installed))
+    if ensemble and model:
+        # The committee is specialists only, so it has no use for a named model.
+        # Saying so beats running four votes the argument had no part in.
+        print(f"--model {model} is ignored with --ensemble, which votes every "
+              f"installed specialist.\n")
+        model = None
+    # The llm exemption does not apply to a committee: it never votes.
+    if not installed and (ensemble or model != "llm"):
+        print(describe_models(installed, measured_accuracies()))
         print("\nNo specialist is installed. Install one with:\n"
               "    pip install 'chemgraph[ocsr]'\n"
               "or read this image with the agent's own model:\n"
               "    python run_ocsr.py --agent --model llm")
         return 1
 
-    print(describe_models(installed), "\n")
+    print(describe_models(installed, measured_accuracies()), "\n")
 
     correct = 0
     for name, expected in EXPECTED.items():
         path = IMAGES / f"{name}.png"
-        result = image_to_smiles_core(str(path), model=model)
+        result = image_to_smiles_core(str(path), model=model, ensemble=ensemble)
 
         if not result["ok"]:
             print(f"  {name:14} FAILED  {result['error'][:90]}")
@@ -82,6 +91,12 @@ def run_direct(model: str | None) -> int:
         print(f"  {name:14} {'match' if hit else 'DIFFERS'}  "
               f"{result['smiles'][:58]}")
         print(f"  {'':14} {result['model_used']}, {result['latency_s']:.1f}s{cold}")
+        if result["agreement"]:
+            number = ("no number: " + (result["confidence_unavailable_reason"] or "")
+                      if result["confidence"] is None
+                      else f"{result['confidence']:.4f}")
+            print(f"  {'':14} agreement {result['agreement']}, "
+                  f"{number} ({result['confidence_label']})")
         if not hit:
             print(f"  {'':14} expected {expected[:58]}")
 
@@ -112,13 +127,17 @@ def main() -> int:
     parser.add_argument("--model", default=None,
                         help="decimer, molnextr, molscribe, ocsrglyph, or llm. "
                              "Unset picks the default specialist.")
+    parser.add_argument("--ensemble", action="store_true",
+                        help="vote every installed specialist and report the "
+                             "measured confidence instead of reading with one; "
+                             "ignores --model, and needs a specialist installed")
     parser.add_argument("--llm", default="gpt-4o",
                         help="which LLM the agent runs on, with --agent")
     args = parser.parse_args()
 
     if args.agent:
         return run_agent(args.llm, args.model)
-    return run_direct(args.model)
+    return run_direct(args.model, ensemble=args.ensemble)
 
 
 if __name__ == "__main__":

@@ -53,8 +53,9 @@ it. The published accuracies were measured under the other prompt.
 Exact match is over a 722-image benchmark. It ranks the four against each other;
 it does not predict how any of them will do on your images. DECIMER is the default because it is the most accurate of the four.
 
-`list_ocsr_models` reports the same table plus what is actually installed on the
-machine you are on.
+`list_ocsr_models` reports what is actually installed on the machine you are on.
+The accuracies it prints come from the calibration table, so they follow a refit
+(see below); the numbers above are the shipped table's, measured on the benchmark.
 
 ## Installing
 
@@ -138,6 +139,14 @@ which happened, and `latency_s` includes the load when it did.
     "valid": True,           # RDKit parsed it
     "formula": "C9H8O4",
     "n_fragments": 1,        # above 1 means a salt, mixture, or reaction scheme
+    "confidence": None,      # single model: no per-image number, see below
+    "confidence_interval": None,  # the 95% interval, when a committee measured one
+    "confidence_label": "weak",   # bands this model's measured solo accuracy
+    "confidence_unavailable_reason": "single_model_has_no_per_image_confidence",
+    "agreement": None,       # how a committee split, when one ran
+    "votes": None,           # which models produced which SMILES
+    "abstained": None,       # models that ran and returned nothing usable
+    "backend_used": "specialist",   # or "llm", or "ensemble"
     "model_used": "decimer",
     "cold_start": False,
     "latency_s": 0.7,
@@ -146,10 +155,69 @@ which happened, and `latency_s` includes the load when it did.
 }
 ```
 
-No confidence number is reported. A single model cannot say how likely it is to be
-right about one particular image, and quoting its benchmark accuracy here would
-answer a question about someone else's images. If an answer matters, run a second
-model and see whether the two agree.
+A single model reports no confidence, because it cannot say how likely it is to be
+right about one particular image, and quoting its benchmark accuracy would answer a
+question about someone else's images.
+
+## Confidence from a committee
+
+`ensemble=True` reads the image with every installed specialist and votes. How much
+they agree is measurable, and it was measured on 722 benchmark images:
+
+| agreement | meaning | P(correct) | n |
+|-----------|---------|-----------:|---:|
+| `4` | all four agree | 0.9989 | 462 |
+| `3/1` | three against one | 0.9816 | 135 |
+| `2/1/1` | two agree, two differ | 0.8017 | 57 |
+| `2/2` | an even split | below the sample floor | 12 |
+| `1/1/1/1` | all different | 0.3772 | 56 |
+
+The strongest single model is right 89.9% of the time, so a unanimous committee
+turns a one-in-ten error rate into one in a thousand, and an all-different vote is
+worse than a coin flip. A model that ran and returned nothing usable counts as a
+dissenting singleton, so the parts always sum to the committee size.
+
+```python
+result = image_to_smiles_core("molecule.png", ensemble=True)
+# {'ok': True, 'smiles': 'CC(=O)Oc1ccccc1C(=O)O', 'confidence': 0.9989,
+#  'confidence_interval': [0.9946, 1.0], 'confidence_label': 'unanimous',
+#  'agreement': '4',
+#  'votes': {'CC(=O)Oc1ccccc1C(=O)O': ['decimer', 'molnextr', ...]}, ...}
+```
+
+Buckets below 20 observations get a label and an interval but no point estimate: at
+that size the 95% interval is 41 points wide, so a decimal would be false precision.
+`confidence_interval` carries it either way, and is the only quantitative thing a
+thin bucket can honestly offer.
+
+`confidence_label` is one of `unanimous` (p >= 0.99), `strong` (>= 0.95), `weak`
+(>= 0.70), or `conflicting` below that, prefixed `low_n_` when the bucket is thin.
+`unknown` means the table has no bucket for this split, and `unavailable` that no
+number applies at all; `confidence_unavailable_reason` says which case it is. On a
+single-model call the label bands that model's measured solo accuracy, since there
+is no per-image number to band.
+
+### Refitting for your own images
+
+The shipped table describes those four models on RDKit-rendered diagrams. Scans,
+photographs and journal crops have a different relationship between agreement and
+correctness, so fit your own:
+
+```bash
+python -m chemgraph.tools.ocsr_calibrate --labels labels.csv --out mine.json
+export CHEMGRAPH_OCSR_CALIBRATION=mine.json
+```
+
+`labels.csv` is `image_path,smiles` with a reference SMILES per image. If you have
+no labels to spare, `--validate` scores the current table against a sample instead,
+which takes far fewer of them than fitting a new one. It checks whatever the tool
+would use: `CHEMGRAPH_OCSR_CALIBRATION` when that is set, and the packaged table
+otherwise.
+
+When the table covers fewer models than are installed, pass
+`models_wanted=["decimer", "molnextr"]` so the committee that runs is the one the
+table describes. Otherwise every installed model votes and no calibrated number
+applies.
 
 ## Images
 
