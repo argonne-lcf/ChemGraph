@@ -355,12 +355,12 @@ def _render_first_run_setup(config: dict) -> bool:
         return False
     if st.session_state.get("_setup_skipped"):
         return False
-    if providers.any_provider_ready(config):
-        return False
-    # A saved local-server choice counts as completed setup even though
-    # credential checks cannot prove a local server "ready".
-    configured = providers.provider_for_model(config["general"].get("model", ""))
-    if configured is not None and configured.auth_kind == "none":
+    # Skip setup only when the *selected* model's provider is usable. A
+    # credential for a different provider does not make the chosen model
+    # work, so gating on "any provider ready" would bypass setup and then
+    # initialize an unusable model. A saved local-server choice reports
+    # ready (auth_kind "none") and likewise skips setup.
+    if providers.selected_provider_ready(config):
         return False
 
     st.info(
