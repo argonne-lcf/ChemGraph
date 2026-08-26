@@ -278,6 +278,7 @@ def test_shared_loader_routes_codex_prefix(monkeypatch):
     [
         ("single_agent", "construct_single_agent_graph"),
         ("main_agent", "construct_main_agent_graph"),
+        ("deep_agent", "construct_deep_agent_graph"),
     ],
 )
 def test_chemgraph_routes_codex_to_supported_workflow(
@@ -309,7 +310,7 @@ def test_chemgraph_routes_codex_to_supported_workflow(
 
 
 def test_chemgraph_rejects_codex_for_unsupported_workflows():
-    with pytest.raises(ValueError, match="single_agent and main_agent workflows"):
+    with pytest.raises(ValueError, match="single_agent, main_agent, and deep_agent"):
         ChemGraph(model_name="codex:test-model", workflow_type="multi_agent")
 
 

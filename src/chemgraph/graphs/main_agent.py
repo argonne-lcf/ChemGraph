@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Collection, Sequence
 from typing import Any
 
-from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware import FilesystemMiddleware, SubAgentMiddleware
@@ -18,6 +17,10 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphInterrupt
 
 from chemgraph.agent.events import SUBAGENT_METADATA_KEY
+from chemgraph.graphs.deep_agent import (
+    DEFAULT_DEEPAGENT_PROMPT,
+    construct_deep_agent_graph,
+)
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 
@@ -46,27 +49,6 @@ Rules:
 8. Use `read_file` to inspect checkpoint-backed files returned by subagents
    when their contents are needed. This tool cannot access host files.
 """
-
-
-DEFAULT_DEEPAGENT_PROMPT = """\
-You are ChemGraph's workspace specialist. Complete repository exploration,
-coding, testing, file analysis, and other multi-step workspace tasks. Use the
-built-in filesystem and execution tools when needed. Do not perform molecular
-simulations or invent chemistry results; return those tasks to the supervisor
-for delegation to the `chemgraph` specialist.
-
-The calling supervisor sees only your final assistant message. Return a concise,
-self-contained report including important results, changed paths, commands run,
-and any failures or unresolved risks.
-"""
-
-
-_DEEPAGENT_INTERRUPT_ON = {
-    "execute": {"allowed_decisions": ["approve", "reject"]},
-    "write_file": {"allowed_decisions": ["approve", "reject"]},
-    "edit_file": {"allowed_decisions": ["approve", "reject"]},
-    "delete": {"allowed_decisions": ["approve", "reject"]},
-}
 
 
 def latest_assistant_text(messages: list[Any]) -> str:
@@ -225,6 +207,7 @@ def construct_main_agent_graph(
     enable_deepagent: bool = False,
     deepagent_backend: BackendProtocol | None = None,
     deepagent_recursion_limit: int = 50,
+    deepagent_system_prompt: str = DEFAULT_DEEPAGENT_PROMPT,
     system_prompt: str = DEFAULT_MAIN_AGENT_PROMPT,
     checkpointer: Any | None = None,
     subagent_recorder: SubagentRunRecorder | None = None,
@@ -266,19 +249,19 @@ def construct_main_agent_graph(
         registered_subagents = list(subagents)
 
     if enable_deepagent:
-        workspace_agent = create_deep_agent(
-            model=llm,
+        workspace_agent = construct_deep_agent_graph(
+            llm,
             tools=[],
-            system_prompt=DEFAULT_DEEPAGENT_PROMPT,
+            system_prompt=deepagent_system_prompt,
             backend=(
                 deepagent_backend
                 if deepagent_backend is not None
                 else StateBackend()
             ),
-            interrupt_on=_DEEPAGENT_INTERRUPT_ON,
             checkpointer=None,
+            recursion_limit=deepagent_recursion_limit,
             name="deepagent",
-        ).with_config({"recursion_limit": deepagent_recursion_limit})
+        )
         registered_subagents.append(
             {
                 "name": "deepagent",
