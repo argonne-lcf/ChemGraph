@@ -266,6 +266,24 @@ def any_provider_ready(config: Dict[str, Any]) -> bool:
     )
 
 
+def selected_provider_ready(config: Dict[str, Any]) -> bool:
+    """Return whether the provider for the *configured model* is usable.
+
+    Unlike :func:`any_provider_ready`, this checks the specific provider
+    the selected model dispatches to. A credential for some other provider
+    (e.g. ``ANTHROPIC_API_KEY`` while the model is ``gpt-4o-mini``) does not
+    make the chosen model work, so gating setup on "any provider ready"
+    would drop the user into a broken chat. A local-server model has
+    ``auth_kind == "none"`` and reports ready.
+    """
+    general = config.get("general", {})
+    model = general.get("model", "") if isinstance(general, dict) else ""
+    info = provider_for_model(model)
+    if info is None:
+        return False
+    return provider_status(info, config).ready
+
+
 def align_base_url_for_provider(config: Dict[str, Any], provider_id: str) -> None:
     """Ensure built-in providers have a default URL in their own section.
 

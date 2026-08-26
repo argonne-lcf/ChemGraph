@@ -40,8 +40,8 @@ dependencies = [
     "mace-torch",
     "globus_sdk",
     "streamlit==1.48.1",
-    "stmol==0.0.9",
-    "ipython-genutils==0.2.0",
+    "py3Dmol",
+    "plotly",
     "langsmith==0.10.10",
     "rich==14.1.0",
     "toml==0.10.2",
@@ -80,8 +80,8 @@ uma = [
 ]
 ui = [
     "streamlit",
-    "stmol",
-    "ipython-genutils",
+    "py3Dmol",
+    "plotly",
 ]
 parsl = [
     "parsl",

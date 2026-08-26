@@ -72,3 +72,16 @@ cg_logs/
 notebooks/iri_*_results.json
 notebooks/iri_*_first_turn.json
 notebooks/iri_*_dataset.json
+
+# Agent/UI generated artifacts (written to the launch dir by older versions)
+ir_spectrum*.png
+frequencies*.csv
+*_report.html
+report.html
+output.json
+output.xyz
+molecule.xyz
+optimized_*.xyz
+*_structure.xyz
+ui_artifacts.json
+*_opt.traj

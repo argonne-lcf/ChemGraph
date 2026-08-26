@@ -71,6 +71,41 @@ def _resolve_path(path: str) -> str:
     return path
 
 
+def _write_ir_peaks_csv(path: str, rows) -> None:
+    """Write per-mode IR peaks as ``mode,frequency_cm1,intensity`` rows.
+
+    Parameters
+    ----------
+    path : str
+        Destination CSV path (already resolved).
+    rows : sequence of tuple
+        ``(mode_index, frequency_text, intensity)`` per vibrational mode;
+        imaginary frequencies carry an ``i`` suffix like frequencies CSVs.
+    """
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("mode,frequency_cm1,intensity\n")
+        for mode_index, freq_text, intensity in rows:
+            f.write(f"{mode_index},{freq_text},{float(intensity):.8g}\n")
+
+
+def _write_ir_spectrum_csv(path: str, frequencies, intensities) -> None:
+    """Write a broadened IR spectrum as ``frequency_cm1,intensity`` rows.
+
+    Parameters
+    ----------
+    path : str
+        Destination CSV path (already resolved).
+    frequencies : sequence
+        Spectrum frequencies in cm^-1.
+    intensities : sequence
+        Absorption intensities matching *frequencies*.
+    """
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("frequency_cm1,intensity\n")
+        for freq_value, intensity in zip(frequencies, intensities):
+            f.write(f"{float(freq_value):.4f},{float(intensity):.8g}\n")
+
+
 def _resolve_existing_path(path: str) -> str:
     """Resolve a path to read that a sibling tool may have written to the log dir.
 
@@ -623,8 +658,21 @@ def run_ase_core(params: ASEInputSchema) -> dict:
 
         logger.info("Running optimization with %s (fmax=%s, steps=%s)", optimizer, fmax, steps)
         optimization_steps = 0
+        opt_traj_path: Optional[str] = None
         if len(atoms) > 1:
-            dyn = optimizer_class(atoms)
+            traj_stem = (
+                Path(input_structure_file).stem if input_structure_file else "mol"
+            )
+            # Keep the trajectory next to the results file so all run
+            # artifacts land in the same directory.
+            traj_name = f"{traj_stem}_opt.traj"
+            if output_results_file:
+                opt_traj_path = str(
+                    Path(output_results_file).with_name(traj_name)
+                )
+            else:
+                opt_traj_path = _resolve_path(traj_name)
+            dyn = optimizer_class(atoms, trajectory=opt_traj_path)
             converged = dyn.run(fmax=fmax, steps=steps)
             optimization_steps = dyn.nsteps
         else:
@@ -756,8 +804,39 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     fig.savefig(ir_plot_path, format="png", dpi=300)
                     plt.close(fig)
 
+                    # Also save the spectrum data so the UI can plot it
+                    # interactively instead of showing the static image.
+                    ir_csv_path = _resolve_path(f"ir_spectrum_{mol_stem}.csv")
+                    _write_ir_spectrum_csv(
+                        ir_csv_path, freq_intensity[0], freq_intensity[1]
+                    )
+
+                    # Per-mode peak data (frequency + IR intensity), so the
+                    # UI can re-broaden the spectrum and link peaks to the
+                    # normal-mode trajectories written above.
+                    ir_energies = ir.get_energies()
+                    peak_rows = []
+                    for mode_index in mode_indices:
+                        e = ir_energies[mode_index]
+                        is_imag = abs(e.imag) > 1e-8
+                        e_val = e.imag if is_imag else e.real
+                        freq_text = f"{e_val / units.invcm:.4f}" + (
+                            "i" if is_imag else ""
+                        )
+                        peak_rows.append(
+                            (mode_index, freq_text, float(ir.intensities[mode_index]))
+                        )
+                    ir_peaks_path = _resolve_path(f"ir_peaks_{mol_stem}.csv")
+                    _write_ir_peaks_csv(ir_peaks_path, peak_rows)
+
                     logger.info("IR spectrum plot saved to %s", ir_plot_path)
                     ir_data["IR Plot"] = f"Saved to {os.path.abspath(ir_plot_path)}"
+                    ir_data["IR spectrum data"] = (
+                        f"Saved to {os.path.abspath(ir_csv_path)}"
+                    )
+                    ir_data["IR peak data"] = (
+                        f"Saved to {os.path.abspath(ir_peaks_path)}"
+                    )
                     ir_data["Normal mode data"] = (
                         f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
                     )
@@ -850,13 +929,16 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     "Geometry optimization completed without convergence after "
                     f"{optimization_steps} steps. Results saved to {abs_output}"
                 )
-            return {
+            result = {
                 "status": "success",
                 "message": message,
                 **energy_metadata,
                 "single_point_energy": potential_energy,
                 "unit": "eV",
             }
+            if opt_traj_path and os.path.exists(opt_traj_path):
+                result["trajectory_file"] = os.path.abspath(opt_traj_path)
+            return result
         elif driver == "vib":
             return {
                 "status": "success",

@@ -35,8 +35,8 @@ dependencies:
     - mace-torch==0.3.13
     - globus-sdk
     - streamlit==1.48.1
-    - stmol==0.0.9
-    - ipython-genutils==0.2.0
+    - py3Dmol
+    - plotly
     - langsmith==0.10.10
     - mcp==1.28.1
     - fastmcp==3.4.4

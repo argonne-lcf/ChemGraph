@@ -91,6 +91,37 @@ def test_local_provider_does_not_satisfy_first_run_check(clean_env):
     assert providers.any_provider_ready(_config()) is False  # ...but excluded
 
 
+def test_selected_provider_ready_ignores_unrelated_credentials(clean_env, monkeypatch):
+    # A credential for a different provider must not make the chosen model
+    # count as ready (the setup-gating regression Codex flagged).
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    config = _config()
+    config["general"] = {"model": "gpt-4o-mini"}  # OpenAI, no key set
+
+    assert providers.any_provider_ready(config) is True  # some provider is...
+    assert providers.selected_provider_ready(config) is False  # ...but not this one
+
+
+def test_selected_provider_ready_when_model_matches_credential(clean_env, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    anthropic = providers.get_provider(providers.ANTHROPIC)
+    config = _config()
+    config["general"] = {"model": anthropic.default_model}
+
+    assert providers.selected_provider_ready(config) is True
+
+
+def test_selected_provider_ready_local_model_is_ready(clean_env):
+    config = _config()
+    config["general"] = {"model": "llama3.2"}  # Ollama, auth_kind "none"
+
+    assert providers.selected_provider_ready(config) is True
+
+
+def test_selected_provider_ready_false_without_model(clean_env):
+    assert providers.selected_provider_ready(_config()) is False
+
+
 def test_provider_for_model_maps_prefixes_and_lists():
     assert providers.provider_for_model("argo:gpt-4o").id == providers.ARGO
     assert providers.provider_for_model("alcf:foo/Bar").id == providers.ALCF
