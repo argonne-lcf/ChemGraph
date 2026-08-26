@@ -7,7 +7,6 @@ Python. `single_agent` is the recommended first choice.
 | --- | --- | --- |
 | `single_agent` | One general chemistry agent with local tools | Default; CLI and Python |
 | `main_agent` | Durable supervisor with checkpointed subagents | Interactive CLI or `MainAgentSession` only |
-| `deep_agent` | Repository exploration, coding, and workspace tasks | CLI and Python; alias `deepagent`; broad local shell access |
 | `multi_agent` | Routes tasks among specialized agents | More model calls and orchestration overhead |
 | `python_relp` | Chemistry agent with Python REPL capability | Executes Python in the current process; alias `python_repl` |
 | `graspa` | gRASPA-oriented agent | Site-specific executable/configuration; alias `graspa_agent` |
@@ -41,54 +40,6 @@ chemgraph run --interactive --workflow main_agent
 In Python, construct `MainAgentSession`; `ChemGraph.run()` rejects this workflow.
 See [Python API](python_api.md).
 
-## Deep Agent
-
-`deep_agent` is one reusable workspace workflow with two entry points. It can
-run directly through `ChemGraph(workflow_type="deep_agent")`, or it can be
-registered under `main_agent` as the `deepagent` subagent. Both paths use
-`construct_deep_agent_graph`, so the prompt, backend, tools, recursion limit,
-and approval policy have one implementation.
-
-```bash
-# Direct, process-local interactive thread with action reviews.
-chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
-
-# The same worker delegated by the durable supervisor.
-chemgraph run --interactive --workflow main_agent --deepagent \
-  --deepagent-workspace .
-```
-
-The standalone interactive workflow keeps one thread while that CLI process is
-open; it does not provide cross-process restoration in this first version.
-File mutations and shell commands require structured approve/reject decisions.
-Headless execution is rejected unless both an explicit workspace and
-`--deepagent-dangerously-skip-approvals` are supplied.
-
-With the CLI's virtual local backend, `/workspace` is the project root exposed
-to the Deep Agent. For example, `--deepagent-workspace test/` maps
-`/workspace/script.py` to `test/script.py` on the host. Deep Agents also tells
-the model the corresponding absolute host path to use with shell commands.
-Older files created under `test/workspace/` are not moved automatically.
-
-Run state and session records remain standard ChemGraph artifacts. By default,
-state snapshots are written under the process's `cg_logs/session_*` directory
-and session messages go to the configured ChemGraph session store; neither is
-placed inside the selected Deep Agent workspace. Approval-interrupted direct
-runs save both the pending checkpoint and the completed state after resumption.
-
-!!! danger "Host shell access"
-    The local backend can modify files under its workspace and its shell is not
-    confined to that directory. Use only trusted prompts and disposable,
-    isolated workspaces. The skip-approvals flag removes the action-review
-    boundary for that run.
-
-For comparisons with Claude Code or native Codex, keep the task set, starting
-checkout, time budget, and scoring fixed, and record which runtime performed
-each run. Selecting a `codex:` model here evaluates that model through
-ChemGraph's Deep Agent harness; it does not reproduce the native Codex product
-runtime. `deep_agent` is intentionally not included in the chemistry-focused
-`chemgraph eval` workflow matrix.
-
 ## Multi-agent
 
 `multi_agent` delegates among specialized graphs. It is useful when a request
@@ -116,8 +67,7 @@ scientific engine, credentials, site configuration, or server. Consult
 ## Interface compatibility
 
 The Streamlit interface exposes a subset of workflows. The CLI is the broadest
-discovery surface, but `main_agent` is interactive-only, `deep_agent` has an
-explicit local-access safety boundary, and some specialized workflows depend
-on local resources. Run `chemgraph --help` and
+discovery surface, but `main_agent` is interactive-only and some specialized
+workflows depend on local resources. Run `chemgraph --help` and
 `chemgraph models` against the installed release instead of assuming every
 workflow is available in every environment.

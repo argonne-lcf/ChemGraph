@@ -73,56 +73,6 @@ For CLI use, the equivalent is:
 chemgraph run --interactive --workflow main_agent
 ```
 
-## Workspace Deep Agent
-
-The workspace workflow is separately callable through `ChemGraph.run()`:
-
-```python
-from deepagents.backends import LocalShellBackend
-
-from chemgraph.agent.llm_agent import ChemGraph
-
-agent = ChemGraph(
-    model_name="claude-sonnet-4-20250514",
-    workflow_type="deep_agent",
-    deepagent_backend=LocalShellBackend(
-        root_dir="/path/to/checkout",
-        virtual_mode=True,
-    ),
-)
-result = await agent.run(
-    "Review the test failures.",
-    config={"configurable": {"thread_id": "workspace-review"}},
-)
-```
-
-A virtual `LocalShellBackend` is exposed to the agent at `/workspace`, so file
-tool path `/workspace/src/example.py` maps directly to
-`/path/to/checkout/src/example.py`. The generated Deep Agents system context
-also supplies that host path for shell commands. Custom backends, existing
-composite backends, and non-virtual local backends are passed through unchanged.
-
-The default approval policy interrupts before shell commands and file
-mutations. Without a `human_input_handler`, `run()` raises
-`HumanInputRequired`; its `payload` retains the structured Deep Agents action
-requests and must be resumed with matching structured decisions. Setting
-`deepagent_auto_approve=True` removes this boundary and should be limited to an
-externally isolated, explicitly trusted workspace.
-
-The same constructor can be composed as a worker:
-
-```python
-from chemgraph.graphs.deep_agent import construct_deep_agent_graph
-from chemgraph.registry import AgentRegistry
-
-standalone_graph = construct_deep_agent_graph(model, backend=backend)
-worker = AgentRegistry().as_subagent("deepagent", llm=model, backend=backend)
-```
-
-`as_subagent()` compiles the graph with `checkpointer=None` so it inherits its
-parent checkpoint. `construct_main_agent_graph(enable_deepagent=True, ...)`
-uses this same workflow under the stable subagent name `deepagent`.
-
 ## Custom tools
 
 `ChemGraph` can be extended with compatible LangChain tools. Keep tools narrow,

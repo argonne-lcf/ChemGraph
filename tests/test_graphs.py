@@ -192,7 +192,6 @@ def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tm
         prompts=PromptConfig(
             formatter="custom formatter",
             report="custom report",
-            deepagent="custom workspace prompt",
         ),
         structured_output=True,
         generate_report=True,
@@ -219,7 +218,6 @@ def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tm
     assert captured["kwargs"]["enable_deepagent"] is True
     assert captured["kwargs"]["deepagent_backend"] is deepagent_backend
     assert captured["kwargs"]["deepagent_recursion_limit"] == cg.recursion_limit
-    assert captured["kwargs"]["deepagent_system_prompt"] == "custom workspace prompt"
 
 
 @pytest.mark.asyncio

@@ -113,15 +113,9 @@ checkpoint_db = "~/.chemgraph/checkpoints.db"
 enable_deepagent = false
 ```
 
-`main_agent` still requires interactive CLI mode. `enable_deepagent` controls
-only its optional `deepagent` subagent. To call the graph directly, select
-`workflow = "deep_agent"`; `deepagent_workspace` applies to either entry point.
-Deep Agent is a development-only capability with broad local access, so leave
-it disabled unless you understand the security boundary.
-
-The headless-only `--deepagent-dangerously-skip-approvals` switch is
-intentionally not configurable through TOML. It must be typed explicitly for
-each run together with `--deepagent-workspace`.
+`main_agent` still requires interactive CLI mode. Deep Agent is a
+development-only capability with broad local access; leave it disabled unless
+you understand the security boundary.
 
 ## Evaluation profiles
 

@@ -122,14 +122,6 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         help="Workspace root for the experimental local-shell Deep Agent",
     )
     parser.add_argument(
-        "--deepagent-dangerously-skip-approvals",
-        action="store_true",
-        help=(
-            "Allow a headless deep_agent to execute commands and mutate its "
-            "explicit workspace without approval prompts"
-        ),
-    )
-    parser.add_argument(
         "--recursion-limit",
         type=int,
         default=20,
@@ -496,52 +488,17 @@ def _handle_run(args: argparse.Namespace) -> None:
     args.workflow = resolve_workflow(args.workflow)
     enable_deepagent = bool(getattr(args, "deepagent", False))
     deepagent_workspace = getattr(args, "deepagent_workspace", None)
-    deepagent_auto_approve = bool(
-        getattr(args, "deepagent_dangerously_skip_approvals", False)
-    )
-    if enable_deepagent and args.workflow != "main_agent":
-        console.print(
-            "[red]--deepagent adds a worker only to the main_agent workflow. "
-            "Use -w deep_agent to call it directly.[/red]"
-        )
-        sys.exit(2)
-    if deepagent_workspace is not None and not (
-        enable_deepagent or args.workflow == "deep_agent"
-    ):
+    if deepagent_workspace is not None and not enable_deepagent:
         if cli_deepagent is False and cli_deepagent_workspace is None:
             deepagent_workspace = None
         else:
-            console.print(
-                "[red]--deepagent-workspace requires --deepagent or "
-                "-w deep_agent.[/red]"
-            )
+            console.print("[red]--deepagent-workspace requires --deepagent.[/red]")
             sys.exit(2)
     if enable_deepagent and not getattr(args, "interactive", False):
         console.print(
             "[red]The experimental Deep Agent requires interactive mode.[/red]"
         )
         sys.exit(2)
-    if deepagent_auto_approve and (
-        args.workflow != "deep_agent" or getattr(args, "interactive", False)
-    ):
-        console.print(
-            "[red]--deepagent-dangerously-skip-approvals is supported only "
-            "for non-interactive -w deep_agent runs.[/red]"
-        )
-        sys.exit(2)
-    if args.workflow == "deep_agent" and not getattr(args, "interactive", False):
-        if not deepagent_auto_approve:
-            console.print(
-                "[red]Headless deep_agent runs require "
-                "--deepagent-dangerously-skip-approvals.[/red]"
-            )
-            sys.exit(2)
-        if not deepagent_workspace:
-            console.print(
-                "[red]Headless deep_agent runs require an explicit "
-                "--deepagent-workspace PATH.[/red]"
-            )
-            sys.exit(2)
 
     if args.workflow == "main_agent":
         if not getattr(args, "interactive", False):
@@ -659,8 +616,6 @@ def _handle_run(args: argparse.Namespace) -> None:
         human_supervised=args.human_supervised,
         tools=mcp_tools,
         on_event=trace.on_event if trace else None,
-        deepagent_workspace=deepagent_workspace,
-        deepagent_auto_approve=deepagent_auto_approve,
     )
 
     if not agent:

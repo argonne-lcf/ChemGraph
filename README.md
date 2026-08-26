@@ -118,7 +118,6 @@ Useful run options include:
 | `-s`, `--structured` | Request structured final output |
 | `-r`, `--report` | Allow generation of an HTML report |
 | `--human-supervised` | Allow supported workflows to pause for input |
-| `--deepagent-workspace PATH` | Set the workspace for `deep_agent` or the optional main-agent worker |
 | `--output-file` | Save the CLI response to a file |
 | `-v` / `-vv` | Enable INFO / DEBUG diagnostics |
 
@@ -151,20 +150,6 @@ chemgraph run --interactive --workflow main_agent --resume <session-id>
 See the [CLI guide](https://argonne-lcf.github.io/ChemGraph/cli/) for session
 semantics, interactive commands, MCP connections, tracing, and the
 development-only workspace Deep Agent.
-
-Call the workspace Deep Agent directly in an approval-driven interactive
-session, or attach the same workflow to `main_agent` as the `deepagent`
-subagent:
-
-```bash
-chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
-chemgraph run --interactive --workflow main_agent --deepagent \
-  --deepagent-workspace .
-```
-
-Headless workspace mutation is disabled unless the command includes an
-explicit workspace and `--deepagent-dangerously-skip-approvals`. Use that mode
-only in a disposable, isolated checkout.
 
 ### Use the Python API
 
@@ -247,7 +232,6 @@ stdio client configuration and the experimental HPC servers.
 | --- | --- | --- |
 | `single_agent` | General molecule lookup, ASE calculations, and reports | Default and recommended first workflow |
 | `main_agent` | Long-lived supervisor with delegated chemistry work | Interactive mode; use `MainAgentSession` in Python |
-| `deep_agent` | Repository exploration, coding, and workspace tasks (`deepagent` is an alias) | Interactive approvals by default; broad local shell access |
 | `multi_agent` | Planner/executor decomposition and parallel subtasks | More model calls and orchestration overhead |
 | `python_relp` | LLM-directed Python and arithmetic (`python_repl` is an alias) | Executes Python in the ChemGraph process; use only with trusted prompts |
 | `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra plus Vina from conda-forge |
@@ -364,8 +348,6 @@ chemgraph run -vv -q "What is the SMILES string for water?"
   install it only if the requested workflow needs it.
 - A first MACE or local-embedding run may pause while model weights download.
 - `main_agent` requires `--interactive`.
-- Headless `deep_agent` requires an explicit workspace and the unsafe
-  skip-approvals flag.
 - The Streamlit source command must be run from a repository checkout.
 - A stale installed package can shadow a checkout; activate the intended
   environment and use an editable install.

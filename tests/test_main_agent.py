@@ -533,15 +533,14 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(monkeypatch):
             captured["config"] = config
             return self
 
-    def fake_construct_deep_agent_graph(llm, **kwargs):
-        captured["llm"] = llm
+    def fake_create_deep_agent(**kwargs):
         captured["kwargs"] = kwargs
         return FakeDeepAgent()
 
     backend = object()
     monkeypatch.setattr(
-        "chemgraph.graphs.main_agent.construct_deep_agent_graph",
-        fake_construct_deep_agent_graph,
+        "chemgraph.graphs.main_agent.create_deep_agent",
+        fake_create_deep_agent,
     )
 
     construct_main_agent_graph(
@@ -555,8 +554,13 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(monkeypatch):
     assert captured["kwargs"]["backend"] is backend
     assert captured["kwargs"]["tools"] == []
     assert captured["kwargs"]["checkpointer"] is None
-    assert captured["kwargs"]["recursion_limit"] == 17
-    assert captured["kwargs"]["name"] == "deepagent"
+    assert set(captured["kwargs"]["interrupt_on"]) == {
+        "execute",
+        "write_file",
+        "edit_file",
+        "delete",
+    }
+    assert captured["config"] == {"recursion_limit": 17}
 
 
 @pytest.mark.parametrize(
