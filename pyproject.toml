@@ -129,8 +129,8 @@ where = ["src/"]
 
 [tool.setuptools.package-data]
 "chemgraph.eval" = ["data/*.json"]
-# ocsr_models reads ocsr_registry.json through importlib.resources, so it has to ship.
-"chemgraph.tools" = ["ocsr_registry.json"]
+# ocsr_models and ocsr_core read these through importlib.resources, so they have to ship.
+"chemgraph.tools" = ["ocsr_registry.json", "ocsr_calibration_4model.json"]
 "chemgraph.academy.campaigns" = [
     "example-*/*.json",
     "example-*/*.jsonc",

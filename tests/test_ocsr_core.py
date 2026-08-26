@@ -525,3 +525,163 @@ def test_a_repeated_model_name_still_contributes_its_own_singleton():
                    {"model": "decimer", "ok": True, "smiles": "???"},
                    {"model": "molnextr", "ok": True, "smiles": "CCO"}])
     assert v["pattern"] == "1/1/1"
+
+
+# ---------------------------------------------------------------------------
+# Calibration tables
+# ---------------------------------------------------------------------------
+
+
+def test_packaged_table_is_internally_consistent():
+    """The shipped table must satisfy the validator it is loaded through."""
+    t = core.load_calibration()
+    assert t["committee"] == ["decimer", "molnextr", "molscribe", "ocsrglyph"]
+    assert t["n_items"] == 722
+    for name, cell in t["patterns"].items():
+        assert sum(int(x) for x in name.split("/")) == len(t["committee"])
+        assert 0 <= cell["k"] <= cell["n"]
+
+
+def test_the_shipped_tie_break_matches_its_own_measured_accuracies():
+    """The recorded priority must be strongest model first.
+
+    Silent when broken: the all-different bucket's accuracy was measured under this
+    order, so a different order quotes a number measured for another model's answer.
+    """
+    t = core.load_calibration()
+    order = core.tie_break_order(t)
+    accuracies = [t["model_performance"][m]["accuracy"] for m in order]
+    assert accuracies == sorted(accuracies, reverse=True), order
+
+
+def test_a_table_with_no_tie_break_falls_back_to_committee_order(tmp_path):
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({"committee": ["a", "b"],
+                                  "patterns": {"2": {"k": 1, "n": 1}}}))
+    assert core.tie_break_order(core.load_calibration(str(custom))) == ["a", "b"]
+
+
+@pytest.mark.parametrize("tie_break, why", [
+    ("decimer,molnextr,molscribe,ocsrglyph", "no 'model-priority:' prefix to parse"),
+    ("model-priority: decimer,molnextr", "names fewer models than the committee"),
+    ("model-priority: a,b,c,d", "names models the committee does not contain"),
+])
+def test_an_unusable_tie_break_is_rejected_at_load(tmp_path, tie_break, why):
+    """A tie_break that cannot be trusted must fail loudly.
+
+    Silent when broken: the fallback is the committee's arbitrary JSON order, so the
+    tool votes one way and quotes a number measured the other way.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({
+        "committee": ["decimer", "molnextr", "molscribe", "ocsrglyph"],
+        "tie_break": tie_break,
+        "patterns": {"4": {"k": 1, "n": 1}},
+    }))
+    with pytest.raises(ValueError, match="unusable"):
+        core.load_calibration(str(custom))
+
+
+@pytest.mark.parametrize("table, why", [
+    ([], "top level is not an object"),
+    ({"patterns": {"1": {"k": 1, "n": 2}}}, "no committee at all"),
+    ({"committee": "a,b", "patterns": {"2": {"k": 1, "n": 2}}},
+     "committee is a string"),
+    ({"committee": [], "patterns": {"1": {"k": 1, "n": 1}}},
+     "an empty committee would disable the mismatch guard entirely"),
+    ({"committee": ["a", "a"], "patterns": {"1/1": {"k": 1, "n": 1}}},
+     "a repeated model mismatches forever"),
+    ({"committee": ["a"], "patterns": {}}, "no patterns"),
+    ({"committee": ["a", "b"], "patterns": {"3": {"k": 1, "n": 2}}},
+     "pattern sums past the committee, so it was fit under another abstention rule"),
+    ({"committee": ["a"], "patterns": {"2/-1": {"k": 1, "n": 1}}},
+     "int() accepts a minus sign, so this sums to 1 and passes the sum check"),
+    ({"committee": ["a"], "patterns": {"1": {"k": 5, "n": 2}}}, "k exceeds n"),
+    ({"committee": ["a"], "patterns": {"1": {"k": 1, "n": 1, "p": "high"}}},
+     "p is a string, which used to raise TypeError inside a lookup"),
+    ({"committee": ["a"], "patterns": {"1": {"k": 0, "n": 100, "p": 0.99}}},
+     "p contradicts its own k and n"),
+    ({"committee": ["a"], "patterns": {"1": {"k": 1, "n": 1,
+                                             "ci": [float("nan"), 1.0]}}},
+     "json accepts NaN, which compares false against everything"),
+    ({"committee": ["a"], "patterns": {"1": {"k": 1, "n": 1, "ci": [0.99, 0.1]}}},
+     "a reversed interval"),
+    ({"committee": ["a"], "patterns": {"1": {"k": 1, "n": 1}},
+      "model_performance": {"decimer": {"accuracy": 0.9, "n": 0}}},
+     "an accuracy backed by zero observations reads as a real measurement"),
+    ({"committee": ["a"], "patterns": {"1": {"k": 1, "n": 1}},
+      "model_performance": {"decimer": {"accuracy": "90%"}}},
+     "accuracy is a string"),
+])
+def test_a_table_that_cannot_mean_what_it_says_is_rejected_at_load(
+        tmp_path, monkeypatch, table, why):
+    """A table decides which answers get a confidence, so it fails at load.
+
+    Every case here once loaded cleanly and then either raised a TypeError from deep
+    inside a lookup, naming neither the table nor the field, or returned a confident
+    number that contradicted the table's own k and n.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps(table))
+    with pytest.raises(ValueError, match="unusable"):
+        core.load_calibration(str(custom))
+    # Same rejection whichever route the table arrives by.
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(custom))
+    with pytest.raises(ValueError, match="unusable"):
+        core.load_calibration()
+
+
+def test_a_calibration_path_that_is_not_a_regular_file_is_refused(tmp_path):
+    """A FIFO blocks open() forever, and the caller has already paid for inference."""
+    fifo = tmp_path / "cal.json"
+    os.mkfifo(fifo)
+    with pytest.raises(ValueError, match="not a regular file"):
+        core.load_calibration(str(fifo))
+
+
+def test_unparseable_json_is_a_valueerror_not_a_recursionerror(tmp_path):
+    """Callers guard on ValueError, so a bad table costs the confidence, not the run.
+
+    Silent when broken: json.load raises RecursionError on a deeply nested file, which
+    is neither ValueError nor TypeError and discarded a completed ensemble run.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text("[" * 400)
+    with pytest.raises(ValueError):
+        core.load_calibration(str(custom))
+
+
+@pytest.mark.parametrize("floor, why", [
+    ("20", "a string floor silently disables the check"),
+    (True, "bool is an int in Python, so isinstance alone lets it through"),
+    (-5, "a negative floor can never hold"),
+])
+def test_an_unusable_sample_floor_is_refused_at_load(tmp_path, floor, why):
+    """The floor decides whether a number is quotable, so it fails at load.
+
+    Silent when broken: the table records a floor, confidence() cannot read it, and
+    a point estimate over four images is quoted as measured.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text(json.dumps({"committee": ["a"],
+                                  "min_n_for_point_estimate": floor,
+                                  "patterns": {"1": {"k": 4, "n": 4}}}))
+    with pytest.raises(ValueError, match="min_n_for_point_estimate"):
+        core.load_calibration(str(custom))
+
+
+@pytest.mark.parametrize("literal, why", [
+    ("NaN", "NaN < anything is False, so the floor would never fire"),
+    ("Infinity", "inf fires on every bucket, however large"),
+])
+def test_a_non_finite_sample_floor_is_refused(tmp_path, literal, why):
+    """json accepts both, and each disables the floor in a different direction.
+
+    Silent when broken: NaN quotes a number from four images, inf reports a bucket
+    of a thousand as too thin to quote.
+    """
+    custom = tmp_path / "cal.json"
+    custom.write_text('{"committee": ["a"], "min_n_for_point_estimate": '
+                      + literal + ', "patterns": {"1": {"k": 990, "n": 1000}}}')
+    with pytest.raises(ValueError, match="min_n_for_point_estimate"):
+        core.load_calibration(str(custom))

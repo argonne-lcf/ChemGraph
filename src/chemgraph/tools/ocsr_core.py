@@ -14,7 +14,9 @@ RDKit is a core ChemGraph dependency and is imported lazily here regardless.
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 import os
 import re
 import stat
@@ -495,3 +497,241 @@ def vote(results: list[dict], priority: list[str] | None = None) -> dict:
         "committee": committee,
         "voters": [m for models in groups.values() for m in models],
     }
+
+
+
+def load_calibration(path: str | None = None) -> dict:
+    """Load a calibration table: explicit path, then env var, then the packaged default.
+
+    The packaged default describes the four-model committee on RDKit-rendered images
+    and is what makes ``backend="ensemble"`` work with no configuration. Anyone who
+    builds their own table with the recalibration script points at it here.
+
+    A table drives which answers get a confidence, so a malformed one is rejected on
+    load rather than silently producing wrong numbers deep in a run.
+    """
+    candidate = path or os.environ.get("CHEMGRAPH_OCSR_CALIBRATION")
+    if candidate:
+        resolved = os.path.expanduser(candidate)
+        # A FIFO here blocks open() forever with no caller-side timeout, the same
+        # reason load_image_bytes checks. Callers of this function have usually just
+        # spent real inference time and must not hang holding the result.
+        if not stat.S_ISREG(os.lstat(resolved).st_mode):
+            raise ValueError(f"calibration table is not a regular file: {resolved}")
+        with open(resolved) as fh:
+            return _validate_calibration(_load_json(fh, resolved), resolved)
+
+    from importlib import resources
+
+    # importlib.resources, not a __file__-relative path: the latter works under
+    # `pip install -e` and silently fails on a normal install.
+    ref = resources.files("chemgraph.tools").joinpath("ocsr_calibration_4model.json")
+    with ref.open() as fh:
+        return _validate_calibration(_load_json(fh, "packaged default"), "packaged default")
+
+
+def _load_json(fh, origin: str) -> object:
+    """json.load, with every failure normalised to ValueError.
+
+    Callers guard on (OSError, ValueError, TypeError) so that a bad table costs the
+    confidence and not the prediction. json.load can also raise RecursionError on a
+    deeply nested file, which slipped past all of them and discarded a completed
+    ensemble run.
+    """
+    try:
+        return json.load(fh)
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"could not parse {origin}: {type(exc).__name__}") from None
+
+
+def _validate_calibration(table: object, origin: str) -> dict:
+    """Reject a table that cannot mean what a caller will assume it means."""
+    def bad(why: str) -> ValueError:
+        return ValueError(f"calibration table {origin!r} is unusable: {why}")
+
+    # Arithmetic below converts to float, and an int with hundreds of digits raises
+    # OverflowError, which is neither ValueError nor TypeError and so escaped every
+    # guard in the call chain.
+    def num(value: object, field: str) -> float:
+        try:
+            return float(value)
+        except (OverflowError, ValueError, TypeError):
+            raise bad(f"{field} is not a usable number: {value!r}") from None
+
+    if not isinstance(table, dict):
+        raise bad(f"top level is {type(table).__name__}, expected an object")
+    committee = table.get("committee")
+    if not isinstance(committee, list) or not all(isinstance(m, str) for m in committee):
+        raise bad("'committee' must be a list of model names")
+    # An empty committee disables check_committee, which only compares when both sides
+    # are non-empty, so every mismatch would pass and any table would apply anywhere.
+    if not committee:
+        raise bad("'committee' is empty, which would disable the committee check")
+    # check_committee compares sorted name lists, so a duplicate makes a table that
+    # can never match any real run and reports committee_mismatch forever.
+    if len(set(committee)) != len(committee):
+        raise bad(f"'committee' repeats a model: {committee}")
+    # A tie_break that does not parse, or that does not name exactly the committee,
+    # would fall back to the committee's arbitrary JSON order: the tool would vote one
+    # way and quote a number measured the other way, with nothing in the result to
+    # show it. Reject at load instead.
+    recorded = table.get("tie_break")
+    if recorded is not None:
+        order = _parse_tie_break(recorded)
+        if sorted(order) != sorted(committee):
+            raise bad(
+                f"'tie_break' must name exactly the committee, most accurate first. "
+                f"Committee: {committee}. Parsed from tie_break: {order}. Expected "
+                f"the form 'model-priority: a,b,c'."
+            )
+
+    # Checked because confidence() acts on it: an unusable value silently disables
+    # the floor, and the table would quote a point estimate from a handful of images
+    # while recording that it does not.
+    declared = table.get("min_n_for_point_estimate")
+    # isfinite for the same reason the ci check uses it: json accepts NaN and
+    # Infinity, NaN < anything is False so the floor would never fire, and inf
+    # fires on every bucket however large.
+    if declared is not None and (isinstance(declared, bool)
+                                 or not isinstance(declared, (int, float))
+                                 or not math.isfinite(declared)
+                                 or declared < 0):
+        raise bad(f"'min_n_for_point_estimate' must be a non-negative number: "
+                  f"{declared!r}")
+
+    patterns = table.get("patterns")
+    if not isinstance(patterns, dict) or not patterns:
+        raise bad("'patterns' must be a non-empty object")
+
+    size = len(committee)
+    for name, cell in patterns.items():
+        if not isinstance(cell, dict):
+            raise bad(f"pattern {name!r} is not an object")
+        try:
+            parts = [int(x) for x in str(name).split("/")]
+        except ValueError:
+            raise bad(f"pattern {name!r} is not slash-separated integers") from None
+        # int() accepts a leading minus and unicode digits, so the sum check below is
+        # not enough on its own: "2/-1" sums to 1 and would pass for a one-model
+        # committee. A part is a count of models agreeing, so it is at least 1.
+        if any(p < 1 for p in parts):
+            raise bad(f"pattern {name!r} has a part below 1; each part counts models")
+        # A pattern whose parts do not sum to the committee size means the table was
+        # fit under a different abstention rule; its buckets would not line up with
+        # what vote() produces, and every lookup would quietly miss or mismatch.
+        if sum(parts) != size:
+            raise bad(f"pattern {name!r} sums to {sum(parts)}, committee has {size} models")
+        k, n = cell.get("k"), cell.get("n")
+        if (isinstance(k, bool) or isinstance(n, bool)
+                or not isinstance(n, int) or n < 0
+                or not isinstance(k, int) or not 0 <= k <= n):
+            raise bad(f"pattern {name!r} has invalid k/n: {k!r}/{n!r}")
+        # Not covered by the isinstance checks above: a 400-digit int is a valid
+        # int and satisfies 0 <= k <= n, but the arithmetic below and in confidence()
+        # converts to float, where it raises OverflowError. That is neither ValueError
+        # nor TypeError, so it escapes every caller's guard.
+        num(k, f"pattern {name!r} k")
+        num(n, f"pattern {name!r} n")
+        # A quotable number from no observations at all: (0+0.5)/(0+1) == 0.5 makes
+        # the consistency check below pass, so it has to be caught here.
+        if n == 0 and cell.get("p") is not None:
+            raise bad(f"pattern {name!r} quotes p over 0 observations")
+
+        # p, ci and label are what a caller acts on, so check them here. Left
+        # unchecked, a string p reached _label_for and raised TypeError deep inside a
+        # lookup, and a p that simply disagreed with its own k and n was returned as
+        # a confident answer with nothing to reveal the contradiction.
+        p = cell.get("p")
+        if p is not None:
+            if isinstance(p, bool) or not isinstance(p, (int, float)):
+                raise bad(f"pattern {name!r} has a non-numeric p: {p!r}")
+            if not 0.0 <= p <= 1.0:
+                raise bad(f"pattern {name!r} has p={p} outside [0, 1]")
+            expected = round((k + 0.5) / (n + 1.0), 4)
+            if abs(p - expected) > 5e-4:
+                raise bad(
+                    f"pattern {name!r} says p={p} but k/n = {k}/{n} gives {expected}. "
+                    f"Refit with python -m chemgraph.tools.ocsr_calibrate "
+                    f"instead of editing p."
+                )
+        ci = cell.get("ci")
+        if ci is not None:
+            ok = (isinstance(ci, list) and len(ci) == 2
+                  and all(isinstance(b, (int, float)) and not isinstance(b, bool)
+                          and math.isfinite(num(b, f"pattern {name!r} ci"))
+                          and 0.0 <= b <= 1.0
+                          for b in ci))
+            if not ok:
+                # json.loads accepts NaN and Infinity, and a NaN bound compares false
+                # against everything, so a low-n label would silently come out wrong.
+                raise bad(f"pattern {name!r} has a malformed ci: {ci!r}")
+            if ci[0] > ci[1]:
+                raise bad(f"pattern {name!r} has a reversed ci: {ci!r}")
+        label = cell.get("label")
+        if label is not None and not isinstance(label, str):
+            raise bad(f"pattern {name!r} has a non-string label: {label!r}")
+
+    # Checked here so prior_confidence and model_performance can read it without
+    # each guarding separately. A string accuracy used to reach _label_for and raise
+    # TypeError from inside a lookup, naming neither the table nor the field.
+    performance = table.get("model_performance")
+    if performance is not None:
+        if not isinstance(performance, dict):
+            raise bad("'model_performance' must be an object keyed by model name")
+        for name, entry in performance.items():
+            if not isinstance(entry, dict):
+                raise bad(f"model_performance.{name} is not an object")
+            accuracy = entry.get("accuracy")
+            if accuracy is None:
+                continue  # unmeasured is allowed; it reports no_prior_for_model
+            if isinstance(accuracy, bool) or not isinstance(accuracy, (int, float)):
+                raise bad(f"model_performance.{name} has a non-numeric accuracy")
+            if not 0.0 <= accuracy <= 1.0:
+                raise bad(f"model_performance.{name} has accuracy={accuracy} "
+                          f"outside [0, 1]")
+            count = entry.get("n")
+            if count is not None and (isinstance(count, bool)
+                                      or not isinstance(count, int) or count < 0):
+                raise bad(f"model_performance.{name} has an invalid n: {count!r}")
+            # An accuracy backed by nothing is worse than no accuracy: it reads as a
+            # real measurement and there is no field left to signal otherwise.
+            if count == 0:
+                raise bad(f"model_performance.{name} reports an accuracy over 0 "
+                          f"observations; drop the entry or set accuracy to null")
+    return table
+
+
+def tie_break_order(table: dict) -> list[str]:
+    """The model priority a table was fitted under, from its own tie_break field.
+
+    The order decides which answer wins a tie, so it decides what the all-different
+    bucket's accuracy actually measures. Using the registry's order instead of the
+    table's would attach a number measured for one model's answer to a different
+    model's answer, and check_committee cannot see it because it compares sorted
+    names.
+
+    A table with no tie_break falls back to its committee order, which is the best
+    available guess for a table written before the field existed. A table whose
+    tie_break is present but unusable never reaches here: _validate_calibration
+    rejects it, because falling back would silently vote one way while quoting a
+    number measured the other way.
+    """
+    order = _parse_tie_break(table.get("tie_break"))
+    return order if order is not None else list(table.get("committee") or [])
+
+
+def _parse_tie_break(value: object) -> list[str] | None:
+    """Model names from a tie_break string, or None when there is nothing to parse.
+
+    An unparseable field returns an empty list, which _validate_calibration rejects
+    because it cannot name the committee. A table therefore only reaches
+    :func:`tie_break_order` with a usable order or with none recorded at all.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or "model-priority:" not in value:
+        return []
+    _, _, names = value.partition("model-priority:")
+    return [n.strip() for n in names.split(",") if n.strip()]
