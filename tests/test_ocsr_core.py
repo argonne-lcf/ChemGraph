@@ -413,3 +413,115 @@ def test_weights_dir_env_relocates_every_checkpoint(monkeypatch, tmp_path):
 
     # DECIMER caches its own weights, so the override has nothing to relocate.
     assert ocsr_backends.checkpoint_path("decimer") is None
+
+
+# ---------------------------------------------------------------------------
+# Committee voting
+# ---------------------------------------------------------------------------
+
+
+def _results(*pairs):
+    return [{"model": m, "smiles": s, "ok": True} for m, s in pairs]
+
+
+def test_the_local_prefix_names_the_same_model():
+    """Silent when broken: a "local:" name never matches the table's committee, so
+    check_committee nulls the confidence on every ensemble call."""
+    v = core.vote(_results(("local:decimer", "CCO"), ("molnextr", "CCO")))
+    assert v["committee"] == ["decimer", "molnextr"]
+
+
+def test_vote_groups_by_canonical_form_not_string():
+    """Same molecule written two ways is one vote."""
+    v = core.vote(_results(("decimer", "C(=O)(C(Br)(F)F)O"),
+                           ("molnextr", "O=C(O)C(F)(F)Br"),
+                           ("molscribe", "O=C(O)C(F)(F)Br"),
+                           ("ocsrglyph", "CC(C)(Br)C(=O)O")))
+    assert v["pattern"] == "3/1"
+    assert v["winner"] == core.canonicalize("O=C(O)C(F)(F)Br")
+
+
+def test_an_abstainer_stays_in_the_committee_but_out_of_the_voters():
+    """A model that ran and produced junk is counted, and named as abstaining.
+
+    Silent when broken: it vanishes from the committee, which makes a partial
+    install look like a full one to check_committee.
+    """
+    v = core.vote(_results(("decimer", "CCO"), ("molnextr", "CCO"),
+                           ("molscribe", "CCO"), ("ocsrglyph", "@@@junk")))
+    assert v["committee"] == ["decimer", "molnextr", "molscribe", "ocsrglyph"]
+    assert v["voters"] == ["decimer", "molnextr", "molscribe"]
+    assert "ocsrglyph" in v["abstained"]
+
+
+@pytest.mark.parametrize("smiles, expected", [
+    (("CCO", "CCO", "CCO", "CCO"), "4"),
+    (("CCO", "CCO", "CCO", "@@@"), "3/1"),
+    (("CCO", "CCO", "@@@", "???"), "2/1/1"),
+    (("CCO", "CCO", "CCC", "CCC"), "2/2"),
+    (("CCO", "CCC", "@@@", "???"), "1/1/1/1"),
+    (("@@@", "???", "!!!", "###"), "1/1/1/1"),
+])
+def test_pattern_always_sums_to_the_committee_size(smiles, expected):
+    """Every four-model outcome lands in one of five buckets.
+
+    Silent when broken: a shorter pattern reads as a smaller committee and looks up
+    the wrong row.
+    """
+    models = ["decimer", "molnextr", "molscribe", "ocsrglyph"]
+    v = core.vote(_results(*zip(models, smiles)))
+    assert v["pattern"] == expected
+    assert sum(int(x) for x in v["pattern"].split("/")) == 4
+
+
+def test_vote_breaks_ties_by_model_priority():
+    v = core.vote(
+        _results(("decimer", "CCO"), ("molnextr", "CCN"),
+                 ("molscribe", "CCC"), ("ocsrglyph", "CCF")),
+        priority=["decimer", "molnextr", "molscribe", "ocsrglyph"],
+    )
+    assert v["pattern"] == "1/1/1/1"
+    assert v["winner"] == "CCO"
+
+
+def test_an_abstaining_model_cannot_win_the_tie_break():
+    """Only a model that actually voted may decide the answer.
+
+    Silent when broken: the winner comes from outside `voters`, and the all-different
+    bucket stops carrying the strongest model's solo accuracy it is assumed to.
+    """
+    v = core.vote(
+        [{"model": "decimer", "ok": False, "smiles": "CCN"},
+         {"model": "molnextr", "ok": True, "smiles": "CCO"},
+         {"model": "molscribe", "ok": True, "smiles": "CCN"},
+         {"model": "ocsrglyph", "ok": True, "smiles": "CCF"}],
+        ["decimer", "molnextr", "molscribe", "ocsrglyph"],
+    )
+    assert v["winner"] == "CCO"
+    assert "decimer" in v["abstained"]
+    assert set(v["votes"][v["winner"]]) <= set(v["voters"])
+
+
+def test_vote_with_nobody_voting():
+    """Total failure is the all-singletons bucket, not a missing row.
+
+    Dropping the item would remove it from the calibration table and flatter every
+    other bucket.
+    """
+    v = core.vote(_results(("decimer", "@@@"), ("molnextr", "???")))
+    assert v["pattern"] == "1/1"
+    assert v["winner"] is None
+    assert v["voters"] == []
+    assert len(v["abstained"]) == 2
+
+
+def test_a_repeated_model_name_still_contributes_its_own_singleton():
+    """Two results for one model must not collapse into one dict key.
+
+    Silent when broken: the pattern loses a part and stops summing to the committee
+    size, which `--models decimer,decimer` and the "local:" alias both produce.
+    """
+    v = core.vote([{"model": "decimer", "ok": True, "smiles": "@@@"},
+                   {"model": "decimer", "ok": True, "smiles": "???"},
+                   {"model": "molnextr", "ok": True, "smiles": "CCO"}])
+    assert v["pattern"] == "1/1/1"

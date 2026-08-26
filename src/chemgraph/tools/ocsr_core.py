@@ -399,3 +399,99 @@ def build_result(**overrides) -> dict:
     return result
 
 
+
+def fragment_warning(validation: dict) -> str:
+    """The caveat for a result holding more than one molecule, or "" for one.
+
+    Both backends return it, so the text lives here: an agent that learns to act on
+    the single-model wording must see the same words from a committee.
+    """
+    n = validation.get("n_fragments", 0)
+    if n <= 1:
+        return ""
+    return (f"the image contains {n} disconnected fragments (a salt, a mixture, or "
+            f"a reaction scheme). Ask which one is meant before using this SMILES.")
+
+
+
+def vote(results: list[dict], priority: list[str] | None = None) -> dict:
+    """Group specialist predictions and report the agreement pattern.
+
+    Predictions are canonicalized before grouping, so the same molecule written two
+    ways counts once.
+
+    ``committee`` is every model that was asked; ``voters`` is the subset that
+    returned a parseable SMILES. An abstention counts as a dissenting vote: a model
+    that ran and produced garbage contributes one singleton, so the pattern's parts
+    always sum to the committee size. Four models can only ever produce "4", "3/1",
+    "2/1/1", "2/2", or "1/1/1/1".
+
+    Dropping abstainers and shrinking the pattern was measured on 722 benchmark items
+    and rejected. It split the same situations across eleven buckets instead of five,
+    putting 12% of items below the sample floor where no number can be quoted, against
+    2% under this rule.
+
+    Parameters
+    ----------
+    results : list[dict]
+        One entry per model: ``{"model", "smiles", "ok"}``.
+    priority : list[str], optional
+        Tie-break order, strongest model first. Defaults to the order given.
+
+    Returns
+    -------
+    dict
+        pattern, winner, votes, abstained, committee, voters
+    """
+    def _bare(name: str) -> str:
+        return name.removeprefix("local:")
+
+    committee = [_bare(r.get("model") or "") for r in results]
+    order = [_bare(m) for m in (priority or committee)]
+
+    groups: dict[str, list[str]] = {}
+    abstained: dict[str, str] = {}
+    # Counted separately from the dict: two results carrying the same model name
+    # collapse to one dict key and would drop a singleton from the pattern.
+    n_abstained = 0
+    for r in results:
+        model = _bare(r.get("model") or "")
+        canon = canonicalize(r.get("smiles")) if r.get("ok", True) else None
+        if canon is None:
+            abstained[model] = str(r.get("smiles") or r.get("error") or "")[:80]
+            n_abstained += 1
+            continue
+        groups.setdefault(canon, []).append(model)
+
+    if not groups:
+        # Every model failed. Reporting all-singletons keeps the item in the evidence,
+        # where it counts against that bucket, instead of flattering every other row.
+        return {
+            "pattern": "/".join("1" * len(committee)) if committee else None,
+            "winner": None,
+            "votes": {},
+            "abstained": abstained,
+            "committee": committee,
+            "voters": [],
+        }
+
+    counts = sorted([len(v) for v in groups.values()] + [1] * n_abstained, reverse=True)
+    top = max(len(v) for v in groups.values())
+    tied = [smi for smi, models in groups.items() if len(models) == top]
+    if len(tied) > 1:
+        # Deterministic tie-break by model priority, so an all-different pattern
+        # reports the strongest model's answer and that bucket's measured accuracy is
+        # really that model's solo accuracy. Resolved over the groups, so a model
+        # whose output failed to parse cannot decide the answer.
+        winner = next((smi for m in order for smi in tied if m in groups[smi]), tied[0])
+    else:
+        winner = tied[0]
+
+    return {
+        "pattern": "/".join(str(c) for c in counts),
+        "winner": winner,
+        "votes": groups,
+        "abstained": abstained,
+        "committee": committee,
+        "voters": [m for models in groups.values() for m in models],
+    }
