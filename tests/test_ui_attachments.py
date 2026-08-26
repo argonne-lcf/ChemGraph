@@ -1,6 +1,7 @@
 """Tests for chat file attachments (upload persistence and prompt notes)."""
 
 import io
+import os
 
 from ui import artifacts
 from ui._pages import main_interface as main_ui
@@ -21,7 +22,7 @@ def test_persist_uploads_writes_files_and_returns_paths(tmp_path):
 
     paths = persist_uploads(uploads, str(tmp_path))
 
-    assert [p.split("/")[-1] for p in paths] == ["water.xyz", "data.csv"]
+    assert [os.path.basename(p) for p in paths] == ["water.xyz", "data.csv"]
     assert (tmp_path / "water.xyz").read_bytes().startswith(b"3\nwater")
     assert (tmp_path / "data.csv").read_text() == "a,b\n1,2\n"
 
@@ -46,7 +47,7 @@ def test_persist_uploads_never_overwrites_existing_files(tmp_path):
     paths = persist_uploads(uploads, str(tmp_path))
 
     assert (tmp_path / "water.xyz").read_text() == "run output - do not clobber"
-    assert [p.split("/")[-1] for p in paths] == ["water_1.xyz", "water_2.xyz"]
+    assert [os.path.basename(p) for p in paths] == ["water_1.xyz", "water_2.xyz"]
     assert (tmp_path / "water_1.xyz").read_bytes() == b"upload one"
     assert (tmp_path / "water_2.xyz").read_bytes() == b"upload two"
 

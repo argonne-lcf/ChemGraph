@@ -82,7 +82,7 @@ jobs:
         extra_packages = {
             'calculators': ['tblite'],
             'uma': ['fairchem.core', 'e3nn'],
-            'ui': ['streamlit', 'stmol'],
+            'ui': ['streamlit', 'py3Dmol', 'plotly'],
             'parsl': ['parsl'],
             'xanes': ['parsl'],
             'rag': [
