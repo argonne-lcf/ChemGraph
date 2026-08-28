@@ -151,19 +151,14 @@ def _normalize_argo_wire_model(model_name: str) -> str:
     return fallback
 
 
-def _resolve_argo_api_key(request: ModelRequest) -> str:
-    """Resolve the value passed in the API-key field for Argo routes.
+def _resolve_argo_identity(request: ModelRequest) -> str:
+    """Resolve the identity passed through Argo client credential fields.
 
-    Mirrors the previous ``load_openai_model``: explicit key, else
-    ``OPENAI_API_KEY``, else the argo user / ``ARGO_USER`` / ``"chemgraph"``
-    placeholder.
+    Argo routes use an Argonne username rather than an API key. Keep their
+    identity isolated from explicit API keys and ``OPENAI_API_KEY`` so an
+    OpenAI credential can never be forwarded to an Argo endpoint.
     """
-    api_key = request.api_key
-    if api_key is None:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            api_key = request.argo_user or os.getenv("ARGO_USER", "chemgraph")
-    return api_key
+    return request.argo_user or os.getenv("ARGO_USER") or "chemgraph"
 
 
 def _normalize_argo_anthropic_base_url(base_url: str | None) -> str:
@@ -214,7 +209,7 @@ def prepare_openai(request: ModelRequest) -> PreparedModel:
     if request.base_url is None:
         logger.info("Using default Argo base URL: %s", base_url)
 
-    api_key = _resolve_argo_api_key(request)
+    argo_identity = _resolve_argo_identity(request)
 
     if requested_model_name not in supported_argo_models:
         raise ValueError(
@@ -224,11 +219,7 @@ def prepare_openai(request: ModelRequest) -> PreparedModel:
 
     is_argo_claude_model = requested_model_name.startswith("argo:claude-")
     is_argo_endpoint = bool(base_url and "argoapi" in base_url)
-    argo_user = (
-        request.argo_user or os.getenv("ARGO_USER", "chemgraph")
-        if is_argo_endpoint
-        else None
-    )
+    argo_user = argo_identity if is_argo_endpoint else None
 
     logger.info("Using custom base URL: %s", base_url)
     wire_model = _normalize_argo_model(requested_model_name, base_url)
@@ -238,7 +229,7 @@ def prepare_openai(request: ModelRequest) -> PreparedModel:
     client_kwargs = assemble_client_kwargs(
         model=wire_model,
         requested_model_name=requested_model_name,
-        api_key=api_key,
+        api_key=argo_identity,
         base_url=base_url,
         temperature=request.temperature,
         reasoning_effort=request.reasoning_effort,
@@ -266,13 +257,13 @@ def prepare_anthropic(request: ModelRequest) -> PreparedModel:
         )
 
     base_url = resolve_anthropic_base_url(requested_model_name, request.base_url)
-    api_key = _resolve_argo_api_key(request)
+    argo_identity = _resolve_argo_identity(request)
     wire_model = _normalize_argo_model(requested_model_name, base_url)
 
     logger.info("Using Argo Anthropic base URL: %s", base_url)
     client_kwargs = dict(
         model=wire_model,
-        api_key=api_key,
+        api_key=argo_identity,
         base_url=base_url,
         max_tokens=4000,
         streaming=True,
