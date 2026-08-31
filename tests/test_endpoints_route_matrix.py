@@ -81,6 +81,7 @@ def test_argo_hosted_route_uses_wire_name_and_user_payload():
     assert prepared.supports_structured_output is False
     kwargs = prepared.client_kwargs
     assert kwargs["model"] == "gpt4o"  # wire name
+    assert kwargs["api_key"] == "alice"
     assert kwargs["base_url"] == ARGO_HOSTED_URL
     assert kwargs["model_kwargs"] == {"user": "alice"}
     assert kwargs["max_tokens"] == 4000
@@ -141,6 +142,52 @@ def test_argo_anthropic_never_uses_anthropic_api_key(monkeypatch):
     assert prepared.client_kwargs["api_key"] == "alice"
 
 
+@pytest.mark.parametrize(
+    ("prepare", "model"),
+    [
+        (argo_ep.prepare_openai, "argo:gpt-4o"),
+        (argo_ep.prepare_anthropic, "argo:claude-opus-4.8"),
+    ],
+)
+def test_argo_identity_never_uses_api_keys(monkeypatch, prepare, model):
+    monkeypatch.setenv("ARGO_USER", "argo-env-user")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-secret")
+
+    prepared = prepare(ModelRequest(model=model, api_key="sk-explicit-secret"))
+
+    assert prepared.client_kwargs["api_key"] == "argo-env-user"
+
+
+def test_argo_configured_user_overrides_environment_and_keys(monkeypatch):
+    monkeypatch.setenv("ARGO_USER", "argo-env-user")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-secret")
+    prepared = argo_ep.prepare_openai(
+        ModelRequest(
+            model="argo:gpt-4o",
+            api_key="sk-explicit-secret",
+            argo_user="configured-user",
+        )
+    )
+
+    assert prepared.client_kwargs["api_key"] == "configured-user"
+    assert prepared.client_kwargs["model_kwargs"] == {"user": "configured-user"}
+
+
+@pytest.mark.parametrize(
+    ("prepare", "model"),
+    [
+        (argo_ep.prepare_openai, "argo:gpt-4o"),
+        (argo_ep.prepare_anthropic, "argo:claude-opus-4.8"),
+    ],
+)
+def test_argo_uses_placeholder_instead_of_api_keys(monkeypatch, prepare, model):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-secret")
+
+    prepared = prepare(ModelRequest(model=model, api_key="sk-explicit-secret"))
+
+    assert prepared.client_kwargs["api_key"] == "chemgraph"
+
+
 def test_argo_minimal_parameter_model_omits_sampling():
     prepared = argo_ep.prepare_openai(
         ModelRequest(model="argo:gpt-5", base_url=ARGO_HOSTED_URL)
@@ -153,13 +200,20 @@ def test_argo_minimal_parameter_model_omits_sampling():
 # --- Argo compatible (shim/proxy, prefix stripped) -------------------------
 
 
-def test_argo_compatible_route_strips_prefix_for_local_shim():
+def test_argo_compatible_route_strips_prefix_for_local_shim(monkeypatch):
+    monkeypatch.setenv("ARGO_USER", "argo-env-user")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-secret")
     prepared = argo_ep.prepare_openai(
-        ModelRequest(model="argo:gpt-4.1-mini", base_url="http://localhost:8080/v1")
+        ModelRequest(
+            model="argo:gpt-4.1-mini",
+            base_url="http://localhost:8080/v1",
+            api_key="sk-explicit-secret",
+        )
     )
     # A non-argoapi custom endpoint keeps the OpenAI-style name (prefix
     # stripped) and does not attach a hosted-Argo user payload.
     assert prepared.client_kwargs["model"] == "gpt-4.1-mini"
+    assert prepared.client_kwargs["api_key"] == "argo-env-user"
     assert "model_kwargs" not in prepared.client_kwargs
 
 

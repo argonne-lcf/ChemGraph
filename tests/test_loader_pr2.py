@@ -167,6 +167,18 @@ def test_explicit_openai_key_is_forwarded_and_overrides_env(monkeypatch):
     assert prepared.client_kwargs["api_key"] == "sk-explicit"
 
 
+def test_argo_loader_uses_argo_user_instead_of_api_keys(monkeypatch):
+    monkeypatch.setenv("ARGO_USER", "argo-env-user")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-secret")
+
+    _client, prepared = load_chat_model_prepared(
+        model_name="argo:gpt-4o",
+        api_key="sk-explicit-secret",
+    )
+
+    assert prepared.client_kwargs["api_key"] == "argo-env-user"
+
+
 # --- reasoning_effort flow --------------------------------------------------
 
 
