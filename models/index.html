@@ -1834,6 +1834,11 @@ the source of truth for identifiers supported by the installed version.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">ARGO_USER</span><span class="o">=</span><span class="s2">"&lt;anl-username&gt;"</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--model<span class="w"> </span>argo:gpt-4o<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Summarize the water molecule."</span>
 </code></pre></div>
+<p>For every <code>argo:</code> model, ChemGraph resolves the identity from an explicit or
+configured <code>argo_user</code>, then <code>ARGO_USER</code>, and finally the internal <code>chemgraph</code>
+placeholder required by the client libraries. Argo routes do not read an
+explicit <code>api_key</code> or <code>OPENAI_API_KEY</code>, so OpenAI credentials are never sent to
+an Argo endpoint.</p>
 <p>ALCF-hosted inference routes use <code>ALCF_ACCESS_TOKEN</code>. Available endpoints and
 access policies are facility-managed, so use <code>chemgraph models</code> and the current
 ALCF service instructions rather than copying an old model name.</p>
