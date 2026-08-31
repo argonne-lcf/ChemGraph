@@ -359,6 +359,22 @@ def _simulation_input_for_output(
     return params.model_copy(update={"calculator": output_calculator})
 
 
+def _extract_dipole_moment(atoms) -> List[Optional[float]]:
+    """Return an ASE dipole, including calculators that expose it via results."""
+    try:
+        dipole = atoms.get_dipole_moment()
+    except Exception:
+        dipole = getattr(getattr(atoms, "calc", None), "results", {}).get(
+            "dipole"
+        )
+    if dipole is None:
+        return [None, None, None]
+    try:
+        return [round(float(component), 4) for component in dipole]
+    except (TypeError, ValueError):
+        return [None, None, None]
+
+
 # ---------------------------------------------------------------------------
 # Misc helpers (kept for backward compat / UI)
 # ---------------------------------------------------------------------------
@@ -560,7 +576,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             "error_type": "ValueError",
             "message": (
                 f"Unsupported calculator: {calculator}. Available calculators are "
-                "MACE (mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
+                "MACE (mace_polar, mace_mp, mace_off, mace_anicc), EMT, TBLite (GFN2-xTB, GFN1-xTB), NWChem and Orca"
             ),
         }
     logger.info("Calculator loaded successfully: %s", type(calc).__name__)
@@ -590,11 +606,14 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         final_structure = atoms_to_atomsdata(atoms)
 
         dipole: List[Optional[float]] = [None, None, None]
+        dipole_unit = "e * Angstrom"
         if driver == "dipole":
-            try:
-                dipole = [round(x, 4) for x in atoms.get_dipole_moment()]
-            except Exception:
-                pass
+            dipole = _extract_dipole_moment(atoms)
+            if (
+                isinstance(calc_model, MaceCalc)
+                and calc_model.calculator_type == "mace_polar"
+            ):
+                dipole_unit = "Debye"
 
         end_time = time.time()
         wall_time = end_time - start_time
@@ -606,6 +625,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
             simulation_input=simulation_input,
             success=True,
             dipole_value=dipole,
+            dipole_unit=dipole_unit,
             potential_energy=potential_energy,
             single_point_energy=potential_energy,
             wall_time=wall_time,
@@ -638,7 +658,7 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                     driver, potential_energy, output_results_file
                 ),
                 "dipole_moment": dipole,
-                "dipole_unit": "e * Angstrom",
+                "dipole_unit": dipole_unit,
             }
 
     # ------------------------------------------------------------------

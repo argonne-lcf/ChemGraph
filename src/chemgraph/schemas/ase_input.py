@@ -135,8 +135,8 @@ def _accepted_calculator_type_hint(
 
 # Define all possible calculator classes
 _all_calculator_classes: List[Optional[Type[BaseModel]]] = [
-    FAIRChemCalc,
     MaceCalc,
+    FAIRChemCalc,
     AIMNET2Calc,
     TBLiteCalc,
     EMTCalc,
@@ -163,6 +163,20 @@ _calculator_names = ", ".join(_calculator_name_items)
 
 # Determine default calculator using only calculators detected as available.
 default_calculator = available_calculator_classes[0]
+
+
+def _default_calculator_description() -> str:
+    """Return the default calculator and any resolved model selection."""
+    calculator = default_calculator()
+    calculator_type = getattr(calculator, "calculator_type", None)
+    get_model_name = getattr(calculator, "get_model_name_for_output", None)
+    model_name = get_model_name() if get_model_name is not None else None
+    if calculator_type and model_name:
+        return (
+            f"{default_calculator.__name__} "
+            f"(calculator_type={calculator_type!r}, model={model_name!r})"
+        )
+    return default_calculator.__name__
 
 
 def get_available_calculator_names() -> List[str]:
@@ -237,7 +251,7 @@ def get_calculator_selection_context() -> str:
         "\n\nCalculator availability detected during ChemGraph initialization:\n"
         f"- Available ASE calculators: {_calculator_names}.\n"
         f"- Default calculator when the user does not specify one: "
-        f"{default_calculator.__name__}.\n"
+        f"{_default_calculator_description()}.\n"
         "- When calling run_ase, choose only from the available calculators above. "
         "If the user requests an unavailable calculator, choose the default "
         "available calculator when that substitution is appropriate; otherwise "
@@ -299,7 +313,7 @@ class ASEInputSchema(BaseModel):
     )
     calculator: CalculatorUnion = Field(
         default_factory=default_calculator,
-        description=f"The ASE calculator to be used. Support {_calculator_names}. Use {default_calculator.__name__} if not specified.",
+        description=f"The ASE calculator to be used. Support {_calculator_names}. Use {_default_calculator_description()} if not specified.",
     )
     fmax: float = Field(
         default=0.01,
@@ -373,7 +387,7 @@ class ase_input_schema_ensemble(BaseModel):
     )
     calculator: CalculatorUnion = Field(
         default_factory=default_calculator,
-        description=f"The ASE calculator to be used. Support {_calculator_names}. Use {default_calculator.__name__} if not specified.",
+        description=f"The ASE calculator to be used. Support {_calculator_names}. Use {_default_calculator_description()} if not specified.",
     )
     fmax: float = Field(
         default=0.01,

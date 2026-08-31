@@ -140,7 +140,7 @@ def get_default_config() -> Dict[str, Any]:
         },
         "chemistry": {
             "optimization": {"method": "BFGS", "fmax": 0.05, "steps": 200},
-            "calculators": {"default": "mace_mp", "fallback": "emt"},
+            "calculators": {"default": "mace_polar", "fallback": "emt"},
         },
         "output": {
             "files": {
