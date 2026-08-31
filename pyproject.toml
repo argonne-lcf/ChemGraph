@@ -33,7 +33,7 @@ dependencies = [
     "pubchempy==1.0.5",
     "numpy==2.2.6",
     "numexpr==2.11.0",
-    "pytest==8.4.1",
+    "pytest==9.0.3",
     "ase",
     "rdkit",
     "pymatgen",
