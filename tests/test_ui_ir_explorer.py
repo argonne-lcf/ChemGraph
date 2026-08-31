@@ -33,6 +33,9 @@ def test_explorer_html_embeds_payload_and_libraries():
     assert '"mode": 7' in html
     assert "Frame 0" in html  # frames text made it into the payload
     assert "plotly_hover" in html and "plotly_unhover" in html
+    assert '"Mode " + p.mode' not in html
+    assert "mode %{customdata[0]}" not in html
+    assert 'hovertemplate: "%{x:.1f} cm' in html
 
 
 def test_explorer_stops_previous_animation_before_starting_a_new_one():

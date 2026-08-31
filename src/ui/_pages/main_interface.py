@@ -1391,6 +1391,21 @@ def _trajectory_mode_index(filename: str, fallback: int) -> int:
         return fallback
 
 
+def _format_frequency_option(
+    value: object, display_index: int, imaginary: bool = False
+) -> str:
+    """Format a one-based mode label for a vibrational-frequency dropdown."""
+    raw_value = str(value).strip()
+    has_imaginary_suffix = raw_value.endswith("i")
+    numeric_value = raw_value[:-1] if has_imaginary_suffix else raw_value
+    suffix = "i" if imaginary or has_imaginary_suffix else ""
+    try:
+        frequency = f"{float(numeric_value):.2f}{suffix}"
+    except ValueError:
+        frequency = raw_value
+    return f"Mode {display_index}: {frequency} cm⁻¹"
+
+
 @st.cache_data(show_spinner=False)
 def _cached_mode_frames(traj_path: str, mtime: float) -> Optional[str]:
     """Load a normal-mode trajectory as multi-model XYZ text (cached).
@@ -1478,21 +1493,21 @@ def _render_ir_explorer_panel(
     # ----- Controls: mode dropdown + Gaussian width slider -----
     col_mode, col_width = st.columns([3, 2], vertical_alignment="bottom")
     with col_mode:
-        option_labels: dict[str, int] = {}
-        for p in peak_records:
-            suffix = "i" if p["imaginary"] else ""
+        mode_labels: dict[int, str] = {}
+        for display_index, p in enumerate(peak_records, start=1):
             freq_value = p["frequency"] if p["frequency"] is not None else 0.0
-            option_label = (
-                f"Mode {p['mode']}: {freq_value:.2f}{suffix} cm⁻¹"
+            mode_labels[p["mode"]] = _format_frequency_option(
+                freq_value,
+                display_index,
+                p["imaginary"],
             )
-            option_labels[option_label] = p["mode"]
-        selected_label = st.selectbox(
+        selected_mode = st.selectbox(
             "Normal mode",
-            list(option_labels.keys()),
+            list(mode_labels),
             index=0,
+            format_func=mode_labels.__getitem__,
             key=f"ir_frequency_select_{idx}",
         )
-        selected_mode = option_labels[selected_label]
     with col_width:
         width = st.slider(
             "Peak width (FWHM, cm⁻¹)",
@@ -1645,29 +1660,23 @@ def _render_ir_spectrum(idx: int, messages: list, entry: dict) -> None:
                 return
 
             st.write("**Select a frequency to visualize:**")
-            freq_options = {}
-            for mode_idx, row in modes.iterrows():
+            frequency_labels = {}
+            for display_index, (mode_idx, row) in enumerate(
+                modes.iterrows(), start=1
+            ):
                 freq_text = str(row["frequency"]).strip()
-                ase_mode_idx = _trajectory_mode_index(
-                    str(row["filename"]), mode_idx
+                frequency_labels[mode_idx] = _format_frequency_option(
+                    freq_text, display_index
                 )
-                suffix = "i" if freq_text.endswith("i") else ""
-                try:
-                    freq_value = float(freq_text.rstrip("i"))
-                    label = (
-                        f"Mode {ase_mode_idx}: {freq_value:.2f}{suffix} cm\u207b\u00b9"
-                    )
-                except ValueError:
-                    label = f"Mode {ase_mode_idx}: {freq_text} cm\u207b\u00b9"
-                freq_options[label] = mode_idx
 
-            selected_freq = st.selectbox(
+            selected_mode_row = st.selectbox(
                 "Frequency",
-                list(freq_options.keys()),
+                list(frequency_labels),
                 index=0,
+                format_func=frequency_labels.__getitem__,
                 key=f"ir_frequency_select_{idx}",
             )
-            traj_file = str(modes.loc[freq_options[selected_freq]]["filename"])
+            traj_file = str(modes.loc[selected_mode_row]["filename"])
             # The CSV lists bare trajectory names; they live next to the CSV
             # (the run's own turn directory), not at the chat-dir root.
             traj_base = str(Path(freq_path).parent) if freq_path else log_dir
