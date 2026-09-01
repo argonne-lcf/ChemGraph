@@ -155,6 +155,26 @@ def test_mlip_remote_execution_requires_absolute_output(monkeypatch):
         run_mlip_mcp._mlip_transport_hook(task)
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/remote/results/output.json",
+        "C:/remote/results/output.json",
+        r"\\worker\share\results\output.json",
+    ],
+)
+def test_remote_output_path_accepts_worker_platform_paths(path):
+    assert run_mlip_mcp._is_absolute_remote_path(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["output.json", "results/output.json", r"C:results\output.json"],
+)
+def test_remote_output_path_rejects_relative_paths(path):
+    assert not run_mlip_mcp._is_absolute_remote_path(path)
+
+
 @pytest.mark.asyncio
 async def test_run_mlip_mcp_returns_async_job_handle(monkeypatch):
     backend = _ImmediateBackend()

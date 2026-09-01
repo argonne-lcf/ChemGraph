@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from chemgraph.execution.base import TaskSpec
@@ -79,6 +79,11 @@ def _resolved_local_optional_file(path: str | None) -> str | None:
     return resolved if os.path.isfile(resolved) else None
 
 
+def _is_absolute_remote_path(path: str) -> bool:
+    """Recognize absolute worker paths independently of the server platform."""
+    return PurePosixPath(path).is_absolute() or PureWindowsPath(path).is_absolute()
+
+
 def _local_request_files(
     params: MLIPInputSchema | MLIPBatchInputSchema,
 ) -> list[str]:
@@ -127,7 +132,7 @@ def _validate_remote_paths(
     else:
         output_path = params.output_results_directory
         field_name = "output_results_directory"
-    if not os.path.isabs(output_path):
+    if not _is_absolute_remote_path(output_path):
         raise ValueError(
             f"{field_name} must be an absolute path on a non-shared execution "
             "backend."
