@@ -32,7 +32,7 @@ def _single_params(input_file, output_file, **overrides):
     values = {
         "input_structure_file": str(input_file),
         "output_results_file": str(output_file),
-        "model": {"provider": "mace", "checkpoint": "unused.model"},
+        "model": {"family": "mace", "checkpoint": "unused.model"},
     }
     values.update(overrides)
     return MLIPInputSchema(**values)
@@ -43,26 +43,34 @@ def _emt_context(counter=None):
     def calculator_context(_params):
         if counter is not None:
             counter["entered"] += 1
-        yield EMT(), {}
+        yield (
+            EMT(),
+            {},
+            {"backend": "ase", "device": "cpu", "dtype": "float64"},
+            {"family": "mace", "checkpoint": "unused.model"},
+        )
 
     return calculator_context
 
 
-def test_run_mlip_ase_energy_writes_runtime_neutral_result(tmp_path, monkeypatch):
+def test_run_mlip_ase_energy_writes_backend_neutral_result(tmp_path, monkeypatch):
     input_file = tmp_path / "copper.xyz"
     output_file = tmp_path / "energy.json"
     _write_copper(input_file)
-    monkeypatch.setattr(core, "_ase_calculator_context", _emt_context())
+    monkeypatch.setitem(core._ASE_CONTEXT_FACTORIES, "ase", _emt_context())
 
     result = core.run_mlip_core(_single_params(input_file, output_file))
 
     assert result["status"] == "success"
+    assert result["potential_energy"] == result["single_point_energy"]
     assert result["single_point_energy"] is not None
     stored = json.loads(output_file.read_text())
     assert stored["success"] is True
     assert stored["simulation_input"]["driver"] == "energy"
-    assert stored["runtime_info"]["type"] == "ase"
-    assert stored["model_info"]["provider"] == "mace"
+    assert stored["calculator_info"]["requested"]["backend"] == "ase"
+    assert stored["calculator_info"]["resolved"]["device"] == "cpu"
+    assert stored["model_info"]["requested"]["family"] == "mace"
+    assert stored["potential_energy"] == stored["single_point_energy"]
     assert len(stored["forces"]) == 2
 
 
@@ -70,7 +78,7 @@ def test_run_mlip_ase_fixed_cell_optimization(tmp_path, monkeypatch):
     input_file = tmp_path / "copper.xyz"
     output_file = tmp_path / "opt.json"
     initial = _write_copper(input_file, distance=3.0)
-    monkeypatch.setattr(core, "_ase_calculator_context", _emt_context())
+    monkeypatch.setitem(core._ASE_CONTEXT_FACTORIES, "ase", _emt_context())
 
     params = _single_params(
         input_file,
@@ -94,14 +102,14 @@ def test_batch_reuses_calculator_and_records_partial_failure(tmp_path, monkeypat
     _write_copper(first)
     _write_copper(second, distance=2.7)
     counter = {"entered": 0}
-    monkeypatch.setattr(
-        core, "_ase_calculator_context", _emt_context(counter)
+    monkeypatch.setitem(
+        core._ASE_CONTEXT_FACTORIES, "ase", _emt_context(counter)
     )
 
     params = MLIPBatchInputSchema(
         input_structure_files=[str(first), str(missing), str(second)],
         output_results_directory=str(tmp_path / "results"),
-        model={"provider": "mace", "checkpoint": "unused.model"},
+        model={"family": "mace", "checkpoint": "unused.model"},
     )
     result = core.run_mlip_batch_core(params)
 
@@ -137,10 +145,16 @@ def test_nvalchemi_batch_loads_once_and_chunks_in_order(tmp_path, monkeypatch):
 
     def load_model(params):
         loaded.append(params.model.checkpoint)
-        return sentinel_model
+        return (
+            sentinel_model,
+            {"backend": "nvalchemi", "device": "cuda"},
+            {"family": "mace", "checkpoint": "model.pt"},
+        )
 
-    def run_chunk(model, entries):
+    def run_chunk(model, entries, calculator_resolved, model_resolved):
         assert model is sentinel_model
+        assert calculator_resolved["backend"] == "nvalchemi"
+        assert model_resolved["family"] == "mace"
         chunks.append([entry[1] for entry in entries])
         return [
             core._success_result(
@@ -162,8 +176,8 @@ def test_nvalchemi_batch_loads_once_and_chunks_in_order(tmp_path, monkeypatch):
         input_structure_files=input_files,
         output_results_directory=str(tmp_path / "results"),
         batch_size=2,
-        runtime={"type": "nvalchemi", "device": "cuda"},
-        model={"provider": "mace", "checkpoint": "model.pt"},
+        calculator={"backend": "nvalchemi", "device": "cuda"},
+        model={"family": "mace", "checkpoint": "model.pt"},
     )
 
     result = core.run_mlip_batch_core(params)
@@ -196,15 +210,25 @@ def test_rootstock_calculator_uses_context_manager(monkeypatch):
     params = MLIPInputSchema(
         input_structure_file="unused.xyz",
         model={
-            "provider": "rootstock",
+            "family": "mace",
             "checkpoint": "org/model",
+        },
+        calculator={
+            "backend": "rootstock",
             "cluster": "local",
         },
     )
 
-    with core._ase_calculator_context(params) as (calculator, atoms_info):
+    with core._rootstock_calculator_context(params) as (
+        calculator,
+        atoms_info,
+        calculator_resolved,
+        model_resolved,
+    ):
         assert calculator == "calculator"
         assert atoms_info == {}
+        assert calculator_resolved["backend"] == "rootstock"
+        assert model_resolved == {"family": "mace", "checkpoint": "org/model"}
 
     assert [event[0] for event in events] == ["init", "enter", "exit"]
     assert events[0][1]["checkpoint"] == "org/model"
@@ -223,7 +247,7 @@ def test_optional_backend_error_is_persisted_per_item(tmp_path, monkeypatch):
     params = _single_params(
         input_file,
         output_file,
-        runtime={"type": "nvalchemi"},
+        calculator={"backend": "nvalchemi"},
     )
 
     result = core.run_mlip_core(params)
@@ -234,27 +258,105 @@ def test_optional_backend_error_is_persisted_per_item(tmp_path, monkeypatch):
     assert "nvalchemi_mace" in stored["error"]
 
 
-def test_schema_rejects_unsupported_runtime_model_pairs():
-    with pytest.raises(ValidationError, match="supports only provider='mace'"):
+def test_schema_rejects_unsupported_calculator_model_pairs():
+    with pytest.raises(ValidationError, match="supports only model.family='mace'"):
         MLIPInputSchema(
             input_structure_file="input.xyz",
-            runtime={"type": "nvalchemi"},
-            model={"provider": "uma", "checkpoint": "uma-s-1p1"},
+            calculator={"backend": "nvalchemi"},
+            model={"family": "uma", "checkpoint": "uma-s-1p1"},
         )
 
-    with pytest.raises(ValidationError, match="require runtime.type='ase'"):
+    with pytest.raises(ValidationError, match="only MACE-MP"):
         MLIPInputSchema(
             input_structure_file="input.xyz",
-            runtime={"type": "nvalchemi"},
-            model={"provider": "rootstock", "checkpoint": "org/model"},
+            calculator={"backend": "nvalchemi"},
+            model={
+                "family": "mace",
+                "checkpoint": "model.pt",
+                "calculator_type": "mace_off",
+            },
         )
+
+    with pytest.raises(ValidationError, match="does not support MACE dispersion"):
+        MLIPInputSchema(
+            input_structure_file="input.xyz",
+            calculator={"backend": "nvalchemi"},
+            model={
+                "family": "mace",
+                "checkpoint": "model.pt",
+                "dispersion": {},
+            },
+        )
+
+    with pytest.raises(ValidationError, match="omit calculator_type"):
+        MLIPInputSchema(
+            input_structure_file="input.xyz",
+            calculator={"backend": "rootstock"},
+            model={
+                "family": "mace",
+                "checkpoint": "org/model",
+                "calculator_type": "mace_mp",
+            },
+        )
+
+    with pytest.raises(ValidationError, match="setup_kwargs"):
+        MLIPInputSchema(
+            input_structure_file="input.xyz",
+            calculator={"backend": "rootstock"},
+            model={
+                "family": "uma",
+                "checkpoint": "org/model",
+                "task_name": "omol",
+            },
+        )
+
+    with pytest.raises(ValidationError, match="both cluster and root"):
+        MLIPInputSchema(
+            input_structure_file="input.xyz",
+            calculator={
+                "backend": "rootstock",
+                "cluster": "local",
+                "root": "/remote/root",
+            },
+            model={"family": "aimnet2", "checkpoint": "org/model"},
+        )
+
+
+def test_schema_routes_one_config_to_calculator_adapters():
+    requests = [
+        MLIPInputSchema(
+            input_structure_file="input.xyz",
+            model={"family": "uma", "checkpoint": "uma-s-1p1"},
+        ),
+        MLIPInputSchema(
+            input_structure_file="input.xyz",
+            calculator={"backend": "nvalchemi"},
+            model={"family": "mace", "checkpoint": "model.pt"},
+        ),
+        MLIPInputSchema(
+            input_structure_file="input.xyz",
+            calculator={"backend": "rootstock", "cluster": "local"},
+            model={"family": "aimnet2", "checkpoint": "org/model"},
+        ),
+    ]
+
+    assert [request.calculator.backend for request in requests] == [
+        "ase",
+        "nvalchemi",
+        "rootstock",
+    ]
+    assert [request.model.family for request in requests] == [
+        "uma",
+        "mace",
+        "aimnet2",
+    ]
 
 
 def test_relative_paths_resolve_through_chemgraph_log_dir(tmp_path, monkeypatch):
     input_file = tmp_path / "input.xyz"
     _write_copper(input_file)
     monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
-    monkeypatch.setattr(core, "_ase_calculator_context", _emt_context())
+    monkeypatch.setitem(core._ASE_CONTEXT_FACTORIES, "ase", _emt_context())
 
     result = core.run_mlip_core(
         _single_params("input.xyz", "nested/result.json")

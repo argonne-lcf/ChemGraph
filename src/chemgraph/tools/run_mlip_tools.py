@@ -1,4 +1,4 @@
-"""LangChain entry points for runtime-selectable MLIP calculations."""
+"""LangChain entry points for calculator-selectable MLIP calculations."""
 
 from langchain_core.tools import tool
 

@@ -1,4 +1,4 @@
-"""Plain-Python core for runtime-selectable MLIP calculations.
+"""Plain-Python core for calculator-selectable MLIP calculations.
 
 This module owns all calculation, batching, lifecycle, and serialization
 logic. Framework wrappers in ``run_mlip_tools.py`` and ``run_mlip_mcp.py``
@@ -16,15 +16,15 @@ from typing import Any, Iterator, Sequence
 
 from chemgraph.schemas.mlip_input import (
     AIMNet2ModelConfig,
-    ASEMLIPRuntimeConfig,
+    ASECalculatorConfig,
     MACEModelConfig,
     MLIPBatchInputSchema,
     MLIPBatchItemSchema,
     MLIPBatchManifestSchema,
     MLIPInputSchema,
     MLIPOutputSchema,
-    NVAlchemiRuntimeConfig,
-    RootstockModelConfig,
+    NVAlchemiCalculatorConfig,
+    RootstockCalculatorConfig,
     UMAModelConfig,
 )
 from chemgraph.tools.ase_core import (
@@ -68,17 +68,39 @@ def _write_result(result: MLIPOutputSchema, output_file: str) -> str:
     return str(output_path.resolve())
 
 
+def _model_info(
+    params: MLIPInputSchema,
+    resolved: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "requested": params.model.model_dump(mode="json"),
+        "resolved": resolved or {},
+    }
+
+
+def _calculator_info(
+    params: MLIPInputSchema,
+    resolved: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "requested": params.calculator.model_dump(mode="json"),
+        "resolved": resolved or {},
+    }
+
+
 def _failure_result(
     params: MLIPInputSchema,
     input_file: str,
     error: Exception | str,
     wall_time: float,
+    calculator_resolved: dict[str, Any] | None = None,
+    model_resolved: dict[str, Any] | None = None,
 ) -> MLIPOutputSchema:
     return MLIPOutputSchema(
         input_structure_file=input_file,
         simulation_input=params.model_dump(mode="json"),
-        runtime_info=params.runtime.model_dump(mode="json"),
-        model_info=params.model.model_dump(mode="json"),
+        calculator_info=_calculator_info(params, calculator_resolved),
+        model_info=_model_info(params, model_resolved),
         success=False,
         error=str(error),
         wall_time=wall_time,
@@ -94,6 +116,8 @@ def _success_result(
     stress: Any,
     converged: bool,
     wall_time: float,
+    calculator_resolved: dict[str, Any] | None = None,
+    model_resolved: dict[str, Any] | None = None,
 ) -> MLIPOutputSchema:
     force_values = None if forces is None else forces.tolist()
     stress_values = None if stress is None else stress.tolist()
@@ -102,11 +126,12 @@ def _success_result(
         converged=converged,
         final_structure=atoms_to_atomsdata(atoms),
         simulation_input=params.model_dump(mode="json"),
+        potential_energy=float(energy),
         single_point_energy=float(energy),
         forces=force_values,
         stress=stress_values,
-        runtime_info=params.runtime.model_dump(mode="json"),
-        model_info=params.model.model_dump(mode="json"),
+        calculator_info=_calculator_info(params, calculator_resolved),
+        model_info=_model_info(params, model_resolved),
         success=True,
         wall_time=wall_time,
     )
@@ -115,37 +140,15 @@ def _success_result(
 @contextmanager
 def _ase_calculator_context(
     params: MLIPInputSchema,
-) -> Iterator[tuple[Any, dict[str, Any]]]:
+) -> Iterator[
+    tuple[Any, dict[str, Any], dict[str, Any], dict[str, Any]]
+]:
     """Create one ASE calculator and keep it alive for the surrounding batch."""
-    runtime = params.runtime
-    if not isinstance(runtime, ASEMLIPRuntimeConfig):
-        raise TypeError("ASE calculator requested for a non-ASE runtime.")
+    calculator_config = params.calculator
+    if not isinstance(calculator_config, ASECalculatorConfig):
+        raise TypeError("ASE calculator requested for a non-ASE backend.")
 
     model = params.model
-    if isinstance(model, RootstockModelConfig):
-        try:
-            from rootstock import RootstockCalculator
-        except ImportError as exc:
-            raise ImportError(
-                "Rootstock provider requires the optional dependency. "
-                "Install ChemGraph with the 'rootstock' extra."
-            ) from exc
-
-        kwargs = {
-            "checkpoint": model.checkpoint,
-            "cluster": model.cluster,
-            "root": model.root,
-            "cache_root": model.cache_root,
-            "device": runtime.device,
-            "setup_kwargs": model.setup_kwargs,
-            "timeout": model.timeout,
-            "weights": model.weights,
-        }
-        kwargs = {key: value for key, value in kwargs.items() if value is not None}
-        with RootstockCalculator(**kwargs) as calculator:
-            yield calculator, {}
-        return
-
     if isinstance(model, MACEModelConfig):
         try:
             from chemgraph.schemas.calculators.mace_calc import (
@@ -154,22 +157,43 @@ def _ase_calculator_context(
             )
         except ImportError as exc:
             raise ImportError(
-                "MACE provider requires mace-torch to be installed."
+                "The MACE model family requires mace-torch to be installed."
             ) from exc
 
+        calculator_type = model.calculator_type or "mace_mp"
+        device = calculator_config.device or "cpu"
+        dtype = calculator_config.dtype or "float64"
+        dispersion = model.dispersion
         config = MaceCalc(
-            calculator_type=model.calculator_type,
+            calculator_type=calculator_type,
             model=model.checkpoint,
-            device=runtime.device,
-            default_dtype=runtime.dtype,
-            dispersion=model.dispersion,
-            damping=model.damping,
-            dispersion_xc=model.dispersion_xc,
-            dispersion_cutoff=model.dispersion_cutoff,
+            device=device,
+            default_dtype=dtype,
+            dispersion=dispersion is not None,
+            damping=dispersion.damping if dispersion is not None else "bj",
+            dispersion_xc=dispersion.xc if dispersion is not None else "pbe",
+            dispersion_cutoff=(
+                dispersion.cutoff if dispersion is not None else 21.167088422553647
+            ),
         )
         with mace_loading_lock():
             calculator = config.get_calculator()
-        yield calculator, {}
+        yield (
+            calculator,
+            {},
+            {
+                "backend": "ase",
+                "device": device,
+                "dtype": dtype,
+                "optimizer": calculator_config.optimizer,
+            },
+            {
+                "family": "mace",
+                "checkpoint": str(config.get_model_name_for_output()),
+                "calculator_type": calculator_type,
+                "dispersion": dispersion is not None,
+            },
+        )
         return
 
     if isinstance(model, UMAModelConfig):
@@ -177,18 +201,35 @@ def _ase_calculator_context(
             from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
         except ImportError as exc:
             raise ImportError(
-                "UMA provider requires fairchem-core to be installed."
+                "The UMA model family requires fairchem-core to be installed."
             ) from exc
 
+        device = calculator_config.device or "cpu"
+        task_name = model.task_name or "omol"
+        inference_settings = model.inference_settings or "default"
         config = FAIRChemCalc(
             model_name=model.checkpoint,
-            task_name=model.task_name,
-            inference_settings=model.inference_settings,
-            device=runtime.device,
+            task_name=task_name,
+            inference_settings=inference_settings,
+            device=device,
             charge=model.charge,
             multiplicity=model.multiplicity,
         )
-        yield config.get_calculator(), config.get_atoms_properties()
+        yield (
+            config.get_calculator(),
+            config.get_atoms_properties(),
+            {
+                "backend": "ase",
+                "device": device,
+                "optimizer": calculator_config.optimizer,
+            },
+            {
+                "family": "uma",
+                "checkpoint": model.checkpoint,
+                "task_name": task_name,
+                "inference_settings": inference_settings,
+            },
+        )
         return
 
     if isinstance(model, AIMNet2ModelConfig):
@@ -196,14 +237,75 @@ def _ase_calculator_context(
             from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
         except ImportError as exc:
             raise ImportError(
-                "AIMNet2 provider requires aimnet2calc to be installed."
+                "The AIMNet2 model family requires aimnet2calc to be installed."
             ) from exc
 
         config = AIMNET2Calc(model=model.checkpoint)
-        yield config.get_calculator(), {}
+        yield (
+            config.get_calculator(),
+            {},
+            {"backend": "ase", "optimizer": calculator_config.optimizer},
+            {"family": "aimnet2", "checkpoint": model.checkpoint},
+        )
         return
 
-    raise ValueError(f"Unsupported ASE MLIP provider: {model.provider}")
+    raise ValueError(f"Unsupported ASE MLIP model family: {model.family}")
+
+
+@contextmanager
+def _rootstock_calculator_context(
+    params: MLIPInputSchema,
+) -> Iterator[
+    tuple[Any, dict[str, Any], dict[str, Any], dict[str, Any]]
+]:
+    """Create one Rootstock calculator and reuse its worker for a batch."""
+    calculator_config = params.calculator
+    if not isinstance(calculator_config, RootstockCalculatorConfig):
+        raise TypeError("Rootstock calculator requested for a different backend.")
+
+    try:
+        from rootstock import RootstockCalculator
+    except ImportError as exc:
+        raise ImportError(
+            "Rootstock calculator requires the optional dependency. "
+            "Install ChemGraph with the 'rootstock' extra."
+        ) from exc
+
+    model = params.model
+    kwargs = {
+        "checkpoint": model.checkpoint,
+        "cluster": calculator_config.cluster,
+        "root": calculator_config.root,
+        "cache_root": calculator_config.cache_root,
+        "device": calculator_config.device,
+        "setup_kwargs": calculator_config.setup_kwargs,
+        "timeout": calculator_config.timeout,
+        "weights": calculator_config.weights,
+    }
+    kwargs = {key: value for key, value in kwargs.items() if value is not None}
+    atoms_info = {}
+    if isinstance(model, UMAModelConfig):
+        atoms_info = {"charge": model.charge, "spin": model.multiplicity}
+
+    with RootstockCalculator(**kwargs) as calculator:
+        yield (
+            calculator,
+            atoms_info,
+            {
+                "backend": "rootstock",
+                "device": calculator_config.device,
+                "optimizer": calculator_config.optimizer,
+                "cluster": calculator_config.cluster,
+                "root": calculator_config.root,
+            },
+            {"family": model.family, "checkpoint": model.checkpoint},
+        )
+
+
+_ASE_CONTEXT_FACTORIES = {
+    "ase": _ase_calculator_context,
+    "rootstock": _rootstock_calculator_context,
+}
 
 
 def _optional_stress(atoms):
@@ -222,12 +324,16 @@ def _run_ase_calculation(
     calculator: Any,
     atoms_info: dict[str, Any],
     start_time: float,
+    calculator_resolved: dict[str, Any],
+    model_resolved: dict[str, Any],
 ) -> MLIPOutputSchema:
     from ase.optimize import BFGS, FIRE, GPMin, LBFGS, MDMin
 
-    runtime = params.runtime
-    if not isinstance(runtime, ASEMLIPRuntimeConfig):
-        raise TypeError("ASE calculation requested for a non-ASE runtime.")
+    calculator_config = params.calculator
+    if not isinstance(
+        calculator_config, (ASECalculatorConfig, RootstockCalculatorConfig)
+    ):
+        raise TypeError("ASE calculation requested for an incompatible backend.")
 
     atoms.info.update(atoms_info)
     atoms.calc = calculator
@@ -240,7 +346,7 @@ def _run_ase_calculation(
             "fire": FIRE,
             "mdmin": MDMin,
         }
-        optimizer = optimizer_classes[runtime.optimizer](atoms, logfile=None)
+        optimizer = optimizer_classes[calculator_config.optimizer](atoms, logfile=None)
         converged = bool(optimizer.run(fmax=params.fmax, steps=params.steps))
 
     energy = float(atoms.get_potential_energy())
@@ -255,52 +361,75 @@ def _run_ase_calculation(
         stress,
         converged,
         time.time() - start_time,
+        calculator_resolved,
+        model_resolved,
     )
 
 
 def _load_nvalchemi_model(params: MLIPInputSchema):
-    runtime = params.runtime
+    calculator_config = params.calculator
     model_config = params.model
-    if not isinstance(runtime, NVAlchemiRuntimeConfig) or not isinstance(
+    if not isinstance(calculator_config, NVAlchemiCalculatorConfig) or not isinstance(
         model_config, MACEModelConfig
     ):
-        raise TypeError("Invalid NVIDIA ALCHEMI runtime/model configuration.")
+        raise TypeError("Invalid NVIDIA ALCHEMI calculator/model configuration.")
 
     try:
         import torch
         from nvalchemi.models.mace import MACEWrapper
     except ImportError as exc:
         raise ImportError(
-            "NVIDIA ALCHEMI runtime requires ChemGraph's 'nvalchemi_mace' "
+            "NVIDIA ALCHEMI calculator support requires ChemGraph's "
+            "'nvalchemi_mace' "
             "extra plus the CUDA-specific ALCHEMI dependencies."
         ) from exc
 
-    dtype = getattr(torch, runtime.dtype)
+    dtype = getattr(torch, calculator_config.dtype)
     wrapped = MACEWrapper.from_checkpoint(
         model_config.checkpoint,
-        device=torch.device(runtime.device),
+        device=torch.device(calculator_config.device),
         dtype=dtype,
-        enable_cueq=runtime.enable_cueq,
-        compile_model=runtime.compile_model,
+        enable_cueq=calculator_config.enable_cueq,
+        compile_model=calculator_config.compile_model,
     )
     wrapped.eval()
-    return wrapped
+    return (
+        wrapped,
+        {
+            "backend": "nvalchemi",
+            "device": calculator_config.device,
+            "dtype": calculator_config.dtype,
+            "optimizer": calculator_config.optimizer,
+            "compile_model": calculator_config.compile_model,
+            "enable_cueq": calculator_config.enable_cueq,
+        },
+        {
+            "family": "mace",
+            "checkpoint": model_config.checkpoint,
+            "calculator_type": model_config.calculator_type or "mace_mp",
+            "dispersion": False,
+        },
+    )
 
 
-def _atoms_to_nvalchemi_data(atoms, runtime: NVAlchemiRuntimeConfig):
+def _atoms_to_nvalchemi_data(
+    atoms,
+    calculator_config: NVAlchemiCalculatorConfig,
+):
     try:
         import torch
         from nvalchemi.data import AtomicData
     except ImportError as exc:
         raise ImportError(
-            "NVIDIA ALCHEMI runtime requires ChemGraph's 'nvalchemi_mace' "
+            "NVIDIA ALCHEMI calculator support requires ChemGraph's "
+            "'nvalchemi_mace' "
             "extra plus the CUDA-specific ALCHEMI dependencies."
         ) from exc
 
-    dtype = getattr(torch, runtime.dtype)
+    dtype = getattr(torch, calculator_config.dtype)
     data = AtomicData.from_atoms(
         atoms,
-        device=torch.device(runtime.device),
+        device=torch.device(calculator_config.device),
         dtype=dtype,
     )
     data.forces = torch.zeros(data.num_nodes, 3, device=data.device, dtype=dtype)
@@ -318,6 +447,8 @@ def _nvalchemi_result(
     data,
     converged: bool,
     start_time: float,
+    calculator_resolved: dict[str, Any] | None = None,
+    model_resolved: dict[str, Any] | None = None,
 ) -> MLIPOutputSchema:
     final_atoms = original_atoms.copy()
     final_atoms.positions = data.positions.detach().cpu().numpy()
@@ -340,29 +471,37 @@ def _nvalchemi_result(
         stress,
         converged,
         time.time() - start_time,
+        calculator_resolved,
+        model_resolved,
     )
 
 
 def _run_nvalchemi_chunk(
     model: Any,
     entries: Sequence[tuple[MLIPInputSchema, str, Any, float]],
+    calculator_resolved: dict[str, Any] | None = None,
+    model_resolved: dict[str, Any] | None = None,
 ) -> list[MLIPOutputSchema]:
     try:
         from nvalchemi.data import Batch
         from nvalchemi.dynamics import BaseDynamics, ConvergenceHook, FIRE
     except ImportError as exc:
         raise ImportError(
-            "NVIDIA ALCHEMI runtime requires ChemGraph's 'nvalchemi_mace' "
+            "NVIDIA ALCHEMI calculator support requires ChemGraph's "
+            "'nvalchemi_mace' "
             "extra plus the CUDA-specific ALCHEMI dependencies."
         ) from exc
 
     params0 = entries[0][0]
-    runtime = params0.runtime
-    if not isinstance(runtime, NVAlchemiRuntimeConfig):
-        raise TypeError("NVIDIA ALCHEMI calculation received a non-ALCHEMI runtime.")
+    calculator_config = params0.calculator
+    if not isinstance(calculator_config, NVAlchemiCalculatorConfig):
+        raise TypeError(
+            "NVIDIA ALCHEMI calculation received a different calculator backend."
+        )
 
     data_list = [
-        _atoms_to_nvalchemi_data(atoms, runtime) for _, _, atoms, _ in entries
+        _atoms_to_nvalchemi_data(atoms, calculator_config)
+        for _, _, atoms, _ in entries
     ]
     batch = Batch.from_data_list(data_list)
     hooks = model.make_neighbor_hooks()
@@ -373,7 +512,7 @@ def _run_nvalchemi_chunk(
         convergence = ConvergenceHook.from_fmax(params0.fmax)
         dynamics = FIRE(
             model=model,
-            dt=runtime.dt,
+            dt=calculator_config.dt,
             hooks=hooks,
             convergence_hook=convergence,
             n_steps=params0.steps,
@@ -398,6 +537,8 @@ def _run_nvalchemi_chunk(
             data,
             index in converged_indices,
             start_time,
+            calculator_resolved,
+            model_resolved,
         )
         for index, ((params, input_file, atoms, start_time), data) in enumerate(
             zip(entries, final_data)
@@ -414,7 +555,9 @@ def _chunks_by_capacity(
     atom_count = 0
     for entry in entries:
         n_atoms = len(entry[2])
-        exceeds_atoms = max_atoms is not None and chunk and atom_count + n_atoms > max_atoms
+        exceeds_atoms = (
+            max_atoms is not None and chunk and atom_count + n_atoms > max_atoms
+        )
         if len(chunk) >= batch_size or exceeds_atoms:
             yield chunk
             chunk = []
@@ -449,9 +592,16 @@ def _execute_single_requests(
         return [result for result in results if result is not None]
 
     first_params = prepared[0][1]
-    if first_params.runtime.type == "ase":
+    backend = first_params.calculator.backend
+    if backend in _ASE_CONTEXT_FACTORIES:
+        context_factory = _ASE_CONTEXT_FACTORIES[backend]
         try:
-            with _ase_calculator_context(first_params) as (calculator, atoms_info):
+            with context_factory(first_params) as (
+                calculator,
+                atoms_info,
+                calculator_resolved,
+                model_resolved,
+            ):
                 for index, params, input_file, atoms, started in prepared:
                     try:
                         results[index] = _run_ase_calculation(
@@ -461,19 +611,28 @@ def _execute_single_requests(
                             calculator,
                             atoms_info,
                             started,
+                            calculator_resolved,
+                            model_resolved,
                         )
                     except Exception as exc:
                         results[index] = _failure_result(
-                            params, input_file, exc, time.time() - started
+                            params,
+                            input_file,
+                            exc,
+                            time.time() - started,
+                            calculator_resolved,
+                            model_resolved,
                         )
         except Exception as exc:
             for index, params, input_file, _, started in prepared:
                 results[index] = _failure_result(
                     params, input_file, exc, time.time() - started
                 )
-    else:
+    elif backend == "nvalchemi":
         try:
-            model = _load_nvalchemi_model(first_params)
+            model, calculator_resolved, model_resolved = _load_nvalchemi_model(
+                first_params
+            )
             nvalchemi_entries = [
                 (params, input_file, atoms, started)
                 for _, params, input_file, atoms, started in prepared
@@ -483,7 +642,12 @@ def _execute_single_requests(
                 nvalchemi_entries, batch_size, max_atoms
             ):
                 try:
-                    chunk_results = _run_nvalchemi_chunk(model, chunk)
+                    chunk_results = _run_nvalchemi_chunk(
+                        model,
+                        chunk,
+                        calculator_resolved,
+                        model_resolved,
+                    )
                     if len(chunk_results) != len(chunk):
                         raise RuntimeError(
                             "NVIDIA ALCHEMI returned a different number of "
@@ -492,7 +656,12 @@ def _execute_single_requests(
                 except Exception as exc:
                     chunk_results = [
                         _failure_result(
-                            params, input_file, exc, time.time() - started
+                            params,
+                            input_file,
+                            exc,
+                            time.time() - started,
+                            calculator_resolved,
+                            model_resolved,
                         )
                         for params, input_file, _, started in chunk
                     ]
@@ -505,6 +674,8 @@ def _execute_single_requests(
                 results[index] = _failure_result(
                     params, input_file, exc, time.time() - started
                 )
+    else:
+        raise ValueError(f"Unsupported calculator backend: {backend}")
 
     return [result for result in results if result is not None]
 
@@ -515,6 +686,7 @@ def _tool_result(result: MLIPOutputSchema, result_file: str) -> dict[str, Any]:
             "status": "success",
             "message": f"MLIP calculation completed. Results saved to {result_file}",
             "output_results_file": result_file,
+            "potential_energy": result.potential_energy,
             "single_point_energy": result.single_point_energy,
             "unit": result.energy_unit,
             "converged": result.converged,
@@ -528,7 +700,7 @@ def _tool_result(result: MLIPOutputSchema, result_file: str) -> dict[str, Any]:
 
 
 def run_mlip_core(params: MLIPInputSchema) -> dict[str, Any]:
-    """Run one MLIP calculation and persist a runtime-neutral JSON result."""
+    """Run one MLIP calculation and persist a backend-neutral JSON result."""
     if not isinstance(params, MLIPInputSchema):
         params = MLIPInputSchema.model_validate(params)
     result = _execute_single_requests([params], batch_size=1)[0]
@@ -559,8 +731,8 @@ def _single_params_for_batch_item(
         input_structure_file=input_file,
         output_results_file=output_file,
         driver=batch_params.driver,
-        runtime=batch_params.runtime,
         model=batch_params.model,
+        calculator=batch_params.calculator,
         fmax=batch_params.fmax,
         steps=batch_params.steps,
     )
@@ -613,6 +785,8 @@ def run_mlip_batch_core(params: MLIPBatchInputSchema) -> dict[str, Any]:
                 result.input_structure_file,
                 f"Could not write MLIP result: {exc}",
                 result.wall_time or 0.0,
+                result.calculator_info.get("resolved"),
+                result.model_info.get("resolved"),
             )
         items.append(
             MLIPBatchItemSchema(
@@ -633,10 +807,25 @@ def run_mlip_batch_core(params: MLIPBatchInputSchema) -> dict[str, Any]:
     else:
         status = "failure"
 
+    calculator_info = next(
+        (
+            result.calculator_info
+            for result in results
+            if result.calculator_info.get("resolved")
+        ),
+        {
+            "requested": params.calculator.model_dump(mode="json"),
+            "resolved": {},
+        },
+    )
+    model_info = next(
+        (result.model_info for result in results if result.model_info.get("resolved")),
+        {"requested": params.model.model_dump(mode="json"), "resolved": {}},
+    )
     manifest = MLIPBatchManifestSchema(
         status=status,
-        runtime_info=params.runtime.model_dump(mode="json"),
-        model_info=params.model.model_dump(mode="json"),
+        calculator_info=calculator_info,
+        model_info=model_info,
         total=len(items),
         succeeded=succeeded,
         failed=failed,

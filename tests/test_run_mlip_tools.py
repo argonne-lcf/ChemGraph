@@ -5,7 +5,7 @@ from chemgraph.tools import run_mlip_tools
 def test_run_mlip_langchain_tool_delegates(monkeypatch):
     params = MLIPInputSchema(
         input_structure_file="input.xyz",
-        model={"provider": "mace", "checkpoint": "model.pt"},
+        model={"family": "mace", "checkpoint": "model.pt"},
     )
     monkeypatch.setattr(
         run_mlip_tools,
@@ -21,7 +21,7 @@ def test_run_mlip_langchain_tool_delegates(monkeypatch):
 def test_run_mlip_batch_langchain_tool_delegates(monkeypatch):
     params = MLIPBatchInputSchema(
         input_structure_files=["input.xyz"],
-        model={"provider": "mace", "checkpoint": "model.pt"},
+        model={"family": "mace", "checkpoint": "model.pt"},
     )
     monkeypatch.setattr(
         run_mlip_tools,

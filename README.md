@@ -256,6 +256,8 @@ available in that environment.
 | MACE | Core install | MACE-Polar medium is the default and supports molecular dipole moments; first use downloads ASL-licensed model weights |
 | TBLite / xTB | `pip install "chemgraph[calculators]"` | May require a Fortran toolchain when no wheel is available |
 | UMA / FAIRChem | `pip install "chemgraph[uma]"` | Use a separate environment from MACE if `e3nn` resolution conflicts |
+| NVIDIA ALCHEMI for MACE | `pip install "chemgraph[nvalchemi_mace]"` | CUDA-oriented batched MACE evaluation |
+| Rootstock | `pip install "chemgraph[rootstock]"` | Hosted model adapter exposed through an ASE calculator |
 | NWChem | Install the `nwchem` executable separately | Must be on `PATH` or configured through ASE |
 | ORCA | Install ORCA separately | Must be on `PATH` or configured through ASE |
 | AIMNet2 | Install `aimnet2calc` separately | Detected lazily when installed |

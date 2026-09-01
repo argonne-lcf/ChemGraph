@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-        install_extras: [core, calculators, uma, ui, parsl, xanes, rag]
+        install_extras: [core, calculators, rootstock, nvalchemi_mace, uma, ui, parsl, xanes, rag]
 
     steps:
     - uses: actions/checkout@v4
@@ -81,6 +81,8 @@ jobs:
         # Mapping of extras to key packages they provide
         extra_packages = {
             'calculators': ['tblite'],
+            'rootstock': ['rootstock'],
+            'nvalchemi_mace': ['nvalchemi'],
             'uma': ['fairchem.core', 'e3nn'],
             'ui': ['streamlit', 'py3Dmol', 'plotly'],
             'parsl': ['parsl'],
