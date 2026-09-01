@@ -1,0 +1,24 @@
+# ChemGraph config: Aurora Inkling inference (two-node recipe).
+# Node 0 runs llama-server (PG10: 10-tile pure GPU, UD-IQ1_S GGUF).
+# Node 1 runs ChemGraph; AURORA_BASE_URL is set by the PBS script from ENDPOINT.txt.
+#
+# Usage:
+#   qsub -q debug-scaling scripts/aurora/two_node_inkling.pbs
+#   # or manually: source scripts/aurora/chemgraph_aurora_env.sh ENDPOINT.txt
+#   chemgraph run --config config/aurora_inkling.toml -q "..."
+
+[general]
+model = "aurora:inkling"
+workflow = "single_agent"
+output = "last_message"
+recursion_limit = 20
+
+[api.aurora]
+# Set by exporting AURORA_BASE_URL (chemgraph_aurora_env.sh reads ENDPOINT.txt).
+# Override manually for a fixed node: base_url = "http://<node_ip>:8000/v1"
+base_url = "http://127.0.0.1:8000/v1"
+timeout = 120
+
+[logging]
+level = "WARNING"
+console = true

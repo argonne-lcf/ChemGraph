@@ -1,0 +1,127 @@
+#!/bin/bash -l
+#PBS -l select=2
+#PBS -l place=scatter
+#PBS -l walltime=01:00:00
+#PBS -q debug-scaling
+#PBS -A MatSciAI
+#PBS -l filesystems=flare
+#PBS -N ink-chemgraph
+#PBS -j oe
+#PBS -o /lus/flare/projects/MatSciAI/xiaoliyan/workdir/alcf-aurora-llm/inkling/logs/chemgraph_two_node.out
+
+# Two-node ChemGraph + Inkling inference recipe:
+#   Node 0: llama-server (Inkling UD-IQ1_S, C_PG8 — 8-tile pure GPU, max ctx, --jinja for tool calls)
+#   Node 1: ChemGraph scientific workload (aurora:inkling via AURORA_BASE_URL)
+#
+# The two nodes communicate via the intra-cluster IP of node 0 written to ENDPOINT.txt.
+# No SSH tunnel needed — both nodes are on the same job allocation.
+#
+# Usage:
+#   qsub -q debug-scaling scripts/aurora/two_node_inkling.pbs
+#   qsub -q debug-scaling -v QUERY="Optimize water with EMT and report energy",CTX=4096 ...
+#
+# Performance reference (Inkling UD-IQ1_S, PG10, single stream):
+#   gen ~6.73 tok/s, prefill ~8.7 tok/s, TTFT ~2.3 s
+
+set -o pipefail
+
+# ── paths ────────────────────────────────────────────────────────────────────
+INKLING=/lus/flare/projects/MatSciAI/xiaoliyan/workdir/alcf-aurora-llm/inkling
+BIN=${BIN:-$HOME/llamacpp-sycl/build/bin}   # your llama.cpp SYCL build (see build_llamacpp_sycl.pbs)
+GGUF=${GGUF:-$INKLING/models/unsloth-Inkling-GGUF/UD-IQ1_S/inkling-UD-IQ1_S-00001-of-00007.gguf}
+CG_REPO=${CG_REPO:-/lus/flare/projects/MatSciAI/xiaoliyan/workdir/ChemGraph}
+CG_VENV=${CG_VENV:-/lus/flare/projects/MatSciAI/xiaoliyan/software/venvs/chemgraph}
+CENV=${CENV:-/lus/flare/projects/MatSciAI/xiaoliyan/software/conda/envs/aurora-llm}
+LOGDIR=${LOGDIR:-$INKLING/logs}; mkdir -p "$LOGDIR"
+
+# ── tunable parameters ────────────────────────────────────────────────────────
+PORT=${PORT:-8000}; SERVED=${SERVED:-inkling}
+CTX=${CTX:-131072}; NPAR=${NPAR:-4}; NThreads=${NThreads:-32}   # 131072 = Inkling native max context
+QUERY=${QUERY:-"Build water from SMILES O, optimize it with EMT, and report the final energy."}
+
+# ── node layout ───────────────────────────────────────────────────────────────
+NODE0=$(head -1 "$PBS_NODEFILE")      # LLM server node
+NODE1=$(sed -n '2p' "$PBS_NODEFILE")  # ChemGraph / science node
+NODE0_IP=$(ssh "$NODE0" hostname -i 2>/dev/null | awk '{print $1}')
+echo "START $(date -Is) job=$PBS_JOBID"
+echo "NODE0=$NODE0 (ip=$NODE0_IP) -> llama-server"
+echo "NODE1=$NODE1 -> ChemGraph"
+echo "GGUF=$GGUF PORT=$PORT CTX=$CTX"
+[ -e "$GGUF" ] || { echo "ERROR: GGUF not found ($GGUF)"; exit 2; }
+
+# ── launch all-XPU llama-server on node 0 (8-tile pure GPU, max context) ──────
+# All-XPU: ZE_AFFINITY_MASK=0..7 (8 tiles), NO -ncmoe, layer split, fa on, --jinja.
+# Validated at -c 131072 (max ctx, 8k fill PASS = campaign arm C_PG8). node 0 is dedicated
+# to the LLM; node 1 runs ChemGraph, so using 10 tiles here is fine.
+ssh "$NODE0" bash -s <<SSHEOF &
+set -o pipefail
+module load oneapi/release/2025.3.1
+export ZE_FLAT_DEVICE_HIERARCHY=FLAT
+export ZE_AFFINITY_MASK=0,1,2,3,4,5,6,7
+export GGML_SYCL_ENABLE_VMM=0
+export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+JT=${PBS_JOBID:-$$}
+export TRITON_CACHE_DIR=/tmp/tc_\${JT} SYCL_CACHE_DIR=/tmp/sc_\${JT}
+mkdir -p "\$TRITON_CACHE_DIR" "\$SYCL_CACHE_DIR"
+echo "all-XPU llama-server: 8-tile layer split -c $CTX on \$(hostname)"
+"$BIN/llama-server" \
+  -m "$GGUF" \
+  -c $CTX -ngl 99 -sm layer \
+  -ts 0.125,0.125,0.125,0.125,0.125,0.125,0.125,0.125 \
+  -fa on --reasoning off --jinja \
+  --no-mmap -t $NThreads \
+  --parallel $NPAR --cont-batching \
+  --alias $SERVED \
+  --host 0.0.0.0 --port $PORT > "$LOGDIR/inkling_server.out" 2>&1
+echo "llama-server exited \$?"
+SSHEOF
+SRV_PID=$!
+
+# ── wait for server to become ready ──────────────────────────────────────────
+READY=0
+for _ in $(seq 1 180); do
+  curl -sf "http://$NODE0_IP:$PORT/health" >/dev/null 2>&1 && { READY=1; echo "server ready $(date -Is)"; break; }
+  sleep 10
+done
+if [ "$READY" != 1 ]; then
+  echo "SERVER NOT READY — tail:"; tail -40 "$LOGDIR/inkling_server.out"
+  kill $SRV_PID 2>/dev/null; exit 4
+fi
+
+# ── publish endpoint ──────────────────────────────────────────────────────────
+cat > "$CG_REPO/ENDPOINT.txt" <<EOF
+node=$NODE0
+ip=$NODE0_IP
+url=http://$NODE0_IP:$PORT/v1
+model=aurora:$SERVED
+job=$PBS_JOBID
+started=$(date -Is)
+EOF
+echo "ENDPOINT: http://$NODE0_IP:$PORT/v1  model=aurora:$SERVED"
+
+# ── run ChemGraph on node 1 ───────────────────────────────────────────────────
+# AURORA_BASE_URL points at node 0's server; node 1 reaches it via intra-cluster IP.
+echo "=== ChemGraph run on $NODE1 ==="
+ssh "$NODE1" bash -s <<CGEOF
+set -o pipefail
+export AURORA_BASE_URL="http://$NODE0_IP:$PORT/v1"
+export OPENAI_API_KEY=dummy
+export http_proxy=http://proxy.alcf.anl.gov:3128 https_proxy=http://proxy.alcf.anl.gov:3128
+export no_proxy="$NODE0_IP,127.0.0.1,localhost" NO_PROXY="$NODE0_IP,127.0.0.1,localhost"
+export LD_LIBRARY_PATH="$CENV/lib:\$LD_LIBRARY_PATH"
+export CHEMGRAPH_LOG_DIR="$LOGDIR/cg_logs"
+mkdir -p "\$CHEMGRAPH_LOG_DIR"
+cd "$CG_REPO"
+"$CG_VENV/bin/chemgraph" run \
+  --model aurora:$SERVED \
+  --workflow single_agent \
+  --output last_message \
+  -v \
+  -q "$QUERY" 2>&1 | tee "$LOGDIR/chemgraph_run.out"
+echo "CHEMGRAPH_RC=\${PIPESTATUS[0]}"
+CGEOF
+
+echo "=== shutting down server ==="
+kill $SRV_PID 2>/dev/null
+wait $SRV_PID 2>/dev/null
+echo "DONE $(date -Is)"
