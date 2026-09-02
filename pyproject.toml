@@ -40,7 +40,7 @@ dependencies = [
     "mace-torch>=0.3.16",
     "graph-longrange @ git+https://github.com/WillBaldwin0/graph_electrostatics.git@v0.4.0",
     "globus_sdk",
-    "streamlit==1.48.1",
+    "streamlit==1.54.0",
     "py3Dmol",
     "plotly",
     "langsmith==0.10.10",
