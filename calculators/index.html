@@ -1789,7 +1789,7 @@ runtime; optional engines that cannot be imported or located are omitted.</p>
 <tr>
 <td>MACE</td>
 <td>Included in core ChemGraph</td>
-<td>General ML potential; downloads weights on first use</td>
+<td>MACE-Polar medium is the default; supports energies, forces, and molecular dipole moments</td>
 </tr>
 <tr>
 <td>TBLite</td>
@@ -1838,9 +1838,14 @@ not exist for another.</p>
 It is not a general-purpose high-accuracy molecular method. Do not treat an EMT
 result as scientifically appropriate merely because the workflow completed.</p>
 <h2 id="mace-downloads">MACE downloads<a class="headerlink" href="#mace-downloads" title="Permanent link">&para;</a></h2>
-<p>MACE is installed with the core package, but pretrained weights may be fetched
-on first use. In restricted or offline environments, pre-stage the required
-model cache or choose EMT for the initial test.</p>
+<p>MACE is installed with the core package. When no calculator is specified,
+ChemGraph uses the MACE-Polar medium checkpoint (<code>mace_polar</code> with
+<code>polar-1-m</code>). Pretrained weights may be fetched on first use. In restricted or
+offline environments, pre-stage the required model cache or choose EMT for the
+initial test. MACE-Polar checkpoints are distributed under the Academic
+Software License (ASL); review its terms before use.</p>
+<p>MACE-Polar can calculate molecular dipole moments with <code>driver="dipole"</code>.
+ChemGraph reports these dipole vectors in Debye.</p>
 <h2 id="uma-dependency-isolation">UMA dependency isolation<a class="headerlink" href="#uma-dependency-isolation" title="Permanent link">&para;</a></h2>
 <p>The UMA/fairchem stack can require an <code>e3nn</code> version that conflicts with MACE.
 Use a separate virtual environment for UMA rather than forcing incompatible

@@ -2,106 +2,106 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/acknowledgements/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/calculators/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/citation/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/cli/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/code_formatting_and_linting/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/codex_subscription/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/configuration_with_toml/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/contributing/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/docker_support/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/evaluation/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/example_usage/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/hpc_and_academy/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/installation/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/kubernetes/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/license/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/mcp_servers/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/models/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/project_structure/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/python_api/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/quickstart/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/registries/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/running_local_models/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/streamlit_web_interface/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/troubleshooting/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
     <url>
          <loc>https://argonne-lcf.github.io/ChemGraph/workflows/</loc>
-         <lastmod>2026-08-31</lastmod>
+         <lastmod>2026-09-02</lastmod>
     </url>
 </urlset>
