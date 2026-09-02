@@ -234,7 +234,7 @@ streamlit run src/ui/app.py
 
 `config.toml` at the project root controls runtime settings:
 - `[general]` -- model, workflow, recursion_limit, verbosity
-- `[chemistry.calculators]` -- default calculator (mace_mp), fallback (emt)
+- `[chemistry.calculators]` -- default calculator (mace_polar), fallback (emt)
 - `[chemistry.optimization]` -- optimizer method, fmax, steps
 - `[api.*]` -- LLM provider base URLs and timeouts
 

@@ -319,7 +319,11 @@ def test_mace_ensemble_energy_prefers_canonical_key():
 
 @pytest.mark.parametrize(
     ("calculator_type", "expected_model"),
-    [("mace_mp", "medium-mpa-0"), ("mace_off", "medium")],
+    [
+        ("mace_polar", "polar-1-m"),
+        ("mace_mp", "medium-mpa-0"),
+        ("mace_off", "medium"),
+    ],
 )
 @pytest.mark.skipif(
     importlib.util.find_spec("mace") is None, reason="MACE not installed"
@@ -361,6 +365,60 @@ def test_run_ase_core_records_default_mace_model(
     assert received_models == [None]
     assert params.calculator.model is None
     assert output["simulation_input"]["calculator"]["model"] == expected_model
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("mace") is None, reason="MACE not installed"
+)
+def test_run_ase_core_reads_mace_polar_dipole_from_calculator_results(
+    monkeypatch, tmp_path
+):
+    """Use PolarMACE's result-level dipole and report its native units."""
+    from ase import Atoms
+    from ase.calculators.calculator import Calculator
+    from ase.io import write as ase_write
+
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from chemgraph.schemas.calculators.mace_calc import MaceCalc
+    from chemgraph.tools import ase_core
+
+    class PolarLikeCalculator(Calculator):
+        implemented_properties = ["energy"]
+
+        def calculate(self, atoms=None, properties=None, system_changes=None):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {
+                "energy": -1.25,
+                "dipole": [0.12345, -0.5, 1.0],
+            }
+
+    input_path = tmp_path / "water.xyz"
+    output_path = tmp_path / "output.json"
+    ase_write(
+        input_path,
+        Atoms(
+            "H2O",
+            positions=[[0.0, 0.0, 0.0], [0.0, 0.8, 0.6], [0.0, -0.8, 0.6]],
+        ),
+    )
+    monkeypatch.setattr(
+        MaceCalc, "get_calculator", lambda self: PolarLikeCalculator()
+    )
+    params = ASEInputSchema.model_construct(
+        input_structure_file=str(input_path),
+        output_results_file=str(output_path),
+        driver="dipole",
+        calculator=MaceCalc(),
+    )
+
+    result = ase_core.run_ase_core(params)
+    output = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert result["status"] == "success"
+    assert result["dipole_moment"] == [0.1235, -0.5, 1.0]
+    assert result["dipole_unit"] == "Debye"
+    assert output["dipole_value"] == [0.1235, -0.5, 1.0]
+    assert output["dipole_unit"] == "Debye"
 
 
 @pytest.mark.asyncio

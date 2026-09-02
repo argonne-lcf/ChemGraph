@@ -230,6 +230,15 @@ def test_trajectory_mode_index_uses_exported_ase_index():
     assert main_ui._trajectory_mode_index("legacy-name.traj", 4) == 4
 
 
+def test_frequency_dropdown_mode_indices_are_one_based():
+    first_label = main_ui._format_frequency_option(1595.4321, 1)
+    imaginary_label = main_ui._format_frequency_option("45.12i", 2)
+
+    assert first_label == "Mode 1: 1595.43 cm⁻¹"
+    assert imaginary_label == "Mode 2: 45.12i cm⁻¹"
+    assert "Mode 0" not in first_label
+
+
 def test_latex_delimiters_are_normalized_for_streamlit_markdown():
     raw = (
         "Using the combustion reaction\n\n"

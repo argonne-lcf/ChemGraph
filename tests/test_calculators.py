@@ -40,6 +40,17 @@ def test_default_calculator_is_in_detected_available_calculators():
     assert available
     assert "Calculator availability detected during ChemGraph initialization" in context
     assert default in context
+    if importlib.util.find_spec("mace") is not None:
+        assert default == "MaceCalc"
+        assert "calculator_type='mace_polar'" in context
+        assert "model='polar-1-m'" in context
+
+        from chemgraph.schemas.ase_input import ASEInputSchema
+
+        params = ASEInputSchema(input_structure_file="water.xyz", driver="energy")
+        assert isinstance(params.calculator, MaceCalc)
+        assert params.calculator.calculator_type == "mace_polar"
+        assert params.calculator.get_model_name_for_output() == "polar-1-m"
 
 
 def test_invalid_calculator_type_error_lists_accepted_values():
@@ -63,7 +74,9 @@ def test_invalid_calculator_type_error_lists_accepted_values():
 @pytest.mark.skipif(
     importlib.util.find_spec("mace") is None, reason="MACE not installed"
 )
-@pytest.mark.parametrize("calculator_type", ["mace_mp", "mace_off", "mace_anicc"])
+@pytest.mark.parametrize(
+    "calculator_type", ["mace_polar", "mace_mp", "mace_off", "mace_anicc"]
+)
 @pytest.mark.parametrize(
     ("schema_name", "structure_input"),
     [
@@ -99,6 +112,7 @@ def test_mace_calculator_schema_rejects_invalid_variant(calculator_type):
 @pytest.mark.parametrize(
     ("calculator_type", "model", "expected"),
     [
+        ("mace_polar", None, "polar-1-m"),
         ("mace_mp", None, "medium-mpa-0"),
         ("mace_off", None, "medium"),
         ("mace_anicc", None, None),
@@ -109,6 +123,55 @@ def test_mace_model_name_for_output(calculator_type, model, expected):
     calc = MaceCalc(calculator_type=calculator_type, model=model)
 
     assert calc.get_model_name_for_output() == expected
+
+
+def test_mace_polar_medium_is_default():
+    calc = MaceCalc()
+
+    assert calc.calculator_type == "mace_polar"
+    assert calc.get_model_name_for_output() == "polar-1-m"
+    assert calc.get_atoms_properties() == {
+        "charge": 0,
+        "spin": 1,
+        "external_field": [0.0, 0.0, 0.0],
+    }
+    description = MaceCalc.model_fields["calculator_type"].description
+    assert description is not None
+    assert "dipole moments" in description
+
+
+def test_nonpolar_mace_does_not_inject_polar_metadata():
+    assert MaceCalc(calculator_type="mace_mp").get_atoms_properties() == {}
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("mace") is None, reason="MACE not installed"
+)
+@pytest.mark.parametrize(
+    ("model", "expected_model"), [(None, "polar-1-m"), ("polar-1-l", "polar-1-l")]
+)
+def test_mace_polar_loader_uses_selected_model(monkeypatch, model, expected_model):
+    import mace.calculators
+
+    class FakePolarCalculator:
+        implemented_properties = ["energy"]
+
+    sentinel = FakePolarCalculator()
+    received = []
+
+    def fake_mace_polar(**kwargs):
+        received.append(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(mace.calculators, "mace_polar", fake_mace_polar)
+
+    calc = MaceCalc(model=model, device="cpu", default_dtype="float64")
+
+    assert calc.get_calculator() is sentinel
+    assert received == [
+        {"model": expected_model, "device": "cpu", "default_dtype": "float64"}
+    ]
+    assert "dipole" in sentinel.implemented_properties
 
 
 @pytest.mark.skipif(
@@ -160,9 +223,14 @@ def test_emt_calculator():
 @pytest.mark.skipif(
     importlib.util.find_spec("mace") is None, reason="MACE not installed"
 )
-def test_mace_calculator():
-    # Test MACE calculator initialization
-    calc = MaceCalc(model_type="medium")
+def test_mace_calculator(monkeypatch):
+    # Exercise the ASE calculator interface without downloading model weights.
+    import mace.calculators
+    from ase.calculators.emt import EMT
+
+    monkeypatch.setattr(mace.calculators, "mace_polar", lambda **kwargs: EMT())
+
+    calc = MaceCalc()
     ase_calc = calc.get_calculator()
 
     # Create a simple molecule

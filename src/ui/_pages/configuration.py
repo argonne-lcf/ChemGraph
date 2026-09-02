@@ -557,6 +557,7 @@ def _render_chemistry_settings(config: dict) -> None:
     with col4:
         st.write("**Calculators**")
         calc_options = [
+            "mace_polar",
             "mace_mp",
             "mace_off",
             "mace_anicc",

@@ -70,8 +70,8 @@ function showMode(mode) {
   const p = peaks.find(q => q.mode === mode);
   const label = document.getElementById("modelabel");
   if (p) {
-    label.textContent = "Mode " + p.mode + " \\u2014 " +
-        p.freq.toFixed(1) + (p.imaginary ? "i" : "") + " cm\\u207b\\u00b9";
+    label.textContent = p.freq.toFixed(1) +
+        (p.imaginary ? "i" : "") + " cm\\u207b\\u00b9";
   }
   if (!viewer) return;
   try {
@@ -103,9 +103,9 @@ const traces = [
   {x: real.map(p => p.freq), y: real.map(p => p.y), mode: "markers",
    marker: {size: baseSize.slice(), color: "rgba(14,149,148,.25)",
             line: {color: ACCENT, width: baseLine.slice()}},
-   customdata: real.map(p => [p.mode, p.intensity]),
-   hovertemplate: "mode %{customdata[0]}<br>%{x:.1f} cm\\u207b\\u00b9" +
-                  "<br>I = %{customdata[1]:.3g}<extra></extra>"}
+   customdata: real.map(p => p.intensity),
+   hovertemplate: "%{x:.1f} cm\\u207b\\u00b9" +
+                  "<br>I = %{customdata:.3g}<extra></extra>"}
 ];
 const selected = real.find(p => p.mode === DATA.selected_mode);
 const layout = {
