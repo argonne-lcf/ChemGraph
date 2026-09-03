@@ -28,6 +28,7 @@ scripts/demo/
 ├── demo_globus_compute_agent.py                    laptop, LLM, live GC endpoint
 ├── demo_globus_transfer_direct.py                  laptop, no LLM, Globus Transfer + GC
 ├── demo_globus_transfer_agent.py                   laptop, LLM, Globus Transfer + GC
+├── demo_globus_ase_deep_agent.py                   laptop, Deep Agent, Transfer + GC + ASE/EMT
 ├── demo_parsl_in_job_direct.py                     inside qsub -I on Polaris/Aurora, no LLM
 ├── demo_parsl_in_job_agent.py                      inside qsub -I, LLM
 ├── demo_ensemble_launcher_in_job_direct.py         inside qsub -I, no LLM
@@ -43,10 +44,11 @@ it with a ChemGraph LLM agent over `langchain-mcp-adapters`.
 
 | Variable | Required by | Notes |
 |----------|-------------|-------|
-| `GLOBUS_COMPUTE_ENDPOINT_ID` | `demo_globus_compute_*`, `demo_globus_transfer_*` | UUID from `globus-compute-endpoint start chemgraph-<system>` |
-| `GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID` | `demo_globus_transfer_*` | Globus Connect Personal on the laptop |
-| `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` | `demo_globus_transfer_*` | HPC collection UUID (ALCF data portal) |
-| `GLOBUS_TRANSFER_DESTINATION_BASE_PATH` | `demo_globus_transfer_*` | e.g. `/eagle/projects/MyProj/staging` |
+| `GLOBUS_COMPUTE_ENDPOINT_ID` | `demo_globus_*` | UUID from `globus-compute-endpoint start chemgraph-<system>` |
+| `GLOBUS_COMPUTE_AMQP_PORT` | optional for stdio agent demos | Result-streaming port; use `443` when outbound `5671` is blocked |
+| `GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID` | transfer demos and `demo_globus_ase_deep_agent.py` | Globus Connect Personal on the laptop |
+| `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` | transfer demos and `demo_globus_ase_deep_agent.py` | HPC collection UUID (ALCF data portal) |
+| `GLOBUS_TRANSFER_DESTINATION_BASE_PATH` | transfer demos and `demo_globus_ase_deep_agent.py` | e.g. `/eagle/projects/MyProj/staging` |
 | `COMPUTE_SYSTEM` | `demo_parsl_in_job_*`, `demo_ensemble_launcher_in_job_*` | `polaris` or `aurora` |
 | `PBS_NODEFILE` | both in-job demos | Set automatically inside `qsub` — demos abort if missing |
 | `CG_AMQP_PORT=443` | optional, Aurora | Use when outbound 5671 is blocked |
@@ -103,6 +105,7 @@ export GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID="<hpc-collection-uuid>"
 export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/projects/MyProj/staging
 python scripts/demo/demo_globus_transfer_direct.py
 python scripts/demo/demo_globus_transfer_agent.py --model gpt-4o-mini
+python scripts/demo/demo_globus_ase_deep_agent.py --model gpt-4o-mini
 ```
 
 The direct demo stages the 5 `.xyz` fixtures, then runs MACE in
@@ -117,6 +120,31 @@ Remote-path mode has one quirk: `_mace_worker` only attaches
 thermo columns — the full JSON results sit on the HPC under
 `<remote_directory>/<molecule>_thermo.json`. Pull them back with a
 follow-up Globus Transfer if needed.
+
+`demo_globus_ase_deep_agent.py` is the smallest agent-driven validation of
+both services. It authenticates Transfer in the parent terminal, starts
+`chemgraph.mcp.ase_mcp_hpc` over stdio, and binds only its Transfer and remote
+ASE tools to a state-backed Deep Agent. The agent stages one water structure
+and submits an ASE energy calculation with EMT. The Python driver polls the
+asynchronous Compute batch with a fixed timeout, then resumes the same graph to
+retrieve and validate one finite `potential_energy`.
+
+The first run may display a Globus URL and request an authorization code before
+the MCP server starts. Later runs reuse and automatically refresh
+`~/.globus/chemgraph_transfer_tokens.json`. For an endpoint whose result stream
+must use port 443, run:
+
+```bash
+python scripts/demo/demo_globus_ase_deep_agent.py \
+  --model gpt-4o-mini \
+  --amqp-port 443
+```
+
+The remote endpoint environment must be able to import compatible ChemGraph
+and ASE installations. The local input must also be visible through the
+configured source collection. The example leaves its uniquely named remote
+staging directory and result JSON in place and prints that path for manual
+cleanup; reverse Transfer and remote deletion are not automated.
 
 ### Inside a PBS allocation on Polaris
 

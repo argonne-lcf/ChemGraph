@@ -3,8 +3,9 @@
 
 LLM agent on the laptop drives a local ``mace_mcp_hpc`` subprocess.
 With both Compute and Transfer env vars set, the MCP server
-auto-registers the transfer tools (``mace_mcp_hpc.py:310-313``). The
-agent is told to (a) stage the demo's structures to the remote
+auto-registers the transfer tools. The parent process authenticates
+Transfer before starting that non-interactive subprocess. The agent is told
+to (a) stage the demo's structures to the remote
 collection via ``transfer_files``, then (b) call ``run_mace_ensemble``
 with ``remote_structure_directory`` so MACE runs on the pre-staged
 files. Finally it reports a Gibbs-energy table.
@@ -110,6 +111,10 @@ async def amain(model: str, device: str, query: str, workload: str, verbose: int
         "HOME": os.environ.get("HOME", ""),
         "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", ""),
     }
+    if os.environ.get("GLOBUS_COMPUTE_AMQP_PORT"):
+        forwarded["GLOBUS_COMPUTE_AMQP_PORT"] = os.environ[
+            "GLOBUS_COMPUTE_AMQP_PORT"
+        ]
     server_configs = {
         server_label: {
             "transport": "stdio",
@@ -191,6 +196,15 @@ def main() -> None:
     if missing:
         print(f"ERROR: missing env vars: {', '.join(missing)}")
         sys.exit(2)
+
+    from chemgraph.execution.config import get_transfer_manager
+
+    transfer_manager = get_transfer_manager(allow_interactive_auth=True)
+    if transfer_manager is None:
+        print("ERROR: Globus Transfer configuration is incomplete.")
+        sys.exit(2)
+    print("Authenticating Globus Transfer in the parent process...")
+    transfer_manager.authenticate()
 
     query = args.query or _agent_prompt(args.device, args.workload, args.calculator)
     asyncio.run(amain(args.model, args.device, query, args.workload, args.verbose))
