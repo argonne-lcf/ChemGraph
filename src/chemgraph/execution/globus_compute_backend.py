@@ -52,6 +52,7 @@ class GlobusComputeBackend(ExecutionBackend):
         super().__init__()
         self._executor = None
         self._endpoint_id: str | None = None
+        self._executor_kwargs: dict[str, Any] = {}
         self._shares_filesystem = False
 
     @property
@@ -92,6 +93,7 @@ class GlobusComputeBackend(ExecutionBackend):
         self._shares_filesystem = bool(kwargs.get("shares_filesystem", False))
 
         self._endpoint_id = endpoint_id
+        self._executor_kwargs = dict(executor_kwargs)
         self._executor = Executor(**executor_kwargs)
         self._initialized = True
         logger.info(
@@ -109,7 +111,7 @@ class GlobusComputeBackend(ExecutionBackend):
 
         if self._executor is None or getattr(self._executor, "_stopped", False):
             logger.info("Re-creating Globus Compute Executor")
-            self._executor = Executor(endpoint_id=self._endpoint_id)
+            self._executor = Executor(**self._executor_kwargs)
 
     @staticmethod
     def _looks_like_stopped_executor(exc: BaseException) -> bool:
@@ -215,4 +217,5 @@ class GlobusComputeBackend(ExecutionBackend):
             except Exception:
                 logger.warning("Error during Globus Compute shutdown.", exc_info=True)
             self._executor = None
+        self._executor_kwargs = {}
         self._initialized = False
