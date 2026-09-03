@@ -28,8 +28,11 @@ MANIFEST_FILENAME = "ui_artifacts.json"
 # Classification buckets, in the order the UI renders them.
 STRUCTURES = "structures"
 IR_PLOTS = "ir_plots"
+IR_SPECTRA = "ir_spectra"
+IR_PEAKS = "ir_peaks"
 FREQUENCY_TABLES = "frequency_tables"
 MODE_TRAJECTORIES = "mode_trajectories"
+TRAJECTORIES = "trajectories"
 REPORTS = "reports"
 IMAGES = "images"
 DATA = "data"
@@ -114,10 +117,21 @@ def classify_artifacts(files: list[str]) -> dict[str, list[str]]:
             _add(STRUCTURES, rel)
         elif name.endswith(".png") and name.startswith("ir_spectrum"):
             _add(IR_PLOTS, rel)
+        elif name.endswith(".csv") and name.startswith("ir_spectrum"):
+            _add(IR_SPECTRA, rel)
+        elif name.endswith(".csv") and name.startswith("ir_peaks"):
+            _add(IR_PEAKS, rel)
         elif name.endswith(".csv") and name.startswith("frequencies"):
             _add(FREQUENCY_TABLES, rel)
         elif fnmatch.fnmatch(name, "*_vib.*.traj"):
             _add(MODE_TRAJECTORIES, rel)
+        elif name.endswith("_opt.traj"):
+            # Only optimization trajectories are rendered as convergence plots;
+            # matching the ``<stem>_opt.traj`` name the optimizer writes keeps an
+            # unrelated .traj (e.g. an uploaded MD run) from being mislabeled.
+            _add(TRAJECTORIES, rel)
+        elif name.endswith(".traj"):
+            _add(OTHER, rel)
         elif name.endswith((".html", ".htm")):
             _add(REPORTS, rel)
         elif name.endswith(".png"):
@@ -130,7 +144,10 @@ def classify_artifacts(files: list[str]) -> dict[str, list[str]]:
 
 
 def append_manifest_entry(
-    log_dir: Optional[str], query: str, files: list[str]
+    log_dir: Optional[str],
+    query: str,
+    files: list[str],
+    attachments: Optional[list[str]] = None,
 ) -> None:
     """Append one exchange's artifact list to the log-dir manifest.
 
@@ -145,11 +162,16 @@ def append_manifest_entry(
         User query that produced the artifacts.
     files : list[str]
         Relative artifact paths for the exchange.
+    attachments : list[str], optional
+        Display names of files the user attached to the query.
     """
     if not log_dir:
         return
     entries = load_manifest(log_dir)
-    entries.append({"query": query, "files": list(files)})
+    record: dict = {"query": query, "files": list(files)}
+    if attachments:
+        record["attachments"] = list(attachments)
+    entries.append(record)
     try:
         os.makedirs(log_dir, exist_ok=True)
         manifest_path = Path(log_dir) / MANIFEST_FILENAME
@@ -210,3 +232,5 @@ def attach_artifacts_to_history(history: list[dict], log_dir: Optional[str]) -> 
         if entry.get("query") != record.get("query"):
             break
         entry["artifacts"] = list(record.get("files", []))
+        if record.get("attachments"):
+            entry["attachments"] = list(record["attachments"])

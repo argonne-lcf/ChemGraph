@@ -14,10 +14,12 @@ cd ChemGraph
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-streamlit run src/ui/app.py
+chemgraph ui
 ```
 
-Open `http://localhost:8501`.
+Open `http://localhost:8501`. `chemgraph ui` works from any directory
+(`--address`, `--port`, and `--headless` are supported); from the repo root
+you can also run `streamlit run src/ui/app.py` directly.
 
 ## Run with Docker
 
@@ -69,6 +71,13 @@ need their dependencies and external programs.
 API credentials entered in the UI should be treated as secrets. Prefer
 environment variables for shared deployments, avoid placing tokens in a
 committed TOML file, and protect network access to the Streamlit server.
+
+## Attachments
+
+Attach structure or data files (XYZ, PDB, CIF, JSON, CSV, ...) with the
+paperclip in the chat box and refer to them in your message ("optimize the
+attached structure"). Files are saved into the exchange's artifact
+directory and the agent receives their exact paths.
 
 ## Sessions and artifacts
 

@@ -19,20 +19,26 @@ from chemgraph.tools.cheminformatics_core import (
 
 
 @tool
-def molecule_name_to_smiles(name: str) -> dict:
+def molecule_name_to_smiles(name: str, include_stereochemistry: bool = False) -> dict:
     """Convert a molecule name to SMILES format.
 
     Parameters
     ----------
     name : str
         The name of the molecule to convert.
+    include_stereochemistry : bool, optional
+        Set to True to keep stereochemistry, which is required to tell
+        enantiomers apart: with the default of False, "L-alanine" and
+        "D-alanine" both resolve to the same SMILES.
 
     Returns
     -------
     dict
         A JSON-serializable dict with the resolved SMILES.
     """
-    smiles = molecule_name_to_smiles_core(name)
+    smiles = molecule_name_to_smiles_core(
+        name, include_stereochemistry=include_stereochemistry
+    )
     return {"name": str(name), "smiles": smiles}
 
 

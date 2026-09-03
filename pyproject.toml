@@ -33,15 +33,16 @@ dependencies = [
     "pubchempy==1.0.5",
     "numpy==2.2.6",
     "numexpr==2.11.0",
-    "pytest==8.4.1",
+    "pytest==9.0.3",
     "ase",
     "rdkit",
     "pymatgen",
-    "mace-torch",
+    "mace-torch>=0.3.16",
+    "graph-longrange @ git+https://github.com/WillBaldwin0/graph_electrostatics.git@v0.4.0",
     "globus_sdk",
-    "streamlit==1.48.1",
-    "stmol==0.0.9",
-    "ipython-genutils==0.2.0",
+    "streamlit==1.54.0",
+    "py3Dmol",
+    "plotly",
     "langsmith==0.10.10",
     "rich==14.1.0",
     "toml==0.10.2",
@@ -80,8 +81,8 @@ uma = [
 ]
 ui = [
     "streamlit",
-    "stmol",
-    "ipython-genutils",
+    "py3Dmol",
+    "plotly",
 ]
 parsl = [
     "parsl",

@@ -130,7 +130,7 @@ def molecule_name_to_smiles(name: str) -> str:
     comps = pcp.get_compounds(name.strip(), "name")
     if not comps:
         raise ValueError(f"No PubChem compound found for: {name}")
-    return comps[0].canonical_smiles
+    return comps[0].connectivity_smiles  # .smiles keeps stereochemistry
 ```
 
 ## How to add a new MCP server tool
@@ -234,7 +234,7 @@ streamlit run src/ui/app.py
 
 `config.toml` at the project root controls runtime settings:
 - `[general]` -- model, workflow, recursion_limit, verbosity
-- `[chemistry.calculators]` -- default calculator (mace_mp), fallback (emt)
+- `[chemistry.calculators]` -- default calculator (mace_polar), fallback (emt)
 - `[chemistry.optimization]` -- optimizer method, fmax, steps
 - `[api.*]` -- LLM provider base URLs and timeouts
 

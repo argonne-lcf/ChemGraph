@@ -59,6 +59,12 @@ export ARGO_USER="<anl-username>"
 chemgraph run --model argo:gpt-4o -q "Summarize the water molecule."
 ```
 
+For every `argo:` model, ChemGraph resolves the identity from an explicit or
+configured `argo_user`, then `ARGO_USER`, and finally the internal `chemgraph`
+placeholder required by the client libraries. Argo routes do not read an
+explicit `api_key` or `OPENAI_API_KEY`, so OpenAI credentials are never sent to
+an Argo endpoint.
+
 ALCF-hosted inference routes use `ALCF_ACCESS_TOKEN`. Available endpoints and
 access policies are facility-managed, so use `chemgraph models` and the current
 ALCF service instructions rather than copying an old model name.

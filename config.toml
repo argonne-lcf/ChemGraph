@@ -87,7 +87,7 @@ displacement = 0.01
 nprocs = 1
 
 [chemistry.calculators]
-default = "mace_mp"
+default = "mace_polar"
 fallback = "emt"
 
 [output.files]

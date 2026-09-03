@@ -15,6 +15,7 @@ import torch
 _logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL_NAMES = {
+    "mace_polar": "polar-1-m",
     "mace_mp": "medium-mpa-0",
     "mace_off": "medium",
 }
@@ -106,18 +107,26 @@ class MaceCalc(BaseModel):
 
     This class defines the configuration parameters for MACE machine learning models
     used in molecular simulations. It supports different calculator types including
-    MACE-MP, MACE-OFF, and MACE-ANI-CC.
+    MACE-Polar, MACE-MP, MACE-OFF, and MACE-ANI-CC. MACE-Polar predicts
+    molecular dipole moments in addition to energies and forces.
 
     Parameters
     ----------
     calculator_type : str, optional
-        Type of calculator to use. Options: 'mace_mp' (default), 'mace_off', or 'mace_anicc'
+        Type of calculator to use. Options: 'mace_polar' (default), 'mace_mp',
+        'mace_off', or 'mace_anicc'.
     model : str or Path, optional
         Name or path to the model file. If None, uses default model for selected calculator type.
     device : str, optional
         Device to use for calculations ('cpu' or 'cuda' or 'xpu'), by default 'cpu'
     default_dtype : str, optional
         Default data type for the model, by default 'float64'. Use 'float32' if device is 'xpu'.
+    charge : int, optional
+        Total system charge used by MACE-Polar, by default 0.
+    multiplicity : int, optional
+        Spin multiplicity used by MACE-Polar, by default 1 (singlet).
+    external_field : tuple of float, optional
+        External electric field used by MACE-Polar, by default zero.
     dispersion : bool, optional
         Whether to use D3 dispersion corrections (only for 'mace_mp'), by default False
     damping : str, optional
@@ -131,16 +140,23 @@ class MaceCalc(BaseModel):
         by default 21.167088422553647 (40.0 * units.Bohr)
     """
 
-    calculator_type: Literal["mace_mp", "mace_off", "mace_anicc"] = Field(
-        default="mace_mp",
-        description="Type of calculator. Options: 'mace_mp' (default), 'mace_off', or 'mace_anicc'.",
+    calculator_type: Literal[
+        "mace_polar", "mace_mp", "mace_off", "mace_anicc"
+    ] = Field(
+        default="mace_polar",
+        description="Type of calculator. Options: 'mace_polar' (default), "
+        "'mace_mp', 'mace_off', or 'mace_anicc'. MACE-Polar supports "
+        "energies, forces, and molecular dipole moments.",
     )
     model: Optional[Union[str, Path]] = Field(
         default=None,
-        description="Path to the model. If None, MACE selects its default model. "
-        "ChemGraph records 'medium-mpa-0' for mace_mp and 'medium' for mace_off "
-        "in successful simulation output. "
-        "Options: 'small', 'medium', 'large', 'small-0b', 'medium-0b', 'small-0b2', 'medium-0b2','large-0b2', 'medium-0b3', 'medium-mpa-0', 'medium-omat-0', 'mace-matpes-pbe-0', 'mace-matpes-r2scan-0'",
+        description="Path to the model. If None, ChemGraph selects 'polar-1-m' "
+        "for mace_polar; MACE selects its own default for other calculator types. "
+        "ChemGraph records the resolved model name in successful simulation output. "
+        "Options include: 'polar-1-s', 'polar-1-m', 'polar-1-l', 'small', "
+        "'medium', 'large', 'small-0b', 'medium-0b', 'small-0b2', "
+        "'medium-0b2', 'large-0b2', 'medium-0b3', 'medium-mpa-0', "
+        "'medium-omat-0', 'mace-matpes-pbe-0', and 'mace-matpes-r2scan-0'.",
     )
     device: str = Field(
         default="cpu",
@@ -149,6 +165,19 @@ class MaceCalc(BaseModel):
     default_dtype: str = Field(
         default="float64",
         description="Default dtype for the model (float32 or float64).",
+    )
+    charge: int = Field(
+        default=0,
+        description="Total system charge used by MACE-Polar.",
+    )
+    multiplicity: int = Field(
+        default=1,
+        ge=1,
+        description="Spin multiplicity used by MACE-Polar.",
+    )
+    external_field: tuple[float, float, float] = Field(
+        default=(0.0, 0.0, 0.0),
+        description="External electric field used by MACE-Polar.",
     )
     dispersion: bool = Field(
         default=False,
@@ -170,13 +199,27 @@ class MaceCalc(BaseModel):
     def get_model_name_for_output(self) -> Optional[Union[str, Path]]:
         """Return the model identifier to record in simulation output.
 
-        MACE still receives ``None`` when the caller omits a model. This
-        method only supplies ChemGraph's maintained name for that upstream
-        default so persisted simulation metadata is not ambiguous.
+        This supplies ChemGraph's maintained name for an omitted model so
+        persisted simulation metadata is not ambiguous. MACE-Polar also uses
+        the resolved name because its upstream loader requires one explicitly.
         """
         if self.model is not None:
             return self.model
         return _DEFAULT_MODEL_NAMES.get(self.calculator_type)
+
+    def get_atoms_properties(self) -> dict:
+        """Return atom-level metadata required by MACE-Polar."""
+        if self.calculator_type != "mace_polar":
+            return {}
+        return {
+            "charge": self.charge,
+            "spin": self.multiplicity,
+            "external_field": list(self.external_field),
+        }
+
+    def get_multiplicity(self) -> int:
+        """Return spin multiplicity for thermochemistry."""
+        return self.multiplicity
 
     def get_calculator(self):
         """Get the appropriate MACECalculator instance based on the selected calculator type.
@@ -203,7 +246,24 @@ class MaceCalc(BaseModel):
         # Force torch to disable weights_only loading (allows full pickle loads) for MACE models
         os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
 
-        if self.calculator_type == "mace_mp":
+        if self.calculator_type == "mace_polar":
+            from mace.calculators import mace_polar
+
+            calculator = mace_polar(
+                model=self.model or _DEFAULT_MODEL_NAMES["mace_polar"],
+                device=self.device,
+                default_dtype=self.default_dtype,
+            )
+            implemented_properties = getattr(
+                calculator, "implemented_properties", None
+            )
+            if (
+                implemented_properties is not None
+                and "dipole" not in implemented_properties
+            ):
+                implemented_properties.append("dipole")
+            return calculator
+        elif self.calculator_type == "mace_mp":
             from mace.calculators import mace_mp
 
             return mace_mp(
@@ -232,5 +292,6 @@ class MaceCalc(BaseModel):
             )
         else:
             raise ValueError(
-                "Invalid calculator_type. Choose 'mace_mp' or 'mace_off' or 'mace_anicc'."
+                "Invalid calculator_type. Choose 'mace_polar', 'mace_mp', "
+                "'mace_off', or 'mace_anicc'."
             )

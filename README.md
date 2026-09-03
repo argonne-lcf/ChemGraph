@@ -211,7 +211,7 @@ cd ChemGraph
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-streamlit run src/ui/app.py
+chemgraph ui
 ```
 
 Open `http://localhost:8501`. For an image-based setup, use the Docker command
@@ -275,7 +275,7 @@ available in that environment.
 | Capability | Installation | Notes |
 | --- | --- | --- |
 | EMT | Core install | Lightweight; useful for setup checks, not general high-accuracy chemistry |
-| MACE | Core install | First use downloads model weights and can be slow |
+| MACE | Core install | MACE-Polar medium is the default and supports molecular dipole moments; first use downloads ASL-licensed model weights |
 | TBLite / xTB | `pip install "chemgraph[calculators]"` | May require a Fortran toolchain when no wheel is available |
 | UMA / FAIRChem | `pip install "chemgraph[uma]"` | Use a separate environment from MACE if `e3nn` resolution conflicts |
 | NWChem | Install the `nwchem` executable separately | Must be on `PATH` or configured through ASE |
