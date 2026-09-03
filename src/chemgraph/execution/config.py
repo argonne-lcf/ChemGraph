@@ -11,6 +11,9 @@ Environment variables
 ``COMPUTE_SYSTEM``
     Override the target HPC system (``"polaris"``, ``"aurora"``,
     ``"crux"``, ``"local"``).
+``GLOBUS_COMPUTE_AMQP_PORT``
+    Override the Globus Compute result-streaming port when it is not set in
+    ``config.toml`` or passed explicitly.
 """
 
 from __future__ import annotations
@@ -129,6 +132,10 @@ def get_backend(
         env_id = os.getenv("GLOBUS_COMPUTE_ENDPOINT_ID")
         if env_id:
             merged_kwargs["endpoint_id"] = env_id
+    if resolved_backend == "globus_compute" and not merged_kwargs.get("amqp_port"):
+        env_port = os.getenv("GLOBUS_COMPUTE_AMQP_PORT")
+        if env_port:
+            merged_kwargs["amqp_port"] = env_port
 
     # -- instantiate ----------------------------------------------------------
     logger.info(

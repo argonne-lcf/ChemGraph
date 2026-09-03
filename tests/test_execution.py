@@ -14,7 +14,7 @@ import sys
 import tempfile
 from concurrent.futures import Future
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -919,6 +919,41 @@ class TestGlobusComputeBackendGaps:
                 endpoint_id="test-uuid", amqp_port=443
             )
 
+    def test_stopped_executor_retry_preserves_constructor_options(self):
+        """A recovery Executor must retain endpoint and AMQP configuration."""
+        mock_sdk, first_executor = _make_mock_gc_modules()
+        first_executor._stopped = False
+        first_executor.submit.side_effect = RuntimeError(
+            "Executor has been shut down"
+        )
+        second_executor = MagicMock()
+        second_executor._stopped = False
+        completed = Future()
+        completed.set_result(25)
+        second_executor.submit.return_value = completed
+        mock_sdk.Executor.side_effect = [first_executor, second_executor]
+
+        with patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}):
+            from chemgraph.execution.globus_compute_backend import (
+                GlobusComputeBackend,
+            )
+
+            backend = GlobusComputeBackend()
+            backend.initialize(
+                endpoint_id="test-uuid",
+                amqp_port=443,
+            )
+            future = backend.submit(
+                TaskSpec(task_id="retry", callable=_square, args=(5,))
+            )
+
+        assert future.result() == 25
+        assert mock_sdk.Executor.call_args_list == [
+            call(endpoint_id="test-uuid", amqp_port=443),
+            call(endpoint_id="test-uuid", amqp_port=443),
+        ]
+        second_executor.submit.assert_called_once_with(_square, 5)
+
     def test_shutdown_executor_raises(self):
         """If executor.shutdown() raises, the error is swallowed and state resets."""
         mock_sdk, mock_executor = _make_mock_gc_modules()
@@ -996,6 +1031,53 @@ class TestGetBackendGlobusComputeGaps:
                 assert isinstance(backend, GlobusComputeBackend)
                 assert backend._initialized is True
                 mock_sdk.Executor.assert_called_once_with(endpoint_id="toml-uuid")
+            finally:
+                backend.shutdown()
+
+    def test_factory_reads_amqp_port_from_environment(self):
+        mock_sdk, _ = _make_mock_gc_modules()
+        with (
+            patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}),
+            patch.dict(
+                os.environ,
+                {"GLOBUS_COMPUTE_AMQP_PORT": "443"},
+            ),
+        ):
+            from chemgraph.execution.config import get_backend
+
+            backend = get_backend(
+                backend_name="globus_compute",
+                endpoint_id="environment-port-uuid",
+            )
+            try:
+                mock_sdk.Executor.assert_called_once_with(
+                    endpoint_id="environment-port-uuid",
+                    amqp_port=443,
+                )
+            finally:
+                backend.shutdown()
+
+    def test_explicit_amqp_port_overrides_environment(self):
+        mock_sdk, _ = _make_mock_gc_modules()
+        with (
+            patch.dict(sys.modules, {"globus_compute_sdk": mock_sdk}),
+            patch.dict(
+                os.environ,
+                {"GLOBUS_COMPUTE_AMQP_PORT": "443"},
+            ),
+        ):
+            from chemgraph.execution.config import get_backend
+
+            backend = get_backend(
+                backend_name="globus_compute",
+                endpoint_id="explicit-port-uuid",
+                amqp_port=5671,
+            )
+            try:
+                mock_sdk.Executor.assert_called_once_with(
+                    endpoint_id="explicit-port-uuid",
+                    amqp_port=5671,
+                )
             finally:
                 backend.shutdown()
 
