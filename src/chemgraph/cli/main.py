@@ -119,7 +119,10 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         default=None,
         metavar="PATH",
-        help="Workspace root for the experimental local-shell Deep Agent",
+        help=(
+            "Workspace root mounted at /workspace for file tools; shell "
+            "commands are not confined to it"
+        ),
     )
     parser.add_argument(
         "--deepagent-skill",
@@ -136,8 +139,9 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         "--deepagent-dangerously-skip-approvals",
         action="store_true",
         help=(
-            "Allow a headless deep_agent to execute commands and mutate its "
-            "explicit workspace without approval prompts"
+            "Allow a headless deep_agent to execute commands and mutate files "
+            "without approval prompts; its shell is not confined to the "
+            "workspace"
         ),
     )
     parser.add_argument(

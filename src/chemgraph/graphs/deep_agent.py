@@ -41,7 +41,7 @@ _DEFAULT_INTERRUPT_POLICY = object()
 _WORKSPACE_MOUNT = "/workspace/"
 
 
-def _normalize_skill_sources(skills: Sequence[str] | None) -> tuple[str, ...]:
+def normalize_skill_sources(skills: Sequence[str] | None) -> tuple[str, ...]:
     """Validate and freeze ordered backend-relative skill source paths."""
     if skills is None:
         return ()
@@ -106,7 +106,7 @@ def construct_deep_agent_graph(
     effective_backend = _normalize_backend(
         backend if backend is not None else StateBackend()
     )
-    skill_sources = _normalize_skill_sources(skills)
+    skill_sources = normalize_skill_sources(skills)
     workflow = create_deep_agent(
         model=llm,
         tools=list(tools or []),
@@ -124,4 +124,5 @@ __all__ = [
     "DEFAULT_DEEPAGENT_INTERRUPT_ON",
     "DEFAULT_DEEPAGENT_PROMPT",
     "construct_deep_agent_graph",
+    "normalize_skill_sources",
 ]
