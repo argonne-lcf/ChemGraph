@@ -8,9 +8,12 @@ version = "0.7.0"
 description = "A computational chemistry agent for molecular simulation tasks."
 readme = "README.md"
 authors = [
-    { name = "Thang Pham", email = "tpham@anl.gov" },
-    { name = "Murat Keçeli", email = "keceli@anl.gov" },
-    { name = "Aditya Tanikanti", email = "atanikanti@anl.gov" }
+    { name = "Thang Pham" },
+    { name = "Murat Keçeli" },
+    { name = "Aditya Tanikanti" }
+]
+maintainers = [
+    { name = "Murat Keçeli", email = "keceli@anl.gov" }
 ]
 requires-python = ">=3.11"
 dependencies = [
