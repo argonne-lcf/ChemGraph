@@ -224,7 +224,7 @@ def run_graspa_ensemble(params: graspa_input_schema_ensemble) -> list[dict]:
 
 # ── Globus Transfer (registered only when configured) ──────────────────
 
-_transfer_manager = get_transfer_manager()
+_transfer_manager = get_transfer_manager(allow_interactive_auth=False)
 if _transfer_manager is not None:
     register_transfer_tools(mcp, _transfer_manager)
     logger.info("Registered Globus Transfer tools on gRASPA MCP server.")
