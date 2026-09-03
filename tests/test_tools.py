@@ -19,7 +19,7 @@ TEST_DIR = Path(__file__).parent
 def test_molecule_name_to_smiles(monkeypatch):
     class FakeCompound:
         def __init__(self, smiles):
-            self.canonical_smiles = smiles
+            self.connectivity_smiles = smiles
 
     def fake_get_compounds(name, namespace):
         assert namespace == "name"

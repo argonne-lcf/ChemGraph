@@ -94,7 +94,7 @@ def molecule_name_to_smiles_core(name: str) -> str:
     if not comps:
         raise ValueError(f"No PubChem compound found for name: {name!r}")
 
-    smiles = comps[0].canonical_smiles
+    smiles = comps[0].connectivity_smiles
     if not smiles:
         raise ValueError(f"PubChem returned an empty SMILES for {name!r}.")
     return smiles
