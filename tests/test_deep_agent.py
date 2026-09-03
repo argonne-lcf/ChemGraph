@@ -2,7 +2,9 @@
 
 import hashlib
 import json
+import os
 import shlex
+import subprocess
 import sys
 from types import SimpleNamespace
 from typing import Any
@@ -77,6 +79,26 @@ def _legacy_topology_fingerprint(agent: ChemGraph) -> str:
     ).hexdigest()
 
 
+def _message_content_text(message: Any) -> str:
+    """Return text without escaping structured content-block strings."""
+    content = message.content
+    if isinstance(content, list):
+        return "\n".join(
+            block.get("text", str(block))
+            if isinstance(block, dict)
+            else str(block)
+            for block in content
+        )
+    return str(content)
+
+
+def _shell_command(*parts: str) -> str:
+    """Quote a command for the current platform's host shell."""
+    if os.name == "nt":
+        return subprocess.list2cmdline(parts)
+    return shlex.join(parts)
+
+
 def test_constructor_builds_safe_standalone_graph(monkeypatch):
     captured = {}
     workflow = _FakeWorkflow()
@@ -138,7 +160,7 @@ def test_constructor_loads_ordered_workspace_skills(tmp_path):
     )
 
     system_prompt = "\n".join(
-        str(message.content)
+        _message_content_text(message)
         for message in model.received_messages
         if message.type == "system"
     )
@@ -188,9 +210,9 @@ def test_constructor_mounts_virtual_local_backend_at_workspace(
     assert (tmp_path / "probe.py").is_file()
     assert not (tmp_path / "workspace" / "probe.py").exists()
 
-    command = (
-        f"{shlex.quote(sys.executable)} "
-        f"{shlex.quote(str(tmp_path / 'probe.py'))}"
+    command = _shell_command(
+        sys.executable,
+        str(tmp_path / "probe.py"),
     )
     execute_result = mounted.execute(command)
     assert execute_result.exit_code == 0
@@ -212,7 +234,7 @@ def test_virtual_workspace_supplies_shell_host_path_to_model(tmp_path):
     )
 
     system_prompt = "\n".join(
-        str(message.content)
+        _message_content_text(message)
         for message in model.received_messages
         if message.type == "system"
     )
