@@ -21,7 +21,10 @@ payloads.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -33,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 # Globus Transfer API scope
 TRANSFER_SCOPE = "urn:globus:auth:scope:transfer.api.globus.org:all"
+TRANSFER_RESOURCE_SERVER = "transfer.api.globus.org"
 
 # Default Globus native-app client ID (Globus Tutorial client).
 # Projects should register their own app at https://app.globus.org.
@@ -69,6 +73,10 @@ class GlobusTransferManager:
     client_id : str, optional
         Globus app client ID for OAuth.  Defaults to the Globus Tutorial
         client.
+    allow_interactive_auth : bool, optional
+        Whether a missing or unusable token cache may trigger an interactive
+        Native App login.  MCP servers must disable this so OAuth prompts do
+        not consume their protocol stream.
     """
 
     def __init__(
@@ -78,12 +86,14 @@ class GlobusTransferManager:
         destination_base_path: str,
         source_base_path: Optional[str] = None,
         client_id: Optional[str] = None,
+        allow_interactive_auth: bool = True,
     ) -> None:
         self.source_endpoint_id = source_endpoint_id
         self.destination_endpoint_id = destination_endpoint_id
         self.destination_base_path = destination_base_path.rstrip("/")
         self.source_base_path = source_base_path
         self._client_id = client_id or _DEFAULT_CLIENT_ID
+        self.allow_interactive_auth = allow_interactive_auth
         self._transfer_client = None
 
     # ── authentication ──────────────────────────────────────────────────
@@ -102,75 +112,161 @@ class GlobusTransferManager:
             ) from exc
 
         client = globus_sdk.NativeAppAuthClient(self._client_id)
+        token_file = Path.home() / ".globus" / "chemgraph_transfer_tokens.json"
+        tokens = self._load_tokens(token_file)
+
+        if tokens is None:
+            tokens = self._interactive_login(client, token_file)
+
+        authorizer = self._make_refresh_authorizer(
+            globus_sdk,
+            client,
+            tokens,
+            token_file,
+        )
+        try:
+            # RefreshTokenAuthorizer is lazy.  Resolve a header now so an
+            # authentication preflight really refreshes an expired access
+            # token before an MCP subprocess starts.
+            authorizer.get_authorization_header()
+        except Exception as exc:
+            if not self.allow_interactive_auth:
+                raise RuntimeError(
+                    "Globus Transfer authentication is unavailable in this "
+                    "non-interactive process. Run an interactive ChemGraph "
+                    "Transfer authentication preflight first."
+                ) from exc
+            logger.warning(
+                "Cached Globus Transfer credentials could not be refreshed; "
+                "starting a new interactive login."
+            )
+            tokens = self._interactive_login(client, token_file)
+            authorizer = self._make_refresh_authorizer(
+                globus_sdk,
+                client,
+                tokens,
+                token_file,
+            )
+            authorizer.get_authorization_header()
+
+        self._transfer_client = globus_sdk.TransferClient(authorizer=authorizer)
+        return self._transfer_client
+
+    def authenticate(self) -> None:
+        """Create or refresh the Transfer credentials for later operations.
+
+        Call this from an interactive parent process before starting an MCP
+        server.  Credentials remain in the normal on-disk token cache and are
+        never returned to the caller.
+        """
+        self._get_transfer_client()
+
+    def _interactive_login(self, client, token_file: Path) -> dict:
+        """Run the Native App login flow, or fail before touching stdio."""
+        if not self.allow_interactive_auth:
+            raise RuntimeError(
+                "Globus Transfer authentication is required, but interactive "
+                "authentication is disabled for this process. Run an "
+                "interactive ChemGraph Transfer authentication preflight first."
+            )
+
         client.oauth2_start_flow(
             requested_scopes=TRANSFER_SCOPE,
             refresh_tokens=True,
         )
-
-        # Try loading cached tokens first
-        token_file = (
-            Path.home() / ".globus" / "chemgraph_transfer_tokens.json"
+        authorize_url = client.oauth2_get_authorize_url()
+        logger.info("Globus Transfer interactive authentication required.")
+        print(
+            "\nGlobus Transfer authentication required.\n"
+            f"Go to this URL and login:\n  {authorize_url}\n"
         )
-        tokens = self._load_tokens(token_file)
+        auth_code = input("Enter the authorization code: ").strip()
+        token_response = client.oauth2_exchange_code_for_tokens(auth_code)
+        tokens = dict(token_response.by_resource_server[TRANSFER_RESOURCE_SERVER])
+        self._save_tokens(token_file, tokens)
+        return tokens
 
-        if tokens is None:
-            # Interactive login required
-            authorize_url = client.oauth2_get_authorize_url()
-            logger.info(
-                "Globus Transfer authentication required.\n"
-                "Go to this URL and login:\n  %s",
-                authorize_url,
-            )
-            print(
-                "\nGlobus Transfer authentication required.\n"
-                f"Go to this URL and login:\n  {authorize_url}\n"
-            )
-            auth_code = input("Enter the authorization code: ").strip()
-            token_response = client.oauth2_exchange_code_for_tokens(auth_code)
-            tokens = token_response.by_resource_server["transfer.api.globus.org"]
-            self._save_tokens(token_file, tokens)
-        else:
-            # Refresh if expired
-            if tokens.get("expires_at_seconds", 0) < time.time():
-                try:
-                    token_response = client.oauth2_refresh_tokens(
-                        globus_sdk.RefreshTokenAuthorizer(
-                            tokens["refresh_token"], client
-                        )
-                    )
-                    tokens = token_response.by_resource_server[
-                        "transfer.api.globus.org"
-                    ]
-                    self._save_tokens(token_file, tokens)
-                except Exception:
-                    logger.warning(
-                        "Token refresh failed, falling back to existing token."
-                    )
+    def _make_refresh_authorizer(
+        self,
+        globus_sdk,
+        client,
+        tokens: dict,
+        token_file: Path,
+    ):
+        """Build an auto-refreshing authorizer backed by the token cache."""
+        refresh_token = tokens.get("refresh_token")
+        if not refresh_token:
+            if self.allow_interactive_auth:
+                tokens = self._interactive_login(client, token_file)
+                refresh_token = tokens["refresh_token"]
+            else:
+                raise RuntimeError(
+                    "The Globus Transfer token cache has no refresh token and "
+                    "interactive authentication is disabled. Run an interactive "
+                    "ChemGraph Transfer authentication preflight first."
+                )
 
-        authorizer = globus_sdk.AccessTokenAuthorizer(tokens["access_token"])
-        self._transfer_client = globus_sdk.TransferClient(authorizer=authorizer)
-        return self._transfer_client
+        def save_refreshed_tokens(token_response) -> None:
+            refreshed = dict(
+                token_response.by_resource_server[TRANSFER_RESOURCE_SERVER]
+            )
+            refreshed.setdefault("refresh_token", refresh_token)
+            self._save_tokens(token_file, refreshed)
+
+        authorizer_kwargs: dict[str, Any] = {
+            "on_refresh": save_refreshed_tokens,
+        }
+        access_token = tokens.get("access_token")
+        expires_at = tokens.get("expires_at_seconds")
+        if access_token and expires_at is not None:
+            authorizer_kwargs.update(
+                access_token=access_token,
+                expires_at=int(expires_at),
+            )
+        return globus_sdk.RefreshTokenAuthorizer(
+            refresh_token,
+            client,
+            **authorizer_kwargs,
+        )
 
     @staticmethod
     def _load_tokens(path: Path) -> Optional[dict]:
         if not path.is_file():
             return None
-        import json
 
         try:
             with open(path) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, KeyError):
+                tokens = json.load(f)
+            return tokens if isinstance(tokens, dict) else None
+        except (json.JSONDecodeError, OSError):
             return None
 
     @staticmethod
     def _save_tokens(path: Path, tokens: dict) -> None:
-        import json
-
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(dict(tokens), f, indent=2)
-        path.chmod(0o600)
+        tmp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                delete=False,
+            ) as f:
+                tmp_path = Path(f.name)
+                os.chmod(tmp_path, 0o600)
+                json.dump(dict(tokens), f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+            path.chmod(0o600)
+        except Exception:
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
+            raise
 
     # ── transfers ───────────────────────────────────────────────────────
 

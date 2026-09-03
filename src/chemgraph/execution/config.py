@@ -250,6 +250,7 @@ def get_transfer_manager(
         destination_base_path=merged["destination_base_path"],
         source_base_path=merged.get("source_base_path"),
         client_id=merged.get("client_id"),
+        allow_interactive_auth=bool(merged.get("allow_interactive_auth", True)),
     )
     logger.info(
         "GlobusTransferManager created: %s -> %s",
