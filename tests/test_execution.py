@@ -200,6 +200,7 @@ class TestLocalBackend:
 # ── EnsembleLauncherBackend tests ──────────────────────────────────────────
 
 
+@pytest.mark.ensemble_launcher
 class TestELBackend:
     @classmethod
     def setup_class(cls):
