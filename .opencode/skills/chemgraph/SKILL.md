@@ -130,7 +130,7 @@ def molecule_name_to_smiles(name: str) -> str:
     comps = pcp.get_compounds(name.strip(), "name")
     if not comps:
         raise ValueError(f"No PubChem compound found for: {name}")
-    return comps[0].connectivity_smiles
+    return comps[0].connectivity_smiles  # .smiles keeps stereochemistry
 ```
 
 ## How to add a new MCP server tool

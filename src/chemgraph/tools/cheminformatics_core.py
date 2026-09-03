@@ -69,18 +69,30 @@ def smiles_to_3d(
 # ---------------------------------------------------------------------------
 
 
-def molecule_name_to_smiles_core(name: str) -> str:
-    """Resolve a molecule name to its canonical SMILES via PubChem.
+def molecule_name_to_smiles_core(
+    name: str, include_stereochemistry: bool = False
+) -> str:
+    """Resolve a molecule name to its SMILES via PubChem.
 
     Parameters
     ----------
     name : str
         Common or IUPAC molecule name.
+    include_stereochemistry : bool, optional
+        If ``False`` (the default), return the connectivity SMILES, which
+        carries no stereochemistry.  If ``True``, return the isomeric SMILES,
+        which encodes stereocentres and double-bond geometry.
+
+        The default is stereochemistry-free for backwards compatibility.
+        Note that it cannot distinguish enantiomers: ``"L-alanine"`` and
+        ``"D-alanine"`` both resolve to ``"CC(C(=O)O)N"``, and RDKit will pick
+        an arbitrary mirror image when embedding that into 3D.  Pass ``True``
+        whenever the caller cares which enantiomer it gets.
 
     Returns
     -------
     str
-        Canonical SMILES string.
+        SMILES string.
 
     Raises
     ------
@@ -94,7 +106,10 @@ def molecule_name_to_smiles_core(name: str) -> str:
     if not comps:
         raise ValueError(f"No PubChem compound found for name: {name!r}")
 
-    smiles = comps[0].connectivity_smiles
+    if include_stereochemistry:
+        smiles = comps[0].smiles
+    else:
+        smiles = comps[0].connectivity_smiles
     if not smiles:
         raise ValueError(f"PubChem returned an empty SMILES for {name!r}.")
     return smiles

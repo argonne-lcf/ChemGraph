@@ -35,22 +35,33 @@ mcp = FastMCP(
 
 @mcp.tool(
     name="molecule_name_to_smiles",
-    description="Convert a molecule name to a canonical SMILES string using PubChem.",
+    description=(
+        "Convert a molecule name to a SMILES string using PubChem. "
+        "Set include_stereochemistry=true to distinguish enantiomers."
+    ),
 )
-async def molecule_name_to_smiles(name: str) -> str:
-    """Resolve a molecule name to its canonical SMILES via PubChem.
+async def molecule_name_to_smiles(
+    name: str, include_stereochemistry: bool = False
+) -> str:
+    """Resolve a molecule name to its SMILES via PubChem.
 
     Parameters
     ----------
     name : str
         Molecule name to resolve.
+    include_stereochemistry : bool, optional
+        Set to True to keep stereochemistry, which is required to tell
+        enantiomers apart: with the default of False, "L-alanine" and
+        "D-alanine" both resolve to the same SMILES.
 
     Returns
     -------
     str
-        Canonical SMILES string.
+        SMILES string.
     """
-    return molecule_name_to_smiles_core(name)
+    return molecule_name_to_smiles_core(
+        name, include_stereochemistry=include_stereochemistry
+    )
 
 
 @mcp.tool(
