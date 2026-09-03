@@ -252,7 +252,8 @@ def test_experimental_backend_can_explicitly_skip_confirmation(
         )
 
     assert isinstance(backend, FakeBackend)
-    assert "approvals are disabled" in capture.get().lower()
+    rendered = " ".join(capture.get().lower().replace("│", " ").split())
+    assert "approvals are disabled" in rendered
 
 
 def test_experimental_backend_rejects_missing_workspace(tmp_path):
@@ -310,6 +311,8 @@ def test_deepagent_cli_boolean_flags():
         parser.parse_args(["--checkpoint-db", "/tmp/checkpoints.db"]).checkpoint_db
         == "/tmp/checkpoints.db"
     )
+    help_text = " ".join(parser.format_help().split())
+    assert "shell commands are not confined to it" in help_text
 
 
 def test_main_agent_query_failure_suggests_retry():
@@ -899,7 +902,7 @@ def test_run_query_preserves_structured_deepagent_approval(monkeypatch):
         async def run(self, *_args, **_kwargs):
             raise HumanInputRequired("approval", payload=payload)
 
-        def _finalize_completed_run(self, state, config, query):
+        def finalize_completed_run(self, state, config, query):
             finalized.append((state, config, query))
             return state["messages"][-1]
 
@@ -960,7 +963,7 @@ def test_run_query_maps_multiple_interrupt_responses_by_id(monkeypatch):
                 interrupts=pending,
             )
 
-        def _finalize_completed_run(self, state, _config, _query):
+        def finalize_completed_run(self, state, _config, _query):
             return state["messages"][-1]
 
     answers = iter(["approve-first", "reject-second"])
@@ -1041,10 +1044,10 @@ def test_run_query_persists_chained_deepagent_interrupt(monkeypatch):
         async def run(self, *_args, **_kwargs):
             raise HumanInputRequired("approval", payload=payloads[0])
 
-        def _persist_run_state(self, config):
+        def persist_run_state(self, config):
             persisted.append(config)
 
-        def _finalize_completed_run(self, state, _config, _query):
+        def finalize_completed_run(self, state, _config, _query):
             return state["messages"][-1]
 
     prompted = []
