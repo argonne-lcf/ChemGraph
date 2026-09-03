@@ -12,6 +12,10 @@ authors = [
     { name = "Murat Keçeli" },
     { name = "Aditya Tanikanti" }
 ]
+maintainers = [
+    { name = "Thang Pham" },
+    { name = "Murat Keçeli" },
+]
 requires-python = ">=3.11"
 dependencies = [
     "deepagents==0.7.5",
