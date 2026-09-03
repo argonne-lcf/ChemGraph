@@ -664,7 +664,7 @@ def test_a_single_model_label_bands_its_measured_accuracy(monkeypatch, image,
     table = tmp_path / "cal.json"
     table.write_text(json.dumps({
         "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
-        "model_performance": {"decimer": {"accuracy": 0.996, "n": 500}},
+        "model_performance": {"decimer": {"accuracy": 0.996, "k": 498, "n": 500}},
     }))
     monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
 
@@ -765,9 +765,10 @@ def test_a_prefixed_priority_still_picks_the_strongest_model(monkeypatch, image,
     falls back to dict insertion order, which is the arbitrary choice the
     tie-break exists to replace.
     """
+    # An even split, so the priority decides rather than the count.
     flat = core.canonicalize(PENICILLIN)
     _committee(monkeypatch, {"decimer": flat, "molnextr": PENICILLIN,
-                             "molscribe": flat, "ocsrglyph": flat})
+                             "molscribe": PENICILLIN, "ocsrglyph": flat})
     table = tmp_path / "cal.json"
     # A table has to prefix both fields to load: the validator makes tie_break name
     # exactly the committee. It then reports a mismatch, since vote() bares the
@@ -798,7 +799,7 @@ def test_a_single_model_label_uses_the_table_the_caller_named(monkeypatch, image
     mine = tmp_path / "mine.json"
     mine.write_text(json.dumps({
         "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
-        "model_performance": {"decimer": {"accuracy": 0.55, "n": 200}},
+        "model_performance": {"decimer": {"accuracy": 0.55, "k": 110, "n": 200}},
     }))
 
     result = tools.image_to_smiles_core(image, model="decimer",
@@ -930,13 +931,13 @@ def test_the_model_listing_reports_the_table_and_not_the_registry(monkeypatch,
     table = tmp_path / "cal.json"
     table.write_text(json.dumps({
         "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
-        "model_performance": {"decimer": {"accuracy": 0.123, "n": 50}},
+        "model_performance": {"decimer": {"accuracy": 0.12, "k": 6, "n": 50}},
     }))
     monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
 
     listing = tools.list_ocsr_models.func()
 
-    assert "0.123 exact match" in listing
+    assert "0.120 exact match" in listing  # this table states no p, so accuracy
     assert "0.899" not in listing  # the registry figure
 
 
@@ -951,6 +952,32 @@ def test_an_unreadable_table_still_returns_the_read(monkeypatch, image, tmp_path
     assert result["confidence_label"] == "unavailable"
 
 
+def test_the_example_script_marks_a_missing_checkpoint(monkeypatch, capsys):
+    """describe_models defaults ready to installed, so omitting it is vacuous.
+
+    Silent when broken: the example tells a first-time user setup is finished, and
+    the next call fails on a checkpoint that was never downloaded.
+    """
+    import runpy
+    import pathlib
+
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+    monkeypatch.setattr(backends, "usable_specialists", lambda: ["decimer"])
+    monkeypatch.setattr(backends, "smiles_from_specialist", lambda name, path: {
+        "ok": True, "smiles": ASPIRIN, "raw": "", "model_used": name,
+        "cold_start": False, "latency_s": 0.1, "error": ""})
+    script = (pathlib.Path(__file__).parent.parent / "examples" / "ocsr"
+              / "run_ocsr.py")
+
+    runpy.run_path(str(script))["run_direct"](None)
+
+    listing = capsys.readouterr().out
+
+    assert "molnextr" in listing and "installed, checkpoint missing" in listing
+    assert "molnextr: 0.835 exact match (your table), 4.35s/image (ready)" \
+        not in listing
+
+
 def test_the_example_script_prints_what_the_tool_reports(monkeypatch, tmp_path):
     """Both read accuracies through the same call, so a refit moves both.
 
@@ -960,12 +987,80 @@ def test_the_example_script_prints_what_the_tool_reports(monkeypatch, tmp_path):
     table = tmp_path / "cal.json"
     table.write_text(json.dumps({
         "committee": ["decimer"], "patterns": {"1": {"k": 1, "n": 1}},
-        "model_performance": {"decimer": {"accuracy": 0.42, "n": 99}},
+        "model_performance": {"decimer": {"accuracy": 0.4242, "k": 42, "n": 99}},
     }))
     monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
 
-    assert tools.measured_accuracies()["decimer"]["accuracy"] == 0.42
-    assert "0.420 exact match" in tools.list_ocsr_models.func()
+    assert tools.measured_accuracies()["decimer"]["accuracy"] == 0.4242
+    assert "0.424 exact match" in tools.list_ocsr_models.func()
+
+
+def test_the_listing_quotes_the_number_the_tool_quotes(monkeypatch, tmp_path):
+    """One install cannot report two accuracies for one model.
+
+    Silent when broken: the listing prints the table's raw rate while a single-model
+    read reports the Jeffreys estimate, and nothing says why they differ.
+    """
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer"], "min_n_for_point_estimate": 20,
+        "patterns": {"1": {"k": 90, "n": 100}},
+        "model_performance": {"decimer": {"accuracy": 0.9, "p": 0.8960,
+                                          "k": 90, "n": 100}},
+    }))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
+
+    shown = tools.measured_accuracies()["decimer"]["accuracy"]
+
+    assert shown == core.prior_confidence("decimer")["p"] == 0.8960
+    assert "0.896 exact match" in tools.list_ocsr_models.func()
+
+
+def test_the_listing_withholds_what_the_tool_withholds(monkeypatch, tmp_path):
+    """Below the floor the tool quotes no number, so neither can the listing.
+
+    Silent when broken: a model measured on seven images is listed at 1.000 while
+    asking the tool for the same model returns no figure at all.
+    """
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer"], "min_n_for_point_estimate": 20,
+        "patterns": {"1": {"k": 7, "n": 7}},
+        "model_performance": {"decimer": {"accuracy": 1.0, "p": None,
+                                          "k": 7, "n": 7}},
+    }))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
+
+    listing = tools.list_ocsr_models.func()
+
+    assert core.prior_confidence("decimer")["p"] is None
+    # Positively, so falling back to the registry's packaged figure fails here too:
+    # a negative assertion alone is satisfied by printing 0.899 instead of 1.000.
+    assert "measured on too few images to quote (your table)" in listing
+    assert "0.899" not in listing
+
+
+def test_a_model_the_table_omits_falls_back_to_the_registry(monkeypatch, tmp_path):
+    """A table that never measured a model is not a table that withheld its figure.
+
+    Silent when broken: model_performance returns {} for an uncovered model, and
+    `{} is not None` reports every one of them as measured on too few images, by a
+    table that does not mention them.
+    """
+    table = tmp_path / "cal.json"
+    table.write_text(json.dumps({
+        "committee": ["decimer"], "min_n_for_point_estimate": 20,
+        "patterns": {"1": {"k": 90, "n": 100}},
+        "model_performance": {"decimer": {"accuracy": 0.9, "p": 0.896,
+                                          "k": 90, "n": 100}},
+    }))
+    monkeypatch.setenv("CHEMGRAPH_OCSR_CALIBRATION", str(table))
+
+    listing = tools.list_ocsr_models.func()
+
+    assert "0.896 exact match (your table)" in listing  # covered
+    assert "0.835 exact match" in listing               # uncovered: the registry
+    assert listing.count("too few images") == 0
 
 
 def test_the_listing_separates_installed_from_ready(monkeypatch, tmp_path):
@@ -1005,3 +1100,425 @@ def test_decimer_needs_no_checkpoint_and_is_never_called_unready(monkeypatch,
     monkeypatch.setattr(backends, "available_specialists", lambda: ["decimer"])
 
     assert backends.usable_specialists() == ["decimer"]
+
+
+L_ALANINE = "C[C@@H](N)C(=O)O"
+D_ALANINE = "C[C@H](N)C(=O)O"
+
+
+def test_the_strongest_model_supplies_the_stereochemistry(monkeypatch, image):
+    """Not the majority: the models rank the same way on stereochemistry.
+
+    Silent when broken: three weaker readings outvote the one measured most likely
+    to be right. On the benchmark's stereo-bearing items DECIMER is exact 76.6% of
+    the time against molnextr 57.4%, ocsrglyph 48.9% and molscribe 40.4%, and where
+    the two rules disagreed the priority pick matched gold 55 times to nil.
+    """
+    _committee(monkeypatch, {"decimer": D_ALANINE, "molnextr": L_ALANINE,
+                             "molscribe": L_ALANINE, "ocsrglyph": L_ALANINE})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["agreement"] == "4"
+    assert result["smiles"] == core.canonicalize(D_ALANINE, stereo=True)
+    # The three that read otherwise are not silently discarded.
+    assert "different stereochemistries" in result["warning"]
+
+def test_a_stereo_split_says_the_number_does_not_cover_it(monkeypatch, image):
+    """The table was fitted stereo-blind, so it scores the skeleton only.
+
+    Silent when broken: an even split on the wedge bonds reports 0.9989 unanimous
+    with nothing to show half the committee read the other enantiomer.
+    """
+    _committee(monkeypatch, {"decimer": D_ALANINE, "molnextr": D_ALANINE,
+                             "molscribe": L_ALANINE, "ocsrglyph": L_ALANINE})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["confidence"] > 0.99  # the skeleton really is unanimous
+    assert "different stereochemistries" in result["warning"]
+    assert "stereo-blind" in result["warning"]
+
+
+def test_agreeing_on_the_stereochemistry_raises_no_caveat(monkeypatch, image):
+    """The warning has to stay off the path where every model read the same thing."""
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, L_ALANINE))
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["smiles"] == core.canonicalize(L_ALANINE, stereo=True)
+    assert result["warning"] == ""
+
+
+def test_reading_no_stereocentre_is_not_a_conflict(monkeypatch, image):
+    """A model that marked nothing read less, it did not read differently.
+
+    Silent when broken: on the benchmark this warns on all 115 groups that hold
+    more than one stereo form instead of the 112 that lose something, and an agent
+    taught to treat the caveat as meaningful learns to ignore it.
+    """
+    flat = core.canonicalize(L_ALANINE)
+    _committee(monkeypatch, {"decimer": L_ALANINE, "molnextr": L_ALANINE,
+                             "molscribe": L_ALANINE, "ocsrglyph": flat})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["smiles"] == core.canonicalize(L_ALANINE, stereo=True)
+    assert result["warning"] == ""
+
+
+def test_dropping_a_stereocentre_the_minority_read_is_a_conflict(monkeypatch, image):
+    """The answer loses information one model supplied, so it has to say so."""
+    flat = core.canonicalize(L_ALANINE)
+    _committee(monkeypatch, {"decimer": flat, "molnextr": flat,
+                             "molscribe": flat, "ocsrglyph": L_ALANINE})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["smiles"] == flat
+    assert "different stereochemistries" in result["warning"]
+
+
+DIENE_BOTH = "C/C=C/C=C/C"
+DIENE_ONE = "C/C=C/C=CC"
+
+
+def test_an_answer_that_says_more_is_not_a_conflict(monkeypatch, image):
+    """Reading one of two double bonds where the answer reads both loses nothing.
+
+    Silent when broken: 29 of the 115 real multi-form groups warn about a
+    difference in which the answer already carries everything the others read.
+    """
+    _committee(monkeypatch, {"decimer": DIENE_BOTH, "molnextr": DIENE_ONE,
+                             "molscribe": DIENE_ONE, "ocsrglyph": DIENE_ONE})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["smiles"] == core.canonicalize(DIENE_BOTH, stereo=True)
+    assert result["warning"] == ""
+
+
+def test_an_answer_that_says_less_is_a_conflict(monkeypatch, image):
+    """The mirror case: the answer drops a centre the others assigned."""
+    _committee(monkeypatch, {"decimer": DIENE_ONE, "molnextr": DIENE_BOTH,
+                             "molscribe": DIENE_BOTH, "ocsrglyph": DIENE_BOTH})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["smiles"] == core.canonicalize(DIENE_ONE, stereo=True)
+    assert "different stereochemistries" in result["warning"]
+
+
+def test_the_caveat_names_who_backs_the_answer(monkeypatch, image):
+    """The largest group is regularly not the answer's.
+
+    Silent when broken: a leading count reads as the answer's support when it
+    belongs to the readings the answer overruled, which is half of the real cases.
+    """
+    flat = core.canonicalize(L_ALANINE)
+    _committee(monkeypatch, {"decimer": flat, "molnextr": L_ALANINE,
+                             "molscribe": L_ALANINE, "ocsrglyph": L_ALANINE})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["smiles"] == flat
+    assert "decimer's reading" in result["warning"]
+    assert "3 other models read otherwise" in result["warning"]
+    # The largest group is the one that lost, so its size must not lead.
+    assert "3 different" not in result["warning"]
+
+
+def test_a_centre_the_answer_lacks_entirely_is_still_a_conflict(monkeypatch, image):
+    """The comparison is keyed on the atom, so a one-sided centre cannot be skipped.
+
+    Silent when broken: zipping the two elementwise truncates to the shorter list,
+    so an answer carrying no stereo at all covers everything by default. On the
+    benchmark that hid 26 of the 112 groups where the answer discards a reading,
+    including a sulfur centre three models never saw.
+    """
+    plain = "O=[N+]([O-])c1cccnc1S(=O)(=O)O"
+    marked = "O=[N+]([O-])c1cccnc1[S@SP3](=O)(=O)O"
+    _committee(monkeypatch, {"decimer": plain, "molnextr": marked,
+                             "molscribe": plain, "ocsrglyph": plain})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["smiles"] == core.canonicalize(plain, stereo=True)
+    assert "different stereochemistries" in result["warning"]
+
+
+@pytest.mark.parametrize("answer, other, covered, why", [
+    ("O=[N+]([O-])c1cccnc1S(=O)(=O)O",
+     "O=[N+]([O-])c1cccnc1[S@SP3](=O)(=O)O",
+     False, "the answer drops a square-planar sulfur centre entirely"),
+    ("O=[S@SP1](=O)(NCCCBr)c1ccccc1",
+     "O=[S@SP2](=O)(NCCCBr)c1ccccc1",
+     False, "two square-planar assignments RDKit both describes as NoValue"),
+    ("C[C@H](Cl)[C@@H](C)N", "C[C@H](N)[C@@H](C)Cl",
+     False, "same atom indices, opposite substituents at each centre"),
+    ("O=C(O)[C@@H](O)C(O)[C@H](O)C(=O)O",
+     "O=C(O)[C@@H](O)C(O)[C@@H](O)C(=O)O",
+     False, "the meso form perceives one fewer centre than its diastereomer"),
+    ("C/C=C/C=C/C", "C/C=C/C=CC", True, "the answer assigns a bond the other left open"),
+    ("C[C@@H](N)C(=O)O", "C[C@@H](N)C(=O)O", True, "identical"),
+])
+def test_stereo_coverage_holds_where_element_comparison_does_not(monkeypatch, image,
+                                                                 answer, other,
+                                                                 covered, why):
+    """Each of these defeats a comparison of perceived stereo elements.
+
+    Silent when broken: RDKit returns those in an unpromised order, in a count
+    that changes when one assignment settles another centre, and with a descriptor
+    of NoValue for every class but tetrahedral. Comparing the stereoisomers each
+    form still admits needs no alignment and reads every class.
+    """
+    # decimer leads the shipped tie-break, so its reading becomes the answer.
+    _committee(monkeypatch, {"decimer": answer, "molnextr": other,
+                             "molscribe": other, "ocsrglyph": other})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    warned = "different stereochemistries" in (result["warning"] or "")
+    assert warned is not covered, why
+
+
+@pytest.mark.parametrize("model", [5, 5.0, True, ["decimer"], {"a": 1}])
+def test_a_model_that_is_not_a_name_is_refused_not_raised(model):
+    """models_wanted is type-checked and this was not.
+
+    Silent when broken: .strip() on an int raises AttributeError past the contract
+    that says every failure comes back as ok=False.
+    """
+    result = tools.image_to_smiles_core("/nonexistent.png", model=model)
+
+    assert not result["ok"]
+    assert "must be a name" in result["error"]
+
+
+def test_an_image_path_that_is_not_a_path_is_refused_not_raised():
+    result = tools.image_to_smiles_core(42)
+
+    assert not result["ok"]
+    assert "must be a path" in result["error"]
+
+
+# Raffinose, a trisaccharide with 14 unassigned centres flat. Chosen over sucrose
+# because sucrose sits at exactly 512 isomers, the cap itself, so the enumeration
+# still completes and the truncation branch below is never taken.
+RAFFINOSE_FLAT = "OCC1OC(OCC2OC(OC3(CO)OC(CO)C(O)C3O)C(O)C(O)C2O)C(O)C(O)C1O"
+RAFFINOSE = ("OC[C@H]1O[C@H](OC[C@H]2O[C@H](O[C@]3(CO)O[C@H](CO)[C@@H](O)[C@@H]3O)"
+             "[C@H](O)[C@@H](O)[C@@H]2O)[C@H](O)[C@@H](O)[C@@H]1O")
+# The same skeleton with only the middle ring's two centres read, in each of two
+# incompatible ways. Both leave 4096 forms open, so both take the fallback.
+RAFFINOSE_ONE_RING = ("OCC1OC(OC[C@H]2O[C@H](OC3(CO)OC(CO)C(O)C3O)C(O)C(O)C2O)"
+                      "C(O)C(O)C1O")
+RAFFINOSE_OTHER_RING = ("OCC1OC(OC[C@@H]2O[C@@H](OC3(CO)OC(CO)C(O)C3O)C(O)C(O)C2O)"
+                        "C(O)C(O)C1O")
+
+
+def test_a_sugar_read_flat_by_the_rest_is_not_a_conflict(monkeypatch, image):
+    """Past the enumeration cap a truncated set is not a subset of anything.
+
+    Silent when broken: any sugar or polyol with 9 or more unassigned centres warns
+    that the committee read different stereochemistries when three of four read
+    none at all, which is the case the coverage rule exists to allow.
+    """
+    _committee(monkeypatch, {"decimer": RAFFINOSE, "molnextr": RAFFINOSE_FLAT,
+                             "molscribe": RAFFINOSE_FLAT,
+                             "ocsrglyph": RAFFINOSE_FLAT})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert result["agreement"] == "4"
+    assert result["warning"] == ""
+
+
+def test_a_sugar_read_with_a_flipped_centre_still_conflicts(monkeypatch, image):
+    """The fallback must not wave everything through: it still catches a real one.
+
+    Both readings leave 4096 forms open, so both take the fallback, and they
+    disagree on the two centres each does assign.
+    """
+    _committee(monkeypatch, {"decimer": RAFFINOSE_ONE_RING,
+                             "molnextr": RAFFINOSE_OTHER_RING,
+                             "molscribe": RAFFINOSE_OTHER_RING,
+                             "ocsrglyph": RAFFINOSE_OTHER_RING})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert "different stereochemistries" in result["warning"]
+
+
+def test_an_unread_square_planar_centre_is_still_less_detail(monkeypatch, image):
+    """Reading one centre where the others read none stays less detail.
+
+    Silent when broken: comparing _chiralPermutation to catch a metal-centre
+    conflict was tried and reverted, because the index depends on the neighbour
+    order the SMILES was written in and 12 of 18 same-geometry pairs came back as
+    conflicts. This is the case that regression broke.
+    """
+    pad = "C(O)" * 11
+    cis = f"Cl[Pt@SP1](Cl)([NH3])[NH2]{pad}O"
+    flat = f"Cl[Pt](Cl)([NH3])[NH2]{pad}O"
+    _committee(monkeypatch, {"decimer": cis, "molnextr": flat,
+                             "molscribe": flat, "ocsrglyph": flat})
+
+    assert tools.image_to_smiles_core(image, ensemble=True)["warning"] == ""
+
+
+def test_the_truncation_fallback_is_the_path_these_two_take(monkeypatch, image):
+    """Guards the pair above: at or under the cap they never exercise it.
+
+    Silent when broken: the molecule drifts to one the enumeration can finish, both
+    tests keep passing, and the branch they exist for stops being reached at all.
+    """
+    from rdkit import Chem
+    from rdkit.Chem.EnumerateStereoisomers import (GetStereoisomerCount,
+                                                   StereoEnumerationOptions)
+
+    opts = StereoEnumerationOptions(onlyUnassigned=True, unique=True,
+                                    tryEmbedding=False, maxIsomers=tools._MAX_ISOMERS)
+    for smiles in (RAFFINOSE_FLAT, RAFFINOSE_ONE_RING, RAFFINOSE_OTHER_RING):
+        mol = Chem.MolFromSmiles(core.canonicalize(smiles, stereo=True))
+        assert GetStereoisomerCount(mol, options=opts) > tools._MAX_ISOMERS
+
+    # And the cap is above what a real prediction reaches: the largest count over
+    # the benchmark's 2777 predictions is 512, so no ordinary molecule pays for the
+    # fallback's weaker comparison.
+    assert tools._MAX_ISOMERS >= 512
+
+
+def test_the_no_specialist_error_is_bounded(monkeypatch, image):
+    """It joins one backend error per model and goes into an agent's context.
+
+    Silent when broken: a long weights directory measured 32,932 characters.
+    """
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+    monkeypatch.setattr(backends, "smiles_from_specialist", lambda n, p: {
+        "ok": False, "smiles": None, "raw": "", "model_used": n, "cold_start": False,
+        "latency_s": 0.1, "ran": False, "error": "x" * 9000})
+
+    result = tools.image_to_smiles_core(image, ensemble=True)
+
+    assert not result["ok"]
+    assert len(result["error"]) < 1000
+
+
+def test_a_str_subclass_model_cannot_run_its_own_code(image):
+    """isinstance passes for a subclass, which is free to override strip.
+
+    Silent when broken: whatever the subclass raises escapes the never-raises
+    contract from inside the guard added to keep a non-string out.
+    """
+    class HostileStrip(str):
+        def strip(self, *a):
+            raise RuntimeError("boom")
+
+    class HostileStr(str):
+        def __str__(self):
+            raise RuntimeError("boom")
+
+    for hostile in (HostileStrip("decimer"), HostileStr("decimer")):
+        assert isinstance(tools.image_to_smiles_core(image, model=hostile), dict)
+
+
+def test_the_models_wanted_error_does_not_call_a_caller_supplied_repr(monkeypatch,
+                                                                     image):
+    """The guard reports what it rejected, and repr is caller code too.
+
+    Silent when broken: the object's own exception replaces the error message the
+    guard exists to produce.
+    """
+    class Hostile:
+        def __repr__(self):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+
+    result = tools.image_to_smiles_core(image, ensemble=True,
+                                        models_wanted=[Hostile()])
+
+    assert not result["ok"]
+    assert "a Hostile" in result["error"]
+
+
+@pytest.mark.parametrize("wanted", [[["decimer"]], [{"a": 1}], [set()], [None], [5]])
+def test_an_unhashable_models_wanted_element_is_refused_not_raised(monkeypatch,
+                                                                   image, wanted):
+    """The guard tests membership in a dict, which hashes before it can report.
+
+    Silent when broken: TypeError from inside the check written to prevent it.
+    """
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+
+    result = tools.image_to_smiles_core(image, ensemble=True, models_wanted=wanted)
+
+    assert not result["ok"]
+    assert "not OCSR specialists" in result["error"]
+
+
+@pytest.mark.parametrize("call, field", [
+    (lambda: tools.image_to_smiles_core("/x" + "y" * 50000 + ".png"), "error"),
+    (lambda: tools.image_to_smiles_core("/x.png", model="z" * 50000), "error"),
+])
+def test_no_result_field_echoes_an_unbounded_input(call, field):
+    """Every message can quote a path, a model name or a backend error.
+
+    Silent when broken: 100,000 characters of one bad argument go back into an
+    agent's context.
+    """
+    assert len(call()[field]) <= core._MAX_MESSAGE_CHARS
+
+
+@pytest.mark.parametrize("call, field", [
+    (lambda: tools.image_to_smiles_core("/x" + "y" * 50000 + ".png"), "error"),
+    (lambda: tools.image_to_smiles_core("/x.png", model="z" * 50000), "error"),
+])
+def test_the_echo_is_bounded_before_the_field_is(call, field):
+    """The field cap has to hold four legitimate caveats, so it is too wide alone.
+
+    Silent when broken: one 50,000-character argument fills the whole budget and
+    pushes off the end the part of the message a user has to act on.
+    """
+    assert len(call()[field]) < 900
+
+
+def test_the_cap_applies_to_the_warning_and_the_reason_too(monkeypatch, image):
+    _committee(monkeypatch, dict.fromkeys(ALL_FOUR, ASPIRIN))
+
+    result = tools.image_to_smiles_core(
+        image, ensemble=True, calibration="/q" + "w" * 50000 + ".json")
+
+    assert len(result["warning"]) <= core._MAX_MESSAGE_CHARS
+    assert len(result["confidence_unavailable_reason"]) <= core._MAX_MESSAGE_CHARS
+    # The echo is what keeps this well under the cap: the path appears in the
+    # warning, and the actionable half of the sentence follows it.
+    assert result["warning"].endswith("carries no confidence")
+
+
+def test_a_legitimate_four_caveat_warning_is_not_truncated(monkeypatch, image):
+    """A salt, read by a shrunken committee whose two absentees named a download.
+
+    Silent when broken: the cap cuts the refit command off the mismatch note, which
+    is the one part of that message a user can act on.
+    """
+    monkeypatch.setattr(backends, "available_specialists", lambda: ALL_FOUR)
+
+    def one(name, path):
+        if name in ("molscribe", "ocsrglyph"):
+            return {"ok": False, "smiles": None, "raw": "", "model_used": name,
+                    "cold_start": False, "latency_s": 0.1, "ran": False,
+                    "error": "checkpoint not found at ~/ocsr-weights/x/model.pth; "
+                             "download it with: hf download Org/Repo model.pth"}
+        return {"ok": True, "smiles": "C[C@H](N)C(=O)O.Cl.O" if name == "decimer"
+                else "CC(N)C(=O)O.Cl.O", "raw": "", "model_used": name,
+                "cold_start": False, "latency_s": 0.1, "error": "", "ran": True}
+
+    monkeypatch.setattr(backends, "smiles_from_specialist", one)
+
+    warning = tools.image_to_smiles_core(image, ensemble=True)["warning"]
+
+    assert not warning.endswith("...")
+    assert "disconnected fragments" in warning
+    assert "could not run" in warning
+    assert "--models decimer,molnextr" in warning

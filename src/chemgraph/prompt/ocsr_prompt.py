@@ -95,6 +95,11 @@ wait: before feeding a SMILES to a calculation, or when a plain call returned
 something the user doubts. Tell the user the number and the split, and treat
 `confidence_label` of `conflicting` as an answer not to build on.
 
+Read `warning` even when the confidence is high. The table was fitted stereo-blind,
+so a unanimous committee scores the skeleton and says nothing about wedge bonds: if
+the models read different stereochemistry, the number stays high and the caveat is
+the only sign. Repeat it to the user before they act on the stereocentres.
+
 A committee can come back with no number and a warning about a mismatch. That means
 the calibration table describes a different set of models than this machine ran.
 When the warning names a subset, pass it as `models_wanted` to vote exactly the

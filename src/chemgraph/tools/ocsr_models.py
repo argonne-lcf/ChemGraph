@@ -141,11 +141,23 @@ def describe_models(installed: list[str] | None = None,
         # installed models leaves the rest on the registry's figures, and a listing
         # mixing the two without saying so cannot be read: the model labelled most
         # accurate can show the lowest number.
-        refit = (measured.get(name) or {}).get("accuracy")
+        # An entry present with a null accuracy is a table that measured this model
+        # and withheld the figure, which is not the same as a table that does not
+        # cover it. Falling back to the registry there would print the packaged
+        # benchmark number for a user whose own data says too little to quote one.
+        entry = measured.get(name)
+        refit = (entry or {}).get("accuracy")
+        # bool(entry), since model_performance returns {} for a model the table does
+        # not cover and `{} is not None` would call every one of them measured.
+        withheld = bool(entry) and refit is None
         accuracy = refit if refit is not None else m.get("accuracy")
         source = " (your table)" if refit is not None else ""
-        score = (f"{accuracy:.3f} exact match{source}" if accuracy is not None
-                 else "unmeasured")
+        if withheld:
+            score = "measured on too few images to quote (your table)"
+        elif accuracy is not None:
+            score = f"{accuracy:.3f} exact match{source}"
+        else:
+            score = "unmeasured"
         latency = m.get("latency_s")
         speed = f", {latency:g}s/image" if latency else ""
         lines.append(f"  {name}{default}: {score}{speed} ({mark})")

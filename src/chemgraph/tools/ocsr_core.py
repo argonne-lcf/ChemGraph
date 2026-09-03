@@ -37,8 +37,21 @@ _MAX_IMAGE_BYTES = 8_000_000
 # RDKit parsing is superlinear in string length: 20k characters costs about 9 s of
 # CPU and a megabyte-scale string is effectively unbounded. Model output is untrusted,
 # so cap it before RDKit sees it. Real SMILES are well under 1000 characters; the
-# longest in the OCSR benchmark is 224.
+# longest reference label in the OCSR benchmark is 152 and the longest prediction
+# any model returned is 485.
 _MAX_SMILES_CHARS = 4000
+
+# Cap for the free-text fields of a result. Each can echo a caller-supplied path,
+# model name or backend message, and the dict is read back into an agent's context.
+# 1200 clears the longest legitimate warning, which is four caveats at once: a
+# salt, the models that could not run, a committee the table does not describe,
+# and a stereo split. Searching that space by driving image_to_smiles_core puts
+# the maximum near 1190. No per-term breakdown here: it was written four times
+# and wrong four times, because the terms trade off against each other through the
+# number of models running and cannot each be taken at their own maximum. A lower
+# cap drops the refit command off the end of the mismatch note, which is the one
+# part of that message a user has to act on.
+_MAX_MESSAGE_CHARS = 1200
 
 # Confidence label cut-points, applied to the point estimate. Below the calibration
 # table's n floor these are prefixed "low_n_", because a 30-60 pp interval does not
@@ -135,12 +148,14 @@ def load_image_bytes(image_path: str, max_bytes: int = _MAX_IMAGE_BYTES) -> tupl
             f"files are refused (a FIFO would block forever, /dev/zero would not end)."
         )
     if st.st_size > max_bytes:
-        raise ValueError(f"image is {st.st_size} bytes, over the {max_bytes} limit: {path}")
+        raise ValueError(f"image is {st.st_size} bytes, over the {max_bytes} limit: "
+                         f"{echo(path)}")
 
     with open(path, "rb") as fh:
         data = fh.read(max_bytes + 1)  # +1 so a file that grew since lstat is caught
     if len(data) > max_bytes:
-        raise ValueError(f"image grew past the {max_bytes} limit while reading: {path}")
+        raise ValueError(f"image grew past the {max_bytes} limit while reading: "
+                         f"{echo(path)}")
 
     mime = _sniff_mime(data[:16])
     if mime is None:
@@ -156,6 +171,31 @@ def load_image_bytes(image_path: str, max_bytes: int = _MAX_IMAGE_BYTES) -> tupl
 # ---------------------------------------------------------------------------
 
 
+def _encodable(smiles: str) -> bool:
+    """True when the string can cross into RDKit, which takes bytes.
+
+    json.loads accepts a lone surrogate such as ``\\ud800``, so a model reply
+    carrying a broken UTF-16 pair arrives here as a str no encoder can render.
+    Every RDKit entry point then raises UnicodeEncodeError, which is a raise out of
+    two functions whose contract is to return a value for any input.
+    """
+    try:
+        smiles.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def jeffreys(k: int, n: int) -> float:
+    """Posterior mean under Beta(0.5, 0.5). Keeps a perfect bucket below 1.0.
+
+    One definition, because the table records this as the rule covering every
+    number in it and the validator enforces that. ocsr_calibrate imports it, so a
+    table cannot be fitted under one formula and checked against another.
+    """
+    return (k + 0.5) / (n + 1.0)
+
+
 def canonicalize(smiles: str | None, stereo: bool = False) -> str | None:
     """Canonical SMILES, or None when the string does not parse.
 
@@ -168,7 +208,7 @@ def canonicalize(smiles: str | None, stereo: bool = False) -> str | None:
     other three emit aromatic, and on 422 benchmark items raw-string comparison finds
     the four unanimous on 12 where canonical comparison finds it on 289.
     """
-    if not smiles or len(smiles) > _MAX_SMILES_CHARS:
+    if not smiles or len(smiles) > _MAX_SMILES_CHARS or not _encodable(smiles):
         return None
     from rdkit import Chem, RDLogger
 
@@ -324,6 +364,9 @@ def validate_smiles_core(smiles: str) -> dict:
             f"parsing cost grows superlinearly and real SMILES are far shorter"
         )
         return out
+    if not _encodable(smiles):
+        out["errors"].append("SMILES contains characters that are not valid text")
+        return out
 
     try:
         from rdkit import Chem, RDLogger
@@ -378,6 +421,26 @@ def validate_smiles_core(smiles: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def echo(value: object, limit: int = 120) -> str:
+    """A caller-supplied value, shortened for quoting in a message.
+
+    Bounds the echo where it happens. The cap in :func:`build_result` bounds the
+    assembled field, which has to stay wide enough for four legitimate caveats at
+    once, so on its own it lets one 50,000-character path fill the whole budget and
+    push the part a user has to act on off the end.
+
+    Cut from the middle. What is quoted here is usually a path, and a deep directory
+    chain is identical across every file in it, so trimming the tail leaves two
+    different images with byte-identical errors and an agent cannot tell which one
+    failed.
+    """
+    text = str(value)
+    if len(text) <= limit:
+        return text
+    head = (limit - 3) // 2
+    return text[:head] + "..." + text[len(text) - (limit - 3 - head):]
+
+
 def build_result(**overrides) -> dict:
     """Assemble the tool's return dict, with every contract key present.
 
@@ -415,6 +478,14 @@ def build_result(**overrides) -> dict:
     if unknown:
         raise KeyError(f"not part of the OCSR result contract: {sorted(unknown)}")
     result.update(overrides)
+    # Cap the free text here rather than at each site that builds it. Every one of
+    # them can echo something the caller supplied, a path, a model name, a backend
+    # message, and the whole dict goes back into an agent's context. One place to
+    # enforce it means a new message cannot reintroduce an unbounded field.
+    for key in ("error", "warning", "confidence_unavailable_reason"):
+        text = result[key]
+        if isinstance(text, str) and len(text) > _MAX_MESSAGE_CHARS:
+            result[key] = text[:_MAX_MESSAGE_CHARS - 3] + "..."
     return result
 
 
@@ -526,12 +597,25 @@ def load_calibration(path: str | None = None) -> dict:
     """
     candidate = path or os.environ.get("CHEMGRAPH_OCSR_CALIBRATION")
     if candidate:
+        # Before expanduser, which calls __fspath__ on anything that has one. Every
+        # caller guards this function for OSError, ValueError and TypeError, and an
+        # object whose __fspath__ raises something else escapes all three. A Path is
+        # the ordinary way to pass a path, so it is converted here where whatever
+        # __fspath__ raises can be turned into one of the three.
+        if not isinstance(candidate, (str, os.PathLike)):
+            raise ValueError(f"calibration must be a path, got "
+                             f"{type(candidate).__name__}")
+        try:
+            candidate = os.fspath(candidate)
+        except Exception as exc:
+            raise ValueError(f"calibration path is unusable: "
+                             f"{type(exc).__name__}") from None
         resolved = os.path.expanduser(candidate)
         # A FIFO here blocks open() forever with no caller-side timeout, the same
         # reason load_image_bytes checks. Callers of this function have usually just
         # spent real inference time and must not hang holding the result.
         if not stat.S_ISREG(os.lstat(resolved).st_mode):
-            raise ValueError(f"calibration table is not a regular file: {resolved}")
+            raise ValueError(f"calibration table is not a regular file: {echo(resolved)}")
         with open(resolved) as fh:
             return _validate_calibration(_load_json(fh, resolved), resolved)
 
@@ -574,6 +658,24 @@ def _validate_calibration(table: object, origin: str) -> dict:
         except (OverflowError, ValueError, TypeError):
             raise bad(f"{field} is not a usable number: {value!r}") from None
 
+    def check_ci(span: object, where: str) -> None:
+        """A pattern cell and a model_performance entry bound theirs identically.
+
+        isfinite because json.loads accepts NaN and Infinity, and a NaN bound
+        compares false against everything, so a low-n label would come out wrong
+        with nothing to show why.
+        """
+        if span is None:
+            return
+        ok = (isinstance(span, list) and len(span) == 2
+              and all(isinstance(b, (int, float)) and not isinstance(b, bool)
+                      and math.isfinite(num(b, f"{where} ci")) and 0.0 <= b <= 1.0
+                      for b in span))
+        if not ok:
+            raise bad(f"{where} has a malformed ci: {span!r}")
+        if span[0] > span[1]:
+            raise bad(f"{where} has a reversed ci: {span!r}")
+
     if not isinstance(table, dict):
         raise bad(f"top level is {type(table).__name__}, expected an object")
     committee = table.get("committee")
@@ -605,15 +707,18 @@ def _validate_calibration(table: object, origin: str) -> dict:
     # the floor, and the table would quote a point estimate from a handful of images
     # while recording that it does not.
     declared = table.get("min_n_for_point_estimate")
-    # isfinite for the same reason the ci check uses it: json accepts NaN and
-    # Infinity, NaN < anything is False so the floor would never fire, and inf
-    # fires on every bucket however large.
-    if declared is not None and (isinstance(declared, bool)
-                                 or not isinstance(declared, (int, float))
-                                 or not math.isfinite(declared)
-                                 or declared < 0):
-        raise bad(f"'min_n_for_point_estimate' must be a non-negative number: "
-                  f"{declared!r}")
+    if declared is not None:
+        if isinstance(declared, bool) or not isinstance(declared, (int, float)):
+            raise bad(f"'min_n_for_point_estimate' must be a non-negative number: "
+                      f"{declared!r}")
+        # Through num(), so a 400-digit int raises ValueError here rather than
+        # OverflowError from the isfinite call, which no caller guards against.
+        # isfinite for the reason the ci check uses it: json accepts NaN, which
+        # compares false against everything so the floor would never fire, and
+        # Infinity, which fires on every bucket however large.
+        if not math.isfinite(num(declared, "'min_n_for_point_estimate'")) or declared < 0:
+            raise bad(f"'min_n_for_point_estimate' must be a non-negative number: "
+                      f"{declared!r}")
 
     patterns = table.get("patterns")
     if not isinstance(patterns, dict) or not patterns:
@@ -637,6 +742,16 @@ def _validate_calibration(table: object, origin: str) -> dict:
         # what vote() produces, and every lookup would quietly miss or mismatch.
         if sum(parts) != size:
             raise bad(f"pattern {name!r} sums to {sum(parts)}, committee has {size} models")
+        # vote() emits counts largest first, joined by a slash and nothing else, so
+        # a key that differs from that in any way is a bucket no lookup can ever
+        # reach. Descending order is one way to differ. int() also normalises, so
+        # "+4", "0004", " 4 " and the Arabic-Indic digit all parse to the same parts
+        # and none of them is ever looked up. Rejecting the key beats shipping a
+        # silently dead row.
+        canonical = "/".join(str(x) for x in sorted(parts, reverse=True))
+        if str(name) != canonical:
+            raise bad(f"pattern {name!r} is not the key vote() emits, which is "
+                      f"{canonical!r}")
         k, n = cell.get("k"), cell.get("n")
         if (isinstance(k, bool) or isinstance(n, bool)
                 or not isinstance(n, int) or n < 0
@@ -652,6 +767,11 @@ def _validate_calibration(table: object, origin: str) -> dict:
         # the consistency check below pass, so it has to be caught here.
         if n == 0 and cell.get("p") is not None:
             raise bad(f"pattern {name!r} quotes p over 0 observations")
+        # An interval is a quotable number too: below the floor confidence() falls
+        # back to ci[0] as the estimate exactly when n is 0, so a bucket with no
+        # observations would report a band from nothing.
+        if n == 0 and cell.get("ci") is not None:
+            raise bad(f"pattern {name!r} quotes an interval over 0 observations")
 
         # p, ci and label are what a caller acts on, so check them here. Left
         # unchecked, a string p reached _label_for and raised TypeError deep inside a
@@ -663,29 +783,30 @@ def _validate_calibration(table: object, origin: str) -> dict:
                 raise bad(f"pattern {name!r} has a non-numeric p: {p!r}")
             if not 0.0 <= p <= 1.0:
                 raise bad(f"pattern {name!r} has p={p} outside [0, 1]")
-            expected = round((k + 0.5) / (n + 1.0), 4)
+            expected = round(jeffreys(k, n), 4)
             if abs(p - expected) > 5e-4:
                 raise bad(
                     f"pattern {name!r} says p={p} but k/n = {k}/{n} gives {expected}. "
                     f"Refit with python -m chemgraph.tools.ocsr_calibrate "
                     f"instead of editing p."
                 )
-        ci = cell.get("ci")
-        if ci is not None:
-            ok = (isinstance(ci, list) and len(ci) == 2
-                  and all(isinstance(b, (int, float)) and not isinstance(b, bool)
-                          and math.isfinite(num(b, f"pattern {name!r} ci"))
-                          and 0.0 <= b <= 1.0
-                          for b in ci))
-            if not ok:
-                # json.loads accepts NaN and Infinity, and a NaN bound compares false
-                # against everything, so a low-n label would silently come out wrong.
-                raise bad(f"pattern {name!r} has a malformed ci: {ci!r}")
-            if ci[0] > ci[1]:
-                raise bad(f"pattern {name!r} has a reversed ci: {ci!r}")
+        check_ci(cell.get("ci"), f"pattern {name!r}")
         label = cell.get("label")
-        if label is not None and not isinstance(label, str):
-            raise bad(f"pattern {name!r} has a non-string label: {label!r}")
+        if label is not None:
+            if not isinstance(label, str):
+                raise bad(f"pattern {name!r} has a non-string label: {label!r}")
+            # Cross-checked against its own p, the way the p is cross-checked
+            # against its own k/n. confidence() returns a stored label verbatim
+            # above the floor, and an agent is told to band on the label, so a
+            # bucket right on 1 of 100 could be labelled unanimous and nothing in
+            # the result would contradict it.
+            p_value = cell.get("p")
+            if isinstance(p_value, (int, float)) and not isinstance(p_value, bool):
+                want = _label_for(p_value)
+                if label != want:
+                    raise bad(f"pattern {name!r} is labelled {label!r} but p="
+                              f"{p_value} bands as {want!r}. Refit rather than "
+                              f"editing the label.")
 
     # Checked here so prior_confidence and model_performance can read it without
     # each guarding separately. A string accuracy used to reach _label_for and raise
@@ -697,23 +818,77 @@ def _validate_calibration(table: object, origin: str) -> dict:
         for name, entry in performance.items():
             if not isinstance(entry, dict):
                 raise bad(f"model_performance.{name} is not an object")
+            # Every field is checked whether or not accuracy is present. Hanging
+            # the rest of this block off accuracy left an entry stating p, k, n and
+            # ci with no accuracy entirely unchecked, and model_performance() is
+            # documented as the one place to ask how good a model is: it handed
+            # back a NaN p and a k larger than its own n.
             accuracy = entry.get("accuracy")
-            if accuracy is None:
-                continue  # unmeasured is allowed; it reports no_prior_for_model
-            if isinstance(accuracy, bool) or not isinstance(accuracy, (int, float)):
-                raise bad(f"model_performance.{name} has a non-numeric accuracy")
-            if not 0.0 <= accuracy <= 1.0:
-                raise bad(f"model_performance.{name} has accuracy={accuracy} "
-                          f"outside [0, 1]")
+            if accuracy is not None:
+                if (isinstance(accuracy, bool)
+                        or not isinstance(accuracy, (int, float))):
+                    raise bad(f"model_performance.{name} has a non-numeric accuracy")
+                if not 0.0 <= accuracy <= 1.0:
+                    raise bad(f"model_performance.{name} has accuracy={accuracy} "
+                              f"outside [0, 1]")
             count = entry.get("n")
-            if count is not None and (isinstance(count, bool)
-                                      or not isinstance(count, int) or count < 0):
-                raise bad(f"model_performance.{name} has an invalid n: {count!r}")
+            if count is not None:
+                if (isinstance(count, bool) or not isinstance(count, int)
+                        or count < 0):
+                    raise bad(f"model_performance.{name} has an invalid n: {count!r}")
+                # Through num() like every other count: it is compared against the
+                # floor and divided into k, and nothing else should have to stay
+                # bounded for that to be safe.
+                num(count, f"model_performance.{name} n")
             # An accuracy backed by nothing is worse than no accuracy: it reads as a
-            # real measurement and there is no field left to signal otherwise.
-            if count == 0:
-                raise bad(f"model_performance.{name} reports an accuracy over 0 "
-                          f"observations; drop the entry or set accuracy to null")
+            # real measurement and there is no field left to signal otherwise. A
+            # missing n is the same case and looked like the safe one: the floor
+            # test in prior_confidence needs an int, so an accuracy with no n skips
+            # the floor entirely and a model measured on seven images reports 1.0
+            # unanimous, which is exactly what the floor exists to prevent.
+            quoted = entry.get("p")
+            if (accuracy is not None or quoted is not None) and count is None:
+                raise bad(f"model_performance.{name} states a number with no 'n', "
+                          f"so no sample floor can apply to it")
+            if count == 0 and (accuracy is not None or quoted is not None):
+                raise bad(f"model_performance.{name} states a number over 0 "
+                          f"observations; drop the entry or set it to null")
+            # k reaches the same arithmetic the pattern cells do, so it needs the
+            # same guard: a 400-digit int is a valid int and then raises
+            # OverflowError from prior_confidence, past every caller's guard.
+            hits = entry.get("k")
+            if hits is not None:
+                if (isinstance(hits, bool) or not isinstance(hits, int)
+                        or hits < 0 or (count is not None and hits > count)):
+                    raise bad(f"model_performance.{name} has an invalid k: {hits!r}")
+                num(hits, f"model_performance.{name} k")
+            # 'p' is the field prior_confidence quotes and accuracy is what the
+            # listing falls back to, so both owe the cross-check the pattern cells'
+            # p owes. k is what makes that check possible, so a stated number
+            # without one cannot be checked and is refused rather than trusted.
+            if quoted is not None:
+                if isinstance(quoted, bool) or not isinstance(quoted, (int, float)):
+                    raise bad(f"model_performance.{name} has a non-numeric p")
+                if not 0.0 <= quoted <= 1.0:
+                    raise bad(f"model_performance.{name} has p={quoted} "
+                              f"outside [0, 1]")
+            if (accuracy is not None or quoted is not None) and hits is None:
+                raise bad(f"model_performance.{name} states a number with no 'k', "
+                          f"so nothing can be checked against it")
+            if hits is not None and count:
+                if accuracy is not None:
+                    want = round(hits / count, 4)
+                    if abs(accuracy - want) > 5e-4:
+                        raise bad(f"model_performance.{name} says accuracy="
+                                  f"{accuracy} but k/n = {hits}/{count} gives "
+                                  f"{want}. Refit rather than editing accuracy.")
+                if quoted is not None:
+                    want = round(jeffreys(hits, count), 4)
+                    if abs(quoted - want) > 5e-4:
+                        raise bad(f"model_performance.{name} says p={quoted} but "
+                                  f"Jeffreys on {hits}/{count} gives {want}. Refit "
+                                  f"rather than editing p.")
+            check_ci(entry.get("ci"), f"model_performance.{name}")
     return table
 
 
@@ -732,6 +907,8 @@ def tie_break_order(table: dict) -> list[str]:
     rejects it, because falling back would silently vote one way while quoting a
     number measured the other way.
     """
+    if not isinstance(table, dict):
+        return []
     order = _parse_tie_break(table.get("tie_break"))
     return order if order is not None else list(table.get("committee") or [])
 
@@ -780,13 +957,29 @@ def confidence(pattern: str | None, table: dict) -> dict:
     if pattern is None:
         return {"p": None, "label": "unavailable", "n": 0, "ci": None,
                 "reason": "no_prediction"}
+    # Public, so it is reachable with a table that never went through the validator.
+    # A None here used to raise AttributeError from inside a lookup.
+    if not isinstance(table, dict):
+        return {"p": None, "label": "unavailable", "n": 0, "ci": None,
+                "reason": "no_calibration_table"}
 
     entry = (table.get("patterns") or {}).get(pattern)
     if entry is None:
         return {"p": None, "label": "unknown", "n": 0, "ci": None,
                 "reason": "unknown_pattern"}
+    # The table guard above covers the table; the bucket needs its own, for the
+    # same reason: unvalidated, a non-object cell raises out of the lookup.
+    if not isinstance(entry, dict):
+        return {"p": None, "label": "unavailable", "n": 0, "ci": None,
+                "reason": "unusable_bucket"}
 
     p, n, ci = entry.get("p"), entry.get("n", 0), entry.get("ci")
+    # The validator rejects a non-integer or negative n, and this function is public,
+    # so an unvalidated table can still reach the arithmetic below where n == -1
+    # makes the Jeffreys denominator zero.
+    if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+        return {"p": None, "label": "unavailable", "n": 0, "ci": None,
+                "reason": "unusable_bucket"}
     # Honour the floor the table declares, not only the producer's decision to leave
     # p out. A table written by hand, or fitted with a --min-n lower than the one
     # recorded, can carry a point estimate over a handful of images; quoting it
@@ -812,7 +1005,7 @@ def confidence(pattern: str | None, table: dict) -> dict:
         # report "unanimous" from four images, which is the claim the floor exists
         # to refuse, and the low_n_ prefix a caller bands on would be missing.
         k = entry.get("k")
-        est = ((k + 0.5) / (n + 1.0)) if (k is not None and n) else (ci[0] if ci else 0.0)
+        est = jeffreys(k, n) if (k is not None and n) else (ci[0] if ci else 0.0)
         label = _label_for(est, low_n=True)
         return {"p": None, "label": label, "n": n, "ci": ci,
                 "reason": "below_n_floor"}
@@ -848,11 +1041,37 @@ def prior_confidence(model: str, table: dict | None = None) -> dict:
                 "reason": f"calibration_unreadable: {type(exc).__name__}"}
 
     entry = (t.get("model_performance") or {}).get(bare)
-    if not entry or entry.get("accuracy") is None:
+    # Whichever field is quoted below, not accuracy alone. accuracy is the record of
+    # what was counted and nothing requires it, so an entry stating only p reported
+    # no prior at all: unavailable from the tool, n=0 for a model measured on 722
+    # images, and a listing claiming the table measured it on too few.
+    if not entry or (entry.get("p") is None and entry.get("accuracy") is None):
         return {"p": None, "label": "unavailable", "n": 0, "ci": None,
                 "reason": "no_prior_for_model"}
-    p = entry["accuracy"]
-    return {"p": p, "label": _label_for(p), "n": entry.get("n", 0),
+    # 'p' is the quotable estimate the fitter wrote, Jeffreys like every pattern
+    # cell. 'accuracy' is the raw rate and stays the record of what was counted, so
+    # a table without a p (hand-written, or fitted before the field existed) still
+    # reports something rather than nothing.
+    p = entry["p"] if entry.get("p") is not None else entry["accuracy"]
+    n, k = entry.get("n"), entry.get("k")
+    # The same floor the agreement buckets are held to, and the same estimator below
+    # it. An accuracy is fitted from the same images by the same run, so a table that
+    # withholds a bucket's number over three images cannot quote a solo accuracy over
+    # those same three, and cannot call it unanimous either: raw k/n is what the
+    # Jeffreys rule exists to replace.
+    #
+    # n is always present alongside an accuracy: the validator rejects an entry
+    # without one, because a missing n skips this comparison and reports the floor's
+    # opposite. The isinstance guards stay because this function is public and a
+    # caller can hand it a dict that never went through the validator.
+    floor = t.get("min_n_for_point_estimate")
+    if (isinstance(n, int) and not isinstance(n, bool)
+            and isinstance(floor, (int, float)) and not isinstance(floor, bool)
+            and n < floor):
+        est = jeffreys(k, n) if isinstance(k, int) and not isinstance(k, bool) else p
+        return {"p": None, "label": _label_for(est, low_n=True), "n": n,
+                "ci": entry.get("ci"), "reason": "below_n_floor"}
+    return {"p": p, "label": _label_for(p), "n": n if n is not None else 0,
             "ci": entry.get("ci"), "reason": None}
 
 

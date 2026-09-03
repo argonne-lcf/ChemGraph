@@ -20,7 +20,9 @@ image_to_smiles_core("examples/ocsr/images/aspirin.png")
 ```
 
 `python run_ocsr.py` runs all four images and checks each answer against the
-structure it was drawn from. `--agent` routes the same call through an LLM.
+structure it was drawn from. `--ensemble` votes every installed specialist and
+prints the agreement and confidence beside each result. `--agent` routes the same
+call through an LLM, and `--llm` picks which one.
 
 ## Models
 
@@ -28,11 +30,15 @@ structure it was drawn from. `--agent` routes the same call through an LLM.
 
 | model | exact match | speed |
 |-------|-------------|-------|
-| `decimer` (default) | 0.899 | 0.7 s |
+| `decimer` (default) | 0.898 | 0.7 s |
 | `molnextr` | 0.835 | 4.4 s |
 | `molscribe` | 0.824 | 5.0 s |
 | `ocsrglyph` | 0.766 | 0.3 s |
 | `llm` | not measured | varies |
+
+Each figure is the Jeffreys estimate `(k+0.5)/(n+1)` over the 722-image benchmark,
+which is what `list_ocsr_models` prints and what a single-model read bands on. The
+raw counts are in the calibration table's `model_performance`.
 
 `pip install 'chemgraph[ocsr]'` installs all four specialists. `llm` needs no
 install and uses the agent's own model.
@@ -172,7 +178,7 @@ they agree is measurable, and it was measured on 722 benchmark images:
 | `2/2` | an even split | below the sample floor | 12 |
 | `1/1/1/1` | all different | 0.3772 | 56 |
 
-The strongest single model is right 89.9% of the time, so a unanimous committee
+The strongest single model is right 89.8% of the time, so a unanimous committee
 turns a one-in-ten error rate into one in a thousand, and an all-different vote is
 worse than a coin flip. A model that ran and returned nothing usable counts as a
 dissenting singleton, so the parts always sum to the committee size.
@@ -189,6 +195,15 @@ Buckets below 20 observations get a label and an interval but no point estimate:
 that size the 95% interval is 41 points wide, so a decimal would be false precision.
 `confidence_interval` carries it either way, and is the only quantitative thing a
 thin bucket can honestly offer.
+
+The number scores the skeleton only: `"scoring": "stereo_blind"` in the table, so
+the committee is counted after stereochemistry is stripped. Models that agree on
+the skeleton can still have read different wedge bonds, and the answer then takes
+the reading of the model highest in the table's `tie_break` order. That order ranks
+by overall accuracy, which is close to but not the same as accuracy on
+stereochemistry, so the answer is not always the best-placed reading of the wedge
+bonds. `warning` says when a reading was overruled, and it can accompany a
+confidence of 0.9989.
 
 `confidence_label` is one of `unanimous` (p >= 0.99), `strong` (>= 0.95), `weak`
 (>= 0.70), or `conflicting` below that, prefixed `low_n_` when the bucket is thin.
@@ -207,6 +222,11 @@ correctness, so fit your own:
 python -m chemgraph.tools.ocsr_calibrate --labels labels.csv --out mine.json
 export CHEMGRAPH_OCSR_CALIBRATION=mine.json
 ```
+
+`--models` fits a subset of what is installed, `--tie-break` overrides the priority
+the fitter derives from your own measurements, and `--min-n` moves the floor below
+which a bucket gets a label but no number. `image_to_smiles_core` also takes
+`calibration=` for one call, where the environment variable covers a session.
 
 `labels.csv` is `image_path,smiles` with a reference SMILES per image. If you have
 no labels to spare, `--validate` scores the current table against a sample instead,

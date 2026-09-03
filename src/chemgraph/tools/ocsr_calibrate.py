@@ -60,11 +60,6 @@ DEFAULT_MIN_N = 20
 SCORING = "stereo_blind"
 
 
-def _jeffreys(k: int, n: int) -> float:
-    """Posterior mean under Beta(0.5, 0.5). Keeps a perfect bucket below 1.0."""
-    return (k + 0.5) / (n + 1.0)
-
-
 def _interval(k: int, n: int, alpha: float = 0.05) -> tuple[list[float], str]:
     """A 95% interval and the method that produced it.
 
@@ -101,8 +96,14 @@ def read_labels(path: str) -> list[tuple[str, str]]:
     """
     base = os.path.dirname(os.path.abspath(path))
     rows: list[tuple[str, str]] = []
-    with open(path, newline="") as fh:
-        for row in csv.reader(fh):
+    # A labels file is user input: normalise the two ways csv can refuse it into
+    # the ValueError main() already reports, rather than a traceback.
+    with open(path, newline="", errors="replace") as fh:
+        try:
+            parsed = list(csv.reader(fh))
+        except csv.Error as exc:
+            raise ValueError(f"{path} is not readable as CSV: {exc}") from None
+        for row in parsed:
             if len(row) < 2:
                 continue
             img, smiles = row[0].strip(), row[1].strip()
@@ -227,7 +228,7 @@ def fit_calibration(rows: list[tuple[list[dict], str]], models: list[str],
         ci, ci_method = _interval(k, n)
         cell: dict = {"k": k, "n": n, "ci": ci}
         if n >= min_n:
-            cell["p"] = round(_jeffreys(k, n), 4)
+            cell["p"] = round(core.jeffreys(k, n), 4)
             cell["label"] = core._label_for(cell["p"])
         else:
             # No stored label below the floor: the consumer derives one from the
@@ -235,9 +236,16 @@ def fit_calibration(rows: list[tuple[list[dict], str]], models: list[str],
             cell["p"] = None
         patterns[pattern] = cell
 
+    # Two numbers because they answer two questions. 'accuracy' is the raw rate,
+    # the record of what was counted, and it is what the validator cross-checks k
+    # and n against. 'p' is the quotable estimate, Jeffreys like every pattern cell,
+    # so a model perfect on 25 images and the bucket fitted from those same 25
+    # cannot band differently. Withheld below the floor for the same reason a thin
+    # bucket withholds its p.
     performance = {
         name: {
             "accuracy": round(k / n, 4),
+            "p": round(core.jeffreys(k, n), 4) if n >= min_n else None,
             "k": k,
             "n": n,
             "ci": _interval(k, n)[0],
@@ -261,8 +269,10 @@ def fit_calibration(rows: list[tuple[list[dict], str]], models: list[str],
         "model_performance_rule": (
             "Per-model accuracy over the same images, used when a backend runs one "
             "model and there is no agreement pattern to look up. 'accuracy' is the raw "
-            "rate; 'ci' is the 95% Jeffreys interval; 'abstention_rate' is how often "
-            "the model returned no parseable SMILES."
+            "rate, the record of what was counted; 'p' is the quotable Jeffreys "
+            "estimate, the same rule the pattern cells use, and is null below "
+            "min_n_for_point_estimate; 'ci' is the 95% Jeffreys interval; "
+            "'abstention_rate' is how often the model returned no parseable SMILES."
         ),
         "tie_break": "model-priority: " + ",".join(order),
         "created": date.today().isoformat(),
@@ -281,16 +291,20 @@ def fit_calibration(rows: list[tuple[list[dict], str]], models: list[str],
 
 def report(table: dict, min_n: int) -> str:
     """A human-readable summary, including what is too thin to quote."""
+    # Only 'committee' and 'patterns' are required by the validator, so the header
+    # reads the rest defensively. The body below already routes through confidence()
+    # for the same reason: a table this function cannot summarise is still a table
+    # the tool will happily use.
     lines = [
         f"committee : {', '.join(table['committee'])}",
-        f"images    : {table['n_items']}",
-        f"scoring   : {table['scoring']}",
+        f"images    : {table.get('n_items', 'unrecorded')}",
+        f"scoring   : {table.get('scoring', 'unrecorded')}",
         "",
         f"{'pattern':10s} {'k/n':>9s} {'P(correct)':>11s} {'95% CI':>16s}  label",
     ]
     thin = []
     for pattern, cell in table["patterns"].items():
-        k, n = cell["k"], cell["n"]
+        k, n = cell.get("k", 0), cell.get("n", 0)
         # Every displayed field comes from confidence(), the same call image_to_smiles
         # makes, so this report cannot drift from what the tool will say. Reading
         # cell["label"] and cell["ci"] directly crashed with a bare KeyError on the
@@ -319,6 +333,22 @@ def validate(rows: list[tuple[list[dict], str]], models: list[str],
     table is badly wrong for your images, where fitting a new one needs a few
     hundred. This is the question most users actually have.
     """
+    # The same check the tool applies before quoting a number. Without it this
+    # endorses a table the tool will then refuse: a committee the table does not
+    # describe produces patterns it has no bucket for, so every row reads
+    # "no number" and the verdict blames the sample size.
+    #
+    # Read from the rows rather than from `models`, so a caller assembling rows by
+    # hand is checked on what they actually contain. main() refuses the same
+    # mismatch earlier, from the argument, before paying for any inference.
+    ran = sorted({str(r.get("model", "")).removeprefix("local:")
+                  for results, _ in rows for r in results} or set(models))
+    mismatch = core.check_committee({"committee": ran}, table)
+    if mismatch:
+        return (f"cannot validate: {mismatch}\n"
+                f"Scoring these models against this table would compare patterns "
+                f"it was never fitted for.")
+
     # Vote by the rule the table was fitted under, so the comparison is like for
     # like. Using any other order would measure a different quantity than the one
     # the table's numbers describe. A table that reached here without going through
@@ -377,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--labels", required=True,
+    p.add_argument("--labels", required=True, type=os.path.expanduser,
                    help="CSV of image_path,smiles (relative paths resolve to its directory)")
     p.add_argument("--models", default=None,
                    help=("comma-separated committee; default is every installed "
@@ -386,13 +416,39 @@ def main(argv: list[str] | None = None) -> int:
                    help=("comma-separated models, most accurate first, deciding who "
                          "wins when the committee splits evenly. Defaults to the "
                          "most accurate first, measured on your own images."))
-    p.add_argument("--out", default=None, help="where to write the table")
+    p.add_argument("--out", default=None, type=os.path.expanduser,
+                   help="where to write the table")
     p.add_argument("--validate", action="store_true",
                    help="check the current table (CHEMGRAPH_OCSR_CALIBRATION, or "
                         "the packaged one) against your images instead of fitting")
     p.add_argument("--min-n", type=int, default=DEFAULT_MIN_N,
                    help=f"observations needed for a point estimate (default {DEFAULT_MIN_N})")
     args = p.parse_args(argv)
+
+    if args.out:
+        # Probed here for the same reason --validate loads its table here: an
+        # unwritable path found after collect() discards a full run of inference
+        # and the table it produced.
+        try:
+            # Through realpath, so a link is judged by the file it resolves to and
+            # neither branch has to special-case one: append would follow a link and
+            # create its target, and "x" would not follow and would refuse a
+            # dangling one with "File exists" naming a path that does not exist.
+            out_path = os.path.realpath(args.out)
+            if os.path.exists(out_path):
+                # Do not create or remove anything: a zero-byte file the user
+                # already had is indistinguishable from one the probe made, and
+                # this runs before the other argument checks, so a run that then
+                # exits 2 would have destroyed it.
+                with open(out_path, "a"):
+                    pass
+            else:
+                with open(out_path, "x"):
+                    pass
+                os.unlink(out_path)
+        except OSError as exc:
+            print(f"cannot write {args.out}: {exc}", file=sys.stderr)
+            return 2
 
     if args.min_n < 0:
         # Checked here for the same reason as --models below: the pre-write
@@ -434,11 +490,15 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
             return 2
 
-    if not os.path.isfile(os.path.expanduser(args.labels)):
+    if not os.path.isfile(args.labels):
         print(f"no such labels file: {args.labels}. Expected a CSV of "
               f"image_path,smiles.", file=sys.stderr)
         return 2
-    labels = read_labels(args.labels)
+    try:
+        labels = read_labels(args.labels)
+    except (OSError, ValueError) as exc:
+        print(f"cannot read {args.labels}: {exc}", file=sys.stderr)
+        return 2
     if not labels:
         print(f"no usable rows in {args.labels}; expected image_path,smiles",
               file=sys.stderr)
@@ -458,6 +518,15 @@ def main(argv: list[str] | None = None) -> int:
             reference_table = core.load_calibration()
         except (OSError, ValueError, TypeError) as exc:
             print(f"cannot validate: {exc}", file=sys.stderr)
+            return 2
+        # Both inputs are known here, so refuse now rather than after collect() has
+        # run every model over every image to reach the same conclusion.
+        mismatch = core.check_committee({"committee": list(models)}, reference_table)
+        if mismatch:
+            print(f"cannot validate: {mismatch}\n"
+                  f"Scoring these models against this table would compare patterns "
+                  f"it was never fitted for. Name the table's own committee with "
+                  f"--models, or fit a new table for these.", file=sys.stderr)
             return 2
 
     print(f"running {len(models)} model(s) over {len(labels)} images; the first call "
@@ -492,15 +561,24 @@ def main(argv: list[str] | None = None) -> int:
 
     print(report(table, args.min_n))
     if args.out:
-        with open(args.out, "w") as fh:
-            json.dump(table, fh, indent=2)
+        try:
+            # out_path, the same path the pre-flight probe cleared. realpath
+            # strips a trailing slash and open does not, so probing one and
+            # writing the other asks two different questions and the probe stops
+            # meaning anything.
+            with open(out_path, "w") as fh:
+                json.dump(table, fh, indent=2)
+        except OSError as exc:
+            print(f"\nthe table was fitted but could not be written to "
+                  f"{out_path}: {exc}", file=sys.stderr)
+            return 1
         installed = backends.available_specialists()
         subset = [m for m in installed if m not in models]
         names = ", ".join(repr(m) for m in models)
         wanted = f"models_wanted=[{names}], " if subset else ""
-        print(f"\nwrote {args.out}\nUse it with: "
+        print(f"\nwrote {out_path}\nUse it with: "
               f"image_to_smiles_core(img, ensemble=True, {wanted}"
-              f"calibration='{args.out}')")
+              f"calibration='{out_path}')")
         if subset:
             print(f"  models_wanted is needed here: {', '.join(subset)} "
                   f"{'is' if len(subset) == 1 else 'are'} also installed, and the "

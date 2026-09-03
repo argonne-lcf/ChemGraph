@@ -53,7 +53,8 @@ def _same_molecule(a: str | None, b: str) -> bool:
 
 def run_direct(model: str | None, ensemble: bool = False) -> int:
     """Call the tool on every image and report agreement with the known answer."""
-    from chemgraph.tools.ocsr_backends import available_specialists
+    from chemgraph.tools.ocsr_backends import (available_specialists,
+                                                usable_specialists)
     from chemgraph.tools.ocsr_models import describe_models
     from chemgraph.tools.ocsr_tools import (image_to_smiles_core,
                                             measured_accuracies)
@@ -67,6 +68,8 @@ def run_direct(model: str | None, ensemble: bool = False) -> int:
         model = None
     # The llm exemption does not apply to a committee: it never votes.
     if not installed and (ensemble or model != "llm"):
+        # No ready argument: installed is empty here, so nothing can be marked
+        # ready or missing and passing it would be untestable decoration.
         print(describe_models(installed, measured_accuracies()))
         print("\nNo specialist is installed. Install one with:\n"
               "    pip install 'chemgraph[ocsr]'\n"
@@ -74,7 +77,8 @@ def run_direct(model: str | None, ensemble: bool = False) -> int:
               "    python run_ocsr.py --agent --model llm")
         return 1
 
-    print(describe_models(installed, measured_accuracies()), "\n")
+    print(describe_models(installed, measured_accuracies(),
+                          usable_specialists()), "\n")
 
     correct = 0
     for name, expected in EXPECTED.items():

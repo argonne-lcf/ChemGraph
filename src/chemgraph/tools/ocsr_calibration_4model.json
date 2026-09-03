@@ -20,6 +20,7 @@
   "model_performance": {
     "decimer": {
       "accuracy": 0.8989,
+      "p": 0.8983,
       "k": 649,
       "n": 722,
       "ci": [
@@ -30,6 +31,7 @@
     },
     "molnextr": {
       "accuracy": 0.8352,
+      "p": 0.8347,
       "k": 603,
       "n": 722,
       "ci": [
@@ -40,6 +42,7 @@
     },
     "molscribe": {
       "accuracy": 0.8241,
+      "p": 0.8237,
       "k": 595,
       "n": 722,
       "ci": [
@@ -50,6 +53,7 @@
     },
     "ocsrglyph": {
       "accuracy": 0.7659,
+      "p": 0.7656,
       "k": 553,
       "n": 722,
       "ci": [
@@ -107,7 +111,7 @@
     }
   },
   "label_rule": "Where p is present, the consumer may quote it. Where p is null (n below min_n_for_point_estimate), no number is quoted: the label comes from the Jeffreys estimate (k+0.5)/(n+1), the same quantity p reports above the floor, so one rule covers the whole table.",
-  "model_performance_rule": "Per-model accuracy over the same images, used when a backend runs one model and there is no agreement pattern to look up. 'accuracy' is the raw rate; 'ci' is the 95% Jeffreys interval; 'abstention_rate' is how often the model returned no parseable SMILES.",
+  "model_performance_rule": "Per-model accuracy over the same images, used when a backend runs one model and there is no agreement pattern to look up. 'accuracy' is the raw rate, the record of what was counted; 'p' is the quotable Jeffreys estimate, the same rule the pattern cells use, and is null below min_n_for_point_estimate; 'ci' is the 95% Jeffreys interval; 'abstention_rate' is how often the model returned no parseable SMILES.",
   "note": "Valid ONLY for this exact four-model committee. Refit with chemgraph.tools.ocsr_calibrate for any other set.",
   "interval_method": "Jeffreys equal-tailed (scipy)"
 }

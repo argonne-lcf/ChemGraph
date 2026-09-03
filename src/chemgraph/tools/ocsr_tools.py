@@ -31,6 +31,12 @@ from chemgraph.tools import ocsr_models as models
 
 logger = logging.getLogger(__name__)
 
+# Cap on stereoisomer enumeration when comparing two readings of one skeleton. 512
+# covers every prediction in the benchmark (max 512, 8 of 2777 above 64), and the
+# count is checked first so a molecule past it takes the substructure path instead
+# of comparing a truncated set.
+_MAX_ISOMERS = 512
+
 
 def measured_accuracies() -> dict[str, dict]:
     """Solo accuracy per model, from the calibration table rather than the registry.
@@ -44,12 +50,24 @@ def measured_accuracies() -> dict[str, dict]:
         table = core.load_calibration()
     except (OSError, ValueError, TypeError):
         return {}
-    return {m: core.model_performance(m, table) for m in models.SPECIALIST_MODELS}
+    out = {}
+    for m in models.SPECIALIST_MODELS:
+        entry = core.model_performance(m, table)
+        # The listing shows the number the tool quotes, which is the table's 'p'.
+        # 'accuracy' beside it is the raw rate, the record of what was counted, and
+        # showing that here would have one install report two different accuracies
+        # for one model. Withheld below the floor, so the listing cannot state a
+        # figure the tool refuses to state.
+        if entry:
+            prior = core.prior_confidence(m, table)
+            entry["accuracy"] = prior["p"] if prior["reason"] is None else None
+        out[m] = entry
+    return out
 
 
 def _unknown_model_error(model: str) -> str:
     installed = backends.available_specialists()
-    return (f"unknown model {model!r}. Choose one of: "
+    return (f"unknown model {core.echo(repr(model))}. Choose one of: "
             f"{', '.join(models.MODEL_CHOICES)}.\n\n"
             f"{models.describe_models(installed, measured_accuracies(), backends.usable_specialists())}")
 
@@ -65,7 +83,15 @@ def _resolve_model(model: str | None) -> tuple[str, str]:
         installed = backends.available_specialists()
         return (installed[0] if installed else models.LLM_MODEL), ""
 
-    name = model.strip().lower()
+    if not isinstance(model, str):
+        # models_wanted is type-checked and this was not, so a non-string reached
+        # .strip() and raised AttributeError past the never-raises contract.
+        return "", (f"model must be a name, got {type(model).__name__}. "
+                    f"Choose one of: {', '.join(models.MODEL_CHOICES)}.")
+    # Through str's own methods: isinstance passes for a subclass, which is free to
+    # override strip and lower with anything, including a raise. No str() call
+    # either, since __str__ is equally overridable and isinstance already passed.
+    name = str.lower(str.strip(model))
     if name not in models.MODEL_CHOICES:
         return "", _unknown_model_error(model)
     return name, ""
@@ -86,25 +112,21 @@ def _validate_models_wanted(wanted, installed: list[str]) -> str:
     if not wanted:
         return (f"models_wanted is empty. Omit it to vote every installed "
                 f"specialist, or name some of: {choices}")
-    unknown = [m for m in wanted if m not in models.SPECIALIST_MODELS]
+    # isinstance first: `m not in dict` hashes m, so an unhashable element raises
+    # from inside the guard that exists to report it.
+    unknown = [m for m in wanted
+               if not isinstance(m, str) or m not in models.SPECIALIST_MODELS]
     if unknown:
-        return (f"not OCSR specialists: {', '.join(repr(m) for m in unknown)}. "
-                f"Choose from: {choices}")
-    absent = [m for m in wanted if m not in installed]
+        # Named by type where the value is not a string: repr is caller-supplied
+        # code too, and this is the guard that has to survive whatever it is given.
+        shown = ", ".join(core.echo(repr(m)) if isinstance(m, str)
+                          else f"a {type(m).__name__}" for m in unknown)
+        return f"not OCSR specialists: {shown}. Choose from: {choices}"
+    absent = [m for m in wanted if m not in installed]  # all strings by now
     if absent:
         return (f"requested but not installed: {', '.join(absent)}. Install with: "
                 f"pip install 'chemgraph[ocsr]'")
     return ""
-
-
-def _trim(text: str, limit: int = 400) -> str:
-    """Cap a message assembled from backend errors.
-
-    Every warning the tool produces is bounded except this one: the errors are
-    joined from as many models as ran, and a long weights directory pushed one past
-    6 kB in testing. The whole result dict goes back into an agent's context.
-    """
-    return text if len(text) <= limit else text[:limit - 3] + "..."
 
 
 def _prior_label(model: str, calibration: str | None) -> str:
@@ -167,8 +189,8 @@ def _run_ensemble(resolved: str, calibration: str | None,
         return core.build_result(
             ok=False, backend_used="ensemble", cold_start=cold,
             latency_s=round(total, 3),
-            error="no specialist could run: " + "; ".join(
-                f"{n}: {e}" for n, e in absent),
+            error="no specialist could run: " + core.echo(
+                "; ".join(f"{n}: {e}" for n, e in absent), 400),
             confidence_unavailable_reason="no_specialist_could_run",
         )
 
@@ -211,34 +233,132 @@ def _run_ensemble(resolved: str, calibration: str | None,
     # the single-model path answers with one enantiomer. The strongest model in the
     # winning group decides, by the same priority that breaks ties, since members
     # can disagree on stereochemistry while agreeing on the skeleton.
+    warnings: list[str] = []
     winners = v["votes"][v["winner"]]
     # vote() stores bare names, so the priority has to be bare too. A table writing
     # "local:molnextr" would otherwise match nothing and fall through to insertion
     # order, which is the arbitrary choice this whole block exists to avoid.
-    best = next((m for m in (n.removeprefix("local:") for n in priority)
-                 if m in winners), winners[0])
-    raw = next(r["smiles"] for r in results
-               if r["model"].removeprefix("local:") == best)
-    smiles = core.canonicalize(raw, stereo=True) or v["winner"]
+    order = [n.removeprefix("local:") for n in priority]
+    stereo_votes: dict[str, list[str]] = {}
+    for r in results:
+        model = r["model"].removeprefix("local:")
+        if model not in winners:
+            continue
+        form = core.canonicalize(r["smiles"], stereo=True)
+        if form is not None:
+            stereo_votes.setdefault(form, []).append(model)
+
+    if stereo_votes:
+        # The strongest model in the group supplies the stereochemistry, by the same
+        # priority that breaks ties. Counting the group again and taking the majority
+        # was measured on the benchmark's 47 stereo-bearing items and rejected: the
+        # models rank the same way on stereochemistry as they do overall (DECIMER
+        # 76.6%, molnextr 57.4%, ocsrglyph 48.9%, molscribe 40.4%), so a majority
+        # lets three weaker readings outvote the one most likely to be right.
+        smiles = next((f for m in order for f in stereo_votes if m in stereo_votes[f]),
+                      next(iter(stereo_votes)))
+
+        # Warn when the answer loses something another member read. A member that
+        # marked less is not a conflict: reading one of two double bonds where the
+        # answer reads both discards nothing. What matters is whether the answer
+        # still carries every centre that member assigned, which RDKit answers by
+        # comparing what each form still leaves open. On the benchmark 115 of 721
+        # groups hold more than one form; 112 lose something and warn, and in the
+        # other 3 the answer already says everything the rest did.
+        def _covered_by_answer(other: str) -> bool:
+            """True when the answer says everything `other` says, and agrees.
+
+            Compared as sets of the stereoisomers each form still admits: the
+            answer covers the other exactly when it leaves no more of them open.
+            That needs no alignment between the two molecules, which is what makes
+            it right where comparing perceived stereo elements is not. Those come
+            back in an order RDKit does not promise, in a count that changes when
+            assigning one centre makes another non-stereogenic, and carrying a
+            descriptor of NoValue for every class except tetrahedral, so square
+            planar sulfur and octahedral metals compare equal whatever they say.
+            """
+            from rdkit import Chem
+            from rdkit.Chem.EnumerateStereoisomers import (
+                EnumerateStereoisomers, GetStereoisomerCount,
+                StereoEnumerationOptions)
+
+            mol = Chem.MolFromSmiles(smiles)
+            ref = Chem.MolFromSmiles(other)
+            if mol is None or ref is None:
+                return False
+            opts = StereoEnumerationOptions(onlyUnassigned=True, unique=True,
+                                            tryEmbedding=False, maxIsomers=_MAX_ISOMERS)
+            try:
+                # Count first. Past the cap EnumerateStereoisomers returns exactly
+                # _MAX_ISOMERS forms with nothing to say it stopped early, and a
+                # truncated set is not a subset of anything: a sugar read with every
+                # centre assigned would report a conflict against the same sugar read
+                # with none, which is the case this function exists to allow. Fall
+                # back to asking whether the answer embeds the other with its
+                # chirality intact. The count overestimates, since it honours
+                # neither the cap nor unique=True, so this path is taken by some
+                # molecules the enumeration could have finished; the two rules agree
+                # on all 115 multi-form groups in the benchmark.
+                if (GetStereoisomerCount(mol, options=opts) > _MAX_ISOMERS
+                        or GetStereoisomerCount(ref, options=opts) > _MAX_ISOMERS):
+                    # Blind to square planar and octahedral centres, which
+                    # HasSubstructMatch ignores. Comparing their tags was tried and
+                    # reverted: _chiralPermutation indexes the neighbour order the
+                    # SMILES was written in, so the same geometry reached two ways
+                    # compares unequal and 12 of 18 same-geometry pairs were
+                    # reported as conflicts. A rare missed conflict beats frequent
+                    # false ones on the case this function exists to allow.
+                    return (mol.GetNumAtoms() == ref.GetNumAtoms()
+                            and mol.HasSubstructMatch(ref, useChirality=True))
+                mine = {Chem.MolToSmiles(x)
+                        for x in EnumerateStereoisomers(mol, options=opts)}
+                theirs = {Chem.MolToSmiles(x)
+                          for x in EnumerateStereoisomers(ref, options=opts)}
+            except Exception:  # pragma: no cover - defensive around RDKit
+                return False
+            # No emptiness guard: a molecule RDKit parsed always enumerates to at
+            # least itself, and the one case that produced a misleading set, the
+            # cap cutting the enumeration short, is caught above by the count.
+            return mine <= theirs
+
+        conflicting = [f for f in stereo_votes
+                       if f != smiles and not _covered_by_answer(f)]
+        if conflicting:
+            # Name the support for the answer, not the largest group. The two are
+            # often different: the strongest model is regularly the one that read
+            # no stereocentre where the rest did, so a leading count would read as
+            # the answer's backing when it belongs to the readings it overruled.
+            backing = sorted(stereo_votes[smiles])
+            outvoted = sum(len(m) for f, m in stereo_votes.items() if f != smiles)
+            warnings.append(
+                f"the committee agreed on the skeleton and read "
+                f"{len(stereo_votes)} different stereochemistries; this answer is "
+                f"{', '.join(backing)}'s reading and {outvoted} other "
+                f"{'model' if outvoted == 1 else 'models'} read otherwise. The "
+                f"confidence was measured stereo-blind and does not cover it")
+    else:
+        smiles = v["winner"]
 
     validation = core.validate_smiles_core(smiles)
     # Both can be true at once: a salt read by a committee whose table is missing
     # needs both caveats, so they accumulate rather than shadowing each other.
-    warnings = [w for w in [core.fragment_warning(validation)] if w]
+    fragments = core.fragment_warning(validation)
+    if fragments:
+        warnings.insert(0, fragments)
     if absent:
         # Independent of everything below: a committee can shrink and still find a
         # table that fits the survivors, which reports a confidence and no mismatch.
         # Nested under one of those branches, the only sign that three of four
         # models never ran would be a latency nobody reads.
-        warnings.append("These were installed but could not run: " + _trim(
-            "; ".join(f"{n}: {e}" for n, e in absent)))
+        warnings.append("These were installed but could not run: " + core.echo(
+            "; ".join(f"{n}: {e}" for n, e in absent), 400))
     if mismatch:
         # Surface this in warning too: the reason alone names a Python exception
         # class, and anything that prints the result shows a bare missing number.
         warnings.append(mismatch)
     elif unreadable:
-        warnings.append(f"the calibration table at {calibration!r} could not be "
-                        f"read, so this answer carries no confidence")
+        warnings.append(f"the calibration table at {core.echo(repr(calibration))} "
+                        f"could not be read, so this answer carries no confidence")
     elif conf.get("reason") == "unknown_pattern":
         # The third confidence-less path. Without this it is the only one that
         # surfaces as a bare missing number, which is what the other two get a
@@ -312,13 +432,21 @@ def image_to_smiles_core(image_path: str, model: str | None = None,
     # Load and sniff before dispatching: this rejects a missing file, an oversized
     # one, and a non-image renamed to .png, and it does so identically for every
     # model instead of once per backend.
+    if not isinstance(image_path, str):
+        return core.build_result(
+            error=f"image_path must be a path, got {type(image_path).__name__}")
+
     try:
         resolved = core.resolve_image_path(image_path)
         image_bytes, mime = core.load_image_bytes(resolved)
     except (FileNotFoundError, ValueError) as e:
         return core.build_result(model_used=name, error=str(e))
     except OSError as e:
-        return core.build_result(model_used=name, error=f"cannot read {image_path}: {e}")
+        # Both halves bounded: an OSError's own text repeats the path it failed on,
+        # so quoting the exception unbounded reintroduces what echo just trimmed.
+        return core.build_result(
+            model_used=name,
+            error=f"cannot read {core.echo(image_path)}: {core.echo(e, 200)}")
 
     if ensemble:
         # Dispatched after the image checks above, so a committee run rejects a bad
@@ -473,7 +601,11 @@ _TOOL_DOC = """Read a molecule's 2D structure diagram from an image and return i
         error : str
             Empty when ok, otherwise what went wrong and what to do about it.
         warning : str
-            Non-fatal caveats, such as multiple fragments.
+            Non-fatal caveats: multiple fragments, a committee the table does not
+            describe, models that could not run, and a committee that agreed on
+            the skeleton while reading different stereochemistry. The last one can
+            accompany a high confidence, because the table was fitted stereo-blind
+            and so scores the skeleton alone.
     """
 
 
