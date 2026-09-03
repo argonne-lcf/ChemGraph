@@ -111,11 +111,25 @@ definitions. See [MCP servers](mcp_servers.md).
 workflow = "main_agent"
 checkpoint_db = "~/.chemgraph/checkpoints.db"
 enable_deepagent = false
+# deepagent_skills = ["/workspace/.agents/skills/"]
 ```
 
-`main_agent` still requires interactive CLI mode. Deep Agent is a
-development-only capability with broad local access; leave it disabled unless
-you understand the security boundary.
+`main_agent` still requires interactive CLI mode. `enable_deepagent` controls
+only its optional `deepagent` subagent. To call the graph directly, select
+`workflow = "deep_agent"`; `deepagent_workspace` applies to either entry point.
+Deep Agent is a development-only capability with broad local access, so leave
+it disabled unless you understand the security boundary.
+
+The headless-only `--deepagent-dangerously-skip-approvals` switch is
+intentionally not configurable through TOML. It must be typed explicitly for
+each run together with `--deepagent-workspace`.
+
+`deepagent_skills` is an ordered list of backend-relative source directories.
+It applies to a direct `deep_agent` or to an enabled `main_agent` worker. Later
+sources override earlier sources with the same skill name. A repeated
+`--deepagent-skill` CLI option replaces the TOML list for that run; explicitly
+disabling the worker with `--no-deepagent` also clears its configured skills.
+No skill directories are loaded when the list is omitted.
 
 ## Evaluation profiles
 

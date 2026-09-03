@@ -70,6 +70,8 @@ class _FakeMainSession:
 def test_main_agent_is_a_cli_workflow():
     assert "main_agent" in commands.ALL_WORKFLOW_TYPES
     assert "main_agent" in cli_main._WORKFLOW_CHOICES
+    assert "deep_agent" in commands.ALL_WORKFLOW_TYPES
+    assert commands.resolve_workflow("deepagent") == "deep_agent"
 
 
 def test_interactive_event_renders_only_tagged_subagent_tool_calls():
@@ -228,6 +230,32 @@ def test_experimental_backend_stops_when_confirmation_is_declined(
         commands._create_experimental_deepagent_backend(str(tmp_path))
 
 
+def test_experimental_backend_can_explicitly_skip_confirmation(
+    monkeypatch,
+    tmp_path,
+):
+    class FakeBackend:
+        def __init__(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr("deepagents.backends.LocalShellBackend", FakeBackend)
+    monkeypatch.setattr(
+        commands.Confirm,
+        "ask",
+        lambda *_args, **_kwargs: pytest.fail("confirmation should be skipped"),
+    )
+
+    with console.capture() as capture:
+        backend = commands._create_experimental_deepagent_backend(
+            str(tmp_path),
+            require_confirmation=False,
+        )
+
+    assert isinstance(backend, FakeBackend)
+    rendered = " ".join(capture.get().lower().replace("│", " ").split())
+    assert "approvals are disabled" in rendered
+
+
 def test_experimental_backend_rejects_missing_workspace(tmp_path):
     with pytest.raises(ValueError, match="not a directory"):
         commands._create_experimental_deepagent_backend(
@@ -272,10 +300,19 @@ def test_deepagent_cli_boolean_flags():
 
     assert parser.parse_args(["--deepagent"]).deepagent is True
     assert parser.parse_args(["--no-deepagent"]).deepagent is False
+    assert parser.parse_args(["--workflow", "deepagent"]).workflow == "deepagent"
+    assert parser.parse_args(
+        ["--deepagent-dangerously-skip-approvals"]
+    ).deepagent_dangerously_skip_approvals is True
+    assert parser.parse_args(
+        ["--deepagent-skill", "/base/", "--deepagent-skill", "/project/"]
+    ).deepagent_skills == ["/base/", "/project/"]
     assert (
         parser.parse_args(["--checkpoint-db", "/tmp/checkpoints.db"]).checkpoint_db
         == "/tmp/checkpoints.db"
     )
+    help_text = " ".join(parser.format_help().split())
+    assert "shell commands are not confined to it" in help_text
 
 
 def test_main_agent_query_failure_suggests_retry():
@@ -595,6 +632,9 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         reasoning_effort="high",
         max_retries=4,
         terminal_tool_names=("finish",),
+        enable_deepagent=True,
+        deepagent_workspace=str(tmp_path),
+        deepagent_skills=("/workspace/.agents/skills/",),
         topology_fingerprint="target",
     )
     target_db = str(tmp_path / "target-checkpoints.db")
@@ -675,6 +715,10 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         True,
         77,
     )
+    assert resume_kwargs["deepagent_skills"] == (
+        "/workspace/.agents/skills/",
+    )
+    assert rebuild_kwargs["deepagent_skills"] is None
     for kwargs in (resume_kwargs, rebuild_kwargs):
         assert kwargs["human_supervised"] is True
         assert kwargs["reasoning_effort"] == "high"
@@ -765,7 +809,11 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
 
     def fake_initialize(*_args, **kwargs):
         initialization_calls.append(
-            (kwargs["enable_deepagent"], kwargs["deepagent_workspace"])
+            (
+                kwargs["enable_deepagent"],
+                kwargs["deepagent_workspace"],
+                kwargs["deepagent_skills"],
+            )
         )
         return next(agents)
 
@@ -782,12 +830,243 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
             generate_report=False,
             enable_deepagent=True,
             deepagent_workspace="/workspace",
+            deepagent_skills=["/workspace/.agents/skills/"],
         )
 
     assert initialization_calls == [
-        (True, "/workspace"),
-        (False, None),
-        (True, "/workspace"),
+        (True, "/workspace", ["/workspace/.agents/skills/"]),
+        (False, None, None),
+        (True, "/workspace", ["/workspace/.agents/skills/"]),
+    ]
+
+
+def test_interactive_standalone_deepagent_reuses_one_thread(monkeypatch):
+    answers = iter(
+        ["gpt-4o-mini", "deep_agent", "inspect files", "run tests", "quit"]
+    )
+    agent = SimpleNamespace(session_id="deep-session")
+    thread_ids = []
+
+    monkeypatch.setattr(
+        commands.Prompt,
+        "ask",
+        lambda *_args, **_kwargs: next(answers),
+    )
+    monkeypatch.setattr(commands, "initialize_agent", lambda *_args, **_kwargs: agent)
+
+    def fake_run(_agent, _query, *, thread_id, verbose=False):
+        thread_ids.append(thread_id)
+        return None
+
+    monkeypatch.setattr(commands, "run_query", fake_run)
+
+    with console.capture():
+        commands.interactive_mode(
+            workflow="deep_agent",
+            generate_report=False,
+            deepagent_workspace="/workspace",
+        )
+
+    assert len(thread_ids) == 2
+    assert thread_ids[0] == thread_ids[1]
+
+
+def test_run_query_preserves_structured_deepagent_approval(monkeypatch):
+    from chemgraph.agent.llm_agent import HumanInputRequired
+
+    payload = {
+        "action_requests": [{"name": "execute", "args": {"command": "ruff"}}],
+        "review_configs": [
+            {
+                "action_name": "execute",
+                "allowed_decisions": ["approve", "reject"],
+            }
+        ],
+    }
+    resume_inputs = []
+    finalized = []
+
+    class Workflow:
+        async def astream(self, stream_input, **_kwargs):
+            resume_inputs.append(stream_input)
+            yield {"messages": ["done"]}
+
+        def get_state(self, _config):
+            return SimpleNamespace(tasks=())
+
+    class Agent:
+        workflow = Workflow()
+        recursion_limit = 20
+        return_option = "last_message"
+
+        async def run(self, *_args, **_kwargs):
+            raise HumanInputRequired("approval", payload=payload)
+
+        def finalize_completed_run(self, state, config, query):
+            finalized.append((state, config, query))
+            return state["messages"][-1]
+
+    prompted = []
+    monkeypatch.setattr(
+        commands,
+        "_prompt_for_interrupt",
+        lambda value: prompted.append(value)
+        or {"decisions": [{"type": "approve"}]},
+    )
+
+    result = commands.run_query(Agent(), "run lint", thread_id=10)
+
+    assert result == "done"
+    assert prompted == [payload]
+    assert resume_inputs[0].resume == {"decisions": [{"type": "approve"}]}
+    assert finalized == [
+        (
+            {"messages": ["done"]},
+            {
+                "configurable": {"thread_id": 10},
+                "recursion_limit": 20,
+            },
+            "run lint",
+        )
+    ]
+
+
+def test_run_query_maps_multiple_interrupt_responses_by_id(monkeypatch):
+    from chemgraph.agent.llm_agent import HumanInputRequired
+
+    payloads = [
+        {"question": "First approval?"},
+        {"question": "Second approval?"},
+    ]
+    pending = (
+        PendingInterrupt(id="first-id", payload=payloads[0]),
+        PendingInterrupt(id="second-id", payload=payloads[1]),
+    )
+    resume_inputs = []
+
+    class Workflow:
+        async def astream(self, stream_input, **_kwargs):
+            resume_inputs.append(stream_input)
+            yield {"messages": ["done"]}
+
+        def get_state(self, _config):
+            return SimpleNamespace(tasks=(), interrupts=())
+
+    class Agent:
+        workflow = Workflow()
+        recursion_limit = 20
+
+        async def run(self, *_args, **_kwargs):
+            raise HumanInputRequired(
+                "First approval?",
+                payload=payloads[0],
+                interrupts=pending,
+            )
+
+        def finalize_completed_run(self, state, _config, _query):
+            return state["messages"][-1]
+
+    answers = iter(["approve-first", "reject-second"])
+    prompted = []
+    monkeypatch.setattr(
+        commands,
+        "_prompt_for_interrupt",
+        lambda payload: prompted.append(payload) or next(answers),
+    )
+
+    result = commands.run_query(Agent(), "review actions", thread_id=12)
+
+    assert result == "done"
+    assert prompted == payloads
+    assert resume_inputs[0].resume == {
+        "first-id": "approve-first",
+        "second-id": "reject-second",
+    }
+
+
+def test_run_query_rejects_multiple_interrupts_without_stable_ids(monkeypatch):
+    from chemgraph.agent.llm_agent import HumanInputRequired
+
+    pending = (
+        PendingInterrupt(id="", payload={"question": "First?"}),
+        PendingInterrupt(id="second-id", payload={"question": "Second?"}),
+    )
+
+    class Agent:
+        recursion_limit = 20
+
+        async def run(self, *_args, **_kwargs):
+            raise HumanInputRequired(
+                "First?",
+                payload=pending[0].payload,
+                interrupts=pending,
+            )
+
+    monkeypatch.setattr(commands, "_prompt_for_interrupt", lambda payload: payload)
+
+    with console.capture() as capture:
+        result = commands.run_query(Agent(), "review actions", thread_id=13)
+
+    assert result is None
+    assert "do not expose stable IDs" in capture.get()
+
+
+def test_run_query_persists_chained_deepagent_interrupt(monkeypatch):
+    from chemgraph.agent.llm_agent import HumanInputRequired
+
+    payloads = [
+        {"action_requests": [{"name": "write_file", "args": {}}]},
+        {"action_requests": [{"name": "execute", "args": {}}]},
+    ]
+
+    class Workflow:
+        resume_count = 0
+
+        async def astream(self, _stream_input, **_kwargs):
+            self.resume_count += 1
+            if self.resume_count == 1:
+                yield {
+                    "messages": ["waiting"],
+                    "__interrupt__": [SimpleNamespace(value=payloads[1])],
+                }
+            else:
+                yield {"messages": ["done"]}
+
+        def get_state(self, _config):
+            return SimpleNamespace(tasks=())
+
+    persisted = []
+
+    class Agent:
+        workflow = Workflow()
+        recursion_limit = 20
+
+        async def run(self, *_args, **_kwargs):
+            raise HumanInputRequired("approval", payload=payloads[0])
+
+        def persist_run_state(self, config):
+            persisted.append(config)
+
+        def finalize_completed_run(self, state, _config, _query):
+            return state["messages"][-1]
+
+    prompted = []
+    monkeypatch.setattr(
+        commands,
+        "_prompt_for_interrupt",
+        lambda payload: prompted.append(payload)
+        or {"decisions": [{"type": "approve"}]},
+    )
+
+    result = commands.run_query(Agent(), "write and run", thread_id=11)
+
+    assert result == "done"
+    assert prompted == payloads
+    assert persisted == [
+        {
+            "configurable": {"thread_id": 11},
+            "recursion_limit": 20,
+        }
     ]
 
 
@@ -840,6 +1119,12 @@ def _run_args(**overrides):
         "recursion_limit": 20,
         "deepagent": None,
         "deepagent_workspace": None,
+        "deepagent_skills": None,
+        "deepagent_dangerously_skip_approvals": False,
+        "query": None,
+        "output_file": None,
+        "trace_dir": None,
+        "checkpoint_db": None,
         "mcp_url": None,
         "mcp_command": None,
         "mcp_server_name": None,
@@ -854,6 +1139,61 @@ def test_main_agent_requires_interactive_cli_mode():
 
     assert exc_info.value.code == 2
     assert "requires interactive mode" in capture.get()
+
+
+def test_headless_deepagent_requires_unsafe_flag_and_workspace(tmp_path):
+    with console.capture() as capture, pytest.raises(SystemExit) as exc_info:
+        cli_main._handle_run(
+            _run_args(
+                workflow="deep_agent",
+                query="inspect the repository",
+                deepagent_workspace=str(tmp_path),
+            )
+        )
+
+    assert exc_info.value.code == 2
+    assert "dangerously-skip-approvals" in capture.get()
+
+    with console.capture() as capture, pytest.raises(SystemExit) as exc_info:
+        cli_main._handle_run(
+            _run_args(
+                workflow="deep_agent",
+                query="inspect the repository",
+                deepagent_dangerously_skip_approvals=True,
+            )
+        )
+
+    assert exc_info.value.code == 2
+    assert "explicit --deepagent-workspace" in capture.get()
+
+
+def test_headless_deepagent_forwards_explicit_unsafe_configuration(
+    monkeypatch,
+    tmp_path,
+):
+    captured = {}
+    agent = SimpleNamespace(session_id="deep-session")
+    monkeypatch.setattr(
+        cli_main,
+        "initialize_agent",
+        lambda *_args, **kwargs: captured.update(kwargs) or agent,
+    )
+    monkeypatch.setattr(cli_main, "run_query", lambda *_args, **_kwargs: None)
+
+    with console.capture():
+        cli_main._handle_run(
+            _run_args(
+                workflow="deep_agent",
+                query="inspect the repository",
+                deepagent_workspace=str(tmp_path),
+                deepagent_skills=["/workspace/.agents/skills/"],
+                deepagent_dangerously_skip_approvals=True,
+            )
+        )
+
+    assert captured["deepagent_workspace"] == str(tmp_path)
+    assert captured["deepagent_skills"] == ["/workspace/.agents/skills/"]
+    assert captured["deepagent_auto_approve"] is True
 
 
 def test_main_agent_dispatches_persistent_resume(monkeypatch):
@@ -886,6 +1226,7 @@ def test_deepagent_toml_and_cli_precedence(
                 "general": {
                     "enable_deepagent": True,
                     "deepagent_workspace": str(tmp_path),
+                    "deepagent_skills": ["/workspace/.agents/skills/"],
                 }
             }
         )
@@ -908,4 +1249,7 @@ def test_deepagent_toml_and_cli_precedence(
     assert captured["enable_deepagent"] is expected
     assert captured["deepagent_workspace"] == (
         str(tmp_path) if expected else None
+    )
+    assert captured["deepagent_skills"] == (
+        ["/workspace/.agents/skills/"] if expected else None
     )
