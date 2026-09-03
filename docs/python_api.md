@@ -120,7 +120,10 @@ requests and must be resumed with matching structured decisions. Its
 `interrupts` tuple retains every pending request and its LangGraph interrupt
 ID; callers must resume concurrent requests with an exact mapping from those
 IDs to responses. `question` and `payload` continue to describe the first
-request for compatibility. Setting
+request for compatibility. A configured handler may use the legacy
+`handler(question)` signature or `handler(question, payload)` when it needs the
+raw structured request; both synchronous and asynchronous handlers are
+supported. Setting
 `deepagent_auto_approve=True` removes this boundary and should be limited to an
 externally isolated, explicitly trusted workspace.
 

@@ -23,7 +23,7 @@ from chemgraph.agent.interrupts import (
     interrupt_question as _interrupt_question,
     normalize_interrupts,
 )
-from chemgraph.graphs.deep_agent import _normalize_skill_sources
+from chemgraph.graphs.deep_agent import normalize_skill_sources
 from chemgraph.memory.store import SessionStore
 from chemgraph.memory.durable import delete_durable_session
 from chemgraph.cli.checkpoint_runtime import (
@@ -256,7 +256,7 @@ def initialize_agent(
     """
     # Resolve workflow alias before initializing.
     workflow_type = resolve_workflow(workflow_type)
-    deepagent_skills = _normalize_skill_sources(deepagent_skills)
+    deepagent_skills = normalize_skill_sources(deepagent_skills)
     if enable_deepagent and workflow_type != "main_agent":
         raise ValueError(
             "The experimental Deep Agent is available only with main_agent."
@@ -590,13 +590,13 @@ def run_query(
                 console.print("[red]Resume produced no output.[/red]")
                 return None
 
-            return agent._finalize_completed_run(
+            return agent.finalize_completed_run(
                 result,
                 resume_config,
                 query,
             )
         except HumanInputRequired as hir:
-            agent._persist_run_state(resume_config)
+            agent.persist_run_state(resume_config)
             pending_interrupts = hir.interrupts
         except Exception as e:
             console.print(f"[red]Error processing query: {e}[/red]")

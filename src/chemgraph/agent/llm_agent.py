@@ -1,6 +1,6 @@
-import asyncio
 import datetime
 import hashlib
+import inspect
 import json
 import os
 from dataclasses import dataclass
@@ -56,8 +56,8 @@ from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.graphs.deep_agent import (
     DEFAULT_DEEPAGENT_PROMPT,
-    _normalize_skill_sources,
     construct_deep_agent_graph,
+    normalize_skill_sources,
 )
 from chemgraph.agent.turn import serialize_state
 
@@ -83,6 +83,8 @@ from chemgraph.prompt.xanes_prompt import (
 import logging
 
 logger = logging.getLogger(__name__)
+
+HumanInputHandler = Callable[[str], Any] | Callable[[str, Any], Any]
 
 
 @dataclass
@@ -180,10 +182,12 @@ class ChemGraph:
         Maximum number of LLM retry attempts when an agent
         fails to parse its output, by default 1
     human_input_handler : callable, optional
-        A callback ``f(question: str) -> Any`` invoked when the graph
-        pauses for human input (via ``interrupt()``).  Receives the
-        question text and returns the resume value. Deep Agent action reviews
-        require a structured decision mapping rather than a string.
+        A callback ``f(question: str) -> Any`` or
+        ``f(question: str, payload: Any) -> Any`` invoked when the graph
+        pauses for human input (via ``interrupt()``). The optional second
+        argument receives the raw interrupt payload. Deep Agent action reviews
+        require the callback to return a structured decision mapping rather
+        than a string.
         If ``None`` (default), interrupts propagate as
         ``HumanInputRequired`` exceptions whose ``payload`` retains the raw
         interrupt value. The handler may also be an
@@ -241,7 +245,7 @@ class ChemGraph:
         memory_db_path: Optional[str] = None,
         log_dir: Optional[str] = None,
         max_retries: int = 1,
-        human_input_handler: Optional[Callable[[str], Any]] = None,
+        human_input_handler: Optional[HumanInputHandler] = None,
         human_supervised: bool = False,
         terminal_tool_names: Collection[str] = (),
         enable_deepagent: bool = False,
@@ -252,7 +256,7 @@ class ChemGraph:
         reasoning_effort: Optional[str] = None,
         checkpointer: BaseCheckpointSaver | None = None,
     ):
-        normalized_deepagent_skills = _normalize_skill_sources(deepagent_skills)
+        normalized_deepagent_skills = normalize_skill_sources(deepagent_skills)
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."
@@ -446,9 +450,6 @@ class ChemGraph:
             "terminal_tool_names": self.terminal_tool_names,
             "enable_deepagent": self.enable_deepagent,
             "workspace": str(workspace) if workspace is not None else None,
-            "deepagent_skills": (
-                self.deepagent_skills if self.enable_deepagent else ()
-            ),
             "tool_signatures": tool_signatures,
             "system_prompt": self.system_prompt,
             "formatter_prompt": self.formatter_prompt,
@@ -459,6 +460,8 @@ class ChemGraph:
             and self.deepagent_prompt != DEFAULT_DEEPAGENT_PROMPT
         ):
             topology_payload["deepagent_prompt"] = self.deepagent_prompt
+        if self.enable_deepagent and self.deepagent_skills:
+            topology_payload["deepagent_skills"] = self.deepagent_skills
         topology_fingerprint = hashlib.sha256(
             json.dumps(topology_payload, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()
@@ -889,13 +892,13 @@ class ChemGraph:
         except Exception as e:
             logger.warning(f"Failed to save messages to session store: {e}")
 
-    def _persist_run_state(self, config: dict) -> None:
+    def persist_run_state(self, config: dict) -> None:
         """Write the current checkpoint state to the configured log directory."""
         log_dir = self.log_dir or "cg_logs"
         os.makedirs(log_dir, exist_ok=True)
         self.write_state(config=config)
 
-    def _finalize_completed_run(
+    def finalize_completed_run(
         self,
         last_state: dict,
         config: dict,
@@ -903,7 +906,7 @@ class ChemGraph:
     ) -> Any:
         """Persist a completed run and return the configured result shape."""
         self._save_messages_to_store(last_state, query)
-        self._persist_run_state(config)
+        self.persist_run_state(config)
 
         if self.return_option == "last_message":
             return last_state["messages"][-1]
@@ -961,9 +964,29 @@ class ChemGraph:
                 payload=payload,
                 interrupts=interrupts,
             )
-        if asyncio.iscoroutinefunction(handler):
-            return await handler(question)
-        return handler(question)
+        args: tuple[Any, ...] = (question,)
+        kwargs: dict[str, Any] = {}
+        try:
+            signature = inspect.signature(handler)
+        except (TypeError, ValueError):
+            pass
+        else:
+            try:
+                signature.bind(question, payload)
+            except TypeError:
+                try:
+                    signature.bind(question, payload=payload)
+                except TypeError:
+                    pass
+                else:
+                    kwargs["payload"] = payload
+            else:
+                args = (question, payload)
+
+        result = handler(*args, **kwargs)
+        if inspect.isawaitable(result):
+            return await result
+        return result
 
     async def run(self, query: str, config=None, resume_from: Optional[str] = None):
         """
@@ -973,9 +996,9 @@ class ChemGraph:
 
         When the graph pauses for human input (via ``interrupt()``), the
         ``human_input_handler`` callback is invoked to obtain the user's
-        response, and the graph is automatically resumed.  If no handler
-        is configured, the ``GraphInterrupt`` exception propagates to the
-        caller.
+        response, and the graph is automatically resumed. If no handler
+        is configured, a ``HumanInputRequired`` exception propagates to the
+        caller with the raw interrupt payload.
 
         Parameters
         ----------
@@ -1223,12 +1246,12 @@ class ChemGraph:
                 },
             )
 
-            return self._finalize_completed_run(last_state, config, query)
+            return self.finalize_completed_run(last_state, config, query)
 
         except HumanInputRequired:
             # No human_input_handler configured — propagate so the
             # caller (CLI / UI) can prompt the user and resume.
-            self._persist_run_state(config)
+            self.persist_run_state(config)
             raise
         except Exception as e:
             event(

@@ -1,5 +1,6 @@
 """Tests for the reusable standalone Deep Agent workflow."""
 
+import hashlib
 import json
 import shlex
 import sys
@@ -17,6 +18,7 @@ from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
 from chemgraph.cli import commands
 from chemgraph.graphs.deep_agent import (
     DEFAULT_DEEPAGENT_INTERRUPT_ON,
+    DEFAULT_DEEPAGENT_PROMPT,
     construct_deep_agent_graph,
 )
 from chemgraph.models.endpoints import PreparedModel
@@ -43,6 +45,36 @@ class _RecordingChatModel(_ScriptedChatModel):
             run_manager=run_manager,
             **kwargs,
         )
+
+
+def _legacy_topology_fingerprint(agent: ChemGraph) -> str:
+    """Reproduce the main-agent fingerprint before skill support was added."""
+    workspace = getattr(agent.deepagent_backend, "cwd", None)
+    graph_config = agent.main_agent_metadata.graph_config
+    topology_payload = {
+        "model_name": agent.model_name,
+        "reasoning_effort": agent.reasoning_effort,
+        "recursion_limit": agent.recursion_limit,
+        "structured_output": agent.structured_output,
+        "generate_report": agent.generate_report,
+        "max_retries": agent.max_retries,
+        "human_supervised": agent.human_supervised,
+        "terminal_tool_names": agent.terminal_tool_names,
+        "enable_deepagent": agent.enable_deepagent,
+        "workspace": str(workspace) if workspace is not None else None,
+        "tool_signatures": graph_config.tool_signatures,
+        "system_prompt": agent.system_prompt,
+        "formatter_prompt": agent.formatter_prompt,
+        "report_prompt": agent.report_prompt,
+    }
+    if (
+        agent.enable_deepagent
+        and agent.deepagent_prompt != DEFAULT_DEEPAGENT_PROMPT
+    ):
+        topology_payload["deepagent_prompt"] = agent.deepagent_prompt
+    return hashlib.sha256(
+        json.dumps(topology_payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
 
 
 def test_constructor_builds_safe_standalone_graph(monkeypatch):
@@ -377,6 +409,73 @@ async def test_chemgraph_resumes_all_pending_interrupt_ids(monkeypatch, tmp_path
     }
 
 
+@pytest.mark.asyncio
+async def test_human_input_handler_receives_raw_structured_payload():
+    payload = {
+        "action_requests": [
+            {"name": "execute", "args": {"command": "pytest"}}
+        ],
+        "review_configs": [
+            {
+                "action_name": "execute",
+                "allowed_decisions": ["approve", "reject"],
+            }
+        ],
+    }
+    decision = {"decisions": [{"type": "reject"}]}
+    received = []
+
+    def handler(question, raw_payload):
+        received.append((question, raw_payload))
+        return decision
+
+    agent = object.__new__(ChemGraph)
+    agent.human_input_handler = handler
+
+    result = await agent._call_human_input_handler(
+        "Review the requested action.",
+        payload=payload,
+    )
+
+    assert result is decision
+    assert received == [("Review the requested action.", payload)]
+    assert received[0][1] is payload
+
+
+@pytest.mark.asyncio
+async def test_human_input_handler_awaits_async_callable_object():
+    payload = {"question": "Continue?"}
+
+    class AsyncHandler:
+        async def __call__(self, question, raw_payload):
+            return question, raw_payload
+
+    agent = object.__new__(ChemGraph)
+    agent.human_input_handler = AsyncHandler()
+
+    assert await agent._call_human_input_handler(
+        "Continue?",
+        payload=payload,
+    ) == ("Continue?", payload)
+
+
+@pytest.mark.asyncio
+async def test_human_input_handler_does_not_retry_callback_type_error():
+    calls = []
+
+    def handler(question, payload):
+        calls.append((question, payload))
+        raise TypeError("handler failed")
+
+    agent = object.__new__(ChemGraph)
+    agent.human_input_handler = handler
+
+    with pytest.raises(TypeError, match="handler failed"):
+        await agent._call_human_input_handler("Continue?", payload={"id": 1})
+
+    assert calls == [("Continue?", {"id": 1})]
+
+
 def test_main_agent_metadata_persists_skills_in_topology(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "chemgraph.agent.llm_agent.load_chat_model_prepared",
@@ -394,7 +493,23 @@ def test_main_agent_metadata_persists_skills_in_topology(monkeypatch, tmp_path):
         lambda *_args, **_kwargs: SimpleNamespace(),
     )
 
-    agents = [
+    no_skill_agents = [
+        ChemGraph(
+            workflow_type="main_agent",
+            enable_deepagent=enable_deepagent,
+            enable_memory=False,
+            log_dir=str(tmp_path),
+        )
+        for enable_deepagent in (False, True)
+    ]
+    for agent in no_skill_agents:
+        graph_config = agent.main_agent_metadata.graph_config
+        assert graph_config.deepagent_skills == ()
+        assert graph_config.topology_fingerprint == _legacy_topology_fingerprint(
+            agent
+        )
+
+    skill_agents = [
         ChemGraph(
             workflow_type="main_agent",
             enable_deepagent=True,
@@ -406,7 +521,7 @@ def test_main_agent_metadata_persists_skills_in_topology(monkeypatch, tmp_path):
         for skill in ("/workspace/base/", "/workspace/project/")
     ]
 
-    configs = [agent.main_agent_metadata.graph_config for agent in agents]
+    configs = [agent.main_agent_metadata.graph_config for agent in skill_agents]
     assert configs[0].deepagent_skills == ("/workspace/base/",)
     assert configs[1].deepagent_skills == ("/workspace/project/",)
     assert configs[0].topology_fingerprint != configs[1].topology_fingerprint
