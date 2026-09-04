@@ -234,6 +234,118 @@ def test_run_ase_core_creates_output_parent_directory(monkeypatch, tmp_path):
     assert output_path.parent.is_dir()
 
 
+def _tblite_params_for_isolation_test():
+    """Build TBLite params without requiring the optional engine package."""
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
+
+    return ASEInputSchema.model_construct(
+        input_structure_file="water.xyz",
+        output_results_file="output.json",
+        driver="energy",
+        calculator=TBLiteCalc(),
+    )
+
+
+def test_run_ase_core_isolates_tblite(monkeypatch):
+    from chemgraph.tools import ase_core
+
+    expected = {"status": "success", "message": "isolated"}
+    monkeypatch.setattr(
+        ase_core, "_run_ase_core_isolated", lambda _params: expected
+    )
+    monkeypatch.setattr(
+        ase_core,
+        "_run_ase_core_in_process",
+        lambda _params: pytest.fail("TBLite ran in the parent process"),
+    )
+
+    assert ase_core.run_ase_core(_tblite_params_for_isolation_test()) == expected
+
+
+def test_isolated_ase_core_contains_native_abort(monkeypatch):
+    import signal
+    import subprocess
+
+    from chemgraph.tools import ase_core
+
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(
+            command,
+            -signal.SIGABRT,
+            stdout="",
+            stderr="OMP: Error #15: found libomp.dylib already initialized.",
+        )
+
+    monkeypatch.setattr(ase_core.subprocess, "run", fake_run)
+
+    result = ase_core._run_ase_core_isolated(_tblite_params_for_isolation_test())
+
+    assert result["status"] == "failure"
+    assert result["error_type"] == "CalculatorProcessError"
+    assert result["returncode"] == -signal.SIGABRT
+    assert "contained" in result["message"]
+
+
+def test_isolated_ase_core_returns_worker_result(monkeypatch):
+    import subprocess
+
+    from chemgraph.tools import ase_core
+
+    expected = {"status": "success", "potential_energy": -1.23}
+
+    def fake_run(command, **_kwargs):
+        Path(command[-1]).write_text(json.dumps(expected), encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(ase_core.subprocess, "run", fake_run)
+
+    assert (
+        ase_core._run_ase_core_isolated(_tblite_params_for_isolation_test())
+        == expected
+    )
+
+
+def test_ase_worker_serializes_numpy_scalars():
+    import numpy as np
+
+    from chemgraph.tools._ase_worker import _json_default
+
+    assert _json_default(np.bool_(True)) is True
+
+
+def test_ir_rejects_calculator_without_dipole_before_reading_structure(
+    monkeypatch, tmp_path
+):
+    from ase import Atoms
+    from ase.io import write as ase_write
+
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from chemgraph.tools import ase_core
+
+    input_path = tmp_path / "h2.xyz"
+    ase_write(input_path, Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.74]]))
+
+    class _NoDipoleCalc:
+        implemented_properties = ["energy", "forces"]
+
+    monkeypatch.setattr(
+        ase_core, "load_calculator", lambda _calculator: (_NoDipoleCalc(), {}, None)
+    )
+    params = ASEInputSchema(
+        input_structure_file=str(input_path),
+        output_results_file=str(tmp_path / "ir.json"),
+        driver="ir",
+        calculator={"calculator_type": "emt"},
+    )
+
+    result = ase_core.run_ase_core(params)
+
+    assert result["status"] == "failure"
+    assert result["error_type"] == "PropertyNotImplementedError"
+    assert "implements dipole moments" in result["message"]
+
+
 @pytest.mark.parametrize(
     ("converged", "expected_steps", "expected_message"),
     [

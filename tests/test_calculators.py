@@ -1,4 +1,7 @@
 import importlib.util
+import subprocess
+import sys
+
 import pytest
 import numpy as np
 from pydantic import ValidationError
@@ -7,6 +10,21 @@ from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
 from chemgraph.schemas.calculators.orca_calc import OrcaCalc
 from ase import Atoms
+
+
+def test_ase_schema_import_does_not_load_optional_native_engines():
+    """Schema discovery must not initialize mutually incompatible runtimes."""
+    script = """
+import sys
+import chemgraph.schemas.ase_input  # noqa: F401
+
+optional_modules = ("torch", "tblite.ase", "fairchem.core", "mace")
+loaded = [name for name in optional_modules if name in sys.modules]
+if loaded:
+    raise SystemExit(f"optional native modules loaded: {loaded}")
+"""
+
+    subprocess.run([sys.executable, "-c", script], check=True)
 
 
 @pytest.mark.skipif(
