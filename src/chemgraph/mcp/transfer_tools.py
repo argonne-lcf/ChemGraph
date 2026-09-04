@@ -152,14 +152,14 @@ def register_transfer_tools(
         """
         return transfer_manager.check_transfer_status(task_id)
 
-    def list_remote_files(transfer_path: str) -> list[dict]:
+    def list_remote_files(remote_path: str) -> list[dict]:
         """List files using a collection-visible destination path.
 
         Useful to verify that files were staged correctly before
         running ensemble calculations. Pass ``transfer_directory`` from
         ``transfer_files`` when Transfer and compute path namespaces differ.
         """
-        return transfer_manager.list_remote_directory(transfer_path)
+        return transfer_manager.list_remote_directory(remote_path)
 
     mcp.add_tool(
         transfer_files,

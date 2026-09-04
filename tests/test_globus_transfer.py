@@ -446,3 +446,7 @@ def test_transfer_mcp_response_distinguishes_path_namespaces(tmp_path):
     assert response["compute_file_mapping"] == {
         source_path: "/flare/Project/batch/water.xyz"
     }
+
+    manager.list_remote_directory.return_value = []
+    assert mcp.tools["list_remote_files"](remote_path="/Project/batch") == []
+    manager.list_remote_directory.assert_called_once_with("/Project/batch")
