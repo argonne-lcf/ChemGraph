@@ -186,6 +186,15 @@ def test_run_example_submits_polls_and_resumes_same_graph(
                 return {
                     "messages": [
                         _tool_message(
+                            "list_transfer_facilities",
+                            {
+                                "selection_mode": "server_configured",
+                                "transfer_configured": True,
+                                "active_system": "polaris",
+                                "facilities": [],
+                            },
+                        ),
+                        _tool_message(
                             "check_endpoint_status",
                             {"status": {"status": "online"}},
                         ),
