@@ -4,6 +4,8 @@ Hermetic: no model is loaded and no image is read. The fitter takes per-image
 prediction rows, so everything below is built from literal SMILES.
 """
 
+import os
+
 import pytest
 
 pytest.importorskip("rdkit")
@@ -445,6 +447,8 @@ def test_the_probe_and_the_write_use_one_path(monkeypatch, tmp_path):
     assert (tmp_path / "table.json").is_file()
 
 
+@pytest.mark.skipif(os.name != "posix",
+                    reason="POSIX modes and symlinks are platform-specific")
 def test_the_out_probe_refuses_a_read_only_file_through_a_link(monkeypatch,
                                                               tmp_path, capsys):
     """The same file has to get the same answer whichever name reaches it.
@@ -471,6 +475,8 @@ def test_the_out_probe_refuses_a_read_only_file_through_a_link(monkeypatch,
     target.chmod(0o600)
 
 
+@pytest.mark.skipif(os.name != "posix",
+                    reason="POSIX modes and symlinks are platform-specific")
 def test_the_out_probe_follows_the_link_to_its_target(monkeypatch, tmp_path,
                                                      capsys):
     """A symlink resolves in its target's directory, not the one holding the link.
@@ -496,6 +502,8 @@ def test_the_out_probe_follows_the_link_to_its_target(monkeypatch, tmp_path,
     readonly.chmod(0o700)
 
 
+@pytest.mark.skipif(os.name != "posix",
+                    reason="POSIX modes and symlinks are platform-specific")
 def test_the_out_probe_accepts_a_dangling_symlink(monkeypatch, tmp_path,
                                                   capsys):
     """exists() follows the link, open(x) does not, so they disagree on this one.
