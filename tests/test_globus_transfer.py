@@ -13,6 +13,7 @@ import pytest
 from chemgraph.execution.globus_transfer import (
     TRANSFER_RESOURCE_SERVER,
     GlobusTransferManager,
+    TransferResult,
 )
 
 
@@ -23,6 +24,18 @@ def _manager(*, allow_interactive_auth: bool = True) -> GlobusTransferManager:
         destination_base_path="/remote/staging",
         allow_interactive_auth=allow_interactive_auth,
     )
+
+
+@pytest.fixture(autouse=True)
+def _clear_transfer_environment(monkeypatch):
+    for name in (
+        "COMPUTE_SYSTEM",
+        "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID",
+        "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
+        "GLOBUS_TRANSFER_DESTINATION_BASE_PATH",
+        "GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH",
+    ):
+        monkeypatch.delenv(name, raising=False)
 
 
 def _tokens(access_token: str = "access-token") -> dict:
@@ -214,3 +227,222 @@ def test_transfer_factory_forwards_noninteractive_auth_policy():
 
     assert manager is not None
     assert manager.allow_interactive_auth is False
+
+
+def test_transfer_result_contains_transfer_and_compute_paths(tmp_path):
+    local_file = tmp_path / "water.xyz"
+    local_file.write_text("3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n")
+    manager = GlobusTransferManager(
+        source_endpoint_id="source-id",
+        destination_endpoint_id="destination-id",
+        destination_base_path="/MyProject/staging",
+        destination_compute_base_path="/flare/MyProject/staging",
+    )
+    transfer_client = MagicMock()
+    transfer_client.submit_transfer.return_value = {"task_id": "task-id"}
+    manager._transfer_client = transfer_client
+    sdk = MagicMock()
+    transfer_data = MagicMock()
+    sdk.TransferData.return_value = transfer_data
+
+    with patch.dict(sys.modules, {"globus_sdk": sdk}):
+        result = manager.transfer_files(
+            [str(local_file)],
+            remote_subdir="batch-1",
+        )
+
+    source_path = str(local_file.resolve())
+    transfer_path = "/MyProject/staging/batch-1/water.xyz"
+    compute_path = "/flare/MyProject/staging/batch-1/water.xyz"
+    transfer_data.add_item.assert_called_once_with(source_path, transfer_path)
+    assert result.remote_directory == "/MyProject/staging/batch-1"
+    assert result.compute_directory == "/flare/MyProject/staging/batch-1"
+    assert result.file_mapping == {source_path: transfer_path}
+    assert result.compute_file_mapping == {source_path: compute_path}
+
+
+def test_transfer_result_defaults_compute_paths_for_compatibility():
+    result = TransferResult(
+        task_id="task-id",
+        source_endpoint_id="source-id",
+        destination_endpoint_id="destination-id",
+        file_mapping={"local": "/remote/file"},
+        remote_directory="/remote",
+    )
+
+    assert result.compute_directory == "/remote"
+    assert result.compute_file_mapping == {"local": "/remote/file"}
+
+
+def test_transfer_factory_infers_polaris_collection_from_system(tmp_path):
+    from chemgraph.execution.config import get_transfer_manager
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("", encoding="utf-8")
+    manager = get_transfer_manager(
+        config_path=str(config_path),
+        system="polaris",
+        source_endpoint_id="source-id",
+        destination_base_path="/eagle/MyProject/staging",
+    )
+
+    assert manager is not None
+    assert manager.destination_endpoint_id == (
+        "05d2c76a-e867-4f67-aa57-76edeb0beda0"
+    )
+    assert manager.destination_compute_base_path == "/eagle/MyProject/staging"
+
+
+def test_transfer_factory_uses_execution_system_from_config(tmp_path):
+    from chemgraph.execution.config import get_transfer_manager
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[execution]
+system = "polaris"
+
+[execution.globus_transfer]
+source_endpoint_id = "source-id"
+destination_base_path = "/eagle/MyProject/staging"
+""",
+        encoding="utf-8",
+    )
+
+    manager = get_transfer_manager(config_path=str(config_path))
+
+    assert manager is not None
+    assert manager.destination_endpoint_id == (
+        "05d2c76a-e867-4f67-aa57-76edeb0beda0"
+    )
+
+
+def test_transfer_factory_system_argument_precedes_environment(
+    tmp_path,
+    monkeypatch,
+):
+    from chemgraph.execution.config import get_transfer_manager
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("COMPUTE_SYSTEM", "aurora")
+
+    manager = get_transfer_manager(
+        config_path=str(config_path),
+        system="polaris",
+        source_endpoint_id="source-id",
+        destination_base_path="/eagle/MyProject/staging",
+    )
+
+    assert manager is not None
+    assert manager.destination_endpoint_id == (
+        "05d2c76a-e867-4f67-aa57-76edeb0beda0"
+    )
+
+
+def test_transfer_factory_uses_compute_system_environment(tmp_path, monkeypatch):
+    from chemgraph.execution.config import get_transfer_manager
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("", encoding="utf-8")
+    monkeypatch.setenv("COMPUTE_SYSTEM", "polaris")
+
+    manager = get_transfer_manager(
+        config_path=str(config_path),
+        source_endpoint_id="source-id",
+        destination_base_path="/eagle/MyProject/staging",
+    )
+
+    assert manager is not None
+    assert manager.destination_endpoint_id == (
+        "05d2c76a-e867-4f67-aa57-76edeb0beda0"
+    )
+
+
+def test_transfer_factory_requires_override_for_placeholder_aurora_id(tmp_path):
+    from chemgraph.execution.config import get_transfer_manager
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("", encoding="utf-8")
+
+    manager = get_transfer_manager(
+        config_path=str(config_path),
+        system="aurora",
+        source_endpoint_id="source-id",
+        destination_base_path="/MyProject/staging",
+    )
+
+    assert manager is None
+
+
+def test_transfer_factory_translates_aurora_path_with_explicit_id(tmp_path):
+    from chemgraph.execution.config import get_transfer_manager
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("", encoding="utf-8")
+    manager = get_transfer_manager(
+        config_path=str(config_path),
+        system="aurora",
+        source_endpoint_id="source-id",
+        destination_endpoint_id="user-supplied-id",
+        destination_base_path="/MyProject/staging",
+    )
+
+    assert manager is not None
+    assert manager.destination_endpoint_id == "user-supplied-id"
+    assert manager.destination_base_path == "/MyProject/staging"
+    assert manager.destination_compute_base_path == "/flare/MyProject/staging"
+
+
+def test_custom_collection_disables_implicit_polaris_translation(tmp_path):
+    from chemgraph.execution.config import get_transfer_manager
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("", encoding="utf-8")
+    manager = get_transfer_manager(
+        config_path=str(config_path),
+        system="polaris",
+        source_endpoint_id="source-id",
+        destination_endpoint_id="custom-collection-id",
+        destination_base_path="/custom/staging",
+    )
+
+    assert manager is not None
+    assert manager.destination_compute_base_path == "/custom/staging"
+
+
+def test_transfer_mcp_response_distinguishes_path_namespaces(tmp_path):
+    from chemgraph.mcp.transfer_tools import register_transfer_tools
+
+    local_file = tmp_path / "water.xyz"
+    local_file.write_text("water", encoding="utf-8")
+    source_path = str(local_file.resolve())
+    manager = MagicMock()
+    manager.transfer_files.return_value = TransferResult(
+        task_id="task-id",
+        source_endpoint_id="source-id",
+        destination_endpoint_id="destination-id",
+        file_mapping={source_path: "/Project/batch/water.xyz"},
+        remote_directory="/Project/batch",
+        compute_directory="/flare/Project/batch",
+        compute_file_mapping={source_path: "/flare/Project/batch/water.xyz"},
+    )
+
+    class FakeMCP:
+        def __init__(self):
+            self.tools = {}
+
+        def add_tool(self, tool, *, name, description):
+            self.tools[name] = tool
+
+    mcp = FakeMCP()
+    register_transfer_tools(mcp, manager)
+
+    response = mcp.tools["transfer_files"](source_path, wait=False)
+
+    assert response["remote_directory"] == "/flare/Project/batch"
+    assert response["transfer_directory"] == "/Project/batch"
+    assert response["file_mapping"] == {source_path: "/Project/batch/water.xyz"}
+    assert response["compute_file_mapping"] == {
+        source_path: "/flare/Project/batch/water.xyz"
+    }
