@@ -82,8 +82,6 @@ _FACILITY_TRANSFER_PROFILES = {
     ),
     "aurora": FacilityTransferProfile(
         system="aurora",
-        # Placeholder: replace this public UUID once the Flare collection ID is
-        # ready to be maintained here. The factory will not use a nil UUID.
         collection_id="f39a7a0f-5bfc-46ce-9615-ba9f8592814f",
         collection_name="alcf#dtn_flare",
         transfer_root="/",
@@ -92,7 +90,7 @@ _FACILITY_TRANSFER_PROFILES = {
             "https://docs.alcf.anl.gov/aurora/data-management/"
             "moving_data_to_aurora/globus/"
         ),
-        verified_on=None,
+        verified_on=date(2026, 9, 4),
     ),
 }
 
@@ -102,3 +100,8 @@ def get_facility_transfer_profile(
 ) -> FacilityTransferProfile | None:
     """Return the public Transfer profile for *system*, if one is bundled."""
     return _FACILITY_TRANSFER_PROFILES.get(system.strip().lower())
+
+
+def list_facility_transfer_profiles() -> tuple[FacilityTransferProfile, ...]:
+    """Return bundled Transfer profiles in stable display order."""
+    return tuple(_FACILITY_TRANSFER_PROFILES.values())

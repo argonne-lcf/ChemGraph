@@ -246,11 +246,16 @@ def get_transfer_manager(
                 merged[key] = env_val
 
     resolved_system = system or os.getenv("COMPUTE_SYSTEM") or cfg.get("system")
+    resolved_system_name = (
+        resolved_system.strip().lower()
+        if isinstance(resolved_system, str) and resolved_system.strip()
+        else None
+    )
     profile = None
-    if isinstance(resolved_system, str) and resolved_system.strip():
+    if resolved_system_name is not None:
         from chemgraph.hpc_configs import get_facility_transfer_profile
 
-        profile = get_facility_transfer_profile(resolved_system)
+        profile = get_facility_transfer_profile(resolved_system_name)
 
     configured_destination = merged.get("destination_endpoint_id")
     if not configured_destination and profile is not None:
@@ -308,6 +313,7 @@ def get_transfer_manager(
         source_base_path=merged.get("source_base_path"),
         client_id=merged.get("client_id"),
         allow_interactive_auth=bool(merged.get("allow_interactive_auth", True)),
+        system=resolved_system_name,
     )
     logger.info(
         "GlobusTransferManager created: %s -> %s",

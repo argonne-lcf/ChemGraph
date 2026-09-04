@@ -57,7 +57,9 @@ mcp = CGFastMCP(
         3. extract_output_json: load simulation results from a JSON file.
         4. check_job_status / get_job_results / list_jobs / cancel_job: HPC
            job batch management. Job state persists across sessions.
-        5. transfer_files / check_transfer_status / list_remote_files
+        5. list_transfer_facilities: show Polaris/Aurora Transfer profiles and
+           the active server target.
+        6. transfer_files / check_transfer_status / list_remote_files
            (when Globus Transfer is configured): stage input files on the
            remote HPC filesystem before running ensembles in remote mode.
 
@@ -330,11 +332,11 @@ mcp.add_tool(
 )
 
 
-# ── Globus Transfer (registered only when configured) ──────────────────
+# ── Globus Transfer discovery and configured operations ───────────────
 
 _transfer_manager = get_transfer_manager(allow_interactive_auth=False)
+register_transfer_tools(mcp, _transfer_manager)
 if _transfer_manager is not None:
-    register_transfer_tools(mcp, _transfer_manager)
     logger.info("Registered Globus Transfer tools on ASE MCP server.")
 
 

@@ -90,6 +90,9 @@ class GlobusTransferManager:
         Whether a missing or unusable token cache may trigger an interactive
         Native App login.  MCP servers must disable this so OAuth prompts do
         not consume their protocol stream.
+    system : str, optional
+        Facility system name associated with this destination. Used for
+        agent-visible discovery metadata only.
     """
 
     def __init__(
@@ -101,6 +104,7 @@ class GlobusTransferManager:
         client_id: Optional[str] = None,
         allow_interactive_auth: bool = True,
         destination_compute_base_path: Optional[str] = None,
+        system: Optional[str] = None,
     ) -> None:
         self.source_endpoint_id = source_endpoint_id
         self.destination_endpoint_id = destination_endpoint_id
@@ -111,6 +115,7 @@ class GlobusTransferManager:
         self.source_base_path = source_base_path
         self._client_id = client_id or _DEFAULT_CLIENT_ID
         self.allow_interactive_auth = allow_interactive_auth
+        self.system = system.strip().lower() if system else None
         self._transfer_client = None
 
     # ── authentication ──────────────────────────────────────────────────
