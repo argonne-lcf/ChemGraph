@@ -1,13 +1,15 @@
 # Command-line interface
 
 The `chemgraph` command provides query execution, evaluation, session
-inspection, model discovery, dashboards, and Academy orchestration.
+inspection, model discovery, the web interface, dashboards, and Academy
+orchestration.
 
 ```text
 chemgraph run        Run an agent query or interactive session
 chemgraph eval       Evaluate a dataset
-chemgraph session    List, inspect, export, or delete saved sessions
+chemgraph session    List, inspect, or delete saved sessions
 chemgraph models     List registered model identifiers
+chemgraph ui         Launch the Streamlit web interface
 chemgraph dashboard  Launch the trace dashboard
 chemgraph academy    Run Academy campaigns and workers
 ```

@@ -1,6 +1,8 @@
 from contextlib import nullcontext
 import os
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, Mock
 
 from chemgraph.models.supported_models import supported_argo_models
 from ui._pages import main_interface as main_ui
@@ -117,6 +119,41 @@ def test_non_argo_structured_output_is_preserved():
 
     assert structured is True
     assert notice is None
+
+
+def test_remote_endpoint_allows_chat_submission(monkeypatch, tmp_path):
+    from ui import endpoint
+
+    base_url = "https://api.openai.com/v1"
+    query = "Calculate the energy of water"
+    result = {"messages": [{"role": "ai", "content": "Test response"}]}
+    agent = Mock(recursion_limit=20, log_dir=str(tmp_path))
+    agent.workflow.get_state.return_value = SimpleNamespace(values={"messages": []})
+    fake_st = MagicMock()
+    fake_st.session_state = _SessionState(agent=agent, conversation_history=[])
+    stream_workflow = Mock()
+    probe_opener = Mock()
+
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_stream_workflow", stream_workflow)
+    monkeypatch.setattr(main_ui, "_poll_and_display", lambda *args: ("done", result))
+    monkeypatch.setattr(main_ui, "_save_exchange_to_store", Mock())
+    monkeypatch.setattr(endpoint, "build_opener", probe_opener)
+    endpoint.check_local_model_endpoint.clear()
+    try:
+        status = main_ui.check_local_model_endpoint(base_url)
+        main_ui._handle_query_submission(query, 1, status, base_url)
+    finally:
+        endpoint.check_local_model_endpoint.clear()
+
+    probe_opener.assert_not_called()
+    stream_workflow.assert_called_once()
+    assert stream_workflow.call_args.args[0] == {"messages": query}
+    assert fake_st.session_state.last_run_error is None
+    assert fake_st.session_state.conversation_history[0]["query"] == query
+    assert fake_st.session_state.conversation_history[0]["result"] == result
+    fake_st.error.assert_not_called()
 
 
 def test_available_calculators_sidebar_replaces_quick_settings(monkeypatch):

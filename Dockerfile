@@ -23,17 +23,18 @@ RUN conda install -y -c conda-forge \
     nwchem \
     && conda clean -afy
 
-# Install ChemGraph and UI runtime
-RUN pip install --no-cache-dir . && \
-    pip install --no-cache-dir jupyterlab
+# Install ChemGraph and UI runtime in one resolution pass.
+RUN python -m pip install --no-cache-dir . jupyterlab
 
-# Install Python tblite from source with conservative flags to avoid ABI/symbol issues on ARM.
+# Install Python tblite from source with conservative compiler flags.
 RUN CFLAGS="-O2 -fno-tree-vectorize" \
     FFLAGS="-O2 -fno-tree-vectorize" \
-    pip install --no-cache-dir --no-binary=tblite --force-reinstall "tblite==0.4.0"
+    python -m pip install --no-cache-dir --no-binary=tblite --force-reinstall "tblite==0.4.0"
 
-# Validate calculator runtimes at build time after package install.
-RUN which nwchem && python -c "from tblite.ase import TBLite"
+# Validate calculator runtimes and dependency consistency after installation.
+RUN which nwchem && \
+    python -c "from tblite.ase import TBLite" && \
+    python -m pip check
 
 # Allow git commands in bind-mounted repo paths inside the container.
 RUN git config --system --add safe.directory /app

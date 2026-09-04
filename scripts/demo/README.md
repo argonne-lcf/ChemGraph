@@ -173,20 +173,6 @@ same pattern as `demo_local_agent.py`.
 
 ## Known caveats
 
-- **`langchain-mcp-adapters` must be pinned to `0.1.14`** for the
-  `*_agent.py` scripts to import. Versions `>=0.2.0` import
-  `langchain_core.messages.content` (a 1.x API) which doesn't exist in
-  `langchain-core 0.3.x` — and `langgraph 0.4.7` (pinned in
-  `pyproject.toml`) constrains us to `langchain-core 0.3.x`. Fix in
-  `.cg_env`:
-  ```bash
-  pip install 'langchain-mcp-adapters==0.1.14'
-  ```
-  This is an **env-only pin** — `pyproject.toml` still lists
-  `langchain-mcp-adapters` unpinned, so a fresh `pip install -e .`
-  will regress to `>=0.2`. Re-run the pin command after any clean env
-  rebuild. The durable fix (one-line edit to `pyproject.toml`) was
-  deferred per user request.
 - `ensemble-launcher` is not on PyPI for Python 3.12; the in-job EL
   demos only work on HPC where `scripts/hpc_setup/install_remote.sh`
   builds it from source.
