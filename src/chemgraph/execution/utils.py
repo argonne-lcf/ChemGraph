@@ -14,17 +14,81 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from pydantic import BaseModel
 
+from chemgraph.execution.base import TaskSpec
+
 if TYPE_CHECKING:
     from chemgraph.execution.base import ExecutionBackend
     from chemgraph.execution.job_tracker import JobTracker
 
 logger = logging.getLogger(__name__)
+
+REMOTE_DIRECTORY_TIMEOUT_ENV = "CHEMGRAPH_REMOTE_DIRECTORY_TIMEOUT"
+DEFAULT_REMOTE_DIRECTORY_TIMEOUT = 300.0
+
+
+def get_remote_directory_timeout() -> float:
+    """Return the configured timeout for remote directory probes."""
+    raw_timeout = os.environ.get(REMOTE_DIRECTORY_TIMEOUT_ENV)
+    if raw_timeout is None:
+        return DEFAULT_REMOTE_DIRECTORY_TIMEOUT
+    try:
+        timeout = float(raw_timeout)
+    except ValueError as exc:
+        raise ValueError(
+            f"{REMOTE_DIRECTORY_TIMEOUT_ENV} must be a positive number, "
+            f"got {raw_timeout!r}."
+        ) from exc
+    if timeout <= 0:
+        raise ValueError(
+            f"{REMOTE_DIRECTORY_TIMEOUT_ENV} must be a positive number, "
+            f"got {raw_timeout!r}."
+        )
+    return timeout
+
+
+def probe_remote_directory(
+    backend: ExecutionBackend,
+    remote_directory: str,
+    list_callable: Callable[[str], list[str]],
+    timeout: float | None = None,
+) -> list[str]:
+    """List files through an execution backend before ensemble fanout.
+
+    Remote schedulers may need several minutes to provision their first worker,
+    so this probe uses a longer, configurable timeout than local task waits.
+    """
+    effective_timeout = (
+        get_remote_directory_timeout() if timeout is None else timeout
+    )
+    probe = TaskSpec(
+        task_id="ls_remote_dir",
+        task_type="python",
+        callable=list_callable,
+        kwargs={"path": remote_directory},
+    )
+    future = backend.submit(probe)
+    try:
+        return future.result(timeout=effective_timeout)
+    except TimeoutError as exc:
+        raise RuntimeError(
+            f"Timed out after {effective_timeout:g}s while listing remote "
+            f"directory {remote_directory}. The remote scheduler may still "
+            "be starting workers; retry after the endpoint is warm or increase "
+            f"{REMOTE_DIRECTORY_TIMEOUT_ENV}."
+        ) from exc
+    except Exception as exc:
+        detail = str(exc) or type(exc).__name__
+        raise RuntimeError(
+            f"Could not list remote directory {remote_directory}: "
+            f"{type(exc).__name__}: {detail}"
+        ) from exc
 
 
 def to_picklable(value: Any) -> Any:

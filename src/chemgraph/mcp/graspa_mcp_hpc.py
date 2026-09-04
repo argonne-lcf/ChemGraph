@@ -17,10 +17,10 @@ import logging
 import os
 from pathlib import Path
 
-from chemgraph.execution.base import TaskSpec
 from chemgraph.execution.config import get_transfer_manager
 from chemgraph.execution.utils import (
     make_per_structure_output,
+    probe_remote_directory,
     resolve_structure_files,
 )
 from chemgraph.mcp.cg_fastmcp import CGFastMCP
@@ -142,19 +142,9 @@ def _expand_graspa_ensemble(params: graspa_input_schema_ensemble) -> list[dict]:
     if params.remote_structure_directory:
         remote_dir = params.remote_structure_directory
         mcp._ensure_backend()
-        probe = TaskSpec(
-            task_id="ls_remote_dir",
-            task_type="python",
-            callable=_ls_remote_files,
-            kwargs={"path": remote_dir},
+        file_names = probe_remote_directory(
+            mcp._backend, remote_dir, _ls_remote_files
         )
-        fut = mcp._backend.submit(probe)
-        try:
-            file_names = fut.result(timeout=30)
-        except Exception as exc:
-            raise RuntimeError(
-                f"Could not list remote directory {remote_dir}: {exc}"
-            ) from exc
 
         # Filter to CIF files (gRASPA expects CIFs).
         file_names = [f for f in file_names if f.lower().endswith(".cif")]
