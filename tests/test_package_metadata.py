@@ -89,7 +89,7 @@ def test_conda_environment_covers_exact_project_pins() -> None:
     assert all(dependency in environment_specs for dependency in direct_urls)
 
 
-def test_tblite_pin_matches_all_installation_surfaces() -> None:
+def test_calculator_pin_matches_all_installation_surfaces() -> None:
     """Conda and container installs should use the calculator-extra TBLite pin."""
     metadata = _load_toml(_REPO_ROOT / "pyproject.toml")["project"]
     calculator_pins = _exact_pins(metadata["optional-dependencies"]["calculators"])
