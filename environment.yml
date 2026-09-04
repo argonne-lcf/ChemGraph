@@ -7,16 +7,17 @@ dependencies:
   - pip
   - numpy=2.2.6
   - pandas=2.2.3
-  - pytest=8.4.1
+  - pytest=9.0.3
   - rich=14.1.0
   - toml=0.10.2
-  - tblite
+  - tblite=0.4.0
   - nwchem
   - pip:
     - ase==3.25.0
     - rdkit==2025.3.3
     - langgraph==1.2.9
     - langgraph-checkpoint==4.1.1
+    - langgraph-checkpoint-sqlite==3.1.1
     - langgraph-prebuilt==1.1.0
     - langgraph-sdk==0.4.2
     - langchain==1.3.14
@@ -33,9 +34,9 @@ dependencies:
     - numexpr==2.11.0
     - pymatgen==2025.3.10
     - mace-torch>=0.3.16
-    - graph-longrange @ git+https://github.com/WillBaldwin0/graph_electrostatics.git@v0.4.0
+    - -r requirements/mace-polar.txt
     - globus-sdk
-    - streamlit==1.48.1
+    - streamlit==1.54.0
     - py3Dmol
     - plotly
     - langsmith==0.10.10

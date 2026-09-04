@@ -9,7 +9,7 @@ runtime; optional engines that cannot be imported or located are omitted.
 | Calculator | Setup | Best use in onboarding |
 | --- | --- | --- |
 | EMT | Included with ASE | Fast, offline smoke tests; limited elements/accuracy |
-| MACE | Included in core ChemGraph | MACE-Polar medium is the default; supports energies, forces, and molecular dipole moments |
+| MACE | MACE-MP included in core; Polar requires an add-on | Polar medium is preferred when installed; otherwise MACE-MP supplies energies and forces |
 | TBLite | `pip install "chemgraph[calculators]"` | Semiempirical calculations |
 | UMA / fairchem | `pip install "chemgraph[uma]"` in a separate environment | Advanced universal ML potential |
 | AIMNet2 | Install its package/model dependencies separately | Supported molecular ML route when importable |
@@ -45,14 +45,38 @@ result as scientifically appropriate merely because the workflow completed.
 ## MACE downloads
 
 MACE is installed with the core package. When no calculator is specified,
-ChemGraph uses the MACE-Polar medium checkpoint (`mace_polar` with
-`polar-1-m`). Pretrained weights may be fetched on first use. In restricted or
+ChemGraph uses MACE-Polar (`mace_polar`, `polar-1-m`) if the `graph-longrange`
+add-on is installed; otherwise it uses MACE-MP (`mace_mp`, reported as
+`medium-mpa-0`). Explicit calculator selections are preserved.
+
+Starting with v0.7.0, install Polar from the matching source checkout or extracted
+source distribution with:
+
+```bash
+python -m pip install . -r requirements/mace-polar.txt
+python -m pip check
+```
+
+For a published release, pin both ChemGraph and its requirements to that release:
+
+```bash
+python -m pip install 'chemgraph==0.7.0' -r https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/mace-polar.txt
+```
+
+Use the matching tag or commit when installing another version; the add-on files
+are introduced in v0.7.0. The conda environment and Docker images explicitly
+install Polar. Run `conda env create -f environment.yml` from the checkout root
+so its supplemental requirements path resolves correctly.
+
+Pretrained weights may be fetched on first use. In restricted or
 offline environments, pre-stage the required model cache or choose EMT for the
 initial test. MACE-Polar checkpoints are distributed under the Academic
 Software License (ASL); review its terms before use.
 
 MACE-Polar can calculate molecular dipole moments with `driver="dipole"`.
 ChemGraph reports these dipole vectors in Debye.
+MACE-MP does not supply Polar's dipole or IR capabilities. An explicit Polar
+request without the add-on reports installation instructions before loading weights.
 
 ## UMA dependency isolation
 

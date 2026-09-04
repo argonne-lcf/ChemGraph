@@ -2,6 +2,7 @@
 Reference: https://github.com/ACEsuit/mace/blob/main/mace/calculators/foundations_models.py"""
 
 import functools
+import importlib.util
 import logging
 import os
 import tempfile
@@ -19,6 +20,16 @@ _DEFAULT_MODEL_NAMES = {
     "mace_mp": "medium-mpa-0",
     "mace_off": "medium",
 }
+
+
+def mace_polar_available() -> bool:
+    """Detect the Polar add-on without importing it or loading model weights."""
+    return importlib.util.find_spec("graph_longrange") is not None
+
+
+def get_default_mace_calculator_type() -> str:
+    """Prefer Polar when its add-on is installed, otherwise use MACE-MP."""
+    return "mace_polar" if mace_polar_available() else "mace_mp"
 
 # Process-wide lock for MACE operations.
 # MACE model deserialization (torch.load) triggers torch.fx.symbolic_trace
@@ -113,8 +124,8 @@ class MaceCalc(BaseModel):
     Parameters
     ----------
     calculator_type : str, optional
-        Type of calculator to use. Options: 'mace_polar' (default), 'mace_mp',
-        'mace_off', or 'mace_anicc'.
+        Type of calculator to use: 'mace_polar', 'mace_mp', 'mace_off', or
+        'mace_anicc'. Defaults to Polar when its add-on is installed, else MACE-MP.
     model : str or Path, optional
         Name or path to the model file. If None, uses default model for selected calculator type.
     device : str, optional
@@ -143,9 +154,10 @@ class MaceCalc(BaseModel):
     calculator_type: Literal[
         "mace_polar", "mace_mp", "mace_off", "mace_anicc"
     ] = Field(
-        default="mace_polar",
-        description="Type of calculator. Options: 'mace_polar' (default), "
-        "'mace_mp', 'mace_off', or 'mace_anicc'. MACE-Polar supports "
+        default_factory=get_default_mace_calculator_type,
+        description="Type of calculator. Defaults to 'mace_polar' when the "
+        "graph-longrange add-on is installed, otherwise 'mace_mp'. Other options "
+        "are 'mace_off' and 'mace_anicc'. MACE-Polar supports "
         "energies, forces, and molecular dipole moments.",
     )
     model: Optional[Union[str, Path]] = Field(
@@ -238,6 +250,15 @@ class MaceCalc(BaseModel):
         ValueError
             If an invalid calculator_type is specified
         """
+        if self.calculator_type == "mace_polar" and not mace_polar_available():
+            raise ImportError(
+                "MACE-Polar requires the graph-longrange add-on. From the matching "
+                "ChemGraph source checkout or extracted source distribution, run "
+                "'python -m pip install -r requirements/mace-polar.txt'. "
+                "See https://argonne-lcf.github.io/ChemGraph/calculators/ "
+                "for versioned installation instructions."
+            )
+
         from mace.modules.models import ScaleShiftMACE
 
         # Allow loading slice and ScaleShiftMACE objects for compatibility with older model files

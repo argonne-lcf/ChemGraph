@@ -79,7 +79,9 @@ jobs:
     - name: Install and verify wheel
       run: |
         python -m pip install dist/*.whl
+        python scripts/check_distribution_metadata.py dist/*
         python -c "import chemgraph; print(f'ChemGraph {chemgraph.__version__}')"
+        chemgraph --help
         python -m pip check
 
   # Exercises the distributed/HPC feature set: the Academy multi-agent module

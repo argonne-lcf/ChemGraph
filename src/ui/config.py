@@ -97,6 +97,8 @@ def save_config(config: Dict[str, Any], config_path: Optional[str] = None) -> bo
 
 def get_default_config() -> Dict[str, Any]:
     """Return default configuration."""
+    from chemgraph.schemas.calculators.mace_calc import get_default_mace_calculator_type
+
     return {
         "general": {
             "model": "gpt-4o-mini",
@@ -140,7 +142,9 @@ def get_default_config() -> Dict[str, Any]:
         },
         "chemistry": {
             "optimization": {"method": "BFGS", "fmax": 0.05, "steps": 200},
-            "calculators": {"default": "mace_polar", "fallback": "emt"},
+            "calculators": {
+                "default": get_default_mace_calculator_type(), "fallback": "emt"
+            },
         },
         "output": {
             "files": {

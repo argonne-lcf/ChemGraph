@@ -84,7 +84,8 @@ displacement = 0.01
 nprocs = 1
 
 [chemistry.calculators]
-default = "mace_polar"
+# Omit default to detect MACE-Polar when installed, otherwise MACE-MP.
+# Set default explicitly here to preserve a particular calculator selection.
 fallback = "emt"
 
 [output.files]

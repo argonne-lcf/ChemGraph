@@ -294,8 +294,10 @@ def _preload_torchvision() -> None:
 
 
 def _install_hint() -> str:
-    """How to install a missing model. One extra covers all four."""
-    return (f"Install it with: pip install 'chemgraph[ocsr]'. "
+    """Install PyPI support and the pinned Git specialists together."""
+    return ("From the matching ChemGraph source checkout or extracted source "
+            "distribution, run: python -m pip install '.[ocsr]' "
+            "-r requirements/ocsr-models.txt. "
             f"Installed here: {', '.join(available_specialists()) or 'none'}.")
 
 
@@ -383,4 +385,3 @@ def smiles_from_specialist(name: str, image_path: str) -> dict:
 
     return _narrow(ok=True, smiles=smiles, raw=str(raw or "")[:200],
                    model_used=bare, cold_start=cold, latency_s=elapsed)
-
