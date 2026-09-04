@@ -33,13 +33,13 @@ paths must stay in environment variables or local configuration.
 | System | Collection | Bundled ID | Transfer path | Compute path |
 | --- | --- | --- | --- | --- |
 | Polaris | `alcf#dtn_eagle` | `05d2c76a-e867-4f67-aa57-76edeb0beda0` | `/eagle/<project>/...` | `/eagle/<project>/...` |
-| Aurora | `alcf#dtn_flare` | Placeholder; override required | `/<project>/...` | `/flare/<project>/...` |
+| Aurora | `alcf#dtn_flare` | `f39a7a0f-5bfc-46ce-9615-ba9f8592814f` | `/<project>/...` | `/flare/<project>/...` |
 
-Set `COMPUTE_SYSTEM=polaris` or `[execution] system = "polaris"` and omit
-`GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` to select the Eagle ID. The Flare ID
-is intentionally the nil UUID until it is updated, so Aurora users must set an
-explicit destination ID. The profile still translates the Flare
-collection-visible path to the path seen by Aurora workers.
+Set `COMPUTE_SYSTEM=polaris` or `COMPUTE_SYSTEM=aurora` (or the equivalent
+`[execution] system` value) and omit
+`GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` to select the bundled destination.
+The Aurora profile translates the Flare collection-visible path to the path
+seen by Aurora workers.
 
 Explicit arguments take priority, followed by `[execution.globus_transfer]`
 settings and environment fallbacks. A custom Polaris collection disables the
@@ -55,6 +55,11 @@ system = "polaris"
 source_endpoint_id = "<your-source-collection-uuid>"
 destination_base_path = "/eagle/<project>/staging"
 ```
+
+HPC MCP servers always expose `list_transfer_facilities`. Agents can use it to
+see both profiles and identify the active server target. Selection is fixed at
+server startup so the Transfer destination stays aligned with the configured
+Compute endpoint.
 
 See the ALCF documentation for current
 [Eagle and Flare collection paths](https://docs.alcf.anl.gov/data-management/data-transfer/using-globus/)
