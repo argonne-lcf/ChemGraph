@@ -47,7 +47,7 @@ it with a ChemGraph LLM agent over `langchain-mcp-adapters`.
 | `GLOBUS_COMPUTE_ENDPOINT_ID` | `demo_globus_*` | UUID from `globus-compute-endpoint start chemgraph-<system>` |
 | `GLOBUS_COMPUTE_AMQP_PORT` | optional for stdio agent demos | Result-streaming port; use `443` when outbound `5671` is blocked |
 | `GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID` | transfer demos and `demo_globus_ase_deep_agent.py` | Globus Connect Personal on the laptop |
-| `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` | optional for Polaris; required for Aurora until its bundled ID is updated | HPC collection UUID |
+| `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` | optional collection override | Defaults from `COMPUTE_SYSTEM` for Polaris and Aurora |
 | `GLOBUS_TRANSFER_DESTINATION_BASE_PATH` | transfer demos and `demo_globus_ase_deep_agent.py` | collection path, e.g. `/eagle/MyProj/staging` on Eagle or `/MyProj/staging` on Flare |
 | `GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH` | optional custom collection override | worker-visible equivalent of the destination base path |
 | `COMPUTE_SYSTEM` | transfer and HPC demos | `polaris` or `aurora`; selects a bundled Transfer profile |
@@ -109,12 +109,11 @@ python scripts/demo/demo_globus_transfer_agent.py --model gpt-4o-mini
 python scripts/demo/demo_globus_ase_deep_agent.py --model gpt-4o-mini
 ```
 
-Polaris uses the bundled public `alcf#dtn_eagle` collection ID. For Aurora,
-set `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` explicitly and use the Flare
-collection path (for example `/MyProj/staging`); ChemGraph maps that to the
-worker path `/flare/MyProj/staging`. The bundled Flare ID is currently a
-placeholder. For a custom collection whose namespace differs from the worker
-filesystem, also set `GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH`.
+Polaris uses the bundled public `alcf#dtn_eagle` collection ID. Aurora uses the
+bundled `alcf#dtn_flare` ID and a collection path such as `/MyProj/staging`;
+ChemGraph maps that to the worker path `/flare/MyProj/staging`. For a custom
+collection whose namespace differs from the worker filesystem, also set
+`GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH`.
 
 The direct demo stages the 5 `.xyz` fixtures, then runs MACE in
 *remote-path* mode (worker reads from the staged dir, no inline
@@ -132,10 +131,11 @@ directory to pull them back with a follow-up Globus Transfer if needed.
 `demo_globus_ase_deep_agent.py` is the smallest agent-driven validation of
 both services. It authenticates Transfer in the parent terminal, starts
 `chemgraph.mcp.ase_mcp_hpc` over stdio, and binds only its Transfer and remote
-ASE tools to a state-backed Deep Agent. The agent stages one water structure
-and submits an ASE energy calculation with EMT. The Python driver polls the
-asynchronous Compute batch with a fixed timeout, then resumes the same graph to
-retrieve and validate one finite `potential_energy`.
+ASE tools to a state-backed Deep Agent. The agent first calls
+`list_transfer_facilities` to observe the active Polaris/Aurora target, stages
+one water structure, and submits an ASE energy calculation with EMT. The Python
+driver polls the asynchronous Compute batch with a fixed timeout, then resumes
+the same graph to retrieve and validate one finite `potential_energy`.
 
 The first run may display a Globus URL and request an authorization code before
 the MCP server starts. Later runs reuse and automatically refresh

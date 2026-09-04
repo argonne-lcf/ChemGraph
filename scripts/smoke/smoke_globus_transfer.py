@@ -7,9 +7,9 @@ success, nonzero on any failure.
 Prereqs (env vars)
 ------------------
 - GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID       -- local Globus collection UUID
-- COMPUTE_SYSTEM                           -- polaris, or aurora with an ID override
+- COMPUTE_SYSTEM                           -- polaris or aurora
 - GLOBUS_TRANSFER_DESTINATION_BASE_PATH    -- e.g. /eagle/MyProj/staging
-- GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID  -- required while Flare ID is a placeholder
+- GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID  -- optional collection override
 - (for --with-mcp): GLOBUS_COMPUTE_ENDPOINT_ID and HPC venv with MACE
 
 First run triggers a Globus OAuth flow. Token caches at
