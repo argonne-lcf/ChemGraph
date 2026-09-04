@@ -41,6 +41,18 @@ class _ImmediateBackend:
         return future
 
 
+class _SequencedTracker:
+    def __init__(self, statuses):
+        self.statuses = list(statuses)
+        self.calls = []
+
+    def get_status(self, batch_id):
+        self.calls.append(batch_id)
+        if len(self.statuses) > 1:
+            return self.statuses.pop(0)
+        return self.statuses[0]
+
+
 def test_schema_fanout_tool_advertises_batch_result_signature(monkeypatch):
     """Fanout tools expose an ensemble input but return batch summaries."""
     local_mcp = CGFastMCP(name="test")
@@ -96,6 +108,53 @@ async def test_cg_fastmcp_preserves_sdk_schema_and_backend_contract():
     assert len(backend.submitted) == 1
     assert backend.submitted[0].task_type == "python"
     assert backend.submitted[0].kwargs == {"value": 4}
+
+
+@pytest.mark.asyncio
+async def test_wait_for_job_blocks_inside_one_mcp_call():
+    local_mcp = CGFastMCP(name="test")
+    tracker = _SequencedTracker(
+        [
+            {"batch_id": "batch-1", "status": "pending"},
+            {"batch_id": "batch-1", "status": "running"},
+            {"batch_id": "batch-1", "status": "completed"},
+        ]
+    )
+    local_mcp._backend = object()
+    local_mcp._tracker = tracker
+    local_mcp._register_job_tools()
+
+    async with Client(local_mcp) as client:
+        result = await client.call_tool(
+            "wait_for_job",
+            {"batch_id": "batch-1", "timeout": 1, "poll_interval": 0.001},
+        )
+
+    payload = json.loads(result.content[0].text)
+    assert payload == {"batch_id": "batch-1", "status": "completed"}
+    assert tracker.calls == ["batch-1", "batch-1", "batch-1"]
+
+
+@pytest.mark.asyncio
+async def test_wait_for_job_returns_structured_timeout():
+    local_mcp = CGFastMCP(name="test")
+    tracker = _SequencedTracker(
+        [{"batch_id": "batch-1", "status": "pending"}]
+    )
+    local_mcp._backend = object()
+    local_mcp._tracker = tracker
+    local_mcp._register_job_tools()
+
+    async with Client(local_mcp) as client:
+        result = await client.call_tool(
+            "wait_for_job",
+            {"batch_id": "batch-1", "timeout": 0.001, "poll_interval": 0.001},
+        )
+
+    payload = json.loads(result.content[0].text)
+    assert payload["status"] == "timeout"
+    assert payload["timeout_seconds"] == 0.001
+    assert "did not reach a terminal state" in payload["message"]
 
 
 def test_streamable_http_server_disables_websockets(monkeypatch):

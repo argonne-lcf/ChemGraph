@@ -44,8 +44,9 @@ mcp = CGFastMCP(
            using the configured execution backend.
         3. fetch_mp_structures: fetch optimized structures from Materials Project.
         4. plot_xanes: generate normalized XANES plots for completed calculations.
-        5. check_job_status / get_job_results / list_jobs / cancel_job: HPC
-           job batch management. Job state persists across sessions.
+        5. check_job_status / wait_for_job / get_job_results / list_jobs /
+           cancel_job: HPC job batch management. Job state persists across
+           sessions.
         6. list_transfer_facilities: show Polaris/Aurora Transfer profiles and
            the active server target.
         7. transfer_files / check_transfer_status / list_remote_files
@@ -59,11 +60,10 @@ mcp = CGFastMCP(
         - When returning paths, use absolute paths.
         - Energies are in eV.
         - When a tool returns status='submitted' with a batch_id, call
-          get_job_results(batch_id) to retrieve results.  If the job is
-          still pending, report the batch_id to the user so they can
-          check later.  Job state is persisted across sessions -- the
-          user can call list_jobs or get_job_results in a future session
-          to retrieve results.
+          wait_for_job(batch_id) before get_job_results(batch_id). If waiting
+          times out, report the batch_id to the user. Job state is persisted
+          across sessions -- the user can call list_jobs or get_job_results in
+          a future session to retrieve results.
     """,
 )
 
