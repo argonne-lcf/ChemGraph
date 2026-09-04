@@ -12,6 +12,8 @@ runtime; optional engines that cannot be imported or located are omitted.
 | MACE | Included in core ChemGraph | MACE-Polar medium is the default; supports energies, forces, and molecular dipole moments |
 | TBLite | `pip install "chemgraph[calculators]"` | Semiempirical calculations |
 | UMA / fairchem | `pip install "chemgraph[uma]"` in a separate environment | Advanced universal ML potential |
+| NVIDIA ALCHEMI | `pip install "chemgraph[nvalchemi_mace]"` | CUDA-oriented batched MACE evaluation |
+| Rootstock | `pip install "chemgraph[rootstock]"` | Hosted MACE, UMA, or AIMNet2 checkpoint through ASE |
 | AIMNet2 | Install its package/model dependencies separately | Supported molecular ML route when importable |
 | NWChem | Install/configure NWChem for ASE | External quantum chemistry |
 | ORCA | Install/configure ORCA for ASE | External quantum chemistry |
@@ -59,6 +61,25 @@ ChemGraph reports these dipole vectors in Debye.
 The UMA/fairchem stack can require an `e3nn` version that conflicts with MACE.
 Use a separate virtual environment for UMA rather than forcing incompatible
 versions into the core environment.
+
+## MLIP calculator backends
+
+The specialized `run_mlip` and `run_mlip_batch` tools keep the scientific model
+identity separate from the adapter that evaluates it. A request has one
+`model` object and one `calculator` object; `calculator.backend` selects `ase`,
+`nvalchemi`, or `rootstock`. Unsupported combinations fail during validation
+instead of silently dropping settings.
+
+| Calculator backend | Model families in the initial interface | Notes |
+| --- | --- | --- |
+| `ase` | MACE, UMA, AIMNet2 | General single-structure and reusable-calculator batch path |
+| `nvalchemi` | MACE-MP | Native CUDA batching; supports energy and FIRE optimization |
+| `rootstock` | MACE, UMA, AIMNet2 | Uses canonical hosted checkpoints and manages its calculator context across a batch |
+
+Execution placement is a separate concern. The same calculator request can be
+submitted by the MLIP MCP server through the local, Parsl, Ensemble Launcher,
+or Globus Compute execution backend. See [MCP servers](mcp_servers.md#mlip-server)
+for examples and remote filesystem requirements.
 
 ## External executables
 
