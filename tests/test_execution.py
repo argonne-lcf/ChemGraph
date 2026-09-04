@@ -21,8 +21,11 @@ import pytest
 from chemgraph.execution.base import TaskSpec
 from chemgraph.execution.local_backend import LocalBackend
 from chemgraph.execution.utils import (
+    DEFAULT_REMOTE_DIRECTORY_TIMEOUT,
     gather_futures,
+    get_remote_directory_timeout,
     make_per_structure_output,
+    probe_remote_directory,
     resolve_structure_files,
     write_results_jsonl,
 )
@@ -52,6 +55,61 @@ class TestTaskSpec:
         assert spec.num_nodes == 1
         assert spec.processes_per_node == 1
         assert spec.gpus_per_task == 0
+
+
+class TestRemoteDirectoryProbe:
+    def test_uses_backend_and_configured_timeout(self, monkeypatch):
+        monkeypatch.setenv("CHEMGRAPH_REMOTE_DIRECTORY_TIMEOUT", "425")
+        future = MagicMock()
+        future.result.return_value = ["water.xyz"]
+        backend = MagicMock()
+        backend.submit.return_value = future
+
+        result = probe_remote_directory(backend, "/remote/batch", os.listdir)
+
+        assert result == ["water.xyz"]
+        task = backend.submit.call_args.args[0]
+        assert task.task_id == "ls_remote_dir"
+        assert task.callable is os.listdir
+        assert task.kwargs == {"path": "/remote/batch"}
+        future.result.assert_called_once_with(timeout=425.0)
+
+    def test_defaults_to_five_minutes(self, monkeypatch):
+        monkeypatch.delenv("CHEMGRAPH_REMOTE_DIRECTORY_TIMEOUT", raising=False)
+
+        assert get_remote_directory_timeout() == DEFAULT_REMOTE_DIRECTORY_TIMEOUT
+
+    @pytest.mark.parametrize("value", ["invalid", "0", "-1"])
+    def test_rejects_invalid_timeout(self, monkeypatch, value):
+        monkeypatch.setenv("CHEMGRAPH_REMOTE_DIRECTORY_TIMEOUT", value)
+
+        with pytest.raises(ValueError, match="must be a positive number"):
+            get_remote_directory_timeout()
+
+    def test_timeout_explains_scheduler_startup(self):
+        future = MagicMock()
+        future.result.side_effect = TimeoutError
+        backend = MagicMock()
+        backend.submit.return_value = future
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"Timed out after 12s.*scheduler may still be starting workers",
+        ):
+            probe_remote_directory(
+                backend, "/remote/batch", os.listdir, timeout=12
+            )
+
+    def test_blank_backend_error_includes_exception_type(self):
+        future = MagicMock()
+        future.result.side_effect = OSError()
+        backend = MagicMock()
+        backend.submit.return_value = future
+
+        with pytest.raises(RuntimeError, match=r"OSError: OSError"):
+            probe_remote_directory(
+                backend, "/remote/batch", os.listdir, timeout=12
+            )
 
 
 # ── LocalBackend tests ──────────────────────────────────────────────────
