@@ -239,7 +239,9 @@ def test_transfer_factory_forwards_noninteractive_auth_policy():
     assert manager.allow_interactive_auth is False
 
 
-def test_transfer_result_contains_transfer_and_compute_paths(tmp_path):
+def test_transfer_submission_uses_sdk_v4_data_and_contains_paths(tmp_path):
+    import globus_sdk
+
     local_file = tmp_path / "water.xyz"
     local_file.write_text("3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n")
     manager = GlobusTransferManager(
@@ -251,20 +253,23 @@ def test_transfer_result_contains_transfer_and_compute_paths(tmp_path):
     transfer_client = MagicMock()
     transfer_client.submit_transfer.return_value = {"task_id": "task-id"}
     manager._transfer_client = transfer_client
-    sdk = MagicMock()
-    transfer_data = MagicMock()
-    sdk.TransferData.return_value = transfer_data
 
-    with patch.dict(sys.modules, {"globus_sdk": sdk}):
-        result = manager.transfer_files(
-            [str(local_file)],
-            remote_subdir="batch-1",
-        )
+    result = manager.transfer_files(
+        [str(local_file)],
+        remote_subdir="batch-1",
+    )
 
     source_path = str(local_file.resolve())
     transfer_path = "/MyProject/staging/batch-1/water.xyz"
     compute_path = "/flare/MyProject/staging/batch-1/water.xyz"
-    transfer_data.add_item.assert_called_once_with(source_path, transfer_path)
+    transfer_data = transfer_client.submit_transfer.call_args.args[0]
+    assert isinstance(transfer_data, globus_sdk.TransferData)
+    assert transfer_data["source_endpoint"] == "source-id"
+    assert transfer_data["destination_endpoint"] == "destination-id"
+    assert transfer_data["label"] == "ChemGraph file staging (batch-1)"
+    assert transfer_data["sync_level"] == 3
+    assert transfer_data["DATA"][0]["source_path"] == source_path
+    assert transfer_data["DATA"][0]["destination_path"] == transfer_path
     assert result.remote_directory == "/MyProject/staging/batch-1"
     assert result.compute_directory == "/flare/MyProject/staging/batch-1"
     assert result.file_mapping == {source_path: transfer_path}

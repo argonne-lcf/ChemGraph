@@ -331,7 +331,6 @@ class GlobusTransferManager:
         transfer_label = label or f"ChemGraph file staging ({remote_subdir})"
 
         tdata = globus_sdk.TransferData(
-            tc,
             self.source_endpoint_id,
             self.destination_endpoint_id,
             label=transfer_label,
