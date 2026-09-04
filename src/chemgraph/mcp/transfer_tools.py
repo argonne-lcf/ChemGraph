@@ -117,9 +117,13 @@ def register_transfer_tools(
 
         response = {
             "task_id": transfer_result.task_id,
-            "remote_directory": transfer_result.remote_directory,
+            # Compute tools historically consume ``remote_directory``. Keep
+            # that contract while exposing the collection path separately.
+            "remote_directory": transfer_result.compute_directory,
+            "transfer_directory": transfer_result.remote_directory,
             "file_count": len(files),
             "file_mapping": transfer_result.file_mapping,
+            "compute_file_mapping": transfer_result.compute_file_mapping,
         }
 
         if wait:
@@ -148,13 +152,14 @@ def register_transfer_tools(
         """
         return transfer_manager.check_transfer_status(task_id)
 
-    def list_remote_files(remote_path: str) -> list[dict]:
-        """List files in a directory on the remote HPC endpoint.
+    def list_remote_files(transfer_path: str) -> list[dict]:
+        """List files using a collection-visible destination path.
 
         Useful to verify that files were staged correctly before
-        running ensemble calculations.
+        running ensemble calculations. Pass ``transfer_directory`` from
+        ``transfer_files`` when Transfer and compute path namespaces differ.
         """
-        return transfer_manager.list_remote_directory(remote_path)
+        return transfer_manager.list_remote_directory(transfer_path)
 
     mcp.add_tool(
         transfer_files,
@@ -163,8 +168,8 @@ def register_transfer_tools(
             "Transfer local files to the remote HPC filesystem via "
             "Globus Transfer. Use this to pre-stage structure files "
             "before running ensemble calculations with "
-            "remote_structure_directory. Returns the remote directory "
-            "path and a mapping of local-to-remote file paths."
+            "remote_structure_directory. Returns remote_directory for "
+            "compute tools and transfer_directory for Transfer API calls."
         ),
     )
     mcp.add_tool(
@@ -179,8 +184,7 @@ def register_transfer_tools(
         list_remote_files,
         name="list_remote_files",
         description=(
-            "List files in a directory on the remote HPC endpoint. "
-            "Useful to verify that files were staged correctly before "
-            "running ensemble calculations."
+            "List files in a destination collection directory. Pass the "
+            "transfer_directory returned by transfer_files."
         ),
     )

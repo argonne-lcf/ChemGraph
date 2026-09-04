@@ -16,7 +16,7 @@ payloads.
        [execution.globus_transfer]
        source_endpoint_id = "<local-collection-uuid>"
        destination_endpoint_id = "<hpc-collection-uuid>"
-       destination_base_path = "/eagle/projects/MyProject/staging"
+       destination_base_path = "/eagle/MyProject/staging"
 """
 
 from __future__ import annotations
@@ -50,10 +50,20 @@ class TransferResult:
     task_id: str
     source_endpoint_id: str
     destination_endpoint_id: str
-    file_mapping: dict[str, str]  # local_path -> remote_path
-    remote_directory: str
+    file_mapping: dict[str, str]  # local_path -> collection-visible path
+    remote_directory: str  # collection-visible path (backward compatible name)
     submitted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     label: str = ""
+    compute_directory: str = ""  # path visible to destination compute workers
+    compute_file_mapping: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # Preserve compatibility for callers that construct results using the
+        # original fields, where both namespaces were assumed to be identical.
+        if not self.compute_directory:
+            self.compute_directory = self.remote_directory
+        if not self.compute_file_mapping:
+            self.compute_file_mapping = dict(self.file_mapping)
 
 
 class GlobusTransferManager:
@@ -66,8 +76,11 @@ class GlobusTransferManager:
     destination_endpoint_id : str
         UUID of the Globus collection on the HPC system.
     destination_base_path : str
-        Root directory on the destination where staged files are placed.
-        Each transfer batch creates a subdirectory underneath.
+        Collection-visible root directory where staged files are placed. Each
+        transfer batch creates a subdirectory underneath.
+    destination_compute_base_path : str, optional
+        Path to the same directory as seen by compute workers. Defaults to
+        ``destination_base_path`` when both namespaces are identical.
     source_base_path : str, optional
         If provided, local paths are resolved relative to this directory.
     client_id : str, optional
@@ -87,10 +100,14 @@ class GlobusTransferManager:
         source_base_path: Optional[str] = None,
         client_id: Optional[str] = None,
         allow_interactive_auth: bool = True,
+        destination_compute_base_path: Optional[str] = None,
     ) -> None:
         self.source_endpoint_id = source_endpoint_id
         self.destination_endpoint_id = destination_endpoint_id
-        self.destination_base_path = destination_base_path.rstrip("/")
+        self.destination_base_path = _normalize_base_path(destination_base_path)
+        self.destination_compute_base_path = _normalize_base_path(
+            destination_compute_base_path or destination_base_path
+        )
         self.source_base_path = source_base_path
         self._client_id = client_id or _DEFAULT_CLIENT_ID
         self.allow_interactive_auth = allow_interactive_auth
@@ -301,7 +318,11 @@ class GlobusTransferManager:
         if remote_subdir is None:
             remote_subdir = f"batch_{uuid.uuid4().hex[:12]}"
 
-        remote_dir = f"{self.destination_base_path}/{remote_subdir}"
+        remote_dir = _join_remote_path(self.destination_base_path, remote_subdir)
+        compute_dir = _join_remote_path(
+            self.destination_compute_base_path,
+            remote_subdir,
+        )
         transfer_label = label or f"ChemGraph file staging ({remote_subdir})"
 
         tdata = globus_sdk.TransferData(
@@ -317,6 +338,7 @@ class GlobusTransferManager:
         # second add_item silently overwrites the first on the
         # destination collection.
         file_mapping: dict[str, str] = {}
+        compute_file_mapping: dict[str, str] = {}
         used_names: dict[str, int] = {}
         for local_path in local_paths:
             p = Path(local_path).resolve()
@@ -331,8 +353,10 @@ class GlobusTransferManager:
                 )
             used_names[base] = count + 1
             remote_path = f"{remote_dir}/{remote_name}"
+            compute_path = f"{compute_dir}/{remote_name}"
             tdata.add_item(str(p), remote_path)
             file_mapping[str(p)] = remote_path
+            compute_file_mapping[str(p)] = compute_path
 
         result = tc.submit_transfer(tdata)
         task_id = result["task_id"]
@@ -351,6 +375,8 @@ class GlobusTransferManager:
             file_mapping=file_mapping,
             remote_directory=remote_dir,
             label=transfer_label,
+            compute_directory=compute_dir,
+            compute_file_mapping=compute_file_mapping,
         )
 
     def check_transfer_status(self, task_id: str) -> dict[str, Any]:
@@ -429,8 +455,22 @@ class GlobusTransferManager:
         local_path: str,
         remote_subdir: Optional[str] = None,
     ) -> str:
-        """Compute the remote path for a local file."""
+        """Compute the collection-visible path for a local file."""
         filename = Path(local_path).name
         if remote_subdir:
-            return f"{self.destination_base_path}/{remote_subdir}/{filename}"
-        return f"{self.destination_base_path}/{filename}"
+            remote_directory = _join_remote_path(
+                self.destination_base_path,
+                remote_subdir,
+            )
+            return _join_remote_path(remote_directory, filename)
+        return _join_remote_path(self.destination_base_path, filename)
+
+
+def _normalize_base_path(path: str) -> str:
+    """Strip trailing separators without turning the root into an empty path."""
+    return path.rstrip("/") or "/"
+
+
+def _join_remote_path(base_path: str, child: str) -> str:
+    """Join a normalized remote base path and a relative child path."""
+    return f"{base_path.rstrip('/')}/{child.lstrip('/')}"

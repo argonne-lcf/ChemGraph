@@ -208,19 +208,24 @@ def get_backend(
 
 def get_transfer_manager(
     config_path: Optional[str] = None,
+    system: Optional[str] = None,
     **kwargs: Any,
 ):
     """Create a :class:`GlobusTransferManager` from config, or ``None``.
 
     Reads the ``[execution.globus_transfer]`` section from
-    ``config.toml``.  Returns ``None`` when the required endpoint IDs
-    are not configured, so callers can skip transfer-tool registration.
+    ``config.toml``. When no destination collection is configured, a public
+    facility default is selected using the explicit *system*,
+    ``COMPUTE_SYSTEM``, or ``[execution] system`` (in that order). Returns
+    ``None`` when the remaining required settings are not configured, so
+    callers can skip transfer-tool registration.
 
-    Environment variable overrides
+    Environment variable fallbacks
     ------------------------------
     ``GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID``
     ``GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID``
     ``GLOBUS_TRANSFER_DESTINATION_BASE_PATH``
+    ``GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH``
     """
     cfg = _load_execution_config(config_path)
     transfer_cfg = cfg.get("globus_transfer", {})
@@ -230,11 +235,53 @@ def get_transfer_manager(
         ("source_endpoint_id", "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID"),
         ("destination_endpoint_id", "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID"),
         ("destination_base_path", "GLOBUS_TRANSFER_DESTINATION_BASE_PATH"),
+        (
+            "destination_compute_base_path",
+            "GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH",
+        ),
     ):
         if not merged.get(key):
             env_val = os.getenv(env_var)
             if env_val:
                 merged[key] = env_val
+
+    resolved_system = system or os.getenv("COMPUTE_SYSTEM") or cfg.get("system")
+    profile = None
+    if isinstance(resolved_system, str) and resolved_system.strip():
+        from chemgraph.hpc_configs import get_facility_transfer_profile
+
+        profile = get_facility_transfer_profile(resolved_system)
+
+    configured_destination = merged.get("destination_endpoint_id")
+    if not configured_destination and profile is not None:
+        if profile.has_placeholder_collection_id:
+            logger.warning(
+                "The bundled %s Globus collection ID is a placeholder; "
+                "configure GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID explicitly.",
+                profile.system,
+            )
+        else:
+            configured_destination = profile.collection_id
+            merged["destination_endpoint_id"] = configured_destination
+            logger.info(
+                "Using bundled %s Globus collection %s (%s)",
+                profile.system,
+                profile.collection_name,
+                profile.collection_id,
+            )
+
+    profile_matches_destination = profile is not None and (
+        profile.has_placeholder_collection_id
+        or configured_destination == profile.collection_id
+    )
+    if (
+        profile_matches_destination
+        and merged.get("destination_base_path")
+        and not merged.get("destination_compute_base_path")
+    ):
+        merged["destination_compute_base_path"] = profile.compute_path(
+            merged["destination_base_path"]
+        )
 
     required = (
         "source_endpoint_id",
@@ -255,6 +302,9 @@ def get_transfer_manager(
         source_endpoint_id=merged["source_endpoint_id"],
         destination_endpoint_id=merged["destination_endpoint_id"],
         destination_base_path=merged["destination_base_path"],
+        destination_compute_base_path=merged.get(
+            "destination_compute_base_path"
+        ),
         source_base_path=merged.get("source_base_path"),
         client_id=merged.get("client_id"),
         allow_interactive_auth=bool(merged.get("allow_interactive_auth", True)),
