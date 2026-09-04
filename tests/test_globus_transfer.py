@@ -26,6 +26,16 @@ def _manager(*, allow_interactive_auth: bool = True) -> GlobusTransferManager:
     )
 
 
+class _FakeMCP:
+    def __init__(self):
+        self.tools = {}
+        self.descriptions = {}
+
+    def add_tool(self, tool, *, name, description):
+        self.tools[name] = tool
+        self.descriptions[name] = description
+
+
 @pytest.fixture(autouse=True)
 def _clear_transfer_environment(monkeypatch):
     for name in (
@@ -359,7 +369,7 @@ def test_transfer_factory_uses_compute_system_environment(tmp_path, monkeypatch)
     )
 
 
-def test_transfer_factory_requires_override_for_placeholder_aurora_id(tmp_path):
+def test_transfer_factory_infers_aurora_collection_and_compute_path(tmp_path):
     from chemgraph.execution.config import get_transfer_manager
 
     config_path = tmp_path / "config.toml"
@@ -372,10 +382,16 @@ def test_transfer_factory_requires_override_for_placeholder_aurora_id(tmp_path):
         destination_base_path="/MyProject/staging",
     )
 
-    assert manager is None
+    assert manager is not None
+    assert manager.system == "aurora"
+    assert manager.destination_endpoint_id == (
+        "f39a7a0f-5bfc-46ce-9615-ba9f8592814f"
+    )
+    assert manager.destination_base_path == "/MyProject/staging"
+    assert manager.destination_compute_base_path == "/flare/MyProject/staging"
 
 
-def test_transfer_factory_translates_aurora_path_with_explicit_id(tmp_path):
+def test_custom_aurora_collection_disables_implicit_path_translation(tmp_path):
     from chemgraph.execution.config import get_transfer_manager
 
     config_path = tmp_path / "config.toml"
@@ -389,9 +405,10 @@ def test_transfer_factory_translates_aurora_path_with_explicit_id(tmp_path):
     )
 
     assert manager is not None
+    assert manager.system == "aurora"
     assert manager.destination_endpoint_id == "user-supplied-id"
     assert manager.destination_base_path == "/MyProject/staging"
-    assert manager.destination_compute_base_path == "/flare/MyProject/staging"
+    assert manager.destination_compute_base_path == "/MyProject/staging"
 
 
 def test_custom_collection_disables_implicit_polaris_translation(tmp_path):
@@ -428,14 +445,8 @@ def test_transfer_mcp_response_distinguishes_path_namespaces(tmp_path):
         compute_file_mapping={source_path: "/flare/Project/batch/water.xyz"},
     )
 
-    class FakeMCP:
-        def __init__(self):
-            self.tools = {}
-
-        def add_tool(self, tool, *, name, description):
-            self.tools[name] = tool
-
-    mcp = FakeMCP()
+    manager.system = "aurora"
+    mcp = _FakeMCP()
     register_transfer_tools(mcp, manager)
 
     response = mcp.tools["transfer_files"](source_path, wait=False)
@@ -450,3 +461,70 @@ def test_transfer_mcp_response_distinguishes_path_namespaces(tmp_path):
     manager.list_remote_directory.return_value = []
     assert mcp.tools["list_remote_files"](remote_path="/Project/batch") == []
     manager.list_remote_directory.assert_called_once_with("/Project/batch")
+
+
+def test_transfer_facility_discovery_is_available_without_configuration():
+    from chemgraph.mcp.transfer_tools import register_transfer_tools
+
+    mcp = _FakeMCP()
+    register_transfer_tools(mcp, None)
+
+    assert set(mcp.tools) == {"list_transfer_facilities"}
+    assert "Polaris and Aurora" in mcp.descriptions["list_transfer_facilities"]
+    payload = mcp.tools["list_transfer_facilities"]()
+    assert payload["selection_mode"] == "server_configured"
+    assert payload["transfer_configured"] is False
+    assert payload["active_system"] is None
+    assert [facility["system"] for facility in payload["facilities"]] == [
+        "polaris",
+        "aurora",
+    ]
+    assert not any(facility["active"] for facility in payload["facilities"])
+
+
+def test_transfer_facility_discovery_reports_active_bundled_target():
+    from chemgraph.mcp.transfer_tools import register_transfer_tools
+
+    manager = GlobusTransferManager(
+        source_endpoint_id="source-id",
+        destination_endpoint_id="05d2c76a-e867-4f67-aa57-76edeb0beda0",
+        destination_base_path="/eagle/MyProject/staging",
+        system="POLARIS",
+    )
+    mcp = _FakeMCP()
+    register_transfer_tools(mcp, manager)
+
+    payload = mcp.tools["list_transfer_facilities"]()
+    assert payload["transfer_configured"] is True
+    assert payload["active_system"] == "polaris"
+    polaris = next(
+        facility
+        for facility in payload["facilities"]
+        if facility["system"] == "polaris"
+    )
+    assert polaris["active"] is True
+    assert polaris["uses_bundled_collection"] is True
+    assert polaris["verified_on"] == "2026-09-03"
+    assert "polaris HPC filesystem" in mcp.descriptions["transfer_files"]
+
+
+def test_transfer_facility_discovery_identifies_custom_collection():
+    from chemgraph.mcp.transfer_tools import register_transfer_tools
+
+    manager = GlobusTransferManager(
+        source_endpoint_id="source-id",
+        destination_endpoint_id="custom-id",
+        destination_base_path="/custom/staging",
+        system="aurora",
+    )
+    mcp = _FakeMCP()
+    register_transfer_tools(mcp, manager)
+
+    payload = mcp.tools["list_transfer_facilities"]()
+    aurora = next(
+        facility
+        for facility in payload["facilities"]
+        if facility["system"] == "aurora"
+    )
+    assert aurora["active"] is True
+    assert aurora["uses_bundled_collection"] is False

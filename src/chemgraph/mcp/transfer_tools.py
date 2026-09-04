@@ -1,7 +1,8 @@
 """Shared MCP tools for Globus Transfer file staging.
 
-Call :func:`register_transfer_tools` to add ``transfer_files``,
-``check_transfer_status``, and ``list_remote_files`` to any
+Call :func:`register_transfer_tools` to add ``list_transfer_facilities`` and,
+when Transfer is configured, ``transfer_files``, ``check_transfer_status``,
+and ``list_remote_files`` to any
 :class:`~mcp.server.fastmcp.FastMCP` (or
 :class:`~chemgraph.mcp.cg_fastmcp.CGFastMCP`) server instance.
 
@@ -33,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 def register_transfer_tools(
     mcp: FastMCP,
-    transfer_manager: GlobusTransferManager,
+    transfer_manager: GlobusTransferManager | None,
 ) -> None:
-    """Register file-transfer MCP tools on *mcp*.
+    """Register Transfer discovery and configured operation tools on *mcp*.
 
     Parameters
     ----------
@@ -43,9 +44,85 @@ def register_transfer_tools(
         The MCP server to register tools on. May be a plain ``FastMCP``
         or a :class:`~chemgraph.mcp.cg_fastmcp.CGFastMCP`; ``add_tool``
         is inherited so the same registration works either way.
-    transfer_manager : GlobusTransferManager
-        The configured transfer manager instance.
+    transfer_manager : GlobusTransferManager, optional
+        The configured transfer manager instance. When omitted, facility
+        discovery is still registered but operational tools are not.
     """
+    from chemgraph.hpc_configs import list_facility_transfer_profiles
+
+    profiles = list_facility_transfer_profiles()
+    active_system = None
+    if transfer_manager is not None:
+        configured_system = getattr(transfer_manager, "system", None)
+        if isinstance(configured_system, str):
+            active_system = configured_system
+        else:
+            destination_id = getattr(
+                transfer_manager,
+                "destination_endpoint_id",
+                None,
+            )
+            active_profile = next(
+                (
+                    profile
+                    for profile in profiles
+                    if profile.collection_id == destination_id
+                ),
+                None,
+            )
+            if active_profile is not None:
+                active_system = active_profile.system
+
+    def list_transfer_facilities() -> dict:
+        """List supported Transfer facilities and the active server target.
+
+        Facility selection is fixed when the MCP server starts. Reconfigure
+        and restart the server to change the active Transfer destination.
+        """
+        facilities = []
+        for profile in profiles:
+            active = profile.system == active_system
+            facilities.append(
+                {
+                    "system": profile.system,
+                    "collection_name": profile.collection_name,
+                    "collection_id": profile.collection_id,
+                    "transfer_root": profile.transfer_root,
+                    "compute_root": profile.compute_root,
+                    "documentation_url": profile.documentation_url,
+                    "verified_on": (
+                        profile.verified_on.isoformat()
+                        if profile.verified_on is not None
+                        else None
+                    ),
+                    "active": active,
+                    "uses_bundled_collection": bool(
+                        active
+                        and transfer_manager is not None
+                        and transfer_manager.destination_endpoint_id
+                        == profile.collection_id
+                    ),
+                }
+            )
+        return {
+            "selection_mode": "server_configured",
+            "transfer_configured": transfer_manager is not None,
+            "active_system": active_system,
+            "facilities": facilities,
+        }
+
+    mcp.add_tool(
+        list_transfer_facilities,
+        name="list_transfer_facilities",
+        description=(
+            "List supported Globus Transfer facilities (Polaris and Aurora), "
+            "their public collection/path metadata, and the active "
+            "server-configured target."
+        ),
+    )
+
+    if transfer_manager is None:
+        return
 
     def transfer_files(
         source_paths: Union[str, list[str]],
@@ -165,8 +242,9 @@ def register_transfer_tools(
         transfer_files,
         name="transfer_files",
         description=(
-            "Transfer local files to the remote HPC filesystem via "
-            "Globus Transfer. Use this to pre-stage structure files "
+            "Transfer local files to the server-configured "
+            f"{active_system or 'remote'} HPC filesystem via Globus Transfer. "
+            "Use this to pre-stage structure files "
             "before running ensemble calculations with "
             "remote_structure_directory. Returns remote_directory for "
             "compute tools and transfer_directory for Transfer API calls."
