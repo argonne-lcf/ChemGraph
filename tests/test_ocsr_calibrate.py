@@ -315,16 +315,23 @@ def test_an_unwritable_out_path_is_refused_before_any_inference(monkeypatch,
 
     monkeypatch.setattr(backends, "smiles_from_specialist", never)
 
-    code = calibrate.main(["--labels", str(labels), "--out", "/proc/nope/t.json"])
+    # A path under a directory that does not exist: unwritable on every platform,
+    # where /proc/... is a writable relative path on Windows.
+    missing = tmp_path / "nope" / "t.json"
+
+    code = calibrate.main(["--labels", str(labels), "--out", str(missing)])
 
     assert code == 2
     assert "cannot write" in capsys.readouterr().err
 
 
+# ids are given explicitly: pytest builds one from the parameter itself, and the
+# 200 kB field would put a 200 kB test id into the environment variable pytest
+# exports for it, past the 32767-character limit Windows enforces.
 @pytest.mark.parametrize("content, why", [
     (b"\xff\xfe\x00bad", "not valid UTF-8"),
     (b"image_path,smiles\n" + b"a" * 200000 + b",CCO\n", "a field past csv's limit"),
-])
+], ids=["not-utf8", "field-past-csv-limit"])
 def test_a_labels_file_csv_cannot_read_is_reported_not_raised(tmp_path, content, why):
     labels = tmp_path / "labels.csv"
     labels.write_bytes(content)
