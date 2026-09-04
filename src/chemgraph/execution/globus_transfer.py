@@ -16,7 +16,7 @@ payloads.
        [execution.globus_transfer]
        source_endpoint_id = "<local-collection-uuid>"
        destination_endpoint_id = "<hpc-collection-uuid>"
-       destination_base_path = "/eagle/MyProject/staging"
+       destination_base_path = "/MyProject/staging"
 """
 
 from __future__ import annotations

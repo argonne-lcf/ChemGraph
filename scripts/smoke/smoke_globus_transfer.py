@@ -8,7 +8,7 @@ Prereqs (env vars)
 ------------------
 - GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID       -- local Globus collection UUID
 - COMPUTE_SYSTEM                           -- polaris or aurora
-- GLOBUS_TRANSFER_DESTINATION_BASE_PATH    -- e.g. /eagle/MyProj/staging
+- GLOBUS_TRANSFER_DESTINATION_BASE_PATH    -- e.g. /MyProj/staging
 - GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID  -- optional collection override
 - (for --with-mcp): GLOBUS_COMPUTE_ENDPOINT_ID and HPC venv with MACE
 

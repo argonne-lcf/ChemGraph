@@ -298,7 +298,7 @@ def test_transfer_factory_infers_polaris_collection_from_system(tmp_path):
         config_path=str(config_path),
         system="polaris",
         source_endpoint_id="source-id",
-        destination_base_path="/eagle/MyProject/staging",
+        destination_base_path="/MyProject/staging",
     )
 
     assert manager is not None
@@ -319,7 +319,7 @@ system = "polaris"
 
 [execution.globus_transfer]
 source_endpoint_id = "source-id"
-destination_base_path = "/eagle/MyProject/staging"
+destination_base_path = "/MyProject/staging"
 """,
         encoding="utf-8",
     )
@@ -346,7 +346,7 @@ def test_transfer_factory_system_argument_precedes_environment(
         config_path=str(config_path),
         system="polaris",
         source_endpoint_id="source-id",
-        destination_base_path="/eagle/MyProject/staging",
+        destination_base_path="/MyProject/staging",
     )
 
     assert manager is not None
@@ -365,7 +365,7 @@ def test_transfer_factory_uses_compute_system_environment(tmp_path, monkeypatch)
     manager = get_transfer_manager(
         config_path=str(config_path),
         source_endpoint_id="source-id",
-        destination_base_path="/eagle/MyProject/staging",
+        destination_base_path="/MyProject/staging",
     )
 
     assert manager is not None
@@ -493,7 +493,7 @@ def test_transfer_facility_discovery_reports_active_bundled_target():
     manager = GlobusTransferManager(
         source_endpoint_id="source-id",
         destination_endpoint_id="05d2c76a-e867-4f67-aa57-76edeb0beda0",
-        destination_base_path="/eagle/MyProject/staging",
+        destination_base_path="/MyProject/staging",
         system="POLARIS",
     )
     mcp = _FakeMCP()
@@ -509,7 +509,7 @@ def test_transfer_facility_discovery_reports_active_bundled_target():
     )
     assert polaris["active"] is True
     assert polaris["uses_bundled_collection"] is True
-    assert polaris["verified_on"] == "2026-09-03"
+    assert polaris["verified_on"] == "2026-09-04"
     assert "polaris HPC filesystem" in mcp.descriptions["transfer_files"]
 
 
