@@ -28,7 +28,7 @@ scripts/demo/
 ├── demo_globus_compute_agent.py                    laptop, LLM, live GC endpoint
 ├── demo_globus_transfer_direct.py                  laptop, no LLM, Globus Transfer + GC
 ├── demo_globus_transfer_agent.py                   laptop, LLM, Globus Transfer + GC
-├── demo_globus_ase_deep_agent.py                   laptop, Deep Agent, Transfer + GC + ASE/EMT
+├── demo_globus_ase_deep_agent.py                   laptop, Deep Agent, Transfer + GC + ASE/MACE
 ├── demo_parsl_in_job_direct.py                     inside qsub -I on Polaris/Aurora, no LLM
 ├── demo_parsl_in_job_agent.py                      inside qsub -I, LLM
 ├── demo_ensemble_launcher_in_job_direct.py         inside qsub -I, no LLM
@@ -50,6 +50,7 @@ it with a ChemGraph LLM agent over `langchain-mcp-adapters`.
 | `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` | optional collection override | Defaults from `COMPUTE_SYSTEM` for Polaris and Aurora |
 | `GLOBUS_TRANSFER_DESTINATION_BASE_PATH` | transfer demos and `demo_globus_ase_deep_agent.py` | collection path, e.g. `/MyProj/staging` on bundled Eagle and Flare collections |
 | `GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH` | optional custom collection override | worker-visible equivalent of the destination base path |
+| `CHEMGRAPH_REMOTE_DIRECTORY_TIMEOUT` | optional remote ensemble probe timeout | seconds to wait for scheduler startup before listing staged files; defaults to `300` |
 | `COMPUTE_SYSTEM` | transfer and HPC demos | `polaris` or `aurora`; selects a bundled Transfer profile |
 | `PBS_NODEFILE` | both in-job demos | Set automatically inside `qsub` — demos abort if missing |
 | `CG_AMQP_PORT=443` | optional, Aurora | Use when outbound 5671 is blocked |
@@ -132,11 +133,48 @@ directory to pull them back with a follow-up Globus Transfer if needed.
 `demo_globus_ase_deep_agent.py` is the smallest agent-driven validation of
 both services. It authenticates Transfer in the parent terminal, starts
 `chemgraph.mcp.ase_mcp_hpc` over stdio, and binds only its Transfer and remote
-ASE tools to a state-backed Deep Agent. The agent first calls
-`list_transfer_facilities` to observe the active Polaris/Aurora target, stages
-one water structure, and submits an ASE energy calculation with EMT. The Python
-driver polls the asynchronous Compute batch with a fixed timeout, then resumes
-the same graph to retrieve and validate one finite `potential_energy`.
+ASE tools to a state-backed Deep Agent. A single high-level request asks the
+agent to stage one structure or a directory of `.xyz` structures and run
+MACE-MP small energy calculations on CUDA. The agent chooses and sequences the
+available Transfer and Compute tools autonomously. The Python wrapper keeps a
+semantic check that the submitted calculator is MACE, validates result counts,
+reports aggregate energies and per-structure failures, and passes only when
+every calculation succeeds. If Deep Agent offloads a large tool response, such
+as a result set for hundreds of structures, the wrapper recovers its JSON from
+the graph's virtual state files instead of treating the offload notice as the
+result.
+
+The default input remains `structures/water.xyz`. To stage and calculate every
+`.xyz` file directly inside `structures`, use an explicit directory input and a
+longer timeout:
+
+```bash
+export CHEMGRAPH_REMOTE_DIRECTORY_TIMEOUT=900
+python scripts/demo/demo_globus_ase_deep_agent.py \
+  --model codex:gpt-5.6-sol \
+  --input "$PWD/scripts/demo/structures" \
+  --compute-timeout 7200 \
+  --poll-interval 15
+```
+
+This includes local untracked `.xyz` files. Directory discovery is
+non-recursive; unrelated file types are not transferred.
+
+The demo streams the system prompt, user request, assistant messages, tool-call
+arguments, and tool results to the terminal as the graph runs. Credential-like
+fields are redacted. Deep Agent's preview and virtual-file path are printed for
+an oversized tool result; pass `--trace-full-payloads` to print the complete
+stored JSON. To retain the full terminal transcript, redirect both output
+streams through `tee`:
+
+```bash
+python scripts/demo/demo_globus_ase_deep_agent.py \
+  --model codex:gpt-5.6-sol \
+  --input "$PWD/scripts/demo/structures" \
+  --compute-timeout 7200 \
+  --poll-interval 15 \
+  2>&1 | tee globus-ase-run.log
+```
 
 The first run may display a Globus URL and request an authorization code before
 the MCP server starts. Later runs reuse and automatically refresh
@@ -149,11 +187,15 @@ python scripts/demo/demo_globus_ase_deep_agent.py \
   --amqp-port 443
 ```
 
-The remote endpoint environment must be able to import compatible ChemGraph
-and ASE installations. The local input must also be visible through the
+The remote endpoint environment must be able to import compatible ChemGraph,
+ASE, and MACE installations, and the `small` MACE-MP model must be cached or
+downloadable by the workers. The local input must also be visible through the
 configured source collection. The example leaves its uniquely named remote
-staging directory and result JSON in place and prints that path for manual
-cleanup; reverse Transfer and remote deletion are not automated.
+staging directory and result JSON files in place and prints that path for
+manual cleanup; reverse Transfer and remote deletion are not automated. Remote
+ensemble tools wait up to 300 seconds for their directory-listing probe while a
+scheduler starts its first worker. Set `CHEMGRAPH_REMOTE_DIRECTORY_TIMEOUT` to
+a larger value when queues regularly take longer.
 
 ### Inside a PBS allocation on Polaris
 

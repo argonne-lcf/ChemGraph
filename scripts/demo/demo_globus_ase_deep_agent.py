@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""Run a transferred ASE/EMT energy calculation with a Deep Agent.
+"""Run transferred ASE/MACE energy calculations with a Deep Agent.
 
 The laptop process authenticates Globus Transfer, starts the backend-aware ASE
 MCP server over stdio, and binds its Transfer and Compute tools to ChemGraph's
-generic Deep Agent.  The model stages and submits the calculation; this driver
-polls the asynchronous batch deterministically and resumes the same graph to
-retrieve and summarize the result.
+generic Deep Agent. The model performs the complete workflow in one graph turn:
+facility discovery, transfer, ASE submission, blocking job wait, and result
+retrieval. The Python wrapper only validates and prints the final result.
 
 Required environment variables::
 
@@ -16,7 +16,8 @@ Required environment variables::
 Set ``COMPUTE_SYSTEM=polaris`` or ``COMPUTE_SYSTEM=aurora`` to select the
 matching bundled destination collection and path mapping.
 
-The selected model's credentials are also required.  The first run may prompt
+``--input`` accepts one structure file or a directory of ``.xyz`` files. The
+selected model's credentials are also required. The first run may prompt
 for a Globus authorization code before the MCP subprocess is started.
 """
 
@@ -28,10 +29,11 @@ import contextlib
 import json
 import math
 import os
+import re
 import sys
-import time
+import traceback
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +59,7 @@ BOUND_TOOL_NAMES = (
     "check_transfer_status",
     "list_remote_files",
     "run_ase_ensemble",
-    "check_job_status",
+    "wait_for_job",
     "get_job_results",
 )
 _SERVER_ENV_KEYS = (
@@ -82,26 +84,48 @@ _SERVER_ENV_KEYS = (
     "REQUESTS_CA_BUNDLE",
     "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
     "GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH",
+    "CHEMGRAPH_REMOTE_DIRECTORY_TIMEOUT",
     *REQUIRED_ENV,
 )
 
 GLOBUS_ASE_SYSTEM_PROMPT = """\
-You are running one explicit live integration test of Globus Transfer, Globus
-Compute, and ASE. Use the supplied MCP tools exactly as directed. Do not use
-Deep Agent filesystem tools, subagents, or shell-like behavior, and never call
-an ordinary in-process `run_ase` tool.
-
-For a submission request, call `list_transfer_facilities` first to identify the
-active server-configured target. Then call `check_endpoint_status`, followed by
-`transfer_files` with `wait=true`. Only after the transfer reports
-`status="completed"`, pass its exact `remote_directory` to `run_ase_ensemble`.
-Stop after submission and report the returned `batch_id`; do not poll the
-Compute batch yourself.
-
-For a retrieval request naming a completed batch, call `get_job_results`
-exactly once with that batch ID. Report the returned potential energy in eV
-without inventing or changing any value.
+You are a Globus and ASE orchestration agent. Use the available tools
+autonomously to complete the request. Read offloaded tool results when
+necessary, and never invent simulation results.
 """
+
+_OFFLOADED_TOOL_RESULT_RE = re.compile(
+    r"saved in the filesystem at this path:\s*(?P<path>/\S+)"
+)
+_SENSITIVE_TRACE_TEXT_RE = re.compile(
+    r"(?i)\b(access[_-]?token|refresh[_-]?token|api[_-]?key|authorization|"
+    r"password|secret)\b([\"']?\s*[:=]\s*[\"']?)([^\s,;\"']+)"
+)
+_BEARER_TOKEN_RE = re.compile(r"(?i)\bBearer\s+[^\s,;]+")
+
+
+def build_user_request(
+    *,
+    input_path: str,
+    is_directory: bool,
+    input_count: int,
+    timeout: float,
+    poll_interval: float,
+) -> str:
+    """Build one high-level request without prescribing a tool sequence."""
+    if is_directory:
+        action = f"Stage every .xyz file in {input_path}"
+        structures = "staged structures"
+    else:
+        action = f"Stage the input structure at {input_path}"
+        structures = "staged structure"
+    return (
+        f"{action} to the configured HPC facility and run a MACE-MP small "
+        f"CUDA energy simulation over the {structures}. Complete the workflow "
+        f"and report the success/failure summary. Expect {input_count} input "
+        f"structure(s); wait up to {timeout:g} seconds and use a "
+        f"{poll_interval:g}-second polling interval."
+    )
 
 
 def select_globus_ase_tools(tools: Sequence[Any]) -> tuple[list[Any], dict[str, Any]]:
@@ -131,13 +155,17 @@ def select_globus_ase_tools(tools: Sequence[Any]) -> tuple[list[Any], dict[str, 
     return [by_name[name] for name in BOUND_TOOL_NAMES], by_name
 
 
-def decode_tool_payload(value: Any) -> dict[str, Any]:
+def decode_tool_payload(
+    value: Any,
+    *,
+    files: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Decode dict or MCP/LangChain content into one JSON object."""
     if isinstance(value, dict):
         for key in ("structuredContent", "structured_content", "data"):
             nested = value.get(key)
             if isinstance(nested, dict):
-                return nested
+                return decode_tool_payload(nested, files=files)
         return value
 
     data = getattr(value, "data", None)
@@ -146,7 +174,7 @@ def decode_tool_payload(value: Any) -> dict[str, Any]:
     artifact = getattr(value, "artifact", None)
     if artifact is not None:
         try:
-            return decode_tool_payload(artifact)
+            return decode_tool_payload(artifact, files=files)
         except ValueError:
             pass
     content = getattr(value, "content", value)
@@ -155,28 +183,63 @@ def decode_tool_payload(value: Any) -> dict[str, Any]:
         try:
             decoded = json.loads(content)
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Tool returned non-JSON text: {content}") from exc
+            match = _OFFLOADED_TOOL_RESULT_RE.search(content)
+            if match is None:
+                raise ValueError(f"Tool returned non-JSON text: {content}") from exc
+            path = match.group("path").rstrip(".,;")
+            if files is None or path not in files:
+                raise ValueError(
+                    f"Tool result was offloaded to {path!r}, but the graph "
+                    "state contains no matching file."
+                ) from exc
+            file_data = files[path]
+            if not isinstance(file_data, Mapping):
+                raise ValueError(
+                    f"Offloaded tool result {path!r} has invalid file metadata."
+                ) from exc
+            encoding = file_data.get("encoding", "utf-8")
+            if encoding != "utf-8":
+                raise ValueError(
+                    f"Offloaded tool result {path!r} uses unsupported "
+                    f"encoding {encoding!r}; expected 'utf-8'."
+                ) from exc
+            stored_content = file_data.get("content")
+            if not isinstance(stored_content, str):
+                raise ValueError(
+                    f"Offloaded tool result {path!r} has no text content."
+                ) from exc
+            try:
+                return decode_tool_payload(stored_content, files=files)
+            except ValueError as stored_exc:
+                raise ValueError(
+                    f"Offloaded tool result {path!r} does not contain valid "
+                    "JSON."
+                ) from stored_exc
         if not isinstance(decoded, dict):
             raise ValueError("Tool JSON result is not an object.")
-        return decode_tool_payload(decoded)
+        return decode_tool_payload(decoded, files=files)
 
     if isinstance(content, list):
         for block in content:
             if isinstance(block, dict):
                 if isinstance(block.get("text"), str):
                     try:
-                        return decode_tool_payload(block["text"])
+                        return decode_tool_payload(block["text"], files=files)
                     except ValueError:
+                        if _OFFLOADED_TOOL_RESULT_RE.search(block["text"]):
+                            raise
                         continue
                 try:
-                    return decode_tool_payload(block)
+                    return decode_tool_payload(block, files=files)
                 except ValueError:
                     continue
             text = getattr(block, "text", None)
             if isinstance(text, str):
                 try:
-                    return decode_tool_payload(text)
+                    return decode_tool_payload(text, files=files)
                 except ValueError:
+                    if _OFFLOADED_TOOL_RESULT_RE.search(text):
+                        raise
                     continue
 
     raise ValueError(f"Tool returned no JSON object: {value!r}")
@@ -198,69 +261,327 @@ def find_tool_payload(state: dict[str, Any], name: str) -> dict[str, Any]:
         if message_name == name and (
             isinstance(message, ToolMessage) or message_type == "tool"
         ):
-            return decode_tool_payload(message)
+            return decode_tool_payload(message, files=state.get("files"))
     raise RuntimeError(f"Deep Agent did not call required tool {name!r}.")
 
 
-async def invoke_json_tool(tool: Any, arguments: dict[str, Any]) -> dict[str, Any]:
-    """Invoke a LangChain MCP tool and require a JSON-object response."""
-    return decode_tool_payload(await tool.ainvoke(arguments))
-
-
-async def wait_for_batch(
-    status_tool: Any,
-    batch_id: str,
-    *,
-    timeout: float,
-    poll_interval: float,
-) -> dict[str, Any]:
-    """Poll a Compute batch outside the LLM until it reaches a terminal state."""
-    deadline = time.monotonic() + timeout
-    while True:
-        status = await invoke_json_tool(status_tool, {"batch_id": batch_id})
-        state = str(status.get("status", "")).lower()
-        print(
-            "Compute status: "
-            f"{state or 'unknown'} "
-            f"({status.get('completed_tasks', 0)}/{status.get('total_tasks', '?')})"
+def find_tool_arguments(state: dict[str, Any], name: str) -> dict[str, Any]:
+    """Return the most recent arguments for a named graph tool call."""
+    for message in reversed(state.get("messages", [])):
+        tool_calls = (
+            message.get("tool_calls", [])
+            if isinstance(message, dict)
+            else getattr(message, "tool_calls", [])
         )
-        if state == "completed":
-            return status
-        if state in {"failed", "partial"} or "error" in status:
-            raise RuntimeError(f"Compute batch {batch_id} failed: {status}")
-        if state not in {"pending", "running"}:
-            raise RuntimeError(
-                f"Compute batch {batch_id} returned unknown status: {status}"
-            )
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError(
-                f"Compute batch {batch_id} did not finish within {timeout:g}s."
-            )
-        await asyncio.sleep(min(poll_interval, remaining))
+        for tool_call in reversed(tool_calls or []):
+            if isinstance(tool_call, dict):
+                call_name = tool_call.get("name")
+                arguments = tool_call.get("args")
+            else:
+                call_name = getattr(tool_call, "name", None)
+                arguments = getattr(tool_call, "args", None)
+            if call_name == name and isinstance(arguments, dict):
+                return arguments
+    raise RuntimeError(f"Deep Agent did not record tool arguments for {name!r}.")
 
 
-def validate_energy_result(payload: dict[str, Any], batch_id: str) -> float:
-    """Require one successful result with a finite potential energy."""
+def validate_mace_tool_call(state: dict[str, Any]) -> None:
+    """Prevent this MACE demo from silently falling back to another calculator."""
+    submitted = find_tool_arguments(state, "run_ase_ensemble")
+    params = submitted.get("params")
+    calculator = params.get("calculator") if isinstance(params, dict) else None
+    calculator_type = (
+        calculator.get("calculator_type")
+        if isinstance(calculator, dict)
+        else None
+    )
+    if not isinstance(calculator_type, str) or not calculator_type.startswith(
+        "mace_"
+    ):
+        raise RuntimeError(
+            "Deep Agent must use a MACE calculator for run_ase_ensemble; "
+            f"got {calculator_type!r}."
+        )
+
+
+def _redact_trace_value(value: Any) -> Any:
+    """Redact credential-like values before printing an agent trace."""
+    if isinstance(value, Mapping):
+        redacted = {}
+        for key, nested in value.items():
+            key_text = str(key)
+            normalized = key_text.lower()
+            if any(
+                marker in normalized
+                for marker in (
+                    "token",
+                    "secret",
+                    "password",
+                    "api_key",
+                    "apikey",
+                    "authorization",
+                )
+            ):
+                redacted[key_text] = "[REDACTED]"
+            else:
+                redacted[key_text] = _redact_trace_value(nested)
+        return redacted
+    if isinstance(value, (list, tuple)):
+        return [_redact_trace_value(item) for item in value]
+    if isinstance(value, str):
+        value = _SENSITIVE_TRACE_TEXT_RE.sub(
+            lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]",
+            value,
+        )
+        return _BEARER_TOKEN_RE.sub("Bearer [REDACTED]", value)
+    return value
+
+
+def _trace_json(value: Any) -> str:
+    return json.dumps(
+        _redact_trace_value(value),
+        default=str,
+        sort_keys=True,
+    )
+
+
+def _print_trace_message(label: str, content: Any) -> None:
+    """Print one human- or model-authored message with redaction."""
+    print(label)
+    if isinstance(content, str):
+        print(_redact_trace_value(content))
+    else:
+        print(f"  content: {_trace_json(content)}")
+
+
+def print_deep_agent_trace(
+    state: dict[str, Any],
+    seen: set[tuple[str, str]] | None = None,
+    *,
+    include_offloaded_payloads: bool = False,
+) -> set[tuple[str, str]]:
+    """Print newly surfaced Deep Agent messages and tool events in order."""
+    seen = seen if seen is not None else set()
+    for message_index, message in enumerate(state.get("messages", [])):
+        if isinstance(message, dict):
+            tool_calls = message.get("tool_calls", [])
+            message_type = message.get("type")
+            message_role = message.get("role")
+            message_id = message.get("id")
+            message_name = message.get("name")
+            tool_call_id = message.get("tool_call_id")
+            message_status = message.get("status")
+            content = message.get("content")
+        else:
+            tool_calls = getattr(message, "tool_calls", [])
+            message_type = getattr(message, "type", None)
+            message_role = getattr(message, "role", None)
+            message_id = getattr(message, "id", None)
+            message_name = getattr(message, "name", None)
+            tool_call_id = getattr(message, "tool_call_id", None)
+            message_status = getattr(message, "status", None)
+            content = getattr(message, "content", None)
+
+        event_id = str(message_id or f"{message_index}:{message_type or message_role}")
+        message_key = ("message", event_id)
+        has_content = content not in (None, "", [])
+        if message_key not in seen and has_content:
+            if message_type == "human" or message_role in {"human", "user"}:
+                seen.add(message_key)
+                _print_trace_message("Deep Agent input [human]:", content)
+            elif message_type == "ai" or message_role == "assistant":
+                seen.add(message_key)
+                _print_trace_message("Deep Agent output [assistant]:", content)
+
+        for call_index, tool_call in enumerate(tool_calls or []):
+            if isinstance(tool_call, dict):
+                name = tool_call.get("name", "unknown")
+                arguments = tool_call.get("args", {})
+                call_id = tool_call.get("id")
+            else:
+                name = getattr(tool_call, "name", "unknown")
+                arguments = getattr(tool_call, "args", {})
+                call_id = getattr(tool_call, "id", None)
+            event_id = str(call_id or f"{message_index}:{call_index}:{name}")
+            event_key = ("call", event_id)
+            if event_key in seen:
+                continue
+            seen.add(event_key)
+            print(f"Deep Agent tool call [{event_id}]: {name}")
+            print(f"  arguments: {_trace_json(arguments)}")
+
+        if isinstance(message, ToolMessage) or message_type == "tool":
+            event_id = str(tool_call_id or f"{message_index}:{message_name}")
+            event_key = ("result", event_id)
+            if event_key in seen:
+                continue
+            seen.add(event_key)
+            try:
+                result = decode_tool_payload(
+                    message,
+                    files=(
+                        state.get("files")
+                        if include_offloaded_payloads
+                        else None
+                    ),
+                )
+            except ValueError:
+                result = content
+            print(f"Deep Agent tool result [{event_id}]: {message_name}")
+            if message_status:
+                print(f"  status: {message_status}")
+            if isinstance(result, str):
+                print("  payload:")
+                print(_redact_trace_value(result))
+            else:
+                print(f"  payload: {_trace_json(result)}")
+
+    sys.stdout.flush()
+    return seen
+
+
+def discover_input_files(input_path: Path) -> list[Path]:
+    """Resolve one structure or the direct ``.xyz`` children of a directory."""
+    resolved = input_path.resolve()
+    if resolved.is_file():
+        return [resolved]
+    if not resolved.is_dir():
+        raise ValueError(f"Input path does not exist: {input_path}")
+
+    files = sorted(
+        (
+            path.resolve()
+            for path in resolved.iterdir()
+            if path.is_file() and path.suffix.lower() == ".xyz"
+        ),
+        key=lambda path: path.name,
+    )
+    if not files:
+        raise ValueError(f"Input directory contains no .xyz files: {input_path}")
+    return files
+
+
+def summarize_energy_results(
+    payload: dict[str, Any],
+    batch_id: str,
+    input_files: Sequence[Path],
+) -> dict[str, Any]:
+    """Validate an ensemble payload and associate every result with its input."""
     if payload.get("batch_id") != batch_id:
         raise RuntimeError(
             f"Result batch ID does not match {batch_id!r}: {payload!r}"
         )
-    if payload.get("status") != "completed":
-        raise RuntimeError(f"Compute results are not completed: {payload!r}")
     results = payload.get("results")
-    if not isinstance(results, list) or len(results) != 1:
-        raise RuntimeError(f"Expected exactly one Compute result: {payload!r}")
-    result = results[0]
-    if not isinstance(result, dict) or result.get("status") != "success":
-        raise RuntimeError(f"ASE calculation failed: {result!r}")
-    energy = result.get("potential_energy")
-    if isinstance(energy, bool) or not isinstance(energy, (int, float)):
-        raise RuntimeError(f"ASE result has no numeric potential_energy: {result!r}")
-    energy = float(energy)
-    if not math.isfinite(energy):
-        raise RuntimeError(f"ASE potential_energy is not finite: {energy!r}")
-    return energy
+    if not isinstance(results, list):
+        raise RuntimeError(f"Compute results are not a list: {payload!r}")
+
+    expected_count = len(input_files)
+    by_index: dict[int, dict[str, Any]] = {}
+    for result in results:
+        if not isinstance(result, dict):
+            raise RuntimeError(f"Compute result is not an object: {result!r}")
+        index = result.get("index")
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise RuntimeError(f"Compute result has no integer index: {result!r}")
+        if not 0 <= index < expected_count:
+            raise RuntimeError(
+                f"Compute result index {index} is outside 0..{expected_count - 1}."
+            )
+        if index in by_index:
+            raise RuntimeError(f"Duplicate Compute result index: {index}")
+        by_index[index] = result
+
+    energies: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+    for index, input_file in enumerate(input_files):
+        result = by_index.get(index)
+        if result is None:
+            failures.append(
+                {
+                    "index": index,
+                    "structure": input_file.name,
+                    "error_type": "MissingResult",
+                    "message": "No result was returned for this structure.",
+                }
+            )
+            continue
+
+        energy = result.get("potential_energy")
+        valid_energy = (
+            not isinstance(energy, bool)
+            and isinstance(energy, (int, float))
+            and math.isfinite(float(energy))
+        )
+        if result.get("status") == "success" and valid_energy:
+            energies.append(
+                {
+                    "index": index,
+                    "structure": input_file.name,
+                    "potential_energy": float(energy),
+                }
+            )
+            continue
+
+        if result.get("status") == "success":
+            error_type = "InvalidEnergy"
+            message = f"Invalid potential_energy: {energy!r}"
+        else:
+            error_type = str(result.get("error_type") or "CalculationFailed")
+            message = str(result.get("message") or result)
+        failures.append(
+            {
+                "index": index,
+                "structure": input_file.name,
+                "error_type": error_type,
+                "message": message,
+            }
+        )
+
+    energy_values = [entry["potential_energy"] for entry in energies]
+    return {
+        "batch_id": batch_id,
+        "batch_status": str(payload.get("status", "unknown")),
+        "expected_count": expected_count,
+        "results_received": len(results),
+        "succeeded": len(energies),
+        "failed": len(failures),
+        "energies": energies,
+        "failures": failures,
+        "energy_min": min(energy_values) if energy_values else None,
+        "energy_max": max(energy_values) if energy_values else None,
+        "energy_mean": (
+            sum(energy_values) / len(energy_values) if energy_values else None
+        ),
+        "all_succeeded": (
+            payload.get("status") == "completed"
+            and len(energies) == expected_count
+            and not failures
+        ),
+    }
+
+
+def print_ensemble_summary(summary: Mapping[str, Any]) -> None:
+    """Print aggregate energies and concise per-structure failures."""
+    print(
+        "MACE ensemble: "
+        f"{summary['succeeded']}/{summary['expected_count']} succeeded, "
+        f"{summary['failed']} failed "
+        f"({summary['results_received']} results received)"
+    )
+    if summary["succeeded"]:
+        print(
+            "Potential energy (eV): "
+            f"min={summary['energy_min']:.12g}, "
+            f"max={summary['energy_max']:.12g}, "
+            f"mean={summary['energy_mean']:.12g}"
+        )
+    if summary["failures"]:
+        print("Failed structures:")
+        for failure in summary["failures"]:
+            print(
+                f"  - {failure['structure']} [index={failure['index']}]: "
+                f"{failure['error_type']}: {failure['message']}"
+            )
 
 
 def _server_environment(amqp_port: int | None) -> dict[str, str]:
@@ -278,7 +599,8 @@ def _endpoint_is_online(payload: dict[str, Any]) -> bool:
     return str(status).lower() in {"online", "ok", "running"}
 
 
-async def run_example(args: argparse.Namespace) -> float:
+async def run_example(args: argparse.Namespace) -> dict[str, Any]:
+    input_files = discover_input_files(args.input)
     server_name = "ChemGraph ASE (Globus)"
     client = MultiServerMCPClient(
         {
@@ -294,7 +616,7 @@ async def run_example(args: argparse.Namespace) -> float:
     async with contextlib.AsyncExitStack() as stack:
         session = await stack.enter_async_context(client.session(server_name))
         loaded_tools = await load_mcp_tools(session)
-        bound_tools, tools = select_globus_ase_tools(loaded_tools)
+        bound_tools, _ = select_globus_ase_tools(loaded_tools)
         print(f"Bound MCP tools: {[tool.name for tool in bound_tools]}")
 
         model = load_chat_model(model_name=args.model, temperature=0.0)
@@ -309,88 +631,103 @@ async def run_example(args: argparse.Namespace) -> float:
             "configurable": {"thread_id": f"globus-ase-{uuid.uuid4().hex}"}
         }
         input_path = str(args.input.resolve())
-        submission_prompt = f"""\
-Run the live integration test now.
-
-1. List the Transfer facilities and identify the active target.
-2. Check the configured Globus Compute endpoint.
-3. Transfer this exact local file with wait=true: {input_path}
-4. Submit run_ase_ensemble with this exact params object, replacing only
-   REMOTE_DIRECTORY with the transfer result's remote_directory:
-   {{
-     "remote_structure_directory": "REMOTE_DIRECTORY",
-     "output_results_file": "globus_ase_energy.json",
-     "driver": "energy",
-     "calculator": {{"calculator_type": "emt"}}
-   }}
-5. Stop after submission and report the batch_id. Do not poll it.
-"""
-        submission = await graph.ainvoke(
-            {"messages": [HumanMessage(content=submission_prompt)]},
-            config=config,
+        request = build_user_request(
+            input_path=input_path,
+            is_directory=args.input.resolve().is_dir(),
+            input_count=len(input_files),
+            timeout=args.compute_timeout,
+            poll_interval=args.poll_interval,
         )
+        print("Deep Agent input [system]:")
+        print(_redact_trace_value(GLOBUS_ASE_SYSTEM_PROMPT.rstrip()))
+        sys.stdout.flush()
+        seen_events: set[tuple[str, str]] = set()
+        result: dict[str, Any] | None = None
+        async for state in graph.astream(
+            {"messages": [HumanMessage(content=request)]},
+            config=config,
+            stream_mode="values",
+        ):
+            result = state
+            print_deep_agent_trace(
+                state,
+                seen_events,
+                include_offloaded_payloads=args.trace_full_payloads,
+            )
+        if result is None:
+            raise RuntimeError("Deep Agent produced no graph states.")
 
-        facilities = find_tool_payload(submission, "list_transfer_facilities")
+        facilities = find_tool_payload(result, "list_transfer_facilities")
         if not facilities.get("transfer_configured") or not facilities.get(
             "active_system"
         ):
             raise RuntimeError(
                 f"Globus Transfer has no active facility: {facilities}"
             )
-        endpoint = find_tool_payload(submission, "check_endpoint_status")
+        endpoint = find_tool_payload(result, "check_endpoint_status")
         if not _endpoint_is_online(endpoint):
             raise RuntimeError(f"Globus Compute endpoint is not online: {endpoint}")
-        transfer = find_tool_payload(submission, "transfer_files")
+        transfer = find_tool_payload(result, "transfer_files")
         if transfer.get("status") != "completed":
             raise RuntimeError(f"Globus Transfer did not complete: {transfer}")
+        if transfer.get("file_count") != len(input_files):
+            raise RuntimeError(
+                "Globus Transfer staged an unexpected number of files: "
+                f"expected {len(input_files)}, got {transfer.get('file_count')!r}."
+            )
         remote_directory = transfer.get("remote_directory")
         if not isinstance(remote_directory, str) or not remote_directory:
             raise RuntimeError(f"Transfer returned no remote directory: {transfer}")
         transfer_directory = transfer.get("transfer_directory", remote_directory)
-        submitted = find_tool_payload(submission, "run_ase_ensemble")
+        submitted = find_tool_payload(result, "run_ase_ensemble")
         if submitted.get("status") != "submitted" or not submitted.get("batch_id"):
             raise RuntimeError(f"ASE batch was not submitted: {submitted}")
+        if submitted.get("n_tasks") != len(input_files):
+            raise RuntimeError(
+                "ASE submitted an unexpected number of tasks: "
+                f"expected {len(input_files)}, got {submitted.get('n_tasks')!r}."
+            )
         batch_id = str(submitted["batch_id"])
+        waited = find_tool_payload(result, "wait_for_job")
+        if waited.get("batch_id") != batch_id:
+            raise RuntimeError(f"Compute wait returned the wrong batch: {waited}")
+        result_payload = find_tool_payload(result, "get_job_results")
+        validate_mace_tool_call(result)
+        summary = summarize_energy_results(result_payload, batch_id, input_files)
+
         print(f"Active facility: {facilities['active_system']}")
+        print(f"Local inputs: {len(input_files)} from {input_path}")
         print(f"Compute directory: {remote_directory}")
         print(f"Transfer directory: {transfer_directory}")
         print(f"Compute batch: {batch_id}")
-
-        await wait_for_batch(
-            tools["check_job_status"],
-            batch_id,
-            timeout=args.compute_timeout,
-            poll_interval=args.poll_interval,
+        print_ensemble_summary(summary)
+        if waited.get("status") != "completed" or not summary["all_succeeded"]:
+            raise RuntimeError(
+                "MACE ensemble did not complete successfully: "
+                f"wait_status={waited.get('status')!r}, "
+                f"result_status={summary['batch_status']!r}, "
+                f"succeeded={summary['succeeded']}/{summary['expected_count']}."
+            )
+        print(
+            "PASS: all "
+            f"{summary['expected_count']} MACE-MP small calculations completed."
         )
-        retrieval = await graph.ainvoke(
-            {
-                "messages": [
-                    HumanMessage(
-                        content=(
-                            f"Compute batch {batch_id} is now completed. Call "
-                            "get_job_results exactly once for that batch and "
-                            "report its potential energy."
-                        )
-                    )
-                ]
-            },
-            config=config,
-        )
-        result_payload = find_tool_payload(retrieval, "get_job_results")
-        energy = validate_energy_result(result_payload, batch_id)
-
-        print(f"PASS: water EMT potential energy = {energy:.12g} eV")
         print(
             "Remote inputs and JSON results were left in place at "
             f"{transfer_directory}; remove them manually when no longer needed."
         )
-        return energy
+        return summary
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default="gpt-4o-mini")
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=DEFAULT_INPUT,
+        help="One structure file or a directory whose direct .xyz files are staged.",
+    )
     parser.add_argument(
         "--amqp-port",
         type=int,
@@ -404,7 +741,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--poll-interval", type=float, default=10.0)
     parser.add_argument("--compute-timeout", type=float, default=1800.0)
+    parser.add_argument(
+        "--trace-full-payloads",
+        action="store_true",
+        help="Expand offloaded tool-result JSON instead of printing its preview.",
+    )
     return parser
+
+
+def _report_failure(exc: Exception) -> None:
+    """Print a concise failure and expand nested asynchronous errors."""
+    print(f"FAIL: {type(exc).__name__}: {exc}", file=sys.stderr)
+    if isinstance(exc, BaseExceptionGroup):
+        traceback.print_exception(exc, file=sys.stderr)
 
 
 def main() -> int:
@@ -413,8 +762,10 @@ def main() -> int:
     if missing:
         print(f"ERROR: missing environment variables: {', '.join(missing)}", file=sys.stderr)
         return 2
-    if not args.input.is_file():
-        print(f"ERROR: input file does not exist: {args.input}", file=sys.stderr)
+    try:
+        discover_input_files(args.input)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     if args.poll_interval <= 0 or args.compute_timeout <= 0:
         print("ERROR: polling interval and timeout must be positive.", file=sys.stderr)
@@ -433,7 +784,7 @@ def main() -> int:
         print("Interrupted.", file=sys.stderr)
         return 130
     except Exception as exc:
-        print(f"FAIL: {type(exc).__name__}: {exc}", file=sys.stderr)
+        _report_failure(exc)
         return 1
     return 0
 
