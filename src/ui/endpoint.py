@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 import streamlit as st
@@ -25,6 +25,29 @@ def _is_local_address(hostname: str) -> bool:
     return host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 
 
+def _build_local_models_probe_url(base_url: str) -> Optional[str]:
+    """Validate and canonicalize a local endpoint probe URL.
+
+    Returns a safe canonical URL ending in ``/models`` when valid,
+    otherwise ``None``.
+    """
+    parsed = urlparse((base_url or "").strip())
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    if not _is_local_address(parsed.hostname or ""):
+        return None
+    # Disallow userinfo, query, and fragment in probe target.
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return None
+
+    base_path = parsed.path.rstrip("/")
+    safe_path = f"{base_path}/models" if base_path else "/models"
+    netloc = parsed.hostname or ""
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    return urlunparse((parsed.scheme, netloc, safe_path, "", "", ""))
+
+
 @st.cache_data(ttl=10)
 def check_local_model_endpoint(base_url: Optional[str]) -> Dict[str, Any]:
     """Quick reachability check for local OpenAI-compatible endpoints.
@@ -42,11 +65,10 @@ def check_local_model_endpoint(base_url: Optional[str]) -> Dict[str, Any]:
     if not base_url:
         return {"ok": True, "message": "No base URL configured."}
 
-    parsed = urlparse(base_url)
-    if not _is_local_address(parsed.hostname or ""):
-        return {"ok": True, "message": "Skipping non-local endpoint probe."}
+    probe = _build_local_models_probe_url(base_url)
+    if not probe:
+        return {"ok": False, "message": "Invalid local endpoint URL."}
 
-    probe = base_url.rstrip("/") + "/models"
     req = Request(probe, method="GET")
 
     try:
