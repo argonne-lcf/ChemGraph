@@ -56,8 +56,9 @@ mcp = CGFastMCP(
         2. run_ase_ensemble: run ASE calculations over every structure in a
            directory (local or pre-staged remote).
         3. extract_output_json: load simulation results from a JSON file.
-        4. check_job_status / get_job_results / list_jobs / cancel_job: HPC
-           job batch management. Job state persists across sessions.
+        4. check_job_status / wait_for_job / get_job_results / list_jobs /
+           cancel_job: HPC job batch management. Job state persists across
+           sessions.
         5. list_transfer_facilities: show Polaris/Aurora Transfer profiles and
            the active server target.
         6. transfer_files / check_transfer_status / list_remote_files
@@ -73,9 +74,9 @@ mcp = CGFastMCP(
         - When returning paths, use absolute paths.
         - Energies are in eV and wall times are in seconds.
         - When a tool returns status='submitted' with a batch_id, call
-          get_job_results(batch_id) to retrieve results. If still pending,
-          report the batch_id so the user can check later -- job state is
-          persisted across sessions.
+          wait_for_job(batch_id) before get_job_results(batch_id). If waiting
+          times out, report the batch_id so the user can check later -- job
+          state is persisted across sessions.
     """
     + get_calculator_selection_context(),
 )

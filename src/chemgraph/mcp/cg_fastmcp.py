@@ -211,6 +211,52 @@ class CGFastMCP(FastMCP):
             return self._tracker.get_status(batch_id)
 
         @self.add_tool
+        async def wait_for_job(
+            batch_id: str,
+            timeout: float = 1800.0,
+            poll_interval: float = 10.0,
+        ) -> dict:
+            """Wait for a submitted job batch to reach a terminal state.
+
+            This performs status polling inside one MCP tool call so an agent
+            does not spend one graph step per poll while an HPC scheduler is
+            starting workers.
+            """
+            if timeout <= 0:
+                raise ValueError("timeout must be positive.")
+            if poll_interval <= 0:
+                raise ValueError("poll_interval must be positive.")
+
+            self._ensure_backend()
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + timeout
+            while True:
+                status = self._tracker.get_status(batch_id)
+                state = str(status.get("status", "")).lower()
+                logger.info(
+                    "Waiting for batch '%s': status=%s completed=%s/%s",
+                    batch_id,
+                    state or "unknown",
+                    status.get("completed_tasks", 0),
+                    status.get("total_tasks", "?"),
+                )
+                if "error" in status or state not in {"pending", "running"}:
+                    return status
+
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    return {
+                        **status,
+                        "status": "timeout",
+                        "timeout_seconds": timeout,
+                        "message": (
+                            f"Batch {batch_id!r} did not reach a terminal "
+                            f"state within {timeout:g} seconds."
+                        ),
+                    }
+                await asyncio.sleep(min(poll_interval, remaining))
+
+        @self.add_tool
         def get_job_results(
             batch_id: str, include_partial: bool = False
         ) -> dict:

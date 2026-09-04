@@ -283,9 +283,9 @@ async def submit_or_gather(
             "n_tasks": len(pending),
             "message": (
                 f"Submitted {len(pending)} task(s) to remote HPC endpoint. "
-                f"Use check_job_status(batch_id='{batch_id}') to monitor "
-                f"progress, and get_job_results(batch_id='{batch_id}') to "
-                f"retrieve results once complete."
+                f"Use wait_for_job(batch_id='{batch_id}') to wait for a "
+                "terminal state, then use "
+                f"get_job_results(batch_id='{batch_id}') to retrieve results."
             ),
         }
 

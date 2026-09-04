@@ -348,7 +348,7 @@ class TestSubmitOrGather:
         assert result["status"] == "submitted"
         assert "batch_id" in result
         assert result["n_tasks"] == 1
-        assert "check_job_status" in result["message"]
+        assert "wait_for_job" in result["message"]
 
     def test_async_backend_batch_trackable(self):
         backend = MagicMock()

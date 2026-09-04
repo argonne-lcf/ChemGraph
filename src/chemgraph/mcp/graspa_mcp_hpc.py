@@ -41,8 +41,9 @@ mcp = CGFastMCP(
            Local mode uses input_structures; remote mode uses
            remote_structure_directory (pre-stage files first with
            transfer_files).
-        2. check_job_status / get_job_results / list_jobs / cancel_job:
-           HPC job batch management. Job state persists across sessions.
+        2. check_job_status / wait_for_job / get_job_results / list_jobs /
+           cancel_job: HPC job batch management. Job state persists across
+           sessions.
         3. list_transfer_facilities: show Polaris/Aurora Transfer profiles and
            the active server target.
         4. transfer_files / check_transfer_status / list_remote_files
@@ -59,9 +60,9 @@ mcp = CGFastMCP(
           output files defined in the schemas.
         - When returning paths, use absolute paths.
         - Energies are in eV and wall times are in seconds.
-        - When a tool returns status='submitted' with a batch_id, use
-          check_job_status to poll for progress before calling
-          get_job_results.  Job state is persisted across sessions.
+        - When a tool returns status='submitted' with a batch_id, call
+          wait_for_job before get_job_results. Job state is persisted across
+          sessions.
     """,
 )
 
