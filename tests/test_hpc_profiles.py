@@ -17,9 +17,9 @@ def test_polaris_profile_uses_public_eagle_collection():
     assert profile.collection_name == "alcf#dtn_eagle"
     assert profile.collection_id == "05d2c76a-e867-4f67-aa57-76edeb0beda0"
     assert not profile.has_placeholder_collection_id
-    assert profile.compute_path("/eagle/MyProject/staging") == (
-        "/eagle/MyProject/staging"
-    )
+    assert profile.transfer_root == "/"
+    assert profile.compute_root == "/eagle"
+    assert profile.compute_path("/MyProject/staging") == "/eagle/MyProject/staging"
 
 
 def test_aurora_profile_maps_flare_collection_paths_to_compute_paths():
@@ -41,14 +41,12 @@ def test_profile_listing_has_stable_display_order():
     assert all(profile.verified_on is not None for profile in profiles)
 
 
-def test_profile_rejects_paths_outside_collection_root():
+def test_profile_rejects_parent_traversal():
     profile = get_facility_transfer_profile("polaris")
 
     assert profile is not None
-    with pytest.raises(ValueError, match="outside the polaris collection root"):
-        profile.compute_path("/flare/MyProject")
     with pytest.raises(ValueError, match="Parent traversal"):
-        profile.compute_path("/eagle/MyProject/../OtherProject")
+        profile.compute_path("/MyProject/../OtherProject")
 
 
 def test_unknown_system_has_no_transfer_profile():

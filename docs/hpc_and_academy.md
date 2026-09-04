@@ -32,14 +32,15 @@ paths must stay in environment variables or local configuration.
 
 | System | Collection | Bundled ID | Transfer path | Compute path |
 | --- | --- | --- | --- | --- |
-| Polaris | `alcf#dtn_eagle` | `05d2c76a-e867-4f67-aa57-76edeb0beda0` | `/eagle/<project>/...` | `/eagle/<project>/...` |
+| Polaris | `alcf#dtn_eagle` | `05d2c76a-e867-4f67-aa57-76edeb0beda0` | `/<project>/...` | `/eagle/<project>/...` |
 | Aurora | `alcf#dtn_flare` | `f39a7a0f-5bfc-46ce-9615-ba9f8592814f` | `/<project>/...` | `/flare/<project>/...` |
 
 Set `COMPUTE_SYSTEM=polaris` or `COMPUTE_SYSTEM=aurora` (or the equivalent
 `[execution] system` value) and omit
 `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` to select the bundled destination.
-The Aurora profile translates the Flare collection-visible path to the path
-seen by Aurora workers.
+The profiles translate collection-visible paths to the paths seen by compute
+workers: Eagle projects gain the `/eagle` prefix on Polaris, while Flare
+projects gain the `/flare` prefix on Aurora.
 
 Explicit arguments take priority, followed by `[execution.globus_transfer]`
 settings and environment fallbacks. A custom Polaris collection disables the
@@ -53,7 +54,7 @@ system = "polaris"
 
 [execution.globus_transfer]
 source_endpoint_id = "<your-source-collection-uuid>"
-destination_base_path = "/eagle/<project>/staging"
+destination_base_path = "/<project>/staging"
 ```
 
 HPC MCP servers always expose `list_transfer_facilities`. Agents can use it to

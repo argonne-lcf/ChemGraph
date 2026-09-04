@@ -15,7 +15,7 @@ Prereqs::
     export GLOBUS_COMPUTE_ENDPOINT_ID=...
     export GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID=...
     export COMPUTE_SYSTEM=polaris
-    export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/MyProj/staging
+    export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/MyProj/staging
     export OPENAI_API_KEY=...      # or any supported model
 
 Run::

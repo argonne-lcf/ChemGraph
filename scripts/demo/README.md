@@ -48,7 +48,7 @@ it with a ChemGraph LLM agent over `langchain-mcp-adapters`.
 | `GLOBUS_COMPUTE_AMQP_PORT` | optional for stdio agent demos | Result-streaming port; use `443` when outbound `5671` is blocked |
 | `GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID` | transfer demos and `demo_globus_ase_deep_agent.py` | Globus Connect Personal on the laptop |
 | `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` | optional collection override | Defaults from `COMPUTE_SYSTEM` for Polaris and Aurora |
-| `GLOBUS_TRANSFER_DESTINATION_BASE_PATH` | transfer demos and `demo_globus_ase_deep_agent.py` | collection path, e.g. `/eagle/MyProj/staging` on Eagle or `/MyProj/staging` on Flare |
+| `GLOBUS_TRANSFER_DESTINATION_BASE_PATH` | transfer demos and `demo_globus_ase_deep_agent.py` | collection path, e.g. `/MyProj/staging` on bundled Eagle and Flare collections |
 | `GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH` | optional custom collection override | worker-visible equivalent of the destination base path |
 | `COMPUTE_SYSTEM` | transfer and HPC demos | `polaris` or `aurora`; selects a bundled Transfer profile |
 | `PBS_NODEFILE` | both in-job demos | Set automatically inside `qsub` — demos abort if missing |
@@ -103,16 +103,17 @@ For Aurora add `--device xpu --amqp-port 443`.
 ```bash
 export GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID="<laptop-collection-uuid>"
 export COMPUTE_SYSTEM=polaris
-export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/MyProj/staging
+export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/MyProj/staging
 python scripts/demo/demo_globus_transfer_direct.py
 python scripts/demo/demo_globus_transfer_agent.py --model gpt-4o-mini
 python scripts/demo/demo_globus_ase_deep_agent.py --model gpt-4o-mini
 ```
 
-Polaris uses the bundled public `alcf#dtn_eagle` collection ID. Aurora uses the
-bundled `alcf#dtn_flare` ID and a collection path such as `/MyProj/staging`;
-ChemGraph maps that to the worker path `/flare/MyProj/staging`. For a custom
-collection whose namespace differs from the worker filesystem, also set
+Polaris uses the bundled public `alcf#dtn_eagle` collection ID and maps a
+collection path such as `/MyProj/staging` to the worker path
+`/eagle/MyProj/staging`. Aurora uses the bundled `alcf#dtn_flare` ID and maps
+the same collection path to `/flare/MyProj/staging`. For a custom collection
+whose namespace differs from the worker filesystem, also set
 `GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH`.
 
 The direct demo stages the 5 `.xyz` fixtures, then runs MACE in

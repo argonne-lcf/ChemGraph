@@ -13,7 +13,7 @@ Prereq env vars::
     export GLOBUS_COMPUTE_ENDPOINT_ID=...
     export GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID=...        # laptop GCP collection
     export COMPUTE_SYSTEM=polaris                         # selects public Eagle ID
-    export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/MyProj/staging
+    export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/MyProj/staging
 
 First run prompts for Globus OAuth; the token caches at
 ``~/.globus/chemgraph_transfer_tokens.json``.
