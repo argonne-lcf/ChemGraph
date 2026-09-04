@@ -160,9 +160,10 @@ backend = "local"
 ```
 
 Parsl, Ensemble Launcher, Globus Compute, and transfer settings are deployment
-specific. Start from the runnable examples linked in
-[HPC and Academy](hpc_and_academy.md) rather than copying credentials or endpoint
-IDs into documentation.
+specific. Start from the runnable examples and public facility Transfer
+profiles described in [HPC and Academy](hpc_and_academy.md). Public managed
+collection IDs may be shared; do not copy user endpoint IDs, credentials, or
+private paths into documentation.
 
 ## Which interface reads what?
 

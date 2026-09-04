@@ -14,8 +14,8 @@ Prereqs::
 
     export GLOBUS_COMPUTE_ENDPOINT_ID=...
     export GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID=...
-    export GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID=...
-    export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/projects/MyProj/staging
+    export COMPUTE_SYSTEM=polaris
+    export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/MyProj/staging
     export OPENAI_API_KEY=...      # or any supported model
 
 Run::
@@ -105,12 +105,18 @@ async def amain(model: str, device: str, query: str, workload: str, verbose: int
         "CHEMGRAPH_EXECUTION_BACKEND": "globus_compute",
         "GLOBUS_COMPUTE_ENDPOINT_ID": os.environ["GLOBUS_COMPUTE_ENDPOINT_ID"],
         "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID": os.environ["GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID"],
-        "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID": os.environ["GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID"],
         "GLOBUS_TRANSFER_DESTINATION_BASE_PATH": os.environ["GLOBUS_TRANSFER_DESTINATION_BASE_PATH"],
         "PATH": os.environ.get("PATH", ""),
         "HOME": os.environ.get("HOME", ""),
         "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV", ""),
     }
+    for key in (
+        "COMPUTE_SYSTEM",
+        "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
+        "GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH",
+    ):
+        if os.environ.get(key):
+            forwarded[key] = os.environ[key]
     if os.environ.get("GLOBUS_COMPUTE_AMQP_PORT"):
         forwarded["GLOBUS_COMPUTE_AMQP_PORT"] = os.environ[
             "GLOBUS_COMPUTE_AMQP_PORT"
@@ -189,7 +195,6 @@ def main() -> None:
     required = (
         "GLOBUS_COMPUTE_ENDPOINT_ID",
         "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID",
-        "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
         "GLOBUS_TRANSFER_DESTINATION_BASE_PATH",
     )
     missing = [v for v in required if not os.environ.get(v)]

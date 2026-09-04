@@ -28,9 +28,10 @@ callables). `water.xyz` is the shared 3-atom fixture.
 |----------|-------------|-------|
 | `GLOBUS_COMPUTE_ENDPOINT_ID` | `smoke_globus_compute.py`, `smoke_globus_transfer.py --with-mcp` | UUID printed by `globus-compute-endpoint start chemgraph-<system>` |
 | `GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID` | `smoke_globus_transfer.py` | Globus Connect Personal collection on the laptop |
-| `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` | `smoke_globus_transfer.py` | HPC collection UUID (ALCF data portal) |
-| `GLOBUS_TRANSFER_DESTINATION_BASE_PATH` | `smoke_globus_transfer.py` | e.g. `/eagle/projects/MyProj/staging` (Polaris), `/flare/projects/MyProj/staging` (Aurora) |
-| `COMPUTE_SYSTEM` | `smoke_parsl_in_job.py`, `smoke_ensemble_launcher_in_job.py` | `polaris` or `aurora` |
+| `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` | optional for Polaris; required for Aurora until its bundled ID is updated | HPC collection UUID |
+| `GLOBUS_TRANSFER_DESTINATION_BASE_PATH` | `smoke_globus_transfer.py` | collection path: `/eagle/MyProj/staging` (Eagle) or `/MyProj/staging` (Flare) |
+| `GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH` | optional custom collection override | worker-visible equivalent of the destination base path |
+| `COMPUTE_SYSTEM` | transfer, Parsl, and Ensemble Launcher smoke tests | `polaris` or `aurora` |
 | `PBS_NODEFILE` | both in-job scripts | Set automatically by PBS inside `qsub` — the scripts abort if missing |
 | `CG_SMOKE_DEVICE` | optional, MACE device override | Defaults: `cuda` (Polaris/Globus), `xpu` (Aurora) |
 
@@ -57,11 +58,16 @@ python scripts/smoke/smoke_globus_compute.py --amqp 443   # Aurora (5671 blocked
 
 ```bash
 export GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID="<laptop-collection-uuid>"
-export GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID="<hpc-collection-uuid>"
-export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/projects/MyProj/staging
+export COMPUTE_SYSTEM=polaris
+export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/MyProj/staging
 python scripts/smoke/smoke_globus_transfer.py            # transfer only
 python scripts/smoke/smoke_globus_transfer.py --with-mcp # also dispatch MACE ensemble in remote-path mode
 ```
+
+For Aurora, also export `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` and use a
+Flare collection path such as `/MyProj/staging`. ChemGraph translates it to
+`/flare/MyProj/staging` for compute workers. The bundled Flare collection ID is
+currently a placeholder.
 
 First run triggers an OAuth flow; the token caches at
 `~/.globus/chemgraph_transfer_tokens.json` for subsequent runs.

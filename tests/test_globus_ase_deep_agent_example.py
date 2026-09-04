@@ -142,11 +142,18 @@ def test_validate_energy_result_requires_one_finite_success(example):
 def test_server_environment_forwards_port_but_not_llm_secret(example, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "do-not-forward")
     monkeypatch.setenv("GLOBUS_COMPUTE_ENDPOINT_ID", "endpoint-id")
+    monkeypatch.setenv(
+        "GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH",
+        "/flare/MyProject/staging",
+    )
 
     environment = example._server_environment(443)
 
     assert environment["GLOBUS_COMPUTE_AMQP_PORT"] == "443"
     assert environment["GLOBUS_COMPUTE_ENDPOINT_ID"] == "endpoint-id"
+    assert environment["GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH"] == (
+        "/flare/MyProject/staging"
+    )
     assert environment["CHEMGRAPH_EXECUTION_BACKEND"] == "globus_compute"
     assert "OPENAI_API_KEY" not in environment
 
@@ -187,6 +194,7 @@ def test_run_example_submits_polls_and_resumes_same_graph(
                             {
                                 "status": "completed",
                                 "remote_directory": "/remote/batch-1",
+                                "transfer_directory": "/collection/batch-1",
                             },
                         ),
                         _tool_message(

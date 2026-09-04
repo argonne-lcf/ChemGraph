@@ -11,8 +11,11 @@ Required environment variables::
 
     GLOBUS_COMPUTE_ENDPOINT_ID
     GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID
-    GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID
     GLOBUS_TRANSFER_DESTINATION_BASE_PATH
+
+Set ``COMPUTE_SYSTEM=polaris`` to use the bundled Eagle collection ID. Aurora
+currently requires ``GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID`` because its
+bundled Flare ID is a placeholder.
 
 The selected model's credentials are also required.  The first run may prompt
 for a Globus authorization code before the MCP subprocess is started.
@@ -46,7 +49,6 @@ DEFAULT_INPUT = _HERE / "structures" / "water.xyz"
 REQUIRED_ENV = (
     "GLOBUS_COMPUTE_ENDPOINT_ID",
     "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID",
-    "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
     "GLOBUS_TRANSFER_DESTINATION_BASE_PATH",
 )
 BOUND_TOOL_NAMES = (
@@ -78,6 +80,8 @@ _SERVER_ENV_KEYS = (
     "no_proxy",
     "SSL_CERT_FILE",
     "REQUESTS_CA_BUNDLE",
+    "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
+    "GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH",
     *REQUIRED_ENV,
 )
 
@@ -332,11 +336,13 @@ Run the live integration test now.
         remote_directory = transfer.get("remote_directory")
         if not isinstance(remote_directory, str) or not remote_directory:
             raise RuntimeError(f"Transfer returned no remote directory: {transfer}")
+        transfer_directory = transfer.get("transfer_directory", remote_directory)
         submitted = find_tool_payload(submission, "run_ase_ensemble")
         if submitted.get("status") != "submitted" or not submitted.get("batch_id"):
             raise RuntimeError(f"ASE batch was not submitted: {submitted}")
         batch_id = str(submitted["batch_id"])
-        print(f"Remote directory: {remote_directory}")
+        print(f"Compute directory: {remote_directory}")
+        print(f"Transfer directory: {transfer_directory}")
         print(f"Compute batch: {batch_id}")
 
         await wait_for_batch(
@@ -365,7 +371,7 @@ Run the live integration test now.
         print(f"PASS: water EMT potential energy = {energy:.12g} eV")
         print(
             "Remote inputs and JSON results were left in place at "
-            f"{remote_directory}; remove them manually when no longer needed."
+            f"{transfer_directory}; remove them manually when no longer needed."
         )
         return energy
 
