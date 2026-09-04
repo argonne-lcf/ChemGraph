@@ -270,6 +270,8 @@ def prepare_anthropic(request: ModelRequest) -> PreparedModel:
     )
     if requested_model_name not in MODELS_WITHOUT_TEMPERATURE:
         client_kwargs["temperature"] = request.temperature
+    if request.reasoning_effort is not None:
+        client_kwargs["reasoning_effort"] = request.reasoning_effort
 
     return PreparedModel(
         endpoint_name="argo_anthropic",
