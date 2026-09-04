@@ -84,7 +84,7 @@ _FACILITY_TRANSFER_PROFILES = {
         system="aurora",
         # Placeholder: replace this public UUID once the Flare collection ID is
         # ready to be maintained here. The factory will not use a nil UUID.
-        collection_id="00000000-0000-0000-0000-000000000000",
+        collection_id="f39a7a0f-5bfc-46ce-9615-ba9f8592814f",
         collection_name="alcf#dtn_flare",
         transfer_root="/",
         compute_root="/flare",
