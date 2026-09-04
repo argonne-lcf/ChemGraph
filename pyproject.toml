@@ -39,7 +39,7 @@ dependencies = [
     "pymatgen",
     "mace-torch>=0.3.16",
     "graph-longrange @ git+https://github.com/WillBaldwin0/graph_electrostatics.git@v0.4.0",
-    "globus_sdk",
+    "globus-sdk>=4",
     "streamlit==1.54.0",
     "py3Dmol",
     "plotly",
