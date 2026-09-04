@@ -12,8 +12,8 @@ Prereq env vars::
 
     export GLOBUS_COMPUTE_ENDPOINT_ID=...
     export GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID=...        # laptop GCP collection
-    export GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID=...   # HPC collection
-    export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/projects/MyProj/staging
+    export COMPUTE_SYSTEM=polaris                         # selects public Eagle ID
+    export GLOBUS_TRANSFER_DESTINATION_BASE_PATH=/eagle/MyProj/staging
 
 First run prompts for Globus OAuth; the token caches at
 ``~/.globus/chemgraph_transfer_tokens.json``.
@@ -88,7 +88,6 @@ def main() -> None:
     required = (
         "GLOBUS_COMPUTE_ENDPOINT_ID",
         "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID",
-        "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
         "GLOBUS_TRANSFER_DESTINATION_BASE_PATH",
     )
     missing = [v for v in required if not os.environ.get(v)]
@@ -119,7 +118,8 @@ def main() -> None:
         label=f"chemgraph-demo-{int(time.time())}",
     )
     print(f"      task_id   = {transfer.task_id}")
-    print(f"      remote_dir = {transfer.remote_directory}")
+    print(f"      transfer_dir = {transfer.remote_directory}")
+    print(f"      compute_dir  = {transfer.compute_directory}")
     print(f"      waiting up to {args.transfer_timeout}s for SUCCEEDED...")
     status = tm.wait_for_transfer(
         transfer.task_id, timeout=args.transfer_timeout, poll_interval=5
@@ -148,7 +148,7 @@ def main() -> None:
     jobs = []
     tasks = []
     for name in args.molecules:
-        remote_xyz = f"{transfer.remote_directory}/{name}.xyz"
+        remote_xyz = f"{transfer.compute_directory}/{name}.xyz"
         job = {
             # input_structure_file is ignored when remote_structure_file is set
             # (the worker's remote-path branch overrides it). Pass a sentinel.
@@ -203,9 +203,10 @@ def main() -> None:
     csv_path = write_csv(results, output_dir / "demo_globus_transfer.csv")
     print(f"CSV (per-call status; thermo values blank in remote-path mode): {csv_path}")
     print(
-        f"\nNote: workers wrote full JSON results under {transfer.remote_directory} "
+        f"\nNote: workers wrote full JSON results under {transfer.compute_directory} "
         f"on the HPC. To pull them back, you can run another Globus Transfer "
-        f"job in the reverse direction."
+        f"job in the reverse direction using {transfer.remote_directory} as "
+        f"the collection-visible directory."
     )
 
 

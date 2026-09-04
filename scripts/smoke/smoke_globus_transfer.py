@@ -7,8 +7,9 @@ success, nonzero on any failure.
 Prereqs (env vars)
 ------------------
 - GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID       -- local Globus collection UUID
-- GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID  -- HPC collection UUID
-- GLOBUS_TRANSFER_DESTINATION_BASE_PATH    -- e.g. /eagle/projects/MyProj/staging
+- COMPUTE_SYSTEM                           -- polaris, or aurora with an ID override
+- GLOBUS_TRANSFER_DESTINATION_BASE_PATH    -- e.g. /eagle/MyProj/staging
+- GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID  -- required while Flare ID is a placeholder
 - (for --with-mcp): GLOBUS_COMPUTE_ENDPOINT_ID and HPC venv with MACE
 
 First run triggers a Globus OAuth flow. Token caches at
@@ -52,7 +53,6 @@ def main() -> None:
 
     require_env(
         "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID",
-        "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID",
         "GLOBUS_TRANSFER_DESTINATION_BASE_PATH",
     )
     if args.with_mcp:
@@ -83,7 +83,8 @@ def main() -> None:
         )
         assert transfer_result.task_id, "no task_id returned"
         print(f"       task_id = {transfer_result.task_id}")
-        print(f"       remote_dir = {transfer_result.remote_directory}")
+        print(f"       transfer_dir = {transfer_result.remote_directory}")
+        print(f"       compute_dir = {transfer_result.compute_directory}")
 
     with r.check(f"wait_for_transfer(timeout={args.timeout}s) reaches SUCCEEDED"):
         assert transfer_result is not None
@@ -133,7 +134,7 @@ def main() -> None:
             mcp.init_backend()
             try:
                 params = mace_input_schema_ensemble(
-                    remote_structure_directory=transfer_result.remote_directory,
+                    remote_structure_directory=transfer_result.compute_directory,
                     output_result_file="water_smoke_tr.json",
                     driver="opt",
                     model="medium-mpa-0",
