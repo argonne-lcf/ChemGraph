@@ -13,9 +13,8 @@ Required environment variables::
     GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID
     GLOBUS_TRANSFER_DESTINATION_BASE_PATH
 
-Set ``COMPUTE_SYSTEM=polaris`` to use the bundled Eagle collection ID. Aurora
-currently requires ``GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID`` because its
-bundled Flare ID is a placeholder.
+Set ``COMPUTE_SYSTEM=polaris`` or ``COMPUTE_SYSTEM=aurora`` to select the
+matching bundled destination collection and path mapping.
 
 The selected model's credentials are also required.  The first run may prompt
 for a Globus authorization code before the MCP subprocess is started.
@@ -52,6 +51,7 @@ REQUIRED_ENV = (
     "GLOBUS_TRANSFER_DESTINATION_BASE_PATH",
 )
 BOUND_TOOL_NAMES = (
+    "list_transfer_facilities",
     "check_endpoint_status",
     "transfer_files",
     "check_transfer_status",
@@ -91,10 +91,12 @@ Compute, and ASE. Use the supplied MCP tools exactly as directed. Do not use
 Deep Agent filesystem tools, subagents, or shell-like behavior, and never call
 an ordinary in-process `run_ase` tool.
 
-For a submission request, call `check_endpoint_status`, then `transfer_files`
-with `wait=true`. Only after the transfer reports `status="completed"`, pass
-its exact `remote_directory` to `run_ase_ensemble`. Stop after submission and
-report the returned `batch_id`; do not poll the Compute batch yourself.
+For a submission request, call `list_transfer_facilities` first to identify the
+active server-configured target. Then call `check_endpoint_status`, followed by
+`transfer_files` with `wait=true`. Only after the transfer reports
+`status="completed"`, pass its exact `remote_directory` to `run_ase_ensemble`.
+Stop after submission and report the returned `batch_id`; do not poll the
+Compute batch yourself.
 
 For a retrieval request naming a completed batch, call `get_job_results`
 exactly once with that batch ID. Report the returned potential energy in eV
@@ -310,9 +312,10 @@ async def run_example(args: argparse.Namespace) -> float:
         submission_prompt = f"""\
 Run the live integration test now.
 
-1. Check the configured Globus Compute endpoint.
-2. Transfer this exact local file with wait=true: {input_path}
-3. Submit run_ase_ensemble with this exact params object, replacing only
+1. List the Transfer facilities and identify the active target.
+2. Check the configured Globus Compute endpoint.
+3. Transfer this exact local file with wait=true: {input_path}
+4. Submit run_ase_ensemble with this exact params object, replacing only
    REMOTE_DIRECTORY with the transfer result's remote_directory:
    {{
      "remote_structure_directory": "REMOTE_DIRECTORY",
@@ -320,13 +323,20 @@ Run the live integration test now.
      "driver": "energy",
      "calculator": {{"calculator_type": "emt"}}
    }}
-4. Stop after submission and report the batch_id. Do not poll it.
+5. Stop after submission and report the batch_id. Do not poll it.
 """
         submission = await graph.ainvoke(
             {"messages": [HumanMessage(content=submission_prompt)]},
             config=config,
         )
 
+        facilities = find_tool_payload(submission, "list_transfer_facilities")
+        if not facilities.get("transfer_configured") or not facilities.get(
+            "active_system"
+        ):
+            raise RuntimeError(
+                f"Globus Transfer has no active facility: {facilities}"
+            )
         endpoint = find_tool_payload(submission, "check_endpoint_status")
         if not _endpoint_is_online(endpoint):
             raise RuntimeError(f"Globus Compute endpoint is not online: {endpoint}")
@@ -341,6 +351,7 @@ Run the live integration test now.
         if submitted.get("status") != "submitted" or not submitted.get("batch_id"):
             raise RuntimeError(f"ASE batch was not submitted: {submitted}")
         batch_id = str(submitted["batch_id"])
+        print(f"Active facility: {facilities['active_system']}")
         print(f"Compute directory: {remote_directory}")
         print(f"Transfer directory: {transfer_directory}")
         print(f"Compute batch: {batch_id}")
