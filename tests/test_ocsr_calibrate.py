@@ -412,7 +412,10 @@ def test_both_path_arguments_expand_a_tilde(monkeypatch, tmp_path):
     monkeypatch.setattr(backends, "smiles_from_specialist", lambda n, p: {
         "ok": True, "smiles": "CCO", "raw": "", "model_used": n,
         "cold_start": False, "latency_s": 0.1, "error": "", "ran": True})
+    # posixpath.expanduser reads HOME; ntpath.expanduser reads USERPROFILE and
+    # never HOME, so both are set for the same directory.
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.chdir(tmp_path)
 
     code = calibrate.main(["--labels", "~/labels.csv", "--out", "~/t.json",

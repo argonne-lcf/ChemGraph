@@ -648,6 +648,7 @@ def test_a_table_that_cannot_mean_what_it_says_is_rejected_at_load(
         core.load_calibration()
 
 
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="mkfifo is POSIX-only")
 def test_a_calibration_path_that_is_not_a_regular_file_is_refused(tmp_path):
     """A FIFO blocks open() forever, and the caller has already paid for inference."""
     fifo = tmp_path / "cal.json"

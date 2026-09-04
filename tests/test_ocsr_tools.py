@@ -7,6 +7,7 @@ business and is checked by `examples/ocsr/run_ocsr.py` against known structures.
 """
 
 import json
+import os
 
 import pytest
 
@@ -1090,7 +1091,8 @@ def test_a_missing_checkpoint_error_quotes_a_command_that_downloads_it(monkeypat
     _, error = backends._resolve_weights("molnextr")
 
     assert "hf download" in error
-    assert f"--local-dir {tmp_path}/molnextr" in error
+    # os.path.join, so the separator is the platform's own.
+    assert f"--local-dir {os.path.join(str(tmp_path), 'molnextr')}" in error
 
 
 def test_decimer_needs_no_checkpoint_and_is_never_called_unready(monkeypatch,
