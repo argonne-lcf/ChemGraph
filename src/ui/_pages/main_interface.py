@@ -2213,7 +2213,9 @@ def _handle_query_submission(
 
             # Save messages to persistent session store (best-effort)
             try:
-                agent._save_messages_to_store(last_state, trimmed_query)
+                agent._save_messages_to_store(
+                    last_state, trimmed_query, thread_id=cfg["configurable"]["thread_id"]
+                )
             except Exception:
                 pass
 

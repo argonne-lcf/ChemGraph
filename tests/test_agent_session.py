@@ -21,6 +21,9 @@ from chemgraph.agent.llm_agent import ChemGraph
 from chemgraph.agent.turn import TurnResult, serialize_state
 from chemgraph.memory.store import SessionStore
 from chemgraph.models.endpoints import PreparedModel
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, MessagesState, StateGraph
 
 
 # ------------------------------------------------------------------
@@ -108,6 +111,96 @@ def _make_agent(clean_env, mock_agent_patches, tmp_db, **kwargs):
     defaults.update(kwargs)
     agent = ChemGraph(**defaults)
     return agent
+
+
+@pytest.fixture
+def cumulative_agent(clean_env, mock_agent_patches, tmp_db):
+    """Use a compiled graph with its real message reducer and a hermetic LLM."""
+    agent = _make_agent(clean_env, mock_agent_patches, tmp_db)
+    model = FakeListChatModel(responses=["Repeated answer"])
+    builder = StateGraph(MessagesState)
+    builder.add_node("reply", lambda state: {"messages": [model.invoke(state["messages"])]})
+    builder.add_edge(START, "reply")
+    builder.add_edge("reply", END)
+    agent.workflow = builder.compile(checkpointer=InMemorySaver())
+    return agent
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("config", [None, {"thread_id": 7}, {"configurable": {"thread_id": "7"}}])
+async def test_cumulative_turns_are_saved_once(cumulative_agent, config):
+    agent = cumulative_agent
+    for turn in range(1, 4):
+        await agent.run("Repeated question", config=config)
+        session = agent.session_store.get_session(agent.uuid)
+        assert len(session.messages) == 2 * turn
+        assert session.query_count == turn
+    thread_id = "1" if config is None else "7"
+    state = agent.workflow.get_state({"configurable": {"thread_id": thread_id}}).values
+    agent._save_messages_to_store(state, "Repeated question", thread_id=thread_id)
+    assert len(agent.session_store.get_session(agent.uuid).messages) == 6
+
+
+@pytest.mark.asyncio
+async def test_cumulative_history_survives_alternating_threads(cumulative_agent):
+    agent = cumulative_agent
+    for count, thread_id in enumerate(["a", "b", "a", "b"], start=1):
+        await agent.run("Repeated question", config={"thread_id": thread_id})
+        session = agent.session_store.get_session(agent.uuid)
+        assert len(session.messages) == count * 2
+        assert session.query_count == count
+
+
+@pytest.mark.asyncio
+async def test_failed_save_retries_all_unsaved_history(cumulative_agent, monkeypatch):
+    agent = cumulative_agent
+    save = agent.session_store.save_messages
+    monkeypatch.setattr(agent.session_store, "save_messages", Mock(side_effect=RuntimeError("DB unavailable")))
+    await agent.run("First question")
+    assert agent.session_store.get_session(agent.uuid).messages == []
+    monkeypatch.setattr(agent.session_store, "save_messages", save)
+    await agent.run("Second question")
+    session = agent.session_store.get_session(agent.uuid)
+    assert len(session.messages) == 4
+    assert session.query_count == 2
+    state = agent.workflow.get_state({"configurable": {"thread_id": "1"}}).values
+    agent._save_messages_to_store(state, "Second question")
+    assert len(agent.session_store.get_session(agent.uuid).messages) == 4
+
+
+@pytest.mark.parametrize("with_ids", [False, True])
+def test_snapshot_identity_is_scoped_to_normalized_thread(cumulative_agent, with_ids):
+    agent = cumulative_agent
+    agent._ensure_session("Repeated question")
+    messages = [
+        {"type": "human", "content": "Repeated question"},
+        {"type": "tool", "name": "read", "content": [{"type": "text", "text": "same"}]},
+        {"type": "human", "content": "Repeated question"},
+    ]
+    if with_ids:
+        for index, msg in enumerate(messages):
+            msg["id"] = str(index)
+    for thread_id in (7, "7", "other", "other"):
+        # Copies model successive deserialized snapshots, not object identity.
+        agent._save_messages_to_store(
+            {"messages": [dict(msg) for msg in messages]}, "Repeated question", thread_id=thread_id
+        )
+    if with_ids:
+        agent._save_messages_to_store(
+            {"messages": messages[1:] + messages[:1]}, "Repeated question", thread_id="7"
+        )
+    session = agent.session_store.get_session(agent.uuid)
+    assert len(session.messages) == 6
+    assert session.query_count == 4
+    assert [message.content for message in session.messages] == ["Repeated question", "same", "Repeated question"] * 2
+
+
+def test_idless_snapshot_tracks_payload_changes(cumulative_agent):
+    agent = cumulative_agent
+    agent._ensure_session("Question")
+    for text in ("original", "updated", "updated"):
+        agent._save_messages_to_store({"messages": [{"type": "ai", "content": text}]}, "Question")
+    assert [message.content for message in agent.session_store.get_session(agent.uuid).messages] == ["original", "updated"]
 
 
 # ------------------------------------------------------------------
