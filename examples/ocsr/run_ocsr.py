@@ -60,7 +60,7 @@ def run_direct(model: str | None) -> int:
     if not installed and model != "llm":
         print(describe_models(installed))
         print("\nNo specialist is installed. Install one with:\n"
-              "    pip install 'chemgraph[ocsr]'\n"
+              "    python -m pip install '.[ocsr]' -r requirements/ocsr-models.txt\n"
               "or read this image with the agent's own model:\n"
               "    python run_ocsr.py --agent --model llm")
         return 1

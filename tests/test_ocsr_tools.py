@@ -257,9 +257,11 @@ def test_an_explicit_model_is_never_silently_swapped(monkeypatch, image):
     assert "molscribe" in result["error"]
 
 
-def test_install_hint_names_the_extra():
-    """One command installs all four, so every missing model points at the same one."""
-    assert "chemgraph[ocsr]" in backends._install_hint()
+def test_install_hint_names_the_extra_and_supplemental_requirements():
+    """The extra and pinned Git specialists must be resolved together."""
+    hint = backends._install_hint()
+    assert "'.[ocsr]' -r requirements/ocsr-models.txt" in hint
+    assert "matching ChemGraph source" in hint
 
 
 def test_importing_the_backends_does_not_import_torchvision():

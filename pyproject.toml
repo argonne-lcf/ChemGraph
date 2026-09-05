@@ -38,7 +38,6 @@ dependencies = [
     "rdkit",
     "pymatgen",
     "mace-torch>=0.3.16",
-    "graph-longrange @ git+https://github.com/WillBaldwin0/graph_electrostatics.git@v0.4.0",
     "globus_sdk",
     "streamlit==1.54.0",
     "py3Dmol",
@@ -55,16 +54,12 @@ dependencies = [
 [project.optional-dependencies]
 # Optical Chemical Structure Recognition: read a structure diagram, get a SMILES.
 #
-# All four specialists run in this environment, so none needs one of its own. Two are
-# installed from forks that relax pins predating Python 3.12; the upstream pins are
-# mutually unsatisfiable, so pip refuses to resolve them together. The forks change
-# dependency metadata only, and chemgraph.tools.timm_compat handles the import paths
-# timm moved after 0.4.12. Checkpoints are covered in examples/ocsr/README.md.
+# DECIMER and shared support packages are installable from PyPI. The three Git-only
+# specialists live in requirements/ocsr-models.txt because PyPI rejects direct URL
+# dependencies, including extras. See examples/ocsr/README.md for the pinned forks,
+# timm compatibility shim, installation instructions, and checkpoints.
 ocsr = [
     "decimer>=2.8",
-    "glyph @ git+https://github.com/EdisonScientific/glyph@0bf782f863d26b041ace157668928ef07c38b972",
-    "MolNexTR @ git+https://github.com/reowszer/MolNexTR@f450b9661557b1f91ae36f59dd1fadfbcb3a0967",
-    "MolScribe @ git+https://github.com/reowszer/MolScribe@b03b30fbac9a78434116e626ebef6c7b7bdcdb6e",
     # Upper bound because timm_compat reaches into private modules (models._builder,
     # models._registry), which carry no stability promise across minor releases.
     "timm>=1.0,<1.1",

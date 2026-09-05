@@ -83,6 +83,11 @@ checkout's `cg_logs/` directory.
 docker build -t chemgraph:local .
 ```
 
+ARM builds install CPU PyTorch from its official wheel index because the PyPI
+CUDA dependency set includes unsupported ARM wheels. x86 builds retain their
+normal PyPI PyTorch selection. Both images explicitly install the Polar add-on
+and run `pip check` after resolving ChemGraph and its runtime dependencies.
+
 The TBLite build can take time, especially on ARM. Mount a dedicated artifact
 directory rather than a home directory, pass tokens at runtime, remember that
 container paths may differ from host paths, and pin an image tag or digest for

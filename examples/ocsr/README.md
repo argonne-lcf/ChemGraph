@@ -34,7 +34,8 @@ structure it was drawn from. `--agent` routes the same call through an LLM.
 | `ocsrglyph` | 0.766 | 0.3 s |
 | `llm` | not measured | varies |
 
-`pip install 'chemgraph[ocsr]'` installs all four specialists. `llm` needs no
+`pip install 'chemgraph[ocsr]'` installs DECIMER and shared support; the other
+three specialists need the pinned add-on requirements below. `llm` needs no
 install and uses the agent's own model.
 
 The specialists return a SMILES and nothing else. An LLM returns whatever it likes,
@@ -59,16 +60,32 @@ machine you are on.
 ## Installing
 
 ```bash
-pip install 'chemgraph[ocsr]'
+python -m pip install '.[ocsr]' -r requirements/ocsr-models.txt
+python -m pip check
 ```
 
+Run this from the matching ChemGraph checkout or extracted source distribution.
 That installs all four specialists. Three of them also need a checkpoint on disk,
 listed under Checkpoints below; DECIMER fetches its own.
 
 DECIMER is on PyPI. The other three install from GitHub, pinned to a commit so the
-extra keeps resolving to what was tested here. MolNexTR and MolScribe point at forks
+add-on keeps resolving to what was tested here. PyPI rejects Git dependencies in
+package metadata, even in extras. Starting with v0.7.0, a published install can use:
+
+```bash
+python -m pip install 'chemgraph[ocsr]==0.7.0' -r https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/ocsr-models.txt
+```
+
+Use the matching tag or commit for another version. MolNexTR and MolScribe point at forks
 whose only change is two lines of `setup.py` each: both pin `timm==0.4.12`, OCSRGlyph
 needs timm 1.x, and no single version satisfies both.
+
+The complete specialist installation is supported on Linux. On Apple Silicon
+with Python 3.12, the `pyonmttok` dependency has no matching macOS wheel; use a
+Linux container or host for the full set of specialists.
+When extending ChemGraph's ARM Docker images, add
+`--extra-index-url https://download.pytorch.org/whl/cpu` to the OCSR installation
+command so torchvision uses the same CPU build as the image's PyTorch.
 
 Installing them one at a time lets the later install replace the timm the earlier one
 needs, and pip reports success while OCSRGlyph fails at inference with

@@ -253,10 +253,10 @@ def get_calculator_selection_context() -> str:
         f"- Default calculator when the user does not specify one: "
         f"{_default_calculator_description()}.\n"
         "- When calling run_ase, choose only from the available calculators above. "
-        "If the user requests an unavailable calculator, choose the default "
-        "available calculator when that substitution is appropriate; otherwise "
-        "ask for clarification or explain that the requested calculator is not "
-        "available."
+        "Preserve explicit calculator selections; explain missing dependencies "
+        "instead of silently substituting another calculator. MACE-Polar requires "
+        "the graph-longrange add-on. MACE-MP does not provide Polar's dipole or "
+        "IR capabilities."
     )
 
 

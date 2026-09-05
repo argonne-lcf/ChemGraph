@@ -1,0 +1,4 @@
+# Install together with ChemGraph's ocsr extra; these forks relax incompatible pins.
+glyph @ git+https://github.com/EdisonScientific/glyph@0bf782f863d26b041ace157668928ef07c38b972
+MolNexTR @ git+https://github.com/reowszer/MolNexTR@f450b9661557b1f91ae36f59dd1fadfbcb3a0967
+MolScribe @ git+https://github.com/reowszer/MolScribe@b03b30fbac9a78434116e626ebef6c7b7bdcdb6e
