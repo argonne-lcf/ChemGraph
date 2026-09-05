@@ -269,7 +269,9 @@ def get_symmetry_number(atomsdata: AtomsData) -> int:
         pbc=atomsdata.pbc,
     )
     aaa = AseAtomsAdaptor()
-    molecule = aaa.get_molecule(atoms)
+    # Rotational symmetry depends on geometry, not the calculator's electronic
+    # state. Reconstructed Atoms lack magnetic moments for radical species.
+    molecule = aaa.get_molecule(atoms, charge_spin_check=False)
     pga = PointGroupAnalyzer(molecule)
     return pga.get_rotational_symmetry_number()
 
@@ -714,7 +716,17 @@ def run_ase_core(params: ASEInputSchema) -> dict:
         # --------------------------------------------------------------
         # Vibrational / thermo / IR analysis
         # --------------------------------------------------------------
+        all_energies = []
         if driver in {"vib", "thermo", "ir"}:
+            vib_data = {
+                "energies": [],
+                "energy_unit": "meV",
+                "frequencies": [],
+                "frequency_unit": "cm-1",
+            }
+        if driver in {"vib", "thermo", "ir"} and not (
+            driver == "thermo" and len(atoms) == 1
+        ):
             logger.info("Starting vibrational analysis (driver=%s)", driver)
             from ase.vibrations import Vibrations
             from ase import units
@@ -732,13 +744,6 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                 vib.clean()
                 vib.run()
                 logger.info("Vibrational analysis complete")
-
-                vib_data = {
-                    "energies": [],
-                    "energy_unit": "meV",
-                    "frequencies": [],
-                    "frequency_unit": "cm-1",
-                }
 
                 all_energies = vib.get_energies()
                 mode_indices = _vibrational_mode_indices(
@@ -861,55 +866,39 @@ def run_ase_core(params: ASEInputSchema) -> dict:
                         f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
                     )
 
-                # ---- Thermochemistry ----
-                if driver == "thermo":
-                    logger.info("Computing thermochemistry (T=%s K, P=%s Pa)", temperature, pressure)
-                    if len(atoms) == 1:
-                        thermo_data = {
-                            "enthalpy": potential_energy,
-                            "entropy": 0.0,
-                            "gibbs_free_energy": potential_energy,
-                            "unit": "eV",
-                        }
-                    else:
-                        from ase.thermochemistry import IdealGasThermo
+        # ---- Thermochemistry ----
+        if driver == "thermo":
+            from ase.thermochemistry import IdealGasThermo
 
-                        linear = is_linear_molecule(final_structure)
-                        geometry = "linear" if linear else "nonlinear"
-                        symmetrynumber = get_symmetry_number(final_structure)
+            logger.info("Computing thermochemistry (T=%s K, P=%s Pa)", temperature, pressure)
+            if len(atoms) == 1:
+                geometry, symmetrynumber = "monatomic", 1
+            else:
+                linear = is_linear_molecule(final_structure)
+                geometry = "linear" if linear else "nonlinear"
+                symmetrynumber = get_symmetry_number(final_structure)
 
-                        # IdealGasThermo expects total spin S; calculators expose
-                        # multiplicity (2S+1) via get_multiplicity() when supported.
-                        multiplicity = (
-                            getattr(calc_model, "get_multiplicity", lambda: None)()
-                            or 1
-                        )
-                        spin_S = (multiplicity - 1) / 2.0
-
-                        thermo = IdealGasThermo(
-                            vib_energies=all_energies,
-                            potentialenergy=potential_energy,
-                            atoms=atoms,
-                            geometry=geometry,
-                            symmetrynumber=symmetrynumber,
-                            spin=spin_S,
-                        )
-                        thermo_data = {
-                            "enthalpy": float(
-                                thermo.get_enthalpy(temperature=temperature)
-                            ),
-                            "entropy": float(
-                                thermo.get_entropy(
-                                    temperature=temperature, pressure=pressure
-                                )
-                            ),
-                            "gibbs_free_energy": float(
-                                thermo.get_gibbs_energy(
-                                    temperature=temperature, pressure=pressure
-                                )
-                            ),
-                            "unit": "eV",
-                        }
+            # IdealGasThermo expects total spin S; calculators expose 2S+1.
+            multiplicity = getattr(calc_model, "get_multiplicity", lambda: None)() or 1
+            thermo = IdealGasThermo(
+                vib_energies=all_energies,
+                potentialenergy=potential_energy,
+                atoms=atoms,
+                geometry=geometry,
+                symmetrynumber=symmetrynumber,
+                spin=(multiplicity - 1) / 2.0,
+            )
+            thermo_data = {
+                "enthalpy": float(thermo.get_enthalpy(temperature=temperature)),
+                "entropy": float(
+                    thermo.get_entropy(temperature=temperature, pressure=pressure)
+                ),
+                "gibbs_free_energy": float(
+                    thermo.get_gibbs_energy(temperature=temperature, pressure=pressure)
+                ),
+                "unit": "eV",
+                "entropy_unit": "eV/K",
+            }
 
         # ---- serialise full output ----
         end_time = time.time()

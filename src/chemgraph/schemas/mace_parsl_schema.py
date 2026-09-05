@@ -164,7 +164,7 @@ class mace_output_schema(BaseModel):
     )
     thermochemistry: dict = Field(
         default={},
-        description="Thermochemistry data in eV.",
+        description="Thermochemistry energies in eV and entropy in eV/K.",
     )
     error: str = Field(
         default="",
