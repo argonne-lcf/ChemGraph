@@ -83,6 +83,9 @@ needs timm 1.x, and no single version satisfies both.
 The complete specialist installation is supported on Linux. On Apple Silicon
 with Python 3.12, the `pyonmttok` dependency has no matching macOS wheel; use a
 Linux container or host for the full set of specialists.
+When extending ChemGraph's ARM Docker images, add
+`--extra-index-url https://download.pytorch.org/whl/cpu` to the OCSR installation
+command so torchvision uses the same CPU build as the image's PyTorch.
 
 Installing them one at a time lets the later install replace the timm the earlier one
 needs, and pip reports success while OCSRGlyph fails at inference with
