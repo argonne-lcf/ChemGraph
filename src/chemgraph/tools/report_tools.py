@@ -621,17 +621,18 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         if "enthalpy" in ase_output.thermochemistry:
             enthalpy_ev = ase_output.thermochemistry['enthalpy']
             thermo_info.append(
-                f'<div><strong>Enthalpy:</strong> <span class="energy-value" data-ev="{enthalpy_ev}">{enthalpy_ev:.6f}</span></div>'
+                f'<div><strong>Enthalpy:</strong> <span class="energy-value" data-ev="{enthalpy_ev}">{enthalpy_ev:.6f}</span> <span class="energy-unit">eV</span></div>'
             )
         if "entropy" in ase_output.thermochemistry:
-            entropy_ev = ase_output.thermochemistry['entropy']
+            # Current and legacy ASE results express entropy in eV/K.
+            entropy_ev_k = ase_output.thermochemistry['entropy']
             thermo_info.append(
-                f'<div><strong>Entropy:</strong> <span class="energy-value" data-ev="{entropy_ev}">{entropy_ev:.6f}</span></div>'
+                f'<div><strong>Entropy:</strong> <span class="entropy-value" data-ev-k="{entropy_ev_k}">{entropy_ev_k:.6f}</span> <span class="entropy-unit">eV/K</span></div>'
             )
         if "gibbs_free_energy" in ase_output.thermochemistry:
             gibbs_ev = ase_output.thermochemistry['gibbs_free_energy']
             thermo_info.append(
-                f'<div><strong>Gibbs Free Energy:</strong> <span class="energy-value" data-ev="{gibbs_ev}">{gibbs_ev:.6f}</span></div>'
+                f'<div><strong>Gibbs Free Energy:</strong> <span class="energy-value" data-ev="{gibbs_ev}">{gibbs_ev:.6f}</span> <span class="energy-unit">eV</span></div>'
             )
 
         if thermo_info:
@@ -643,7 +644,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                     <button onclick="toggleEnergyUnit('kjmol')" data-unit="kjmol">kJ/mol</button>
                     <button onclick="toggleEnergyUnit('kcalmol')" data-unit="kcalmol">kcal/mol</button>
                 </div>
-                <strong>Thermochemistry Values</strong> (<span class="energy-unit">eV</span>):<br>
+                <strong>Thermochemistry Values</strong>:<br>
                 {"".join(thermo_info)}
             </li>""")
         else:
@@ -790,6 +791,15 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 document.querySelectorAll('.energy-unit').forEach(label => {
                     label.textContent = unit === 'ev' ? 'eV' : 
                                      unit === 'kjmol' ? 'kJ/mol' : 'kcal/mol';
+                });
+                document.querySelectorAll('.entropy-unit').forEach(label => {
+                    label.textContent = unit === 'ev' ? 'eV/K' :
+                                     unit === 'kjmol' ? 'kJ/(mol K)' : 'kcal/(mol K)';
+                });
+                document.querySelectorAll('.entropy-value').forEach(cell => {
+                    const factor = unit === 'ev' ? 1 :
+                                   unit === 'kjmol' ? EV_TO_KJMOL : EV_TO_KCALMOL;
+                    cell.textContent = (parseFloat(cell.dataset.evK) * factor).toFixed(6);
                 });
                 
                 // Convert all energy values
