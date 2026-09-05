@@ -462,7 +462,9 @@ class ASEOutputSchema(BaseModel):
         default={},
         description="Infrared spectrum related data.",
     )
-    thermochemistry: dict = Field(default={}, description="Thermochemistry data in eV.")
+    thermochemistry: dict = Field(
+        default={}, description="Thermochemistry energies in eV and entropy in eV/K."
+    )
     success: bool = Field(
         default=False, description="Indicates if the simulation finished correctly."
     )

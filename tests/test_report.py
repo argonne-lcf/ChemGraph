@@ -1,4 +1,5 @@
 import json
+import re
 import pytest
 from pathlib import Path
 import tempfile
@@ -164,6 +165,25 @@ def test_generate_html_labels_energy_by_driver(
 
     content = report_html.read_text(encoding="utf-8")
     assert expected_label in content
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_report_distinguishes_entropy_units(tmp_path, legacy):
+    output = json.loads(json.dumps(sample_ase_output))
+    if not legacy:
+        output["thermochemistry"]["entropy_unit"] = "eV/K"
+    source, report = tmp_path / "result.json", tmp_path / "report.html"
+    source.write_text(json.dumps(output))
+    generate_html.invoke({"results_json_path": str(source), "output_path": str(report)})
+    content = report.read_text()
+    entropy_row = re.search(r'<div><strong>Entropy:</strong>.*?</div>', content).group()
+    assert 'class="entropy-unit">eV/K</span>' in entropy_row
+    assert 'class="entropy-value"' in entropy_row
+    assert 'data-ev-k="0.001957587821789186"' in entropy_row
+    assert 'class="energy-value"' not in entropy_row
+    for name in ("Enthalpy", "Gibbs Free Energy"):
+        row = re.search(rf'<div><strong>{name}:</strong>.*?</div>', content).group()
+        assert 'class="energy-unit">eV</span>' in row
 
 
 @pytest.fixture(scope="session")

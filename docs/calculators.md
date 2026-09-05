@@ -36,6 +36,13 @@ Calculator-backed tools cover operations such as:
 Support depends on the selected calculator. A valid property for one engine may
 not exist for another.
 
+Ideal-gas thermochemistry uses the requested temperature and pressure. Enthalpy
+and Gibbs energy are reported in eV; entropy is reported in eV/K with a separate
+`entropy_unit` field. HTML reports also support kJ/(mol K) and kcal/(mol K) for
+entropy. Single atoms include translational and electronic-spin contributions
+without running finite-difference vibrations. Calculator multiplicity determines
+the electronic-spin contribution.
+
 ## EMT for setup checks
 
 EMT is lightweight and requires no download, making it a useful plumbing test.
