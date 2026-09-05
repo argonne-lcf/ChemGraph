@@ -1,10 +1,30 @@
 from contextlib import nullcontext
 import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from chemgraph.models.supported_models import supported_argo_models
 from ui._pages import main_interface as main_ui
 from ui.message_utils import extract_molecular_structure, normalize_latex_delimiters
+
+
+def test_query_submission_saves_with_the_normalized_thread_id(monkeypatch, tmp_path):
+    agent = MagicMock(log_dir=str(tmp_path), recursion_limit=20)
+    agent.workflow.get_state.return_value.values = {"messages": []}
+    fake_st = MagicMock()
+    fake_st.session_state = _SessionState(agent=agent, conversation_history=[])
+    snapshot = {"messages": [{"type": "human", "content": "question"}]}
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_activate_turn_dir", lambda *args: str(tmp_path))
+    monkeypatch.setattr(main_ui, "persist_uploads", lambda *args: [])
+    monkeypatch.setattr(main_ui, "_stream_workflow", lambda *args: None)
+    monkeypatch.setattr(main_ui, "_poll_and_display", lambda *args: ("done", snapshot))
+    monkeypatch.setattr(main_ui, "_save_exchange_to_store", lambda *args: None)
+    monkeypatch.setattr(main_ui.artifact_utils, "append_manifest_entry", lambda *args, **kwargs: None)
+
+    main_ui._handle_query_submission(" question ", 42, {"ok": True}, None)
+
+    agent._save_messages_to_store.assert_called_once_with(snapshot, "question", thread_id="42")
 
 
 class _SessionState(dict):

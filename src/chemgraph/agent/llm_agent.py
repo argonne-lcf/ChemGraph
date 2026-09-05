@@ -274,6 +274,7 @@ class ChemGraph:
 
         # Track whether session has been registered in the memory store
         self._session_created: bool = False
+        self._saved_message_keys: dict[str, set[tuple]] = {}
         self._session_title: Optional[str] = None
 
         try:
@@ -740,16 +741,20 @@ class ChemGraph:
         self._session_created = True
         logger.info(f"Created session {self.uuid}: {self._session_title}")
 
-    def _save_messages_to_store(self, last_state: dict, query: str) -> None:
-        """Extract messages from workflow state and persist to session store."""
+    def _save_messages_to_store(
+        self, last_state: dict, query: str, *, thread_id: str = "1"
+    ) -> None:
+        """Append only unsaved messages from this thread's accumulated state."""
         if self.session_store is None or not self._session_created:
             return
 
         try:
+            saved_keys = self._saved_message_keys.setdefault(str(thread_id), set())
+            pending_keys = set()
             messages_to_save = []
             state_messages = last_state.get("messages", [])
 
-            for msg in state_messages:
+            for position, msg in enumerate(state_messages):
                 role = None
                 content = ""
                 tool_name = None
@@ -783,6 +788,20 @@ class ChemGraph:
                     content = str(content)
 
                 if role and content:
+                    message_id = (
+                        msg.get("id") if isinstance(msg, dict)
+                        else getattr(msg, "id", None)
+                    )
+                    # Graph IDs survive snapshot copies. Without an ID, retain
+                    # identical text at different transcript positions.
+                    key = (
+                        ("id", message_id)
+                        if isinstance(message_id, str) and message_id
+                        else ("position", position, role, content, tool_name)
+                    )
+                    if key in saved_keys or key in pending_keys:
+                        continue
+                    pending_keys.add(key)
                     messages_to_save.append(
                         SessionMessage(
                             role=role,
@@ -796,6 +815,8 @@ class ChemGraph:
                 messages=messages_to_save,
                 title=self._session_title,
             )
+            # The store commits atomically. Keep failed writes eligible for retry.
+            saved_keys.update(pending_keys)
             logger.info(
                 f"Saved {len(messages_to_save)} messages to session {self.uuid}"
             )
@@ -1081,7 +1102,7 @@ class ChemGraph:
                 raise RuntimeError("Workflow produced no states.")
 
             # Save messages to persistent session store
-            self._save_messages_to_store(last_state, query)
+            self._save_messages_to_store(last_state, query, thread_id=thread_id)
 
             messages = _state_messages(last_state)
             executed_tools = _executed_tool_names(messages)
