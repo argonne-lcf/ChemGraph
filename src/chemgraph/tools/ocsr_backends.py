@@ -52,10 +52,17 @@ _ERROR_MASQUERADE = (
 
 
 def _narrow(ok=False, smiles=None, raw="", model_used=None,
-            cold_start=False, latency_s=0.0, error="") -> dict:
-    """The shape both backends return. Keeps the two paths honest with each other."""
+            cold_start=False, latency_s=0.0, error="", ran=True) -> dict:
+    """The shape both backends return. Keeps the two paths honest with each other.
+
+    ``ran`` is False when the model never saw the image: not installed, no
+    checkpoint, or the load failed. A committee has to tell that apart from a model
+    that read the image and produced nothing usable, because only the second is
+    evidence about the image.
+    """
     return {"ok": ok, "smiles": smiles, "raw": raw, "model_used": model_used,
-            "cold_start": cold_start, "latency_s": round(latency_s, 3), "error": error}
+            "cold_start": cold_start, "latency_s": round(latency_s, 3),
+            "error": error, "ran": ran}
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +265,16 @@ def available_specialists() -> list[str]:
 _WEIGHTS_DIR_ENV = "CHEMGRAPH_OCSR_WEIGHTS_DIR"
 
 
+def usable_specialists() -> list[str]:
+    """Installed models whose checkpoint is also present, so a call would run.
+
+    Three of the four need a checkpoint the ocsr extra cannot fetch, so being
+    importable is not the same as being able to read an image.
+    """
+    return [name for name in available_specialists()
+            if not _resolve_weights(name)[1]]
+
+
 def checkpoint_path(name: str) -> str | None:
     """The resolved checkpoint path for ``name``, or None if it needs none.
 
@@ -306,8 +323,14 @@ def _resolve_weights(name: str) -> tuple[str | None, str]:
         return None, ""
     if os.path.exists(path):
         return path, ""
-    return None, (f"{name}'s checkpoint is missing at {path}. "
-                  f"examples/ocsr/README.md lists where to download it, and "
+    # Quote the command rather than pointing at a file to read. A checkpoint is
+    # the one install step the extra cannot do, so this is where most first runs
+    # stop, and the fix is one line the user can paste.
+    spec = models.SPECIALIST_MODELS.get(name, {})
+    cmd = (spec.get("install") or {}).get("download")
+    fix = (f"Download it with: {cmd} --local-dir {os.path.dirname(path)}"
+           if cmd else "examples/ocsr/README.md lists where to download it")
+    return None, (f"{name}'s checkpoint is missing at {path}. {fix}. "
                   f"CHEMGRAPH_OCSR_WEIGHTS_DIR moves where it is looked for.")
 
 
@@ -350,13 +373,13 @@ def smiles_from_specialist(name: str, image_path: str) -> dict:
     bare = name.removeprefix("local:")
 
     if bare not in _LOADERS:
-        return _narrow(model_used=bare, latency_s=time.monotonic() - start,
+        return _narrow(model_used=bare, latency_s=time.monotonic() - start, ran=False,
                        error=f"unknown model {bare!r}. Choose one of: "
                              f"{', '.join(_LOADERS)}, or 'llm'.")
 
     model, cold, error = _get_model(bare)
     if model is None:
-        return _narrow(model_used=bare, cold_start=cold, error=error,
+        return _narrow(model_used=bare, cold_start=cold, error=error, ran=False,
                        latency_s=time.monotonic() - start)
 
     try:

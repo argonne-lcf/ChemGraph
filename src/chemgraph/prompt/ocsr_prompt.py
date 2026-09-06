@@ -86,11 +86,30 @@ of a bare string. Reach for it when a plain call came back with no SMILES the to
 could read: the answer arrives in a named field, and an image that is not a molecule
 can say so instead of being guessed at. It does nothing for the specialists.
 
+`ensemble=True` reads the image with every installed specialist and votes, returning
+a measured `confidence`: the share of benchmark images where a committee splitting
+this way was right. Four agreeing models are right 99.9% of the time and four
+disagreeing ones 37.7%, which a single model cannot tell you about its own answer.
+It costs one inference per model, so use it when the answer matters more than the
+wait: before feeding a SMILES to a calculation, or when a plain call returned
+something the user doubts. Tell the user the number and the split, and treat
+`confidence_label` of `conflicting` as an answer not to build on.
+
+Read `warning` even when the confidence is high. The table was fitted stereo-blind,
+so a unanimous committee scores the skeleton and says nothing about wedge bonds: if
+the models read different stereochemistry, the number stays high and the caveat is
+the only sign. Repeat it to the user before they act on the stereocentres.
+
+A committee can come back with no number and a warning about a mismatch. That means
+the calibration table describes a different set of models than this machine ran.
+When the warning names a subset, pass it as `models_wanted` to vote exactly the
+committee the table measured; when it says models are missing, report what the
+warning says rather than retrying.
+
 Read `valid` before you act on the answer. When it is false, RDKit could not parse
 what the model produced, so the string is not a molecule and reporting it as one
-would be wrong. The tool reports no confidence number: a single model cannot say how
-likely it is to be right about this particular image. If the answer matters, run a
-second model and tell the user whether the two agreed.
+would be wrong. A single-model call reports no confidence, because one model cannot
+say how likely it is to be right about this particular image.
 
 If `n_fragments` is greater than 1, the image contained more than one molecule, or a
 salt, or a reaction scheme. Ask the user which molecule they meant. Do not pass a
@@ -102,9 +121,9 @@ read it, and stop. If the user wants a geometry, an energy, or any
 other calculation on the molecule, say that the SMILES is ready for it and let them
 ask; the tools for that are not bound here.
 
-`list_ocsr_models` says which models this machine has and how accurate each was on
-the benchmark. Use it when the user asks what is available, or after an install
-error, so the answer describes this machine instead of your memory.
+`list_ocsr_models` says which models this machine has and how accurate each measured
+on the calibration table in use. Use it when the user asks what is available, or
+after an install error, so the answer describes this machine instead of your memory.
 
 If a SMILES you propose yourself needs checking, `validate_smiles` reports what RDKit
 makes of it. You do not need it for a SMILES that came from `image_to_smiles`, whose
