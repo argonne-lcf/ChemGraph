@@ -215,11 +215,11 @@ def is_linear_molecule(atomsdata: AtomsData, tol: float = 1e-3) -> bool:
 
 
 def _vibrational_mode_indices(atomsdata: AtomsData, total_modes: int) -> list[int]:
-    """Return ASE mode indices corresponding to molecular vibrations.
+    """Return mode indices for standalone vibration and IR reporting.
 
-    ASE returns all ``3N`` normal modes in ascending order.  The leading
-    translational and rotational modes are excluded from reported vibration
-    data: five modes for a linear molecule and six for a nonlinear molecule.
+    Skip the first five modes for linear molecules and six for nonlinear
+    molecules. This positional rule does not identify individual mode
+    character. Thermochemistry instead reports the modes retained by ASE.
 
     Parameters
     ----------
@@ -249,7 +249,7 @@ def _vibrational_mode_indices(atomsdata: AtomsData, total_modes: int) -> list[in
 
 
 def _vibrational_mode_record(mode_index: int, energy: complex) -> dict:
-    """Format an original ASE mode without hiding small imaginary energies."""
+    """Format an ASE mode in meV and cm-1, marking imaginary values with i."""
     from ase import units
 
     value = energy.imag if energy.imag != 0 else energy.real
@@ -270,7 +270,12 @@ def _calculate_thermochemistry(
     temperature,
     pressure,
 ) -> tuple[dict, list[int]]:
-    """Let ASE select/clean modes and map its retained energies to ASE indices."""
+    """Compute thermochemistry using ASE's mode selection and cleanup.
+
+    Return thermochemistry values and metadata with original retained mode
+    indices. Preserve ASE warnings and warn when no vibrations contribute.
+    Record raw imaginary-mode counts as diagnostics.
+    """
     import ase
     from ase.thermochemistry import IdealGasThermo
 
@@ -326,12 +331,6 @@ def _calculate_thermochemistry(
 
     notes = [str(warning.message) for warning in caught]
     raw_imaginary_count = int(np.count_nonzero(np.iscomplex(all_energies)))
-    if raw_imaginary_count:
-        notes.append(
-            f"The input spectrum contains {raw_imaginary_count} imaginary modes. "
-            "These thermochemistry values do not establish structural stability; "
-            "inspect the complete spectrum."
-        )
     if len(atoms) > 1 and not mode_indices:
         notes.append("No vibrational modes contributed to thermochemistry.")
     for note in notes:

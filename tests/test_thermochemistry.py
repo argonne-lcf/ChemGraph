@@ -375,6 +375,7 @@ def test_molecular_thermo_retains_spin_and_vibrations(
 def test_thermo_reports_exactly_the_modes_used_by_ase(
     tmp_path,
     monkeypatch,
+    caplog,
     energies,
     expected_indices,
     cleanup_count,
@@ -434,15 +435,17 @@ def test_thermo_reports_exactly_the_modes_used_by_ase(
     assert thermo["vib_selection"] == "highest"
     assert thermo["ignore_imag_modes"] is True
     assert thermo["ase_version"] == ase.__version__
-    if thermo["raw_imaginary_mode_count"]:
-        assert any(
-            "do not establish structural stability" in note
-            for note in thermo["warnings"]
-        )
+    expected_warnings = []
+    if cleanup_count:
+        expected_warnings.append(f"{cleanup_count} imag modes removed")
     if not expected_indices:
-        assert (
-            "No vibrational modes contributed to thermochemistry." in thermo["warnings"]
+        expected_warnings.append(
+            "No vibrational modes contributed to thermochemistry."
         )
+    assert thermo["warnings"] == expected_warnings
+    assert "The input spectrum contains" not in caplog.text
+    for note in expected_warnings:
+        assert note in caplog.text
     rows = (tmp_path / "frequencies_input.csv").read_text(encoding="utf-8").splitlines()
     assert rows == [
         f"input_vib.{i}.traj,{frequency}"

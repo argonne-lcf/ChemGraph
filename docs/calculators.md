@@ -64,9 +64,11 @@ Thermochemistry metadata records `ase_version`, `vib_selection`,
 it is not the number of imaginary modes in the complete input. Selection may
 already have excluded imaginary modes even when `n_imag` is zero. Successful
 thermochemistry with excluded modes does not establish structural stability.
-Warnings identify imaginary input modes and calculations with no vibrational
-contribution. If ASE raises or returns non-finite thermodynamic values, ChemGraph
-returns a failure with `results_file` pointing to the completed structure,
+The raw imaginary-mode count is diagnostic and does not itself trigger a
+warning. Warnings contain messages emitted by ASE and identify calculations
+with no vibrational contribution. If ASE raises or returns non-finite
+thermodynamic values, ChemGraph returns a failure with `results_file` pointing
+to the completed structure,
 potential energy, convergence state, and full spectrum; the JSON records
 `success=false` and the error, with no thermochemistry values.
 

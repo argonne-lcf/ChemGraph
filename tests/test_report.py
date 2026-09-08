@@ -159,14 +159,14 @@ def test_report_shows_ase_retained_modes_and_complete_spectrum(tmp_path, case):
         energies=[all_modes[i]["energy"] for i in indices],
         frequencies=[all_modes[i]["frequency"] for i in indices],
     )
-    note = "Inspect <input> imaginary modes; stability is not established."
+    note = "ASE diagnostic: <input>"
     output["thermochemistry"].update(
         ase_version="3.29.0",
         vib_selection="highest",
         ignore_imag_modes=True,
         n_imag=0 if case == "selection-only" else 1,
         raw_imaginary_mode_count=4,
-        warnings=[note],
+        warnings=[] if case == "selection-only" else [note],
     )
     if case == "all-removed":
         output["thermochemistry"]["warnings"].append(
@@ -200,12 +200,14 @@ def test_report_shows_ase_retained_modes_and_complete_spectrum(tmp_path, case):
     else:
         assert "ASE 3.29.0" in content
         assert "Imaginary modes in the complete input: 4" in content
-        assert "Inspect &lt;input&gt; imaginary modes" in content
         assert (
             "non-positive modes (imaginary or zero energy) after selection" in content
         )
     if case == "selection-only":
         assert "ASE cleanup removed 0" in content
+        assert "<strong>Warning:</strong>" not in content
+    elif case != "failure":
+        assert "ASE diagnostic: &lt;input&gt;" in content
     if case == "all-removed":
         assert "No vibrational modes contributed to thermochemistry." in content
 
