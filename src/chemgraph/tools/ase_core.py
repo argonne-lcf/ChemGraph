@@ -248,7 +248,10 @@ def _vibrational_mode_indices(atomsdata: AtomsData, total_modes: int) -> list[in
 
 
 def get_symmetry_number(atomsdata: AtomsData) -> int:
-    """Return the rotational symmetry number using Pymatgen.
+    """Return the rotational symmetry number of an isolated molecule.
+
+    Coordinates must describe an unwrapped molecule; periodic images are
+    not reconstructed for point-group analysis.
 
     Parameters
     ----------
@@ -258,6 +261,9 @@ def get_symmetry_number(atomsdata: AtomsData) -> int:
     -------
     int
     """
+    if len(atomsdata.numbers) == 1:
+        return 1
+
     from pymatgen.symmetry.analyzer import PointGroupAnalyzer
     from ase import Atoms
     from pymatgen.io.ase import AseAtomsAdaptor
@@ -749,6 +755,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
         thermo_data: dict = {}
         vib_data: dict = {}
         ir_data: dict = {}
+        ir_plot_path: Optional[str] = None
 
         # --------------------------------------------------------------
         # Vibrational / thermo / IR analysis
@@ -761,17 +768,37 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 "frequencies": [],
                 "frequency_unit": "cm-1",
             }
-        if driver in {"vib", "thermo", "ir"} and not (
-            driver == "thermo" and len(atoms) == 1
-        ):
-            logger.info("Starting vibrational analysis (driver=%s)", driver)
-            from ase.vibrations import Vibrations
-            from ase import units
-
-            ir_plot_path: Optional[str] = None
             mol_stem = (
                 Path(input_structure_file).stem if input_structure_file else "mol"
             )
+            # Remove previous modes even when this run has no vibrations.
+            freq_file = Path(_resolve_path(f"frequencies_{mol_stem}.csv"))
+            freq_file.unlink(missing_ok=True)
+            traj_dest_dir = _resolve_path("")
+            stale_traj_pattern = (
+                glob.escape(_resolve_path(f"{mol_stem}_vib.")) + "*.traj"
+            )
+            for stale_traj_file in glob.glob(stale_traj_pattern):
+                os.unlink(stale_traj_file)
+
+            if driver == "ir":
+                ir_data = {
+                    "spectrum_frequencies": [],
+                    "spectrum_frequencies_units": "cm-1",
+                    "spectrum_intensities": [],
+                    "spectrum_intensities_units": "D/Å^2 amu^-1",
+                }
+                for name in (
+                    f"ir_spectrum_{mol_stem}.png",
+                    f"ir_spectrum_{mol_stem}.csv",
+                    f"ir_peaks_{mol_stem}.csv",
+                ):
+                    Path(_resolve_path(name)).unlink(missing_ok=True)
+
+        if driver in {"vib", "thermo", "ir"} and len(atoms) > 1:
+            logger.info("Starting vibrational analysis (driver=%s)", driver)
+            from ase.vibrations import Vibrations
+            from ase import units
 
             with tempfile.TemporaryDirectory(
                 prefix=f"chemgraph_vib_{mol_stem}_"
@@ -798,10 +825,6 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                     vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
                 # Write frequencies CSV
-                freq_file_path = _resolve_path(f"frequencies_{mol_stem}.csv")
-                freq_file = Path(freq_file_path)
-                if freq_file.exists():
-                    freq_file.unlink()
                 with freq_file.open("w", encoding="utf-8") as f:
                     for mode_index, freq in zip(
                         mode_indices, vib_data["frequencies"]
@@ -814,14 +837,8 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                         n=mode_index, kT=units.kB * 300, nimages=30
                     )
 
-                traj_dest_dir = _resolve_path("")
                 if traj_dest_dir:
                     os.makedirs(traj_dest_dir, exist_ok=True)
-                stale_traj_pattern = os.path.join(
-                    traj_dest_dir, f"{mol_stem}_vib.*.traj"
-                )
-                for stale_traj_file in glob.glob(stale_traj_pattern):
-                    os.unlink(stale_traj_file)
                 for mode_index in mode_indices:
                     traj_file = os.path.join(tmpdir, f"vib.{mode_index}.traj")
                     dest_name = f"{mol_stem}_{Path(traj_file).name}"
@@ -840,11 +857,6 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
 
                     matplotlib.use("Agg")
                     import matplotlib.pyplot as plt
-
-                    ir_data["spectrum_frequencies"] = []
-                    ir_data["spectrum_frequencies_units"] = "cm-1"
-                    ir_data["spectrum_intensities"] = []
-                    ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
 
                     ir_name = os.path.join(tmpdir, "ir")
                     ir = Infrared(atoms, name=ir_name)
@@ -916,7 +928,15 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 symmetrynumber = get_symmetry_number(final_structure)
 
             # IdealGasThermo expects total spin S; calculators expose 2S+1.
-            multiplicity = getattr(calc_model, "get_multiplicity", lambda: None)() or 1
+            multiplicity = getattr(calc_model, "get_multiplicity", lambda: None)()
+            if multiplicity is None:
+                logger.warning(
+                    "%s does not report spin multiplicity; assuming a singlet "
+                    "(multiplicity=1) for thermochemistry. Electronic-spin entropy "
+                    "is omitted for open-shell species.",
+                    type(calc_model).__name__,
+                )
+                multiplicity = 1
             thermo = IdealGasThermo(
                 vib_energies=all_energies,
                 potentialenergy=potential_energy,
@@ -925,14 +945,12 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 symmetrynumber=symmetrynumber,
                 spin=(multiplicity - 1) / 2.0,
             )
+            enthalpy = float(thermo.get_enthalpy(temperature, verbose=False))
+            entropy = float(thermo.get_entropy(temperature, pressure, verbose=False))
             thermo_data = {
-                "enthalpy": float(thermo.get_enthalpy(temperature=temperature)),
-                "entropy": float(
-                    thermo.get_entropy(temperature=temperature, pressure=pressure)
-                ),
-                "gibbs_free_energy": float(
-                    thermo.get_gibbs_energy(temperature=temperature, pressure=pressure)
-                ),
+                "enthalpy": enthalpy,
+                "entropy": entropy,
+                "gibbs_free_energy": enthalpy - temperature * entropy,
                 "unit": "eV",
                 "entropy_unit": "eV/K",
             }
@@ -1006,6 +1024,12 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 ),
             }
         elif driver == "ir":
+            artifact_message = (
+                f"IR plot saved to {os.path.abspath(ir_plot_path)}. "
+                "Normal modes saved as individual .traj files"
+                if ir_plot_path
+                else "Single atoms have no vibrational modes or IR spectrum."
+            )
             return {
                 "status": "success",
                 **energy_metadata,
@@ -1013,8 +1037,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 "message": (
                     "Infrared computed and returned. "
                     f"Full results (structure, vibrations, thermochemistry and metadata) saved to {abs_output}. "
-                    f"IR plot saved to {os.path.abspath(ir_plot_path) if ir_plot_path else 'N/A'}. "
-                    "Normal modes saved as individual .traj files"
+                    f"{artifact_message}"
                 ),
             }
 

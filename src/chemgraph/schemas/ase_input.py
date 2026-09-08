@@ -294,8 +294,8 @@ class ASEInputSchema(BaseModel):
         Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
     steps : int
         Maximum number of steps for geometry optimization.
-    temperature : Optional[float]
-        Temperature in Kelvin, required for thermochemical calculations (e.g., when using 'thermo' as the driver).
+    temperature : float
+        Positive temperature in Kelvin for thermochemistry; omitted or null values use 298.15 K.
     pressure : float
         Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
     """
@@ -327,14 +327,22 @@ class ASEInputSchema(BaseModel):
         default=1000,
         description="Maximum number of optimization steps. Internally 'vib', 'thermo' and 'ir' run geometry optimization before performing their respective calculations.",
     )
-    temperature: Optional[float] = Field(
-        default=None,
-        description="Temperature for thermochemistry calculations in Kelvin (K).",
+    temperature: float = Field(
+        default=298.15,
+        gt=0,
+        allow_inf_nan=False,
+        description="Temperature for thermochemistry in Kelvin (K), finite and greater than zero. Omitted or null values use 298.15 K.",
     )
     pressure: float = Field(
         default=101325.0,
         description="Pressure for thermochemistry calculations in Pascal (Pa).",
     )
+
+    @field_validator("temperature", mode="before")
+    @classmethod
+    def _default_temperature(cls, value: Any) -> Any:
+        """Treat explicit null like an omitted temperature."""
+        return cls.model_fields["temperature"].default if value is None else value
 
     @model_validator(mode="before")
     @classmethod
@@ -401,14 +409,22 @@ class ase_input_schema_ensemble(BaseModel):
         default=1000,
         description="Maximum number of optimization steps. Internally 'vib', 'thermo' and 'ir' run geometry optimization before performing their respective calculations.",
     )
-    temperature: Optional[float] = Field(
-        default=None,
-        description="Temperature for thermochemistry calculations in Kelvin (K).",
+    temperature: float = Field(
+        default=298.15,
+        gt=0,
+        allow_inf_nan=False,
+        description="Temperature for thermochemistry in Kelvin (K), finite and greater than zero. Omitted or null values use 298.15 K.",
     )
     pressure: float = Field(
         default=101325.0,
         description="Pressure for thermochemistry calculations in Pascal (Pa).",
     )
+
+    @field_validator("temperature", mode="before")
+    @classmethod
+    def _default_temperature(cls, value: Any) -> Any:
+        """Treat explicit null like an omitted temperature."""
+        return cls.model_fields["temperature"].default if value is None else value
 
     @model_validator(mode="before")
     @classmethod
