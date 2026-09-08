@@ -137,6 +137,79 @@ def test_generate_html_distinguishes_filtered_and_legacy_modes(tmp_path):
     assert "This legacy result includes the first 6" in legacy_content
 
 
+@pytest.mark.parametrize("case", ["selection-only", "cleanup", "all-removed", "failure"])
+def test_report_shows_ase_retained_modes_and_complete_spectrum(tmp_path, case):
+    output = json.loads(json.dumps(sample_ase_output))
+    vibrations = output["vibrational_frequencies"]
+    all_modes = [
+        {"mode_index": i, "frequency": frequency, "energy": energy}
+        for i, (frequency, energy) in enumerate(
+            zip(
+                vibrations["frequencies"],
+                vibrations["energies"],
+            )
+        )
+    ]
+    indices = [6, 7, 8] if case == "selection-only" else [7, 8]
+    if case in {"all-removed", "failure"}:
+        indices = []
+    vibrations.update(
+        mode_indices=indices,
+        all_modes=all_modes,
+        energies=[all_modes[i]["energy"] for i in indices],
+        frequencies=[all_modes[i]["frequency"] for i in indices],
+    )
+    note = "Inspect <input> imaginary modes; stability is not established."
+    output["thermochemistry"].update(
+        ase_version="3.29.0",
+        vib_selection="highest",
+        ignore_imag_modes=True,
+        n_imag=0 if case == "selection-only" else 1,
+        raw_imaginary_mode_count=4,
+        warnings=[note],
+    )
+    if case == "all-removed":
+        output["thermochemistry"]["warnings"].append(
+            "No vibrational modes contributed to thermochemistry."
+        )
+    if case == "failure":
+        output.update(
+            success=False,
+            error="Thermochemistry failed for <input>",
+            thermochemistry={},
+        )
+    results_json, report_html = tmp_path / "result.json", tmp_path / "report.html"
+    results_json.write_text(json.dumps(output), encoding="utf-8")
+    generate_html.invoke(
+        {"results_json_path": str(results_json), "output_path": str(report_html)}
+    )
+    content = report_html.read_text(encoding="utf-8")
+    assert f"{len(indices)} of 3 expected vibrational modes contributed" in content
+    assert "Complete input spectrum" in content
+    assert content.count("<td>Used</td>") == len(indices)
+    assert content.count("<td>Excluded</td>") == 9 - len(indices)
+    assert "<td>Translation/Rotation</td>" not in content
+    assert "Excluded modes are not necessarily translations or rotations" in content
+    for mode in all_modes:
+        assert mode["frequency"] in content
+    for i in indices:
+        assert re.search(rf'<tr class="vibrational-mode">\s*<td>{i + 1}</td>', content)
+    if case == "failure":
+        assert "Thermochemistry failed for &lt;input&gt;" in content
+        assert "Final Potential Energy" in content
+    else:
+        assert "ASE 3.29.0" in content
+        assert "Imaginary modes in the complete input: 4" in content
+        assert "Inspect &lt;input&gt; imaginary modes" in content
+        assert (
+            "non-positive modes (imaginary or zero energy) after selection" in content
+        )
+    if case == "selection-only":
+        assert "ASE cleanup removed 0" in content
+    if case == "all-removed":
+        assert "No vibrational modes contributed to thermochemistry." in content
+
+
 @pytest.mark.parametrize(
     ("driver", "legacy_energy", "expected_label"),
     [

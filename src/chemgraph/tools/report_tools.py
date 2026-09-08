@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+from html import escape
 from typing import Optional
 from langchain_core.tools import tool
 
@@ -528,6 +529,8 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             trans_rot_modes = 5 if is_linear else 6
 
         frequencies = ase_output.vibrational_frequencies["frequencies"]
+        ase_selected = "all_modes" in ase_output.vibrational_frequencies
+        selected_indices = ase_output.vibrational_frequencies.get("mode_indices", [])
         includes_nonvibrational_modes = len(frequencies) == 3 * num_atoms
         num_vibrational_modes = max(3 * num_atoms - trans_rot_modes, 0)
 
@@ -555,7 +558,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             1,
         ):
             is_nonvibrational = (
-                includes_nonvibrational_modes and i <= trans_rot_modes
+                not ase_selected and includes_nonvibrational_modes and i <= trans_rot_modes
             )
             mode_type = (
                 "Translation/Rotation" if is_nonvibrational else "Vibrational"
@@ -563,10 +566,11 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             row_class = (
                 "trans-rot-mode" if is_nonvibrational else "vibrational-mode"
             )
+            display_index = selected_indices[i - 1] + 1 if ase_selected else i
 
             freq_table += f"""
                     <tr class="{row_class}">
-                        <td>{i}</td>
+                        <td>{display_index}</td>
                         <td>{freq}</td>
                         <td>{energy}</td>
                         <td>{mode_type}</td>
@@ -579,7 +583,33 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         </div>
         """
 
-        if includes_nonvibrational_modes:
+        if ase_selected:
+            mode_note = (
+                f"{len(frequencies)} of {num_vibrational_modes} expected vibrational "
+                "modes contributed to thermochemistry. Mode numbers refer to the "
+                "original ASE spectrum (displayed starting at 1). "
+                "Excluded modes are not necessarily translations or rotations."
+            )
+            raw_rows = []
+            for mode in ase_output.vibrational_frequencies["all_modes"]:
+                disposition = (
+                    "Used" if mode["mode_index"] in selected_indices else "Excluded"
+                )
+                raw_rows.append(
+                    f"<tr><td>{mode['mode_index'] + 1}</td>"
+                    f"<td>{escape(str(mode['frequency']))}</td>"
+                    f"<td>{escape(str(mode['energy']))}</td>"
+                    f"<td>{disposition}</td></tr>"
+                )
+            freq_table += (
+                "<details><summary>Complete input spectrum</summary>"
+                "<div class='table-container'><table><thead><tr>"
+                f"<th>Mode #</th><th>Frequency ({escape(freq_unit)})</th>"
+                f"<th>Energy ({escape(energy_unit)})</th><th>Thermochemistry</th>"
+                "</tr></thead><tbody>" + "".join(raw_rows)
+                + "</tbody></table></div></details>"
+            )
+        elif includes_nonvibrational_modes:
             mode_note = (
                 f"This legacy result includes the first {trans_rot_modes} "
                 "translation/rotation modes."
@@ -590,10 +620,16 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 "from the reported frequencies."
             )
 
+        breakdown = (
+            f"Expected: {num_vibrational_modes} vibrational modes; "
+            f"used: {len(frequencies)}"
+            if ase_selected else
+            f"{trans_rot_modes} translation/rotation modes + {num_vibrational_modes} vibrational modes"
+        )
         mode_explanation = f"""
         <div class="mode-explanation">
             <p><strong>Molecule Type:</strong> {molecule_type}</p>
-            <p><strong>Mode Breakdown:</strong> {trans_rot_modes} translation/rotation modes + {num_vibrational_modes} vibrational modes</p>
+            <p><strong>Mode Breakdown:</strong> {breakdown}</p>
             <p><em>Note: {mode_note}</em></p>
         </div>
         """
@@ -616,6 +652,21 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
     # Thermochemistry Values
     if ase_output.thermochemistry:
         thermo_info = []
+        if "ase_version" in ase_output.thermochemistry:
+            metadata = ase_output.thermochemistry
+            thermo_info.append(
+                f"<div>ASE {escape(str(metadata['ase_version']))}; "
+                f"mode selection: {escape(str(metadata['vib_selection']))}; "
+                f"ignore_imag_modes: {escape(str(metadata['ignore_imag_modes']))}.</div>"
+                f"<div>Imaginary modes in the complete input: {metadata['raw_imaginary_mode_count']}. "
+                f"ASE cleanup removed {metadata['n_imag']} non-positive modes "
+                "(imaginary or zero energy) after selection.</div>"
+            )
+            for warning in metadata.get("warnings", []):
+                thermo_info.append(
+                    "<div role='note' class='thermo-warning'>"
+                    f"<strong>Warning:</strong> {escape(str(warning))}</div>"
+                )
 
         # Add data attributes for conversion with labels
         if "enthalpy" in ase_output.thermochemistry:
@@ -673,7 +724,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
     # Error Information
     if ase_output.error:
         calc_results.append(
-            f"<li class='regular-item'><strong>Error:</strong> <span style='color: #dc3545;'>{ase_output.error}</span></li>"
+            f"<li class='regular-item'><strong>Error:</strong> <span style='color: #dc3545;'>{escape(ase_output.error)}</span></li>"
         )
 
     # Join all results with proper spacing
