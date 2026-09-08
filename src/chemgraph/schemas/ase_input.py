@@ -476,14 +476,22 @@ class ASEOutputSchema(BaseModel):
     )
     vibrational_frequencies: dict = Field(
         default={},
-        description="Vibrational frequencies (in cm-1) and energies (in eV).",
+        description=(
+            "Vibrational frequencies in cm-1 and energies in meV. Thermochemistry "
+            "results include the original zero-based mode_indices used by ASE "
+            "and all_modes, the complete input spectrum including excluded modes."
+        ),
     )
     ir_data: dict = Field(
         default={},
         description="Infrared spectrum related data.",
     )
     thermochemistry: dict = Field(
-        default={}, description="Thermochemistry energies in eV and entropy in eV/K."
+        default={}, description=(
+            "Thermochemistry energies in eV and entropy in eV/K, with ASE version, "
+            "mode-selection policy, cleanup counts, and warnings. ASE n_imag counts "
+            "modes removed after selection, including zero-energy modes."
+        )
     )
     success: bool = Field(
         default=False, description="Indicates if the simulation finished correctly."

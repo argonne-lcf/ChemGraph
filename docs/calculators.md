@@ -45,6 +45,31 @@ results without this field, and reject other declared entropy units. The shared
 **Units** selector converts energy and entropy together; entropy labels change
 to kJ/(mol K) or kcal/(mol K) for the corresponding molar energy selection.
 
+ChemGraph requires ASE >= 3.29.0. For `thermo`, the complete complex spectrum is
+passed to `IdealGasThermo(vib_selection="highest", ignore_imag_modes=True)`.
+ASE selects the expected number of modes by squared energy, then removes any
+remaining imaginary or zero-energy modes. ChemGraph does not apply an additional
+frequency cutoff or convert imaginary frequencies to real ones.
+
+Reported thermochemistry frequencies, CSV entries, and trajectories match the
+energies ASE actually used. `vibrational_frequencies.mode_indices` contains their
+original zero-based ASE indices; `all_modes` preserves every input mode as
+`mode_index`, `energy` (meV), and `frequency` (cm-1), with an `i` suffix for
+imaginary values. HTML displays mode numbers starting at 1 and includes the full
+spectrum with used/excluded labels. Standalone `vib` and `ir` output is unchanged.
+
+Thermochemistry metadata records `ase_version`, `vib_selection`,
+`ignore_imag_modes`, `n_imag`, `raw_imaginary_mode_count`, and `warnings`.
+`n_imag` is ASE's cleanup count **after selection**, including zero-energy modes;
+it is not the number of imaginary modes in the complete input. Selection may
+already have excluded imaginary modes even when `n_imag` is zero. Successful
+thermochemistry with excluded modes does not establish structural stability.
+Warnings identify imaginary input modes and calculations with no vibrational
+contribution. If ASE raises or returns non-finite thermodynamic values, ChemGraph
+returns a failure with `results_file` pointing to the completed structure,
+potential energy, convergence state, and full spectrum; the JSON records
+`success=false` and the error, with no thermochemistry values.
+
 Single atoms skip finite-difference vibrations for `thermo`, `vib`, and `ir`.
 Atomic thermochemistry includes translation and uses the calculator's reported
 multiplicity for the electronic-spin contribution. If no multiplicity is

@@ -1,6 +1,7 @@
 """Scientific regressions using EMT and controlled molecular vibrations."""
 
 import json
+import warnings
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -10,7 +11,7 @@ from pydantic import ValidationError
 from ase import Atoms, units
 from ase.calculators.calculator import Calculator, all_changes
 from ase.calculators.emt import EMT
-from ase.io import write
+from ase.io import read, write
 from ase.thermochemistry import IdealGasThermo
 import ase.vibrations
 
@@ -21,6 +22,42 @@ from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.schemas.calculators.nwchem_calc import NWChemCalc
 from chemgraph.tools import ase_core
 from chemgraph.tools.ase_core import get_symmetry_number, run_ase_core
+
+
+def _controlled_spectrum(monkeypatch, energies):
+    class ConstantCalculator(Calculator):
+        implemented_properties = ["energy", "forces"]
+
+        def calculate(
+            self, atoms=None, properties=("energy",), system_changes=all_changes
+        ):
+            super().calculate(atoms, properties, system_changes)
+            self.results = {"energy": -1.0, "forces": np.zeros((len(atoms), 3))}
+
+    calculator = ConstantCalculator()
+    monkeypatch.setattr(MaceCalc, "get_calculator", lambda self: calculator)
+    vibration_runs = []
+
+    class ControlledVibrations:
+        def __init__(self, atoms, name):
+            self.atoms, self.name = atoms, name
+
+        def clean(self):
+            pass
+
+        def run(self):
+            vibration_runs.append(self.atoms)
+
+        def get_energies(self):
+            return np.asarray(energies, dtype=complex)
+
+        def write_mode(self, n, **kwargs):
+            frame = self.atoms.copy()
+            frame.info["mode_index"] = n
+            write(Path(f"{self.name}.{n}.traj"), frame)
+
+    monkeypatch.setattr(ase.vibrations, "Vibrations", ControlledVibrations)
+    return calculator, vibration_runs
 
 
 def _run_thermo(tmp_path, monkeypatch, atoms, calculator, **conditions):
@@ -158,6 +195,8 @@ def test_monatomic_thermo_matches_ase_without_vibrations(
         "energy_unit": "meV",
         "frequencies": [],
         "frequency_unit": "cm-1",
+        "mode_indices": [],
+        "all_modes": [],
     }
     vibrations.assert_not_called()
     assert not list(tmp_path.glob("*.traj"))
@@ -201,12 +240,15 @@ def test_atomic_drivers_skip_displacements_and_clean_artifacts(
     )
     assert result["status"] == "success", result
     output = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
-    assert output["vibrational_frequencies"] == {
+    expected_vibrations = {
         "energies": [],
         "energy_unit": "meV",
         "frequencies": [],
         "frequency_unit": "cm-1",
     }
+    if driver == "thermo":
+        expected_vibrations.update(mode_indices=[], all_modes=[])
+    assert output["vibrational_frequencies"] == expected_vibrations
     vibrations.assert_not_called()
     infrared.assert_not_called()
     assert all(not (tmp_path / name).exists() for name in stale)
@@ -270,36 +312,7 @@ def test_molecular_thermo_retains_spin_and_vibrations(
     mode_count = 3 * len(atoms) - (5 if geometry == "linear" else 6)
     energies[-mode_count:] = np.arange(1, mode_count + 1) * 0.2
 
-    class ConstantCalculator(Calculator):
-        implemented_properties = ["energy", "forces"]
-
-        def calculate(
-            self, atoms=None, properties=("energy",), system_changes=all_changes
-        ):
-            super().calculate(atoms, properties, system_changes)
-            self.results = {"energy": -1.0, "forces": np.zeros((len(atoms), 3))}
-
-    calculator = ConstantCalculator()
-    monkeypatch.setattr(MaceCalc, "get_calculator", lambda self: calculator)
-    vibration_runs = []
-
-    class ControlledVibrations:
-        def __init__(self, atoms, name):
-            self.atoms, self.name = atoms, name
-
-        def clean(self):
-            pass
-
-        def run(self):
-            vibration_runs.append(self.atoms)
-
-        def get_energies(self):
-            return energies
-
-        def write_mode(self, n, **kwargs):
-            write(Path(f"{self.name}.{n}.traj"), self.atoms)
-
-    monkeypatch.setattr(ase.vibrations, "Vibrations", ControlledVibrations)
+    calculator, vibration_runs = _controlled_spectrum(monkeypatch, energies)
     config = MaceCalc(calculator_type="mace_polar", multiplicity=multiplicity, charge=0)
     output = _run_thermo(
         tmp_path, monkeypatch, atoms, config, temperature=300, pressure=101325
@@ -322,3 +335,167 @@ def test_molecular_thermo_retains_spin_and_vibrations(
     assert calculator.atoms.info["charge"] == 0
     assert calculator.atoms.info["spin"] == multiplicity
     assert output["simulation_input"]["calculator"]["multiplicity"] == multiplicity
+
+
+@pytest.mark.parametrize(
+    "energies,expected_indices,cleanup_count",
+    [
+        pytest.param(
+            [
+                0.00748031j,
+                0.00398170j,
+                3.96854e-8j,
+                3.96839e-8j,
+                3.12353e-10j,
+                8.62908e-5,
+                9.16070e-5,
+                9.16070e-5,
+                0.0234627,
+                0.0297504,
+                0.0297504,
+                0.0352987,
+            ],
+            [6, 7, 8, 9, 10, 11],
+            0,
+            id="recorded-cu4",
+        ),
+        pytest.param(
+            [0.09j, 0.08j, 0.07j, 0.06j, 0.05j, 0.04j, 0.03j, 0.02, 0.03],
+            [7, 8],
+            1,
+            id="remaining-imaginary",
+        ),
+        pytest.param([0.01j] * 9, [], 3, id="all-imaginary"),
+        pytest.param([0.01j] * 6 + [0, 0.02, 0.03], [7, 8], 1, id="selected-zero"),
+        pytest.param([0.01] * 7 + [0.02, 0.03], [6, 7, 8], 0, id="boundary-duplicates"),
+        pytest.param([0.03, 0.01, 0.02] + [0.001] * 6, [1, 2, 0], 0, id="unordered"),
+        pytest.param([0.0] * 9, [], 3, id="all-zero"),
+    ],
+)
+def test_thermo_reports_exactly_the_modes_used_by_ase(
+    tmp_path,
+    monkeypatch,
+    energies,
+    expected_indices,
+    cleanup_count,
+):
+    _controlled_spectrum(monkeypatch, energies)
+    atoms = (
+        Atoms("Cu4", positions=[[0, 0, 0], [2.3, 0, 0], [2.3, 2.3, 0], [0, 2.3, 0]])
+        if len(energies) == 12
+        else Atoms("OH2", positions=[[0, 0, 0], [0.76, 0, 0.59], [-0.76, 0, 0.59]])
+    )
+    output = _run_thermo(
+        tmp_path,
+        monkeypatch,
+        atoms,
+        MaceCalc(calculator_type="mace_polar", multiplicity=1),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        reference = IdealGasThermo(
+            vib_energies=energies,
+            geometry="nonlinear",
+            atoms=atoms,
+            potentialenergy=-1.0,
+            spin=0,
+            symmetrynumber=get_symmetry_number(
+                AtomsData(
+                    numbers=atoms.numbers,
+                    positions=atoms.positions,
+                )
+            ),
+            vib_selection="highest",
+            ignore_imag_modes=True,
+        )
+    thermo, vibration = output["thermochemistry"], output["vibrational_frequencies"]
+    _assert_reference(thermo, reference, 298.15, 101325)
+    assert vibration["mode_indices"] == expected_indices
+    assert np.array(vibration["energies"], dtype=float) / 1e3 == pytest.approx(
+        reference.vib_energies
+    )
+    assert np.array(
+        vibration["frequencies"], dtype=float
+    ) * units.invcm == pytest.approx(reference.vib_energies)
+    assert len(vibration["all_modes"]) == len(energies)
+    for i, (original, record) in enumerate(zip(energies, vibration["all_modes"])):
+        assert record["mode_index"] == i
+        assert record["energy"].endswith("i") == bool(np.iscomplex(original))
+        magnitude = (
+            complex(original).imag if np.iscomplex(original) else float(original)
+        )
+        assert float(record["energy"].removesuffix("i")) / 1e3 == pytest.approx(
+            magnitude
+        )
+    assert thermo["n_imag"] == cleanup_count
+    assert thermo["raw_imaginary_mode_count"] == np.count_nonzero(
+        np.iscomplex(energies)
+    )
+    assert thermo["vib_selection"] == "highest"
+    assert thermo["ignore_imag_modes"] is True
+    assert thermo["ase_version"] == ase.__version__
+    if thermo["raw_imaginary_mode_count"]:
+        assert any(
+            "do not establish structural stability" in note
+            for note in thermo["warnings"]
+        )
+    if not expected_indices:
+        assert (
+            "No vibrational modes contributed to thermochemistry." in thermo["warnings"]
+        )
+    rows = (tmp_path / "frequencies_input.csv").read_text(encoding="utf-8").splitlines()
+    assert rows == [
+        f"input_vib.{i}.traj,{frequency}"
+        for i, frequency in zip(expected_indices, vibration["frequencies"])
+    ]
+    assert {path.name for path in tmp_path.glob("input_vib.*.traj")} == {
+        f"input_vib.{i}.traj" for i in expected_indices
+    }
+    for index in expected_indices:
+        assert read(tmp_path / f"input_vib.{index}.traj").info["mode_index"] == index
+
+
+@pytest.mark.parametrize("failure", ["constructor", "entropy", "nonfinite"])
+def test_thermo_failure_preserves_completed_results(tmp_path, monkeypatch, failure):
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
+    _controlled_spectrum(monkeypatch, [0.01j] * 6 + [0.02, 0.03, 0.04])
+    if failure == "constructor":
+        monkeypatch.setattr(
+            "ase.thermochemistry.IdealGasThermo",
+            Mock(side_effect=ValueError("thermo unavailable")),
+        )
+    elif failure == "entropy":
+        monkeypatch.setattr(
+            IdealGasThermo,
+            "get_entropy",
+            Mock(side_effect=ValueError("thermo unavailable")),
+        )
+    else:
+        monkeypatch.setattr(
+            IdealGasThermo, "get_entropy", Mock(return_value=float("nan"))
+        )
+    atoms = Atoms("OH2", positions=[[0, 0, 0], [0.76, 0, 0.59], [-0.76, 0, 0.59]])
+    write(tmp_path / "input.xyz", atoms)
+    result = run_ase_core(
+        ASEInputSchema(
+            input_structure_file="input.xyz",
+            output_results_file="result.json",
+            calculator=MaceCalc(calculator_type="mace_polar", multiplicity=1),
+            driver="thermo",
+        )
+    )
+    assert result["status"] == "failure"
+    assert result["error_type"] == "ValueError"
+    assert result["converged"] is True
+    assert result["potential_energy"] == -1.0
+    assert result["results_file"] == str(tmp_path / "result.json")
+    json.dumps(result)  # The failure payload must also work over MCP/ensemble JSON.
+    output = json.loads(Path(result["results_file"]).read_text(encoding="utf-8"))
+    assert output["success"] is False
+    assert output["error"]
+    assert output["thermochemistry"] == {}
+    assert output["final_structure"]["numbers"] == atoms.numbers.tolist()
+    assert output["potential_energy"] == -1.0
+    assert len(output["vibrational_frequencies"]["all_modes"]) == 9
+    assert output["vibrational_frequencies"]["mode_indices"] == []
+    assert read(tmp_path / "input_opt.traj").get_potential_energy() == -1.0

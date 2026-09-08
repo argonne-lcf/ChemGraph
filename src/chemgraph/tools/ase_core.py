@@ -15,6 +15,7 @@ import os
 import shutil
 import tempfile
 import time
+import warnings
 from pathlib import Path
 from typing import List, Optional
 
@@ -245,6 +246,110 @@ def _vibrational_mode_indices(atomsdata: AtomsData, total_modes: int) -> list[in
 
     num_nonvibrational = 5 if is_linear_molecule(atomsdata) else 6
     return list(range(num_nonvibrational, total_modes))
+
+
+def _vibrational_mode_record(mode_index: int, energy: complex) -> dict:
+    """Format an original ASE mode without hiding small imaginary energies."""
+    from ase import units
+
+    value = energy.imag if energy.imag != 0 else energy.real
+    suffix = "i" if energy.imag != 0 else ""
+    return {
+        "mode_index": mode_index,
+        "energy": f"{1e3 * value}{suffix}",
+        "frequency": f"{value / units.invcm}{suffix}",
+    }
+
+
+def _calculate_thermochemistry(
+    atoms,
+    final_structure,
+    all_energies,
+    potential_energy,
+    calc_model,
+    temperature,
+    pressure,
+) -> tuple[dict, list[int]]:
+    """Let ASE select/clean modes and map its retained energies to ASE indices."""
+    import ase
+    from ase.thermochemistry import IdealGasThermo
+
+    expected_modes = 0 if len(atoms) == 1 else 3 * len(atoms)
+    if len(all_energies) != expected_modes:
+        raise ValueError(
+            f"Expected {expected_modes} input modes, got {len(all_energies)}."
+        )
+    if len(atoms) == 1:
+        geometry, symmetrynumber = "monatomic", 1
+    else:
+        geometry = "linear" if is_linear_molecule(final_structure) else "nonlinear"
+        symmetrynumber = get_symmetry_number(final_structure)
+
+    # IdealGasThermo expects total spin S; calculators expose 2S+1.
+    multiplicity = getattr(calc_model, "get_multiplicity", lambda: None)()
+    if multiplicity is None:
+        logger.warning(
+            "%s does not report spin multiplicity; assuming a singlet "
+            "(multiplicity=1) for thermochemistry. Electronic-spin entropy "
+            "is omitted for open-shell species.",
+            type(calc_model).__name__,
+        )
+        multiplicity = 1
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", UserWarning)
+        thermo = IdealGasThermo(
+            vib_energies=all_energies,
+            potentialenergy=potential_energy,
+            atoms=atoms,
+            geometry=geometry,
+            symmetrynumber=symmetrynumber,
+            spin=(multiplicity - 1) / 2.0,
+            vib_selection="highest",
+            ignore_imag_modes=True,
+        )
+        retained_energies = thermo.vib_energies
+        enthalpy = float(thermo.get_enthalpy(temperature, verbose=False))
+        entropy = float(thermo.get_entropy(temperature, pressure, verbose=False))
+    gibbs_free_energy = enthalpy - temperature * entropy
+    if not np.all(np.isfinite([enthalpy, entropy, gibbs_free_energy])):
+        raise ValueError("ASE returned non-finite thermochemistry values.")
+
+    # ASE sorts stably and keeps the last modes. Match equal energies from
+    # the end so degenerate modes at the selection boundary keep their IDs.
+    indices_by_energy: dict[float, list[int]] = {}
+    for index, energy in enumerate(all_energies):
+        indices_by_energy.setdefault(float(np.real(energy)), []).append(index)
+    mode_indices = [
+        indices_by_energy[float(energy)].pop() for energy in reversed(retained_energies)
+    ][::-1]
+
+    notes = [str(warning.message) for warning in caught]
+    raw_imaginary_count = int(np.count_nonzero(np.iscomplex(all_energies)))
+    if raw_imaginary_count:
+        notes.append(
+            f"The input spectrum contains {raw_imaginary_count} imaginary modes. "
+            "These thermochemistry values do not establish structural stability; "
+            "inspect the complete spectrum."
+        )
+    if len(atoms) > 1 and not mode_indices:
+        notes.append("No vibrational modes contributed to thermochemistry.")
+    for note in notes:
+        logger.warning(note)
+
+    return {
+        "enthalpy": enthalpy,
+        "entropy": entropy,
+        "gibbs_free_energy": gibbs_free_energy,
+        "unit": "eV",
+        "entropy_unit": "eV/K",
+        "ase_version": ase.__version__,
+        "vib_selection": "highest",
+        "ignore_imag_modes": True,
+        "n_imag": int(thermo.n_imag),
+        "raw_imaginary_mode_count": raw_imaginary_count,
+        "warnings": notes,
+    }, mode_indices
 
 
 def get_symmetry_number(atomsdata: AtomsData) -> int:
@@ -489,7 +594,7 @@ def _energy_result_metadata(
     converged: Optional[bool] = None,
     optimization_steps: Optional[int] = None,
 ) -> dict:
-    """Build consistent energy metadata for a successful tool result."""
+    """Build consistent metadata for a completed energy calculation."""
     result = {
         "driver": driver,
         "potential_energy": potential_energy,
@@ -497,7 +602,7 @@ def _energy_result_metadata(
         "results_file": os.path.abspath(results_file),
     }
     if converged is not None:
-        result["converged"] = converged
+        result["converged"] = bool(converged)
     if optimization_steps is not None:
         result["optimization_steps"] = optimization_steps
     return result
@@ -753,6 +858,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             pbc=atoms.pbc,
         )
         thermo_data: dict = {}
+        thermo_error: Optional[Exception] = None
         vib_data: dict = {}
         ir_data: dict = {}
         ir_plot_path: Optional[str] = None
@@ -810,9 +916,27 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 logger.info("Vibrational analysis complete")
 
                 all_energies = vib.get_energies()
-                mode_indices = _vibrational_mode_indices(
-                    final_structure, len(all_energies)
-                )
+                if driver == "thermo":
+                    vib_data.update(
+                        mode_indices=[],
+                        all_modes=[
+                            _vibrational_mode_record(i, e)
+                            for i, e in enumerate(all_energies)
+                        ],
+                    )
+                    try:
+                        thermo_data, mode_indices = _calculate_thermochemistry(
+                            atoms, final_structure, all_energies, potential_energy,
+                            calc_model, temperature, pressure,
+                        )
+                        vib_data["mode_indices"] = mode_indices
+                    except Exception as exc:
+                        logger.exception("Thermochemistry failed; preserving vibration results")
+                        thermo_error, mode_indices = exc, []
+                else:
+                    mode_indices = _vibrational_mode_indices(
+                        final_structure, len(all_energies)
+                    )
 
                 for mode_index in mode_indices:
                     e = all_energies[mode_index]
@@ -916,44 +1040,16 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                     )
 
         # ---- Thermochemistry ----
-        if driver == "thermo":
-            from ase.thermochemistry import IdealGasThermo
-
-            logger.info("Computing thermochemistry (T=%s K, P=%s Pa)", temperature, pressure)
-            if len(atoms) == 1:
-                geometry, symmetrynumber = "monatomic", 1
-            else:
-                linear = is_linear_molecule(final_structure)
-                geometry = "linear" if linear else "nonlinear"
-                symmetrynumber = get_symmetry_number(final_structure)
-
-            # IdealGasThermo expects total spin S; calculators expose 2S+1.
-            multiplicity = getattr(calc_model, "get_multiplicity", lambda: None)()
-            if multiplicity is None:
-                logger.warning(
-                    "%s does not report spin multiplicity; assuming a singlet "
-                    "(multiplicity=1) for thermochemistry. Electronic-spin entropy "
-                    "is omitted for open-shell species.",
-                    type(calc_model).__name__,
+        if driver == "thermo" and len(atoms) == 1:
+            vib_data.update(mode_indices=[], all_modes=[])
+            try:
+                thermo_data, _ = _calculate_thermochemistry(
+                    atoms, final_structure, [], potential_energy, calc_model,
+                    temperature, pressure,
                 )
-                multiplicity = 1
-            thermo = IdealGasThermo(
-                vib_energies=all_energies,
-                potentialenergy=potential_energy,
-                atoms=atoms,
-                geometry=geometry,
-                symmetrynumber=symmetrynumber,
-                spin=(multiplicity - 1) / 2.0,
-            )
-            enthalpy = float(thermo.get_enthalpy(temperature, verbose=False))
-            entropy = float(thermo.get_entropy(temperature, pressure, verbose=False))
-            thermo_data = {
-                "enthalpy": enthalpy,
-                "entropy": entropy,
-                "gibbs_free_energy": enthalpy - temperature * entropy,
-                "unit": "eV",
-                "entropy_unit": "eV/K",
-            }
+            except Exception as exc:
+                logger.exception("Thermochemistry failed; preserving atomic results")
+                thermo_error = exc
 
         # ---- serialise full output ----
         end_time = time.time()
@@ -967,7 +1063,8 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             simulation_input=simulation_input,
             vibrational_frequencies=vib_data,
             thermochemistry=thermo_data,
-            success=True,
+            success=thermo_error is None,
+            error=str(thermo_error) if thermo_error is not None else "",
             ir_data=ir_data,
             potential_energy=potential_energy,
             single_point_energy=potential_energy,
@@ -985,6 +1082,16 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             converged=converged,
             optimization_steps=optimization_steps,
         )
+        if thermo_error is not None:
+            return {
+                "status": "failure",
+                "error_type": type(thermo_error).__name__,
+                "message": (
+                    f"Thermochemistry failed: {thermo_error}. "
+                    f"Completed structure, energy, and vibration results saved to {abs_output}"
+                ),
+                **energy_metadata,
+            }
         if driver == "opt":
             if converged:
                 message = f"Geometry optimization converged. Results saved to {abs_output}"
