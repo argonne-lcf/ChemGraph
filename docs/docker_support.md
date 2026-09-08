@@ -4,6 +4,10 @@ The ChemGraph image can run JupyterLab, Streamlit, the CLI, or the general MCP
 server. It includes the source-tree entry points plus NWChem and TBLite support
 configured by the repository Dockerfile.
 
+Both Docker variants install the validated ASE version, 3.29.0, after the other
+Python packages and print its version during build validation. Rebuild existing
+images to pick up this change.
+
 ## Streamlit
 
 Set the credential in your host environment, then pass it by name:

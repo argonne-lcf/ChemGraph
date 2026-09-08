@@ -13,7 +13,7 @@ dependencies:
   - tblite=0.4.0
   - nwchem
   - pip:
-    - ase==3.25.0
+    - ase==3.29.0
     - rdkit==2025.3.3
     - langgraph==1.2.9
     - langgraph-checkpoint==4.1.1

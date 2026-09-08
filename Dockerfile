@@ -36,8 +36,10 @@ RUN CFLAGS="-O2 -fno-tree-vectorize" \
     python -m pip install --no-cache-dir --no-binary=tblite \
     . jupyterlab -r requirements/mace-polar.txt "tblite==0.4.0"
 
-# Validate calculator runtimes at build time after package install.
-RUN which nwchem && python -c "from tblite.ase import TBLite; import graph_longrange" && \
+# Use the validated ASE version after all other Python package installs.
+RUN python -m pip install --no-cache-dir "ase==3.29.0" && \
+    which nwchem && \
+    python -c "import ase; from tblite.ase import TBLite; import graph_longrange; print(f'ASE {ase.__version__}')" && \
     python -m pip check
 
 # Allow git commands in bind-mounted repo paths inside the container.

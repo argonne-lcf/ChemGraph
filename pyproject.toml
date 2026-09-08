@@ -34,7 +34,7 @@ dependencies = [
     "numpy==2.2.6",
     "numexpr==2.11.0",
     "pytest==9.0.3",
-    "ase",
+    "ase>=3.29.0",
     "rdkit",
     "pymatgen",
     "mace-torch>=0.3.16",
