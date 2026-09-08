@@ -36,7 +36,7 @@ def _run_thermo(tmp_path, monkeypatch, atoms, calculator, **conditions):
     )
     result = run_ase_core(params)
     assert result["status"] == "success", result
-    output = json.loads(output_path.read_text())
+    output = json.loads(output_path.read_text(encoding="utf-8"))
     assert result["result"]["thermochemistry"] == output["thermochemistry"]
     assert output["thermochemistry"]["unit"] == "eV"
     assert output["thermochemistry"]["entropy_unit"] == "eV/K"
@@ -200,7 +200,7 @@ def test_atomic_drivers_skip_displacements_and_clean_artifacts(
         )
     )
     assert result["status"] == "success", result
-    output = json.loads((tmp_path / "result.json").read_text())
+    output = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
     assert output["vibrational_frequencies"] == {
         "energies": [],
         "energy_unit": "meV",
