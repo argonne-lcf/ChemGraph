@@ -2,11 +2,13 @@
 Configuration management for ChemGraph Streamlit app.
 """
 
+import copy
 import toml
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from chemgraph.utils.config_utils import flatten_config as _flatten_config
+from chemgraph.utils.calculator_defaults import get_default_mace_calculator_type
 
 # Anchor the default config to the repository root (the directory the app is
 # meant to be launched from per the README) rather than the current working
@@ -14,6 +16,33 @@ from chemgraph.utils.config_utils import flatten_config as _flatten_config
 # launch directory, so starting Streamlit from anywhere else silently created
 # and used a throw-away default config instead of the real one.
 _DEFAULT_CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "config.toml")
+
+
+def merge_config_defaults(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Fill missing settings without resolving automatic calculator selection."""
+    config = copy.deepcopy(config)
+    default_config = get_default_config()
+    for section in ["general", "api", "chemistry", "output"]:
+        if section not in config:
+            config[section] = default_config[section]
+        elif isinstance(config[section], dict):
+            for key, value in default_config[section].items():
+                if key not in config[section]:
+                    if section == "api" and key in {"argo", "vllm"}:
+                        continue
+                    config[section][key] = value
+                elif isinstance(config[section][key], dict) and isinstance(value, dict):
+                    for subkey, subvalue in value.items():
+                        config[section][key].setdefault(subkey, subvalue)
+    return config
+
+
+def resolve_default_calculator(config: Dict[str, Any]) -> str:
+    """Resolve a calculator for display/use without persisting the detection."""
+    calculators = config.get("chemistry", {}).get("calculators", {})
+    if "default" in calculators:
+        return calculators["default"]
+    return get_default_mace_calculator_type()
 
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
@@ -34,31 +63,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     try:
         if os.path.exists(config_path):
             with open(config_path, "r") as f:
-                config = toml.load(f)
-                # Validate configuration structure
-                default_config = get_default_config()
-
-                # Ensure all required sections exist
-                for section in ["general", "api", "chemistry", "output"]:
-                    if section not in config:
-                        config[section] = default_config[section]
-                    elif isinstance(config[section], dict) and isinstance(
-                        default_config[section], dict
-                    ):
-                        # Merge missing keys from default
-                        for key, value in default_config[section].items():
-                            if key not in config[section]:
-                                if section == "api" and key in {"argo", "vllm"}:
-                                    continue
-                                config[section][key] = value
-                            elif isinstance(config[section][key], dict) and isinstance(
-                                value, dict
-                            ):
-                                for subkey, subvalue in value.items():
-                                    if subkey not in config[section][key]:
-                                        config[section][key][subkey] = subvalue
-
-                return config
+                return merge_config_defaults(toml.load(f))
         else:
             # Create default configuration file if it doesn't exist
             default_config = get_default_config()
@@ -97,8 +102,6 @@ def save_config(config: Dict[str, Any], config_path: Optional[str] = None) -> bo
 
 def get_default_config() -> Dict[str, Any]:
     """Return default configuration."""
-    from chemgraph.schemas.calculators.mace_calc import get_default_mace_calculator_type
-
     return {
         "general": {
             "model": "gpt-4o-mini",
@@ -142,9 +145,7 @@ def get_default_config() -> Dict[str, Any]:
         },
         "chemistry": {
             "optimization": {"method": "BFGS", "fmax": 0.05, "steps": 200},
-            "calculators": {
-                "default": get_default_mace_calculator_type(), "fallback": "emt"
-            },
+            "calculators": {"fallback": "emt"},
         },
         "output": {
             "files": {

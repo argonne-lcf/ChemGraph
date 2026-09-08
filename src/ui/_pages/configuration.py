@@ -8,7 +8,10 @@ import streamlit as st
 import toml
 
 from ui import providers
-from ui.config import get_default_config, load_config, save_config
+from ui.config import (
+    get_default_config, load_config, merge_config_defaults,
+    resolve_default_calculator, save_config,
+)
 from ui.endpoint import check_local_model_endpoint
 from ui.provider_widgets import apply_api_key, clear_api_key, render_alcf_login
 
@@ -568,16 +571,25 @@ def _render_chemistry_settings(config: dict) -> None:
             "orca",
             "nwchem",
         ]
-        config["chemistry"]["calculators"]["default"] = st.selectbox(
+        calculators = config["chemistry"]["calculators"]
+        default = calculators.get("default")
+        default_options = [None, *calc_options]
+        if default not in default_options:
+            default_options.append(default)
+        selected = st.selectbox(
             "Default Calculator",
-            calc_options,
-            index=(
-                calc_options.index(config["chemistry"]["calculators"]["default"])
-                if config["chemistry"]["calculators"]["default"] in calc_options
-                else 0
+            default_options,
+            index=default_options.index(default),
+            format_func=lambda value: (
+                f"Automatic ({resolve_default_calculator({})})"
+                if value is None else value
             ),
             key=_wkey("config_calc_default"),
         )
+        if selected is None:
+            calculators.pop("default", None)
+        else:
+            calculators["default"] = selected
         config["chemistry"]["calculators"]["fallback"] = st.selectbox(
             "Fallback Calculator",
             calc_options,
@@ -620,7 +632,10 @@ def _render_raw_toml(config: dict) -> None:
             new_config = toml.loads(edited_config)
             # Update the draft, not the live config.  The user must still
             # click "Save Configuration" to persist and apply the changes.
-            st.session_state._config_draft = new_config
+            st.session_state._config_draft = merge_config_defaults(new_config)
+            st.session_state._config_widget_nonce = (
+                st.session_state.get("_config_widget_nonce", 0) + 1
+            )
             st.success(
                 "✅ Draft updated from TOML.  "
                 "Click **Save Configuration** to apply."
@@ -690,7 +705,7 @@ def _render_config_summary(config: dict) -> None:
         st.write(f"- Model: {config['general']['model']}")
         st.write(f"- Workflow: {config['general']['workflow']}")
         st.write(
-            f"- Default Calculator: {config['chemistry']['calculators']['default']}"
+            f"- Default Calculator: {resolve_default_calculator(config)}"
         )
 
         st.write("**Providers:**")

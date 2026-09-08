@@ -13,6 +13,7 @@ from chemgraph.schemas.calculators.fairchem_calc import FAIRChemCalc
 from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
 from chemgraph.schemas.calculators.aimnet2_calc import AIMNET2Calc
+from chemgraph.utils.calculator_defaults import mace_polar_available
 
 # Gate optional calculators on whether their engine package is installed.
 # Schema classes are always importable (internal to ChemGraph), so we must
@@ -253,8 +254,11 @@ def get_calculator_selection_context() -> str:
         f"- Default calculator when the user does not specify one: "
         f"{_default_calculator_description()}.\n"
         "- When calling run_ase, choose only from the available calculators above. "
-        "Preserve explicit calculator selections; explain missing dependencies "
-        "instead of silently substituting another calculator. MACE-Polar requires "
+        "Preserve explicit calculator selections. If a requested engine is "
+        "unavailable, explain the missing dependencies or ask for clarification "
+        "before calling run_ase; do not silently substitute another calculator. "
+        f"The MACE-Polar add-on is {'installed' if mace_polar_available() else 'not installed'} "
+        "in this environment. MACE-Polar requires "
         "the graph-longrange add-on. MACE-MP does not provide Polar's dipole or "
         "IR capabilities."
     )

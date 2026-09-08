@@ -2,7 +2,6 @@
 Reference: https://github.com/ACEsuit/mace/blob/main/mace/calculators/foundations_models.py"""
 
 import functools
-import importlib.util
 import logging
 import os
 import tempfile
@@ -13,6 +12,9 @@ from typing import Literal, Optional, Union
 from pydantic import BaseModel, Field
 import torch
 
+from chemgraph.utils import calculator_defaults
+from chemgraph.utils.calculator_defaults import get_default_mace_calculator_type
+
 _logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL_NAMES = {
@@ -22,14 +24,11 @@ _DEFAULT_MODEL_NAMES = {
 }
 
 
-def mace_polar_available() -> bool:
-    """Detect the Polar add-on without importing it or loading model weights."""
-    return importlib.util.find_spec("graph_longrange") is not None
-
-
-def get_default_mace_calculator_type() -> str:
-    """Prefer Polar when its add-on is installed, otherwise use MACE-MP."""
-    return "mace_polar" if mace_polar_available() else "mace_mp"
+def _calculator_type_schema(schema: dict) -> None:
+    """Expose the detected default and availability to schema consumers."""
+    schema["default"] = get_default_mace_calculator_type()
+    availability = "installed" if schema["default"] == "mace_polar" else "not installed"
+    schema["description"] += f" The MACE-Polar add-on is {availability} in this environment."
 
 # Process-wide lock for MACE operations.
 # MACE model deserialization (torch.load) triggers torch.fx.symbolic_trace
@@ -155,6 +154,7 @@ class MaceCalc(BaseModel):
         "mace_polar", "mace_mp", "mace_off", "mace_anicc"
     ] = Field(
         default_factory=get_default_mace_calculator_type,
+        json_schema_extra=_calculator_type_schema,
         description="Type of calculator. Defaults to 'mace_polar' when the "
         "graph-longrange add-on is installed, otherwise 'mace_mp'. Other options "
         "are 'mace_off' and 'mace_anicc'. MACE-Polar supports "
@@ -250,9 +250,9 @@ class MaceCalc(BaseModel):
         ValueError
             If an invalid calculator_type is specified
         """
-        if self.calculator_type == "mace_polar" and not mace_polar_available():
+        if self.calculator_type == "mace_polar" and not calculator_defaults.mace_polar_available():
             raise ImportError(
-                "MACE-Polar requires the graph-longrange add-on. From the matching "
+                "MACE-Polar requires the graph-longrange add-on. From the root of the matching "
                 "ChemGraph source checkout or extracted source distribution, run "
                 "'python -m pip install -r requirements/mace-polar.txt'. "
                 "See https://argonne-lcf.github.io/ChemGraph/calculators/ "
