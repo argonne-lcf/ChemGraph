@@ -359,20 +359,33 @@ def _simulation_input_for_output(
     return params.model_copy(update={"calculator": output_calculator})
 
 
-def _extract_dipole_moment(atoms) -> List[Optional[float]]:
+def _validate_dipole_moment(dipole) -> List[float]:
+    """Require a finite three-component dipole before reporting success."""
+    from ase.calculators.calculator import PropertyNotImplementedError
+
+    if dipole is None:
+        raise PropertyNotImplementedError(
+            "The calculator does not provide dipole moments. Dipole and IR "
+            "calculations require a dipole-capable calculator, such as "
+            "MACE-Polar with the graph-longrange add-on installed."
+        )
+    components = np.asarray(dipole, dtype=float)
+    if components.shape != (3,) or not np.isfinite(components).all():
+        raise ValueError("The calculator must return three finite dipole components.")
+    return [round(float(component), 4) for component in components]
+
+
+def _extract_dipole_moment(atoms) -> List[float]:
     """Return an ASE dipole, including calculators that expose it via results."""
+    from ase.calculators.calculator import PropertyNotImplementedError
+
     try:
         dipole = atoms.get_dipole_moment()
-    except Exception:
+    except PropertyNotImplementedError:
         dipole = getattr(getattr(atoms, "calc", None), "results", {}).get(
             "dipole"
         )
-    if dipole is None:
-        return [None, None, None]
-    try:
-        return [round(float(component), 4) for component in dipole]
-    except (TypeError, ValueError):
-        return [None, None, None]
+    return _validate_dipole_moment(dipole)
 
 
 # ---------------------------------------------------------------------------
@@ -503,6 +516,19 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     dict
         Minimal result payload (status, message, key numbers).
     """
+    try:
+        return _run_ase_core(params)
+    except Exception as e:
+        logger.exception("run_ase_core failed with %s: %s", type(e).__name__, e)
+        return {
+            "status": "failure",
+            "error_type": type(e).__name__,
+            "message": str(e),
+        }
+
+
+def _run_ase_core(params: ASEInputSchema) -> dict:
+    """Execute a simulation inside the shared public error boundary."""
     from ase.io import read
     from ase.optimize import BFGS, LBFGS, GPMin, FIRE, MDMin
 
@@ -595,6 +621,17 @@ def run_ase_core(params: ASEInputSchema) -> dict:
     logger.info("Read %d atoms from %s", len(atoms), input_structure_file)
     atoms.info.update(system_info)
     atoms.calc = calc
+
+    if driver == "ir":
+        # Infrared calls this ASE method at every displacement. Check it before
+        # optimization and vibrations; a result-only fallback cannot support IR.
+        from ase.calculators.calculator import PropertyNotImplementedError
+
+        try:
+            dipole = atoms.get_dipole_moment()
+        except PropertyNotImplementedError:
+            dipole = None
+        _validate_dipole_moment(dipole)
 
     # ------------------------------------------------------------------
     # Driver: energy / dipole  (single-point, no optimization)
