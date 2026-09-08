@@ -49,15 +49,18 @@ ChemGraph uses MACE-Polar (`mace_polar`, `polar-1-m`) if the `graph-longrange`
 add-on is installed; otherwise it uses MACE-MP (`mace_mp`, reported as
 `medium-mpa-0`). Explicit calculator selections are preserved.
 
-Starting with v0.7.0, install Polar from the matching source checkout or extracted
-source distribution with:
+Starting with v0.7.0, install Polar from the root of the matching source checkout
+or extracted source distribution (the directory containing `pyproject.toml`):
 
 ```bash
 python -m pip install . -r requirements/mace-polar.txt
 python -m pip check
 ```
 
-For a published release, pin both ChemGraph and its requirements to that release:
+After v0.7.0 is published on PyPI and its Git tag exists, a wheel installation
+can use the command below from any directory. Before publication, use the
+development checkout instructions above. Pin both ChemGraph and its requirements
+to the same release:
 
 ```bash
 python -m pip install 'chemgraph==0.7.0' -r https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/mace-polar.txt
@@ -77,6 +80,13 @@ MACE-Polar can calculate molecular dipole moments with `driver="dipole"`.
 ChemGraph reports these dipole vectors in Debye.
 MACE-MP does not supply Polar's dipole or IR capabilities. An explicit Polar
 request without the add-on reports installation instructions before loading weights.
+Unsupported dipole and IR requests return a failure with an explanation; IR checks
+dipole support before starting optimization or vibrational analysis.
+
+In the UI, **Automatic** leaves `chemistry.calculators.default` absent from the
+saved TOML, so unrelated settings changes preserve detection. Selecting a named
+calculator stores an explicit choice. Restart ChemGraph after installing an add-on
+so its initialization-time calculator descriptions reflect the new environment.
 
 ## UMA dependency isolation
 

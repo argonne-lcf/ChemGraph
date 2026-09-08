@@ -11,25 +11,29 @@ from typing import Any
 import chemgraph
 import pytest
 from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_EXACT_PIN = re.compile(
-    r"^([A-Za-z0-9_.-]+)(?:==|=)([^;\s]+)(?:\s*;.*)?$"
-)
-
-
-def _normalize_package_name(name: str) -> str:
-    """Return a normalized Python package name."""
-    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def _exact_pins(requirements: list[str]) -> dict[str, str]:
     """Return normalized names and versions for exact package pins."""
     pins = {}
     for requirement in requirements:
-        match = _EXACT_PIN.fullmatch(requirement.strip())
-        if match:
-            pins[_normalize_package_name(match.group(1))] = match.group(2)
+        requirement = requirement.strip()
+        if requirement == "pip:" or requirement.startswith("-r "):
+            continue  # Environment structure and supplemental requirements.
+        # Conda's name=version syntax; parse Python requirements with packaging.
+        requirement = re.sub(r"^([A-Za-z0-9_.-]+)=(?!=)", r"\1==", requirement)
+        parsed = Requirement(requirement)
+        for specifier in parsed.specifier:
+            if specifier.operator != "==" or "*" in specifier.version:
+                continue
+            name = canonicalize_name(parsed.name)
+            assert name not in pins or pins[name] == specifier.version, (
+                f"Conflicting exact pins for {name}: {pins[name]} and {specifier.version}"
+            )
+            pins[name] = specifier.version
     return pins
 
 
@@ -77,6 +81,7 @@ def test_conda_environment_covers_exact_project_pins() -> None:
     """Conda installs should retain every exact core dependency pin."""
     project = _load_toml(_REPO_ROOT / "pyproject.toml")["project"]
     project_pins = _exact_pins(project["dependencies"])
+    assert project_pins, "Expected exact project pins to compare with conda"
 
     environment_text = (_REPO_ROOT / "environment.yml").read_text(encoding="utf-8")
     environment_specs = re.findall(
@@ -92,6 +97,18 @@ def test_conda_environment_covers_exact_project_pins() -> None:
     assert not mismatches
 
     assert "-r requirements/mace-polar.txt" in environment_specs
+
+
+def test_exact_pin_parser_handles_extras_markers_and_conda():
+    assert _exact_pins([
+        'Some_Package[extra]==1.2; python_version >= "3.11"',
+        "other=2.0", "unpinned>=1", "wildcard==1.*", "pip:", "-r addons.txt",
+    ]) == {"some-package": "1.2", "other": "2.0"}
+
+
+def test_exact_pin_parser_rejects_conflicting_duplicates():
+    with pytest.raises(AssertionError, match="Conflicting exact pins"):
+        _exact_pins(["Some_Package==1", "some-package==2"])
 
 
 def test_calculator_pin_matches_all_installation_surfaces() -> None:

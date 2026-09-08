@@ -262,6 +262,8 @@ def test_install_hint_names_the_extra_and_supplemental_requirements():
     hint = backends._install_hint()
     assert "'.[ocsr]' -r requirements/ocsr-models.txt" in hint
     assert "matching ChemGraph source" in hint
+    assert "root of" in hint
+    assert "README.md#installing" in hint
 
 
 def test_importing_the_backends_does_not_import_torchvision():

@@ -59,18 +59,23 @@ machine you are on.
 
 ## Installing
 
+Run this from the root of the matching ChemGraph checkout or extracted source
+distribution (the directory containing `pyproject.toml`). If you are currently
+in `examples/ocsr/`, first run `cd ../..`.
+
 ```bash
 python -m pip install '.[ocsr]' -r requirements/ocsr-models.txt
 python -m pip check
 ```
 
-Run this from the matching ChemGraph checkout or extracted source distribution.
 That installs all four specialists. Three of them also need a checkpoint on disk,
 listed under Checkpoints below; DECIMER fetches its own.
 
 DECIMER is on PyPI. The other three install from GitHub, pinned to a commit so the
 add-on keeps resolving to what was tested here. PyPI rejects Git dependencies in
-package metadata, even in extras. Starting with v0.7.0, a published install can use:
+package metadata, even in extras. After v0.7.0 is published on PyPI and its Git tag
+exists, a wheel installation can use this command from any directory. Before
+publication, use the development checkout instructions above:
 
 ```bash
 python -m pip install 'chemgraph[ocsr]==0.7.0' -r https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/ocsr-models.txt
