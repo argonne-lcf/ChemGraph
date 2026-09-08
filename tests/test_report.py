@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import shutil
 from datetime import datetime
+from html.parser import HTMLParser
 from chemgraph.schemas.ase_input import ASEOutputSchema
 from chemgraph.tools.report_tools import generate_html
 
@@ -212,13 +213,36 @@ def test_report_rejects_unsupported_entropy_units(tmp_path, unit):
     assert report.read_text() == "previous report"
 
 
-def test_report_unit_conversion_javascript(tmp_path):
+@pytest.mark.parametrize("script_tag", ["script", "SCRIPT", "ScRiPt"])
+def test_report_unit_conversion_javascript(tmp_path, script_tag):
     """Execute the generated converter, with only its DOM dependencies stubbed."""
     quickjs = pytest.importorskip("quickjs")
+
+    class ScriptParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.scripts = []
+            self.parts = None
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "script":
+                self.parts = []
+
+        def handle_data(self, data):
+            if self.parts is not None:
+                self.parts.append(data)
+
+        def handle_endtag(self, tag):
+            if tag == "script" and self.parts is not None:
+                self.scripts.append("".join(self.parts))
+                self.parts = None
+
     source, report = tmp_path / "result.json", tmp_path / "report.html"
     source.write_text(json.dumps(sample_ase_output))
     generate_html.invoke({"results_json_path": str(source), "output_path": str(report)})
     content = report.read_text()
+    content = content.replace("<script>", f'<{script_tag} type="text/javascript">')
+    content = content.replace("</script>", f"</{script_tag}>")
     elements = {}
     for kind, attrs, value in re.findall(
         r'<span class="((?:energy|entropy)-(?:value|unit))"([^>]*)>(.*?)</span>',
@@ -243,10 +267,11 @@ def test_report_unit_conversion_javascript(tmp_path):
             addEventListener: () => {},
         };
     """)
+    parser = ScriptParser()
+    parser.feed(content)
+    parser.close()
     script = next(
-        script
-        for script in re.findall(r'<script>(.*?)</script>', content, re.S)
-        if 'function toggleEnergyUnit' in script
+        script for script in parser.scripts if 'function toggleEnergyUnit' in script
     )
     runtime.eval(script)
     thermo = sample_ase_output["thermochemistry"]
