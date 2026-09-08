@@ -36,12 +36,23 @@ Calculator-backed tools cover operations such as:
 Support depends on the selected calculator. A valid property for one engine may
 not exist for another.
 
-Ideal-gas thermochemistry uses the requested temperature and pressure. Enthalpy
-and Gibbs energy are reported in eV; entropy is reported in eV/K with a separate
-`entropy_unit` field. HTML reports also support kJ/(mol K) and kcal/(mol K) for
-entropy. Single atoms include translational and electronic-spin contributions
-without running finite-difference vibrations. Calculator multiplicity determines
-the electronic-spin contribution.
+Ideal-gas thermochemistry uses the requested temperature and pressure (defaults:
+298.15 K and 101325 Pa). ASE single and ensemble inputs also interpret a null
+temperature as 298.15 K; supplied temperatures must be finite and positive.
+Enthalpy and Gibbs energy are reported in eV; entropy is reported in eV/K with a
+separate `entropy_unit` field. HTML reports accept eV/K entropy, including legacy
+results without this field, and reject other declared entropy units. The shared
+**Units** selector converts energy and entropy together; entropy labels change
+to kJ/(mol K) or kcal/(mol K) for the corresponding molar energy selection.
+
+Single atoms skip finite-difference vibrations for `thermo`, `vib`, and `ir`.
+Atomic thermochemistry includes translation and uses the calculator's reported
+multiplicity for the electronic-spin contribution. If no multiplicity is
+reported, ChemGraph logs a warning and assumes a singlet, omitting the
+electronic-spin entropy of open-shell species. This does not infer ground-state
+multiplicities or add spin dependence to a calculator's potential energy.
+Rotational symmetry analysis expects an isolated, unwrapped molecule; periodic
+images are not reconstructed.
 
 ## EMT for setup checks
 

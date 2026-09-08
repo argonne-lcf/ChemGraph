@@ -168,7 +168,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .unit-toggle button:hover:not(.active) {{
             background: #e9ecef;
         }}
-        .energy-value {{
+        .energy-value, .entropy-value {{
             display: inline-block;
             min-width: 100px;
         }}
@@ -493,7 +493,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         calc_results.append(f"""
         <li class='regular-item'>
             <div class="unit-toggle">
-                <span>Energy Unit:</span>
+                <span>Units:</span>
                 <button onclick="toggleEnergyUnit('ev')" class="active" data-unit="ev">eV</button>
                 <button onclick="toggleEnergyUnit('kjmol')" data-unit="kjmol">kJ/mol</button>
                 <button onclick="toggleEnergyUnit('kcalmol')" data-unit="kcalmol">kcal/mol</button>
@@ -624,7 +624,13 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 f'<div><strong>Enthalpy:</strong> <span class="energy-value" data-ev="{enthalpy_ev}">{enthalpy_ev:.6f}</span> <span class="energy-unit">eV</span></div>'
             )
         if "entropy" in ase_output.thermochemistry:
-            # Current and legacy ASE results express entropy in eV/K.
+            entropy_unit = ase_output.thermochemistry.get("entropy_unit", "eV/K")
+            if entropy_unit != "eV/K":
+                raise ValueError(
+                    f"Unsupported entropy_unit {entropy_unit!r}; expected 'eV/K'. "
+                    "Convert entropy to eV/K before generating a report."
+                )
+            # Legacy ASE results also express entropy in eV/K.
             entropy_ev_k = ase_output.thermochemistry['entropy']
             thermo_info.append(
                 f'<div><strong>Entropy:</strong> <span class="entropy-value" data-ev-k="{entropy_ev_k}">{entropy_ev_k:.6f}</span> <span class="entropy-unit">eV/K</span></div>'
@@ -639,7 +645,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             calc_results.append(f"""
             <li class='regular-item'>
                 <div class="unit-toggle">
-                    <span>Energy Unit:</span>
+                    <span>Units:</span>
                     <button onclick="toggleEnergyUnit('ev')" class="active" data-unit="ev">eV</button>
                     <button onclick="toggleEnergyUnit('kjmol')" data-unit="kjmol">kJ/mol</button>
                     <button onclick="toggleEnergyUnit('kcalmol')" data-unit="kcalmol">kcal/mol</button>
@@ -799,7 +805,8 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 document.querySelectorAll('.entropy-value').forEach(cell => {
                     const factor = unit === 'ev' ? 1 :
                                    unit === 'kjmol' ? EV_TO_KJMOL : EV_TO_KCALMOL;
-                    cell.textContent = (parseFloat(cell.dataset.evK) * factor).toFixed(6);
+                    const precision = unit === 'ev' ? 6 : 4;
+                    cell.textContent = (parseFloat(cell.dataset.evK) * factor).toFixed(precision);
                 });
                 
                 // Convert all energy values

@@ -168,8 +168,11 @@ def test_generate_html_labels_energy_by_driver(
 
 
 @pytest.mark.parametrize("legacy", [False, True])
-def test_report_distinguishes_entropy_units(tmp_path, legacy):
+@pytest.mark.parametrize("entropy_only", [False, True])
+def test_report_distinguishes_entropy_units(tmp_path, legacy, entropy_only):
     output = json.loads(json.dumps(sample_ase_output))
+    if entropy_only:
+        output["thermochemistry"] = {"entropy": output["thermochemistry"]["entropy"]}
     if not legacy:
         output["thermochemistry"]["entropy_unit"] = "eV/K"
     source, report = tmp_path / "result.json", tmp_path / "report.html"
@@ -181,9 +184,101 @@ def test_report_distinguishes_entropy_units(tmp_path, legacy):
     assert 'class="entropy-value"' in entropy_row
     assert 'data-ev-k="0.001957587821789186"' in entropy_row
     assert 'class="energy-value"' not in entropy_row
+    assert '<span>Units:</span>' in content
+    assert 'Energy Unit:' not in content
+    if entropy_only:
+        assert '<strong>Enthalpy:</strong>' not in content
+        assert '<strong>Gibbs Free Energy:</strong>' not in content
+        return
     for name in ("Enthalpy", "Gibbs Free Energy"):
         row = re.search(rf'<div><strong>{name}:</strong>.*?</div>', content).group()
         assert 'class="energy-unit">eV</span>' in row
+
+
+@pytest.mark.parametrize("unit", ["J/(mol K)", "kJ/(mol K)", "kcal/(mol K)", None, ""])
+def test_report_rejects_unsupported_entropy_units(tmp_path, unit):
+    output = json.loads(json.dumps(sample_ase_output))
+    output["thermochemistry"]["entropy_unit"] = unit
+    source, report = tmp_path / "result.json", tmp_path / "report.html"
+    source.write_text(json.dumps(output))
+    result = generate_html.invoke(
+        {"results_json_path": str(source), "output_path": str(report)}
+    )
+    assert "Unsupported entropy_unit" in result
+    assert "expected 'eV/K'" in result
+    assert not report.exists()
+    report.write_text("previous report")
+    generate_html.invoke({"results_json_path": str(source), "output_path": str(report)})
+    assert report.read_text() == "previous report"
+
+
+def test_report_unit_conversion_javascript(tmp_path):
+    """Execute the generated converter, with only its DOM dependencies stubbed."""
+    quickjs = pytest.importorskip("quickjs")
+    source, report = tmp_path / "result.json", tmp_path / "report.html"
+    source.write_text(json.dumps(sample_ase_output))
+    generate_html.invoke({"results_json_path": str(source), "output_path": str(report)})
+    content = report.read_text()
+    elements = {}
+    for kind, attrs, value in re.findall(
+        r'<span class="((?:energy|entropy)-(?:value|unit))"([^>]*)>(.*?)</span>',
+        content,
+    ):
+        dataset = {}
+        for attr, key in [("data-ev", "ev"), ("data-ev-k", "evK")]:
+            match = re.search(rf'{attr}="([^"]*)"', attrs)
+            if match:
+                dataset[key] = match.group(1)
+        elements.setdefault(f".{kind}", []).append(
+            {"dataset": dataset, "textContent": value}
+        )
+    runtime = quickjs.Context()
+    runtime.eval("const elements = " + json.dumps(elements))
+    runtime.eval("""
+        Object.values(elements).flat().forEach(cell => {
+            cell.parentElement = {querySelector: () => ({textContent: ''})};
+        });
+        const document = {
+            querySelectorAll: selector => elements[selector] || [],
+            addEventListener: () => {},
+        };
+    """)
+    script = next(
+        script
+        for script in re.findall(r'<script>(.*?)</script>', content, re.S)
+        if 'function toggleEnergyUnit' in script
+    )
+    runtime.eval(script)
+    thermo = sample_ase_output["thermochemistry"]
+    energy_values = [
+        round(sample_ase_output["potential_energy"], 6),
+        thermo["enthalpy"],
+        thermo["gibbs_free_energy"],
+    ]
+    conversions = {
+        "ev": (1, "eV", "eV/K", 6, 6),
+        "kjmol": (96.485, "kJ/mol", "kJ/(mol K)", 2, 4),
+        "kcalmol": (23.061, "kcal/mol", "kcal/(mol K)", 2, 4),
+    }
+    for unit in ["ev", "kjmol", "kcalmol", "ev", "kcalmol", "kjmol", "ev"]:
+        runtime.eval(f"toggleEnergyUnit('{unit}')")
+        actual = json.loads(runtime.eval("JSON.stringify(elements)"))
+        factor, energy_unit, entropy_unit, energy_digits, entropy_digits = conversions[
+            unit
+        ]
+        assert [cell["textContent"] for cell in actual[".energy-value"]] == [
+            f"{value * factor:.{energy_digits}f}" for value in energy_values
+        ]
+        assert (
+            actual[".entropy-value"][0]["textContent"]
+            == f"{thermo['entropy'] * factor:.{entropy_digits}f}"
+        )
+        assert all(
+            cell["textContent"] == energy_unit for cell in actual[".energy-unit"]
+        )
+        assert all(
+            cell["textContent"] == entropy_unit for cell in actual[".entropy-unit"]
+        )
 
 
 @pytest.fixture(scope="session")
@@ -269,7 +364,7 @@ def test_generate_html_with_xyz(test_output_dir, sample_ase_output_schema):
         assert "Entropy" in html_content
         assert "Gibbs Free Energy" in html_content
         assert "Thermochemistry Values" in html_content
-        assert "Energy Unit" in html_content
+        assert "<span>Units:</span>" in html_content
         assert "eV" in html_content
         assert "kJ/mol" in html_content
         assert "kcal/mol" in html_content
@@ -342,7 +437,7 @@ def test_generate_html_without_xyz(test_output_dir, sample_ase_output_schema):
         assert "Entropy" in html_content
         assert "Gibbs Free Energy" in html_content
         assert "Thermochemistry Values" in html_content
-        assert "Energy Unit" in html_content
+        assert "<span>Units:</span>" in html_content
         assert "eV" in html_content
         assert "kJ/mol" in html_content
         assert "kcal/mol" in html_content
