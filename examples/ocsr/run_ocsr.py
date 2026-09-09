@@ -52,16 +52,15 @@ def _same_molecule(a: str | None, b: str) -> bool:
 
 def run_direct(model: str | None) -> int:
     """Call the tool on every image and report agreement with the known answer."""
-    from chemgraph.tools.ocsr_backends import available_specialists
+    from chemgraph.tools.ocsr_backends import _install_hint, available_specialists
     from chemgraph.tools.ocsr_models import describe_models
     from chemgraph.tools.ocsr_tools import image_to_smiles_core
 
     installed = available_specialists()
     if not installed and model != "llm":
         print(describe_models(installed))
-        print("\nNo specialist is installed. Install one with:\n"
-              "    pip install 'chemgraph[ocsr]'\n"
-              "or read this image with the agent's own model:\n"
+        print("\nNo specialist is installed. " + _install_hint() +
+              "\nor read this image with the agent's own model:\n"
               "    python run_ocsr.py --agent --model llm")
         return 1
 

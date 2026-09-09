@@ -4,6 +4,7 @@ import numpy as np
 from pydantic import ValidationError
 from chemgraph.schemas.calculators.emt_calc import EMTCalc
 from chemgraph.schemas.calculators.mace_calc import MaceCalc
+from chemgraph.utils import calculator_defaults
 from chemgraph.schemas.calculators.tblite_calc import TBLiteCalc
 from chemgraph.schemas.calculators.orca_calc import OrcaCalc
 from ase import Atoms
@@ -42,15 +43,18 @@ def test_default_calculator_is_in_detected_available_calculators():
     assert default in context
     if importlib.util.find_spec("mace") is not None:
         assert default == "MaceCalc"
-        assert "calculator_type='mace_polar'" in context
-        assert "model='polar-1-m'" in context
+        polar = importlib.util.find_spec("graph_longrange") is not None
+        expected_type = "mace_polar" if polar else "mace_mp"
+        expected_model = "polar-1-m" if polar else "medium-mpa-0"
+        assert f"calculator_type={expected_type!r}" in context
+        assert f"model={expected_model!r}" in context
 
         from chemgraph.schemas.ase_input import ASEInputSchema
 
         params = ASEInputSchema(input_structure_file="water.xyz", driver="energy")
         assert isinstance(params.calculator, MaceCalc)
-        assert params.calculator.calculator_type == "mace_polar"
-        assert params.calculator.get_model_name_for_output() == "polar-1-m"
+        assert params.calculator.calculator_type == expected_type
+        assert params.calculator.get_model_name_for_output() == expected_model
 
 
 def test_invalid_calculator_type_error_lists_accepted_values():
@@ -125,7 +129,8 @@ def test_mace_model_name_for_output(calculator_type, model, expected):
     assert calc.get_model_name_for_output() == expected
 
 
-def test_mace_polar_medium_is_default():
+def test_mace_polar_medium_is_default_when_available(monkeypatch):
+    monkeypatch.setattr(calculator_defaults, "mace_polar_available", lambda: True)
     calc = MaceCalc()
 
     assert calc.calculator_type == "mace_polar"
@@ -164,8 +169,9 @@ def test_mace_polar_loader_uses_selected_model(monkeypatch, model, expected_mode
         return sentinel
 
     monkeypatch.setattr(mace.calculators, "mace_polar", fake_mace_polar)
+    monkeypatch.setattr(calculator_defaults, "mace_polar_available", lambda: True)
 
-    calc = MaceCalc(model=model, device="cpu", default_dtype="float64")
+    calc = MaceCalc(calculator_type="mace_polar", model=model, device="cpu", default_dtype="float64")
 
     assert calc.get_calculator() is sentinel
     assert received == [
@@ -229,6 +235,7 @@ def test_mace_calculator(monkeypatch):
     from ase.calculators.emt import EMT
 
     monkeypatch.setattr(mace.calculators, "mace_polar", lambda **kwargs: EMT())
+    monkeypatch.setattr(mace.calculators, "mace_mp", lambda **kwargs: EMT())
 
     calc = MaceCalc()
     ase_calc = calc.get_calculator()

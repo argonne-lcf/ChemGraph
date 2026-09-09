@@ -63,8 +63,8 @@ jobs:
     - name: Install ChemGraph with MACE support
       shell: bash -l {0}
       run: |
-        pip install --no-cache-dir -e .
-        pip install --no-cache-dir pytest
+        python -m pip install --no-cache-dir -e . -r requirements/mace-polar.txt
+        python -m pip check
     
     - name: Run tests with MACE
       shell: bash -l {0}

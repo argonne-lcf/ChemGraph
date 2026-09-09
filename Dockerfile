@@ -2,8 +2,6 @@ FROM continuumio/miniconda3:latest
 
 WORKDIR /app
 
-COPY . /app
-
 # System packages required by the scientific Python stack
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -23,17 +21,24 @@ RUN conda install -y -c conda-forge \
     nwchem \
     && conda clean -afy
 
-# Install ChemGraph and UI runtime
-RUN pip install --no-cache-dir . && \
-    pip install --no-cache-dir jupyterlab
+# The PyPI CUDA dependency set includes unsupported wheels on Linux ARM.
+# Use PyTorch's CPU distribution on ARM; x86 retains its normal PyPI selection.
+RUN if [ "$(uname -m)" = "aarch64" ]; then \
+    python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch; \
+    fi
 
-# Install Python tblite from source with conservative flags to avoid ABI/symbol issues on ARM.
+COPY . /app
+
+# Resolve ChemGraph, Polar, JupyterLab and TBLite together. Build TBLite from
+# source with conservative flags to avoid ABI/symbol issues on ARM.
 RUN CFLAGS="-O2 -fno-tree-vectorize" \
     FFLAGS="-O2 -fno-tree-vectorize" \
-    pip install --no-cache-dir --no-binary=tblite --force-reinstall "tblite==0.4.0"
+    python -m pip install --no-cache-dir --no-binary=tblite \
+    . jupyterlab -r requirements/mace-polar.txt "tblite==0.4.0"
 
 # Validate calculator runtimes at build time after package install.
-RUN which nwchem && python -c "from tblite.ase import TBLite"
+RUN which nwchem && python -c "from tblite.ase import TBLite; import graph_longrange" && \
+    python -m pip check
 
 # Allow git commands in bind-mounted repo paths inside the container.
 RUN git config --system --add safe.directory /app

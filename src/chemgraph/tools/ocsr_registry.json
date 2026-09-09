@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "_comment": "OCSR specialist models. All four install from the ocsr extra into ChemGraph's own environment; see examples/ocsr/README.md. accuracy is exact match over the 722-image benchmark (n=722 for each). import_name is what ocsr_backends probes to decide whether a model is installed. weights is where a checkpoint is cached; DECIMER manages its own cache and has none.",
+  "_comment": "OCSR specialist models. DECIMER installs from the ocsr extra; the other three require requirements/ocsr-models.txt in the same environment. See examples/ocsr/README.md. accuracy is exact match over the 722-image benchmark (n=722 for each). import_name is what ocsr_backends probes to decide whether a model is installed. weights is where a checkpoint is cached; DECIMER manages its own cache and has none.",
   "specialists": {
     "decimer": {
       "import_name": "DECIMER",

@@ -35,7 +35,7 @@ from ui import providers
 from ui.agent_manager import initialize_agent
 from ui.provider_widgets import apply_api_key, render_alcf_login
 from ui.branding import LOGO_IMAGES, first_existing_asset
-from ui.config import load_config, save_config
+from ui.config import load_config, resolve_default_calculator, save_config
 from ui.endpoint import check_local_model_endpoint
 from ui.file_utils import (
     extract_log_dir_from_messages,
@@ -1843,12 +1843,12 @@ def _render_example_queries(config: dict, selected_model: str) -> None:
         st.markdown("**Based on your current configuration:**")
         st.markdown(f"- Model: {selected_model}")
         st.markdown(
-            f"- Default Calculator: {config['chemistry']['calculators']['default']}"
+            f"- Default Calculator: {resolve_default_calculator(config)}"
         )
 
         examples = [
             "What is the SMILES string for caffeine?",
-            f"Optimize the geometry of water molecule using {config['chemistry']['calculators']['default']}",
+            f"Optimize the geometry of water molecule using {resolve_default_calculator(config)}",
             "Calculate the infrared spectrum of methanol with xtb calculator",
             "What is the reaction enthalpy of methane combustion using mace_mp",
         ]
