@@ -1788,8 +1788,8 @@ runtime; optional engines that cannot be imported or located are omitted.</p>
 </tr>
 <tr>
 <td>MACE</td>
-<td>Included in core ChemGraph</td>
-<td>MACE-Polar medium is the default; supports energies, forces, and molecular dipole moments</td>
+<td>MACE-MP included in core; Polar requires an add-on</td>
+<td>Polar medium is preferred when installed; otherwise MACE-MP supplies energies and forces</td>
 </tr>
 <tr>
 <td>TBLite</td>
@@ -1839,13 +1839,38 @@ It is not a general-purpose high-accuracy molecular method. Do not treat an EMT
 result as scientifically appropriate merely because the workflow completed.</p>
 <h2 id="mace-downloads">MACE downloads<a class="headerlink" href="#mace-downloads" title="Permanent link">&para;</a></h2>
 <p>MACE is installed with the core package. When no calculator is specified,
-ChemGraph uses the MACE-Polar medium checkpoint (<code>mace_polar</code> with
-<code>polar-1-m</code>). Pretrained weights may be fetched on first use. In restricted or
+ChemGraph uses MACE-Polar (<code>mace_polar</code>, <code>polar-1-m</code>) if the <code>graph-longrange</code>
+add-on is installed; otherwise it uses MACE-MP (<code>mace_mp</code>, reported as
+<code>medium-mpa-0</code>). Explicit calculator selections are preserved.</p>
+<p>Starting with v0.7.0, install Polar from the root of the matching source checkout
+or extracted source distribution (the directory containing <code>pyproject.toml</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.<span class="w"> </span>-r<span class="w"> </span>requirements/mace-polar.txt
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>check
+</code></pre></div>
+<p>After v0.7.0 is published on PyPI and its Git tag exists, a wheel installation
+can use the command below from any directory. Before publication, use the
+development checkout instructions above. Pin both ChemGraph and its requirements
+to the same release:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'chemgraph==0.7.0'</span><span class="w"> </span>-r<span class="w"> </span>https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/mace-polar.txt
+</code></pre></div>
+<p>Use the matching tag or commit when installing another version; the add-on files
+are introduced in v0.7.0. The conda environment and Docker images explicitly
+install Polar. Run <code>conda env create -f environment.yml</code> from the checkout root
+so its supplemental requirements path resolves correctly.</p>
+<p>Pretrained weights may be fetched on first use. In restricted or
 offline environments, pre-stage the required model cache or choose EMT for the
 initial test. MACE-Polar checkpoints are distributed under the Academic
 Software License (ASL); review its terms before use.</p>
 <p>MACE-Polar can calculate molecular dipole moments with <code>driver="dipole"</code>.
-ChemGraph reports these dipole vectors in Debye.</p>
+ChemGraph reports these dipole vectors in Debye.
+MACE-MP does not supply Polar's dipole or IR capabilities. An explicit Polar
+request without the add-on reports installation instructions before loading weights.
+Unsupported dipole and IR requests return a failure with an explanation; IR checks
+dipole support before starting optimization or vibrational analysis.</p>
+<p>In the UI, <strong>Automatic</strong> leaves <code>chemistry.calculators.default</code> absent from the
+saved TOML, so unrelated settings changes preserve detection. Selecting a named
+calculator stores an explicit choice. Restart ChemGraph after installing an add-on
+so its initialization-time calculator descriptions reflect the new environment.</p>
 <h2 id="uma-dependency-isolation">UMA dependency isolation<a class="headerlink" href="#uma-dependency-isolation" title="Permanent link">&para;</a></h2>
 <p>The UMA/fairchem stack can require an <code>e3nn</code> version that conflicts with MACE.
 Use a separate virtual environment for UMA rather than forcing incompatible
@@ -1860,7 +1885,7 @@ access independently.</p>
 directory. By default it is a unique directory below <code>cg_logs/</code>. Readers search
 using the same session-aware path handling. Choose a different parent before
 launching ChemGraph:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_LOG_DIR</span><span class="o">=</span><span class="s2">"/absolute/path/to/calculations"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">CHEMGRAPH_LOG_DIR</span><span class="o">=</span><span class="s2">"/absolute/path/to/calculations"</span>
 </code></pre></div>
 <p>Typical outputs include XYZ files, trajectories, JSON/CSV data, spectra, normal
 modes, and HTML reports.</p>

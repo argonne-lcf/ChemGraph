@@ -1780,6 +1780,10 @@ checkout's <code>cg_logs/</code> directory.</p>
 <h2 id="build-and-operate-safely">Build and operate safely<a class="headerlink" href="#build-and-operate-safely" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>docker<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>chemgraph:local<span class="w"> </span>.
 </code></pre></div>
+<p>ARM builds install CPU PyTorch from its official wheel index because the PyPI
+CUDA dependency set includes unsupported ARM wheels. x86 builds retain their
+normal PyPI PyTorch selection. Both images explicitly install the Polar add-on
+and run <code>pip check</code> after resolving ChemGraph and its runtime dependencies.</p>
 <p>The TBLite build can take time, especially on ARM. Mount a dedicated artifact
 directory rather than a home directory, pass tokens at runtime, remember that
 container paths may differ from host paths, and pin an image tag or digest for
