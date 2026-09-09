@@ -46,10 +46,12 @@ results without this field, and reject other declared entropy units. The shared
 to kJ/(mol K) or kcal/(mol K) for the corresponding molar energy selection.
 
 ChemGraph requires ASE >= 3.29.0. For `thermo`, the complete complex spectrum is
-passed to `IdealGasThermo(vib_selection="highest", ignore_imag_modes=True)`.
-ASE selects the expected number of modes by squared energy, then removes any
-remaining imaginary or zero-energy modes. ChemGraph does not apply an additional
-frequency cutoff or convert imaginary frequencies to real ones.
+passed to `IdealGasThermo(vib_selection="highest", ignore_imag_modes=False)`.
+These are ASE's defaults: select the expected number of modes by signed squared
+energy, then reject any remaining imaginary modes. Zero-energy modes are not
+automatically removed; if they yield non-finite thermochemistry, the calculation
+returns a failure. ChemGraph does not apply an additional check of the complete
+spectrum, impose a frequency cutoff, or convert imaginary frequencies to real ones.
 
 Reported thermochemistry frequencies, CSV entries, and trajectories match the
 energies ASE actually used. `vibrational_frequencies.mode_indices` contains their
@@ -60,9 +62,11 @@ spectrum with used/excluded labels. Standalone `vib` and `ir` output is unchange
 
 Thermochemistry metadata records `ase_version`, `vib_selection`,
 `ignore_imag_modes`, `n_imag`, `raw_imaginary_mode_count`, and `warnings`.
-`n_imag` is ASE's cleanup count **after selection**, including zero-energy modes;
-it is not the number of imaginary modes in the complete input. Selection may
-already have excluded imaginary modes even when `n_imag` is zero. Successful
+`n_imag` is zero for successful calculations under this policy. Legacy results
+with `ignore_imag_modes=True` may record modes removed **after selection**,
+including zero-energy modes; HTML reports continue to support that metadata.
+`n_imag` is not the number of imaginary modes in the complete input. Selection
+may already have excluded imaginary modes even when `n_imag` is zero. Successful
 thermochemistry with excluded modes does not establish structural stability.
 The raw imaginary-mode count is diagnostic and does not itself trigger a
 warning. Warnings contain messages emitted by ASE and identify calculations

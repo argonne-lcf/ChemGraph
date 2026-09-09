@@ -1,7 +1,6 @@
 """Scientific regressions using EMT and controlled molecular vibrations."""
 
 import json
-import warnings
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -77,6 +76,8 @@ def _run_thermo(tmp_path, monkeypatch, atoms, calculator, **conditions):
     assert result["result"]["thermochemistry"] == output["thermochemistry"]
     assert output["thermochemistry"]["unit"] == "eV"
     assert output["thermochemistry"]["entropy_unit"] == "eV/K"
+    assert output["thermochemistry"]["ignore_imag_modes"] is False
+    assert output["thermochemistry"]["n_imag"] == 0
     return output
 
 
@@ -338,7 +339,7 @@ def test_molecular_thermo_retains_spin_and_vibrations(
 
 
 @pytest.mark.parametrize(
-    "energies,expected_indices,cleanup_count",
+    "energies,expected_indices",
     [
         pytest.param(
             [
@@ -356,20 +357,10 @@ def test_molecular_thermo_retains_spin_and_vibrations(
                 0.0352987,
             ],
             [6, 7, 8, 9, 10, 11],
-            0,
             id="recorded-cu4",
         ),
-        pytest.param(
-            [0.09j, 0.08j, 0.07j, 0.06j, 0.05j, 0.04j, 0.03j, 0.02, 0.03],
-            [7, 8],
-            1,
-            id="remaining-imaginary",
-        ),
-        pytest.param([0.01j] * 9, [], 3, id="all-imaginary"),
-        pytest.param([0.01j] * 6 + [0, 0.02, 0.03], [7, 8], 1, id="selected-zero"),
-        pytest.param([0.01] * 7 + [0.02, 0.03], [6, 7, 8], 0, id="boundary-duplicates"),
-        pytest.param([0.03, 0.01, 0.02] + [0.001] * 6, [1, 2, 0], 0, id="unordered"),
-        pytest.param([0.0] * 9, [], 3, id="all-zero"),
+        pytest.param([0.01] * 7 + [0.02, 0.03], [6, 7, 8], id="boundary-duplicates"),
+        pytest.param([0.03, 0.01, 0.02] + [0.001] * 6, [1, 2, 0], id="unordered"),
     ],
 )
 def test_thermo_reports_exactly_the_modes_used_by_ase(
@@ -378,7 +369,6 @@ def test_thermo_reports_exactly_the_modes_used_by_ase(
     caplog,
     energies,
     expected_indices,
-    cleanup_count,
 ):
     _controlled_spectrum(monkeypatch, energies)
     atoms = (
@@ -392,23 +382,21 @@ def test_thermo_reports_exactly_the_modes_used_by_ase(
         atoms,
         MaceCalc(calculator_type="mace_polar", multiplicity=1),
     )
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        reference = IdealGasThermo(
-            vib_energies=energies,
-            geometry="nonlinear",
-            atoms=atoms,
-            potentialenergy=-1.0,
-            spin=0,
-            symmetrynumber=get_symmetry_number(
-                AtomsData(
-                    numbers=atoms.numbers,
-                    positions=atoms.positions,
-                )
-            ),
-            vib_selection="highest",
-            ignore_imag_modes=True,
-        )
+    reference = IdealGasThermo(
+        vib_energies=energies,
+        geometry="nonlinear",
+        atoms=atoms,
+        potentialenergy=-1.0,
+        spin=0,
+        symmetrynumber=get_symmetry_number(
+            AtomsData(
+                numbers=atoms.numbers,
+                positions=atoms.positions,
+            )
+        ),
+        vib_selection="highest",
+        ignore_imag_modes=False,
+    )
     thermo, vibration = output["thermochemistry"], output["vibrational_frequencies"]
     _assert_reference(thermo, reference, 298.15, 101325)
     assert vibration["mode_indices"] == expected_indices
@@ -428,24 +416,13 @@ def test_thermo_reports_exactly_the_modes_used_by_ase(
         assert float(record["energy"].removesuffix("i")) / 1e3 == pytest.approx(
             magnitude
         )
-    assert thermo["n_imag"] == cleanup_count
     assert thermo["raw_imaginary_mode_count"] == np.count_nonzero(
         np.iscomplex(energies)
     )
     assert thermo["vib_selection"] == "highest"
-    assert thermo["ignore_imag_modes"] is True
     assert thermo["ase_version"] == ase.__version__
-    expected_warnings = []
-    if cleanup_count:
-        expected_warnings.append(f"{cleanup_count} imag modes removed")
-    if not expected_indices:
-        expected_warnings.append(
-            "No vibrational modes contributed to thermochemistry."
-        )
-    assert thermo["warnings"] == expected_warnings
+    assert thermo["warnings"] == []
     assert "The input spectrum contains" not in caplog.text
-    for note in expected_warnings:
-        assert note in caplog.text
     rows = (tmp_path / "frequencies_input.csv").read_text(encoding="utf-8").splitlines()
     assert rows == [
         f"input_vib.{i}.traj,{frequency}"
@@ -458,10 +435,24 @@ def test_thermo_reports_exactly_the_modes_used_by_ase(
         assert read(tmp_path / f"input_vib.{index}.traj").info["mode_index"] == index
 
 
-@pytest.mark.parametrize("failure", ["constructor", "entropy", "nonfinite"])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "constructor", "entropy", "nonfinite", "remaining-imaginary",
+        "all-imaginary", "selected-zero", "all-zero",
+    ],
+)
 def test_thermo_failure_preserves_completed_results(tmp_path, monkeypatch, failure):
     monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
-    _controlled_spectrum(monkeypatch, [0.01j] * 6 + [0.02, 0.03, 0.04])
+    energies = {
+        "remaining-imaginary": [
+            0.09j, 0.08j, 0.07j, 0.06j, 0.05j, 0.04j, 0.03j, 0.02, 0.03,
+        ],
+        "all-imaginary": [0.01j] * 9,
+        "selected-zero": [0.01j] * 6 + [0, 0.02, 0.03],
+        "all-zero": [0.0] * 9,
+    }.get(failure, [0.01j] * 6 + [0.02, 0.03, 0.04])
+    _controlled_spectrum(monkeypatch, energies)
     if failure == "constructor":
         monkeypatch.setattr(
             "ase.thermochemistry.IdealGasThermo",
@@ -473,10 +464,16 @@ def test_thermo_failure_preserves_completed_results(tmp_path, monkeypatch, failu
             "get_entropy",
             Mock(side_effect=ValueError("thermo unavailable")),
         )
-    else:
+    elif failure == "nonfinite":
         monkeypatch.setattr(
             IdealGasThermo, "get_entropy", Mock(return_value=float("nan"))
         )
+    if failure in {"constructor", "entropy"}:
+        expected_error = "thermo unavailable"
+    elif failure in {"remaining-imaginary", "all-imaginary"}:
+        expected_error = "Imaginary vibrational energies are present."
+    else:
+        expected_error = "ASE returned non-finite thermochemistry values."
     atoms = Atoms("OH2", positions=[[0, 0, 0], [0.76, 0, 0.59], [-0.76, 0, 0.59]])
     write(tmp_path / "input.xyz", atoms)
     result = run_ase_core(
@@ -489,16 +486,22 @@ def test_thermo_failure_preserves_completed_results(tmp_path, monkeypatch, failu
     )
     assert result["status"] == "failure"
     assert result["error_type"] == "ValueError"
+    assert expected_error in result["message"]
+    assert "result" not in result
     assert result["converged"] is True
     assert result["potential_energy"] == -1.0
     assert result["results_file"] == str(tmp_path / "result.json")
     json.dumps(result)  # The failure payload must also work over MCP/ensemble JSON.
     output = json.loads(Path(result["results_file"]).read_text(encoding="utf-8"))
     assert output["success"] is False
-    assert output["error"]
+    assert output["error"] == expected_error
     assert output["thermochemistry"] == {}
     assert output["final_structure"]["numbers"] == atoms.numbers.tolist()
     assert output["potential_energy"] == -1.0
     assert len(output["vibrational_frequencies"]["all_modes"]) == 9
+    assert [
+        complex(mode["energy"].replace("i", "j")) / 1e3
+        for mode in output["vibrational_frequencies"]["all_modes"]
+    ] == pytest.approx(energies)
     assert output["vibrational_frequencies"]["mode_indices"] == []
     assert read(tmp_path / "input_opt.traj").get_potential_energy() == -1.0

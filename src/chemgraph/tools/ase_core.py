@@ -270,7 +270,7 @@ def _calculate_thermochemistry(
     temperature,
     pressure,
 ) -> tuple[dict, list[int]]:
-    """Compute thermochemistry using ASE's mode selection and cleanup.
+    """Compute thermochemistry using ASE's mode selection and validation.
 
     Return thermochemistry values and metadata with original retained mode
     indices. Preserve ASE warnings and warn when no vibrations contribute.
@@ -311,7 +311,7 @@ def _calculate_thermochemistry(
             symmetrynumber=symmetrynumber,
             spin=(multiplicity - 1) / 2.0,
             vib_selection="highest",
-            ignore_imag_modes=True,
+            ignore_imag_modes=False,
         )
         retained_energies = thermo.vib_energies
         enthalpy = float(thermo.get_enthalpy(temperature, verbose=False))
@@ -344,7 +344,7 @@ def _calculate_thermochemistry(
         "entropy_unit": "eV/K",
         "ase_version": ase.__version__,
         "vib_selection": "highest",
-        "ignore_imag_modes": True,
+        "ignore_imag_modes": False,
         "n_imag": int(thermo.n_imag),
         "raw_imaginary_mode_count": raw_imaginary_count,
         "warnings": notes,

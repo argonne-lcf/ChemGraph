@@ -489,8 +489,9 @@ class ASEOutputSchema(BaseModel):
     thermochemistry: dict = Field(
         default={}, description=(
             "Thermochemistry energies in eV and entropy in eV/K, with ASE version, "
-            "mode-selection policy, cleanup counts, and warnings. ASE n_imag counts "
-            "modes removed after selection, including zero-energy modes."
+            "mode-selection policy, cleanup counts, and warnings. ASE rejects "
+            "imaginary modes remaining after highest selection; n_imag is zero "
+            "on success. Legacy results may record removed modes in n_imag."
         )
     )
     success: bool = Field(
