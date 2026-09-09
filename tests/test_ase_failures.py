@@ -31,13 +31,18 @@ def params(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("entrypoint", ["core", "langchain", "mcp"])
-async def test_missing_polar_returns_install_guidance(params, monkeypatch, tmp_path, entrypoint):
+@pytest.mark.parametrize("inputs", [
+    {"calculator_type": "mace_polar"}, {"charge": 1},
+    {"multiplicity": 2}, {"external_field": (0.1, 0, 0)},
+])
+async def test_missing_polar_returns_install_guidance(params, monkeypatch, tmp_path, entrypoint, inputs):
     import mace.calculators
 
     monkeypatch.setattr(calculator_defaults, "mace_polar_available", lambda: False)
     loader = Mock(side_effect=AssertionError("must not download model weights"))
     monkeypatch.setattr(mace.calculators, "mace_polar", loader)
-    params.calculator = MaceCalc(calculator_type="mace_polar")
+    monkeypatch.setattr(mace.calculators, "mace_mp", loader)
+    params.calculator = MaceCalc(**inputs)
     if entrypoint == "core":
         result = ase_core.run_ase_core(params)
     elif entrypoint == "langchain":
@@ -51,6 +56,22 @@ async def test_missing_polar_returns_install_guidance(params, monkeypatch, tmp_p
     assert "requirements/mace-polar.txt" in result["message"]
     loader.assert_not_called()
     assert not (tmp_path / "result.json").exists()
+
+
+def test_inferred_polar_forwards_and_records_physical_inputs(params, monkeypatch, tmp_path):
+    engine = EMT()
+    monkeypatch.setattr(calculator_defaults, "mace_polar_available", lambda: True)
+    monkeypatch.setattr(MaceCalc, "get_calculator", lambda self: engine)
+    params.calculator = MaceCalc(charge=1, multiplicity=2, external_field=(0.1, 0, 0))
+    result = ase_core.run_ase_core(params)
+    assert result["status"] == "success", result
+    assert engine.atoms.info == {"charge": 1, "spin": 2, "external_field": [0.1, 0, 0]}
+    recorded = json.loads((tmp_path / "result.json").read_text())["simulation_input"]["calculator"]
+    assert recorded["calculator_type"] == "mace_polar"
+    assert recorded["model"] == "polar-1-m"
+    assert recorded["charge"] == 1
+    assert recorded["multiplicity"] == 2
+    assert recorded["external_field"] == [0.1, 0, 0]
 
 
 @pytest.mark.parametrize("driver", ["dipole", "ir"])

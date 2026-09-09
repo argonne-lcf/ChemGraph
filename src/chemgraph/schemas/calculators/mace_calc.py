@@ -8,8 +8,8 @@ import tempfile
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal, Optional, Union
-from pydantic import BaseModel, Field
+from typing import Literal, Optional, Self, Union
+from pydantic import BaseModel, Field, model_validator
 import torch
 
 from chemgraph.utils import calculator_defaults
@@ -125,6 +125,8 @@ class MaceCalc(BaseModel):
     calculator_type : str, optional
         Type of calculator to use: 'mace_polar', 'mace_mp', 'mace_off', or
         'mace_anicc'. Defaults to Polar when its add-on is installed, else MACE-MP.
+        Non-default charge, multiplicity, or external field requires Polar when
+        the calculator type is omitted.
     model : str or Path, optional
         Name or path to the model file. If None, uses default model for selected calculator type.
     device : str, optional
@@ -156,7 +158,9 @@ class MaceCalc(BaseModel):
         default_factory=get_default_mace_calculator_type,
         json_schema_extra=_calculator_type_schema,
         description="Type of calculator. Defaults to 'mace_polar' when the "
-        "graph-longrange add-on is installed, otherwise 'mace_mp'. Other options "
+        "graph-longrange add-on is installed, otherwise 'mace_mp'. When the type "
+        "is omitted, nonzero charge, multiplicity other than 1, or a nonzero "
+        "external field requires 'mace_polar'. Other options "
         "are 'mace_off' and 'mace_anicc'. MACE-Polar supports "
         "energies, forces, and molecular dipole moments.",
     )
@@ -207,6 +211,17 @@ class MaceCalc(BaseModel):
         default=21.167088422553647,  # Equivalent to 40.0 * units.Bohr,
         description="Cutoff radius in Bohr for D3 dispersion corrections (only for 'mace_mp').",
     )
+
+    @model_validator(mode="after")
+    def _preserve_physical_inputs(self) -> Self:
+        requires_polar = (
+            self.charge != 0
+            or self.multiplicity != 1
+            or any(self.external_field)
+        )
+        if "calculator_type" not in self.model_fields_set and requires_polar:
+            self.calculator_type = "mace_polar"
+        return self
 
     def get_model_name_for_output(self) -> Optional[Union[str, Path]]:
         """Return the model identifier to record in simulation output.

@@ -73,7 +73,10 @@ def test_explicit_mace_selection_and_ui_configuration_are_preserved(monkeypatch,
     monkeypatch.setattr(calculator_defaults, "mace_polar_available", lambda: polar)
     assert mace_calc.MaceCalc().calculator_type == ("mace_polar" if polar else "mace_mp")
     for variant in ("mace_polar", "mace_mp", "mace_off", "mace_anicc"):
-        calc = mace_calc.MaceCalc(calculator_type=variant, model="/models/custom.model")
+        calc = mace_calc.MaceCalc(
+            calculator_type=variant, model="/models/custom.model",
+            charge=1, multiplicity=2, external_field=(0.1, 0, 0),
+        )
         assert calc.calculator_type == variant
         assert calc.get_model_name_for_output() == "/models/custom.model"
     config = tmp_path / "explicit.toml"
@@ -155,3 +158,32 @@ assert resolve_default_calculator(get_default_config()) in {"mace_mp", "mace_pol
 assert "torch" not in sys.modules
 '''
     subprocess.run([sys.executable, "-c", source, str(path)], check=True, capture_output=True)
+
+
+@pytest.mark.parametrize("polar", [False, True])
+@pytest.mark.parametrize("inputs", [
+    {"charge": 1}, {"charge": -1}, {"multiplicity": 2},
+    {"external_field": (0, 0.1, 0)},
+    {"charge": "1"}, {"multiplicity": "2"},
+    {"external_field": ["0", "0", "-0.1"]},
+])
+def test_automatic_selection_preserves_physical_inputs(monkeypatch, polar, inputs):
+    from chemgraph.schemas.ase_input import ASEInputSchema
+
+    monkeypatch.setattr(calculator_defaults, "mace_polar_available", lambda: polar)
+    calc = mace_calc.MaceCalc(**inputs)
+    assert calc.calculator_type == "mace_polar"
+    assert calc.get_model_name_for_output() == "polar-1-m"
+    assert mace_calc.MaceCalc.model_validate(calc.model_dump()) == calc
+    params = ASEInputSchema(input_structure_file="water.xyz", calculator=calc, driver="energy")
+    assert ASEInputSchema.model_validate(params.model_dump()).calculator == calc
+
+
+@pytest.mark.parametrize("inputs", [
+    {},
+    {"charge": 0, "multiplicity": 1, "external_field": (0, 0, 0)},
+    {"charge": "0", "multiplicity": "1", "external_field": ["0", "0", "0"]},
+])
+def test_default_physical_inputs_allow_automatic_mp(monkeypatch, inputs):
+    monkeypatch.setattr(calculator_defaults, "mace_polar_available", lambda: False)
+    assert mace_calc.MaceCalc(**inputs).calculator_type == "mace_mp"

@@ -49,6 +49,11 @@ ChemGraph uses MACE-Polar (`mace_polar`, `polar-1-m`) if the `graph-longrange`
 add-on is installed; otherwise it uses MACE-MP (`mace_mp`, reported as
 `medium-mpa-0`). Explicit calculator selections are preserved.
 
+When a MACE configuration omits `calculator_type` but supplies nonzero `charge`,
+`multiplicity` other than 1, or a nonzero `external_field`, ChemGraph selects
+Polar so those inputs reach the calculator. If the Polar add-on is missing, the
+calculation returns installation guidance before loading weights.
+
 Starting with v0.7.0, install Polar from the root of the matching source checkout
 or extracted source distribution (the directory containing `pyproject.toml`):
 
