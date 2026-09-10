@@ -21,16 +21,16 @@ You do NOT execute tools yourself. For any question involving computed propertie
   1. Each subtask must correspond to calculating a property **of a single molecule only** (e.g., energy, enthalpy, geometry optimization).
   2. Do NOT generate subtasks that involve combining or comparing results between molecules (e.g., reaction enthalpy, binding energy).
   3. Each subtask must be independent — no task should depend on the result of another.
-  4. Include all relevant simulation parameters from the user's input (temperature, pressure, calculator, etc.) in each task prompt.
+  4. Include all relevant simulation parameters from the user's input (temperature, pressure, calculator, etc.) in each task prompt. Preserve supplied values and do not invent missing values.
+  5. Let executors determine which omitted parameters have tool-defined defaults and validate supplied values against their tool schemas.
 
 **PHASE 1b: Ask Human for Clarification**
-- **Trigger:** The user query is missing critical information needed to generate tasks, or is ambiguous.
+- **Trigger:** An executor identifies a missing required input with no tool-defined default, or the task or supplied values are ambiguous or invalid.
 - **Action:** Set `next_step` to `"ask_human"` and provide a `clarification` string with a clear question.
 - **When to ask:**
-  1. Required simulation parameters are missing (e.g., no calculator specified, no temperature for thermochemistry, no molecule identified).
+  1. An executor identifies a missing required input with no default in its tool schema.
   2. The query is vague or could be interpreted in multiple ways (e.g., "calculate properties of water" — which properties?).
   3. An executor task failed and you need the user to decide how to proceed (e.g., retry with different parameters, use a different method, or skip).
-- **Never guess or assume defaults** for critical parameters — always ask the human when in doubt.
 
 **PHASE 2: Review Results (Subsequent invocations)**
 - **Trigger:** You see executor results or human clarification responses in the conversation history.
@@ -84,13 +84,12 @@ Return ONLY this JSON object. Do not wrap it in markdown fences. Do not include 
 
 _ASK_HUMAN_PLANNER_BLOCK = """\
 **PHASE 1b: Ask Human for Clarification**
-- **Trigger:** The user query is missing critical information needed to generate tasks, or is ambiguous.
+- **Trigger:** An executor identifies a missing required input with no tool-defined default, or the task or supplied values are ambiguous or invalid.
 - **Action:** Set `next_step` to `"ask_human"` and provide a `clarification` string with a clear question.
 - **When to ask:**
-  1. Required simulation parameters are missing (e.g., no calculator specified, no temperature for thermochemistry, no molecule identified).
+  1. An executor identifies a missing required input with no default in its tool schema.
   2. The query is vague or could be interpreted in multiple ways (e.g., "calculate properties of water" — which properties?).
   3. An executor task failed and you need the user to decide how to proceed (e.g., retry with different parameters, use a different method, or skip).
-- **Never guess or assume defaults** for critical parameters — always ask the human when in doubt.
 
 """
 
@@ -167,12 +166,12 @@ Instructions:
 
 2. **Before calling any tool**, ensure that:
    - All required input fields for that specific tool are present and valid.
-   - You do **not assume default values**. You must explicitly extract each value.
-   - For example, temperature must be included for thermodynamic calculations.
+   - Omit unspecified parameters that have defaults in the tool schema and let the tool apply them.
+   - Preserve user-supplied values. Do not invent defaults or replace invalid supplied values with defaults.
 
 3. **You must use tool calls to generate any molecular data**:
    - **Never fabricate SMILES strings, coordinates, thermodynamic properties, or energies**.
-   - If inputs are missing, halt and state what is needed.
+   - If a required input is missing and has no default in the tool schema, or a supplied value is ambiguous or invalid, halt and state what is needed.
 
 4. After each tool call:
    - **Examine the result** to confirm whether it succeeded and meets the original task's needs.

@@ -294,8 +294,8 @@ class ASEInputSchema(BaseModel):
         Force convergence criterion in eV/Å. Optimization stops when all force components fall below this threshold.
     steps : int
         Maximum number of steps for geometry optimization.
-    temperature : Optional[float]
-        Temperature in Kelvin, required for thermochemical calculations (e.g., when using 'thermo' as the driver).
+    temperature : float
+        Positive temperature in Kelvin for thermochemistry; omitted or null values use 298.15 K.
     pressure : float
         Pressure in Pascal (Pa), used in thermochemistry calculations (default is 1 atm).
     """
@@ -327,14 +327,22 @@ class ASEInputSchema(BaseModel):
         default=1000,
         description="Maximum number of optimization steps. Internally 'vib', 'thermo' and 'ir' run geometry optimization before performing their respective calculations.",
     )
-    temperature: Optional[float] = Field(
-        default=None,
-        description="Temperature for thermochemistry calculations in Kelvin (K).",
+    temperature: float = Field(
+        default=298.15,
+        gt=0,
+        allow_inf_nan=False,
+        description="Temperature for thermochemistry in Kelvin (K), finite and greater than zero. Omitted or null values use 298.15 K.",
     )
     pressure: float = Field(
         default=101325.0,
         description="Pressure for thermochemistry calculations in Pascal (Pa).",
     )
+
+    @field_validator("temperature", mode="before")
+    @classmethod
+    def _default_temperature(cls, value: Any) -> Any:
+        """Treat explicit null like an omitted temperature."""
+        return cls.model_fields["temperature"].default if value is None else value
 
     @model_validator(mode="before")
     @classmethod
@@ -401,14 +409,22 @@ class ase_input_schema_ensemble(BaseModel):
         default=1000,
         description="Maximum number of optimization steps. Internally 'vib', 'thermo' and 'ir' run geometry optimization before performing their respective calculations.",
     )
-    temperature: Optional[float] = Field(
-        default=None,
-        description="Temperature for thermochemistry calculations in Kelvin (K).",
+    temperature: float = Field(
+        default=298.15,
+        gt=0,
+        allow_inf_nan=False,
+        description="Temperature for thermochemistry in Kelvin (K), finite and greater than zero. Omitted or null values use 298.15 K.",
     )
     pressure: float = Field(
         default=101325.0,
         description="Pressure for thermochemistry calculations in Pascal (Pa).",
     )
+
+    @field_validator("temperature", mode="before")
+    @classmethod
+    def _default_temperature(cls, value: Any) -> Any:
+        """Treat explicit null like an omitted temperature."""
+        return cls.model_fields["temperature"].default if value is None else value
 
     @model_validator(mode="before")
     @classmethod
@@ -460,13 +476,24 @@ class ASEOutputSchema(BaseModel):
     )
     vibrational_frequencies: dict = Field(
         default={},
-        description="Vibrational frequencies (in cm-1) and energies (in eV).",
+        description=(
+            "Vibrational frequencies in cm-1 and energies in meV. Thermochemistry "
+            "results include the original zero-based mode_indices used by ASE "
+            "and all_modes, the complete input spectrum including excluded modes."
+        ),
     )
     ir_data: dict = Field(
         default={},
         description="Infrared spectrum related data.",
     )
-    thermochemistry: dict = Field(default={}, description="Thermochemistry data in eV.")
+    thermochemistry: dict = Field(
+        default={}, description=(
+            "Thermochemistry energies in eV and entropy in eV/K, with ASE version, "
+            "mode-selection policy, cleanup counts, and warnings. ASE rejects "
+            "imaginary modes remaining after highest selection; n_imag is zero "
+            "on success. Legacy results may record removed modes in n_imag."
+        )
+    )
     success: bool = Field(
         default=False, description="Indicates if the simulation finished correctly."
     )

@@ -36,6 +36,55 @@ Calculator-backed tools cover operations such as:
 Support depends on the selected calculator. A valid property for one engine may
 not exist for another.
 
+Ideal-gas thermochemistry uses the requested temperature and pressure (defaults:
+298.15 K and 101325 Pa). ASE single and ensemble inputs also interpret a null
+temperature as 298.15 K; supplied temperatures must be finite and positive.
+Enthalpy and Gibbs energy are reported in eV; entropy is reported in eV/K with a
+separate `entropy_unit` field. HTML reports accept eV/K entropy, including legacy
+results without this field, and reject other declared entropy units. The shared
+**Units** selector converts energy and entropy together; entropy labels change
+to kJ/(mol K) or kcal/(mol K) for the corresponding molar energy selection.
+
+ChemGraph requires ASE >= 3.29.0. For `thermo`, the complete complex spectrum is
+passed to `IdealGasThermo(vib_selection="highest", ignore_imag_modes=False)`.
+These are ASE's defaults: select the expected number of modes by signed squared
+energy, then reject any remaining imaginary modes. Zero-energy modes are not
+automatically removed; if they yield non-finite thermochemistry, the calculation
+returns a failure. ChemGraph does not apply an additional check of the complete
+spectrum, impose a frequency cutoff, or convert imaginary frequencies to real ones.
+
+Reported thermochemistry frequencies, CSV entries, and trajectories match the
+energies ASE actually used. `vibrational_frequencies.mode_indices` contains their
+original zero-based ASE indices; `all_modes` preserves every input mode as
+`mode_index`, `energy` (meV), and `frequency` (cm-1), with an `i` suffix for
+imaginary values. HTML displays mode numbers starting at 1 and includes the full
+spectrum with used/excluded labels. Standalone `vib` and `ir` output is unchanged.
+
+Thermochemistry metadata records `ase_version`, `vib_selection`,
+`ignore_imag_modes`, `n_imag`, `raw_imaginary_mode_count`, and `warnings`.
+`n_imag` is zero for successful calculations under this policy. Legacy results
+with `ignore_imag_modes=True` may record modes removed **after selection**,
+including zero-energy modes; HTML reports continue to support that metadata.
+`n_imag` is not the number of imaginary modes in the complete input. Selection
+may already have excluded imaginary modes even when `n_imag` is zero. Successful
+thermochemistry with excluded modes does not establish structural stability.
+The raw imaginary-mode count is diagnostic and does not itself trigger a
+warning. Warnings contain messages emitted by ASE and identify calculations
+with no vibrational contribution. If ASE raises or returns non-finite
+thermodynamic values, ChemGraph returns a failure with `results_file` pointing
+to the completed structure,
+potential energy, convergence state, and full spectrum; the JSON records
+`success=false` and the error, with no thermochemistry values.
+
+Single atoms skip finite-difference vibrations for `thermo`, `vib`, and `ir`.
+Atomic thermochemistry includes translation and uses the calculator's reported
+multiplicity for the electronic-spin contribution. If no multiplicity is
+reported, ChemGraph logs a warning and assumes a singlet, omitting the
+electronic-spin entropy of open-shell species. This does not infer ground-state
+multiplicities or add spin dependence to a calculator's potential energy.
+Rotational symmetry analysis expects an isolated, unwrapped molecule; periodic
+images are not reconstructed.
+
 ## EMT for setup checks
 
 EMT is lightweight and requires no download, making it a useful plumbing test.

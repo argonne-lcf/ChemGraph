@@ -15,6 +15,7 @@ import os
 import shutil
 import tempfile
 import time
+import warnings
 from pathlib import Path
 from typing import List, Optional
 
@@ -214,11 +215,11 @@ def is_linear_molecule(atomsdata: AtomsData, tol: float = 1e-3) -> bool:
 
 
 def _vibrational_mode_indices(atomsdata: AtomsData, total_modes: int) -> list[int]:
-    """Return ASE mode indices corresponding to molecular vibrations.
+    """Return mode indices for standalone vibration and IR reporting.
 
-    ASE returns all ``3N`` normal modes in ascending order.  The leading
-    translational and rotational modes are excluded from reported vibration
-    data: five modes for a linear molecule and six for a nonlinear molecule.
+    Skip the first five modes for linear molecules and six for nonlinear
+    molecules. This positional rule does not identify individual mode
+    character. Thermochemistry instead reports the modes retained by ASE.
 
     Parameters
     ----------
@@ -247,8 +248,114 @@ def _vibrational_mode_indices(atomsdata: AtomsData, total_modes: int) -> list[in
     return list(range(num_nonvibrational, total_modes))
 
 
+def _vibrational_mode_record(mode_index: int, energy: complex) -> dict:
+    """Format an ASE mode in meV and cm-1, marking imaginary values with i."""
+    from ase import units
+
+    value = energy.imag if energy.imag != 0 else energy.real
+    suffix = "i" if energy.imag != 0 else ""
+    return {
+        "mode_index": mode_index,
+        "energy": f"{1e3 * value}{suffix}",
+        "frequency": f"{value / units.invcm}{suffix}",
+    }
+
+
+def _calculate_thermochemistry(
+    atoms,
+    final_structure,
+    all_energies,
+    potential_energy,
+    calc_model,
+    temperature,
+    pressure,
+) -> tuple[dict, list[int]]:
+    """Compute thermochemistry using ASE's mode selection and validation.
+
+    Return thermochemistry values and metadata with original retained mode
+    indices. Preserve ASE warnings and warn when no vibrations contribute.
+    Record raw imaginary-mode counts as diagnostics.
+    """
+    import ase
+    from ase.thermochemistry import IdealGasThermo
+
+    expected_modes = 0 if len(atoms) == 1 else 3 * len(atoms)
+    if len(all_energies) != expected_modes:
+        raise ValueError(
+            f"Expected {expected_modes} input modes, got {len(all_energies)}."
+        )
+    if len(atoms) == 1:
+        geometry, symmetrynumber = "monatomic", 1
+    else:
+        geometry = "linear" if is_linear_molecule(final_structure) else "nonlinear"
+        symmetrynumber = get_symmetry_number(final_structure)
+
+    # IdealGasThermo expects total spin S; calculators expose 2S+1.
+    multiplicity = getattr(calc_model, "get_multiplicity", lambda: None)()
+    if multiplicity is None:
+        logger.warning(
+            "%s does not report spin multiplicity; assuming a singlet "
+            "(multiplicity=1) for thermochemistry. Electronic-spin entropy "
+            "is omitted for open-shell species.",
+            type(calc_model).__name__,
+        )
+        multiplicity = 1
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", UserWarning)
+        thermo = IdealGasThermo(
+            vib_energies=all_energies,
+            potentialenergy=potential_energy,
+            atoms=atoms,
+            geometry=geometry,
+            symmetrynumber=symmetrynumber,
+            spin=(multiplicity - 1) / 2.0,
+            vib_selection="highest",
+            ignore_imag_modes=False,
+        )
+        retained_energies = thermo.vib_energies
+        enthalpy = float(thermo.get_enthalpy(temperature, verbose=False))
+        entropy = float(thermo.get_entropy(temperature, pressure, verbose=False))
+    gibbs_free_energy = enthalpy - temperature * entropy
+    if not np.all(np.isfinite([enthalpy, entropy, gibbs_free_energy])):
+        raise ValueError("ASE returned non-finite thermochemistry values.")
+
+    # ASE sorts stably and keeps the last modes. Match equal energies from
+    # the end so degenerate modes at the selection boundary keep their IDs.
+    indices_by_energy: dict[float, list[int]] = {}
+    for index, energy in enumerate(all_energies):
+        indices_by_energy.setdefault(float(np.real(energy)), []).append(index)
+    mode_indices = [
+        indices_by_energy[float(energy)].pop() for energy in reversed(retained_energies)
+    ][::-1]
+
+    notes = [str(warning.message) for warning in caught]
+    raw_imaginary_count = int(np.count_nonzero(np.iscomplex(all_energies)))
+    if len(atoms) > 1 and not mode_indices:
+        notes.append("No vibrational modes contributed to thermochemistry.")
+    for note in notes:
+        logger.warning(note)
+
+    return {
+        "enthalpy": enthalpy,
+        "entropy": entropy,
+        "gibbs_free_energy": gibbs_free_energy,
+        "unit": "eV",
+        "entropy_unit": "eV/K",
+        "ase_version": ase.__version__,
+        "vib_selection": "highest",
+        "ignore_imag_modes": False,
+        "n_imag": int(thermo.n_imag),
+        "raw_imaginary_mode_count": raw_imaginary_count,
+        "warnings": notes,
+    }, mode_indices
+
+
 def get_symmetry_number(atomsdata: AtomsData) -> int:
-    """Return the rotational symmetry number using Pymatgen.
+    """Return the rotational symmetry number of an isolated molecule.
+
+    Coordinates must describe an unwrapped molecule; periodic images are
+    not reconstructed for point-group analysis.
 
     Parameters
     ----------
@@ -258,6 +365,9 @@ def get_symmetry_number(atomsdata: AtomsData) -> int:
     -------
     int
     """
+    if len(atomsdata.numbers) == 1:
+        return 1
+
     from pymatgen.symmetry.analyzer import PointGroupAnalyzer
     from ase import Atoms
     from pymatgen.io.ase import AseAtomsAdaptor
@@ -269,7 +379,9 @@ def get_symmetry_number(atomsdata: AtomsData) -> int:
         pbc=atomsdata.pbc,
     )
     aaa = AseAtomsAdaptor()
-    molecule = aaa.get_molecule(atoms)
+    # Rotational symmetry depends on geometry, not the calculator's electronic
+    # state. Reconstructed Atoms lack magnetic moments for radical species.
+    molecule = aaa.get_molecule(atoms, charge_spin_check=False)
     pga = PointGroupAnalyzer(molecule)
     return pga.get_rotational_symmetry_number()
 
@@ -481,7 +593,7 @@ def _energy_result_metadata(
     converged: Optional[bool] = None,
     optimization_steps: Optional[int] = None,
 ) -> dict:
-    """Build consistent energy metadata for a successful tool result."""
+    """Build consistent metadata for a completed energy calculation."""
     result = {
         "driver": driver,
         "potential_energy": potential_energy,
@@ -489,7 +601,7 @@ def _energy_result_metadata(
         "results_file": os.path.abspath(results_file),
     }
     if converged is not None:
-        result["converged"] = converged
+        result["converged"] = bool(converged)
     if optimization_steps is not None:
         result["optimization_steps"] = optimization_steps
     return result
@@ -622,7 +734,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
     atoms.info.update(system_info)
     atoms.calc = calc
 
-    if driver == "ir":
+    if driver == "ir" and len(atoms) > 1:
         # Infrared calls this ASE method at every displacement. Check it before
         # optimization and vibrations; a result-only fallback cannot support IR.
         from ase.calculators.calculator import PropertyNotImplementedError
@@ -745,21 +857,55 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             pbc=atoms.pbc,
         )
         thermo_data: dict = {}
+        thermo_error: Optional[Exception] = None
         vib_data: dict = {}
         ir_data: dict = {}
+        ir_plot_path: Optional[str] = None
 
         # --------------------------------------------------------------
         # Vibrational / thermo / IR analysis
         # --------------------------------------------------------------
+        all_energies = []
         if driver in {"vib", "thermo", "ir"}:
-            logger.info("Starting vibrational analysis (driver=%s)", driver)
-            from ase.vibrations import Vibrations
-            from ase import units
-
-            ir_plot_path: Optional[str] = None
+            vib_data = {
+                "energies": [],
+                "energy_unit": "meV",
+                "frequencies": [],
+                "frequency_unit": "cm-1",
+            }
             mol_stem = (
                 Path(input_structure_file).stem if input_structure_file else "mol"
             )
+            freq_file = Path(_resolve_path(f"frequencies_{mol_stem}.csv"))
+            traj_dest_dir = _resolve_path("")
+            stale_traj_pattern = (
+                glob.escape(_resolve_path(f"{mol_stem}_vib.")) + "*.traj"
+            )
+            if len(atoms) == 1:
+                # Single atoms have no replacement vibration artifacts.
+                freq_file.unlink(missing_ok=True)
+                for stale_traj_file in glob.glob(stale_traj_pattern):
+                    os.unlink(stale_traj_file)
+
+            if driver == "ir":
+                ir_data = {
+                    "spectrum_frequencies": [],
+                    "spectrum_frequencies_units": "cm-1",
+                    "spectrum_intensities": [],
+                    "spectrum_intensities_units": "D/Å^2 amu^-1",
+                }
+                if len(atoms) == 1:
+                    for name in (
+                        f"ir_spectrum_{mol_stem}.png",
+                        f"ir_spectrum_{mol_stem}.csv",
+                        f"ir_peaks_{mol_stem}.csv",
+                    ):
+                        Path(_resolve_path(name)).unlink(missing_ok=True)
+
+        if driver in {"vib", "thermo", "ir"} and len(atoms) > 1:
+            logger.info("Starting vibrational analysis (driver=%s)", driver)
+            from ase.vibrations import Vibrations
+            from ase import units
 
             with tempfile.TemporaryDirectory(
                 prefix=f"chemgraph_vib_{mol_stem}_"
@@ -770,17 +916,28 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 vib.run()
                 logger.info("Vibrational analysis complete")
 
-                vib_data = {
-                    "energies": [],
-                    "energy_unit": "meV",
-                    "frequencies": [],
-                    "frequency_unit": "cm-1",
-                }
-
                 all_energies = vib.get_energies()
-                mode_indices = _vibrational_mode_indices(
-                    final_structure, len(all_energies)
-                )
+                if driver == "thermo":
+                    vib_data.update(
+                        mode_indices=[],
+                        all_modes=[
+                            _vibrational_mode_record(i, e)
+                            for i, e in enumerate(all_energies)
+                        ],
+                    )
+                    try:
+                        thermo_data, mode_indices = _calculate_thermochemistry(
+                            atoms, final_structure, all_energies, potential_energy,
+                            calc_model, temperature, pressure,
+                        )
+                        vib_data["mode_indices"] = mode_indices
+                    except Exception as exc:
+                        logger.exception("Thermochemistry failed; preserving vibration results")
+                        thermo_error, mode_indices = exc, []
+                else:
+                    mode_indices = _vibrational_mode_indices(
+                        final_structure, len(all_energies)
+                    )
 
                 for mode_index in mode_indices:
                     e = all_energies[mode_index]
@@ -793,10 +950,6 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                     vib_data["frequencies"].append(f"{freq_cm1}{suffix}")
 
                 # Write frequencies CSV
-                freq_file_path = _resolve_path(f"frequencies_{mol_stem}.csv")
-                freq_file = Path(freq_file_path)
-                if freq_file.exists():
-                    freq_file.unlink()
                 with freq_file.open("w", encoding="utf-8") as f:
                     for mode_index, freq in zip(
                         mode_indices, vib_data["frequencies"]
@@ -809,12 +962,9 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                         n=mode_index, kT=units.kB * 300, nimages=30
                     )
 
-                traj_dest_dir = _resolve_path("")
                 if traj_dest_dir:
                     os.makedirs(traj_dest_dir, exist_ok=True)
-                stale_traj_pattern = os.path.join(
-                    traj_dest_dir, f"{mol_stem}_vib.*.traj"
-                )
+                # Keep previous modes until all replacements have been written.
                 for stale_traj_file in glob.glob(stale_traj_pattern):
                     os.unlink(stale_traj_file)
                 for mode_index in mode_indices:
@@ -835,11 +985,6 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
 
                     matplotlib.use("Agg")
                     import matplotlib.pyplot as plt
-
-                    ir_data["spectrum_frequencies"] = []
-                    ir_data["spectrum_frequencies_units"] = "cm-1"
-                    ir_data["spectrum_intensities"] = []
-                    ir_data["spectrum_intensities_units"] = "D/Å^2 amu^-1"
 
                     ir_name = os.path.join(tmpdir, "ir")
                     ir = Infrared(atoms, name=ir_name)
@@ -898,55 +1043,17 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                         f"Normal modes saved as individual .traj files with prefix {mol_stem}_"
                     )
 
-                # ---- Thermochemistry ----
-                if driver == "thermo":
-                    logger.info("Computing thermochemistry (T=%s K, P=%s Pa)", temperature, pressure)
-                    if len(atoms) == 1:
-                        thermo_data = {
-                            "enthalpy": potential_energy,
-                            "entropy": 0.0,
-                            "gibbs_free_energy": potential_energy,
-                            "unit": "eV",
-                        }
-                    else:
-                        from ase.thermochemistry import IdealGasThermo
-
-                        linear = is_linear_molecule(final_structure)
-                        geometry = "linear" if linear else "nonlinear"
-                        symmetrynumber = get_symmetry_number(final_structure)
-
-                        # IdealGasThermo expects total spin S; calculators expose
-                        # multiplicity (2S+1) via get_multiplicity() when supported.
-                        multiplicity = (
-                            getattr(calc_model, "get_multiplicity", lambda: None)()
-                            or 1
-                        )
-                        spin_S = (multiplicity - 1) / 2.0
-
-                        thermo = IdealGasThermo(
-                            vib_energies=all_energies,
-                            potentialenergy=potential_energy,
-                            atoms=atoms,
-                            geometry=geometry,
-                            symmetrynumber=symmetrynumber,
-                            spin=spin_S,
-                        )
-                        thermo_data = {
-                            "enthalpy": float(
-                                thermo.get_enthalpy(temperature=temperature)
-                            ),
-                            "entropy": float(
-                                thermo.get_entropy(
-                                    temperature=temperature, pressure=pressure
-                                )
-                            ),
-                            "gibbs_free_energy": float(
-                                thermo.get_gibbs_energy(
-                                    temperature=temperature, pressure=pressure
-                                )
-                            ),
-                            "unit": "eV",
-                        }
+        # ---- Thermochemistry ----
+        if driver == "thermo" and len(atoms) == 1:
+            vib_data.update(mode_indices=[], all_modes=[])
+            try:
+                thermo_data, _ = _calculate_thermochemistry(
+                    atoms, final_structure, [], potential_energy, calc_model,
+                    temperature, pressure,
+                )
+            except Exception as exc:
+                logger.exception("Thermochemistry failed; preserving atomic results")
+                thermo_error = exc
 
         # ---- serialise full output ----
         end_time = time.time()
@@ -960,7 +1067,8 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             simulation_input=simulation_input,
             vibrational_frequencies=vib_data,
             thermochemistry=thermo_data,
-            success=True,
+            success=thermo_error is None,
+            error=str(thermo_error) if thermo_error is not None else "",
             ir_data=ir_data,
             potential_energy=potential_energy,
             single_point_energy=potential_energy,
@@ -978,6 +1086,29 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             converged=converged,
             optimization_steps=optimization_steps,
         )
+        if thermo_error is not None:
+            if len(atoms) == 1:
+                artifact_message = (
+                    "Completed structure and potential energy are saved in the "
+                    f"results JSON: {abs_output}. Single atoms have no vibrational "
+                    "modes; no frequency CSV or mode trajectories were exported."
+                )
+            else:
+                artifact_message = (
+                    "Completed structure, potential energy, and the full input "
+                    f"vibrational spectrum are saved in the results JSON: {abs_output}. "
+                    "The selected-mode frequency CSV is empty; "
+                    "no selected-mode trajectories were exported."
+                )
+            return {
+                "status": "failure",
+                "error_type": type(thermo_error).__name__,
+                "message": (
+                    f"Thermochemistry failed: {thermo_error}. "
+                    f"{artifact_message}"
+                ),
+                **energy_metadata,
+            }
         if driver == "opt":
             if converged:
                 message = f"Geometry optimization converged. Results saved to {abs_output}"
@@ -1017,6 +1148,12 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 ),
             }
         elif driver == "ir":
+            artifact_message = (
+                f"IR plot saved to {os.path.abspath(ir_plot_path)}. "
+                "Normal modes saved as individual .traj files"
+                if ir_plot_path
+                else "Single atoms have no vibrational modes or IR spectrum."
+            )
             return {
                 "status": "success",
                 **energy_metadata,
@@ -1024,8 +1161,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                 "message": (
                     "Infrared computed and returned. "
                     f"Full results (structure, vibrations, thermochemistry and metadata) saved to {abs_output}. "
-                    f"IR plot saved to {os.path.abspath(ir_plot_path) if ir_plot_path else 'N/A'}. "
-                    "Normal modes saved as individual .traj files"
+                    f"{artifact_message}"
                 ),
             }
 

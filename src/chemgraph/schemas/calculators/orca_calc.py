@@ -42,7 +42,9 @@ class OrcaCalc(BaseModel):
     )
     charge: int = Field(default=0, description="Total charge of the system.")
     multiplicity: int = Field(
-        default=1, description="Total multiplicity of the system."
+        default=1,
+        ge=1,
+        description="Spin multiplicity (2S+1): 1=singlet, 2=doublet, etc.",
     )
     orcasimpleinput: str = Field(
         default="B3LYP def2-TZVP",

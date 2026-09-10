@@ -10,6 +10,35 @@ from chemgraph.schemas.calculators.orca_calc import OrcaCalc
 from ase import Atoms
 
 
+@pytest.mark.parametrize("schema", [TBLiteCalc, OrcaCalc], ids=["tight-binding", "orca"])
+@pytest.mark.parametrize("multiplicity", [0, -1])
+def test_calculator_multiplicity_rejects_nonpositive_values(schema, multiplicity):
+    with pytest.raises(ValidationError, match="multiplicity"):
+        schema(multiplicity=multiplicity)
+
+
+@pytest.mark.parametrize("schema", [TBLiteCalc, OrcaCalc], ids=["tight-binding", "orca"])
+@pytest.mark.parametrize("multiplicity", [1, 2, 3])
+def test_calculator_multiplicity_preserves_valid_values(schema, multiplicity):
+    calc = schema(multiplicity=multiplicity)
+    assert calc.multiplicity == multiplicity
+    assert calc.get_multiplicity() == multiplicity
+
+
+@pytest.mark.parametrize(
+    "schema, inputs, expected",
+    [
+        pytest.param(TBLiteCalc, {}, None, id="tight-binding-default"),
+        pytest.param(TBLiteCalc, {"multiplicity": None}, None, id="tight-binding-null"),
+        pytest.param(OrcaCalc, {}, 1, id="orca-default"),
+    ],
+)
+def test_calculator_multiplicity_preserves_defaults(schema, inputs, expected):
+    calc = schema(**inputs)
+    assert calc.multiplicity == expected
+    assert calc.get_multiplicity() == expected
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("tblite") is None, reason="TBLite not installed"
 )
