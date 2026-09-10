@@ -10,12 +10,54 @@ from typing import Dict, Any, Optional
 from chemgraph.utils.config_utils import flatten_config as _flatten_config
 from chemgraph.utils.calculator_defaults import get_default_mace_calculator_type
 
-# Anchor the default config to the repository root (the directory the app is
-# meant to be launched from per the README) rather than the current working
-# directory.  With a bare ``"config.toml"`` the file resolved relative to the
-# launch directory, so starting Streamlit from anywhere else silently created
-# and used a throw-away default config instead of the real one.
-_DEFAULT_CONFIG_PATH = str(Path(__file__).resolve().parents[2] / "config.toml")
+CONFIG_PATH_ENV = "CHEMGRAPH_CONFIG"
+
+
+def _source_checkout_root() -> Optional[Path]:
+    """Return the repository root when running from a source checkout.
+
+    ``src/ui/config.py`` sits two levels below the repository root, which is
+    identified by its ``pyproject.toml``.  In a wheel installation the same
+    ancestor is ``lib/pythonX.Y``, which has no such marker and is frequently
+    read-only.
+    """
+    root = Path(__file__).resolve().parents[2]
+    return root if (root / "pyproject.toml").is_file() else None
+
+
+def user_config_dir() -> Path:
+    """Return the per-user directory for an installed ChemGraph's config."""
+    base = os.environ.get("XDG_CONFIG_HOME") or os.environ.get("APPDATA")
+    base_path = Path(base) if base else Path.home() / ".config"
+    return base_path / "chemgraph"
+
+
+def default_config_path() -> str:
+    """Resolve where ``config.toml`` lives for this installation.
+
+    Precedence: the ``CHEMGRAPH_CONFIG`` environment variable, then
+    ``<repo>/config.toml`` for a source checkout (the directory the app is
+    meant to be launched from per the README, rather than the current working
+    directory), then a writable per-user location for wheel installations.
+    Resolving relative to the package for installed copies placed the file
+    inside ``lib/pythonX.Y/``; saves there fail silently on read-only
+    installs and the settings are gone on the next start.
+    """
+    override = os.environ.get(CONFIG_PATH_ENV)
+    if override:
+        return str(Path(override).expanduser())
+    checkout = _source_checkout_root()
+    if checkout is not None:
+        return str(checkout / "config.toml")
+    return str(user_config_dir() / "config.toml")
+
+
+_DEFAULT_CONFIG_PATH = default_config_path()
+
+
+def config_path() -> str:
+    """Return the active default configuration file path."""
+    return _DEFAULT_CONFIG_PATH
 
 
 def merge_config_defaults(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -74,6 +116,11 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         return get_default_config()
 
 
+#: Human-readable reason for the most recent failed ``save_config`` call, or
+#: ``None`` after a successful save. UI pages surface it to the user.
+last_save_error: Optional[str] = None
+
+
 def save_config(config: Dict[str, Any], config_path: Optional[str] = None) -> bool:
     """Save configuration to a TOML file.
 
@@ -89,14 +136,19 @@ def save_config(config: Dict[str, Any], config_path: Optional[str] = None) -> bo
     bool
         ``True`` if the file was written successfully.
     """
+    global last_save_error
     if config_path is None:
         config_path = _DEFAULT_CONFIG_PATH
     try:
+        parent = os.path.dirname(os.path.abspath(config_path))
+        os.makedirs(parent, exist_ok=True)
         with open(config_path, "w") as f:
             toml.dump(config, f)
+        last_save_error = None
         return True
     except Exception as e:
-        print(f"Error saving configuration: {e}")
+        last_save_error = f"{config_path}: {e}"
+        print(f"Error saving configuration to {last_save_error}")
         return False
 
 

@@ -16,6 +16,7 @@ These lock in the behaviors PR 3 introduced on top of the endpoint registry:
 
 from __future__ import annotations
 
+from pathlib import Path
 import logging
 
 import pytest
@@ -714,3 +715,53 @@ def test_repository_config_has_canonical_argo_and_vllm_sections():
     assert config["api"]["openai"]["base_url"] == "https://api.openai.com/v1"
     assert "argo" in config["api"]
     assert "vllm" in config["api"]
+
+
+def test_installed_package_uses_writable_user_config_path(monkeypatch, tmp_path):
+    """A wheel install must not resolve config.toml inside lib/pythonX.Y."""
+    from ui import config as ui_config
+
+    site = tmp_path / "venv" / "lib" / "python3.12" / "site-packages" / "ui"
+    site.mkdir(parents=True)
+    monkeypatch.setattr(ui_config, "__file__", str(site / "config.py"))
+    monkeypatch.delenv("CHEMGRAPH_CONFIG", raising=False)
+    monkeypatch.delenv("APPDATA", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+    resolved = Path(ui_config.default_config_path())
+    assert resolved == tmp_path / "xdg" / "chemgraph" / "config.toml"
+    assert "lib" not in resolved.parts
+
+    monkeypatch.delenv("XDG_CONFIG_HOME")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    assert Path(ui_config.default_config_path()) == (
+        tmp_path / "home" / ".config" / "chemgraph" / "config.toml"
+    )
+
+    monkeypatch.setenv("CHEMGRAPH_CONFIG", str(tmp_path / "custom.toml"))
+    assert ui_config.default_config_path() == str(tmp_path / "custom.toml")
+
+
+def test_source_checkout_keeps_repository_config_path(monkeypatch):
+    from ui import config as ui_config
+
+    monkeypatch.delenv("CHEMGRAPH_CONFIG", raising=False)
+    repo_root = Path(ui_config.__file__).resolve().parents[2]
+    assert (repo_root / "pyproject.toml").is_file()
+    assert Path(ui_config.default_config_path()) == repo_root / "config.toml"
+
+
+def test_save_config_creates_parent_directory_and_reports_failures(tmp_path):
+    from ui import config as ui_config
+
+    target = tmp_path / "xdg" / "chemgraph" / "config.toml"
+    assert ui_config.save_config(ui_config.get_default_config(), str(target))
+    assert target.is_file()
+    assert ui_config.last_save_error is None
+    assert ui_config.load_config(str(target)) == ui_config.get_default_config()
+
+    blocked = tmp_path / "blocked.toml" / "config.toml"  # parent is a file
+    (tmp_path / "blocked.toml").write_text("")
+    assert not ui_config.save_config(ui_config.get_default_config(), str(blocked))
+    assert ui_config.last_save_error is not None
+    assert str(blocked) in ui_config.last_save_error
