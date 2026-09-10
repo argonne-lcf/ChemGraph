@@ -9,7 +9,7 @@ runtime; optional engines that cannot be imported or located are omitted.
 | Calculator | Setup | Best use in onboarding |
 | --- | --- | --- |
 | EMT | Included with ASE | Fast, offline smoke tests; limited elements/accuracy |
-| MACE | Included in core ChemGraph | MACE-Polar medium is the default; supports energies, forces, and molecular dipole moments |
+| MACE | MACE-MP included in core; Polar requires an add-on | Polar medium is preferred when installed; otherwise MACE-MP supplies energies and forces |
 | TBLite | `pip install "chemgraph[calculators]"` | Semiempirical calculations |
 | UMA / fairchem | `pip install "chemgraph[uma]"` in a separate environment | Advanced universal ML potential |
 | AIMNet2 | Install its package/model dependencies separately | Supported molecular ML route when importable |
@@ -36,6 +36,55 @@ Calculator-backed tools cover operations such as:
 Support depends on the selected calculator. A valid property for one engine may
 not exist for another.
 
+Ideal-gas thermochemistry uses the requested temperature and pressure (defaults:
+298.15 K and 101325 Pa). ASE single and ensemble inputs also interpret a null
+temperature as 298.15 K; supplied temperatures must be finite and positive.
+Enthalpy and Gibbs energy are reported in eV; entropy is reported in eV/K with a
+separate `entropy_unit` field. HTML reports accept eV/K entropy, including legacy
+results without this field, and reject other declared entropy units. The shared
+**Units** selector converts energy and entropy together; entropy labels change
+to kJ/(mol K) or kcal/(mol K) for the corresponding molar energy selection.
+
+ChemGraph requires ASE >= 3.29.0. For `thermo`, the complete complex spectrum is
+passed to `IdealGasThermo(vib_selection="highest", ignore_imag_modes=False)`.
+These are ASE's defaults: select the expected number of modes by signed squared
+energy, then reject any remaining imaginary modes. Zero-energy modes are not
+automatically removed; if they yield non-finite thermochemistry, the calculation
+returns a failure. ChemGraph does not apply an additional check of the complete
+spectrum, impose a frequency cutoff, or convert imaginary frequencies to real ones.
+
+Reported thermochemistry frequencies, CSV entries, and trajectories match the
+energies ASE actually used. `vibrational_frequencies.mode_indices` contains their
+original zero-based ASE indices; `all_modes` preserves every input mode as
+`mode_index`, `energy` (meV), and `frequency` (cm-1), with an `i` suffix for
+imaginary values. HTML displays mode numbers starting at 1 and includes the full
+spectrum with used/excluded labels. Standalone `vib` and `ir` output is unchanged.
+
+Thermochemistry metadata records `ase_version`, `vib_selection`,
+`ignore_imag_modes`, `n_imag`, `raw_imaginary_mode_count`, and `warnings`.
+`n_imag` is zero for successful calculations under this policy. Legacy results
+with `ignore_imag_modes=True` may record modes removed **after selection**,
+including zero-energy modes; HTML reports continue to support that metadata.
+`n_imag` is not the number of imaginary modes in the complete input. Selection
+may already have excluded imaginary modes even when `n_imag` is zero. Successful
+thermochemistry with excluded modes does not establish structural stability.
+The raw imaginary-mode count is diagnostic and does not itself trigger a
+warning. Warnings contain messages emitted by ASE and identify calculations
+with no vibrational contribution. If ASE raises or returns non-finite
+thermodynamic values, ChemGraph returns a failure with `results_file` pointing
+to the completed structure,
+potential energy, convergence state, and full spectrum; the JSON records
+`success=false` and the error, with no thermochemistry values.
+
+Single atoms skip finite-difference vibrations for `thermo`, `vib`, and `ir`.
+Atomic thermochemistry includes translation and uses the calculator's reported
+multiplicity for the electronic-spin contribution. If no multiplicity is
+reported, ChemGraph logs a warning and assumes a singlet, omitting the
+electronic-spin entropy of open-shell species. This does not infer ground-state
+multiplicities or add spin dependence to a calculator's potential energy.
+Rotational symmetry analysis expects an isolated, unwrapped molecule; periodic
+images are not reconstructed.
+
 ## EMT for setup checks
 
 EMT is lightweight and requires no download, making it a useful plumbing test.
@@ -45,14 +94,48 @@ result as scientifically appropriate merely because the workflow completed.
 ## MACE downloads
 
 MACE is installed with the core package. When no calculator is specified,
-ChemGraph uses the MACE-Polar medium checkpoint (`mace_polar` with
-`polar-1-m`). Pretrained weights may be fetched on first use. In restricted or
+ChemGraph uses MACE-Polar (`mace_polar`, `polar-1-m`) if the `graph-longrange`
+add-on is installed; otherwise it uses MACE-MP (`mace_mp`, reported as
+`medium-mpa-0`). Explicit calculator selections are preserved.
+
+Starting with v0.7.0, install Polar from the root of the matching source checkout
+or extracted source distribution (the directory containing `pyproject.toml`):
+
+```bash
+python -m pip install . -r requirements/mace-polar.txt
+python -m pip check
+```
+
+After v0.7.0 is published on PyPI and its Git tag exists, a wheel installation
+can use the command below from any directory. Before publication, use the
+development checkout instructions above. Pin both ChemGraph and its requirements
+to the same release:
+
+```bash
+python -m pip install 'chemgraph==0.7.0' -r https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/mace-polar.txt
+```
+
+Use the matching tag or commit when installing another version; the add-on files
+are introduced in v0.7.0. The conda environment and Docker images explicitly
+install Polar. Run `conda env create -f environment.yml` from the checkout root
+so its supplemental requirements path resolves correctly.
+
+Pretrained weights may be fetched on first use. In restricted or
 offline environments, pre-stage the required model cache or choose EMT for the
 initial test. MACE-Polar checkpoints are distributed under the Academic
 Software License (ASL); review its terms before use.
 
 MACE-Polar can calculate molecular dipole moments with `driver="dipole"`.
 ChemGraph reports these dipole vectors in Debye.
+MACE-MP does not supply Polar's dipole or IR capabilities. An explicit Polar
+request without the add-on reports installation instructions before loading weights.
+Unsupported dipole and IR requests return a failure with an explanation; IR checks
+dipole support before starting optimization or vibrational analysis.
+
+In the UI, **Automatic** leaves `chemistry.calculators.default` absent from the
+saved TOML, so unrelated settings changes preserve detection. Selecting a named
+calculator stores an explicit choice. Restart ChemGraph after installing an add-on
+so its initialization-time calculator descriptions reflect the new environment.
 
 ## UMA dependency isolation
 

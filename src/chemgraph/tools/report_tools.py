@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+from html import escape
 from typing import Optional
 from langchain_core.tools import tool
 
@@ -168,7 +169,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         .unit-toggle button:hover:not(.active) {{
             background: #e9ecef;
         }}
-        .energy-value {{
+        .energy-value, .entropy-value {{
             display: inline-block;
             min-width: 100px;
         }}
@@ -340,7 +341,7 @@ def generate_html(
     Returns
     -------
     str
-        Path to the generated HTML file
+        Absolute path to the generated HTML file, or an ``Error:`` message.
     """
     # run_ase and the coordinate writers emit relative paths into
     # CHEMGRAPH_LOG_DIR via _resolve_path; resolve bare names to match so a
@@ -355,14 +356,14 @@ def generate_html(
     # Validate results_json_path exists
     if not os.path.isfile(results_json_path):
         return (
-            f"Results JSON file not found: {results_json_path}. "
+            f"Error: Results JSON file not found: {results_json_path}. "
             "Please provide a valid path to the JSON file produced by the run_ase tool."
         )
 
     # Validate xyz_path exists (if provided)
     if xyz_path is not None and not os.path.isfile(xyz_path):
         return (
-            f"XYZ file not found: {xyz_path}. "
+            f"Error: XYZ file not found: {xyz_path}. "
             "Please provide a valid path to an XYZ file."
         )
 
@@ -372,7 +373,7 @@ def generate_html(
             data = json.load(f)
     except json.JSONDecodeError as e:
         return (
-            f"Failed to parse JSON from {results_json_path}: {e}. "
+            f"Error: Failed to parse JSON from {results_json_path}: {e}. "
             "The file may be corrupted or not valid JSON."
         )
 
@@ -381,7 +382,7 @@ def generate_html(
         ase_output = ASEOutputSchema(**data)
     except Exception as e:
         return (
-            f"Failed to validate results data from {results_json_path}: {e}. "
+            f"Error: Failed to validate results data from {results_json_path}: {e}. "
             "The JSON file may not contain valid ASE output data."
         )
 
@@ -392,7 +393,7 @@ def generate_html(
     else:
         if ase_output.final_structure is None:
             return (
-                "No XYZ file provided and no final_structure found in the results JSON. "
+                "Error: No XYZ file provided and no final_structure found in the results JSON. "
                 "Please provide an xyz_path or ensure the simulation results include a final structure."
             )
 
@@ -413,7 +414,7 @@ def generate_html(
     output_dir = os.path.dirname(os.path.abspath(output_path))
     if not os.path.isdir(output_dir):
         return (
-            f"Output directory does not exist: {output_dir}. "
+            f"Error: Output directory does not exist: {output_dir}. "
             "Please provide a valid output path."
         )
 
@@ -430,7 +431,7 @@ def generate_html(
         print(f"✅ HTML viewer created: {output_path}")
         return str(os.path.abspath(output_path))
     except Exception as e:
-        return f"Failed to generate HTML report: {e}"
+        return f"Error: Failed to generate HTML report: {e}"
 
 
 def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) -> str:
@@ -493,7 +494,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         calc_results.append(f"""
         <li class='regular-item'>
             <div class="unit-toggle">
-                <span>Energy Unit:</span>
+                <span>Units:</span>
                 <button onclick="toggleEnergyUnit('ev')" class="active" data-unit="ev">eV</button>
                 <button onclick="toggleEnergyUnit('kjmol')" data-unit="kjmol">kJ/mol</button>
                 <button onclick="toggleEnergyUnit('kcalmol')" data-unit="kcalmol">kcal/mol</button>
@@ -528,6 +529,19 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             trans_rot_modes = 5 if is_linear else 6
 
         frequencies = ase_output.vibrational_frequencies["frequencies"]
+        ase_selected = "all_modes" in ase_output.vibrational_frequencies
+        selected_indices = ase_output.vibrational_frequencies.get("mode_indices")
+        has_mode_mapping = (
+            ase_selected
+            and isinstance(selected_indices, list)
+            and len(selected_indices) == len(frequencies)
+            and all(type(index) is int and index >= 0 for index in selected_indices)
+            and len(set(selected_indices)) == len(selected_indices)
+            and set(selected_indices).issubset(
+                mode["mode_index"]
+                for mode in ase_output.vibrational_frequencies["all_modes"]
+            )
+        )
         includes_nonvibrational_modes = len(frequencies) == 3 * num_atoms
         num_vibrational_modes = max(3 * num_atoms - trans_rot_modes, 0)
 
@@ -555,7 +569,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             1,
         ):
             is_nonvibrational = (
-                includes_nonvibrational_modes and i <= trans_rot_modes
+                not ase_selected and includes_nonvibrational_modes and i <= trans_rot_modes
             )
             mode_type = (
                 "Translation/Rotation" if is_nonvibrational else "Vibrational"
@@ -563,10 +577,13 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             row_class = (
                 "trans-rot-mode" if is_nonvibrational else "vibrational-mode"
             )
+            display_index = i
+            if ase_selected:
+                display_index = selected_indices[i - 1] + 1 if has_mode_mapping else "Unknown"
 
             freq_table += f"""
                     <tr class="{row_class}">
-                        <td>{i}</td>
+                        <td>{display_index}</td>
                         <td>{freq}</td>
                         <td>{energy}</td>
                         <td>{mode_type}</td>
@@ -579,7 +596,43 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         </div>
         """
 
-        if includes_nonvibrational_modes:
+        if ase_selected:
+            mode_note = (
+                f"{len(frequencies)} of {num_vibrational_modes} expected vibrational "
+                "modes contributed to thermochemistry. "
+            )
+            if has_mode_mapping:
+                mode_note += (
+                    "Mode numbers refer to the original ASE spectrum (displayed starting at 1). "
+                    "Excluded modes are not necessarily translations or rotations."
+                )
+            else:
+                mode_note += (
+                    "Original mode mapping is unavailable or inconsistent. Selected mode "
+                    "numbers and usage in the complete spectrum are shown as Unknown."
+                )
+            raw_rows = []
+            for mode in ase_output.vibrational_frequencies["all_modes"]:
+                disposition = "Unknown"
+                if has_mode_mapping:
+                    disposition = (
+                        "Used" if mode["mode_index"] in selected_indices else "Excluded"
+                    )
+                raw_rows.append(
+                    f"<tr><td>{mode['mode_index'] + 1}</td>"
+                    f"<td>{escape(str(mode['frequency']))}</td>"
+                    f"<td>{escape(str(mode['energy']))}</td>"
+                    f"<td>{disposition}</td></tr>"
+                )
+            freq_table += (
+                "<details><summary>Complete input spectrum</summary>"
+                "<div class='table-container'><table><thead><tr>"
+                f"<th>Mode #</th><th>Frequency ({escape(freq_unit)})</th>"
+                f"<th>Energy ({escape(energy_unit)})</th><th>Thermochemistry</th>"
+                "</tr></thead><tbody>" + "".join(raw_rows)
+                + "</tbody></table></div></details>"
+            )
+        elif includes_nonvibrational_modes:
             mode_note = (
                 f"This legacy result includes the first {trans_rot_modes} "
                 "translation/rotation modes."
@@ -590,10 +643,16 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 "from the reported frequencies."
             )
 
+        breakdown = (
+            f"Expected: {num_vibrational_modes} vibrational modes; "
+            f"used: {len(frequencies)}"
+            if ase_selected else
+            f"{trans_rot_modes} translation/rotation modes + {num_vibrational_modes} vibrational modes"
+        )
         mode_explanation = f"""
         <div class="mode-explanation">
             <p><strong>Molecule Type:</strong> {molecule_type}</p>
-            <p><strong>Mode Breakdown:</strong> {trans_rot_modes} translation/rotation modes + {num_vibrational_modes} vibrational modes</p>
+            <p><strong>Mode Breakdown:</strong> {breakdown}</p>
             <p><em>Note: {mode_note}</em></p>
         </div>
         """
@@ -616,34 +675,80 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
     # Thermochemistry Values
     if ase_output.thermochemistry:
         thermo_info = []
+        metadata = ase_output.thermochemistry
+        settings = []
+        for key, label in (
+            ("ase_version", "ASE "),
+            ("vib_selection", "mode selection: "),
+            ("ignore_imag_modes", "ignore_imag_modes: "),
+        ):
+            if metadata.get(key) is not None:
+                settings.append(f"{label}{escape(str(metadata[key]))}")
+        if settings:
+            thermo_info.append(f"<div>{'; '.join(settings)}.</div>")
+        if metadata.get("raw_imaginary_mode_count") is not None:
+            thermo_info.append(
+                "<div>Imaginary modes in the complete input: "
+                f"{escape(str(metadata['raw_imaginary_mode_count']))}.</div>"
+            )
+        policy = metadata.get("ignore_imag_modes")
+        if policy is False:
+            thermo_info.append(
+                "<div>Imaginary modes remaining after selection cause an error; "
+                "zero-energy modes are not removed.</div>"
+            )
+        if policy is True:
+            cleanup = "ASE cleanup removes"
+            if metadata.get("n_imag") is not None:
+                cleanup = f"ASE cleanup removed {escape(str(metadata['n_imag']))}"
+            thermo_info.append(
+                f"<div>{cleanup} non-positive modes "
+                "(imaginary or zero energy) after selection.</div>"
+            )
+        elif metadata.get("n_imag") is not None:
+            thermo_info.append(
+                f"<div>ASE n_imag: {escape(str(metadata['n_imag']))}.</div>"
+            )
+        for warning in metadata.get("warnings") or []:
+            thermo_info.append(
+                "<div role='note' class='thermo-warning'>"
+                f"<strong>Warning:</strong> {escape(str(warning))}</div>"
+            )
 
         # Add data attributes for conversion with labels
         if "enthalpy" in ase_output.thermochemistry:
             enthalpy_ev = ase_output.thermochemistry['enthalpy']
             thermo_info.append(
-                f'<div><strong>Enthalpy:</strong> <span class="energy-value" data-ev="{enthalpy_ev}">{enthalpy_ev:.6f}</span></div>'
+                f'<div><strong>Enthalpy:</strong> <span class="energy-value" data-ev="{enthalpy_ev}">{enthalpy_ev:.6f}</span> <span class="energy-unit">eV</span></div>'
             )
         if "entropy" in ase_output.thermochemistry:
-            entropy_ev = ase_output.thermochemistry['entropy']
+            entropy_unit = ase_output.thermochemistry.get("entropy_unit", "eV/K")
+            if entropy_unit != "eV/K":
+                raise ValueError(
+                    f"Unsupported entropy_unit {entropy_unit!r}; expected 'eV/K'. "
+                    "Convert entropy to eV/K before generating a report."
+                )
+            # Legacy ASE results also express entropy in eV/K.
+            entropy_ev_k = ase_output.thermochemistry['entropy']
             thermo_info.append(
-                f'<div><strong>Entropy:</strong> <span class="energy-value" data-ev="{entropy_ev}">{entropy_ev:.6f}</span></div>'
+                f'<div><strong>Entropy:</strong> <span class="entropy-value" data-ev-k="{entropy_ev_k}">{entropy_ev_k:.6f}</span> <span class="entropy-unit">eV/K</span></div>'
             )
         if "gibbs_free_energy" in ase_output.thermochemistry:
             gibbs_ev = ase_output.thermochemistry['gibbs_free_energy']
             thermo_info.append(
-                f'<div><strong>Gibbs Free Energy:</strong> <span class="energy-value" data-ev="{gibbs_ev}">{gibbs_ev:.6f}</span></div>'
+                f'<div><strong>Gibbs Free Energy:</strong> <span class="energy-value" data-ev="{gibbs_ev}">{gibbs_ev:.6f}</span> <span class="energy-unit">eV</span></div>'
             )
 
         if thermo_info:
             calc_results.append(f"""
             <li class='regular-item'>
                 <div class="unit-toggle">
-                    <span>Energy Unit:</span>
+                    <span>Units:</span>
                     <button onclick="toggleEnergyUnit('ev')" class="active" data-unit="ev">eV</button>
                     <button onclick="toggleEnergyUnit('kjmol')" data-unit="kjmol">kJ/mol</button>
                     <button onclick="toggleEnergyUnit('kcalmol')" data-unit="kcalmol">kcal/mol</button>
                 </div>
-                <strong>Thermochemistry Values</strong> (<span class="energy-unit">eV</span>):<br>
+                <strong>Thermochemistry Values</strong>:<br>
                 {"".join(thermo_info)}
             </li>""")
         else:
@@ -666,7 +771,7 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
     # Error Information
     if ase_output.error:
         calc_results.append(
-            f"<li class='regular-item'><strong>Error:</strong> <span style='color: #dc3545;'>{ase_output.error}</span></li>"
+            f"<li class='regular-item'><strong>Error:</strong> <span style='color: #dc3545;'>{escape(ase_output.error)}</span></li>"
         )
 
     # Join all results with proper spacing
@@ -790,6 +895,16 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 document.querySelectorAll('.energy-unit').forEach(label => {
                     label.textContent = unit === 'ev' ? 'eV' : 
                                      unit === 'kjmol' ? 'kJ/mol' : 'kcal/mol';
+                });
+                document.querySelectorAll('.entropy-unit').forEach(label => {
+                    label.textContent = unit === 'ev' ? 'eV/K' :
+                                     unit === 'kjmol' ? 'kJ/(mol K)' : 'kcal/(mol K)';
+                });
+                document.querySelectorAll('.entropy-value').forEach(cell => {
+                    const factor = unit === 'ev' ? 1 :
+                                   unit === 'kjmol' ? EV_TO_KJMOL : EV_TO_KCALMOL;
+                    const precision = unit === 'ev' ? 6 : 4;
+                    cell.textContent = (parseFloat(cell.dataset.evK) * factor).toFixed(precision);
                 });
                 
                 // Convert all energy values

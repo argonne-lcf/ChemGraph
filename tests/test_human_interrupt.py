@@ -358,6 +358,32 @@ def test_get_single_agent_prompt_strips_ask_human():
     assert len(prompt_without) < len(prompt_with)
     # The default prompt should match the supervised version
     assert prompt_with == single_agent_prompt
+    for prompt in (prompt_with, prompt_without):
+        assert "Use defaults declared by the selected tool's schema" in prompt
+        assert "Preserve user-supplied values and never invent defaults" in prompt
+
+
+def test_get_planner_prompt_keeps_default_delegation_without_ask_human():
+    """Removing human routing must preserve delegation of schema defaults."""
+    from chemgraph.prompt.multi_agent_prompt import (
+        get_planner_prompt,
+        planner_prompt,
+        planner_prompt_json,
+    )
+
+    prompt_with = get_planner_prompt(human_supervised=True)
+    prompt_without = get_planner_prompt(human_supervised=False)
+
+    assert prompt_with == planner_prompt == planner_prompt_json
+    assert "ask_human" in prompt_with
+    assert "ask_human" not in prompt_without
+    assert "PHASE 1b" not in prompt_without
+    assert "When asking the human for clarification" not in prompt_without
+    assert len(prompt_without) < len(prompt_with)
+    for prompt in (prompt_with, prompt_without):
+        assert "Let executors determine which omitted parameters have tool-defined defaults" in prompt
+        assert "Preserve supplied values and do not invent missing values" in prompt
+        assert "no temperature for thermochemistry" not in prompt
 
 
 def test_multi_agent_graph_includes_human_review(monkeypatch):

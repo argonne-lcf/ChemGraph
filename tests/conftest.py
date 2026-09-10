@@ -35,6 +35,10 @@ def pytest_addoption(parser):
         "--run-globus-compute", action="store_true", default=False,
         help="run tests that require a live Globus Compute endpoint"
     )
+    parser.addoption(
+        "--run-ensemble-launcher", action="store_true", default=False,
+        help="run tests that require a live EnsembleLauncher deployment"
+    )
 
 def pytest_collection_modifyitems(config, items):
     skip_llm = None
@@ -45,8 +49,14 @@ def pytest_collection_modifyitems(config, items):
     if not config.getoption("--run-globus-compute"):
         skip_globus = pytest.mark.skip(reason="need --run-globus-compute option to run")
 
+    skip_el = None
+    if not config.getoption("--run-ensemble-launcher"):
+        skip_el = pytest.mark.skip(reason="need --run-ensemble-launcher option to run")
+
     for item in items:
         if skip_llm and "llm" in item.keywords:
             item.add_marker(skip_llm)
         if skip_globus and "globus_compute" in item.keywords:
             item.add_marker(skip_globus)
+        if skip_el and "ensemble_launcher" in item.keywords:
+            item.add_marker(skip_el)

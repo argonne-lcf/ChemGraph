@@ -2,8 +2,6 @@ FROM continuumio/miniconda3:latest
 
 WORKDIR /app
 
-COPY . /app
-
 # ARM-friendly variant of the standard ChemGraph image.
 # This image intentionally does not include any vLLM setup.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -26,16 +24,24 @@ RUN conda install -y -c conda-forge \
     nwchem \
     && conda clean -afy
 
-RUN python -m pip install --no-cache-dir . jupyterlab
+# Avoid the unsupported CUDA dependency wheels selected by PyPI on Linux ARM.
+RUN if [ "$(uname -m)" = "aarch64" ]; then \
+    python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch; \
+    fi
 
-# Install the same TBLite release as the package extra and standard image.
+COPY . /app
+
+# Resolve the same packages as the standard image in one installation pass.
+# Build TBLite from source with conservative compiler flags.
 RUN CFLAGS="-O2 -fno-tree-vectorize" \
     FFLAGS="-O2 -fno-tree-vectorize" \
-    python -m pip install --no-cache-dir --no-binary=tblite --force-reinstall "tblite==0.4.0"
+    python -m pip install --no-cache-dir --no-binary=tblite \
+    . jupyterlab -r requirements/mace-polar.txt "tblite==0.4.0"
 
-# Validate calculator runtimes and dependency consistency after installation.
-RUN which nwchem && \
-    python -c "from tblite.ase import TBLite" && \
+# Use the validated ASE version after all other Python package installs.
+RUN python -m pip install --no-cache-dir "ase==3.29.0" && \
+    which nwchem && \
+    python -c "import ase; from tblite.ase import TBLite; import graph_longrange; print(f'ASE {ase.__version__}')" && \
     python -m pip check
 
 RUN git config --system --add safe.directory /app

@@ -253,7 +253,7 @@ available in that environment.
 | Capability | Installation | Notes |
 | --- | --- | --- |
 | EMT | Core install | Lightweight; useful for setup checks, not general high-accuracy chemistry |
-| MACE | Core install | MACE-Polar medium is the default and supports molecular dipole moments; first use downloads ASL-licensed model weights |
+| MACE | MACE-MP in core; Polar add-on optional | Defaults to MACE-Polar medium when its add-on is installed, otherwise MACE-MP. Dipole/IR require a capable calculator; Polar weights use the ASL. See [installation instructions](docs/calculators.md#mace-downloads). |
 | TBLite / xTB | `pip install "chemgraph[calculators]"` | May require a Fortran toolchain when no wheel is available |
 | UMA / FAIRChem | `pip install "chemgraph[uma]"` | Use a separate environment from MACE if `e3nn` resolution conflicts |
 | NWChem | Install the `nwchem` executable separately | Must be on `PATH` or configured through ASE |

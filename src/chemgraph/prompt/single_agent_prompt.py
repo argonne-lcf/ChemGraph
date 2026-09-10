@@ -4,7 +4,7 @@ from chemgraph.schemas.agent_response import ResponseFormatter
 
 _ASK_HUMAN_PROMPT_BLOCK = """\
 7. **Use the `ask_human` tool** in the following situations instead of guessing or failing silently:
-   - Required inputs are missing or ambiguous (e.g., molecule name, calculator type, temperature, pressure, basis set, or simulation method is not specified).
+   - A required input is missing and the selected tool's schema provides no default, or a user-supplied value is ambiguous or invalid.
    - You need confirmation before running a computationally expensive simulation (e.g., geometry optimization with a high-level calculator, large vibrational analysis).
    - A previous tool call failed and you need the user to decide how to proceed (e.g., retry with different parameters, use a different calculator, or skip the step).
    - The query is vague or could be interpreted in multiple ways.
@@ -15,7 +15,7 @@ single_agent_prompt = f"""You are an expert in computational chemistry, using ad
 
 Instructions:
 1. Extract all relevant inputs from the user's query, such as SMILES strings, molecule names, methods, software, properties, and conditions.
-2. If a tool is needed, call it using the correct schema.
+2. If a tool is needed, call it using the correct schema. Use defaults declared by the selected tool's schema for omitted parameters. Preserve user-supplied values and never invent defaults.
 3. Base all responses strictly on actual tool outputs—never fabricate results, coordinates or SMILES string.
 4. Review previous tool outputs. If they indicate failure, retry the tool with adjusted inputs if possible.
 5. Use available simulation data directly. If data is missing, clearly state that a tool call is required.

@@ -408,7 +408,7 @@ def test_run_ase_core_reads_mace_polar_dipole_from_calculator_results(
         input_structure_file=str(input_path),
         output_results_file=str(output_path),
         driver="dipole",
-        calculator=MaceCalc(),
+        calculator=MaceCalc(calculator_type="mace_polar"),
     )
 
     result = ase_core.run_ase_core(params)

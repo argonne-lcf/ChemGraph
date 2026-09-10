@@ -4,6 +4,10 @@ The ChemGraph image can run JupyterLab, Streamlit, the CLI, or the general MCP
 server. It includes the source-tree entry points plus NWChem and TBLite support
 configured by the repository Dockerfile.
 
+Both Docker variants install the validated ASE version, 3.29.0, after the other
+Python packages and print its version during build validation. Rebuild existing
+images to pick up this change.
+
 ## Streamlit
 
 Set the credential in your host environment, then pass it by name:
@@ -82,6 +86,11 @@ checkout's `cg_logs/` directory.
 ```bash
 docker build -t chemgraph:local .
 ```
+
+ARM builds install CPU PyTorch from its official wheel index because the PyPI
+CUDA dependency set includes unsupported ARM wheels. x86 builds retain their
+normal PyPI PyTorch selection. Both images explicitly install the Polar add-on
+and run `pip check` after resolving ChemGraph and its runtime dependencies.
 
 The TBLite build can take time, especially on ARM. Mount a dedicated artifact
 directory rather than a home directory, pass tokens at runtime, remember that

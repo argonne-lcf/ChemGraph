@@ -82,3 +82,49 @@ def test_chat_page_renders_with_provider_key(isolated_app, monkeypatch):
     # No wizard; chat input is present immediately.
     assert not any("Welcome" in info.value for info in at.info)
     assert len(at.chat_input) == 1
+
+
+@pytest.fixture
+def configuration_app(isolated_app):
+    """Reuse credential/path isolation while exercising the editor directly."""
+    from streamlit.testing.v1 import AppTest
+
+    return AppTest.from_string(
+        "from ui._pages.configuration import render\nrender()",
+        default_timeout=60,
+    )
+
+
+def test_configuration_save_preserves_automatic_selection(configuration_app, tmp_path):
+    import toml
+
+    at = configuration_app.run()
+    assert not at.exception
+    selector = next(s for s in at.selectbox if s.label == "Default Calculator")
+    assert selector.value is None
+    assert "default" not in at.session_state["_config_draft"]["chemistry"]["calculators"]
+    next(b for b in at.button if "Save Configuration" in b.label).click().run()
+    assert not at.exception
+    assert "default" not in toml.load(tmp_path / "config.toml")["chemistry"]["calculators"]
+
+
+def test_raw_toml_can_restore_automatic_selection(configuration_app, tmp_path):
+    import toml
+
+    at = configuration_app.run()
+    next(s for s in at.selectbox if s.label == "Default Calculator").select("mace_mp").run()
+    next(b for b in at.button if "Save Configuration" in b.label).click().run()
+    at.run()
+    assert not at.exception
+    assert toml.load(tmp_path / "config.toml")["chemistry"]["calculators"]["default"] == "mace_mp"
+    previous_nonce = at.session_state["_config_widget_nonce"]
+    at.text_area[0].set_value('[chemistry.calculators]\nfallback = "emt"\n')
+    at.button(key="update_from_toml").click().run()
+    assert not at.exception
+    assert at.session_state["_config_widget_nonce"] > previous_nonce
+    assert next(s for s in at.selectbox if s.label == "Default Calculator").value is None
+    assert "default" not in at.session_state["_config_draft"]["chemistry"]["calculators"]
+    assert at.session_state["config"]["chemistry"]["calculators"]["default"] == "mace_mp"
+    next(b for b in at.button if "Save Configuration" in b.label).click().run()
+    assert not at.exception
+    assert "default" not in toml.load(tmp_path / "config.toml")["chemistry"]["calculators"]
