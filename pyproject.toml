@@ -52,6 +52,10 @@ dependencies = [
     ]
 
 [project.optional-dependencies]
+test = [
+    "quickjs==1.19.4",
+]
+
 # Optical Chemical Structure Recognition: read a structure diagram, get a SMILES.
 #
 # DECIMER and shared support packages are installable from PyPI. The three Git-only
