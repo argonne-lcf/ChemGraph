@@ -31,10 +31,13 @@ COPY . /app
 
 # Resolve ChemGraph, Polar, JupyterLab and TBLite together. Build TBLite from
 # source with conservative flags to avoid ABI/symbol issues on ARM.
+# pymatgen -> monty pulls an unconstrained ruamel.yaml; conda in the base image
+# requires ruamel.yaml<0.19, and `pip check` below fails without this bound.
 RUN CFLAGS="-O2 -fno-tree-vectorize" \
     FFLAGS="-O2 -fno-tree-vectorize" \
     python -m pip install --no-cache-dir --no-binary=tblite \
-    . jupyterlab -r requirements/mace-polar.txt "tblite==0.4.0"
+    . jupyterlab -r requirements/mace-polar.txt "tblite==0.4.0" \
+    "ruamel.yaml<0.19"
 
 # Use the validated ASE version after all other Python package installs.
 RUN python -m pip install --no-cache-dir "ase==3.29.0" && \

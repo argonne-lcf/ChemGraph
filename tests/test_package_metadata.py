@@ -128,6 +128,9 @@ def test_calculator_pin_matches_all_installation_surfaces() -> None:
         assert f'"tblite=={tblite_version}"' in dockerfile
         assert "python -m pip check" in dockerfile
         assert "-r requirements/mace-polar.txt" in dockerfile
+        # conda in the miniconda base image requires ruamel.yaml<0.19; an
+        # unbounded ruamel.yaml from monty/pymatgen makes `pip check` fail.
+        assert '"ruamel.yaml<0.19"' in dockerfile
 
 
 def test_published_dependencies_have_no_direct_urls():
