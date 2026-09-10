@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["setuptools>=77"]  # PEP 639 license expression support
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -15,6 +15,26 @@ authors = [
 maintainers = [
     { name = "Thang Pham" },
     { name = "Murat Keçeli" },
+]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = [
+    "computational chemistry", "agentic AI", "LLM agents", "quantum chemistry",
+    "molecular simulation", "ASE", "LangGraph",
+]
+# shields.io's pypi/pyversions badge and PyPI's sidebar are driven by these
+# classifiers; test_package_metadata keeps them aligned with the CI matrix.
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 requires-python = ">=3.11"
 dependencies = [
@@ -121,7 +141,9 @@ docking = [
 
 [project.urls]
 "Homepage" = "https://github.com/argonne-lcf/ChemGraph"
+"Documentation" = "https://argonne-lcf.github.io/ChemGraph/"
 "Repository" = "https://github.com/argonne-lcf/ChemGraph"
+"Issues" = "https://github.com/argonne-lcf/ChemGraph/issues"
 
 [project.scripts]
 chemgraph = "chemgraph.cli:main"
