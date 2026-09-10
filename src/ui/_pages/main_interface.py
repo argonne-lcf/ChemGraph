@@ -1,6 +1,7 @@
 """Main chat interface page for ChemGraph."""
 
 import asyncio
+import hashlib
 import logging
 import os
 import pprint
@@ -35,6 +36,7 @@ from ui import providers
 from ui.agent_manager import initialize_agent
 from ui.provider_widgets import apply_api_key, render_alcf_login
 from ui.branding import LOGO_IMAGES, first_existing_asset
+from ui import config as ui_config
 from ui.config import load_config, resolve_default_calculator, save_config
 from ui.endpoint import check_local_model_endpoint
 from ui.file_utils import (
@@ -265,6 +267,10 @@ def render() -> None:
     # ----- Agent status sidebar -----
     _render_agent_status(selected_model, selected_workflow, thread_id, endpoint_status)
 
+    setup_save_error = st.session_state.pop("setup_save_error", None)
+    if setup_save_error:
+        st.error(setup_save_error)
+
     # ----- Auto-initialize agent -----
     _auto_initialize_agent(
         config,
@@ -465,11 +471,19 @@ def _finish_first_run_setup(config: dict, info) -> None:
     config["general"]["model"] = info.default_model
     providers.align_base_url_for_provider(config, info.id)
     st.session_state.config = config
-    save_config(config)
+    saved = save_config(config)
     # Local servers stay "unproven" to any_provider_ready, so remember
     # that setup finished to avoid re-gating the chat.
     st.session_state._setup_skipped = True
-    st.toast(f"Ready — using {info.default_model}", icon="\U0001f680")
+    if saved:
+        st.toast(f"Ready — using {info.default_model}", icon="\U0001f680")
+    else:
+        # The session keeps the choice, but it will not survive a restart.
+        st.session_state.setup_save_error = (
+            f"Using {info.default_model} for this session, but the configuration "
+            f"could not be saved ({ui_config.last_save_error}). Set "
+            f"${ui_config.CONFIG_PATH_ENV} to a writable file to persist settings."
+        )
     st.rerun()
 
 
@@ -822,7 +836,41 @@ def _render_agent_status(
     st.sidebar.markdown(
         "Use the Configuration page to modify settings, API endpoints, and chemistry parameters."
     )
-    st.sidebar.markdown("Current config loaded from: `config.toml`")
+    st.sidebar.markdown(f"Current config loaded from: `{ui_config.config_path()}`")
+
+
+def _provider_credential_fingerprint(provider_info, alcf_token: Optional[str]) -> Optional[str]:
+    """Return a non-reversible fingerprint of the credential the agent will use.
+
+    Model clients read their API key once, when the agent is built, so a key
+    applied or cleared afterwards must invalidate the cached agent. The
+    fingerprint enters the configuration tuple compared on every rerun
+    without keeping the secret itself in session state.
+
+    Parameters
+    ----------
+    provider_info : providers.ProviderInfo or None
+        Provider serving the selected model.
+    alcf_token : str, optional
+        Globus access token for ALCF endpoints, when applicable.
+
+    Returns
+    -------
+    str or None
+        SHA-256 hex digest of the active credential, or ``None`` when the
+        provider needs none or none is set.
+    """
+    if provider_info is None:
+        return None
+    if provider_info.auth_kind == "globus":
+        credential = alcf_token
+    elif provider_info.env_var:
+        credential = os.environ.get(provider_info.env_var)
+    else:
+        credential = None
+    if not credential:
+        return None
+    return hashlib.sha256(credential.encode("utf-8")).hexdigest()
 
 
 def _auto_initialize_agent(
@@ -862,6 +910,9 @@ def _auto_initialize_agent(
     provider_info = providers.provider_for_model(selected_model)
     if provider_info is not None and provider_info.auth_kind == "globus":
         alcf_token = alcf_auth.ensure_access_token()
+    # API keys are read when the model client is built; include them so an
+    # applied or cleared key rebuilds the agent instead of reusing the old one.
+    credential_fingerprint = _provider_credential_fingerprint(provider_info, alcf_token)
 
     current_config = (
         selected_model,
@@ -874,7 +925,7 @@ def _auto_initialize_agent(
         selected_base_url,
         get_argo_user_from_nested_config(config),
         st.session_state.get("current_chat_log_dir"),
-        alcf_token,
+        credential_fingerprint,
     )
 
     if st.session_state.agent is None or st.session_state.last_config != current_config:
@@ -905,7 +956,7 @@ def _auto_initialize_agent(
                     selected_base_url,
                     get_argo_user_from_nested_config(config),
                     chat_log_dir,
-                    alcf_token,
+                    credential_fingerprint,
                 )
             else:
                 st.session_state.last_config = None

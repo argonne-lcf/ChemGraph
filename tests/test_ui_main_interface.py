@@ -686,3 +686,97 @@ def test_start_new_chat_clears_history_agent_and_log_dir(monkeypatch):
     assert fake_st.session_state.pending_interrupt_log_dir is None
     assert fake_st.session_state.interrupt_count == 0
     assert fake_st.session_state.interrupt_exchanges == []
+
+
+def _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls):
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+
+    def fake_initialize(*args, **kwargs):
+        calls.append(os.environ.get("OPENAI_API_KEY"))
+        return object()
+
+    monkeypatch.setattr(main_ui, "initialize_agent", fake_initialize)
+    main_ui._auto_initialize_agent(
+        {"general": {"recursion_limit": 20}, "api": {"openai": {}}},
+        "gpt-4o-mini",
+        "single_agent",
+        False,
+        "state",
+        False,
+        False,
+        None,
+    )
+
+
+def test_replacing_api_key_rebuilds_cached_agent(monkeypatch, tmp_path):
+    """A key applied after initialization must not leave the old client in use."""
+    fake_st = _FakeStreamlit()
+    fake_st.session_state.agent = None
+    fake_st.session_state.last_config = None
+    # _ensure_chat_log_dir records the directory it returns; mirror that here.
+    fake_st.session_state.current_chat_log_dir = str(tmp_path)
+    calls = []
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-old")
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls)
+    first_agent = fake_st.session_state.agent
+    assert calls == ["sk-old"]
+    # Secrets never enter session state; only a digest does.
+    assert "sk-old" not in repr(fake_st.session_state.last_config)
+
+    # Same key on rerun: cached agent is reused.
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls)
+    assert fake_st.session_state.agent is first_agent
+    assert calls == ["sk-old"]
+
+    # Replacement key ("Apply key"): the agent is rebuilt with the new key.
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-new")
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls)
+    assert fake_st.session_state.agent is not first_agent
+    assert calls == ["sk-old", "sk-new"]
+
+    # Clearing the key also invalidates the cache.
+    monkeypatch.delenv("OPENAI_API_KEY")
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls)
+    assert calls == ["sk-old", "sk-new", None]
+
+
+def test_credential_fingerprint_is_non_reversible_and_provider_aware():
+    from ui import providers
+
+    openai = providers.provider_for_model("gpt-4o-mini")
+    with_key = main_ui._provider_credential_fingerprint(openai, None)
+    assert with_key is None or "OPENAI_API_KEY" not in os.environ
+    os.environ["OPENAI_API_KEY"] = "sk-fingerprint-test"
+    try:
+        digest = main_ui._provider_credential_fingerprint(openai, None)
+    finally:
+        del os.environ["OPENAI_API_KEY"]
+    assert digest is not None and len(digest) == 64
+    assert "sk-fingerprint-test" not in digest
+    assert main_ui._provider_credential_fingerprint(None, None) is None
+    alcf = providers.get_provider(providers.ALCF)
+    assert main_ui._provider_credential_fingerprint(alcf, "token-a") != (
+        main_ui._provider_credential_fingerprint(alcf, "token-b")
+    )
+
+
+def test_first_run_setup_reports_failed_config_save(monkeypatch):
+    from ui import providers
+
+    fake_st = MagicMock()
+    fake_st.session_state = _SessionState()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "save_config", lambda config: False)
+    monkeypatch.setattr(main_ui.ui_config, "last_save_error", "/ro/config.toml: Read-only file system")
+    info = providers.provider_for_model("gpt-4o-mini")
+    config = {"general": {}, "api": {"openai": {"base_url": "https://api.openai.com/v1"}}}
+
+    main_ui._finish_first_run_setup(config, info)
+
+    fake_st.toast.assert_not_called()
+    assert "Read-only file system" in fake_st.session_state.setup_save_error
+    assert "CHEMGRAPH_CONFIG" in fake_st.session_state.setup_save_error
+    assert fake_st.session_state._setup_skipped is True
+    fake_st.rerun.assert_called_once()
