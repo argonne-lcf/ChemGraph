@@ -272,6 +272,151 @@ def test_atomic_drivers_skip_displacements_and_clean_artifacts(
         assert all((tmp_path / name).exists() for name in ir_files)
 
 
+@pytest.fixture
+def water_vibration_artifacts(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
+    write(
+        tmp_path / "water.xyz",
+        Atoms("OH2", positions=[[0, 0, 0], [0.76, 0, 0.59], [-0.76, 0, 0.59]]),
+    )
+    params = ASEInputSchema(
+        input_structure_file="water.xyz",
+        output_results_file="result.json",
+        calculator=EMTCalc(),
+        driver="vib",
+    )
+    result = run_ase_core(params)
+    assert result["status"] == "success", result
+    paths = [tmp_path / "frequencies_water.csv"] + [
+        tmp_path / f"water_vib.{i}.traj" for i in (6, 7, 8)
+    ]
+    # EMT has no dipole implementation; seed prior IR outputs separately.
+    for name in (
+        "ir_spectrum_water.png", "ir_spectrum_water.csv", "ir_peaks_water.csv",
+    ):
+        path = tmp_path / name
+        path.write_bytes(b"previous IR calculation")
+        paths.append(path)
+    return params, {path: path.read_bytes() for path in paths}
+
+
+@pytest.mark.parametrize("driver", ["vib", "thermo", "ir"])
+def test_displacement_failure_preserves_previous_artifacts(
+    monkeypatch, water_vibration_artifacts, driver,
+):
+    params, artifacts = water_vibration_artifacts
+    original_run = ase.vibrations.Vibrations.run
+    evaluations = 0
+
+    def fail_during_displacements(vib):
+        original_calculate = vib.atoms.calc.calculate
+
+        def calculate(*args, **kwargs):
+            nonlocal evaluations
+            evaluations += 1
+            if evaluations > 10:
+                raise RuntimeError("SCF did not converge")
+            return original_calculate(*args, **kwargs)
+
+        monkeypatch.setattr(vib.atoms.calc, "calculate", calculate)
+        return original_run(vib)
+
+    monkeypatch.setattr(ase.vibrations.Vibrations, "run", fail_during_displacements)
+    result = run_ase_core(params.model_copy(update={"driver": driver}))
+    assert result["status"] == "failure", result
+    assert result["message"] == "SCF did not converge"
+    assert evaluations == 11
+    assert all(path.exists() for path in artifacts)
+    assert {path: path.read_bytes() for path in artifacts} == artifacts
+
+
+def test_mode_write_failure_preserves_previous_trajectories(
+    monkeypatch, water_vibration_artifacts,
+):
+    params, artifacts = water_vibration_artifacts
+    trajectories = {path: data for path, data in artifacts.items() if path.suffix == ".traj"}
+    original_write_mode = ase.vibrations.Vibrations.write_mode
+    written_modes = []
+
+    def fail_after_first_mode(vib, n, **kwargs):
+        if written_modes:
+            raise RuntimeError("mode write failed")
+        original_write_mode(vib, n=n, **kwargs)
+        written_modes.append(n)
+
+    monkeypatch.setattr(ase.vibrations.Vibrations, "write_mode", fail_after_first_mode)
+    result = run_ase_core(params)
+    assert result["status"] == "failure", result
+    assert result["message"] == "mode write failed"
+    assert written_modes == [6]
+    assert all(path.exists() for path in trajectories)
+    assert {path: path.read_bytes() for path in trajectories} == trajectories
+
+
+def test_ir_failure_preserves_previous_ir_artifacts(
+    monkeypatch, water_vibration_artifacts,
+):
+    params, artifacts = water_vibration_artifacts
+    ir_artifacts = {path: data for path, data in artifacts.items() if path.name.startswith("ir_")}
+    infrared_run = Mock(side_effect=RuntimeError("IR calculation failed"))
+    monkeypatch.setattr(ase.vibrations.Infrared, "run", infrared_run)
+    result = run_ase_core(params.model_copy(update={"driver": "ir"}))
+    assert result["status"] == "failure", result
+    assert result["message"] == "IR calculation failed"
+    infrared_run.assert_called_once()
+    assert all(path.exists() for path in ir_artifacts)
+    assert {path: path.read_bytes() for path in ir_artifacts} == ir_artifacts
+
+
+@pytest.mark.parametrize("driver", ["vib", "thermo", "ir"])
+@pytest.mark.parametrize("stem", ["water", "water[1]"])
+def test_molecular_rerun_replaces_artifacts_and_removes_obsolete_modes(
+    tmp_path, monkeypatch, driver, stem,
+):
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
+    energies = [0.001] * 6 + [0.02, 0.03, 0.04]
+    _controlled_spectrum(monkeypatch, energies)
+    if driver == "ir":
+        infrared = Mock()
+        infrared.get_spectrum.return_value = ([500, 1000], [0.2, 0.1])
+        infrared.get_energies.return_value = np.asarray(energies, dtype=complex)
+        infrared.intensities = np.arange(9, dtype=float)
+        monkeypatch.setattr(ase.vibrations, "Infrared", Mock(return_value=infrared))
+    write(
+        tmp_path / f"{stem}.xyz",
+        Atoms("OH2", positions=[[0, 0, 0], [0.76, 0, 0.59], [-0.76, 0, 0.59]]),
+    )
+    replacements = [f"frequencies_{stem}.csv"] + [
+        f"{stem}_vib.{i}.traj" for i in (6, 7, 8)
+    ]
+    if driver == "ir":
+        replacements += [
+            f"ir_spectrum_{stem}.png", f"ir_spectrum_{stem}.csv", f"ir_peaks_{stem}.csv",
+        ]
+    obsolete = f"{stem}_vib.5.traj"
+    unrelated = ["other_vib.5.traj", "water1_vib.5.traj", "frequencies_other.csv"]
+    for name in replacements + [obsolete] + unrelated:
+        (tmp_path / name).write_bytes(b"previous calculation")
+    result = run_ase_core(
+        ASEInputSchema(
+            input_structure_file=f"{stem}.xyz",
+            output_results_file="result.json",
+            calculator=MaceCalc(calculator_type="mace_polar", multiplicity=1),
+            driver=driver,
+        )
+    )
+    assert result["status"] == "success", result
+    assert not (tmp_path / obsolete).exists()
+    assert all((tmp_path / name).read_bytes() != b"previous calculation" for name in replacements)
+    assert all((tmp_path / name).read_bytes() == b"previous calculation" for name in unrelated)
+    rows = (tmp_path / f"frequencies_{stem}.csv").read_text().splitlines()
+    assert [row.split(",")[0] for row in rows] == [
+        f"{stem}_vib.{i}.traj" for i in (6, 7, 8)
+    ]
+    for index in (6, 7, 8):
+        assert read(tmp_path / f"{stem}_vib.{index}.traj").info["mode_index"] == index
+
+
 @pytest.mark.parametrize("number", [1, 8, 29])
 def test_atomic_symmetry_is_one(number):
     assert get_symmetry_number(AtomsData(numbers=[number], positions=[[0, 0, 0]])) == 1

@@ -876,15 +876,16 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             mol_stem = (
                 Path(input_structure_file).stem if input_structure_file else "mol"
             )
-            # Remove previous modes even when this run has no vibrations.
             freq_file = Path(_resolve_path(f"frequencies_{mol_stem}.csv"))
-            freq_file.unlink(missing_ok=True)
             traj_dest_dir = _resolve_path("")
             stale_traj_pattern = (
                 glob.escape(_resolve_path(f"{mol_stem}_vib.")) + "*.traj"
             )
-            for stale_traj_file in glob.glob(stale_traj_pattern):
-                os.unlink(stale_traj_file)
+            if len(atoms) == 1:
+                # Single atoms have no replacement vibration artifacts.
+                freq_file.unlink(missing_ok=True)
+                for stale_traj_file in glob.glob(stale_traj_pattern):
+                    os.unlink(stale_traj_file)
 
             if driver == "ir":
                 ir_data = {
@@ -893,12 +894,13 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                     "spectrum_intensities": [],
                     "spectrum_intensities_units": "D/Å^2 amu^-1",
                 }
-                for name in (
-                    f"ir_spectrum_{mol_stem}.png",
-                    f"ir_spectrum_{mol_stem}.csv",
-                    f"ir_peaks_{mol_stem}.csv",
-                ):
-                    Path(_resolve_path(name)).unlink(missing_ok=True)
+                if len(atoms) == 1:
+                    for name in (
+                        f"ir_spectrum_{mol_stem}.png",
+                        f"ir_spectrum_{mol_stem}.csv",
+                        f"ir_peaks_{mol_stem}.csv",
+                    ):
+                        Path(_resolve_path(name)).unlink(missing_ok=True)
 
         if driver in {"vib", "thermo", "ir"} and len(atoms) > 1:
             logger.info("Starting vibrational analysis (driver=%s)", driver)
@@ -962,6 +964,9 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
 
                 if traj_dest_dir:
                     os.makedirs(traj_dest_dir, exist_ok=True)
+                # Keep previous modes until all replacements have been written.
+                for stale_traj_file in glob.glob(stale_traj_pattern):
+                    os.unlink(stale_traj_file)
                 for mode_index in mode_indices:
                     traj_file = os.path.join(tmpdir, f"vib.{mode_index}.traj")
                     dest_name = f"{mol_stem}_{Path(traj_file).name}"
