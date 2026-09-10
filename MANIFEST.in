@@ -2,3 +2,5 @@ include requirements/mace-polar.txt
 include requirements/ocsr-models.txt
 include config.toml environment.yml Dockerfile Dockerfile.arm
 include scripts/check_distribution_metadata.py
+include tests/water.xyz
+include tests/conftest.py

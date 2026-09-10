@@ -84,6 +84,29 @@ jobs:
         chemgraph --help
         python -m pip check
 
+    - name: Test extracted source distribution
+      run: |
+        sdist_root="$RUNNER_TEMP/chemgraph-sdist"
+        mkdir -p "$sdist_root"
+        tar -xzf dist/chemgraph-*.tar.gz -C "$sdist_root" --strip-components=1
+        cd "$sdist_root"
+        export PYTHONPATH="$sdist_root/src"
+        export PYTHONNOUSERSITE=1
+        python - <<'PY'
+        from pathlib import Path
+        import chemgraph
+        import ui
+        source = Path("src").resolve()
+        for package in (chemgraph, ui):
+            assert Path(package.__file__).resolve().is_relative_to(source)
+        PY
+        python -m pytest -q \
+          tests/test_package_metadata.py \
+          tests/test_mace_defaults.py \
+          tests/test_ase_failures.py \
+          tests/test_mcp.py::test_run_ase_energy_simple \
+          tests/test_mcp.py::test_run_ase_thermo_simple
+
   # Exercises the distributed/HPC feature set: the Academy multi-agent module
   # and the parsl / globus-compute execution backends. These tests use mocks and
   # local subprocesses (no real HPC cluster, Globus endpoint, or LLM), so they

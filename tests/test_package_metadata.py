@@ -152,6 +152,25 @@ def test_supplemental_dependency_pins():
         assert [line for line in lines if line and not line.startswith("#")] == pins
 
 
+def _write_test_distribution(path, requirement, missing=None):
+    metadata = f"Metadata-Version: 2.4\nRequires-Dist: {requirement}\n".encode()
+    if path.suffix == ".whl":
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("chemgraph-0.6.0.dist-info/METADATA", metadata)
+    else:
+        with tarfile.open(path, "w:gz") as archive:
+            for name, data in {
+                "PKG-INFO": metadata, "requirements/mace-polar.txt": b"",
+                "requirements/ocsr-models.txt": b"",
+                "tests/water.xyz": b"", "tests/conftest.py": b"",
+            }.items():
+                if name == missing:
+                    continue
+                member = tarfile.TarInfo(f"chemgraph-0.6.0/{name}")
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+
+
 @pytest.mark.parametrize("kind", ["whl", "tar.gz"])
 @pytest.mark.parametrize("requirement", [
     "numpy>=2", "engine @ https://example.org/engine.whl",
@@ -162,21 +181,23 @@ def test_built_metadata_rejects_urls_including_extras(tmp_path, kind, requiremen
         "check_distribution"
     ]
     path = tmp_path / f"chemgraph-0.6.0.{kind}"
-    metadata = f"Metadata-Version: 2.4\nRequires-Dist: {requirement}\n".encode()
-    if kind == "whl":
-        with zipfile.ZipFile(path, "w") as archive:
-            archive.writestr("chemgraph-0.6.0.dist-info/METADATA", metadata)
-    else:
-        with tarfile.open(path, "w:gz") as archive:
-            for name, data in {
-                "PKG-INFO": metadata, "requirements/mace-polar.txt": b"",
-                "requirements/ocsr-models.txt": b"",
-            }.items():
-                member = tarfile.TarInfo(f"chemgraph-0.6.0/{name}")
-                member.size = len(data)
-                archive.addfile(member, io.BytesIO(data))
+    _write_test_distribution(path, requirement)
     if Requirement(requirement).url:
         with pytest.raises(ValueError, match="direct-URL dependency"):
             check(path)
     else:
+        check(path)
+
+
+@pytest.mark.parametrize("missing", [
+    "requirements/mace-polar.txt", "requirements/ocsr-models.txt",
+    "tests/water.xyz", "tests/conftest.py",
+])
+def test_sdist_requires_support_files(tmp_path, missing):
+    check = runpy.run_path(str(_REPO_ROOT / "scripts/check_distribution_metadata.py"))[
+        "check_distribution"
+    ]
+    path = tmp_path / "chemgraph-0.6.0.tar.gz"
+    _write_test_distribution(path, "numpy>=2", missing=missing)
+    with pytest.raises(ValueError, match=f"missing {re.escape(missing)}"):
         check(path)

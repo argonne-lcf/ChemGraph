@@ -10,7 +10,7 @@ from packaging.requirements import Requirement
 
 
 def check_distribution(path: Path) -> None:
-    """Check built metadata, including extras, and the sdist add-on files."""
+    """Check built metadata, including extras, and sdist support files."""
     if path.suffix == ".whl":
         with zipfile.ZipFile(path) as archive:
             names = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
@@ -24,9 +24,12 @@ def check_distribution(path: Path) -> None:
             if len(roots) != 1:
                 raise ValueError(f"{path}: expected exactly one root PKG-INFO file")
             root = roots[0].split("/")[0]
-            for filename in ("mace-polar.txt", "ocsr-models.txt"):
-                if f"{root}/requirements/{filename}" not in names:
-                    raise ValueError(f"{path}: missing requirements/{filename}")
+            for filename in (
+                "requirements/mace-polar.txt", "requirements/ocsr-models.txt",
+                "tests/water.xyz", "tests/conftest.py",
+            ):
+                if f"{root}/{filename}" not in names:
+                    raise ValueError(f"{path}: missing {filename}")
             with archive.extractfile(roots[0]) as source:
                 metadata = source.read()
     else:
