@@ -59,7 +59,9 @@ class TBLiteCalc(BaseModel):
     )
     charge: Optional[float] = Field(default=None, description="Total charge of the system")
     multiplicity: Optional[int] = Field(
-        default=None, description="Total multiplicity of the system"
+        default=None,
+        ge=1,
+        description="Spin multiplicity (2S+1): 1=singlet, 2=doublet, etc.",
     )
     accuracy: float = Field(
         default=1.0, description="Numerical accuracy of the calculation"
