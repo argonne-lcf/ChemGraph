@@ -203,6 +203,27 @@ def test_idless_snapshot_tracks_payload_changes(cumulative_agent):
     assert [message.content for message in agent.session_store.get_session(agent.uuid).messages] == ["original", "updated"]
 
 
+def test_completed_run_saves_identical_messages_once_per_thread(cumulative_agent):
+    agent = cumulative_agent
+    agent._ensure_session("Repeated question")
+    state = {"messages": [
+        {"id": "question", "type": "human", "content": "Repeated question"},
+        {"id": "answer", "type": "ai", "content": "Repeated answer"},
+    ]}
+
+    for thread_id in (7, "7", "other", "other"):
+        result = agent.finalize_completed_run(
+            state, {"configurable": {"thread_id": thread_id}}, "Repeated question"
+        )
+        assert result == state["messages"][-1]
+
+    session = agent.session_store.get_session(agent.uuid)
+    assert [message.content for message in session.messages] == [
+        "Repeated question", "Repeated answer",
+    ] * 2
+    assert session.query_count == 2
+
+
 # ------------------------------------------------------------------
 # Memory initialization
 # ------------------------------------------------------------------

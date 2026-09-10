@@ -653,6 +653,17 @@ def test_cli_resume_persists_deepagent_logs_and_session(
         "Result written.",
     ]
 
+    for thread_id in (8, 7):
+        result = commands.run_query(agent, "Write the result", thread_id=thread_id)
+        assert result.content == "Result written."
+
+    session = agent.session_store.get_session(agent.session_id)
+    assert [message.content for message in session.messages] == [
+        "Write the result",
+        "Result written.",
+    ] * 2
+    assert session.query_count == 2
+
 
 @pytest.mark.parametrize(
     ("kwargs", "message"),
