@@ -215,6 +215,51 @@ def test_report_shows_ase_retained_modes_and_complete_spectrum(tmp_path, case):
         assert "No vibrational modes contributed to thermochemistry." in content
 
 
+@pytest.mark.parametrize("field", ["raw_imaginary_mode_count", "n_imag"])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '<img id="thermo-count-payload" src=x onerror="window.reportProbe=1">',
+        '<script id="thermo-count-payload">window.reportProbe=1</script>',
+    ],
+    ids=["image-handler", "script"],
+)
+def test_report_renders_thermochemistry_counts_as_text(tmp_path, field, payload):
+    class ReportParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.element_ids = []
+            self.text_parts = []
+
+        def handle_starttag(self, tag, attrs):
+            self.element_ids.append(dict(attrs).get("id"))
+
+        def handle_data(self, data):
+            self.text_parts.append(data)
+
+    output = json.loads(json.dumps(sample_ase_output))
+    output["thermochemistry"].update(
+        ase_version="3.29.0",
+        vib_selection="highest",
+        ignore_imag_modes=False,
+        n_imag=0,
+        raw_imaginary_mode_count=4,
+        warnings=[],
+    )
+    output["thermochemistry"][field] = payload
+    source, report = tmp_path / "result.json", tmp_path / "report.html"
+    source.write_text(json.dumps(output), encoding="utf-8")
+    result = generate_html.invoke(
+        {"results_json_path": str(source), "output_path": str(report)}
+    )
+    assert result == str(report.resolve())
+    parser = ReportParser()
+    parser.feed(report.read_text(encoding="utf-8"))
+    parser.close()
+    assert "thermo-count-payload" not in parser.element_ids
+    assert payload in "".join(parser.text_parts)
+
+
 @pytest.mark.parametrize(
     ("driver", "legacy_energy", "expected_label"),
     [

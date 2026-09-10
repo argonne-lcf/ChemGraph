@@ -658,8 +658,9 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
                 f"<div>ASE {escape(str(metadata['ase_version']))}; "
                 f"mode selection: {escape(str(metadata['vib_selection']))}; "
                 f"ignore_imag_modes: {escape(str(metadata['ignore_imag_modes']))}.</div>"
-                f"<div>Imaginary modes in the complete input: {metadata['raw_imaginary_mode_count']}. "
-                f"ASE cleanup removed {metadata['n_imag']} non-positive modes "
+                "<div>Imaginary modes in the complete input: "
+                f"{escape(str(metadata['raw_imaginary_mode_count']))}. "
+                f"ASE cleanup removed {escape(str(metadata['n_imag']))} non-positive modes "
                 "(imaginary or zero energy) after selection.</div>"
             )
             for warning in metadata.get("warnings", []):
