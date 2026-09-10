@@ -6,6 +6,8 @@ import tempfile
 import shutil
 from datetime import datetime
 from html.parser import HTMLParser
+from langchain_core.messages import AIMessage, ToolMessage
+from chemgraph.graphs.single_agent import route_after_report_tools, route_report_tools
 from chemgraph.schemas.ase_input import ASEOutputSchema
 from chemgraph.tools.report_tools import generate_html
 
@@ -101,6 +103,32 @@ def create_xyz_content_from_final_structure(final_structure):
 def sample_ase_output_schema():
     """Create a valid ASEOutputSchema object from the sample data."""
     return ASEOutputSchema(**sample_ase_output)
+
+
+@pytest.fixture
+def ase_selected_output():
+    output = json.loads(json.dumps(sample_ase_output))
+    vibrations = output["vibrational_frequencies"]
+    vibrations["all_modes"] = [
+        {"mode_index": i, "frequency": frequency, "energy": energy}
+        for i, (frequency, energy) in enumerate(
+            zip(vibrations["frequencies"], vibrations["energies"])
+        )
+    ]
+    vibrations.update(
+        mode_indices=[6, 7, 8],
+        frequencies=vibrations["frequencies"][-3:],
+        energies=vibrations["energies"][-3:],
+    )
+    output["thermochemistry"].update(
+        ase_version="3.29.0",
+        vib_selection="highest",
+        ignore_imag_modes=False,
+        n_imag=0,
+        raw_imaginary_mode_count=4,
+        warnings=["ASE diagnostic: <input>"],
+    )
+    return output
 
 
 def test_generate_html_distinguishes_filtered_and_legacy_modes(tmp_path):
@@ -201,20 +229,130 @@ def test_report_shows_ase_retained_modes_and_complete_spectrum(tmp_path, case):
     else:
         assert "ASE 3.29.0" in content
         assert "Imaginary modes in the complete input: 4" in content
-        assert (
-            "non-positive modes (imaginary or zero energy) after selection" in content
-        )
     if case == "selection-only":
         assert "ignore_imag_modes: False" in content
-        assert "ASE cleanup removed 0" in content
+        assert "Imaginary modes remaining after selection cause an error" in content
+        assert "zero-energy modes are not removed" in content
+        assert "ASE n_imag: 0" in content
+        assert "ASE cleanup" not in content
         assert "<strong>Warning:</strong>" not in content
     elif case != "failure":
         assert "ignore_imag_modes: True" in content
+        assert (
+            "ASE cleanup removed 1 non-positive modes "
+            "(imaginary or zero energy) after selection" in content
+        )
         assert "ASE diagnostic: &lt;input&gt;" in content
     if case == "all-removed":
         assert "No vibrational modes contributed to thermochemistry." in content
 
 
+@pytest.mark.parametrize(
+    ("field", "label"),
+    [
+        ("ase_version", "ASE 3.29.0"),
+        ("vib_selection", "mode selection:"),
+        ("ignore_imag_modes", "ignore_imag_modes:"),
+        ("raw_imaginary_mode_count", "Imaginary modes in the complete input:"),
+        ("n_imag", "ASE n_imag:"),
+        ("warnings", "ASE diagnostic:"),
+    ],
+)
+@pytest.mark.parametrize("missing", [True, False], ids=["missing", "null"])
+def test_report_tolerates_incomplete_metadata(
+    tmp_path, ase_selected_output, field, label, missing
+):
+    metadata = ase_selected_output["thermochemistry"]
+    if missing:
+        metadata.pop(field)
+    else:
+        metadata[field] = None
+    source, report = tmp_path / "result.json", tmp_path / "report.html"
+    source.write_text(json.dumps(ase_selected_output))
+    result = generate_html.invoke(
+        {"results_json_path": str(source), "output_path": str(report)}
+    )
+    assert result == str(report.resolve())
+    content = report.read_text()
+    assert label not in content
+    assert "Enthalpy:" in content
+    assert "Complete input spectrum" in content
+    if field != "warnings":
+        assert "ASE diagnostic: &lt;input&gt;" in content
+    if field == "ignore_imag_modes":
+        assert "ASE cleanup" not in content
+        assert "Imaginary modes remaining after selection cause an error" not in content
+        assert "ASE n_imag: 0" in content
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        "missing", None, [], [6, 7], [6, 7, 8, 8], [6, 7, 99], [6, 7, 7],
+        ["6", 7, 8], [True, 7, 8], [-1, 7, 8],
+    ],
+    ids=[
+        "missing", "null", "empty", "short", "long", "outside-spectrum", "duplicate",
+        "string-index", "boolean-index", "negative-index",
+    ],
+)
+def test_report_preserves_modes_without_valid_mapping(
+    tmp_path, ase_selected_output, indices
+):
+    vibrations = ase_selected_output["vibrational_frequencies"]
+    if indices == "missing":
+        vibrations.pop("mode_indices")
+    else:
+        vibrations["mode_indices"] = indices
+    source, report = tmp_path / "result.json", tmp_path / "report.html"
+    source.write_text(json.dumps(ase_selected_output))
+    result = generate_html.invoke(
+        {"results_json_path": str(source), "output_path": str(report)}
+    )
+    assert result == str(report.resolve())
+    content = report.read_text()
+    assert "Original mode mapping is unavailable or inconsistent" in content
+    assert "Complete input spectrum" in content
+    assert "3 of 3 expected vibrational modes contributed" in content
+    assert "<td>Used</td>" not in content
+    assert "<td>Excluded</td>" not in content
+    assert content.count("<td>Unknown</td>") == 12
+    selected_rows = re.findall(
+        r'<tr class="vibrational-mode">\s*<td>Unknown</td>\s*<td>(.*?)</td>\s*<td>(.*?)</td>',
+        content,
+    )
+    assert selected_rows == list(zip(vibrations["frequencies"], vibrations["energies"]))
+    for mode in vibrations["all_modes"]:
+        assert f"<td>{mode['frequency']}</td><td>{mode['energy']}</td>" in content
+
+
+@pytest.mark.parametrize("n_imag", [0, 2, None])
+def test_report_describes_legacy_cleanup_with_optional_count(
+    tmp_path, ase_selected_output, n_imag
+):
+    metadata = ase_selected_output["thermochemistry"]
+    metadata["ignore_imag_modes"] = True
+    if n_imag is None:
+        metadata.pop("n_imag")
+    else:
+        metadata["n_imag"] = n_imag
+    source, report = tmp_path / "result.json", tmp_path / "report.html"
+    source.write_text(json.dumps(ase_selected_output))
+    result = generate_html.invoke(
+        {"results_json_path": str(source), "output_path": str(report)}
+    )
+    assert result == str(report.resolve())
+    content = report.read_text()
+    assert "Imaginary modes in the complete input: 4" in content
+    assert "Imaginary modes remaining after selection cause an error" not in content
+    if n_imag is None:
+        assert "ASE cleanup removes non-positive modes" in content
+        assert "ASE cleanup removed" not in content
+    else:
+        assert f"ASE cleanup removed {n_imag} non-positive modes" in content
+
+
+@pytest.mark.parametrize("policy", [True, False, None])
 @pytest.mark.parametrize("field", ["raw_imaginary_mode_count", "n_imag"])
 @pytest.mark.parametrize(
     "payload",
@@ -224,7 +362,7 @@ def test_report_shows_ase_retained_modes_and_complete_spectrum(tmp_path, case):
     ],
     ids=["image-handler", "script"],
 )
-def test_report_renders_thermochemistry_counts_as_text(tmp_path, field, payload):
+def test_report_renders_thermochemistry_counts_as_text(tmp_path, policy, field, payload):
     class ReportParser(HTMLParser):
         def __init__(self):
             super().__init__()
@@ -241,7 +379,7 @@ def test_report_renders_thermochemistry_counts_as_text(tmp_path, field, payload)
     output["thermochemistry"].update(
         ase_version="3.29.0",
         vib_selection="highest",
-        ignore_imag_modes=False,
+        ignore_imag_modes=policy,
         n_imag=0,
         raw_imaginary_mode_count=4,
         warnings=[],
@@ -328,12 +466,69 @@ def test_report_rejects_unsupported_entropy_units(tmp_path, unit):
     result = generate_html.invoke(
         {"results_json_path": str(source), "output_path": str(report)}
     )
+    assert result.startswith("Error:")
     assert "Unsupported entropy_unit" in result
     assert "expected 'eV/K'" in result
     assert not report.exists()
     report.write_text("previous report")
     generate_html.invoke({"results_json_path": str(source), "output_path": str(report)})
     assert report.read_text() == "previous report"
+
+
+@pytest.mark.parametrize(
+    ("case", "error"),
+    [
+        ("success", None),
+        ("missing-results", "Results JSON file not found"),
+        ("missing-xyz", "XYZ file not found"),
+        ("invalid-json", "Failed to parse JSON"),
+        ("invalid-schema", "Failed to validate results data"),
+        ("missing-structure", "Failed to validate results data"),
+        ("missing-output-directory", "Output directory does not exist"),
+        ("unsupported-entropy-unit", "Unsupported entropy_unit"),
+        ("write-error", "Failed to generate HTML report"),
+    ],
+)
+def test_report_result_controls_routing(tmp_path, ase_selected_output, case, error):
+    source, report = tmp_path / "result.json", tmp_path / "report.html"
+    args = {"results_json_path": str(source), "output_path": str(report)}
+    if case == "missing-results":
+        args["results_json_path"] = str(tmp_path / "missing.json")
+    elif case == "missing-xyz":
+        args["xyz_path"] = str(tmp_path / "missing.xyz")
+    elif case == "missing-structure":
+        ase_selected_output["final_structure"] = None
+    elif case == "missing-output-directory":
+        args["output_path"] = str(tmp_path / "missing" / "report.html")
+    elif case == "unsupported-entropy-unit":
+        ase_selected_output["thermochemistry"]["entropy_unit"] = "J/(mol K)"
+    source.write_text(json.dumps(ase_selected_output))
+    if case == "invalid-json":
+        source.write_text("{")
+    elif case == "invalid-schema":
+        source.write_text("{}")
+    if case == "write-error":
+        report.mkdir()
+    else:
+        report.write_text("previous report")
+
+    result = generate_html.invoke(args)
+    if error is None:
+        assert result == str(report.resolve())
+        assert "Calculation Results" in report.read_text()
+    else:
+        assert result.startswith("Error:")
+        assert error in result
+        if report.is_file():
+            assert report.read_text() == "previous report"
+    messages = [ToolMessage(content=result, name="generate_html", tool_call_id="call_1")]
+    assert route_after_report_tools({"messages": messages}) == ("retry" if error else "done")
+    messages.append(
+        AIMessage(content="", tool_calls=[{
+            "name": "generate_html", "args": args, "id": "call_2", "type": "tool_call",
+        }])
+    )
+    assert route_report_tools({"messages": messages}) == ("tools" if error else "done")
 
 
 @pytest.mark.parametrize("script_tag", ["script", "SCRIPT", "ScRiPt"])

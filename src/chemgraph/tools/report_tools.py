@@ -341,7 +341,7 @@ def generate_html(
     Returns
     -------
     str
-        Path to the generated HTML file
+        Absolute path to the generated HTML file, or an ``Error:`` message.
     """
     # run_ase and the coordinate writers emit relative paths into
     # CHEMGRAPH_LOG_DIR via _resolve_path; resolve bare names to match so a
@@ -356,14 +356,14 @@ def generate_html(
     # Validate results_json_path exists
     if not os.path.isfile(results_json_path):
         return (
-            f"Results JSON file not found: {results_json_path}. "
+            f"Error: Results JSON file not found: {results_json_path}. "
             "Please provide a valid path to the JSON file produced by the run_ase tool."
         )
 
     # Validate xyz_path exists (if provided)
     if xyz_path is not None and not os.path.isfile(xyz_path):
         return (
-            f"XYZ file not found: {xyz_path}. "
+            f"Error: XYZ file not found: {xyz_path}. "
             "Please provide a valid path to an XYZ file."
         )
 
@@ -373,7 +373,7 @@ def generate_html(
             data = json.load(f)
     except json.JSONDecodeError as e:
         return (
-            f"Failed to parse JSON from {results_json_path}: {e}. "
+            f"Error: Failed to parse JSON from {results_json_path}: {e}. "
             "The file may be corrupted or not valid JSON."
         )
 
@@ -382,7 +382,7 @@ def generate_html(
         ase_output = ASEOutputSchema(**data)
     except Exception as e:
         return (
-            f"Failed to validate results data from {results_json_path}: {e}. "
+            f"Error: Failed to validate results data from {results_json_path}: {e}. "
             "The JSON file may not contain valid ASE output data."
         )
 
@@ -393,7 +393,7 @@ def generate_html(
     else:
         if ase_output.final_structure is None:
             return (
-                "No XYZ file provided and no final_structure found in the results JSON. "
+                "Error: No XYZ file provided and no final_structure found in the results JSON. "
                 "Please provide an xyz_path or ensure the simulation results include a final structure."
             )
 
@@ -414,7 +414,7 @@ def generate_html(
     output_dir = os.path.dirname(os.path.abspath(output_path))
     if not os.path.isdir(output_dir):
         return (
-            f"Output directory does not exist: {output_dir}. "
+            f"Error: Output directory does not exist: {output_dir}. "
             "Please provide a valid output path."
         )
 
@@ -431,7 +431,7 @@ def generate_html(
         print(f"✅ HTML viewer created: {output_path}")
         return str(os.path.abspath(output_path))
     except Exception as e:
-        return f"Failed to generate HTML report: {e}"
+        return f"Error: Failed to generate HTML report: {e}"
 
 
 def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) -> str:
@@ -530,7 +530,18 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
 
         frequencies = ase_output.vibrational_frequencies["frequencies"]
         ase_selected = "all_modes" in ase_output.vibrational_frequencies
-        selected_indices = ase_output.vibrational_frequencies.get("mode_indices", [])
+        selected_indices = ase_output.vibrational_frequencies.get("mode_indices")
+        has_mode_mapping = (
+            ase_selected
+            and isinstance(selected_indices, list)
+            and len(selected_indices) == len(frequencies)
+            and all(type(index) is int and index >= 0 for index in selected_indices)
+            and len(set(selected_indices)) == len(selected_indices)
+            and set(selected_indices).issubset(
+                mode["mode_index"]
+                for mode in ase_output.vibrational_frequencies["all_modes"]
+            )
+        )
         includes_nonvibrational_modes = len(frequencies) == 3 * num_atoms
         num_vibrational_modes = max(3 * num_atoms - trans_rot_modes, 0)
 
@@ -566,7 +577,9 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
             row_class = (
                 "trans-rot-mode" if is_nonvibrational else "vibrational-mode"
             )
-            display_index = selected_indices[i - 1] + 1 if ase_selected else i
+            display_index = i
+            if ase_selected:
+                display_index = selected_indices[i - 1] + 1 if has_mode_mapping else "Unknown"
 
             freq_table += f"""
                     <tr class="{row_class}">
@@ -586,15 +599,25 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
         if ase_selected:
             mode_note = (
                 f"{len(frequencies)} of {num_vibrational_modes} expected vibrational "
-                "modes contributed to thermochemistry. Mode numbers refer to the "
-                "original ASE spectrum (displayed starting at 1). "
-                "Excluded modes are not necessarily translations or rotations."
+                "modes contributed to thermochemistry. "
             )
+            if has_mode_mapping:
+                mode_note += (
+                    "Mode numbers refer to the original ASE spectrum (displayed starting at 1). "
+                    "Excluded modes are not necessarily translations or rotations."
+                )
+            else:
+                mode_note += (
+                    "Original mode mapping is unavailable or inconsistent. Selected mode "
+                    "numbers and usage in the complete spectrum are shown as Unknown."
+                )
             raw_rows = []
             for mode in ase_output.vibrational_frequencies["all_modes"]:
-                disposition = (
-                    "Used" if mode["mode_index"] in selected_indices else "Excluded"
-                )
+                disposition = "Unknown"
+                if has_mode_mapping:
+                    disposition = (
+                        "Used" if mode["mode_index"] in selected_indices else "Excluded"
+                    )
                 raw_rows.append(
                     f"<tr><td>{mode['mode_index'] + 1}</td>"
                     f"<td>{escape(str(mode['frequency']))}</td>"
@@ -652,22 +675,45 @@ def add_additional_info_to_html(html_content: str, ase_output: ASEOutputSchema) 
     # Thermochemistry Values
     if ase_output.thermochemistry:
         thermo_info = []
-        if "ase_version" in ase_output.thermochemistry:
-            metadata = ase_output.thermochemistry
+        metadata = ase_output.thermochemistry
+        settings = []
+        for key, label in (
+            ("ase_version", "ASE "),
+            ("vib_selection", "mode selection: "),
+            ("ignore_imag_modes", "ignore_imag_modes: "),
+        ):
+            if metadata.get(key) is not None:
+                settings.append(f"{label}{escape(str(metadata[key]))}")
+        if settings:
+            thermo_info.append(f"<div>{'; '.join(settings)}.</div>")
+        if metadata.get("raw_imaginary_mode_count") is not None:
             thermo_info.append(
-                f"<div>ASE {escape(str(metadata['ase_version']))}; "
-                f"mode selection: {escape(str(metadata['vib_selection']))}; "
-                f"ignore_imag_modes: {escape(str(metadata['ignore_imag_modes']))}.</div>"
                 "<div>Imaginary modes in the complete input: "
-                f"{escape(str(metadata['raw_imaginary_mode_count']))}. "
-                f"ASE cleanup removed {escape(str(metadata['n_imag']))} non-positive modes "
+                f"{escape(str(metadata['raw_imaginary_mode_count']))}.</div>"
+            )
+        policy = metadata.get("ignore_imag_modes")
+        if policy is False:
+            thermo_info.append(
+                "<div>Imaginary modes remaining after selection cause an error; "
+                "zero-energy modes are not removed.</div>"
+            )
+        if policy is True:
+            cleanup = "ASE cleanup removes"
+            if metadata.get("n_imag") is not None:
+                cleanup = f"ASE cleanup removed {escape(str(metadata['n_imag']))}"
+            thermo_info.append(
+                f"<div>{cleanup} non-positive modes "
                 "(imaginary or zero energy) after selection.</div>"
             )
-            for warning in metadata.get("warnings", []):
-                thermo_info.append(
-                    "<div role='note' class='thermo-warning'>"
-                    f"<strong>Warning:</strong> {escape(str(warning))}</div>"
-                )
+        elif metadata.get("n_imag") is not None:
+            thermo_info.append(
+                f"<div>ASE n_imag: {escape(str(metadata['n_imag']))}.</div>"
+            )
+        for warning in metadata.get("warnings") or []:
+            thermo_info.append(
+                "<div role='note' class='thermo-warning'>"
+                f"<strong>Warning:</strong> {escape(str(warning))}</div>"
+            )
 
         # Add data attributes for conversion with labels
         if "enthalpy" in ase_output.thermochemistry:
