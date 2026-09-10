@@ -734,7 +734,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
     atoms.info.update(system_info)
     atoms.calc = calc
 
-    if driver == "ir":
+    if driver == "ir" and len(atoms) > 1:
         # Infrared calls this ASE method at every displacement. Check it before
         # optimization and vibrations; a result-only fallback cannot support IR.
         from ase.calculators.calculator import PropertyNotImplementedError

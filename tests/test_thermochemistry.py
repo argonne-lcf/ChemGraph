@@ -25,13 +25,17 @@ from chemgraph.tools.ase_core import get_symmetry_number, run_ase_core
 
 def _controlled_spectrum(monkeypatch, energies):
     class ConstantCalculator(Calculator):
-        implemented_properties = ["energy", "forces"]
+        implemented_properties = ["energy", "forces", "dipole"]
 
         def calculate(
             self, atoms=None, properties=("energy",), system_changes=all_changes
         ):
             super().calculate(atoms, properties, system_changes)
-            self.results = {"energy": -1.0, "forces": np.zeros((len(atoms), 3))}
+            self.results = {
+                "energy": -1.0,
+                "forces": np.zeros((len(atoms), 3)),
+                "dipole": np.zeros(3),
+            }
 
     calculator = ConstantCalculator()
     monkeypatch.setattr(MaceCalc, "get_calculator", lambda self: calculator)
@@ -274,6 +278,11 @@ def test_atomic_drivers_skip_displacements_and_clean_artifacts(
 
 @pytest.fixture
 def water_vibration_artifacts(tmp_path, monkeypatch):
+    class DipoleEMT(EMT):
+        def get_dipole_moment(self, atoms=None):
+            return np.zeros(3)
+
+    monkeypatch.setattr(EMTCalc, "get_calculator", lambda self: DipoleEMT())
     monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
     write(
         tmp_path / "water.xyz",
@@ -290,7 +299,7 @@ def water_vibration_artifacts(tmp_path, monkeypatch):
     paths = [tmp_path / "frequencies_water.csv"] + [
         tmp_path / f"water_vib.{i}.traj" for i in (6, 7, 8)
     ]
-    # EMT has no dipole implementation; seed prior IR outputs separately.
+    # Seed prior IR outputs separately from the initial vibration-only run.
     for name in (
         "ir_spectrum_water.png", "ir_spectrum_water.csv", "ir_peaks_water.csv",
     ):
