@@ -645,6 +645,10 @@ def test_thermo_failure_preserves_completed_results(tmp_path, monkeypatch, failu
     assert result["converged"] is True
     assert result["potential_energy"] == -1.0
     assert result["results_file"] == str(tmp_path / "result.json")
+    assert f"results JSON: {result['results_file']}" in result["message"]
+    assert "full input vibrational spectrum" in result["message"]
+    assert "selected-mode frequency CSV is empty" in result["message"]
+    assert "no selected-mode trajectories were exported" in result["message"]
     json.dumps(result)  # The failure payload must also work over MCP/ensemble JSON.
     output = json.loads(Path(result["results_file"]).read_text(encoding="utf-8"))
     assert output["success"] is False
@@ -658,4 +662,47 @@ def test_thermo_failure_preserves_completed_results(tmp_path, monkeypatch, failu
         for mode in output["vibrational_frequencies"]["all_modes"]
     ] == pytest.approx(energies)
     assert output["vibrational_frequencies"]["mode_indices"] == []
+    assert (tmp_path / "frequencies_input.csv").read_text(encoding="utf-8") == ""
+    assert not list(tmp_path.glob("input_vib.*.traj"))
     assert read(tmp_path / "input_opt.traj").get_potential_energy() == -1.0
+
+
+def test_atomic_thermo_failure_describes_absent_vibration_artifacts(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "ase.thermochemistry.IdealGasThermo",
+        Mock(side_effect=ValueError("thermo unavailable")),
+    )
+    atoms = Atoms("Cu", positions=[[0, 0, 0]])
+    atoms.calc = EMT()
+    expected_energy = atoms.get_potential_energy()
+    write(tmp_path / "input.xyz", atoms)
+    result = run_ase_core(
+        ASEInputSchema(
+            input_structure_file="input.xyz",
+            output_results_file="result.json",
+            calculator=EMTCalc(),
+            driver="thermo",
+        )
+    )
+    assert result["status"] == "failure"
+    assert result["error_type"] == "ValueError"
+    assert result["message"].startswith("Thermochemistry failed: thermo unavailable.")
+    assert result["results_file"] == str(tmp_path / "result.json")
+    assert f"results JSON: {result['results_file']}" in result["message"]
+    assert "Single atoms have no vibrational modes" in result["message"]
+    assert "no frequency CSV or mode trajectories were exported" in result["message"]
+    assert "full input vibrational spectrum" not in result["message"]
+    assert result["potential_energy"] == pytest.approx(expected_energy)
+    assert "result" not in result
+    json.dumps(result)
+    output = json.loads(Path(result["results_file"]).read_text(encoding="utf-8"))
+    assert output["success"] is False
+    assert output["error"] == "thermo unavailable"
+    assert output["thermochemistry"] == {}
+    assert output["final_structure"]["numbers"] == atoms.numbers.tolist()
+    assert output["potential_energy"] == pytest.approx(expected_energy)
+    assert output["vibrational_frequencies"]["all_modes"] == []
+    assert output["vibrational_frequencies"]["mode_indices"] == []
+    assert not list(tmp_path.glob("frequencies_*.csv"))
+    assert not list(tmp_path.glob("input_vib.*.traj"))

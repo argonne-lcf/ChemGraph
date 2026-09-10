@@ -1087,12 +1087,25 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             optimization_steps=optimization_steps,
         )
         if thermo_error is not None:
+            if len(atoms) == 1:
+                artifact_message = (
+                    "Completed structure and potential energy are saved in the "
+                    f"results JSON: {abs_output}. Single atoms have no vibrational "
+                    "modes; no frequency CSV or mode trajectories were exported."
+                )
+            else:
+                artifact_message = (
+                    "Completed structure, potential energy, and the full input "
+                    f"vibrational spectrum are saved in the results JSON: {abs_output}. "
+                    "The selected-mode frequency CSV is empty; "
+                    "no selected-mode trajectories were exported."
+                )
             return {
                 "status": "failure",
                 "error_type": type(thermo_error).__name__,
                 "message": (
                     f"Thermochemistry failed: {thermo_error}. "
-                    f"Completed structure, energy, and vibration results saved to {abs_output}"
+                    f"{artifact_message}"
                 ),
                 **energy_metadata,
             }
