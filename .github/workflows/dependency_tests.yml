@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
-        install_extras: [core, calculators, uma, ui, parsl, xanes, rag]
+        install_extras: [core, calculators, uma, ui, web, parsl, xanes, rag]
 
     steps:
     - uses: actions/checkout@v4
@@ -83,6 +83,7 @@ jobs:
             'calculators': ['tblite'],
             'uma': ['fairchem.core', 'e3nn'],
             'ui': ['streamlit', 'py3Dmol', 'plotly'],
+            'web': ['fastapi', 'uvicorn', 'chemgraph.api.app'],
             'parsl': ['parsl'],
             'xanes': ['parsl'],
             'rag': [
