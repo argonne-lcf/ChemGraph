@@ -30,7 +30,7 @@ from langgraph.types import Send, interrupt
 
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.utils.parsing import extract_json_block, parse_response_formatter
-from chemgraph.state.multi_agent_state import ExecutorState, PlannerState
+from chemgraph.state.multi_agent_state import ExecutorState, ExecutorOutputState, PlannerState
 from chemgraph.schemas.multi_agent_response import PlannerResponse
 from chemgraph.prompt.multi_agent_prompt import (
     planner_prompt as default_planner_prompt,
@@ -679,7 +679,7 @@ def construct_executor_subgraph(
     CompiledStateGraph
         Compiled executor subgraph.
     """
-    workflow = StateGraph(ExecutorState)
+    workflow = StateGraph(ExecutorState, output_schema=ExecutorOutputState)
     workflow.add_node(
         "executor_agent",
         partial(
