@@ -73,6 +73,47 @@ def initialize_agent(
         return None
 
 
+#: Attributes that identify a conversation and its persistence bookkeeping.
+_CONVERSATION_ATTRIBUTES = (
+    "uuid",
+    "session_store",
+    "_session_created",
+    "_saved_message_keys",
+    "_session_title",
+)
+
+
+def transfer_conversation_state(source, target) -> None:
+    """Move an active conversation from one agent instance to another.
+
+    Rebuilding the agent (for example after a provider API key is replaced)
+    compiles a fresh graph with an empty in-memory checkpointer, which would
+    drop the LangGraph thread state, any pending human-input interrupt, and
+    the session bookkeeping that prevents duplicate history writes. Reuse the
+    previous checkpointer and session identity on the new instance so the
+    conversation continues under the new credentials.
+
+    Parameters
+    ----------
+    source : ChemGraph
+        Agent that currently owns the conversation.
+    target : ChemGraph
+        Newly constructed agent with the same workflow configuration.
+    """
+    if source is None or target is None or source is target:
+        return
+    for name in _CONVERSATION_ATTRIBUTES:
+        if hasattr(source, name):
+            setattr(target, name, getattr(source, name))
+    source_workflow = getattr(source, "workflow", None)
+    target_workflow = getattr(target, "workflow", None)
+    checkpointer = getattr(source_workflow, "checkpointer", None)
+    if checkpointer is not None and target_workflow is not None:
+        target_workflow.checkpointer = checkpointer
+    if getattr(source, "checkpointer", None) is not None:
+        target.checkpointer = source.checkpointer
+
+
 def run_async_callable(fn):
     """Run an async callable and return its result in a sync context.
 

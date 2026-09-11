@@ -33,7 +33,7 @@ from chemgraph.utils.config_utils import (
 from ui import alcf_auth
 from ui import artifacts as artifact_utils
 from ui import providers
-from ui.agent_manager import initialize_agent
+from ui.agent_manager import initialize_agent, transfer_conversation_state
 from ui.provider_widgets import apply_api_key, render_alcf_login
 from ui.branding import LOGO_IMAGES, first_existing_asset
 from ui import config as ui_config
@@ -928,7 +928,18 @@ def _auto_initialize_agent(
         credential_fingerprint,
     )
 
-    if st.session_state.agent is None or st.session_state.last_config != current_config:
+    previous_agent = st.session_state.agent
+    last_config = st.session_state.last_config
+    if previous_agent is None or last_config != current_config:
+        # Only the credential changed: the graph topology, thread ids and
+        # log directory are identical, so the conversation can move to the
+        # rebuilt agent instead of restarting from an empty checkpointer.
+        credential_only_change = (
+            previous_agent is not None
+            and last_config is not None
+            and last_config[:-1] == current_config[:-1]
+            and last_config[-1] != credential_fingerprint
+        )
         with st.spinner("\U0001f680 Initializing ChemGraph agents..."):
             chat_log_dir = _ensure_chat_log_dir()
             agent = initialize_agent(
@@ -943,8 +954,10 @@ def _auto_initialize_agent(
                 get_argo_user_from_nested_config(config),
                 log_dir=chat_log_dir,
             )
-            st.session_state.agent = agent
             if agent is not None:
+                if credential_only_change:
+                    transfer_conversation_state(previous_agent, agent)
+                st.session_state.agent = agent
                 st.session_state.last_config = (
                     selected_model,
                     selected_workflow,
@@ -958,7 +971,14 @@ def _auto_initialize_agent(
                     chat_log_dir,
                     credential_fingerprint,
                 )
+            elif credential_only_change:
+                # The new credential failed to build a client. Keep the
+                # conversation on the previous agent so nothing is lost; its
+                # cache key still differs from the current credential, so the
+                # next rerun retries and can transfer the state on success.
+                pass
             else:
+                st.session_state.agent = None
                 st.session_state.last_config = None
 
 

@@ -688,18 +688,34 @@ def test_start_new_chat_clears_history_agent_and_log_dir(monkeypatch):
     assert fake_st.session_state.interrupt_exchanges == []
 
 
-def _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls):
+class _FakeAgent:
+    """Stand-in for ChemGraph carrying the conversation-bearing attributes."""
+
+    _counter = 0
+
+    def __init__(self):
+        type(self)._counter += 1
+        self.uuid = f"agent-{self._counter}"
+        self.session_store = object()
+        self._session_created = False
+        self._saved_message_keys = {}
+        self._session_title = None
+        self.checkpointer = None
+        self.workflow = SimpleNamespace(checkpointer=object())
+
+
+def _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls, model="gpt-4o-mini", agent_factory=_FakeAgent):
     monkeypatch.setattr(main_ui, "st", fake_st)
     monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
 
     def fake_initialize(*args, **kwargs):
         calls.append(os.environ.get("OPENAI_API_KEY"))
-        return object()
+        return agent_factory()
 
     monkeypatch.setattr(main_ui, "initialize_agent", fake_initialize)
     main_ui._auto_initialize_agent(
         {"general": {"recursion_limit": 20}, "api": {"openai": {}}},
-        "gpt-4o-mini",
+        model,
         "single_agent",
         False,
         "state",
@@ -709,13 +725,18 @@ def _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls):
     )
 
 
-def test_replacing_api_key_rebuilds_cached_agent(monkeypatch, tmp_path):
-    """A key applied after initialization must not leave the old client in use."""
+def _fresh_streamlit(tmp_path):
     fake_st = _FakeStreamlit()
     fake_st.session_state.agent = None
     fake_st.session_state.last_config = None
     # _ensure_chat_log_dir records the directory it returns; mirror that here.
     fake_st.session_state.current_chat_log_dir = str(tmp_path)
+    return fake_st
+
+
+def test_replacing_api_key_rebuilds_cached_agent(monkeypatch, tmp_path):
+    """A key applied after initialization must not leave the old client in use."""
+    fake_st = _fresh_streamlit(tmp_path)
     calls = []
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-old")
@@ -742,17 +763,106 @@ def test_replacing_api_key_rebuilds_cached_agent(monkeypatch, tmp_path):
     assert calls == ["sk-old", "sk-new", None]
 
 
-def test_credential_fingerprint_is_non_reversible_and_provider_aware():
+def test_credential_refresh_keeps_conversation_state(monkeypatch, tmp_path):
+    """Replacing a key must not reset the thread checkpointer or session id."""
+    fake_st = _fresh_streamlit(tmp_path)
+    calls = []
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-old")
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls)
+    first = fake_st.session_state.agent
+    first._session_created = True
+    first._saved_message_keys = {"1": {("human", "hi")}}
+    first._session_title = "Water energy"
+    checkpointer = first.workflow.checkpointer
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-new")
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls)
+    second = fake_st.session_state.agent
+    assert second is not first
+    assert second.workflow.checkpointer is checkpointer
+    assert second.uuid == first.uuid
+    assert second.session_store is first.session_store
+    assert second._session_created is True
+    assert second._saved_message_keys == {"1": {("human", "hi")}}
+    assert second._session_title == "Water energy"
+
+    # A structural change (different model) is a genuinely new agent.
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls, model="gpt-4o")
+    third = fake_st.session_state.agent
+    assert third.workflow.checkpointer is not checkpointer
+    assert third.uuid != first.uuid
+
+
+def test_failed_credential_refresh_keeps_previous_agent(monkeypatch, tmp_path):
+    fake_st = _fresh_streamlit(tmp_path)
+    calls = []
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-old")
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls)
+    first = fake_st.session_state.agent
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-broken")
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls, agent_factory=lambda: None)
+    assert fake_st.session_state.agent is first
+    stale_key = fake_st.session_state.last_config
+    assert stale_key is not None and stale_key[-1] != main_ui._provider_credential_fingerprint(
+        main_ui.providers.provider_for_model("gpt-4o-mini"), None
+    )  # still mismatched, so the next rerun retries
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-fixed")
+    _init_agent_with_env(monkeypatch, fake_st, tmp_path, calls)
+    assert fake_st.session_state.agent is not first
+    assert fake_st.session_state.agent.uuid == first.uuid
+
+
+def test_transfer_conversation_state_shares_langgraph_thread():
+    from typing import TypedDict
+
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, StateGraph
+
+    from ui.agent_manager import transfer_conversation_state
+
+    class State(TypedDict):
+        count: int
+
+    builder = StateGraph(State)
+    builder.add_node("bump", lambda state: {"count": state["count"] + 1})
+    builder.add_edge(START, "bump")
+    builder.add_edge("bump", END)
+    old = SimpleNamespace(
+        uuid="session-1", session_store=object(), _session_created=True,
+        _saved_message_keys={"7": set()}, _session_title="t", checkpointer=None,
+        workflow=builder.compile(checkpointer=MemorySaver()),
+    )
+    new = SimpleNamespace(
+        uuid="session-2", session_store=object(), _session_created=False,
+        _saved_message_keys={}, _session_title=None, checkpointer=None,
+        workflow=builder.compile(checkpointer=MemorySaver()),
+    )
+    thread = {"configurable": {"thread_id": "7"}}
+    old.workflow.invoke({"count": 0}, thread)
+    assert new.workflow.get_state(thread).values == {}
+
+    transfer_conversation_state(old, new)
+
+    assert new.workflow.get_state(thread).values == {"count": 1}
+    new.workflow.invoke({"count": 10}, thread)
+    assert old.workflow.get_state(thread).values == {"count": 11}
+    assert (new.uuid, new._session_created, new._saved_message_keys) == (
+        "session-1", True, {"7": set()}
+    )
+    transfer_conversation_state(None, new)  # no-op guards
+    transfer_conversation_state(new, new)
+
+
+def test_credential_fingerprint_is_non_reversible_and_provider_aware(monkeypatch):
     from ui import providers
 
     openai = providers.provider_for_model("gpt-4o-mini")
-    with_key = main_ui._provider_credential_fingerprint(openai, None)
-    assert with_key is None or "OPENAI_API_KEY" not in os.environ
-    os.environ["OPENAI_API_KEY"] = "sk-fingerprint-test"
-    try:
-        digest = main_ui._provider_credential_fingerprint(openai, None)
-    finally:
-        del os.environ["OPENAI_API_KEY"]
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert main_ui._provider_credential_fingerprint(openai, None) is None
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-fingerprint-test")
+    digest = main_ui._provider_credential_fingerprint(openai, None)
     assert digest is not None and len(digest) == 64
     assert "sk-fingerprint-test" not in digest
     assert main_ui._provider_credential_fingerprint(None, None) is None
