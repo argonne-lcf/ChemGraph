@@ -14,6 +14,7 @@ from chemgraph.api.app import create_app
 from chemgraph.api.settings import Provider, Settings
 from chemgraph.api.store import Store
 from chemgraph.api.worker import execute_run, Supervisor
+from chemgraph.api.providers import provenance
 
 
 def wait_for(client, run_id, expected):
@@ -88,13 +89,13 @@ def test_worker_reuses_memory_and_does_not_forward_secret_events(tmp_path, monke
 
     settings = Settings(
         data_dir=tmp_path,
-        providers={"test": Provider(model="test-model", api_key_env="WEB_TEST_KEY")},
+        providers={"test": Provider(model="test-model", base_url="http://localhost:9999/v1", api_key_env="WEB_TEST_KEY")},
     )
     store = Store(tmp_path)
     session_id = str(uuid4())
     store.execute(
-        "INSERT INTO sessions(id,owner,model,workflow,title) VALUES (?,?,?,?,?)",
-        (session_id, "owner", "test", "single_agent", "Test"),
+        "INSERT INTO sessions(id,owner,model,workflow,title,provenance) VALUES (?,?,?,?,?,?)",
+        (session_id, "owner", "test", "single_agent", "Test", provenance(settings, "test")),
     )
     monkeypatch.setenv("WEB_TEST_KEY", "private-test-key")
     # execute_run changes only the child environment in production. Restore the
