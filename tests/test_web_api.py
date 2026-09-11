@@ -16,7 +16,7 @@ from chemgraph.api.store import Store
 @pytest.fixture
 def client(tmp_path):
     settings = Settings(
-        data_dir=tmp_path, providers={"Test model": Provider(model="gpt-test")}
+        data_dir=tmp_path, providers={"Test model": Provider(model="gpt-test", base_url="http://localhost:9999/v1")}
     )
     with TestClient(
         create_app(settings, start_workers=False),
@@ -137,11 +137,12 @@ def test_submission_idempotency_busy_sessions_and_foreign_attachments(client):
 
 
 def test_missing_provider_credentials_are_reported_before_queueing(client, monkeypatch):
+    session_id = new_session(client)
     monkeypatch.delenv("CHEMGRAPH_TEST_MISSING_KEY", raising=False)
     client.app.state.settings.providers[
         "Test model"
     ].api_key_env = "CHEMGRAPH_TEST_MISSING_KEY"
-    session_id = new_session(client)
+    assert client.post("/api/v1/sessions", json={"model": "Test model"}).status_code == 503
     assert submit(client, session_id).status_code == 503
     assert client.get(f"/api/v1/sessions/{session_id}").json()["runs"] == []
 

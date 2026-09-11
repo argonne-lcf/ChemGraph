@@ -31,7 +31,9 @@ def workspace_path(root: Path, value: str, *, reading=False) -> str:
     return str(path)
 
 
-def web_tools(workspace: Path, calculators: tuple[str, ...]):
+def web_tools(
+    workspace: Path, calculators: tuple[str, ...], *, guard=None, publish=None
+):
     """Wrap approved tools without exposing shell, Python, or model-file loading."""
     from langchain_core.tools import tool
     from chemgraph.schemas.ase_input import ASEInputSchema
@@ -39,21 +41,29 @@ def web_tools(workspace: Path, calculators: tuple[str, ...]):
     from chemgraph.tools.cheminformatics_tools import molecule_name_to_smiles
     from chemgraph.tools.generic_tools import calculator
 
+    guard = guard or (lambda: None)
+    publish = publish or (lambda _path: None)
+
     @tool
     def smiles_to_coordinate_file(
         smiles: str, output_file: str = "molecule.xyz"
     ) -> str:
         """Create an XYZ structure from SMILES inside the conversation workspace."""
+        guard()
         output_file = workspace_path(workspace, output_file)
         if Path(output_file).suffix.lower() != ".xyz":
             raise ValueError("Coordinate output must be an XYZ file.")
-        return cheminformatics_core.smiles_to_coordinate_file_core(
+        result = cheminformatics_core.smiles_to_coordinate_file_core(
             smiles, output_file=output_file
         )
+        guard()
+        publish(output_file)
+        return result
 
     @tool
     def run_ase(ase_input: ASEInputSchema) -> dict:
         """Run an ASE calculation using an approved calculator and workspace files."""
+        guard()
         data = ase_input.model_copy(deep=True)
         calc = data.calculator
         if calc.calculator_type not in calculators:
@@ -74,7 +84,43 @@ def web_tools(workspace: Path, calculators: tuple[str, ...]):
         data.output_results_file = workspace_path(workspace, data.output_results_file)
         if Path(data.output_results_file).suffix.lower() != ".json":
             raise ValueError("Simulation results must use a JSON filename.")
-        return ase_core.run_ase_core(data)
+        result = ase_core.run_ase_core(data)
+        guard()
+        # Register only outputs owned by this chemistry operation. Internal
+        # graph diagnostics and arbitrary JSON files are never auto-published.
+        output = Path(data.output_results_file)
+        stem = Path(data.input_structure_file).stem
+        turn = Path(os.environ["CHEMGRAPH_LOG_DIR"])
+        paths = [output, output.with_name(f"{stem}_opt.traj")]
+        paths.extend(
+            turn / name
+            for name in (
+                f"frequencies_{stem}.csv",
+                f"ir_spectrum_{stem}.png",
+                f"ir_spectrum_{stem}.csv",
+                f"ir_peaks_{stem}.csv",
+            )
+        )
+        paths.extend(turn.glob(f"{stem}_vib.*.traj"))
+        for path in paths:
+            if path.is_file():
+                publish(path)
+        return result
+
+    @tool
+    def read_workspace_file(filename: str) -> str:
+        """Read an attached XYZ/PDB/CIF/TRAJ structure or JSON/CSV/TXT data file; large content is truncated."""
+        guard()
+        path = Path(workspace_path(workspace, filename, reading=True))
+        if path.suffix.lower() == ".traj":
+            return structure_xyz(path)[:50000]
+        if path.suffix.lower() not in {".xyz", ".pdb", ".cif", ".json", ".csv", ".txt"}:
+            raise ValueError("Choose a supported structure or text attachment.")
+        with path.open(encoding="utf-8") as source:
+            content = source.read(50001)
+        return content[:50000] + (
+            "\n[Content truncated]" if len(content) > 50000 else ""
+        )
 
     @tool
     def extract_output_json(json_file: str) -> dict:
@@ -90,6 +136,7 @@ def web_tools(workspace: Path, calculators: tuple[str, ...]):
         run_ase,
         extract_output_json,
         calculator,
+        read_workspace_file,
     ]
 
 

@@ -6,9 +6,9 @@ import asyncio
 from contextlib import asynccontextmanager
 import hashlib
 import json
-import os
 from pathlib import Path, PureWindowsPath
 import sqlite3
+import time
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request
@@ -22,6 +22,7 @@ from fastapi.responses import (
 from pydantic import BaseModel, Field
 
 from chemgraph.api.settings import Settings
+from chemgraph.api.providers import model_status, provenance, session_status
 from chemgraph.api.store import Store, TERMINAL
 from chemgraph.api.worker import Supervisor
 
@@ -45,6 +46,7 @@ class HumanResponse(BaseModel):
 def create_app(settings: Settings | None = None, *, start_workers=True) -> FastAPI:
     """Application factory; worker startup can be disabled in hermetic API tests."""
     settings = settings or Settings.from_env()
+    model_status(settings)  # Invalid routes fail before creating storage/workers.
     store = Store(settings.data_dir)
     supervisor = Supervisor(store, settings)
 
@@ -71,8 +73,13 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
 
     @app.exception_handler(HTTPException)
     async def http_error(request, exc):
+        detail = (
+            exc.detail
+            if isinstance(exc.detail, dict)
+            else {"code": exc.status_code, "message": str(exc.detail)}
+        )
         return JSONResponse(
-            {"error": {"code": exc.status_code, "message": str(exc.detail)}},
+            {"error": {**detail, "submission_rejected": True}},
             status_code=exc.status_code,
         )
 
@@ -169,6 +176,7 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
                 "status",
                 "final_text",
                 "error",
+                "error_code",
                 "question_id",
                 "question",
                 "created",
@@ -208,6 +216,7 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
         return {
             "user": request.state.identity,
             "models": ["demo"] if settings.demo else list(settings.providers),
+            "model_status": model_status(settings),
             "workflows": ["single_agent", "multi_agent"],
             "calculators": settings.calculators,
             "upload_limit": settings.upload_limit,
@@ -229,15 +238,22 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
             "multi_agent",
         }:
             raise HTTPException(422, "Choose an approved model and workflow.")
+        readiness = model_status(settings)[data.model]
+        if not readiness["configured"]:
+            raise HTTPException(
+                503, {"code": readiness["code"], "message": readiness["message"]}
+            )
         session_id = str(uuid4())
         store.execute(
-            "INSERT INTO sessions(id,owner,model,workflow,title) VALUES (?,?,?,?,?)",
+            "INSERT INTO sessions(id,owner,model,workflow,title,provenance,last_activity) VALUES (?,?,?,?,?,?,?)",
             (
                 session_id,
                 request.state.owner,
                 data.model,
                 data.workflow,
                 "New conversation",
+                provenance(settings, data.model),
+                time.time(),
             ),
         )
         return {
@@ -251,6 +267,8 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
     def session_detail(session_id: str, request: Request):
         session = owned_session(request, session_id)
         session.pop("owner")
+        session["model_status"] = session_status(settings, session)
+        session.pop("provenance")
         session["runs"] = [
             run_view(r)
             for r in store.rows(
@@ -261,7 +279,12 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
 
     @app.post("/api/v1/sessions/{session_id}/uploads", status_code=201)
     async def upload(session_id: str, request: Request, filename: str):
-        owned_session(request, session_id)
+        session = owned_session(request, session_id)
+        readiness = session_status(settings, session)
+        if not readiness["configured"]:
+            raise HTTPException(
+                503, {"code": readiness["code"], "message": readiness["message"]}
+            )
         name = Path(PureWindowsPath(filename).name).name
         if not name or len(name) > 200 or any(ord(c) < 32 for c in name):
             raise HTTPException(422, "Invalid filename.")
@@ -277,22 +300,73 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
             raise HTTPException(
                 422, "Supported uploads: XYZ, PDB, CIF, TRAJ, JSON, CSV, TXT."
             )
-        path = store.session_dir(session_id) / "uploads" / str(uuid4()) / name
+        reservation = str(uuid4())
+        try:
+            expected = int(request.headers.get("content-length", settings.upload_limit))
+        except ValueError:
+            raise HTTPException(422, "Invalid content length.") from None
+        if expected < 0 or expected > settings.upload_limit:
+            raise HTTPException(413, "This file exceeds the upload limit.")
+        with store.transaction() as db:
+            if db.execute(
+                "SELECT 1 FROM runs WHERE session_id=? AND status IN ('queued','running','waiting_for_input','cancelling')",
+                (session_id,),
+            ).fetchone():
+                raise HTTPException(
+                    409, "Wait for the current run before attaching more files."
+                )
+            if (
+                store.owner_usage(request.state.owner, db) + expected
+                > settings.user_storage_limit
+            ):
+                raise HTTPException(
+                    413,
+                    {
+                        "code": "storage_limit",
+                        "message": "Your workspace storage limit has been reached.",
+                    },
+                )
+            db.execute(
+                "INSERT INTO upload_reservations VALUES (?,?,?)",
+                (reservation, session_id, expected),
+            )
+        path = store.root / "staging" / reservation
         path.parent.mkdir(parents=True, exist_ok=True)
         size = 0
         try:
             with path.open("xb") as output:
                 async for chunk in request.stream():
                     size += len(chunk)
-                    if size > settings.upload_limit:
+                    if size > min(expected, settings.upload_limit):
                         raise HTTPException(413, "This file exceeds the upload limit.")
                     output.write(chunk)
             if not size:
                 raise HTTPException(422, "The attachment is empty.")
-            file_id = store.register_file(session_id, path, "upload", name=name)
-        except BaseException:
+            target = store.session_dir(session_id) / "uploads" / reservation / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with store.transaction() as db:
+                path.replace(target)
+                file_id = str(uuid4())
+                db.execute(
+                    "INSERT INTO files VALUES (?,?,?,?,?,?,?)",
+                    (
+                        file_id,
+                        session_id,
+                        None,
+                        name,
+                        str(target.relative_to(store.root)),
+                        "upload",
+                        size,
+                    ),
+                )
+                db.execute("DELETE FROM upload_reservations WHERE id=?", (reservation,))
+                db.execute(
+                    "UPDATE sessions SET last_activity=? WHERE id=?",
+                    (time.time(), session_id),
+                )
+        finally:
             path.unlink(missing_ok=True)
-            raise
+            store.execute("DELETE FROM upload_reservations WHERE id=?", (reservation,))
         return file_view(store.one("SELECT * FROM files WHERE id=?", (file_id,)))
 
     @app.post("/api/v1/sessions/{session_id}/runs", status_code=202)
@@ -322,18 +396,74 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
                     409, "This request ID was already used for a different submission."
                 )
             return run_view(previous)
-        if not settings.demo:
-            provider = settings.providers.get(session["model"])
-            if provider is None or (
-                provider.api_key_env and not os.getenv(provider.api_key_env)
-            ):
-                raise HTTPException(
-                    503,
-                    "This model's provider is unavailable. Ask your administrator to configure it.",
-                )
+        readiness = session_status(settings, session)
+        if not readiness["configured"]:
+            raise HTTPException(
+                503, {"code": readiness["code"], "message": readiness["message"]}
+            )
         run_id = str(uuid4())
         try:
-            with store.connect() as db:
+            with store.transaction() as db:
+                # Recheck inside the transaction for concurrent retries.
+                duplicate = db.execute(
+                    "SELECT * FROM runs WHERE session_id=? AND request_id=?",
+                    (session_id, str(data.request_id)),
+                ).fetchone()
+                if duplicate:
+                    if (
+                        duplicate["query"] != data.query
+                        or json.loads(duplicate["attachments"]) != attachments
+                    ):
+                        raise HTTPException(
+                            409,
+                            "This request ID was already used for a different submission.",
+                        )
+                    return run_view(dict(duplicate))
+                if db.execute(
+                    "SELECT 1 FROM upload_reservations WHERE session_id=?",
+                    (session_id,),
+                ).fetchone():
+                    raise HTTPException(
+                        409, "Wait for attachments to finish uploading."
+                    )
+                if db.execute(
+                    "SELECT 1 FROM runs WHERE session_id=? AND status IN ('queued','running','waiting_for_input','cancelling')",
+                    (session_id,),
+                ).fetchone():
+                    raise HTTPException(
+                        409,
+                        "This conversation already has an unfinished run. Refresh its status.",
+                    )
+                queued = db.execute(
+                    "SELECT count(*) FROM runs WHERE status='queued'"
+                ).fetchone()[0]
+                owner_runs = db.execute(
+                    "SELECT count(*) FROM runs r JOIN sessions s ON s.id=r.session_id WHERE s.owner=? AND r.status IN ('queued','running','waiting_for_input','cancelling')",
+                    (request.state.owner,),
+                ).fetchone()[0]
+                if (
+                    queued >= settings.max_queued
+                    or owner_runs >= settings.max_user_runs
+                ):
+                    raise HTTPException(
+                        429,
+                        {
+                            "code": "queue_limit",
+                            "message": "The run limit has been reached. Wait for an existing run to finish.",
+                        },
+                    )
+                if (
+                    store.owner_usage(request.state.owner, db)
+                    + len(data.query.encode())
+                    > settings.user_storage_limit
+                ):
+                    raise HTTPException(
+                        413,
+                        {
+                            "code": "storage_limit",
+                            "message": "Your workspace storage limit has been reached.",
+                        },
+                    )
                 db.execute(
                     "INSERT INTO runs(id,session_id,query,request_id,attachments) VALUES (?,?,?,?,?)",
                     (
@@ -345,6 +475,14 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
                     ),
                 )
                 db.execute(
+                    "UPDATE sessions SET last_activity=? WHERE id=?",
+                    (time.time(), session_id),
+                )
+                db.execute(
+                    "INSERT INTO events(run_id,type,data) VALUES (?,?,?)",
+                    (run_id, "status", json.dumps({"status": "queued"})),
+                )
+                db.execute(
                     "UPDATE sessions SET title=? WHERE id=? AND title='New conversation'",
                     (data.query[:80], session_id),
                 )
@@ -353,7 +491,27 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
                 409,
                 "This conversation already has an unfinished run. Refresh its status.",
             ) from None
-        store.event(run_id, "status", {"status": "queued"})
+        return run_view(store.one("SELECT * FROM runs WHERE id=?", (run_id,)))
+
+    @app.post("/api/v1/runs/{run_id}/cancel", status_code=202)
+    def cancel(run_id: str, request: Request):
+        owned_run(request, run_id)
+        with store.transaction() as db:
+            row = db.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()
+            if row["status"] not in TERMINAL and row["status"] != "cancelling":
+                state = "cancelled" if row["status"] == "queued" else "cancelling"
+                db.execute(
+                    "UPDATE runs SET status=?,question=NULL,question_id=NULL,error_code='cancelled',error='The run was cancelled.' WHERE id=?",
+                    (state, run_id),
+                )
+                db.execute(
+                    "INSERT INTO events(run_id,type,data) VALUES (?,?,?)",
+                    (run_id, "status", json.dumps({"status": state})),
+                )
+                db.execute(
+                    "UPDATE sessions SET last_activity=? WHERE id=(SELECT session_id FROM runs WHERE id=?)",
+                    (time.time(), run_id),
+                )
         return run_view(store.one("SELECT * FROM runs WHERE id=?", (run_id,)))
 
     @app.get("/api/v1/runs/{run_id}")
@@ -365,7 +523,7 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
         owned_run(request, run_id)
         if not data.answer.strip():
             raise HTTPException(422, "A response must not be blank.")
-        with store.connect() as db:
+        with store.transaction() as db:
             row = db.execute(
                 "SELECT question FROM runs WHERE id=?", (run_id,)
             ).fetchone()
@@ -385,6 +543,10 @@ def create_app(settings: Settings | None = None, *, start_workers=True) -> FastA
                     "human_response",
                     json.dumps({"question": row["question"], "answer": data.answer}),
                 ),
+            )
+            db.execute(
+                "UPDATE sessions SET last_activity=? WHERE id=(SELECT session_id FROM runs WHERE id=?)",
+                (time.time(), run_id),
             )
         return {"accepted": True}
 

@@ -25,6 +25,7 @@ def test_workspace_tools_enforce_paths_calculators_and_emt(tmp_path, monkeypatch
         "run_ase",
         "extract_output_json",
         "calculator",
+        "read_workspace_file",
     }
     (turn / "copper.xyz").write_text("2\nCu dimer\nCu 0 0 0\nCu 0 0 2.5\n")
     params = {
