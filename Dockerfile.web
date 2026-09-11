@@ -1,0 +1,21 @@
+# Reuse the maintained chemistry runtime. Override with an immutable digest for rollout.
+ARG CHEMGRAPH_BASE_IMAGE=ghcr.io/argonne-lcf/chemgraph:latest
+FROM ${CHEMGRAPH_BASE_IMAGE}
+
+USER root
+WORKDIR /app
+COPY pyproject.toml README.md LICENSE /app/
+COPY src /app/src
+# Older images contain the superseded package and an unused Python browser
+# renderer whose websocket pin conflicts with current model-provider clients.
+RUN python -m pip uninstall -y chemgraphagent chemgraph pyppeteer && \
+    python -m pip install --no-cache-dir '.[web]' && \
+    python -m pip check && \
+    useradd --create-home --uid 10001 chemgraph-web && \
+    mkdir -p /data && chown chemgraph-web:chemgraph-web /data
+USER 10001:10001
+ENV CHEMGRAPH_WEB_DATA_DIR=/data PYTHONUNBUFFERED=1
+EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"
+CMD ["python", "-m", "chemgraph.api", "--host", "0.0.0.0", "--port", "8000"]

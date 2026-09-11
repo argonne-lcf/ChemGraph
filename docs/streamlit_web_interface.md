@@ -1,5 +1,9 @@
 # Streamlit interface
 
+A separately deployed [React interface](react_web_interface.md) is also
+available as an internal pilot. Streamlit continues to support the full
+configuration and visualization interface described here.
+
 The web interface provides model/workflow selection, chat, molecular
 visualization, saved sessions, and access to run artifacts.
 
