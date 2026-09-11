@@ -75,6 +75,7 @@ def load_chat_model_prepared(
     *,
     settings: LLMSettings | None = None,
     endpoint: ModelEndpointDescriptor | None = None,
+    timeout_s: float | None = None,
 ) -> tuple["object", PreparedModel]:
     """Load a chat model and return it alongside its resolved metadata.
 
@@ -107,6 +108,11 @@ def load_chat_model_prepared(
             raise ValueError("The saved model endpoint resolves to a different model.")
         if endpoint.base_url is not None:
             prepared = replace(prepared, client_kwargs={**prepared.client_kwargs, "base_url": endpoint.base_url})
+    timeout = timeout_s if timeout_s is not None else (settings.timeout_s if settings else None)
+    if timeout is not None:
+        kwargs = dict(prepared.client_kwargs)
+        kwargs["timeout_s" if spec.protocol in {"ollama", "groq"} else "timeout"] = timeout
+        prepared = replace(prepared, client_kwargs=kwargs)
     client = spec.protocol_build(prepared.client_kwargs)
     descriptor = describe_model_endpoint(prepared, client, request.model, request.base_url)
     if endpoint is not None:
