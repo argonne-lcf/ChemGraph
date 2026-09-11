@@ -951,7 +951,7 @@ button:hover:not(:disabled) {
   .sidebar-scrim {
     display: block;
     position: fixed;
-    inset: 0;
+    inset: 0 0 0 260px;
     background: #0d243e66;
     z-index: 11;
   }

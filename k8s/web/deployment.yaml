@@ -35,12 +35,16 @@ spec:
           env:
             - {name: CHEMGRAPH_WEB_DATA_DIR, value: /data}
             - {name: CHEMGRAPH_WEB_PUBLIC_ORIGIN, value: "https://chemgraph-react.example.com"}
-            - name: CHEMGRAPH_WEB_PROVIDERS
-              value: '{"OpenAI":{"model":"gpt-4o-mini","api_key_env":"OPENAI_API_KEY"}}'
-            - name: OPENAI_API_KEY
+            - {name: CHEMGRAPH_WEB_PROVIDERS_FILE, value: /etc/chemgraph/providers.toml}
+            - name: ARGO_USER
               valueFrom:
-                secretKeyRef: {name: chemgraph-secrets, key: openai-api-key}
-          volumeMounts: [{name: data, mountPath: /data}]
+                secretKeyRef: {name: chemgraph-secrets, key: argo-user, optional: true}
+            - name: ALCF_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef: {name: chemgraph-secrets, key: alcf-access-token, optional: true}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: providers, mountPath: /etc/chemgraph, readOnly: true}
           resources:
             requests: {cpu: "1", memory: 2Gi}
             limits: {cpu: "4", memory: 8Gi}
@@ -59,6 +63,8 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim: {claimName: chemgraph-web-data}
+        - name: providers
+          configMap: {name: chemgraph-web-providers}
 ---
 apiVersion: v1
 kind: Service

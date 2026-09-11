@@ -41,6 +41,8 @@ const statusLabel: Record<string, string> = {
   completed: "Complete",
   failed: "Failed",
   interrupted: "Interrupted",
+  cancelling: "Stopping",
+  cancelled: "Cancelled",
 };
 type Submission = {
   sessionId: string;
@@ -72,6 +74,7 @@ export default function App() {
   const [workflow, setWorkflow] = useState("single_agent");
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [savedAttachments, setSavedAttachments] = useState<Artifact[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
@@ -86,6 +89,12 @@ export default function App() {
   const endOfChat = useRef<HTMLDivElement>(null);
   const activeRun = detail?.runs.find((run) => !terminal(run.status));
   const waiting = activeRun?.status === "waiting_for_input";
+  const selectedModel = detail?.model || model;
+  const modelStatus =
+    detail?.model_status || capabilities?.model_status?.[selectedModel];
+  const unavailable = modelStatus
+    ? !modelStatus.configured
+    : !capabilities?.models.includes(selectedModel);
   const artifacts = detail?.runs.flatMap((run) => run.artifacts) || [];
   const structures = artifacts.filter((artifact) => artifact.preview_url);
   const currentArtifact =
@@ -100,13 +109,42 @@ export default function App() {
     ])
       .then(([caps, list]) => {
         setCapabilities(caps);
-        setModel(caps.models[0] || "");
+        setModel(
+          caps.models.find(
+            (label) => caps.model_status?.[label]?.configured !== false,
+          ) || "",
+        );
         setSessions(list);
       })
       .catch((error) => {
         if (!controller.signal.aborted) setError(error.message);
       });
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => {
+      void api<Capabilities>("/capabilities")
+        .then((caps) => {
+          setCapabilities(caps);
+          setModel((previous) =>
+            caps.models.includes(previous) &&
+            caps.model_status?.[previous]?.configured !== false
+              ? previous
+              : caps.models.find(
+                  (label) => caps.model_status?.[label]?.configured !== false,
+                ) || "",
+          );
+          setRevision((value) => value + 1);
+        })
+        .catch((error) => setError(error.message));
+    };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
   }, []);
 
   useEffect(() => {
@@ -170,6 +208,7 @@ export default function App() {
     setDetail(null);
     setDraft("");
     setFiles([]);
+    setSavedAttachments([]);
     setError("");
     setArtifactId(null);
     setSidebar(false);
@@ -178,7 +217,13 @@ export default function App() {
 
   async function send(event: React.FormEvent) {
     event.preventDefault();
-    if (busy || (!draft.trim() && !pending) || (!model && !selected)) return;
+    if (
+      busy ||
+      (!draft.trim() && !pending) ||
+      (!model && !selected) ||
+      (!waiting && (unavailable || !!activeRun) && !pending)
+    )
+      return;
     setBusy(true);
     setError("");
     try {
@@ -204,7 +249,7 @@ export default function App() {
           setSelected(sessionId);
           setDetail({ ...session, runs: [] });
         }
-        const attachments: string[] = [];
+        const attachments: string[] = savedAttachments.map((file) => file.id);
         for (const file of files) {
           if (file.size > (capabilities?.upload_limit || 0))
             throw new Error(`${file.name} exceeds the upload limit.`);
@@ -217,6 +262,8 @@ export default function App() {
             },
           );
           attachments.push(artifact.id);
+          setSavedAttachments((previous) => [...previous, artifact]);
+          setFiles((previous) => previous.filter((item) => item !== file));
         }
         submission = {
           sessionId,
@@ -231,6 +278,7 @@ export default function App() {
       setPending(null);
       setDraft("");
       setFiles([]);
+      setSavedAttachments([]);
       setRevision((value) => value + 1);
       setSessions(await api<Session[]>("/sessions"));
     } catch (error) {
@@ -239,11 +287,14 @@ export default function App() {
       );
       if (
         error instanceof ApiError &&
-        error.status >= 400 &&
-        error.status < 500
+        (error.submissionRejected ||
+          (error.status >= 400 && error.status < 500))
       ) {
         setPending(null);
         setRevision((value) => value + 1);
+        void api<Capabilities>("/capabilities")
+          .then(setCapabilities)
+          .catch(() => {});
       }
     } finally {
       setBusy(false);
@@ -360,8 +411,17 @@ export default function App() {
               onChange={(event) => setModel(event.target.value)}
             >
               {(capabilities?.models || []).map((value) => (
-                <option key={value} value={value}>
+                <option
+                  key={value}
+                  value={value}
+                  disabled={
+                    capabilities?.model_status?.[value]?.configured === false
+                  }
+                >
                   {value}
+                  {capabilities?.model_status?.[value]?.configured === false
+                    ? " (unavailable)"
+                    : ""}
                 </option>
               ))}
               {detail && !capabilities?.models.includes(detail.model) && (
@@ -473,6 +533,28 @@ export default function App() {
                   {run.final_text && <RichText>{run.final_text}</RichText>}
                   {run.id === activeRun?.id && (
                     <div className="run-progress" aria-live="polite">
+                      <button
+                        disabled={busy || run.status === "cancelling"}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            await api(`/runs/${run.id}/cancel`, post({}));
+                            setRevision((value) => value + 1);
+                          } catch (error) {
+                            setError(
+                              error instanceof Error
+                                ? error.message
+                                : "Unable to cancel this run.",
+                            );
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        {run.status === "cancelling"
+                          ? "Stopping…"
+                          : "Cancel run"}
+                      </button>
                       {progress
                         .filter((item) => item.tool)
                         .slice(-6)
@@ -522,6 +604,8 @@ export default function App() {
                       <button
                         onClick={() => {
                           setDraft(run.query);
+                          setFiles([]);
+                          setSavedAttachments(run.attachments);
                           setError("");
                         }}
                       >
@@ -563,10 +647,22 @@ export default function App() {
               </button>
             </div>
           )}
-          {capabilities && !capabilities.models.length && (
-            <div className="error-banner">
-              No model providers are configured. Ask your administrator to
-              enable a provider.
+          {capabilities &&
+            !capabilities.models.some(
+              (label) =>
+                capabilities.model_status?.[label]?.configured !== false,
+            ) && (
+              <div className="error-banner">
+                No model providers are ready. Ask your administrator to
+                configure a provider and its credentials.
+              </div>
+            )}
+          {modelStatus && (
+            <div
+              className={unavailable ? "error-banner" : "settings-note"}
+              role={unavailable ? "status" : undefined}
+            >
+              {modelStatus.message}
             </div>
           )}
           {selected && (
@@ -579,8 +675,26 @@ export default function App() {
             className={`composer ${waiting ? "needs-response" : ""}`}
             onSubmit={send}
           >
-            {!!files.length && (
+            {!!(files.length + savedAttachments.length) && (
               <div className="attachment-chips">
+                {savedAttachments.map((file) => (
+                  <span key={file.id}>
+                    <Paperclip size={13} />
+                    {file.name}
+                    <button
+                      type="button"
+                      disabled={busy || !!pending}
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() =>
+                        setSavedAttachments((previous) =>
+                          previous.filter((item) => item.id !== file.id),
+                        )
+                      }
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
                 {files.map((file, index) => (
                   <span key={`${file.name}-${index}`}>
                     <Paperclip size={13} />
@@ -610,6 +724,7 @@ export default function App() {
               disabled={
                 busy ||
                 !!pending ||
+                (unavailable && !waiting) ||
                 (!!activeRun && !waiting) ||
                 answered === activeRun?.question_id
               }
@@ -640,7 +755,7 @@ export default function App() {
                       ...files,
                       ...Array.from(event.target.files || []),
                     ];
-                    if (next.length > 10)
+                    if (next.length + savedAttachments.length > 10)
                       setError("Attach up to 10 files per message.");
                     else setFiles(next);
                     event.target.value = "";
@@ -649,7 +764,7 @@ export default function App() {
                 <button
                   type="button"
                   className="attach-button"
-                  disabled={busy || !!activeRun || !!pending}
+                  disabled={busy || !!activeRun || !!pending || unavailable}
                   onClick={() => uploadInput.current?.click()}
                 >
                   <Paperclip size={17} />
@@ -668,6 +783,7 @@ export default function App() {
                 }
                 disabled={
                   busy ||
+                  (unavailable && !waiting && !pending) ||
                   (!draft.trim() && !pending) ||
                   !capabilities?.models.length ||
                   (!!activeRun && !waiting && !pending) ||

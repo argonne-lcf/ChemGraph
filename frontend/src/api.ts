@@ -17,10 +17,16 @@ export interface Session {
 export interface Capabilities {
   user: string;
   models: string[];
+  model_status?: Record<string, ModelStatus>;
   workflows: string[];
   calculators: string[];
   upload_limit: number;
   demo: boolean;
+}
+export interface ModelStatus {
+  configured: boolean;
+  code: string;
+  message: string;
 }
 export interface Run {
   id: string;
@@ -29,6 +35,7 @@ export interface Run {
   status: string;
   final_text: string;
   error: string | null;
+  error_code?: string | null;
   question_id: string | null;
   question: string | null;
   artifacts: Artifact[];
@@ -37,14 +44,16 @@ export interface Run {
 }
 export interface SessionDetail extends Session {
   runs: Run[];
+  model_status?: ModelStatus;
 }
 export const terminal = (status: string) =>
-  ["completed", "failed", "interrupted"].includes(status);
+  ["completed", "failed", "interrupted", "cancelled"].includes(status);
 
 export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public submissionRejected = false,
   ) {
     super(message);
   }
@@ -65,6 +74,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(
       body?.error?.message || `Request failed (${response.status}).`,
       response.status,
+      body?.error?.submission_rejected === true,
     );
   }
   return response.json();

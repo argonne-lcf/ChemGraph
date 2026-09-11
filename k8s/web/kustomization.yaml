@@ -4,3 +4,7 @@ resources:
   - deployment.yaml
   - network-policy.yaml
   - ingress.yaml
+configMapGenerator:
+  - name: chemgraph-web-providers
+    files:
+      - providers.toml
