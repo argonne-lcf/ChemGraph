@@ -894,6 +894,9 @@ def test_run_query_preserves_structured_deepagent_approval(monkeypatch):
         def get_state(self, _config):
             return SimpleNamespace(tasks=())
 
+        async def aget_state(self, config):
+            return self.get_state(config)
+
     class Agent:
         workflow = Workflow()
         recursion_limit = 20
@@ -902,7 +905,7 @@ def test_run_query_preserves_structured_deepagent_approval(monkeypatch):
         async def run(self, *_args, **_kwargs):
             raise HumanInputRequired("approval", payload=payload)
 
-        def finalize_completed_run(self, state, config, query):
+        async def afinalize_completed_run(self, state, config, query):
             finalized.append((state, config, query))
             return state["messages"][-1]
 
@@ -952,6 +955,9 @@ def test_run_query_maps_multiple_interrupt_responses_by_id(monkeypatch):
         def get_state(self, _config):
             return SimpleNamespace(tasks=(), interrupts=())
 
+        async def aget_state(self, config):
+            return self.get_state(config)
+
     class Agent:
         workflow = Workflow()
         recursion_limit = 20
@@ -963,7 +969,7 @@ def test_run_query_maps_multiple_interrupt_responses_by_id(monkeypatch):
                 interrupts=pending,
             )
 
-        def finalize_completed_run(self, state, _config, _query):
+        async def afinalize_completed_run(self, state, _config, _query):
             return state["messages"][-1]
 
     answers = iter(["approve-first", "reject-second"])
@@ -1035,6 +1041,9 @@ def test_run_query_persists_chained_deepagent_interrupt(monkeypatch):
         def get_state(self, _config):
             return SimpleNamespace(tasks=())
 
+        async def aget_state(self, config):
+            return self.get_state(config)
+
     persisted = []
 
     class Agent:
@@ -1044,10 +1053,10 @@ def test_run_query_persists_chained_deepagent_interrupt(monkeypatch):
         async def run(self, *_args, **_kwargs):
             raise HumanInputRequired("approval", payload=payloads[0])
 
-        def persist_run_state(self, config):
+        async def apersist_run_state(self, config):
             persisted.append(config)
 
-        def finalize_completed_run(self, state, _config, _query):
+        async def afinalize_completed_run(self, state, _config, _query):
             return state["messages"][-1]
 
     prompted = []

@@ -19,7 +19,8 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from chemgraph.agent.interrupts import (
-    deduplicate_interrupts,
+    collect_pending_interrupts,
+    is_tool_review as _is_tool_review,
     interrupt_question as _interrupt_question,
     normalize_interrupts,
 )
@@ -256,30 +257,35 @@ def initialize_agent(
     """
     # Resolve workflow alias before initializing.
     workflow_type = resolve_workflow(workflow_type)
-    deepagent_skills = normalize_skill_sources(deepagent_skills)
-    if enable_deepagent and workflow_type != "main_agent":
-        raise ValueError(
-            "The experimental Deep Agent is available only with main_agent."
-        )
-    uses_deepagent = enable_deepagent or workflow_type == "deep_agent"
-    if deepagent_workspace is not None and not uses_deepagent:
-        raise ValueError(
-            "deepagent_workspace requires enable_deepagent=True or the "
-            "deep_agent workflow."
-        )
-    if deepagent_skills and not uses_deepagent:
-        raise ValueError(
-            "deepagent_skills requires enable_deepagent=True or the "
-            "deep_agent workflow."
-        )
-    if deepagent_auto_approve and workflow_type != "deep_agent":
-        raise ValueError(
-            "deepagent_auto_approve is available only for the deep_agent workflow."
-        )
-    if deepagent_auto_approve and not deepagent_workspace:
-        raise ValueError(
-            "deepagent_auto_approve requires an explicit deepagent_workspace."
-        )
+    try:
+        if enable_deepagent and workflow_type != "main_agent":
+            raise ValueError(
+                "The experimental Deep Agent is available only with main_agent."
+            )
+        uses_deepagent = enable_deepagent or workflow_type == "deep_agent"
+        if deepagent_workspace is not None and not uses_deepagent:
+            raise ValueError(
+                "deepagent_workspace requires enable_deepagent=True or the "
+                "deep_agent workflow."
+            )
+        if deepagent_skills and not uses_deepagent:
+            raise ValueError(
+                "deepagent_skills requires enable_deepagent=True or the "
+                "deep_agent workflow."
+            )
+        if deepagent_auto_approve and workflow_type != "deep_agent":
+            raise ValueError(
+                "deepagent_auto_approve is available only for the deep_agent workflow."
+            )
+        if deepagent_auto_approve and not deepagent_workspace:
+            raise ValueError(
+                "deepagent_auto_approve requires an explicit deepagent_workspace."
+            )
+
+        deepagent_skills = normalize_skill_sources(deepagent_skills)
+    except (TypeError, ValueError) as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return None
 
     deepagent_backend = None
     if uses_deepagent:
@@ -451,6 +457,7 @@ def run_query(
     Any
         Agent result, resumed graph result, or ``None`` on failure.
     """
+    from langgraph.errors import GraphInterrupt
     from langgraph.types import Command
     from chemgraph.agent.llm_agent import HumanInputRequired
 
@@ -495,7 +502,9 @@ def run_query(
     # The spinner's `with` block has exited, so the terminal is free
     # for interactive user input.
     while pending_interrupts:
-        interrupt_count += len(pending_interrupts)
+        interrupt_count += sum(
+            not _is_tool_review(pending.payload) for pending in pending_interrupts
+        )
         if interrupt_count > max_interrupts:
             console.print(
                 "[red]Exceeded maximum number of human interrupts. Aborting.[/red]"
@@ -510,21 +519,26 @@ def run_query(
                 )
                 return None
 
-        answers = [
-            _prompt_for_interrupt(pending.payload)
-            for pending in pending_interrupts
-        ]
-        if len(pending_interrupts) == 1:
-            human_answer = answers[0]
-        else:
-            human_answer = {
-                pending.id: answer
-                for pending, answer in zip(
-                    pending_interrupts,
-                    answers,
-                    strict=True,
-                )
-            }
+        try:
+            answers = [
+                _prompt_for_interrupt(pending.payload)
+                for pending in pending_interrupts
+            ]
+            if len(pending_interrupts) == 1:
+                human_answer = answers[0]
+            else:
+                human_answer = {
+                    pending.id: answer
+                    for pending, answer in zip(
+                        pending_interrupts,
+                        answers,
+                        strict=True,
+                    )
+                }
+
+        except (TypeError, ValueError) as exc:
+            console.print(f"[red]Error processing query: {escape(str(exc))}[/red]")
+            return None
 
         # Resume the graph, streaming messages so tool-call parameters
         # are printed just like the initial invocation.
@@ -542,46 +556,46 @@ def run_query(
             prev_msgs: list = []
             last_st = None
             found_interrupts = []
-            async for s in agent.workflow.astream(
-                Command(resume=human_answer),
-                stream_mode="values",
-                config=resume_config,
-            ):
-                if "__interrupt__" in s:
-                    found_interrupts.extend(
-                        normalize_interrupts(s["__interrupt__"])
-                    )
-                if "messages" in s and s["messages"] != prev_msgs:
-                    new_message = s["messages"][-1]
-                    try:
-                        new_message.pretty_print()
-                    except Exception:
-                        pass
-                    prev_msgs = s["messages"]
-                last_st = s
+            bare_interrupt = False
             try:
-                snapshot = agent.workflow.get_state(resume_config)
-                found_interrupts.extend(
-                    normalize_interrupts(
-                        getattr(snapshot, "interrupts", ())
-                    )
-                )
-                for pending_task in getattr(snapshot, "tasks", ()):
-                    found_interrupts.extend(
-                        normalize_interrupts(
-                            getattr(pending_task, "interrupts", ())
+                async for s in agent.workflow.astream(
+                    Command(resume=human_answer),
+                    stream_mode="values",
+                    config=resume_config,
+                ):
+                    if "__interrupt__" in s:
+                        found_interrupts.extend(
+                            normalize_interrupts(s["__interrupt__"])
                         )
-                    )
+                    if "messages" in s and s["messages"] != prev_msgs:
+                        new_message = s["messages"][-1]
+                        try:
+                            new_message.pretty_print()
+                        except Exception:
+                            pass
+                        prev_msgs = s["messages"]
+                    last_st = s
+            except GraphInterrupt as exc:
+                raw = exc.args[0] if exc.args else ()
+                found_interrupts.extend(normalize_interrupts(raw))
+                bare_interrupt = not raw
+            try:
+                snapshot = await agent.workflow.aget_state(resume_config)
             except Exception:
-                pass
-            next_interrupts = deduplicate_interrupts(found_interrupts)
+                snapshot = None
+            next_interrupts = collect_pending_interrupts(
+                found_interrupts, snapshot, fallback=bare_interrupt,
+            )
             if next_interrupts:
+                await agent.apersist_run_state(resume_config)
                 raise HumanInputRequired(
                     _interrupt_question(next_interrupts[0].payload),
                     payload=next_interrupts[0].payload,
                     interrupts=next_interrupts,
                 )
-            return last_st
+            if last_st is None:
+                return None
+            return await agent.afinalize_completed_run(last_st, resume_config, query)
 
         try:
             result = run_async_callable(_resume_stream)
@@ -590,13 +604,8 @@ def run_query(
                 console.print("[red]Resume produced no output.[/red]")
                 return None
 
-            return agent.finalize_completed_run(
-                result,
-                resume_config,
-                query,
-            )
+            return result
         except HumanInputRequired as hir:
-            agent.persist_run_state(resume_config)
             pending_interrupts = hir.interrupts
         except Exception as e:
             console.print(f"[red]Error processing query: {e}[/red]")
@@ -641,15 +650,6 @@ def _render_main_agent_event(event: str, payload: dict[str, Any]) -> None:
         f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent_name))}[/bold cyan] "
         f"[dim]→[/dim] [bold]{escape(str(tool_name))}[/bold]"
         f"({escape(str(arguments))})"
-    )
-
-
-def _is_tool_review(payload: Any) -> bool:
-    """Return whether an interrupt is a Deep Agents tool-review request."""
-    return (
-        isinstance(payload, dict)
-        and isinstance(payload.get("action_requests"), list)
-        and isinstance(payload.get("review_configs"), list)
     )
 
 
@@ -737,23 +737,27 @@ def _run_main_agent_operation(
 
     interrupt_count = 0
     while result.status == "waiting_for_user" and result.interrupts:
-        interrupt_count += len(result.interrupts)
+        interrupt_count += sum(
+            not _is_tool_review(pending.payload) for pending in result.interrupts
+        )
         if interrupt_count > 10:
             console.print(
                 "[red]Exceeded maximum number of nested clarifications.[/red]"
             )
             return None
 
-        answers: Any
-        if len(result.interrupts) == 1:
-            pending = result.interrupts[0]
-            answers = _prompt_for_interrupt(pending.payload)
-        else:
-            answers = {}
-            for pending in result.interrupts:
-                answers[pending.id] = _prompt_for_interrupt(pending.payload)
-
         try:
+            answers: Any
+            if len(result.interrupts) == 1:
+                pending = result.interrupts[0]
+                answers = _prompt_for_interrupt(pending.payload)
+            else:
+                if any(not pending.id for pending in result.interrupts):
+                    raise ValueError("Multiple pending interrupts require stable IDs.")
+                answers = {}
+                for pending in result.interrupts:
+                    answers[pending.id] = _prompt_for_interrupt(pending.payload)
+
             result = (
                 checkpoint_runtime.run(lambda: session.resume(answers))
                 if checkpoint_runtime is not None

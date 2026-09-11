@@ -15,7 +15,7 @@ from langgraph.types import Command
 from chemgraph.agent.events import EventCallback, _AstreamEventCallback
 from chemgraph.agent.interrupts import (
     PendingInterrupt,
-    deduplicate_interrupts,
+    collect_pending_interrupts,
     normalize_interrupts,
 )
 from chemgraph.agent.turn import serialize_state
@@ -251,16 +251,7 @@ class MainAgentSession:
 
         snapshot = await self.workflow.aget_state(self.config)
         state_values = snapshot.values if snapshot else (last_state or {})
-        if snapshot:
-            found.extend(
-                normalize_interrupts(getattr(snapshot, "interrupts", ()))
-            )
-            for task in snapshot.tasks:
-                found.extend(
-                    normalize_interrupts(getattr(task, "interrupts", ()))
-                )
-
-        pending = deduplicate_interrupts(found)
+        pending = collect_pending_interrupts(found, snapshot)
         self._pending = pending
         result = MainAgentTurnResult(
             thread_id=self.thread_id,
@@ -339,12 +330,10 @@ class MainAgentSession:
             )
 
     def _result_from_snapshot(self, snapshot: Any) -> MainAgentTurnResult:
-        found = list(normalize_interrupts(getattr(snapshot, "interrupts", ())))
         failed = bool(getattr(snapshot, "next", ()))
         for task in snapshot.tasks:
-            found.extend(normalize_interrupts(getattr(task, "interrupts", ())))
             failed = failed or bool(getattr(task, "error", None))
-        pending = deduplicate_interrupts(found)
+        pending = collect_pending_interrupts([], snapshot)
         status: SessionStatus
         if pending:
             status = "waiting_for_user"

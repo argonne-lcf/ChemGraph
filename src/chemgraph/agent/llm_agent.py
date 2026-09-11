@@ -12,7 +12,8 @@ import uuid
 from chemgraph.agent.events import EventCallback, _AstreamEventCallback
 from chemgraph.agent.interrupts import (
     PendingInterrupt,
-    deduplicate_interrupts,
+    collect_pending_interrupts,
+    is_tool_review,
     interrupt_question,
     normalize_interrupts,
 )
@@ -256,7 +257,6 @@ class ChemGraph:
         reasoning_effort: Optional[str] = None,
         checkpointer: BaseCheckpointSaver | None = None,
     ):
-        normalized_deepagent_skills = normalize_skill_sources(deepagent_skills)
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."
@@ -268,7 +268,7 @@ class ChemGraph:
                 "deepagent_backend requires enable_deepagent=True or "
                 "workflow_type='deep_agent'."
             )
-        if normalized_deepagent_skills and not (
+        if deepagent_skills and not (
             enable_deepagent or workflow_type == "deep_agent"
         ):
             raise ValueError(
@@ -297,6 +297,7 @@ class ChemGraph:
                 "Experimental codex: models currently support only the "
                 "single_agent, main_agent, and deep_agent workflows."
             )
+        normalized_deepagent_skills = normalize_skill_sources(deepagent_skills)
         reasoning_effort = _resolve_reasoning_effort(model_name, reasoning_effort)
 
         # Always generate a unique identifier for this instance
@@ -711,6 +712,17 @@ class ChemGraph:
         dict or str
             Dictionary of metadata if successful, or "Error" if failed.
         """
+        if config is None:
+            config = {"configurable": {"thread_id": "1"}}
+        try:
+            state = self.get_state(config=config)
+        except Exception as exc:
+            print("Error with write_state: ", str(exc))
+            return "Error"
+        return self._write_state_snapshot(state, config, file_path, file_name)
+
+    def _write_state_snapshot(self, state, config, file_path=None, file_name=None):
+        """Serialize an already retrieved checkpoint for either runner."""
         import json
         import subprocess
 
@@ -730,7 +742,6 @@ class ChemGraph:
                     file_name = f"state_thread_{thread_id}_{self.uuid}_{timestamp}.json"
                 file_path = os.path.join(log_dir, file_name)
 
-            state = self.get_state(config=config)
             serialized_state = serialize_state(state)
 
             try:
@@ -940,6 +951,35 @@ class ChemGraph:
             "Use 'last_message' or 'state'."
         )
 
+    async def apersist_run_state(self, config: dict) -> dict | None:
+        """Retrieve and log a checkpoint without calling a sync saver API."""
+        try:
+            state = await self.aget_state(config)
+        except Exception:
+            logger.warning("Could not log workflow checkpoint.", exc_info=True)
+            return None
+        self._write_state_snapshot(state, config)
+        return state
+
+    async def afinalize_completed_run(
+        self, last_state: dict, config: dict, query: str,
+    ) -> Any:
+        """Persist a completed async run and return the configured result."""
+        self._save_messages_to_store(
+            last_state, query, thread_id=str(config["configurable"]["thread_id"])
+        )
+        state = await self.apersist_run_state(config)
+        if self.return_option == "last_message":
+            return last_state["messages"][-1]
+        if self.return_option == "state":
+            if state is None:
+                state = await self.aget_state(config)
+            return serialize_state(state)
+        raise ValueError(
+            f"Unsupported return_option: {self.return_option}. "
+            "Use 'last_message' or 'state'."
+        )
+
     def load_previous_context(
         self,
         session_id: str,
@@ -1081,6 +1121,7 @@ class ChemGraph:
             prev_msgs: list = []
             last_st = None
             found_interrupts: list[PendingInterrupt] = []
+            bare_interrupt = False
             try:
                 async for s in self.workflow.astream(
                     stream_input, stream_mode="values", config=cfg
@@ -1106,35 +1147,17 @@ class ChemGraph:
                 if interrupts:
                     found_interrupts.extend(normalize_interrupts(interrupts))
                 else:
-                    found_interrupts.append(
-                        PendingInterrupt(
-                            id="",
-                            payload={
-                                "question": "The workflow needs your input."
-                            },
-                        )
-                    )
+                    bare_interrupt = True
 
-            # Double-check the checkpoint for pending interrupts that
-            # the stream may not have surfaced explicitly.
             try:
-                snapshot = self.workflow.get_state(cfg)
-                if snapshot:
-                    found_interrupts.extend(
-                        normalize_interrupts(
-                            getattr(snapshot, "interrupts", ())
-                        )
-                    )
-                    for task in getattr(snapshot, "tasks", ()):
-                        found_interrupts.extend(
-                            normalize_interrupts(
-                                getattr(task, "interrupts", ())
-                            )
-                        )
+                snapshot = await self.workflow.aget_state(cfg)
             except Exception:
                 snapshot = None
+                logger.debug("Could not inspect workflow checkpoint.", exc_info=True)
 
-            pending_interrupts = deduplicate_interrupts(found_interrupts)
+            pending_interrupts = collect_pending_interrupts(
+                found_interrupts, snapshot, fallback=bare_interrupt,
+            )
             if pending_interrupts:
                 logger.info("Graph interrupted: %s", pending_interrupts)
                 # Refresh state from checkpoint for consistency.
@@ -1199,7 +1222,9 @@ class ChemGraph:
             max_interrupts = 10  # safety guard against infinite interrupt loops
             interrupt_count = 0
             while pending_interrupts:
-                interrupt_count += len(pending_interrupts)
+                interrupt_count += sum(
+                    not is_tool_review(pending.payload) for pending in pending_interrupts
+                )
                 if interrupt_count > max_interrupts:
                     logger.error(
                         "Exceeded maximum number of human interrupts (%d); "
@@ -1269,12 +1294,12 @@ class ChemGraph:
                 },
             )
 
-            return self.finalize_completed_run(last_state, config, query)
+            return await self.afinalize_completed_run(last_state, config, query)
 
         except HumanInputRequired:
             # No human_input_handler configured — propagate so the
             # caller (CLI / UI) can prompt the user and resume.
-            self.persist_run_state(config)
+            await self.apersist_run_state(config)
             raise
         except Exception as e:
             event(

@@ -283,6 +283,9 @@ async def test_cli_trace_events_are_emitted_from_astream_path(monkeypatch, tmp_p
         def get_state(self, config):
             return SimpleNamespace(values=self.state)
 
+        async def aget_state(self, config):
+            return self.get_state(config)
+
     monkeypatch.setattr(
         "chemgraph.agent.llm_agent.construct_single_agent_graph",
         lambda *_args, **_kwargs: FakeWorkflow(),

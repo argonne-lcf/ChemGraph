@@ -42,6 +42,9 @@ class _FakeWorkflow:
     def get_state(self, config):
         return SimpleNamespace(values=self.last_state)
 
+    async def aget_state(self, config):
+        return self.get_state(config)
+
 
 @pytest.mark.parametrize(
     ("workflow_type", "constructor_attr", "kwargs"),
