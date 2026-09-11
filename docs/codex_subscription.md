@@ -64,9 +64,24 @@ agent = ChemGraph(
 )
 ```
 
+The same model adapter can drive the workspace harness:
+
+```bash
+chemgraph run --interactive \
+  --model "codex:<codex-model-id>" \
+  --workflow deep_agent \
+  --deepagent-workspace /path/to/disposable-checkout
+```
+
+This measures the model inside ChemGraph's Deep Agent prompt, tools, approval
+policy, and checkpoint loop. It is not a native Codex runtime comparison. For
+comparisons with Codex or Claude Code, use identical starting checkouts and
+tasks, record the runtime and safety mode, and score resulting patches and
+tests independently.
+
 ## Limitations
 
-- Only `single_agent` and `main_agent` are supported.
+- Only `single_agent`, `main_agent`, and `deep_agent` are supported.
 - `main_agent` must be interactive and can restore its supervisor checkpoint;
   individual Codex calls still start fresh read-only threads.
 - The integration pins `openai-codex==0.144.4`; check the installed ChemGraph

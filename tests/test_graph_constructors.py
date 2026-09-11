@@ -18,6 +18,7 @@ def _fake_prepared(**_kwargs):
 WORKFLOWS = [
     "single_agent",
     "main_agent",
+    "deep_agent",
     "multi_agent",
     "python_relp",
     "graspa",
@@ -40,6 +41,7 @@ def test_constructor_is_called(monkeypatch, workflow_type):
     constructor_attr = {
         "single_agent": "construct_single_agent_graph",
         "main_agent": "construct_main_agent_graph",
+        "deep_agent": "construct_deep_agent_graph",
         "multi_agent": "construct_multi_agent_graph",
         "python_relp": "construct_relp_graph",
         "graspa": "construct_graspa_graph",

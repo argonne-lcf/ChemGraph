@@ -8,8 +8,11 @@ thread = 1
 recursion_limit = 20
 human_supervised = false
 # Development-only: add a workspace Deep Agent to interactive main_agent.
+# To call it directly, set workflow = "deep_agent" instead.
 enable_deepagent = false
 # deepagent_workspace = "."
+# Ordered backend-relative Agent Skills directories (later entries win).
+# deepagent_skills = ["/workspace/.agents/skills/"]
 # Durable main-agent checkpoint database.
 # checkpoint_db = "~/.chemgraph/checkpoints.db"
 verbose = false

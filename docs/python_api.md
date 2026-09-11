@@ -73,6 +73,94 @@ For CLI use, the equivalent is:
 chemgraph run --interactive --workflow main_agent
 ```
 
+## Workspace Deep Agent
+
+The workspace workflow is separately callable through `ChemGraph.run()`:
+
+```python
+import os
+
+from deepagents.backends import LocalShellBackend
+
+from chemgraph.agent.llm_agent import ChemGraph
+
+agent = ChemGraph(
+    model_name="claude-sonnet-4-20250514",
+    workflow_type="deep_agent",
+    deepagent_backend=LocalShellBackend(
+        root_dir="/path/to/checkout",
+        virtual_mode=True,
+        env={
+            name: os.environ[name]
+            for name in ("PATH", "PYTHONPATH", "VIRTUAL_ENV", "CONDA_PREFIX", "TMPDIR")
+            if name in os.environ
+        },
+        inherit_env=False,
+    ),
+    deepagent_skills=[
+        "/workspace/shared-skills/",
+        "/workspace/.agents/skills/",
+    ],
+)
+result = await agent.run(
+    "Review the test failures.",
+    config={"configurable": {"thread_id": "workspace-review"}},
+)
+```
+
+A virtual `LocalShellBackend` is exposed to the agent at `/workspace`, so file
+tool path `/workspace/src/example.py` maps directly to
+`/path/to/checkout/src/example.py`. The generated Deep Agents system context
+also supplies that host path for shell commands. Custom backends, existing
+composite backends, and non-virtual local backends are passed through unchanged.
+
+`deepagent_skills` contains ordered POSIX paths interpreted by that same
+backend. ChemGraph passes them to Deep Agents without scanning any implicit
+user or project locations. Each source contains skill directories with a
+required `SKILL.md`; later sources override earlier sources with the same
+skill name. With `StateBackend`, callers invoking the graph directly must seed
+the corresponding files in graph state before the skills can load.
+
+The default approval policy interrupts before shell commands and file
+mutations. Without a `human_input_handler`, `run()` raises
+`HumanInputRequired`; its `payload` retains the structured Deep Agents action
+requests and must be resumed with matching structured decisions. Its
+`interrupts` tuple retains every pending request and its LangGraph interrupt
+ID; callers must resume concurrent requests with an exact mapping from those
+IDs to responses. `question` and `payload` continue to describe the first
+request for compatibility. A configured handler may use the legacy
+`handler(question)` signature or `handler(question, payload)` when it needs the
+raw structured request; both synchronous and asynchronous handlers are
+supported. Setting
+`deepagent_auto_approve=True` removes this boundary and should be limited to an
+externally isolated, explicitly trusted workspace.
+
+The same constructor can be composed as a worker:
+
+```python
+from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+from chemgraph.registry import AgentRegistry
+
+standalone_graph = construct_deep_agent_graph(model, backend=backend)
+worker = AgentRegistry().as_subagent(
+    "deepagent",
+    llm=model,
+    backend=backend,
+    skills=["/workspace/.agents/skills/"],
+)
+```
+
+`as_subagent()` compiles the graph with `checkpointer=None` so it inherits its
+parent checkpoint. The registry returns the canonical worker name `deep_agent`,
+even when requested through the `deepagent` alias; use `worker["name"]` when
+composing task calls. `construct_main_agent_graph(enable_deepagent=True, ...)`
+uses this same workflow under the stable subagent name `deepagent`.
+
+Caller-owned asynchronous checkpointers, including `AsyncSqliteSaver`, are
+supported by `await agent.run(...)` and `await agent.apersist_run_state(config)`.
+Keep the saver open on the same event loop for the run and any resumes. The
+synchronous state methods remain available for synchronous checkpointers.
+
 ## Custom tools
 
 `ChemGraph` can be extended with compatible LangChain tools. Keep tools narrow,

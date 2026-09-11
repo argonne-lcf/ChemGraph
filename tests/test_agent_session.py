@@ -79,6 +79,9 @@ class _GraphStreamCompatibleWorkflow:
     def get_state(self, config):
         return SimpleNamespace(values=self.last_state)
 
+    async def aget_state(self, config):
+        return self.get_state(config)
+
 
 @pytest.fixture
 def mock_agent_patches():
