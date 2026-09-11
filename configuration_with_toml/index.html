@@ -1852,10 +1852,22 @@ definitions. See <a href="../mcp_servers/">MCP servers</a>.</p>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">workflow</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"main_agent"</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">checkpoint_db</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"~/.chemgraph/checkpoints.db"</span>
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">enable_deepagent</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="c1"># deepagent_skills = ["/workspace/.agents/skills/"]</span>
 </code></pre></div>
-<p><code>main_agent</code> still requires interactive CLI mode. Deep Agent is a
-development-only capability with broad local access; leave it disabled unless
-you understand the security boundary.</p>
+<p><code>main_agent</code> still requires interactive CLI mode. <code>enable_deepagent</code> controls
+only its optional <code>deepagent</code> subagent. To call the graph directly, select
+<code>workflow = "deep_agent"</code>; <code>deepagent_workspace</code> applies to either entry point.
+Deep Agent is a development-only capability with broad local access, so leave
+it disabled unless you understand the security boundary.</p>
+<p>The headless-only <code>--deepagent-dangerously-skip-approvals</code> switch is
+intentionally not configurable through TOML. It must be typed explicitly for
+each run together with <code>--deepagent-workspace</code>.</p>
+<p><code>deepagent_skills</code> is an ordered list of backend-relative source directories.
+It applies to a direct <code>deep_agent</code> or to an enabled <code>main_agent</code> worker. Later
+sources override earlier sources with the same skill name. A repeated
+<code>--deepagent-skill</code> CLI option replaces the TOML list for that run; explicitly
+disabling the worker with <code>--no-deepagent</code> also clears its configured skills.
+No skill directories are loaded when the list is omitted.</p>
 <h2 id="evaluation-profiles">Evaluation profiles<a class="headerlink" href="#evaluation-profiles" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">[eval]</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">default_profile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"standard"</span>

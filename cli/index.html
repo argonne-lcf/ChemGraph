@@ -1840,36 +1840,82 @@ and tool results are not printed.</p>
 state by a subagent. It does not grant access to the host filesystem or to
 files written under <code>CHEMGRAPH_LOG_DIR</code>.</p>
 <p>The development workspace Deep Agent can execute broad filesystem and shell
-actions. Enable it only in a disposable, trusted workspace after reviewing the
-CLI warning.</p>
+actions. Call it directly with action reviews:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--deepagent-workspace<span class="w"> </span>/path/to/disposable-checkout
+</code></pre></div>
+<p>Interactive Deep Agent startup uses the current directory when
+<code>--deepagent-workspace</code> is omitted. Before enabling it, the confirmation panel
+shows the resolved workspace and explains that shell commands can access the
+host beyond that directory. Declining leaves the capability disabled. Headless
+runs still require an explicit workspace and the approval-skip flag.</p>
+<p>Or add the same graph to the supervisor as the <code>deepagent</code> subagent:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent<span class="w"> </span>--deepagent<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--deepagent-workspace<span class="w"> </span>/path/to/disposable-checkout<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>/workspace/.agents/skills/
+</code></pre></div>
+<p>The direct interactive workflow keeps one process-local thread until the model
+or workflow changes. It is not restored across CLI processes. Shell and file
+mutations use structured approve/reject prompts.</p>
+<p>The selected directory is mounted for file tools at <code>/workspace</code>. Thus,
+<code>--deepagent-workspace test/</code> makes <code>/workspace/example.py</code> refer to
+<code>test/example.py</code>, not <code>test/workspace/example.py</code>. Shell execution uses the
+absolute host-path mapping supplied to the model. Existing files under a
+previously created <code>test/workspace/</code> directory are not migrated.</p>
+<p>Skills are opt-in. Repeat <code>--deepagent-skill PATH</code> to provide ordered,
+backend-relative source directories; the later source wins when two sources
+contain the same skill name. For the virtual CLI workspace, a conventional
+project source can be selected explicitly as
+<code>/workspace/.agents/skills/</code>. ChemGraph does not scan project or user
+directories automatically.</p>
+<p>Each source must contain one directory per skill, and each skill directory
+must contain a <code>SKILL.md</code> with <code>name</code> and <code>description</code> YAML frontmatter.
+Metadata is cached in the checkpoint for the life of the thread, so restart or
+reinitialize the workflow after changing the available skill set. Reading a
+skill does not require an action review, while executing a bundled script or
+mutating its files continues to use the normal Deep Agent approval policy.</p>
+<p>Deep Agent run logs use the normal ChemGraph locations rather than the selected
+workspace. The default is <code>cg_logs/session_*</code> for state JSON plus the configured
+session database. Pending approval state and the final resumed state are both
+recorded.</p>
+<p>For automation, headless execution must opt out of those prompts explicitly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--deepagent-workspace<span class="w"> </span>/path/to/disposable-checkout<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>/workspace/.agents/skills/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--deepagent-dangerously-skip-approvals<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--query<span class="w"> </span><span class="s2">"Run the repository tests and summarize failures."</span>
+</code></pre></div>
+<p>The unsafe flag is accepted only for non-interactive <code>deep_agent</code>, is not read
+from TOML, and requires an explicit workspace. The backend's shell is not
+confined to the workspace, so use a disposable, isolated environment.</p>
 <h2 id="saved-sessions">Saved sessions<a class="headerlink" href="#saved-sessions" title="Permanent link">&para;</a></h2>
 <p>CLI sessions are stored in <code>~/.chemgraph/sessions.db</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span>session<span class="w"> </span>list
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>chemgraph<span class="w"> </span>session<span class="w"> </span>show<span class="w"> </span>&lt;session-id&gt;
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--resume<span class="w"> </span>&lt;session-id&gt;<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Continue with frequency analysis."</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>chemgraph<span class="w"> </span>session<span class="w"> </span>list
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>chemgraph<span class="w"> </span>session<span class="w"> </span>show<span class="w"> </span>&lt;session-id&gt;
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--resume<span class="w"> </span>&lt;session-id&gt;<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Continue with frequency analysis."</span>
 </code></pre></div>
 <p>Run <code>chemgraph session --help</code> before deletion or other state-changing session
 operations. Resume a session with a compatible workflow.</p>
 <h2 id="use-mcp-tools">Use MCP tools<a class="headerlink" href="#use-mcp-tools" title="Permanent link">&para;</a></h2>
 <p>Connect to one or more streamable-HTTP servers:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--mcp-url<span class="w"> </span>http://localhost:9003/mcp/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Build a 3D structure for methane."</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>--mcp-url<span class="w"> </span>http://localhost:9003/mcp/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Build a 3D structure for methane."</span>
 </code></pre></div>
 <p>Use repeated/configured server definitions for larger deployments. See
 <a href="../mcp_servers/">MCP servers</a> for transports and client configuration.</p>
 <h2 id="trace-and-dashboard">Trace and dashboard<a class="headerlink" href="#trace-and-dashboard" title="Permanent link">&para;</a></h2>
 <p>Use <code>--trace-dir &lt;directory&gt;</code> with <code>single_agent</code> to record trace information,
 then inspect the dashboard options available in your version:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>chemgraph<span class="w"> </span>dashboard<span class="w"> </span>--help
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>chemgraph<span class="w"> </span>dashboard<span class="w"> </span>--help
 </code></pre></div>
 <h2 id="evaluation-and-academy">Evaluation and Academy<a class="headerlink" href="#evaluation-and-academy" title="Permanent link">&para;</a></h2>
 <p>Evaluation needs an explicit dataset or a configured profile:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>--help
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>--help
 </code></pre></div>
 <p>Academy commands require the <code>academy</code> extra and, depending on the backend,
 additional execution extras:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>chemgraph<span class="w"> </span>academy<span class="w"> </span>--help
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>chemgraph<span class="w"> </span>academy<span class="w"> </span>--help
 </code></pre></div>
 <p>See <a href="../evaluation/">Evaluation</a> and <a href="../hpc_and_academy/">HPC and Academy</a>.</p>
 

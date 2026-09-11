@@ -1684,10 +1684,10 @@ same canonical workflow names used by the command-line interface, except for
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="s2">"single_agent"</span><span class="p">,</span> <span class="n">llm</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
 </code></pre></div>
-<p>The registered workers are <code>single_agent</code>, <code>multi_agent</code>, <code>python_relp</code>,
+<p>The registered workers are <code>single_agent</code>, <code>deep_agent</code>, <code>multi_agent</code>, <code>python_relp</code>,
 <code>graspa</code>, <code>mock_agent</code>, <code>graspa_mcp</code>, <code>rag_agent</code>, <code>single_agent_xanes</code>,
-<code>molecular_docking</code>, and <code>single_agent_iri</code>. Existing <code>python_repl</code>,
-<code>graspa_agent</code>, and <code>iri</code> spellings are supported as aliases.</p>
+<code>molecular_docking</code>, and <code>single_agent_iri</code>. Existing <code>deepagent</code>,
+<code>python_repl</code>, <code>graspa_agent</code>, and <code>iri</code> spellings are supported as aliases.</p>
 <p>Standalone workers keep their existing default in-memory checkpointer. When a
 worker is handed to an orchestration graph, use <code>as_subagent()</code> or
 <code>as_subagents()</code>. These adapters compile the worker with <code>checkpointer=None</code> so
@@ -1699,6 +1699,11 @@ it inherits checkpointing from the parent graph:</p>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
 <a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">main_graph</span> <span class="o">=</span> <span class="n">construct_main_agent_graph</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">subagents</span><span class="o">=</span><span class="n">workers</span><span class="p">)</span>
 </code></pre></div>
+<p>The built-in <code>deep_agent</code> entry is the same workspace graph used by
+<code>main_agent</code>'s optional <code>deepagent</code> worker. Supply its backend through worker
+options when local filesystem or shell access is intended. Explicit Agent
+Skills sources can be supplied alongside it with
+<code>skills=["/workspace/.agents/skills/"]</code>; source order is preserved.</p>
 <p><code>as_subagents()</code> validates names, availability, constructor loading, and
 constructor options for the whole requested set before invoking any constructor.
 Per-worker constructor arguments are supplied through <code>options</code>:</p>
