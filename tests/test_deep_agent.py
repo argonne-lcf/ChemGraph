@@ -199,7 +199,8 @@ def test_constructor_mounts_virtual_local_backend_at_workspace(
 
     mounted = captured["backend"]
     assert isinstance(mounted, CompositeBackend)
-    assert mounted.default is backend
+    assert isinstance(mounted.default, LocalShellBackend)
+    assert isinstance(mounted.default, StateBackend)
     assert mounted.routes == {"/workspace/": backend}
 
     write_result = mounted.write(
@@ -392,6 +393,9 @@ async def test_chemgraph_resumes_all_pending_interrupt_ids(monkeypatch, tmp_path
                 tasks=tasks,
                 interrupts=(),
             )
+
+        async def aget_state(self, config):
+            return self.get_state(config)
 
     workflow = MultiInterruptWorkflow()
     monkeypatch.setattr(
@@ -602,6 +606,9 @@ def test_cli_resume_persists_deepagent_logs_and_session(
                 else ()
             )
             return SimpleNamespace(values=self.state, tasks=tasks)
+
+        async def aget_state(self, config):
+            return self.get_state(config)
 
     workflow = ApprovalWorkflow()
     monkeypatch.setattr(

@@ -58,11 +58,40 @@ def normalize_skill_sources(skills: Sequence[str] | None) -> tuple[str, ...]:
     return tuple(normalized)
 
 
+class _WorkspaceShellBackend(StateBackend, LocalShellBackend):
+    """Use checkpoint files at the root while retaining local-shell execution.
+
+    StateBackend precedes LocalShellBackend so file operations never expose a
+    second host-file namespace. The local-shell type also preserves Deep Agents'
+    execution detection and virtual-to-host path guidance.
+    """
+
+    def __init__(self, shell: LocalShellBackend):
+        StateBackend.__init__(self)
+        self.shell = shell
+
+    @property
+    def id(self) -> str:
+        return self.shell.id
+
+    def execute(self, command: str, *, timeout: int | None = None):
+        return self.shell.execute(command, timeout=timeout)
+
+    async def aexecute(self, command: str, *, timeout: int | None = None):
+        return await self.shell.aexecute(command, timeout=timeout)
+
+    async def agrep(self, pattern, path=None, glob=None, *, max_count=None):
+        # FilesystemBackend's async override searches the host directly.
+        return await BackendProtocol.agrep(
+            self, pattern, path, glob, max_count=max_count,
+        )
+
+
 def _normalize_backend(backend: BackendProtocol) -> BackendProtocol:
     """Mount a virtual local workspace at the path Deep Agent expects."""
     if isinstance(backend, LocalShellBackend) and backend.virtual_mode:
         return CompositeBackend(
-            default=backend,
+            default=_WorkspaceShellBackend(backend),
             routes={_WORKSPACE_MOUNT: backend},
         )
     return backend

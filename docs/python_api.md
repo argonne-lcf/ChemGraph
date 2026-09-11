@@ -78,6 +78,8 @@ chemgraph run --interactive --workflow main_agent
 The workspace workflow is separately callable through `ChemGraph.run()`:
 
 ```python
+import os
+
 from deepagents.backends import LocalShellBackend
 
 from chemgraph.agent.llm_agent import ChemGraph
@@ -88,6 +90,12 @@ agent = ChemGraph(
     deepagent_backend=LocalShellBackend(
         root_dir="/path/to/checkout",
         virtual_mode=True,
+        env={
+            name: os.environ[name]
+            for name in ("PATH", "PYTHONPATH", "VIRTUAL_ENV", "CONDA_PREFIX", "TMPDIR")
+            if name in os.environ
+        },
+        inherit_env=False,
     ),
     deepagent_skills=[
         "/workspace/shared-skills/",
@@ -143,8 +151,15 @@ worker = AgentRegistry().as_subagent(
 ```
 
 `as_subagent()` compiles the graph with `checkpointer=None` so it inherits its
-parent checkpoint. `construct_main_agent_graph(enable_deepagent=True, ...)`
+parent checkpoint. The registry returns the canonical worker name `deep_agent`,
+even when requested through the `deepagent` alias; use `worker["name"]` when
+composing task calls. `construct_main_agent_graph(enable_deepagent=True, ...)`
 uses this same workflow under the stable subagent name `deepagent`.
+
+Caller-owned asynchronous checkpointers, including `AsyncSqliteSaver`, are
+supported by `await agent.run(...)` and `await agent.apersist_run_state(config)`.
+Keep the saver open on the same event loop for the run and any resumes. The
+synchronous state methods remain available for synchronous checkpointers.
 
 ## Custom tools
 
