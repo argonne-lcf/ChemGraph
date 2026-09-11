@@ -474,15 +474,18 @@ def test_transfer_facility_discovery_is_available_without_configuration():
     mcp = _FakeMCP()
     register_transfer_tools(mcp, None)
 
-    assert set(mcp.tools) == {"list_transfer_facilities"}
-    assert "Polaris and Aurora" in mcp.descriptions["list_transfer_facilities"]
+    assert set(mcp.tools) == {
+        "list_transfer_facilities", "transfer_files",
+        "check_transfer_status", "list_remote_files",
+    }
     payload = mcp.tools["list_transfer_facilities"]()
-    assert payload["selection_mode"] == "server_configured"
+    assert payload["selection_mode"] == "per_call"
     assert payload["transfer_configured"] is False
     assert payload["active_system"] is None
     assert [facility["system"] for facility in payload["facilities"]] == [
         "polaris",
         "aurora",
+        "crux",
     ]
     assert not any(facility["active"] for facility in payload["facilities"])
 
@@ -510,7 +513,6 @@ def test_transfer_facility_discovery_reports_active_bundled_target():
     assert polaris["active"] is True
     assert polaris["uses_bundled_collection"] is True
     assert polaris["verified_on"] == "2026-09-04"
-    assert "polaris HPC filesystem" in mcp.descriptions["transfer_files"]
 
 
 def test_transfer_facility_discovery_identifies_custom_collection():

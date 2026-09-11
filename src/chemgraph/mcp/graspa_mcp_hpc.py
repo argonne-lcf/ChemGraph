@@ -44,12 +44,11 @@ mcp = CGFastMCP(
         2. check_job_status / wait_for_job / get_job_results / list_jobs /
            cancel_job: HPC job batch management. Job state persists across
            sessions.
-        3. list_transfer_facilities: show Polaris/Aurora Transfer profiles and
-           the active server target.
-        4. transfer_files / check_transfer_status / list_remote_files
-           (when Globus Transfer is configured): stage input files on
-           the remote HPC filesystem before running ensembles in remote
-           mode.
+        3. list_transfer_facilities: show supported Transfer systems and
+           the server's default target.
+        4. transfer_files / check_transfer_status / list_remote_files:
+           stage input files on a remote HPC filesystem before running
+           ensembles. Select compute_system or destination_endpoint_id per call.
 
         Guidelines:
         - Use each tool only when its input schema matches the user

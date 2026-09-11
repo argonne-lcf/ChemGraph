@@ -21,9 +21,12 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from chemgraph.execution.base import ExecutionBackend
+
+if TYPE_CHECKING:
+    from chemgraph.execution.globus_transfer import GlobusTransferManager
 
 logger = logging.getLogger(__name__)
 
@@ -209,16 +212,18 @@ def get_backend(
 def get_transfer_manager(
     config_path: Optional[str] = None,
     system: Optional[str] = None,
+    *,
+    default_manager: GlobusTransferManager | None = None,
     **kwargs: Any,
 ):
     """Create a :class:`GlobusTransferManager` from config, or ``None``.
 
     Reads the ``[execution.globus_transfer]`` section from
-    ``config.toml``. When no destination collection is configured, a public
-    facility default is selected using the explicit *system*,
-    ``COMPUTE_SYSTEM``, or ``[execution] system`` (in that order). Returns
-    ``None`` when the remaining required settings are not configured, so
-    callers can skip transfer-tool registration.
+    ``config.toml``. An explicit destination ID takes priority over *system*,
+    which takes priority over the configured destination. ``default_manager``
+    supplies existing server settings instead of reading config/environment;
+    overrides create an independent manager. Returns ``None`` when required
+    settings are missing. Authentication remains lazy.
 
     Environment variable fallbacks
     ------------------------------
@@ -227,25 +232,35 @@ def get_transfer_manager(
     ``GLOBUS_TRANSFER_DESTINATION_BASE_PATH``
     ``GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH``
     """
-    cfg = _load_execution_config(config_path)
-    transfer_cfg = cfg.get("globus_transfer", {})
-    merged = {**transfer_cfg, **kwargs}
+    from chemgraph.hpc_configs import (
+        get_facility_transfer_profile,
+        list_facility_transfer_profiles,
+    )
 
-    for key, env_var in (
-        ("source_endpoint_id", "GLOBUS_TRANSFER_SOURCE_ENDPOINT_ID"),
-        ("destination_endpoint_id", "GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID"),
-        ("destination_base_path", "GLOBUS_TRANSFER_DESTINATION_BASE_PATH"),
-        (
-            "destination_compute_base_path",
-            "GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH",
-        ),
-    ):
-        if not merged.get(key):
-            env_val = os.getenv(env_var)
-            if env_val:
-                merged[key] = env_val
+    if default_manager is not None:
+        defaults = {
+            key: getattr(default_manager, key)
+            for key in (
+                "source_endpoint_id", "destination_endpoint_id",
+                "destination_base_path", "destination_compute_base_path",
+                "source_base_path", "allow_interactive_auth",
+            )
+        }
+        defaults["client_id"] = default_manager._client_id
+        default_system = default_manager.system
+    else:
+        cfg = _load_execution_config(config_path)
+        defaults = dict(cfg.get("globus_transfer", {}))
+        for key in (
+            "source_endpoint_id", "destination_endpoint_id",
+            "destination_base_path", "destination_compute_base_path",
+        ):
+            if not defaults.get(key):
+                defaults[key] = os.getenv(f"GLOBUS_TRANSFER_{key.upper()}")
+        default_system = os.getenv("COMPUTE_SYSTEM") or cfg.get("system")
 
-    resolved_system = system or os.getenv("COMPUTE_SYSTEM") or cfg.get("system")
+    merged = {**defaults, **{k: v for k, v in kwargs.items() if v is not None}}
+    resolved_system = system or default_system
     resolved_system_name = (
         resolved_system.strip().lower()
         if isinstance(resolved_system, str) and resolved_system.strip()
@@ -253,34 +268,50 @@ def get_transfer_manager(
     )
     profile = None
     if resolved_system_name is not None:
-        from chemgraph.hpc_configs import get_facility_transfer_profile
-
         profile = get_facility_transfer_profile(resolved_system_name)
 
-    configured_destination = merged.get("destination_endpoint_id")
-    if not configured_destination and profile is not None:
-        if profile.has_placeholder_collection_id:
-            logger.warning(
-                "The bundled %s Globus collection ID is a placeholder; "
-                "configure GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID explicitly.",
-                profile.system,
+    if system is not None and not kwargs.get("destination_endpoint_id"):
+        if profile is None or profile.has_placeholder_collection_id:
+            raise ValueError(
+                f"No bundled Transfer collection for system {system!r}. "
+                "Pass destination_endpoint_id explicitly or select a system "
+                "from list_transfer_facilities."
             )
-        else:
-            configured_destination = profile.collection_id
-            merged["destination_endpoint_id"] = configured_destination
-            logger.info(
-                "Using bundled %s Globus collection %s (%s)",
-                profile.system,
-                profile.collection_name,
-                profile.collection_id,
-            )
+        merged["destination_endpoint_id"] = profile.collection_id
+    elif not merged.get("destination_endpoint_id") and profile is not None:
+        if not profile.has_placeholder_collection_id:
+            merged["destination_endpoint_id"] = profile.collection_id
 
-    profile_matches_destination = profile is not None and (
-        profile.has_placeholder_collection_id
-        or configured_destination == profile.collection_id
+    destination = merged.get("destination_endpoint_id")
+    default_profile = (
+        get_facility_transfer_profile(default_system) if default_system else None
     )
+    default_destination = defaults.get("destination_endpoint_id") or (
+        default_profile.collection_id if default_profile else None
+    )
+    if default_destination and destination != default_destination:
+        # A compute path for a previous destination must not follow an override.
+        merged["destination_compute_base_path"] = kwargs.get(
+            "destination_compute_base_path"
+        )
+        if system is None:
+            resolved_system_name = None
+
+    # Keep the selected system when several systems share a collection.
+    # Otherwise derive path mapping from the actual destination UUID.
+    if profile is None or profile.collection_id != destination:
+        profile = next(
+            (
+                p for p in list_facility_transfer_profiles()
+                if not p.has_placeholder_collection_id
+                and p.collection_id == destination
+            ),
+            None,
+        )
+    if profile is not None:
+        resolved_system_name = profile.system
     if (
-        profile_matches_destination
+        profile is not None
         and merged.get("destination_base_path")
         and not merged.get("destination_compute_base_path")
     ):
@@ -296,7 +327,7 @@ def get_transfer_manager(
     if not all(merged.get(k) for k in required):
         logger.debug(
             "Globus Transfer not configured (missing %s). "
-            "Transfer tools will not be registered.",
+            "Supply the missing settings before transferring files.",
             [k for k in required if not merged.get(k)],
         )
         return None
@@ -315,6 +346,8 @@ def get_transfer_manager(
         allow_interactive_auth=bool(merged.get("allow_interactive_auth", True)),
         system=resolved_system_name,
     )
+    if default_manager is not None and manager._client_id == default_manager._client_id:
+        manager._transfer_client = default_manager._transfer_client
     logger.info(
         "GlobusTransferManager created: %s -> %s",
         merged["source_endpoint_id"],

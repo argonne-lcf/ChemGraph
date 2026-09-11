@@ -92,6 +92,17 @@ _FACILITY_TRANSFER_PROFILES = {
         ),
         verified_on=date(2026, 9, 4),
     ),
+    "crux": FacilityTransferProfile(
+        system="crux",
+        collection_id="05d2c76a-e867-4f67-aa57-76edeb0beda0",
+        collection_name="alcf#dtn_eagle",
+        transfer_root="/",
+        compute_root="/eagle",
+        documentation_url=(
+            "https://docs.alcf.anl.gov/data-management/data-transfer/using-globus/"
+        ),
+        verified_on=None,
+    ),
 }
 
 

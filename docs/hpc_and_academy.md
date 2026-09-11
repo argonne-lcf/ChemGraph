@@ -27,24 +27,26 @@ not copy another user's endpoint IDs, allocation names, or private paths.
 ChemGraph keeps backend-neutral facility metadata in
 `chemgraph.hpc_configs.profiles`. Globus collection UUIDs are public
 identifiers, not credentials: Transfer still enforces login, consent, and
-collection ACLs. User collection IDs, project names, credentials, and private
-paths must stay in environment variables or local configuration.
+collection ACLs. Keep credentials in local configuration. Supply user collection
+IDs and project paths through environment variables, local configuration, or
+the available tool arguments.
 
 | System | Collection | Bundled ID | Transfer path | Compute path |
 | --- | --- | --- | --- | --- |
 | Polaris | `alcf#dtn_eagle` | `05d2c76a-e867-4f67-aa57-76edeb0beda0` | `/<project>/...` | `/eagle/<project>/...` |
 | Aurora | `alcf#dtn_flare` | `f39a7a0f-5bfc-46ce-9615-ba9f8592814f` | `/<project>/...` | `/flare/<project>/...` |
+| Crux | `alcf#dtn_eagle` | `05d2c76a-e867-4f67-aa57-76edeb0beda0` | `/<project>/...` | `/eagle/<project>/...` |
 
-Set `COMPUTE_SYSTEM=polaris` or `COMPUTE_SYSTEM=aurora` (or the equivalent
+Set `COMPUTE_SYSTEM` to a supported system (or the equivalent
 `[execution] system` value) and omit
 `GLOBUS_TRANSFER_DESTINATION_ENDPOINT_ID` to select the bundled destination.
 The profiles translate collection-visible paths to the paths seen by compute
-workers: Eagle projects gain the `/eagle` prefix on Polaris, while Flare
+workers: Eagle projects gain the `/eagle` prefix on Polaris and Crux, while Flare
 projects gain the `/flare` prefix on Aurora.
 
 Explicit arguments take priority, followed by `[execution.globus_transfer]`
-settings and environment fallbacks. A custom Polaris collection disables the
-automatic path translation unless
+settings and environment fallbacks. A custom collection uses identical Transfer
+and compute paths unless
 `GLOBUS_TRANSFER_DESTINATION_COMPUTE_BASE_PATH` (or
 `destination_compute_base_path` in TOML) is also set.
 
@@ -57,10 +59,30 @@ source_endpoint_id = "<your-source-collection-uuid>"
 destination_base_path = "/<project>/staging"
 ```
 
-HPC MCP servers always expose `list_transfer_facilities`. Agents can use it to
-see both profiles and identify the active server target. Selection is fixed at
-server startup so the Transfer destination stays aligned with the configured
-Compute endpoint.
+HPC MCP servers always expose the Transfer tools. `list_transfer_facilities`
+lists supported systems and server defaults. The `compute_system` parameter is
+an enum generated from this registry: adding a profile extends the allowed tool
+choices when the server starts. Unknown system names are rejected, including
+when a destination UUID is also supplied.
+
+For example, an agent asked to stage a local file to Crux can call:
+
+```python
+transfer_files(source_paths="/path/to/water.xyz", compute_system="crux")
+```
+
+Per-call `destination_endpoint_id` takes priority over `compute_system`; either
+overrides the configured destination. `source_endpoint_id` overrides the source
+collection, whose files must be accessible locally to the MCP server. Omitted
+arguments use server defaults; `destination_base_path` must still be configured.
+Overrides apply only to that call and do not change the Globus Compute endpoint.
+
+The result includes both endpoint IDs, `remote_directory` for compute tools,
+and `transfer_directory` for Transfer API calls. To inspect that destination,
+pass the returned `destination_endpoint_id` and `transfer_directory` to
+`list_remote_files`. It also accepts `compute_system` with the same precedence.
+Path translation follows the actual destination UUID; changing destinations
+does not carry over the previous destination's configured compute path.
 
 See the ALCF documentation for current
 [Eagle and Flare collection paths](https://docs.alcf.anl.gov/data-management/data-transfer/using-globus/)

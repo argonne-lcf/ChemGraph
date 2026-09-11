@@ -10,8 +10,9 @@ from chemgraph.hpc_configs import (
 )
 
 
-def test_polaris_profile_uses_public_eagle_collection():
-    profile = get_facility_transfer_profile(" POLARIS ")
+@pytest.mark.parametrize("system", [" POLARIS ", " CRUX "])
+def test_eagle_profile_uses_public_collection(system):
+    profile = get_facility_transfer_profile(system)
 
     assert profile is not None
     assert profile.collection_name == "alcf#dtn_eagle"
@@ -37,8 +38,7 @@ def test_aurora_profile_maps_flare_collection_paths_to_compute_paths():
 def test_profile_listing_has_stable_display_order():
     profiles = list_facility_transfer_profiles()
 
-    assert tuple(profile.system for profile in profiles) == ("polaris", "aurora")
-    assert all(profile.verified_on is not None for profile in profiles)
+    assert tuple(profile.system for profile in profiles) == ("polaris", "aurora", "crux")
 
 
 def test_profile_rejects_parent_traversal():

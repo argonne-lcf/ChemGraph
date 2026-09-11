@@ -1,8 +1,7 @@
 """Shared MCP tools for Globus Transfer file staging.
 
-Call :func:`register_transfer_tools` to add ``list_transfer_facilities`` and,
-when Transfer is configured, ``transfer_files``, ``check_transfer_status``,
-and ``list_remote_files`` to any
+Call :func:`register_transfer_tools` to add ``list_transfer_facilities``,
+``transfer_files``, ``check_transfer_status``, and ``list_remote_files`` to any
 :class:`~mcp.server.fastmcp.FastMCP` (or
 :class:`~chemgraph.mcp.cg_fastmcp.CGFastMCP`) server instance.
 
@@ -21,8 +20,11 @@ backend-submitting ``@tool()`` decorator.
 from __future__ import annotations
 
 import logging
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
+
+from chemgraph.hpc_configs import list_facility_transfer_profiles
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -31,12 +33,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# One registry supplies both discovery metadata and validated tool choices.
+TransferComputeSystem = Enum(
+    "TransferComputeSystem",
+    {profile.system: profile.system for profile in list_facility_transfer_profiles()},
+    type=str,
+)
+
 
 def register_transfer_tools(
     mcp: FastMCP,
     transfer_manager: GlobusTransferManager | None,
 ) -> None:
-    """Register Transfer discovery and configured operation tools on *mcp*.
+    """Register Transfer discovery and operation tools on *mcp*.
 
     Parameters
     ----------
@@ -45,12 +54,47 @@ def register_transfer_tools(
         or a :class:`~chemgraph.mcp.cg_fastmcp.CGFastMCP`; ``add_tool``
         is inherited so the same registration works either way.
     transfer_manager : GlobusTransferManager, optional
-        The configured transfer manager instance. When omitted, facility
-        discovery is still registered but operational tools are not.
+        The configured defaults. Missing settings can be supplied in tool
+        calls; operational tools validate configuration when called.
     """
-    from chemgraph.hpc_configs import list_facility_transfer_profiles
+    from chemgraph.execution.config import get_transfer_manager
 
     profiles = list_facility_transfer_profiles()
+    task_managers: dict[str, GlobusTransferManager] = {}
+
+    def resolve_manager(
+        compute_system: TransferComputeSystem | None = None,
+        destination_endpoint_id: str | None = None,
+        source_endpoint_id: str | None = None,
+    ) -> GlobusTransferManager:
+        overrides = {}
+        if compute_system is not None:
+            overrides["system"] = TransferComputeSystem(compute_system).value
+        for key, value in (
+            ("destination_endpoint_id", destination_endpoint_id),
+            ("source_endpoint_id", source_endpoint_id),
+        ):
+            if value is not None:
+                if not value.strip():
+                    raise ValueError(f"{key} must not be empty.")
+                overrides[key] = value.strip()
+        if transfer_manager is not None and not overrides:
+            return transfer_manager
+        manager = get_transfer_manager(
+            default_manager=transfer_manager,
+            allow_interactive_auth=False,
+            **overrides,
+        )
+        if manager is None:
+            raise ValueError(
+                "Globus Transfer requires a source_endpoint_id, a destination "
+                "(compute_system or destination_endpoint_id), and a configured "
+                "destination_base_path (GLOBUS_TRANSFER_DESTINATION_BASE_PATH "
+                "or [execution.globus_transfer] in config.toml). "
+                "Supply missing endpoint selectors in the call or server defaults."
+            )
+        return manager
+
     active_system = None
     if transfer_manager is not None:
         configured_system = getattr(transfer_manager, "system", None)
@@ -74,10 +118,10 @@ def register_transfer_tools(
                 active_system = active_profile.system
 
     def list_transfer_facilities() -> dict:
-        """List supported Transfer facilities and the active server target.
+        """List supported Transfer facilities and the server's default target.
 
-        Facility selection is fixed when the MCP server starts. Reconfigure
-        and restart the server to change the active Transfer destination.
+        Select a system per call with compute_system, or override its
+        collection with destination_endpoint_id. Active flags describe defaults.
         """
         facilities = []
         for profile in profiles:
@@ -105,7 +149,7 @@ def register_transfer_tools(
                 }
             )
         return {
-            "selection_mode": "server_configured",
+            "selection_mode": "per_call",
             "transfer_configured": transfer_manager is not None,
             "active_system": active_system,
             "facilities": facilities,
@@ -115,14 +159,10 @@ def register_transfer_tools(
         list_transfer_facilities,
         name="list_transfer_facilities",
         description=(
-            "List supported Globus Transfer facilities (Polaris and Aurora), "
-            "their public collection/path metadata, and the active "
-            "server-configured target."
+            "List supported compute_system choices for Globus Transfer, "
+            "their public collection/path metadata, and the server's default target."
         ),
     )
-
-    if transfer_manager is None:
-        return
 
     def transfer_files(
         source_paths: Union[str, list[str]],
@@ -130,6 +170,9 @@ def register_transfer_tools(
         remote_subdir: Optional[str] = None,
         wait: bool = True,
         label: Optional[str] = None,
+        compute_system: Optional[TransferComputeSystem] = None,
+        destination_endpoint_id: Optional[str] = None,
+        source_endpoint_id: Optional[str] = None,
     ) -> dict:
         """Transfer files to the remote HPC endpoint via Globus Transfer.
 
@@ -149,7 +192,18 @@ def register_transfer_tools(
             If True (default), block until the transfer completes.
         label : str, optional
             Human-readable label for the transfer task.
+        compute_system : TransferComputeSystem, optional
+            Destination from the supported system choices. Resolves its
+            Transfer collection and paths; does not change the Compute endpoint.
+        destination_endpoint_id : str, optional
+            Destination collection UUID. Takes priority over compute_system.
+        source_endpoint_id : str, optional
+            Source collection UUID, overriding the server default. Source files
+            must still be accessible locally to the MCP server.
         """
+        manager = resolve_manager(
+            compute_system, destination_endpoint_id, source_endpoint_id
+        )
         if isinstance(source_paths, str):
             src = Path(source_paths)
             if src.is_dir():
@@ -186,14 +240,17 @@ def register_transfer_tools(
         else:
             files = [str(Path(p).resolve()) for p in source_paths]
 
-        transfer_result = transfer_manager.transfer_files(
+        transfer_result = manager.transfer_files(
             local_paths=files,
             remote_subdir=remote_subdir,
             label=label,
         )
+        task_managers[transfer_result.task_id] = manager
 
         response = {
             "task_id": transfer_result.task_id,
+            "source_endpoint_id": transfer_result.source_endpoint_id,
+            "destination_endpoint_id": transfer_result.destination_endpoint_id,
             # Compute tools historically consume ``remote_directory``. Keep
             # that contract while exposing the collection path separately.
             "remote_directory": transfer_result.compute_directory,
@@ -204,7 +261,7 @@ def register_transfer_tools(
         }
 
         if wait:
-            status = transfer_manager.wait_for_transfer(transfer_result.task_id)
+            status = manager.wait_for_transfer(transfer_result.task_id)
             response["status"] = (
                 "completed"
                 if status["status"] == "SUCCEEDED"
@@ -227,23 +284,33 @@ def register_transfer_tools(
 
         Use to poll a non-blocking transfer submitted with ``wait=False``.
         """
-        return transfer_manager.check_transfer_status(task_id)
+        manager = task_managers.get(task_id) or resolve_manager()
+        return manager.check_transfer_status(task_id)
 
-    def list_remote_files(remote_path: str) -> list[dict]:
+    def list_remote_files(
+        remote_path: str,
+        compute_system: Optional[TransferComputeSystem] = None,
+        destination_endpoint_id: Optional[str] = None,
+    ) -> list[dict]:
         """List files using a collection-visible destination path.
 
         Useful to verify that files were staged correctly before
         running ensemble calculations. Pass ``transfer_directory`` from
         ``transfer_files`` when Transfer and compute path namespaces differ.
+        Select a supported compute_system or supply destination_endpoint_id;
+        an explicit ID takes priority. Omitted selectors use server defaults.
         """
-        return transfer_manager.list_remote_directory(remote_path)
+        manager = resolve_manager(compute_system, destination_endpoint_id)
+        return manager.list_remote_directory(remote_path)
 
     mcp.add_tool(
         transfer_files,
         name="transfer_files",
         description=(
-            "Transfer local files to the server-configured "
-            f"{active_system or 'remote'} HPC filesystem via Globus Transfer. "
+            "Stage local files via Globus Transfer. Select a supported "
+            "compute_system or supply destination_endpoint_id; an explicit ID "
+            "takes priority. source_endpoint_id overrides the source collection. "
+            "Omitted selectors use server defaults. "
             "Use this to pre-stage structure files "
             "before running ensemble calculations with "
             "remote_structure_directory. Returns remote_directory for "
@@ -263,6 +330,7 @@ def register_transfer_tools(
         name="list_remote_files",
         description=(
             "List files in a destination collection directory. Pass the "
-            "transfer_directory returned by transfer_files."
+            "transfer_directory and destination_endpoint_id returned by "
+            "transfer_files, or select a supported compute_system."
         ),
     )
