@@ -1786,7 +1786,14 @@ checkout's <code>cg_logs/</code> directory.</p>
 <p>ARM builds install CPU PyTorch from its official wheel index because the PyPI
 CUDA dependency set includes unsupported ARM wheels. x86 builds retain their
 normal PyPI PyTorch selection. Both images explicitly install the Polar add-on
-and run <code>pip check</code> after resolving ChemGraph and its runtime dependencies.</p>
+and run <code>pip check</code> after resolving ChemGraph and its runtime dependencies.
+Because the packages share the base image's conda environment, the install
+bounds <code>ruamel.yaml&lt;0.19</code> to stay compatible with conda itself; without it
+<code>pip check</code> fails and the build stops.</p>
+<p>The <code>Docker Build Check</code> workflow (<code>.github/workflows/docker-build.yml</code>) builds
+the <code>linux/amd64</code> image without pushing on every pull request that touches the
+Dockerfiles, <code>pyproject.toml</code>, or <code>requirements/</code>, and on pushes to <code>main</code>, so a
+broken image is caught before a release publishes it to GHCR.</p>
 <p>The TBLite build can take time, especially on ARM. Mount a dedicated artifact
 directory rather than a home directory, pass tokens at runtime, remember that
 container paths may differ from host paths, and pin an image tag or digest for
