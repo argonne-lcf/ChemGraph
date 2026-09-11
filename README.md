@@ -7,6 +7,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/chemgraph.svg)](https://pypi.org/project/chemgraph/)
 [![Documentation](https://img.shields.io/badge/docs-MkDocs-4051b5)](https://argonne-lcf.github.io/ChemGraph/)
 [![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white)](https://github.com/argonne-lcf/ChemGraph/pkgs/container/chemgraph)
+[![Leaderboard](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Leaderboard-FFD21E)](https://huggingface.co/spaces/Autonomous-Scientific-Agents/chemgraph-leaderboard)
 [![License](https://img.shields.io/github/license/argonne-lcf/ChemGraph)](LICENSE)
 
 # ChemGraph

@@ -128,6 +128,9 @@ def test_calculator_pin_matches_all_installation_surfaces() -> None:
         assert f'"tblite=={tblite_version}"' in dockerfile
         assert "python -m pip check" in dockerfile
         assert "-r requirements/mace-polar.txt" in dockerfile
+        # conda in the miniconda base image requires ruamel.yaml<0.19; an
+        # unbounded ruamel.yaml from monty/pymatgen makes `pip check` fail.
+        assert '"ruamel.yaml<0.19"' in dockerfile
 
 
 def test_published_dependencies_have_no_direct_urls():
@@ -180,3 +183,28 @@ def test_built_metadata_rejects_urls_including_extras(tmp_path, kind, requiremen
             check(path)
     else:
         check(path)
+
+
+def test_python_version_classifiers_match_support_matrix():
+    """shields.io's pyversions badge reads these; keep them truthful."""
+    project = _load_toml(_REPO_ROOT / "pyproject.toml")["project"]
+    classifiers = project["classifiers"]
+    declared = {
+        c.rsplit(" :: ", 1)[1]
+        for c in classifiers
+        if c.startswith("Programming Language :: Python :: 3.")
+    }
+    assert declared, "Expected Programming Language :: Python :: 3.X classifiers"
+    assert "Programming Language :: Python :: 3 :: Only" in classifiers
+
+    floor = project["requires-python"].removeprefix(">=")
+    assert min(declared, key=lambda v: tuple(map(int, v.split(".")))) == floor
+
+    workflow = (_REPO_ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+    tested = set(re.findall(r'python-version: \[([^\]]+)\]', workflow)[0].replace('"', "").replace(" ", "").split(","))
+    assert declared == tested
+
+    assert project["license"] == "Apache-2.0"
+    assert not any(c.startswith("License ::") for c in classifiers), (
+        "PEP 639: use the license expression, not License classifiers"
+    )

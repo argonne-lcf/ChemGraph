@@ -55,8 +55,14 @@ The **Configuration → Providers** tab offers the same per-provider cards
 afterwards: readiness status, credentials, endpoint settings, and a model
 picker with one-click activation.
 
-When started from the checkout, the app's default configuration path is the
-repository-root `config.toml`. The interface exposes these workflow choices:
+When started from a source checkout, the app's default configuration path is
+the repository-root `config.toml`. For a wheel installation it is
+`$XDG_CONFIG_HOME/chemgraph/config.toml` (`~/.config/chemgraph/config.toml` by
+default; `%APPDATA%\chemgraph\config.toml` on Windows), because the Python
+installation directory is often read-only. Set `CHEMGRAPH_CONFIG` to a file
+path to override either choice. The Configuration page shows the active path,
+and a failed save is reported instead of being silently dropped. The interface
+exposes these workflow choices:
 
 - `single_agent`
 - `multi_agent`
@@ -95,7 +101,8 @@ as the CLI. Set `CHEMGRAPH_LOG_DIR` before starting Streamlit to redirect them.
   use EMT for a basic check.
 - **Remote browser cannot connect:** bind Streamlit to an appropriate interface
   only on a trusted network and follow your site's port-forwarding policy.
-- **Unexpected config:** inspect the repository-root `config.toml` used by the
-  source app.
+- **Unexpected config:** inspect the file shown under "Configuration file" on
+  the Configuration page (repository-root `config.toml` for a source checkout,
+  the per-user path for an installed package, or `$CHEMGRAPH_CONFIG`).
 
 See [Troubleshooting](troubleshooting.md) for broader diagnostics.

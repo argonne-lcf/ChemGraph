@@ -1,0 +1,67 @@
+name: Docker Build Check
+
+# Build the published image without pushing it, so a broken Dockerfile or an
+# inconsistent dependency set (the build runs `python -m pip check`) fails on
+# the pull request instead of during the release publish workflow.
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "Dockerfile.arm"
+      - "pyproject.toml"
+      - "requirements/**"
+      - "MANIFEST.in"
+      - ".github/workflows/docker-build.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "Dockerfile"
+      - "Dockerfile.arm"
+      - "pyproject.toml"
+      - "requirements/**"
+      - "MANIFEST.in"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: Dockerfile
+            platform: linux/amd64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.dockerfile }} (${{ matrix.platform }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          push: false
+          load: true
+          tags: chemgraph:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        run: |
+          docker run --rm chemgraph:ci-${{ github.sha }} \
+            python -c "import chemgraph, ase; print(chemgraph.__version__, ase.__version__)"
+          docker run --rm chemgraph:ci-${{ github.sha }} chemgraph --help

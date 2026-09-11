@@ -7,6 +7,7 @@ from typing import Any, Dict
 import streamlit as st
 import toml
 
+from ui import config as ui_config
 from ui import providers
 from ui.config import (
     get_default_config, load_config, merge_config_defaults,
@@ -76,6 +77,16 @@ def get_model_options(config: Dict[str, Any]) -> list:
 # ---------------------------------------------------------------------------
 
 
+def _save_failure_message() -> str:
+    """Describe a failed configuration save with the path and a remedy."""
+    reason = ui_config.last_save_error or ui_config.config_path()
+    return (
+        f"❌ Failed to save configuration ({reason}). Settings apply to this "
+        f"session only; set ${ui_config.CONFIG_PATH_ENV} to a writable file to "
+        "persist them."
+    )
+
+
 def render() -> None:
     """Render the Configuration page."""
     st.title("⚙️ Configuration")
@@ -86,6 +97,10 @@ def render() -> None:
     click **Save Configuration**.
     """
     )
+    st.caption(f"Configuration file: `{ui_config.config_path()}`")
+    save_error = st.session_state.pop("config_save_error", None)
+    if save_error:
+        st.error(save_error)
 
     # Ensure config exists in session state
     if "config" not in st.session_state or st.session_state.config is None:
@@ -179,6 +194,8 @@ def _activate_provider_model(draft: dict, info, model_name: str) -> None:
     st.session_state.config = copy.deepcopy(draft)
     if save_config(st.session_state.config):
         st.toast(f"Now using {model_name}", icon="✅")
+    else:
+        st.session_state.config_save_error = _save_failure_message()
     st.rerun()
 
 
@@ -249,7 +266,8 @@ def _render_argo_card(draft: dict, info, status) -> None:
         st.session_state.config["api"].setdefault("argo", {})[
             "argo_user"
         ] = user
-        save_config(st.session_state.config)
+        if not save_config(st.session_state.config):
+            st.session_state.config_save_error = _save_failure_message()
         st.rerun()
     st.caption(status.detail)
     _render_endpoint_settings(draft, "argo", key_prefix="argo")
@@ -661,9 +679,9 @@ def _render_action_buttons(config: dict) -> None:
             # Apply the draft to the live session config, then persist to disk.
             st.session_state.config = copy.deepcopy(config)
             if save_config(st.session_state.config):
-                st.success("✅ Configuration saved to config.toml!")
+                st.success(f"✅ Configuration saved to {ui_config.config_path()}")
             else:
-                st.error("❌ Failed to save configuration")
+                st.error(_save_failure_message())
 
     with col2:
         if st.button("\U0001f504 Reload Configuration"):
