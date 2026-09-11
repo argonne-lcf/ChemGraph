@@ -51,6 +51,8 @@ def prepare(request: ModelRequest) -> PreparedModel:
         api_key=api_key,
         max_output_tokens=6000,
     )
+    if request.base_url is not None:
+        client_kwargs["base_url"] = request.base_url
     return PreparedModel(
         endpoint_name="google_direct",
         protocol=PROTOCOL,

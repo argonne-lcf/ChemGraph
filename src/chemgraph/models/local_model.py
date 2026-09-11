@@ -3,7 +3,7 @@ from chemgraph.models.supported_models import supported_ollama_models
 
 
 def load_ollama_model(
-    model_name: str, temperature: float, base_url: str = None
+    model_name: str, temperature: float, base_url: str = None, timeout_s: float = None
 ) -> ChatOllama:
     """Load an Ollama chat model into LangChain.
 
@@ -46,6 +46,8 @@ def load_ollama_model(
     kwargs = {"model": model_name, "temperature": temperature}
     if base_url:
         kwargs["base_url"] = base_url
+    if timeout_s is not None:
+        kwargs["client_kwargs"] = {"timeout": timeout_s}
     llm = ChatOllama(**kwargs)
     print(f"Successfully loaded model: {model_name}")
     return llm

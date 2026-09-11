@@ -143,6 +143,8 @@ class ChemGraph:
         Base URL for API calls, by default None
     api_key : str, optional
         API key for authentication, by default None
+    model_timeout : float, optional
+        Timeout in seconds per provider request. Defaults to the model settings.
     reasoning_effort : str, optional
         Reasoning effort for manually verified GPT-5.6 models, which default to
         ``"none"``. Supported values are ``none``, ``low``, ``medium``,
@@ -225,6 +227,7 @@ class ChemGraph:
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
         checkpointer: BaseCheckpointSaver | None = None,
+        model_timeout: float | None = None,
     ):
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
@@ -289,6 +292,7 @@ class ChemGraph:
                 api_key=api_key,
                 argo_user=argo_user,
                 reasoning_effort=reasoning_effort,
+                **({"timeout_s": model_timeout} if model_timeout is not None else {}),
             )
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")

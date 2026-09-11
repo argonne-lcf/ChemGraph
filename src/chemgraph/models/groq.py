@@ -14,6 +14,7 @@ def load_groq_model(
     api_key: str = None,
     prompt: str = None,
     base_url: str = None,
+    timeout_s: float = None,
 ) -> ChatGroq:
     """Load a GROQ chat model into LangChain.
     This function loads a GROQ model and configures it for use with LangChain.
@@ -73,6 +74,8 @@ def load_groq_model(
             temperature=temperature,
             api_key=api_key,
             max_tokens=6000,
+            **({"base_url": base_url} if base_url is not None else {}),
+            **({"timeout": timeout_s} if timeout_s is not None else {}),
         )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")

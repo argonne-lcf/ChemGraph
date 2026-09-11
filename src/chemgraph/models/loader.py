@@ -13,6 +13,7 @@ per-model quirks. Protocol builders own the sole client-construction sites.
 from __future__ import annotations
 
 from typing import Optional
+from dataclasses import replace
 
 from chemgraph.models.endpoints import ModelRequest, PreparedModel
 from chemgraph.models.endpoints.registry import select_endpoint
@@ -72,6 +73,7 @@ def load_chat_model_prepared(
     reasoning_effort: Optional[str] = None,
     *,
     settings: LLMSettings | None = None,
+    timeout_s: float | None = None,
 ) -> tuple["object", PreparedModel]:
     """Load a chat model and return it alongside its resolved metadata.
 
@@ -91,6 +93,11 @@ def load_chat_model_prepared(
     )
     spec = _select_endpoint(request)
     prepared = spec.prepare_request(request)
+    timeout = timeout_s if timeout_s is not None else (settings.timeout_s if settings else None)
+    if timeout is not None:
+        kwargs = dict(prepared.client_kwargs)
+        kwargs["timeout_s" if spec.protocol in {"ollama", "groq"} else "timeout"] = timeout
+        prepared = replace(prepared, client_kwargs=kwargs)
     client = spec.protocol_build(prepared.client_kwargs)
     return client, prepared
 

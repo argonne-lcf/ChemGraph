@@ -32,6 +32,8 @@ def prepare(request: ModelRequest) -> PreparedModel:
         model_name=request.model,
         temperature=request.temperature,
     )
+    if request.base_url is not None:
+        client_kwargs["base_url"] = request.base_url
     return PreparedModel(
         endpoint_name="ollama",
         protocol=PROTOCOL,
