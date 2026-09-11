@@ -1,0 +1,42 @@
+# Local-only pilot. For a shared service, set DEV_USER empty and place the
+# frontend behind the institution's authenticating gateway (see docs).
+services:
+  web-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        CHEMGRAPH_BASE_IMAGE: ${CHEMGRAPH_BASE_IMAGE:-ghcr.io/argonne-lcf/chemgraph:latest}
+    image: chemgraph-web-api:local
+    init: true
+    environment:
+      CHEMGRAPH_WEB_PUBLIC_ORIGIN: ${CHEMGRAPH_WEB_PUBLIC_ORIGIN:-http://localhost:8080}
+      CHEMGRAPH_WEB_DEV_USER: ${CHEMGRAPH_WEB_DEV_USER:-}
+      CHEMGRAPH_WEB_DEMO: ${CHEMGRAPH_WEB_DEMO:-false}
+      CHEMGRAPH_WEB_PROVIDERS: ${CHEMGRAPH_WEB_PROVIDERS:-{}}
+      CHEMGRAPH_WEB_CALCULATORS: ${CHEMGRAPH_WEB_CALCULATORS:-["emt"]}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ARGO_USER: ${ARGO_USER:-}
+      ALCF_ACCESS_TOKEN: ${ALCF_ACCESS_TOKEN:-}
+    volumes:
+      - web-data:/data
+      - web-model-cache:/home/chemgraph-web/.cache
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    stop_grace_period: 15s
+    restart: unless-stopped
+  web:
+    build: ./frontend
+    image: chemgraph-web:local
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      web-api:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  web-data:
+  web-model-cache:

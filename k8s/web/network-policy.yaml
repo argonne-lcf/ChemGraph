@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chemgraph-web-api
+spec:
+  podSelector:
+    matchLabels: {app: chemgraph-web-api}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: chemgraph-web}
+      ports: [{protocol: TCP, port: 8000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chemgraph-web-gateway-only
+spec:
+  podSelector:
+    matchLabels: {app: chemgraph-web}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx # Set to your trusted gateway namespace.
+      ports: [{protocol: TCP, port: 8080}]
