@@ -42,6 +42,14 @@ class ExecutorState(TypedDict):
     retry_count: int
 
 
+class ExecutorOutputState(TypedDict):
+    """Only finalized results cross from an executor into its parent planner."""
+
+    executor_results: list
+    executor_logs: dict[str, list]
+    failed_tasks: list
+
+
 class PlannerState(TypedDict):
     """Global state for the main planner-executor graph.
 
