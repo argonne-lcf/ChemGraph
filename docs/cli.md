@@ -86,6 +86,12 @@ chemgraph run --interactive --workflow deep_agent \
   --deepagent-workspace /path/to/disposable-checkout
 ```
 
+Interactive Deep Agent startup uses the current directory when
+`--deepagent-workspace` is omitted. Before enabling it, the confirmation panel
+shows the resolved workspace and explains that shell commands can access the
+host beyond that directory. Declining leaves the capability disabled. Headless
+runs still require an explicit workspace and the approval-skip flag.
+
 Or add the same graph to the supervisor as the `deepagent` subagent:
 
 ```bash

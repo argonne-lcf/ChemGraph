@@ -16,6 +16,7 @@ from typing import Any, Dict
 
 import toml
 
+from chemgraph.graphs.deep_agent import normalize_skill_sources
 from chemgraph.models.endpoints.registry import match_endpoint
 from chemgraph.utils.config_utils import (
     flatten_config,
@@ -83,7 +84,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         "--workflow",
         type=str,
         choices=_WORKFLOW_CHOICES,
-        default="single_agent",
+        default=None,
         help="Workflow type (default: single_agent)",
     )
     parser.add_argument(
@@ -534,42 +535,41 @@ def _handle_run(args: argparse.Namespace) -> None:
     argo_user = get_argo_user_from_flat_config(config) if config else None
 
     # Resolve workflow alias (e.g. python_repl -> python_relp)
-    args.workflow = resolve_workflow(args.workflow)
+    args.workflow = resolve_workflow(args.workflow or "single_agent")
     enable_deepagent = bool(getattr(args, "deepagent", False))
     deepagent_workspace = getattr(args, "deepagent_workspace", None)
     deepagent_skills = getattr(args, "deepagent_skills", None)
     deepagent_auto_approve = bool(
         getattr(args, "deepagent_dangerously_skip_approvals", False)
     )
-    if enable_deepagent and args.workflow != "main_agent":
+    interactive = bool(getattr(args, "interactive", False))
+    if cli_deepagent is True and args.workflow != "main_agent":
         console.print(
             "[red]--deepagent adds a worker only to the main_agent workflow. "
             "Use -w deep_agent to call it directly.[/red]"
         )
         sys.exit(2)
-    if deepagent_workspace is not None and not (
-        enable_deepagent or args.workflow == "deep_agent"
-    ):
-        if cli_deepagent is False and cli_deepagent_workspace is None:
+    uses_deepagent = args.workflow == "deep_agent" or (
+        enable_deepagent and args.workflow == "main_agent"
+    )
+    if not uses_deepagent:
+        if cli_deepagent_workspace is not None:
+            console.print("[red]--deepagent-workspace requires --deepagent or -w deep_agent.[/red]")
+            sys.exit(2)
+        if cli_deepagent_skills is not None:
+            console.print("[red]--deepagent-skill requires --deepagent or -w deep_agent.[/red]")
+            sys.exit(2)
+        # Retain saved settings for later REPL workflow switches.
+        if not interactive or cli_deepagent is False:
             deepagent_workspace = None
-        else:
-            console.print(
-                "[red]--deepagent-workspace requires --deepagent or "
-                "-w deep_agent.[/red]"
-            )
-            sys.exit(2)
-    if deepagent_skills and not (
-        enable_deepagent or args.workflow == "deep_agent"
-    ):
-        if cli_deepagent is False and cli_deepagent_skills is None:
             deepagent_skills = None
-        else:
-            console.print(
-                "[red]--deepagent-skill requires --deepagent or "
-                "-w deep_agent.[/red]"
-            )
+    if uses_deepagent and deepagent_skills is not None:
+        try:
+            normalize_skill_sources(deepagent_skills)
+        except (TypeError, ValueError) as exc:
+            console.print(f"[red]Invalid Deep Agent skills: {exc}[/red]")
             sys.exit(2)
-    if enable_deepagent and not getattr(args, "interactive", False):
+    if enable_deepagent and args.workflow == "main_agent" and not interactive:
         console.print(
             "[red]The experimental Deep Agent requires interactive mode.[/red]"
         )
