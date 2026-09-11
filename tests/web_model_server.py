@@ -87,14 +87,22 @@ def reply(body):
             "role": "assistant",
             "content": f"Calculation complete. EMT potential energy: **{energy:.4f} eV**.",
         }
-    match = re.search(r"(/[^\s'\"\\]+/uploads/[^\s'\"\\]+\.xyz)", text)
-    if match is None:
+    words = text.replace("\\", " ").replace('"', " ").replace("'", " ").split()
+    attachment = next(
+        (
+            word[word.index("/") :]
+            for word in words
+            if "/uploads/" in word and word.endswith(".xyz")
+        ),
+        None,
+    )
+    if attachment is None:
         raise ValueError("Test requires an attached XYZ structure")
     return call(
         "run_ase",
         {
             "ase_input": {
-                "input_structure_file": match.group(1),
+                "input_structure_file": attachment,
                 "output_results_file": "copper-result.json",
                 "driver": "opt",
                 "steps": 10,

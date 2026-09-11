@@ -4,6 +4,8 @@ const real = process.env.WEB_TEST_REAL === "true";
 const resultText = real
   ? "Calculation complete."
   : "Demo calculation complete.";
+// Spawned workers import the chemistry stack before producing their first event.
+const runWait = { timeout: 30000 };
 
 test("upload, clarify, reconnect, inspect a structure and replay a trajectory", async ({
   page,
@@ -31,7 +33,7 @@ test("upload, clarify, reconnect, inspect a structure and replay a trajectory", 
     .getByRole("textbox", { name: "Message", exact: true })
     .fill("Confirm optimization of the attached copper dimer");
   await page.getByRole("button", { name: "Send message" }).click();
-  await expect(page.getByText("A quick clarification")).toBeVisible();
+  await expect(page.getByText("A quick clarification")).toBeVisible(runWait);
   const sessionURL = page.url();
   await page.reload();
   await expect(page.getByText("A quick clarification")).toBeVisible();
@@ -39,7 +41,7 @@ test("upload, clarify, reconnect, inspect a structure and replay a trajectory", 
     .getByRole("textbox", { name: "Response to agent" })
     .fill("Yes, continue");
   await page.getByRole("button", { name: "Send response" }).click();
-  await expect(page.getByText(resultText, { exact: false })).toBeVisible();
+  await expect(page.getByText(resultText, { exact: false })).toBeVisible(runWait);
   await expect(page.locator(".molecule-canvas canvas")).toBeVisible();
   const selector = page.getByLabel("Structure or trajectory");
   const trajectory = await selector
@@ -91,14 +93,14 @@ test("real multi-agent results, unavailable models, and provider errors", async 
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(
     page.getByText("Calculation complete.", { exact: false }),
-  ).toBeVisible();
+  ).toBeVisible(runWait);
   await page
     .getByRole("textbox", { name: "Message", exact: true })
     .fill("Follow-up: recall our work");
   await page.getByRole("button", { name: "Send message" }).click();
   await expect(
     page.getByText("Previous context retained", { exact: false }),
-  ).toBeVisible();
+  ).toBeVisible(runWait);
   await page.getByRole("button", { name: "New conversation" }).click();
   await page.getByLabel("Model").selectOption("Auth failure");
   await page
@@ -109,7 +111,7 @@ test("real multi-agent results, unavailable models, and provider errors", async 
     page.getByText("The provider rejected the shared credentials.", {
       exact: false,
     }),
-  ).toBeVisible();
+  ).toBeVisible(runWait);
   await expect(page.getByText("PRIVATE_PROVIDER_RESPONSE_MARKER")).toHaveCount(
     0,
   );
