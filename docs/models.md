@@ -37,6 +37,27 @@ chemgraph models
 chemgraph run --model gpt-4o-mini --check-keys
 ```
 
+## Reasoning effort
+
+ChemGraph exposes provider reasoning controls for a manually verified subset of
+Argo models:
+
+| Models | Accepted values | Default |
+| --- | --- | --- |
+| `argo:gpt-5.6-luna`, `argo:gpt-5.6-sol`, `argo:gpt-5.6-terra` | `none`, `low`, `medium`, `high`, `xhigh`, `max` | `medium` |
+| `argo:claude-opus-4.8`, `argo:claude-opus-5` | `low`, `medium`, `high`, `xhigh`, `max` | `medium` |
+
+Select the effort for a run with `--reasoning-effort`:
+
+```bash
+chemgraph run --model argo:gpt-5.6-sol --reasoning-effort high \
+  -q "Compare two reaction pathways."
+```
+
+For Claude, ChemGraph forwards the value as Anthropic's overall response
+effort. It does not explicitly enable adaptive thinking. Other model IDs reject
+an explicit effort until their endpoint behavior has been verified.
+
 ## Public API providers
 
 Set the provider's environment variable before launching ChemGraph:

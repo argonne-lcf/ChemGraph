@@ -13,6 +13,7 @@ chemgraph run --config config.toml -q "What is the SMILES string for water?"
 ```toml
 [general]
 model = "gpt-4o-mini"
+# reasoning_effort = "medium"  # Supported Argo GPT-5.6 and Claude Opus models
 workflow = "single_agent"
 output = "last_message"
 structured = false
@@ -33,10 +34,11 @@ chemgraph run --model gpt-4o-mini --workflow single_agent \
 ```
 
 The CLI currently honors selected general/config values such as
-`recursion_limit`, `enable_deepagent`, and `checkpoint_db`, but its parser has
-concrete defaults for several other fields. Therefore a historical `[general]`
-value may not override a CLI default. The CLI flag is the reliable source for
-model/workflow/output behavior.
+`reasoning_effort`, `recursion_limit`, `enable_deepagent`, and `checkpoint_db`,
+but its parser has concrete defaults for several other fields. Therefore a
+historical `[general]` value may not override a CLI default. The CLI flag is the
+reliable source for model/workflow/output behavior. An explicit
+`--reasoning-effort` overrides `[general].reasoning_effort`.
 
 ## Provider endpoints
 

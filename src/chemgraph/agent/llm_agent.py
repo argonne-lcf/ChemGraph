@@ -20,8 +20,10 @@ from chemgraph.memory.schemas import (
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 from chemgraph.models.loader import load_chat_model_prepared
 from chemgraph.models.supported_models import (
+    DEFAULT_REASONING_EFFORT_BY_MODEL,
     MODELS_WITH_REASONING_EFFORT,
-    SUPPORTED_REASONING_EFFORTS,
+    REASONING_EFFORT_CHOICES,
+    REASONING_EFFORTS_BY_MODEL,
 )
 
 from chemgraph.schemas.ase_input import (
@@ -108,12 +110,19 @@ def _resolve_reasoning_effort(
             )
         return None
 
-    effective_effort = "none" if reasoning_effort is None else reasoning_effort
-    if effective_effort not in SUPPORTED_REASONING_EFFORTS:
-        supported_efforts = ", ".join(sorted(SUPPORTED_REASONING_EFFORTS))
+    supported_efforts = REASONING_EFFORTS_BY_MODEL[model_name]
+    effective_effort = (
+        DEFAULT_REASONING_EFFORT_BY_MODEL[model_name]
+        if reasoning_effort is None
+        else reasoning_effort
+    )
+    if effective_effort not in supported_efforts:
+        supported = ", ".join(
+            effort for effort in REASONING_EFFORT_CHOICES if effort in supported_efforts
+        )
         raise ValueError(
             f"Unsupported reasoning effort '{effective_effort}'. "
-            f"Choose one of: {supported_efforts}."
+            f"Model '{model_name}' supports: {supported}."
         )
     return effective_effort
 
@@ -144,9 +153,9 @@ class ChemGraph:
     api_key : str, optional
         API key for authentication, by default None
     reasoning_effort : str, optional
-        Reasoning effort for manually verified GPT-5.6 models, which default to
-        ``"none"``. Supported values are ``none``, ``low``, ``medium``,
-        ``high``, ``xhigh``, and ``max``.
+        Reasoning effort for manually verified Argo GPT-5.6 and Claude Opus
+        models. GPT-5.6 defaults to ``"none"``; Claude defaults to ``"high"``.
+        Supported values depend on the selected model.
     prompts : PromptConfig, optional
         Prompts for the active workflow. Defaults to ``PromptConfig()``, which
         uses ChemGraph's built-in prompts. Override only the fields relevant to
