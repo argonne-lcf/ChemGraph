@@ -89,6 +89,8 @@ def test_missing_workflow_defaults_to_single_agent(dispatch):
         ["--deepagent"],
         ["--deepagent-workspace", "/tmp"],
         ["--deepagent-skill", "/skills/"],
+        ["--deepagent-discover-skills"],
+        ["--no-deepagent-discover-skills"],
     ],
 )
 def test_explicit_incompatible_deepagent_flags_still_fail(dispatch, flags):
@@ -213,3 +215,35 @@ def test_main_agent_limit_counts_questions_only(monkeypatch, approval):
     result = commands.run_main_agent_query(session, "test")
     assert (result is not None) is approval
     assert len(session.calls) == (13 if approval else 11)
+
+
+@pytest.mark.parametrize(
+    "configured,flag,expected",
+    [(True, None, True), (False, None, False),
+     (True, "--no-deepagent-discover-skills", False),
+     (False, "--deepagent-discover-skills", True)],
+)
+def test_skill_discovery_cli_overrides_toml(tmp_path, dispatch, configured, flag, expected):
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {
+        "workflow": "deep_agent", "deepagent_discover_skills": configured,
+        "deepagent_skills": ["/workspace/site/"],
+    }}))
+    argv = ["run", "--interactive", "--config", str(path)]
+    if flag:
+        argv.append(flag)
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
+    assert dispatch["deepagent_discover_skills"] is expected
+    assert dispatch["deepagent_skills"] == ["/workspace/site/"]
+
+
+def test_skill_discovery_rejects_non_boolean_toml(tmp_path, dispatch):
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {
+        "workflow": "deep_agent", "deepagent_discover_skills": "false",
+    }}))
+    args = cli_main.create_argument_parser().parse_args(["run", "--interactive", "--config", str(path)])
+    with pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(args)
+    assert exc.value.code == 2
+    assert not dispatch

@@ -635,6 +635,8 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         enable_deepagent=True,
         deepagent_workspace=str(tmp_path),
         deepagent_skills=("/workspace/.agents/skills/",),
+        deepagent_discover_skills=True,
+        deepagent_user_skills_dir=str(tmp_path / "personal-skills"),
         topology_fingerprint="target",
     )
     target_db = str(tmp_path / "target-checkpoints.db")
@@ -719,6 +721,9 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         "/workspace/.agents/skills/",
     )
     assert rebuild_kwargs["deepagent_skills"] is None
+    for kwargs in (resume_kwargs, rebuild_kwargs):
+        assert kwargs["deepagent_discover_skills"] is True
+        assert kwargs["deepagent_user_skills_dir"] == str(tmp_path / "personal-skills")
     for kwargs in (resume_kwargs, rebuild_kwargs):
         assert kwargs["human_supervised"] is True
         assert kwargs["reasoning_effort"] == "high"

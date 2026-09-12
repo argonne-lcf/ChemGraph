@@ -208,6 +208,8 @@ def initialize_agent(
     reasoning_effort: str | None = None,
     max_retries: int = 1,
     terminal_tool_names: tuple[str, ...] = (),
+    deepagent_discover_skills: bool = True,
+    deepagent_user_skills_dir: str | None = None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -243,6 +245,10 @@ def initialize_agent(
         Enable the development-only workspace worker for ``main_agent``.
     deepagent_workspace : str, optional
         Root directory exposed to the development-only local backend.
+    deepagent_discover_skills : bool, optional
+        Discover personal and project skill directories for local workspaces.
+    deepagent_user_skills_dir : str, optional
+        Resolved personal skill root retained when restoring a session.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
@@ -356,6 +362,8 @@ def initialize_agent(
                 enable_deepagent=enable_deepagent,
                 deepagent_backend=deepagent_backend,
                 deepagent_skills=deepagent_skills,
+                deepagent_discover_skills=deepagent_discover_skills,
+                deepagent_user_skills_dir=deepagent_user_skills_dir,
                 deepagent_auto_approve=deepagent_auto_approve,
                 checkpointer=checkpointer,
                 reasoning_effort=reasoning_effort,
@@ -1092,6 +1100,8 @@ def interactive_mode(
     deepagent_auto_approve: bool = False,
     checkpoint_db: str | None = None,
     resume_session: str | None = None,
+    deepagent_discover_skills: bool = True,
+    deepagent_user_skills_dir: str | None = None,
 ) -> None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -1128,6 +1138,10 @@ def interactive_mode(
         selected workflow is ``main_agent``.
     deepagent_workspace : str, optional
         Local workspace used by the experimental host-shell backend.
+    deepagent_discover_skills : bool, optional
+        Discover personal and project skill directories for local workspaces.
+    deepagent_user_skills_dir : str, optional
+        Resolved personal skill root retained when restoring a session.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
@@ -1187,6 +1201,8 @@ def interactive_mode(
         enable_deepagent = stored_graph_config.enable_deepagent
         deepagent_workspace = stored_graph_config.deepagent_workspace
         deepagent_skills = stored_graph_config.deepagent_skills
+        deepagent_discover_skills = stored_graph_config.deepagent_discover_skills
+        deepagent_user_skills_dir = stored_graph_config.deepagent_user_skills_dir
         reasoning_effort = stored_graph_config.reasoning_effort
         max_retries = stored_graph_config.max_retries
         terminal_tool_names = stored_graph_config.terminal_tool_names
@@ -1233,6 +1249,8 @@ def interactive_mode(
             or (enable_deepagent and workflow == "main_agent")
             else None
         ),
+        deepagent_discover_skills=deepagent_discover_skills,
+        deepagent_user_skills_dir=deepagent_user_skills_dir,
         deepagent_skills=(
             deepagent_skills
             if workflow == "deep_agent"
@@ -1260,6 +1278,9 @@ def interactive_mode(
         )
         if workflow == "main_agent"
         else None
+    )
+    deepagent_user_skills_dir = getattr(
+        agent, "deepagent_user_skills_dir", deepagent_user_skills_dir,
     )
     standalone_thread_id = _next_thread_id() if workflow == "deep_agent" else None
 
@@ -1435,6 +1456,8 @@ Example queries:
                             enable_deepagent=target_config.enable_deepagent,
                             deepagent_workspace=target_config.deepagent_workspace,
                             deepagent_skills=target_config.deepagent_skills,
+                            deepagent_discover_skills=target_config.deepagent_discover_skills,
+                            deepagent_user_skills_dir=target_config.deepagent_user_skills_dir,
                             checkpointer=candidate_saver,
                             reasoning_effort=target_config.reasoning_effort,
                             max_retries=target_config.max_retries,
@@ -1484,6 +1507,8 @@ Example queries:
                     enable_deepagent = target_config.enable_deepagent
                     deepagent_workspace = target_config.deepagent_workspace
                     deepagent_skills = target_config.deepagent_skills
+                    deepagent_discover_skills = target_config.deepagent_discover_skills
+                    deepagent_user_skills_dir = target_config.deepagent_user_skills_dir
                     if (
                         previous_db is not None
                         and os.path.abspath(os.path.expanduser(previous_db))
@@ -1576,6 +1601,8 @@ Example queries:
                         or (enable_deepagent and workflow == "main_agent")
                         else None
                     ),
+                    deepagent_discover_skills=deepagent_discover_skills,
+                    deepagent_user_skills_dir=deepagent_user_skills_dir,
                     deepagent_skills=(
                         deepagent_skills
                         if workflow == "deep_agent"
@@ -1657,6 +1684,8 @@ Example queries:
                             or (enable_deepagent and new_workflow == "main_agent")
                             else None
                         ),
+                        deepagent_discover_skills=deepagent_discover_skills,
+                        deepagent_user_skills_dir=deepagent_user_skills_dir,
                         deepagent_skills=(
                             deepagent_skills
                             if new_workflow == "deep_agent"

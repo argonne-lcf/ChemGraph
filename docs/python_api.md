@@ -112,14 +112,22 @@ A virtual `LocalShellBackend` is exposed to the agent at `/workspace`, so file
 tool path `/workspace/src/example.py` maps directly to
 `/path/to/checkout/src/example.py`. The generated Deep Agents system context
 also supplies that host path for shell commands. Custom backends, existing
-composite backends, and non-virtual local backends are passed through unchanged.
+composite routes, and non-virtual local execution are preserved when adding
+the bundled skill route.
 
-`deepagent_skills` contains ordered POSIX paths interpreted by that same
-backend. ChemGraph passes them to Deep Agents without scanning any implicit
-user or project locations. Each source contains skill directories with a
-required `SKILL.md`; later sources override earlier sources with the same
-skill name. With `StateBackend`, callers invoking the graph directly must seed
-the corresponding files in graph state before the skills can load.
+Bundled skills load without configuration. For supported local workspaces,
+personal `~/.chemgraph/skills/` and project `.agents/skills/` directories are
+also discovered. `deepagent_skills` adds ordered POSIX backend-relative sources;
+later sources override matching names. Set `deepagent_discover_skills=False`
+to use only bundled and explicit sources. On `construct_deep_agent_graph`, the
+same options are `skills=` and `discover_skills=`. See [skills](skills.md) for
+custom backends, source precedence, and session behavior.
+
+With `StateBackend`, only explicitly supplied state-backed skills need files
+seeded in graph state. Bundled resources work without seeding. The standalone
+default prompt permits attached chemistry tools; the supervisor's workspace
+worker continues delegating simulations. `PromptConfig.deepagent=None` selects
+these role-specific defaults; a supplied string is preserved.
 
 The default approval policy interrupts before shell commands and file
 mutations. Without a `human_input_handler`, `run()` raises
