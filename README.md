@@ -120,6 +120,7 @@ Useful run options include:
 | `-r`, `--report` | Allow generation of an HTML report |
 | `--human-supervised` | Allow supported workflows to pause for input |
 | `--deepagent-workspace PATH` | Set the workspace for `deep_agent` or the optional main-agent worker |
+| `--no-deepagent-discover-skills` | Disable personal/project skill discovery; retain bundled and explicit skills |
 | `--deepagent-skill PATH` | Add an explicit backend-relative Agent Skills directory; repeat to layer sources |
 | `--output-file` | Save the CLI response to a file |
 | `-v` / `-vv` | Enable INFO / DEBUG diagnostics |
@@ -165,9 +166,12 @@ chemgraph run --interactive --workflow main_agent --deepagent \
   --deepagent-skill /workspace/.agents/skills/
 ```
 
-Skill directories are never discovered automatically. Each source contains
-one directory per skill with a `SKILL.md`; when names collide, the source from
-the later `--deepagent-skill` occurrence wins.
+ChemGraph bundles `chemgraph` and `pbs-hpc` skills and automatically discovers
+`~/.chemgraph/skills/` and the workspace's `.agents/skills/`. Additional
+`--deepagent-skill` sources override earlier matching names. Use
+`--no-deepagent-discover-skills` to disable personal/project discovery. Skills
+use one directory per `SKILL.md`; their catalog refreshes each new turn. See
+[skills and filesystem backends](docs/skills.md).
 
 Headless workspace mutation is disabled unless the command includes an
 explicit workspace and `--deepagent-dangerously-skip-approvals`. Use that mode
@@ -254,7 +258,7 @@ stdio client configuration and the experimental HPC servers.
 | --- | --- | --- |
 | `single_agent` | General molecule lookup, ASE calculations, and reports | Default and recommended first workflow |
 | `main_agent` | Long-lived supervisor with delegated chemistry work | Interactive mode; use `MainAgentSession` in Python |
-| `deep_agent` | Repository exploration, coding, and workspace tasks (`deepagent` is an alias) | Interactive approvals by default; broad local shell access |
+| `deep_agent` | Workspace tasks and attached chemistry tools (`deepagent` is an alias) | Interactive approvals by default; broad local shell access |
 | `multi_agent` | Planner/executor decomposition and parallel subtasks | More model calls and orchestration overhead |
 | `python_relp` | LLM-directed Python and arithmetic (`python_repl` is an alias) | Executes Python in the ChemGraph process; use only with trusted prompts |
 | `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra plus Vina from conda-forge |

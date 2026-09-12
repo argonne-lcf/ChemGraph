@@ -84,10 +84,12 @@ workers = registry.as_subagents(
 main_graph = construct_main_agent_graph(model, subagents=workers)
 ```
 
-The built-in `deep_agent` entry is the same workspace graph used by
-`main_agent`'s optional `deepagent` worker. Supply its backend through worker
-options when local filesystem or shell access is intended. Explicit Agent
-Skills sources can be supplied alongside it with
+The built-in `deep_agent` entry uses the shared Deep Agent constructor, with
+a standalone prompt supporting attached chemistry tools. `main_agent`'s optional
+`deepagent` worker selects a workspace-only prompt instead. Supply its backend
+through worker options when local filesystem or shell access is intended. Agent
+Skills are bundled and discovered as described in [skills](skills.md). Additional
+sources can be supplied alongside it with
 `skills=["/workspace/.agents/skills/"]`; source order is preserved.
 
 `as_subagents()` validates names, availability, constructor loading, and

@@ -111,6 +111,7 @@ definitions. See [MCP servers](mcp_servers.md).
 workflow = "main_agent"
 checkpoint_db = "~/.chemgraph/checkpoints.db"
 enable_deepagent = false
+deepagent_discover_skills = true
 # deepagent_skills = ["/workspace/.agents/skills/"]
 ```
 
@@ -124,7 +125,11 @@ The headless-only `--deepagent-dangerously-skip-approvals` switch is
 intentionally not configurable through TOML. It must be typed explicitly for
 each run together with `--deepagent-workspace`.
 
-`deepagent_skills` is an ordered list of backend-relative source directories.
+`deepagent_discover_skills` defaults to true and controls personal/project
+skill discovery for local workspaces. Bundled skills are always available.
+The matching CLI boolean flag overrides TOML. See [skills](skills.md).
+
+`deepagent_skills` is an ordered list of additional backend-relative sources.
 It applies to a direct `deep_agent` or to an enabled `main_agent` worker. Later
 sources override earlier sources with the same skill name. A repeated
 `--deepagent-skill` CLI option replaces the TOML list for that run; explicitly
