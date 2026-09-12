@@ -11,8 +11,10 @@ from deepagents.backends import CompositeBackend, LocalShellBackend, StateBacken
 from deepagents.backends.protocol import BackendProtocol
 from langgraph.checkpoint.memory import InMemorySaver
 
+from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
 
-DEFAULT_DEEPAGENT_PROMPT = """\
+
+DEFAULT_DEEPAGENT_WORKSPACE_PROMPT = """\
 You are ChemGraph's workspace specialist. Complete repository exploration,
 coding, testing, file analysis, and other multi-step workspace tasks. Use the
 built-in filesystem and execution tools when needed. Treat `/workspace` as the
@@ -25,6 +27,25 @@ supervisor for delegation to the `chemgraph` specialist.
 The calling supervisor sees only your final assistant message. Return a concise,
 self-contained report including important results, changed paths, commands run,
 and any failures or unresolved risks.
+"""
+
+
+DEFAULT_DEEPAGENT_PROMPT = """\
+You are ChemGraph's standalone Deep Agent. Complete workspace tasks and use
+attached ChemGraph chemistry tools for requested molecular simulations. Read
+the relevant available skill before carrying out a specialized workflow.
+Inspect tool schemas and report actual results; never invent chemistry results.
+If a required chemistry tool is unavailable, explain what is missing rather
+than replacing it with an unapproved shell simulation.
+
+Treat `/workspace` as the project root when that mount exists. Follow the
+"Shell paths vs. virtual paths" mappings for execution. Packaged skills at
+`/chemgraph-skills/` are readable resources, not paths in the execution
+filesystem. Copy any required template/helper into that filesystem before
+using it in a command. Remote MCP servers and compute workers may have yet
+another filesystem; establish input visibility before submitting work.
+
+Return a self-contained report of results, paths, job IDs, and unresolved work.
 """
 
 
@@ -102,6 +123,8 @@ def construct_deep_agent_graph(
     *,
     tools: Sequence[Any] | None = None,
     skills: Sequence[str] | None = None,
+    discover_skills: bool = True,
+    user_skills_dir: str | None = None,
     system_prompt: str = DEFAULT_DEEPAGENT_PROMPT,
     backend: BackendProtocol | None = None,
     interrupt_on: dict[str, Any] | None | object = _DEFAULT_INTERRUPT_POLICY,
@@ -114,8 +137,10 @@ def construct_deep_agent_graph(
     Standalone construction receives an in-memory checkpointer so approval
     interrupts can be resumed. Orchestrators should explicitly pass
     ``checkpointer=None`` so the worker inherits the parent graph's checkpoint.
-    ``skills`` contains ordered, backend-relative Agent Skills directories;
-    later sources override earlier sources with the same skill name.
+    Bundled skills are always available. ``discover_skills`` also discovers
+    personal and project sources for supported local workspaces. ``skills``
+    adds ordered backend-relative sources, overriding discovered/bundled names.
+    ``user_skills_dir`` fixes the personal root when restoring a session.
     Passing ``interrupt_on=None`` disables approval interrupts and should be
     reserved for an externally isolated, explicitly trusted execution context.
     """
@@ -136,10 +161,17 @@ def construct_deep_agent_graph(
         backend if backend is not None else StateBackend()
     )
     skill_sources = normalize_skill_sources(skills)
+    effective_backend, sources, optional = prepare_skill_backend(
+        effective_backend, skill_sources, discover_skills=discover_skills,
+        user_skills_dir=user_skills_dir,
+    )
     workflow = create_deep_agent(
         model=llm,
         tools=list(tools or []),
-        skills=list(skill_sources) if skill_sources else None,
+        skills=sources,
+        middleware=[ChemGraphSkillsMiddleware(
+            backend=effective_backend, sources=sources, optional=optional,
+        )],
         system_prompt=system_prompt,
         backend=effective_backend,
         interrupt_on=effective_interrupt_on,
@@ -152,6 +184,7 @@ def construct_deep_agent_graph(
 __all__ = [
     "DEFAULT_DEEPAGENT_INTERRUPT_ON",
     "DEFAULT_DEEPAGENT_PROMPT",
+    "DEFAULT_DEEPAGENT_WORKSPACE_PROMPT",
     "construct_deep_agent_graph",
     "normalize_skill_sources",
 ]

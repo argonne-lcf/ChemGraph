@@ -57,10 +57,12 @@ from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.graphs.deep_agent import (
     DEFAULT_DEEPAGENT_PROMPT,
+    DEFAULT_DEEPAGENT_WORKSPACE_PROMPT,
     construct_deep_agent_graph,
     normalize_skill_sources,
 )
 from chemgraph.agent.turn import serialize_state
+from chemgraph.skills.runtime import resolve_user_skills_dir
 
 
 from chemgraph.graphs.python_relp_agent import construct_relp_graph
@@ -92,8 +94,8 @@ HumanInputHandler = Callable[[str], Any] | Callable[[str, Any], Any]
 class PromptConfig:
     """Prompts used across ChemGraph workflows.
 
-    Each field defaults to the corresponding module-level prompt, so an
-    unspecified ``PromptConfig`` reproduces ChemGraph's default behavior. Only
+    Fields select the corresponding default prompts. ``deepagent=None``
+    selects the standalone or workspace-worker prompt by workflow. Only
     override the fields relevant to the active ``workflow_type``:
 
     - ``system``/``formatter``/``report``: single_agent, main_agent, mock_agent.
@@ -108,7 +110,7 @@ class PromptConfig:
     executor: str = default_executor_prompt
     aggregator: str = default_aggregator_prompt
     formatter_multi: str = default_formatter_multi_prompt
-    deepagent: str = DEFAULT_DEEPAGENT_PROMPT
+    deepagent: str | None = None
 
 
 def _resolve_reasoning_effort(
@@ -207,6 +209,11 @@ class ChemGraph:
     deepagent_backend : BackendProtocol, optional
         Backend used by the workspace Deep Agent. When omitted, its files are
         stored in checkpointed agent state.
+    deepagent_discover_skills : bool, optional
+        Discover personal and project skill directories for local workspaces.
+        Bundled skills are always available. Defaults to True.
+    deepagent_user_skills_dir : str, optional
+        Override the personal skill root, or retain its resolved session path.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative directories containing Agent Skills. Later
         sources override earlier sources with the same skill name.
@@ -256,6 +263,8 @@ class ChemGraph:
         on_event: Optional[EventCallback] = None,
         reasoning_effort: Optional[str] = None,
         checkpointer: BaseCheckpointSaver | None = None,
+        deepagent_discover_skills: bool = True,
+        deepagent_user_skills_dir: str | None = None,
     ):
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
@@ -297,6 +306,8 @@ class ChemGraph:
                 "Experimental codex: models currently support only the "
                 "single_agent, main_agent, and deep_agent workflows."
             )
+        if not isinstance(deepagent_discover_skills, bool):
+            raise TypeError("deepagent_discover_skills must be a boolean.")
         normalized_deepagent_skills = normalize_skill_sources(deepagent_skills)
         reasoning_effort = _resolve_reasoning_effort(model_name, reasoning_effort)
 
@@ -366,7 +377,12 @@ class ChemGraph:
         self.executor_prompt = prompts.executor
         self.aggregator_prompt = prompts.aggregator
         self.formatter_multi_prompt = prompts.formatter_multi
-        self.deepagent_prompt = prompts.deepagent
+        self.deepagent_prompt = (
+            prompts.deepagent if prompts.deepagent is not None else (
+                DEFAULT_DEEPAGENT_PROMPT if workflow_type == "deep_agent"
+                else DEFAULT_DEEPAGENT_WORKSPACE_PROMPT
+            )
+        )
         self.tools = tools
         self.data_tools = data_tools
         self.max_retries = max_retries
@@ -376,6 +392,10 @@ class ChemGraph:
         self.enable_deepagent = enable_deepagent
         self.deepagent_backend = deepagent_backend
         self.deepagent_skills = normalized_deepagent_skills
+        self.deepagent_discover_skills = deepagent_discover_skills
+        self.deepagent_user_skills_dir = resolve_user_skills_dir(
+            deepagent_backend, deepagent_discover_skills, deepagent_user_skills_dir,
+        )
         self.deepagent_auto_approve = deepagent_auto_approve
         self.checkpointer = checkpointer
         self.on_event = on_event
@@ -459,11 +479,14 @@ class ChemGraph:
         }
         if (
             self.enable_deepagent
-            and self.deepagent_prompt != DEFAULT_DEEPAGENT_PROMPT
+            and self.deepagent_prompt != DEFAULT_DEEPAGENT_WORKSPACE_PROMPT
         ):
             topology_payload["deepagent_prompt"] = self.deepagent_prompt
         if self.enable_deepagent and self.deepagent_skills:
             topology_payload["deepagent_skills"] = self.deepagent_skills
+        if self.enable_deepagent and self.deepagent_discover_skills:
+            topology_payload["deepagent_discover_skills"] = True
+            topology_payload["deepagent_user_skills_dir"] = self.deepagent_user_skills_dir
         topology_fingerprint = hashlib.sha256(
             json.dumps(topology_payload, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()
@@ -482,6 +505,8 @@ class ChemGraph:
                     str(Path(workspace).resolve()) if workspace is not None else None
                 ),
                 deepagent_skills=self.deepagent_skills,
+                deepagent_discover_skills=self.deepagent_discover_skills,
+                deepagent_user_skills_dir=self.deepagent_user_skills_dir,
                 subagent_names=(
                     ("chemgraph", "deepagent")
                     if self.enable_deepagent
@@ -545,6 +570,8 @@ class ChemGraph:
                 enable_deepagent=self.enable_deepagent,
                 deepagent_backend=self.deepagent_backend,
                 deepagent_skills=self.deepagent_skills,
+                deepagent_discover_skills=self.deepagent_discover_skills,
+                deepagent_user_skills_dir=self.deepagent_user_skills_dir,
                 deepagent_recursion_limit=self.recursion_limit,
                 deepagent_system_prompt=self.deepagent_prompt,
                 checkpointer=self.checkpointer,
@@ -564,6 +591,8 @@ class ChemGraph:
                 llm,
                 tools=self.tools,
                 skills=self.deepagent_skills,
+                discover_skills=self.deepagent_discover_skills,
+                user_skills_dir=self.deepagent_user_skills_dir,
                 system_prompt=self.deepagent_prompt,
                 backend=self.deepagent_backend,
                 recursion_limit=self.recursion_limit,

@@ -51,6 +51,9 @@ class MainAgentGraphConfig(BaseModel):
     enable_deepagent: bool = False
     deepagent_workspace: Optional[str] = None
     deepagent_skills: tuple[str, ...] = ()
+    # Older records did not opt into local directory discovery.
+    deepagent_discover_skills: bool = False
+    deepagent_user_skills_dir: Optional[str] = None
     subagent_names: tuple[str, ...] = ("chemgraph",)
     tool_signatures: tuple[str, ...] = ()
     package_version: str = ""

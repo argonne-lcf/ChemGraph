@@ -137,6 +137,12 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--deepagent-discover-skills",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Discover personal and project skills for local Deep Agent workspaces (default: enabled)",
+    )
+    parser.add_argument(
         "--deepagent-dangerously-skip-approvals",
         action="store_true",
         help=(
@@ -426,6 +432,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 "enable_deepagent": False,
                 "deepagent_workspace": None,
                 "deepagent_skills": None,
+                "deepagent_discover_skills": True,
                 "checkpoint_db": None,
                 "verbose": False,
             },
@@ -475,6 +482,7 @@ def _handle_run(args: argparse.Namespace) -> None:
     cli_deepagent = getattr(args, "deepagent", None)
     cli_deepagent_workspace = getattr(args, "deepagent_workspace", None)
     cli_deepagent_skills = getattr(args, "deepagent_skills", None)
+    cli_discover_skills = getattr(args, "deepagent_discover_skills", None)
 
     # Handle special commands first
     if getattr(args, "list_models", False):
@@ -539,6 +547,12 @@ def _handle_run(args: argparse.Namespace) -> None:
     enable_deepagent = bool(getattr(args, "deepagent", False))
     deepagent_workspace = getattr(args, "deepagent_workspace", None)
     deepagent_skills = getattr(args, "deepagent_skills", None)
+    deepagent_discover_skills = getattr(args, "deepagent_discover_skills", None)
+    if deepagent_discover_skills is None:
+        deepagent_discover_skills = True
+    if not isinstance(deepagent_discover_skills, bool):
+        console.print("[red]deepagent_discover_skills must be a boolean.[/red]")
+        sys.exit(2)
     deepagent_auto_approve = bool(
         getattr(args, "deepagent_dangerously_skip_approvals", False)
     )
@@ -553,6 +567,9 @@ def _handle_run(args: argparse.Namespace) -> None:
         enable_deepagent and args.workflow == "main_agent"
     )
     if not uses_deepagent:
+        if cli_discover_skills is not None:
+            console.print("[red]--deepagent-discover-skills requires --deepagent or -w deep_agent.[/red]")
+            sys.exit(2)
         if cli_deepagent_workspace is not None:
             console.print("[red]--deepagent-workspace requires --deepagent or -w deep_agent.[/red]")
             sys.exit(2)
@@ -641,6 +658,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             enable_deepagent=enable_deepagent,
             deepagent_workspace=deepagent_workspace,
             deepagent_skills=deepagent_skills,
+            deepagent_discover_skills=deepagent_discover_skills,
             checkpoint_db=(
                 getattr(args, "checkpoint_db", None) or config.get("checkpoint_db")
             ),
@@ -715,6 +733,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         on_event=trace.on_event if trace else None,
         deepagent_workspace=deepagent_workspace,
         deepagent_skills=deepagent_skills,
+        deepagent_discover_skills=deepagent_discover_skills,
         deepagent_auto_approve=deepagent_auto_approve,
     )
 
