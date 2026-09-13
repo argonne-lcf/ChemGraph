@@ -27,7 +27,7 @@ def test_bundled_file_protocol(asynchronous):
     downloaded = call(
         "download_files", ["/chemgraph/SKILL.md", "/absent", "/../secret"]
     )
-    assert downloaded[0].content.startswith(b"---\nname: chemgraph\n")
+    assert downloaded[0].content.splitlines()[:2] == [b"---", b"name: chemgraph"]
     assert downloaded[1].error == "file_not_found"
     assert downloaded[2].error == "invalid_path"
     assert call("read", "/../secret").error
@@ -38,6 +38,25 @@ def test_bundled_file_protocol(asynchronous):
     assert call("delete", "/chemgraph/").error
     assert call("upload_files", [("/chemgraph/SKILL.md", b"changed")])[0].error
     assert call("download_files", ["/chemgraph/SKILL.md"])[0].content == original
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
+def test_bundled_download_preserves_line_endings(monkeypatch, tmp_path, newline):
+    contents = {}
+    for name in ("chemgraph", "pbs-hpc"):
+        content = (
+            f"---\nname: {name}\ndescription: Test skill\n---\n# Instructions\n"
+        ).replace("\n", newline).encode("utf-8")
+        directory = tmp_path / name
+        directory.mkdir()
+        (directory / "SKILL.md").write_bytes(content)
+        contents[f"/{name}/SKILL.md"] = content
+    monkeypatch.setattr("chemgraph.skills.backend.resources.files", lambda _: tmp_path)
+
+    backend = BundledSkillsBackend()
+    for path, content in contents.items():
+        assert "# Instructions" in backend.read(path).file_data["content"]
+        assert backend.download_files([path])[0].content == content
 
 
 @pytest.mark.parametrize("damage", ["missing", "malformed"])
