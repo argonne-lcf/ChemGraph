@@ -147,9 +147,20 @@ to local discovery disabled. Bundled skills remain available. Adding/editing
 skills is reflected on the next new turn, not midway through a pending approval.
 
 Missing optional directories are skipped. Invalid optional skill files produce
-upstream diagnostics. Unreadable explicitly configured sources raise a clear
-configuration error before the model call. Missing or invalid bundled skills
-fail graph construction, so a broken installation cannot silently lose defaults.
+upstream diagnostics. Optional sources rejected by the backend (for example, a
+project skill directory symlinked outside the virtual workspace) are skipped
+with a warning; other sources remain available. These failures do not relax the
+backend's filesystem boundaries. Warnings clear after the source recovers on a
+new turn.
+
+Unreadable explicitly configured sources raise a clear configuration error before
+the model call. Explicit state/store sources must contain files before each turn
+starts: seed state files in the graph input or populate the store first. These
+backends cannot distinguish missing directories from empty ones, so both are
+rejected. Existing empty filesystem directories remain valid; custom backends
+retain their reported-error semantics. Populated sources with invalid skill
+metadata retain upstream diagnostics. Missing or invalid bundled skills fail
+graph construction, so a broken installation cannot silently lose defaults.
 
 Availability does not guarantee that an LLM follows every instruction. Enforce
 mandatory scientific or operational requirements in tools or middleware.
