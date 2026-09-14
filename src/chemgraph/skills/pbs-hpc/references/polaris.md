@@ -245,6 +245,11 @@ Guidance:
 
 ## ChemGraph execution
 
+For the complete login-node ASE MCP + PBS-managed Parsl example, and a direct
+batch alternative, read [ASE calculations](polaris-ase.md). The explicit
+`allocation_mode="pbs"` uses `PBSProProvider` to acquire nodes from a login node.
+The existing configuration described below remains the default.
+
 ChemGraph's `get_polaris_config` uses `PBS_NODEFILE` to size an existing allocation and
 launches workers using `LocalProvider` and `MpiExecLauncher`. It configures four
 accelerators and the CPU affinity groups above. Its one-node fallback outside PBS is for

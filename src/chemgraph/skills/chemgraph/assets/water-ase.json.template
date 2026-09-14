@@ -1,0 +1,18 @@
+{
+  "input_structure_file": "{{INPUT_XYZ}}",
+  "output_results_file": "{{RESULTS_JSON}}",
+  "driver": "{{DRIVER}}",
+  "optimizer": "bfgs",
+  "fmax": 0.01,
+  "steps": 200,
+  "temperature": 298.15,
+  "pressure": 101325.0,
+  "calculator": {
+    "calculator_type": "mace_polar",
+    "model": "{{MODEL_PATH}}",
+    "device": "cuda",
+    "default_dtype": "float64",
+    "charge": 0,
+    "multiplicity": 1
+  }
+}

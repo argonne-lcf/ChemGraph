@@ -5,6 +5,9 @@ MCP workflows, and **pbs-hpc** for PBS job preparation, monitoring, and facility
 guidance. They are available to standalone Deep Agents, registry-created Deep
 Agent workers, and the optional `main_agent` workspace worker.
 
+Try the [Polaris ASE walkthrough](polaris_ase_workflows.md) for login-node
+ChemGraph with PBS-managed MCP/Parsl workers, or the direct PBS batch example.
+
 ## Where skills live
 
 Maintained skills live in `src/chemgraph/skills/` and ship in the Python wheel
@@ -155,8 +158,8 @@ scripts; a command in an external skill may assume its own repository root, so
 resolve script paths against that collection rather than the workspace. With a
 remote executor, transfer required files to its filesystem first.
 
-The initial bundles contain text instructions and a PBS template. To execute a
-future helper stored in the catalog, first copy it into the executor's filesystem.
+The bundles contain instructions, templates, and an ASE batch entrypoint. To
+execute a helper stored in the catalog, first copy it into the executor's filesystem.
 For example, read the PBS template at
 `/chemgraph-skills/pbs-hpc/assets/job.pbs.template`, fill its placeholders, and
 write it to `/workspace/job.pbs`. With the CLI's local backend, execute commands
