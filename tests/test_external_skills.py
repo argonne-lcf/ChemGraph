@@ -30,6 +30,7 @@ def test_host_paths_are_canonical_and_last_duplicate_wins(monkeypatch, tmp_path,
     (tmp_path / "link").symlink_to(root, target_is_directory=True)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     value = {
         "absolute": str(root),
         "relative": root.name,
@@ -61,7 +62,7 @@ def test_invalid_host_directory_identifies_input_and_resolved_path(
     with pytest.raises(ValueError) as exc:
         resolve_skill_dirs([f"./{kind}"])
     assert f"./{kind}" in str(exc.value)
-    assert str(root) in str(exc.value)
+    assert repr(str(root)) in str(exc.value)
 
 
 class _SkillEvidenceModel(_RecordingChatModel):

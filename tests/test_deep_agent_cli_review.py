@@ -278,7 +278,7 @@ def test_cli_host_paths_use_invocation_directory_and_override_toml(
 def test_invalid_cli_host_path_fails_before_initialization(tmp_path, dispatch, name):
     args = cli_main.create_argument_parser().parse_args([
         "run", "--interactive", "-w", "deep_agent", "--deepagent-skill",
-        str(tmp_path / name),
+        (tmp_path / name).as_posix(),
     ])
     with commands.console.capture() as capture, pytest.raises(SystemExit) as exc:
         cli_main._handle_run(args)
