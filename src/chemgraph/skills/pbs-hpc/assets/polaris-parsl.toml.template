@@ -1,0 +1,19 @@
+[execution]
+backend = "parsl"
+system = "polaris"
+
+[execution.parsl]
+allocation_mode = "pbs"
+run_dir = "{{PARSL_RUN_DIR}}"
+account = "{{PROJECT}}"
+queue = "debug"
+walltime = "00:30:00"
+filesystems = "home:eagle"
+nodes_per_block = 1
+max_blocks = 1
+max_workers_per_node = 1
+worker_init = '''
+source {{ENVIRONMENT_FILE_SHELL}}
+'''
+# Defaults to the login node's bond0 address; override only if needed:
+# address = "COMPUTE_REACHABLE_LOGIN_ADDRESS"

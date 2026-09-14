@@ -16,7 +16,8 @@ from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_ba
 
 DEFAULT_DEEPAGENT_PROMPT = """\
 You are ChemGraph's Deep Agent. Complete workspace tasks and use
-attached ChemGraph chemistry tools for requested molecular simulations. Read
+attached ChemGraph chemistry tools or the documented bundled ASE batch helper
+for requested molecular simulations. Read
 the relevant available skill before carrying out a specialized workflow.
 Inspect tool schemas and report actual results; never invent chemistry results.
 If a required chemistry tool is unavailable, explain what is missing rather

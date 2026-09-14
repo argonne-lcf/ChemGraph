@@ -21,8 +21,10 @@ the existing approval policy; preserve structured interrupts when resuming.
 
 Bundled skills load automatically. Personal `~/.chemgraph/skills/` and workspace
 `.agents/skills/` directories are discovered for supported local backends.
-`deepagent_skills` / repeated `--deepagent-skill` values are additional,
-backend-relative sources, with later sources overriding earlier ones.
+CLI `--deepagent-skill` and TOML `deepagent_skills` values are host directories,
+relative to the invocation directory. Python `deepagent_skills` remains
+backend-relative; Python `deepagent_skill_dirs` mounts host directories.
+Later sources override earlier ones.
 
 For chemistry tool artifacts, relative writes use `CHEMGRAPH_LOG_DIR` through
 `chemgraph.tools.ase_core._resolve_path`; readers use `_resolve_existing_path`.

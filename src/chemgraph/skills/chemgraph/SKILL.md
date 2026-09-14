@@ -9,12 +9,15 @@ description: Use ChemGraph Python and CLI workflows and attached chemistry MCP t
    execution system, and output location. Inspect attached tool schemas before
    selecting arguments. Ask for missing scientific choices rather than inventing
    them; do not replace the requested calculator with another one silently.
-2. Use attached chemistry tools for requested simulations. If a required tool
-   is unavailable, report what is missing. This skill does not grant tools or
-   override approvals.
+2. Use attached chemistry tools, or the bundled Python helper for the
+   [direct PBS example](../pbs-hpc/references/polaris-ase.md).
+   Report missing dependencies without substituting calculators. Skills do not
+   grant tools or override approvals.
 3. For Python or CLI setup, read [interface guidance](references/python-and-cli.md).
    For calculations through attached tools, read
    [MCP workflow guidance](references/mcp-workflows.md).
+   For optimization, frequencies, IR, or thermochemistry on Polaris, read the
+   [ASE and PBS recipe](../pbs-hpc/references/polaris-ase.md).
 4. Establish where every file lives: the agent's virtual filesystem, its shell,
    the MCP server, or the compute worker. A path readable with `read_file` need
    not exist on another host. Use existing staging tools when files must move.
@@ -33,6 +36,6 @@ available skill catalog. Facility-specific values belong in user configuration.
 
 Resolve these relative references against this SKILL.md's directory using file
 tools. `/chemgraph-skills/` is a virtual, read-only resource route. To use a
-template or future helper with `execute`, first write/copy it into the execution
+template or helper with `execute`, first write/copy it into the execution
 backend's workspace and use that environment's actual path. State/store files
 are not automatically visible to a shell or an MCP server.

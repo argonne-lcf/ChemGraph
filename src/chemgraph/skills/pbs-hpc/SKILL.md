@@ -27,6 +27,10 @@ The Polaris reference includes login-node usage, modules, network proxy setup,
 queues, MPI/OpenMP examples, CPU/GPU affinity, MPS/MIG, and storage. Read it for
 Polaris environment setup as well as job submission.
 
+For a complete chemistry workflow, read [Polaris ASE calculations](references/polaris-ase.md).
+It covers a login-node ASE MCP server with PBS-managed Parsl workers and a
+direct batch alternative, including optimization, frequencies, IR, and thermochemistry.
+
 The Aurora reference covers hardware, queue selection, PALS, Intel GPU hierarchy
 and affinity, monitoring, and group-restricted `/soft` access. Read it for Aurora
 operations and environment troubleshooting as well as job submission.
@@ -52,10 +56,12 @@ PBS command reference: [ALCF running jobs](https://docs.alcf.anl.gov/running-job
 
 ## ChemGraph execution boundaries
 
-ChemGraph's `hpc_configs` Parsl configurations for these systems use
-`LocalProvider` inside existing allocations; they do not acquire a PBS
-allocation automatically. Aurora and Crux require `PBS_NODEFILE`; Polaris has
-a local/testing fallback, which is not evidence of a valid allocation.
+The default `allocation_mode="existing"` uses `LocalProvider` inside an existing
+allocation. Aurora and Crux require `PBS_NODEFILE`; Polaris has a local/testing
+fallback, which is not evidence of a valid allocation. Polaris also supports
+explicit `allocation_mode="pbs"`: `PBSProProvider` acquires allocations from the
+login node. In that mode, let Parsl submit allocations; do not also run `qsub`
+for the same MCP calculation.
 
 Use `CHEMGRAPH_WORKER_INIT` or the configured Python environment for worker
 setup. Check the deployment's shared filesystem assumption: Globus Compute

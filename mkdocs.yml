@@ -67,6 +67,7 @@ nav:
       - Kubernetes: kubernetes.md
       - Local models: running_local_models.md
       - HPC and Academy: hpc_and_academy.md
+      - Polaris ASE Workflows: polaris_ase_workflows.md
   - Evaluation: evaluation.md
   - Experimental:
       - Codex subscription: codex_subscription.md
