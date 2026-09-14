@@ -94,7 +94,7 @@ class PromptConfig:
     """Prompts used across ChemGraph workflows.
 
     Fields select the corresponding default prompts. ``deepagent=None``
-    selects the standalone or workspace-worker prompt by workflow. Only
+    selects the shared default Deep Agent prompt. Only
     override the fields relevant to the active ``workflow_type``:
 
     - ``system``/``formatter``/``report``: single_agent, main_agent, mock_agent.

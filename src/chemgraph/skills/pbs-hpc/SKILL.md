@@ -1,6 +1,6 @@
 ---
 name: pbs-hpc
-description: Prepare PBS HPC jobs, choose allocation and filesystem settings, submit and monitor jobs, and diagnose job output. Use for qsub, qstat, PBS scripts, allocations, and ChemGraph execution on Polaris, Aurora, or Crux, plus Polaris environment and GPU setup.
+description: Prepare PBS HPC jobs, choose allocation and filesystem settings, submit and monitor jobs, and diagnose job output. Use for qsub, qstat, PBS scripts, allocations, and ChemGraph execution on Polaris, Aurora, or Crux; also Polaris and Aurora environments, MPI/GPU affinity, monitoring, and Aurora /soft access troubleshooting.
 compatibility: Submission requires PBS commands on an authorized submission host; compute execution requires an allocation and the site's application environment.
 ---
 
@@ -26,6 +26,10 @@ queue limits and site policies.
 The Polaris reference includes login-node usage, modules, network proxy setup,
 queues, MPI/OpenMP examples, CPU/GPU affinity, MPS/MIG, and storage. Read it for
 Polaris environment setup as well as job submission.
+
+The Aurora reference covers hardware, queue selection, PALS, Intel GPU hierarchy
+and affinity, monitoring, and group-restricted `/soft` access. Read it for Aurora
+operations and environment troubleshooting as well as job submission.
 
 ## Prepare and track a job
 

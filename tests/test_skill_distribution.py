@@ -1,5 +1,6 @@
 """Build distributions and read skills without an editable source checkout."""
 
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -58,7 +59,7 @@ def test_skill_resources_in_wheel_and_sdist(skill_distributions):
 def test_installed_skills_readable_outside_checkout(
     skill_distributions, tmp_path, zip_import
 ):
-    _, distribution = skill_distributions
+    root, distribution = skill_distributions
     wheel = next(distribution.glob("*.whl"))
     installed = tmp_path / "installed"
     if zip_import:
@@ -73,8 +74,13 @@ def test_installed_skills_readable_outside_checkout(
         for entry in environment.get("PYTHONPATH", "").split(os.pathsep)
         if entry and not (Path(entry) / "chemgraph").exists()
     )
+    expected_aurora_hash = hashlib.sha256(
+        (root / "src/chemgraph/skills/pbs-hpc/references/aurora.md").read_bytes()
+    ).hexdigest()
     script = """
+import hashlib
 import sys
+from importlib import resources
 sys.path.insert(0, sys.argv[1])
 import chemgraph
 assert chemgraph.__file__.startswith(sys.argv[1]), chemgraph.__file__
@@ -83,9 +89,20 @@ backend = BundledSkillsBackend()
 assert backend.read('/pbs-hpc/SKILL.md').error is None
 assert b'PBS' in backend.download_files(['/pbs-hpc/assets/job.pbs.template'])[0].content
 assert backend.write('/pbs-hpc/SKILL.md', 'overwrite').error
+aurora_path = '/pbs-hpc/references/aurora.md'
+aurora_resource = resources.files('chemgraph.skills').joinpath(
+    'pbs-hpc', 'references', 'aurora.md'
+).read_bytes()
+download = backend.download_files([aurora_path])[0]
+assert download.error is None
+assert download.content == aurora_resource
+assert hashlib.sha256(download.content).hexdigest() == sys.argv[2]
+read = backend.read(aurora_path)
+assert read.error is None
+assert read.file_data['content'] == aurora_resource.decode('utf-8').replace('\\r\\n', '\\n')
 """
     result = subprocess.run(
-        [sys.executable, "-c", script, str(installed)],
+        [sys.executable, "-c", script, str(installed), expected_aurora_hash],
         cwd=tmp_path,
         env=environment,
         capture_output=True,
