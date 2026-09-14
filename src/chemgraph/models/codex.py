@@ -2,7 +2,7 @@
 
 This module adapts the official ``openai-codex`` Python SDK to LangChain's
 chat-model interface.  Codex is used only as the model backend; ChemGraph's
-existing LangGraph workflow remains responsible for executing chemistry tools.
+existing LangGraph workflow remains responsible for executing all exposed tools.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from copy import deepcopy
 from typing import Any, Callable, Mapping, Sequence
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -23,10 +23,22 @@ CODEX_MODEL_PREFIX = "codex:"
 
 _BASE_INSTRUCTIONS = """\
 You are acting only as a language-model backend for ChemGraph.
-Do not inspect files, run commands, browse the web, or use any Codex-provided
-tools. Follow the conversation's system instructions and return only the JSON
-object required by the supplied output schema. ChemGraph, not Codex, executes
-all requested chemistry tools.
+Follow the supplied conversation's system instructions and return only the JSON
+object required by the output schema. You may request any applicable tool listed
+in available_tools, subject to the supplied tool-choice constraint. These can
+include filesystem reads and edits, command execution, delegation, web access,
+and chemistry operations. Request them through the JSON tool_calls array;
+ChemGraph executes them using its configured backends, approvals, and checkpoints.
+
+When the task requires information from an available tool, request that tool
+before answering. In particular, read a relevant skill using the listed
+read_file tool before following or summarizing its full instructions. Base
+capability claims on available tool schemas and returned results or errors.
+The Codex thread's temporary working directory and read-only sandbox do not
+determine access through ChemGraph tools; their backends resolve the paths.
+
+Do not invoke Codex-native tools. Return requests for ChemGraph tools instead,
+and use the returned tool results to continue the conversation.
 """
 
 
@@ -112,20 +124,28 @@ def _message_content(message: BaseMessage) -> str:
     return json.dumps(content, default=str, ensure_ascii=False)
 
 
-def _serialize_messages(messages: list[BaseMessage]) -> list[dict[str, str]]:
+def _serialize_messages(messages: list[BaseMessage]) -> list[dict[str, Any]]:
     role_by_type = {
         "system": "system",
         "human": "user",
         "ai": "assistant",
         "tool": "tool",
     }
-    return [
-        {
+    serialized = []
+    for message in messages:
+        item: dict[str, Any] = {
             "role": role_by_type.get(message.type, message.type),
             "content": _message_content(message),
         }
-        for message in messages
-    ]
+        if message.name is not None:
+            item["name"] = message.name
+        if isinstance(message, AIMessage) and message.tool_calls:
+            item["tool_calls"] = deepcopy(message.tool_calls)
+        if isinstance(message, ToolMessage):
+            item["tool_call_id"] = message.tool_call_id
+            item["status"] = message.status
+        serialized.append(item)
+    return serialized
 
 
 def _normalize_tool_choice(tool_choice: Any, tool_names: set[str]) -> str | None:
@@ -206,9 +226,9 @@ def _decision_prompt(
     )
     if tools:
         tool_instruction = (
-            "Either answer in content with an empty tool_calls array, or request "
-            "the necessary tools. Each tool call's arguments field must be a "
-            "JSON-encoded object string matching that tool's parameters schema."
+            "Request the necessary ChemGraph tools when the task requires "
+            "information or actions they provide. Answer in content with an "
+            "empty tool_calls array when the available evidence is sufficient."
         )
     if tool_choice == "required":
         tool_instruction = "Request at least one of the available tools."
@@ -216,6 +236,13 @@ def _decision_prompt(
         tool_instruction = "Do not request a tool; answer in content."
     elif tool_choice:
         tool_instruction = f"Request the {tool_choice!r} tool."
+
+    if tools and tool_choice != "none":
+        tool_instruction += (
+            " Each tool call's arguments field must be a JSON-encoded object "
+            "string matching that tool's parameters schema. ChemGraph will "
+            "execute these requests and return their results."
+        )
 
     payload = {
         "conversation": _serialize_messages(messages),
