@@ -529,7 +529,7 @@ def test_default_worker_forwards_options_and_inherits_parent_checkpoint(monkeypa
     ],
 )
 def test_deepagent_is_opt_in_and_receives_backend_configuration(
-    monkeypatch, prompt_kwargs, expected_prompt,
+    monkeypatch, tmp_path, prompt_kwargs, expected_prompt,
 ):
     captured = {}
 
@@ -561,6 +561,7 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(
         enable_deepagent=True,
         deepagent_backend=backend,
         deepagent_skills=["/workspace/skills/"],
+        deepagent_skill_dirs=[str(tmp_path)],
         deepagent_recursion_limit=17,
         **prompt_kwargs,
     )
@@ -569,6 +570,7 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(
     assert captured["kwargs"]["tools"] == []
     assert captured["kwargs"]["system_prompt"] == expected_prompt
     assert captured["kwargs"]["skills"] == ["/workspace/skills/"]
+    assert captured["kwargs"]["skill_dirs"] == [str(tmp_path)]
     assert captured["kwargs"]["checkpointer"] is None
     assert captured["kwargs"]["recursion_limit"] == 17
     assert captured["kwargs"]["name"] == "deepagent"
@@ -579,6 +581,7 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(
     [
         ({"deepagent_backend": object()}, "requires enable_deepagent"),
         ({"deepagent_skills": ["/skills/"]}, "requires enable_deepagent"),
+        ({"deepagent_skill_dirs": ["/skills/"]}, "requires enable_deepagent"),
         (
             {"enable_deepagent": True, "deepagent_recursion_limit": 0},
             "must be positive",

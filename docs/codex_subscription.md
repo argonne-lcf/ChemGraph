@@ -90,12 +90,12 @@ access through ChemGraph's tools.
 
 Deep Agent skills are discovered by Python code. Their names, descriptions, and
 paths are added to the model's system context, and the model requests `read_file`
-to inspect full instructions. For an additional collection inside the workspace:
+to inspect full instructions. For an additional collection outside the workspace:
 
 ```bash
 chemgraph run --interactive --workflow deep_agent \
   --model "codex:<codex-model-id>" --deepagent-workspace . \
-  --deepagent-skill /workspace/external/AtomisticSkills/.agents/skills/
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/
 ```
 
 The source directory must already exist. See [skills](skills.md) for directory

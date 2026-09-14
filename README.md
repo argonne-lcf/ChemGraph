@@ -121,7 +121,7 @@ Useful run options include:
 | `--human-supervised` | Allow supported workflows to pause for input |
 | `--deepagent-workspace PATH` | Set the workspace for `deep_agent` or the optional main-agent worker |
 | `--no-deepagent-discover-skills` | Disable personal/project skill discovery; retain bundled and explicit skills |
-| `--deepagent-skill PATH` | Add an explicit backend-relative Agent Skills directory; repeat to layer sources |
+| `--deepagent-skill PATH` | Add a host Agent Skills directory, inside or outside the workspace; repeat to layer sources |
 | `--output-file` | Save the CLI response to a file |
 | `-v` / `-vv` | Enable INFO / DEBUG diagnostics |
 
@@ -163,7 +163,7 @@ subagent:
 chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
 chemgraph run --interactive --workflow main_agent --deepagent \
   --deepagent-workspace . \
-  --deepagent-skill /workspace/.agents/skills/
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/
 ```
 
 ChemGraph bundles `chemgraph` and `pbs-hpc` skills and automatically discovers

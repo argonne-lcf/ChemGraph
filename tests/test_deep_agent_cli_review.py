@@ -43,7 +43,7 @@ def test_saved_deepagent_settings_do_not_block_other_workflows(
                     "workflow": "single_agent",
                     "enable_deepagent": enabled,
                     "deepagent_workspace": str(tmp_path),
-                    "deepagent_skills": ["/workspace/skills/"],
+                    "deepagent_skills": [str(tmp_path)],
                 }
             }
         )
@@ -54,8 +54,8 @@ def test_saved_deepagent_settings_do_not_block_other_workflows(
     cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
     assert dispatch["workflow"] == "single_agent"
     assert dispatch["deepagent_workspace"] == (str(tmp_path) if interactive else None)
-    assert dispatch["deepagent_skills"] == (
-        ["/workspace/skills/"] if interactive else None
+    assert dispatch["deepagent_skill_dirs"] == (
+        (str(tmp_path.resolve()),) if interactive else None
     )
     if interactive:
         assert dispatch["enable_deepagent"] is enabled
@@ -227,14 +227,14 @@ def test_skill_discovery_cli_overrides_toml(tmp_path, dispatch, configured, flag
     path = tmp_path / "config.toml"
     path.write_text(toml.dumps({"general": {
         "workflow": "deep_agent", "deepagent_discover_skills": configured,
-        "deepagent_skills": ["/workspace/site/"],
+        "deepagent_skills": [str(tmp_path)],
     }}))
     argv = ["run", "--interactive", "--config", str(path)]
     if flag:
         argv.append(flag)
     cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
     assert dispatch["deepagent_discover_skills"] is expected
-    assert dispatch["deepagent_skills"] == ["/workspace/site/"]
+    assert dispatch["deepagent_skill_dirs"] == (str(tmp_path.resolve()),)
 
 
 def test_skill_discovery_rejects_non_boolean_toml(tmp_path, dispatch):
@@ -246,4 +246,44 @@ def test_skill_discovery_rejects_non_boolean_toml(tmp_path, dispatch):
     with pytest.raises(SystemExit) as exc:
         cli_main._handle_run(args)
     assert exc.value.code == 2
+    assert not dispatch
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_cli_host_paths_use_invocation_directory_and_override_toml(
+    monkeypatch, tmp_path, dispatch, explicit
+):
+    workspace = tmp_path / "work"
+    workspace.mkdir()
+    external = tmp_path / "external skills"
+    external.mkdir()
+    config_dir = tmp_path / "configuration"
+    config_dir.mkdir()
+    config = config_dir / "settings.toml"
+    config.write_text(toml.dumps({"general": {
+        "workflow": "deep_agent", "deepagent_workspace": str(workspace),
+        "deepagent_skills": ["./external skills"],
+    }}))
+    monkeypatch.chdir(tmp_path)
+    argv = ["run", "--interactive", "--config", str(config)]
+    if explicit:
+        argv += ["--deepagent-skill", "configuration", "--deepagent-skill", "./work"]
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
+    expected = (str(config_dir), str(workspace)) if explicit else (str(external),)
+    assert dispatch["deepagent_skill_dirs"] == expected
+    assert "deepagent_skills" not in dispatch
+
+
+@pytest.mark.parametrize("name", ["missing", "[missing][/red]"])
+def test_invalid_cli_host_path_fails_before_initialization(tmp_path, dispatch, name):
+    args = cli_main.create_argument_parser().parse_args([
+        "run", "--interactive", "-w", "deep_agent", "--deepagent-skill",
+        str(tmp_path / name),
+    ])
+    with commands.console.capture() as capture, pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(args)
+    assert exc.value.code == 2
+    output = capture.get()
+    assert "Cannot access skill directory" in output
+    assert name in output.replace("\n", "")
     assert not dispatch

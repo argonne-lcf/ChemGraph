@@ -1,6 +1,9 @@
 """Skill routing and per-turn discovery shared by ChemGraph Deep Agents."""
 
+import hashlib
 import logging
+import os
+from collections.abc import Sequence
 from pathlib import Path
 
 from deepagents.backends import (
@@ -17,7 +20,46 @@ from chemgraph.skills.backend import BundledSkillsBackend
 
 BUNDLED_SKILLS_PATH = "/chemgraph-skills/"
 USER_SKILLS_PATH = "/chemgraph-user-skills/"
+EXTERNAL_SKILLS_PATH = "/chemgraph-external-skills/"
 logger = logging.getLogger(__name__)
+
+
+def resolve_skill_dirs(skill_dirs: Sequence[str] | None) -> tuple[str, ...]:
+    """Freeze explicit host collections against the caller's working directory."""
+    if skill_dirs is None:
+        return ()
+    if isinstance(skill_dirs, (str, bytes)):
+        raise TypeError("skill_dirs must be a sequence of path strings, not a string.")
+    resolved_dirs = []
+    for source in skill_dirs:
+        if not isinstance(source, str):
+            raise TypeError("Every skill directory must be a string.")
+        if not source.strip():
+            raise ValueError("Skill directory paths must not be empty.")
+        resolved = source
+        try:
+            resolved = Path(source).expanduser().absolute()
+            resolved = resolved.resolve(strict=True)
+            if not resolved.is_dir():
+                raise ValueError("Expected a skill collection directory.")
+            # Opening the listing checks actual access, including ACL failures.
+            with os.scandir(resolved):
+                pass
+        except (OSError, ValueError, RuntimeError) as exc:
+            hint = (
+                " CLI skill paths are host paths; replace virtual /workspace/ "
+                "with the actual workspace directory."
+                if source == "/workspace" or source.startswith("/workspace/")
+                else ""
+            )
+            raise ValueError(
+                f"Cannot access skill directory {source!r} "
+                f"(resolved to {str(resolved)!r}): {exc}.{hint}"
+            ) from exc
+        canonical = str(resolved)
+        resolved_dirs = [path for path in resolved_dirs if path != canonical]
+        resolved_dirs.append(canonical)
+    return tuple(resolved_dirs)
 
 
 def local_skill_workspace(backend):
@@ -47,9 +89,9 @@ def resolve_user_skills_dir(backend, discover_skills, user_skills_dir=None):
 
 
 def prepare_skill_backend(
-    backend, skills, *, discover_skills=True, user_skills_dir=None
+    backend, skills, *, discover_skills=True, user_skills_dir=None, skill_dirs=None
 ):
-    """Add package/personal routes without obscuring shell-to-workspace mappings."""
+    """Mount skill collections while preserving the workspace and executor."""
     if not isinstance(discover_skills, bool):
         raise TypeError("discover_skills must be a boolean.")
     routes = dict(backend.routes) if isinstance(backend, CompositeBackend) else {}
@@ -58,7 +100,7 @@ def prepare_skill_backend(
     if "/workspace" in routes and "/workspace/" not in routes:
         routes["/workspace/"] = routes.pop("/workspace")
     for route in routes:
-        for reserved in (BUNDLED_SKILLS_PATH, USER_SKILLS_PATH):
+        for reserved in (BUNDLED_SKILLS_PATH, USER_SKILLS_PATH, EXTERNAL_SKILLS_PATH):
             prefix = route.rstrip("/") + "/"
             if prefix.startswith(reserved) or reserved.startswith(prefix):
                 raise ValueError(f"Skill route conflicts with reserved path: {route}")
@@ -77,6 +119,11 @@ def prepare_skill_backend(
             project_source: workspace[0] / ".agents/skills",
         }
         sources.extend(optional)
+    for root in resolve_skill_dirs(skill_dirs):
+        digest = hashlib.sha256(root.encode("utf-8")).hexdigest()
+        route = f"{EXTERNAL_SKILLS_PATH}{digest}/"
+        routes[route] = FilesystemBackend(root_dir=root, virtual_mode=True)
+        sources.append(route)
     # Explicit duplicates belong at their final, highest-priority position.
     for source in skills:
         sources = [

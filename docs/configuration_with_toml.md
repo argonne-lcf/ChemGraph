@@ -112,7 +112,7 @@ workflow = "main_agent"
 checkpoint_db = "~/.chemgraph/checkpoints.db"
 enable_deepagent = false
 deepagent_discover_skills = true
-# deepagent_skills = ["/workspace/.agents/skills/"]
+# deepagent_skills = ["../external/AtomisticSkills/.agents/skills/"]
 ```
 
 `main_agent` still requires interactive CLI mode. `enable_deepagent` controls
@@ -129,12 +129,14 @@ each run together with `--deepagent-workspace`.
 skill discovery for local workspaces. Bundled skills are always available.
 The matching CLI boolean flag overrides TOML. See [skills](skills.md).
 
-`deepagent_skills` is an ordered list of additional backend-relative sources.
+`deepagent_skills` is an ordered list of additional host skill directories.
+Relative paths resolve against the CLI invocation directory, not the workspace
+or TOML file directory. Absolute paths, `~`, and `..` are supported.
 It applies to a direct `deep_agent` or to an enabled `main_agent` worker. Later
 sources override earlier sources with the same skill name. A repeated
 `--deepagent-skill` CLI option replaces the TOML list for that run; explicitly
 disabling the worker with `--no-deepagent` also clears its configured skills.
-No skill directories are loaded when the list is omitted.
+Omitting the list still loads bundled skills and any enabled automatic sources.
 
 ## Evaluation profiles
 

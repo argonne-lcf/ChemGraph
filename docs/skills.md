@@ -34,7 +34,8 @@ ones with the same skill name:
 | Bundled | Installed ChemGraph package | `/chemgraph-skills/` |
 | Personal | `~/.chemgraph/skills/` | `/chemgraph-user-skills/` |
 | Project | `<workspace>/.agents/skills/` | `/workspace/.agents/skills/` with the CLI backend |
-| Explicit | Additional backend-relative directories | Paths supplied by the caller |
+| Explicit host | CLI directories or Python `skill_dirs` | `/chemgraph-external-skills/<stable-id>/` |
+| Explicit backend | Python `skills` | Paths supplied by the caller |
 
 The personal and project directories are optional and are not created on startup.
 Shared `~/.agents/skills/` collections can be configured explicitly. Do not keep
@@ -46,7 +47,7 @@ chemgraph run --interactive -w deep_agent --deepagent-workspace .
 
 # Add a site collection, overriding earlier sources with matching names.
 chemgraph run --interactive -w deep_agent --deepagent-workspace . \
-  --deepagent-skill /workspace/site-skills/
+  --deepagent-skill ../shared-skills/
 
 # Load only bundled and explicitly configured skills.
 chemgraph run --interactive -w deep_agent --deepagent-workspace . \
@@ -58,6 +59,30 @@ local discovery. `deepagent_skills` remains an ordered list of additional paths.
 CLI skill paths replace that TOML list, while the discovery CLI flag overrides
 the TOML boolean. An empty explicit list leaves bundled/discovered skills enabled.
 
+CLI skill paths are host directories independent of `--deepagent-workspace`.
+Relative paths (including `../`) resolve against the directory where you launch
+ChemGraph; absolute paths, `~`, spaces, and existing symlinks are supported.
+TOML paths follow the same rule. ChemGraph resolves and validates each directory,
+then exposes it through a stable backend route without copying files or creating
+symlinks. Supported saved sessions retain canonical host paths and rebuild these
+routes when resumed from a different directory. Missing or unreadable explicit
+directories fail with a path-specific error.
+
+```sh
+chemgraph run --interactive --workflow deep_agent --deepagent-workspace . \
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/ \
+  --model argo:gpt-5.6-luna
+```
+
+Pass the collection directory containing `<skill-name>/SKILL.md`; this does not
+recursively search a repository or install its environments and tools. For
+AtomisticSkills, the Widom insertion skill is `chem-sorption-widom`.
+
+**CLI migration:** `/workspace/...` is now a literal host path when passed to
+`--deepagent-skill`. Replace older virtual-path examples with the actual host
+path or a path relative to your invocation directory. Agent file tools still
+use `/workspace/...` for project files.
+
 ## Python and other filesystems
 
 ```python
@@ -68,12 +93,16 @@ graph = construct_deep_agent_graph(
     model,
     backend=LocalShellBackend(root_dir="/path/to/project", env={}),
     discover_skills=True,
+    skill_dirs=["../external/AtomisticSkills/.agents/skills/"],
     skills=["/workspace/site-skills/"],
 )
 ```
 
 The corresponding `ChemGraph` and `construct_main_agent_graph` options are
-`deepagent_discover_skills` and `deepagent_skills`. `user_skills_dir` on the
+`deepagent_discover_skills`, `deepagent_skill_dirs`, and `deepagent_skills`.
+`skill_dirs` explicitly mounts host collections with any backend, even when
+automatic discovery is disabled. `skills` retains its backend-relative meaning
+and has precedence over host collections. `user_skills_dir` on the
 constructor (`deepagent_user_skills_dir` on the higher-level APIs) fixes or
 overrides the personal directory for a supported local workspace; saved sessions
 use this to retain the original resolved root.
@@ -83,7 +112,8 @@ Automatic host directory discovery applies to `LocalShellBackend`,
 `/workspace/` route. Pure virtual filesystem backends use `/.agents/skills/` for
 their project source; non-virtual local backends use the absolute project path.
 For state, store, and arbitrary remote backends, bundled resources are still
-available, but additional sources must be explicitly mapped into the backend.
+available. Use `skill_dirs` to explicitly mount host collections, or `skills`
+for sources already mapped into the backend.
 There is no implicit inspection of the agent host's home for remote backends.
 
 | Backend | File operations | `execute` |
@@ -114,6 +144,12 @@ Deep Agents 0.7.5 advertises names, descriptions, and paths in the prompt, then
 uses **`read_file`** to load `SKILL.md` on demand. There is no separate
 `read_skill` tool. Relative references in a skill resolve against its directory
 in the file backend. See [upstream skills documentation](https://docs.langchain.com/oss/python/deepagents/skills).
+
+External filesystem collections also appear in the prompt's "Shell paths vs.
+virtual paths" mapping when using a local shell. Use these host paths for helper
+scripts; a command in an external skill may assume its own repository root, so
+resolve script paths against that collection rather than the workspace. With a
+remote executor, transfer required files to its filesystem first.
 
 The initial bundles contain text instructions and a PBS template. To execute a
 future helper stored in the catalog, first copy it into the executor's filesystem.

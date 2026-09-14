@@ -117,7 +117,8 @@ the bundled skill route.
 
 Bundled skills load without configuration. For supported local workspaces,
 personal `~/.chemgraph/skills/` and project `.agents/skills/` directories are
-also discovered. `deepagent_skills` adds ordered POSIX backend-relative sources;
+also discovered. `deepagent_skill_dirs=["../shared-skills/"]` mounts host collections independently
+of the workspace. `deepagent_skills` adds ordered POSIX backend-relative sources;
 later sources override matching names. Set `deepagent_discover_skills=False`
 to use only bundled and explicit sources. On `construct_deep_agent_graph`, the
 same options are `skills=` and `discover_skills=`. See [skills](skills.md) for

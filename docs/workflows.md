@@ -59,7 +59,7 @@ chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
 # The same worker delegated by the durable supervisor.
 chemgraph run --interactive --workflow main_agent --deepagent \
   --deepagent-workspace . \
-  --deepagent-skill /workspace/.agents/skills/
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/
 ```
 
 The standalone interactive workflow keeps one thread while that CLI process is

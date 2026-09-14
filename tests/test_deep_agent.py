@@ -339,6 +339,7 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
         tools=[tool],
         deepagent_backend=backend,
         deepagent_skills=["/workspace/base/", "/workspace/project/"],
+        deepagent_skill_dirs=[str(tmp_path)],
         deepagent_auto_approve=True,
         checkpointer=checkpointer,
         enable_memory=False,
@@ -350,6 +351,7 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
     assert captured["kwargs"] == {
         "tools": [tool],
         "skills": ("/workspace/base/", "/workspace/project/"),
+        "skill_dirs": (str(tmp_path),),
         "discover_skills": True,
         "user_skills_dir": None,
         "system_prompt": "custom workspace prompt",

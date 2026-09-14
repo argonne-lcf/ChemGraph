@@ -97,7 +97,7 @@ Or add the same graph to the supervisor as the `deepagent` subagent:
 ```bash
 chemgraph run --interactive --workflow main_agent --deepagent \
   --deepagent-workspace /path/to/disposable-checkout \
-  --deepagent-skill /workspace/.agents/skills/
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/
 ```
 
 The direct interactive workflow keeps one process-local thread until the model
@@ -112,7 +112,12 @@ previously created `test/workspace/` directory are not migrated.
 
 Bundled `chemgraph` and `pbs-hpc` skills load automatically, followed by
 `~/.chemgraph/skills/` and the workspace's `.agents/skills/` when present.
-Repeat `--deepagent-skill PATH` to add backend-relative sources; later sources
+Skill paths are resolved against the CLI invocation directory, independently of
+`--deepagent-workspace`. Absolute paths, `~`, and `../` paths work automatically
+without copies or symlinks. Old CLI `/workspace/...` examples must be replaced
+with host paths; agent file tools continue to use virtual workspace paths.
+
+Repeat `--deepagent-skill PATH` to add host directories; later sources
 win for matching skill names. `--no-deepagent-discover-skills` disables personal
 and project discovery while retaining bundled and explicit sources.
 
@@ -132,7 +137,7 @@ For automation, headless execution must opt out of those prompts explicitly:
 ```bash
 chemgraph run --workflow deep_agent \
   --deepagent-workspace /path/to/disposable-checkout \
-  --deepagent-skill /workspace/.agents/skills/ \
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/ \
   --deepagent-dangerously-skip-approvals \
   --query "Run the repository tests and summarize failures."
 ```

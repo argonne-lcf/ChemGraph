@@ -635,6 +635,7 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         enable_deepagent=True,
         deepagent_workspace=str(tmp_path),
         deepagent_skills=("/workspace/.agents/skills/",),
+        deepagent_skill_dirs=(str(tmp_path.resolve()),),
         deepagent_discover_skills=True,
         deepagent_user_skills_dir=str(tmp_path / "personal-skills"),
         topology_fingerprint="target",
@@ -721,6 +722,8 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         "/workspace/.agents/skills/",
     )
     assert rebuild_kwargs["deepagent_skills"] is None
+    assert resume_kwargs["deepagent_skill_dirs"] == (str(tmp_path.resolve()),)
+    assert rebuild_kwargs["deepagent_skill_dirs"] is None
     for kwargs in (resume_kwargs, rebuild_kwargs):
         assert kwargs["deepagent_discover_skills"] is True
         assert kwargs["deepagent_user_skills_dir"] == str(tmp_path / "personal-skills")
@@ -788,11 +791,12 @@ def test_interactive_eof_closes_checkpoint_runtime(monkeypatch):
     assert runtime.closed is True
 
 
-def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
+def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch, tmp_path):
     answers = iter(
         [
             "first-model",
             "main_agent",
+            "/model second-model",
             "/workflow single_agent",
             "/workflow main_agent",
             "quit",
@@ -800,6 +804,7 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
     )
     agents = iter(
         [
+            SimpleNamespace(),
             SimpleNamespace(),
             SimpleNamespace(session_id="single"),
             SimpleNamespace(),
@@ -818,6 +823,7 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
                 kwargs["enable_deepagent"],
                 kwargs["deepagent_workspace"],
                 kwargs["deepagent_skills"],
+                kwargs["deepagent_skill_dirs"],
             )
         )
         return next(agents)
@@ -836,12 +842,14 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch):
             enable_deepagent=True,
             deepagent_workspace="/workspace",
             deepagent_skills=["/workspace/.agents/skills/"],
+            deepagent_skill_dirs=[str(tmp_path)],
         )
 
     assert initialization_calls == [
-        (True, "/workspace", ["/workspace/.agents/skills/"]),
-        (False, None, None),
-        (True, "/workspace", ["/workspace/.agents/skills/"]),
+        (True, "/workspace", ["/workspace/.agents/skills/"], (str(tmp_path),)),
+        (True, "/workspace", ["/workspace/.agents/skills/"], (str(tmp_path),)),
+        (False, None, None, None),
+        (True, "/workspace", ["/workspace/.agents/skills/"], (str(tmp_path),)),
     ]
 
 
@@ -1200,13 +1208,13 @@ def test_headless_deepagent_forwards_explicit_unsafe_configuration(
                 workflow="deep_agent",
                 query="inspect the repository",
                 deepagent_workspace=str(tmp_path),
-                deepagent_skills=["/workspace/.agents/skills/"],
+                deepagent_skills=[str(tmp_path)],
                 deepagent_dangerously_skip_approvals=True,
             )
         )
 
     assert captured["deepagent_workspace"] == str(tmp_path)
-    assert captured["deepagent_skills"] == ["/workspace/.agents/skills/"]
+    assert captured["deepagent_skill_dirs"] == (str(tmp_path.resolve()),)
     assert captured["deepagent_auto_approve"] is True
 
 
@@ -1240,7 +1248,7 @@ def test_deepagent_toml_and_cli_precedence(
                 "general": {
                     "enable_deepagent": True,
                     "deepagent_workspace": str(tmp_path),
-                    "deepagent_skills": ["/workspace/.agents/skills/"],
+                    "deepagent_skills": [str(tmp_path)],
                 }
             }
         )
@@ -1264,6 +1272,6 @@ def test_deepagent_toml_and_cli_precedence(
     assert captured["deepagent_workspace"] == (
         str(tmp_path) if expected else None
     )
-    assert captured["deepagent_skills"] == (
-        ["/workspace/.agents/skills/"] if expected else None
+    assert captured["deepagent_skill_dirs"] == (
+        (str(tmp_path.resolve()),) if expected else None
     )

@@ -15,8 +15,9 @@ import sys
 from typing import Any, Dict
 
 import toml
+from rich.markup import escape
 
-from chemgraph.graphs.deep_agent import normalize_skill_sources
+from chemgraph.skills.runtime import resolve_skill_dirs
 from chemgraph.models.endpoints.registry import match_endpoint
 from chemgraph.utils.config_utils import (
     flatten_config,
@@ -132,7 +133,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="PATH",
         help=(
-            "Backend-relative Agent Skills directory for the Deep Agent; "
+            "Host Agent Skills directory (relative to the current directory); "
             "repeat to layer multiple sources"
         ),
     )
@@ -580,11 +581,12 @@ def _handle_run(args: argparse.Namespace) -> None:
         if not interactive or cli_deepagent is False:
             deepagent_workspace = None
             deepagent_skills = None
-    if uses_deepagent and deepagent_skills is not None:
+    deepagent_skill_dirs = None
+    if deepagent_skills is not None:
         try:
-            normalize_skill_sources(deepagent_skills)
+            deepagent_skill_dirs = resolve_skill_dirs(deepagent_skills)
         except (TypeError, ValueError) as exc:
-            console.print(f"[red]Invalid Deep Agent skills: {exc}[/red]")
+            console.print(f"[red]Invalid Deep Agent skills: {escape(str(exc))}[/red]")
             sys.exit(2)
     if enable_deepagent and args.workflow == "main_agent" and not interactive:
         console.print(
@@ -657,7 +659,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             tools=mcp_tools,
             enable_deepagent=enable_deepagent,
             deepagent_workspace=deepagent_workspace,
-            deepagent_skills=deepagent_skills,
+            deepagent_skill_dirs=deepagent_skill_dirs,
             deepagent_discover_skills=deepagent_discover_skills,
             checkpoint_db=(
                 getattr(args, "checkpoint_db", None) or config.get("checkpoint_db")
@@ -732,7 +734,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         tools=mcp_tools,
         on_event=trace.on_event if trace else None,
         deepagent_workspace=deepagent_workspace,
-        deepagent_skills=deepagent_skills,
+        deepagent_skill_dirs=deepagent_skill_dirs,
         deepagent_discover_skills=deepagent_discover_skills,
         deepagent_auto_approve=deepagent_auto_approve,
     )

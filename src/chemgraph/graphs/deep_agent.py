@@ -109,6 +109,7 @@ def construct_deep_agent_graph(
     skills: Sequence[str] | None = None,
     discover_skills: bool = True,
     user_skills_dir: str | None = None,
+    skill_dirs: Sequence[str] | None = None,
     system_prompt: str = DEFAULT_DEEPAGENT_PROMPT,
     backend: BackendProtocol | None = None,
     interrupt_on: dict[str, Any] | None | object = _DEFAULT_INTERRUPT_POLICY,
@@ -124,6 +125,8 @@ def construct_deep_agent_graph(
     Bundled skills are always available. ``discover_skills`` also discovers
     personal and project sources for supported local workspaces. ``skills``
     adds ordered backend-relative sources, overriding discovered/bundled names.
+    ``skill_dirs`` mounts explicit host directories, independently of the workspace
+    and discovery setting, before backend-relative ``skills`` sources.
     ``user_skills_dir`` fixes the personal root when restoring a session.
     Passing ``interrupt_on=None`` disables approval interrupts and should be
     reserved for an externally isolated, explicitly trusted execution context.
@@ -147,7 +150,7 @@ def construct_deep_agent_graph(
     skill_sources = normalize_skill_sources(skills)
     effective_backend, sources, optional = prepare_skill_backend(
         effective_backend, skill_sources, discover_skills=discover_skills,
-        user_skills_dir=user_skills_dir,
+        user_skills_dir=user_skills_dir, skill_dirs=skill_dirs,
     )
     workflow = create_deep_agent(
         model=llm,

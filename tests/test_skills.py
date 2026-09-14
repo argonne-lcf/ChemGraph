@@ -575,8 +575,14 @@ def test_personal_root_and_discovery_are_persisted(monkeypatch, tmp_path):
         enable_memory=False,
         log_dir=str(tmp_path),
     )
-    agent = ChemGraph(**kwargs)
+    monkeypatch.chdir(tmp_path)
+    _skill(tmp_path / "external", "external", "External instructions")
+    agent = ChemGraph(**kwargs, deepagent_skill_dirs=["./external"])
     saved = agent.main_agent_metadata.graph_config
+    assert saved.deepagent_skill_dirs == (str(tmp_path / "external"),)
+    other_cwd = tmp_path / "other-cwd"
+    other_cwd.mkdir()
+    monkeypatch.chdir(other_cwd)
     assert saved.deepagent_discover_skills is True
     assert saved.deepagent_user_skills_dir == str(original_home / ".chemgraph/skills")
     monkeypatch.setattr(
@@ -586,17 +592,28 @@ def test_personal_root_and_discovery_are_persisted(monkeypatch, tmp_path):
         **kwargs,
         deepagent_discover_skills=saved.deepagent_discover_skills,
         deepagent_user_skills_dir=saved.deepagent_user_skills_dir,
+        deepagent_skill_dirs=saved.deepagent_skill_dirs,
     )
     assert (
         restored.main_agent_metadata.graph_config.topology_fingerprint
         == saved.topology_fingerprint
     )
+    without_external = ChemGraph(
+        **kwargs, deepagent_user_skills_dir=saved.deepagent_user_skills_dir,
+    )
+    assert without_external.main_agent_metadata.graph_config.topology_fingerprint != saved.topology_fingerprint
+    (tmp_path / "external/external/SKILL.md").unlink()
+    (tmp_path / "external/external").rmdir()
+    (tmp_path / "external").rmdir()
+    with pytest.raises(ValueError, match="Cannot access skill directory"):
+        ChemGraph(**kwargs, deepagent_skill_dirs=saved.deepagent_skill_dirs)
     changed = ChemGraph(**kwargs, deepagent_discover_skills=False)
     assert (
         changed.main_agent_metadata.graph_config.topology_fingerprint
         != saved.topology_fingerprint
     )
     legacy = MainAgentGraphConfig(model_name="test")
+    assert legacy.deepagent_skill_dirs == ()
     assert legacy.deepagent_discover_skills is False
     assert legacy.deepagent_user_skills_dir is None
 
