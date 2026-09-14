@@ -124,10 +124,12 @@ same options are `skills=` and `discover_skills=`. See [skills](skills.md) for
 custom backends, source precedence, and session behavior.
 
 With `StateBackend`, only explicitly supplied state-backed skills need files
-seeded in graph state. Bundled resources work without seeding. The standalone
-default prompt permits attached chemistry tools; the supervisor's workspace
-worker continues delegating simulations. `PromptConfig.deepagent=None` selects
-these role-specific defaults; a supplied string is preserved.
+seeded in graph state. Bundled resources work without seeding. Standalone and
+supervisor-hosted Deep Agents share `DEFAULT_DEEPAGENT_PROMPT`, which permits
+using attached chemistry tools. Tool availability is configured separately;
+the built-in supervisor workspace worker has no chemistry tools attached.
+`PromptConfig.deepagent=None` selects the shared default; a supplied string,
+including an empty string, is preserved.
 
 The default approval policy interrupts before shell commands and file
 mutations. Without a `human_input_handler`, `run()` raises
