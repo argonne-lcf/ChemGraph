@@ -16,8 +16,7 @@ allocation, endpoint, private path, or environment.
 Check whether `execute` runs on that host. A local shell on a laptop cannot run
 remote PBS commands merely because a skill or an HPC MCP server is attached.
 Use attached HPC tools where available; otherwise prepare the script and state
-where the user must submit it. Workspace workers must return chemistry
-execution to their supervisor's chemistry specialist.
+where the user must submit it.
 
 Read the applicable site reference before choosing launch settings:
 [Polaris](references/polaris.md), [Aurora](references/aurora.md), or

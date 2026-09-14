@@ -254,8 +254,7 @@ application-specific MPI/GPU layout and configure worker setup through
 
 Skill files, the `execute` shell, an HPC MCP server, and compute workers can have
 different filesystems. Copy templates and helper scripts into the actual execution
-workspace and check worker visibility. A supervisor's workspace worker must return
-chemistry execution to its chemistry specialist.
+workspace and check worker visibility.
 
 Inspect stdout/stderr, application results, and available scheduler history to establish
 success; a job disappearing from the active queue does not prove completion.

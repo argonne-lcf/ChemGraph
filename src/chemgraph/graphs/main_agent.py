@@ -18,7 +18,7 @@ from langgraph.errors import GraphInterrupt
 
 from chemgraph.agent.events import SUBAGENT_METADATA_KEY
 from chemgraph.graphs.deep_agent import (
-    DEFAULT_DEEPAGENT_WORKSPACE_PROMPT as DEFAULT_DEEPAGENT_PROMPT,
+    DEFAULT_DEEPAGENT_PROMPT,
     construct_deep_agent_graph,
 )
 from chemgraph.graphs.single_agent import construct_single_agent_graph

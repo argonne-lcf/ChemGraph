@@ -127,10 +127,11 @@ different filesystems again.
 
 The read-only route does not confine a local shell. Existing write/execute
 approvals remain in force. Skill frontmatter does not grant additional tools or
-permissions. The standalone default prompt permits attached chemistry tools;
-the main-agent workspace worker continues to delegate simulations to the
-chemistry specialist. A custom `PromptConfig.deepagent` is preserved verbatim;
-its default `None` selects the appropriate prompt for the workflow.
+permissions. Standalone and main-agent workspace Deep Agents share
+`DEFAULT_DEEPAGENT_PROMPT`, which permits using attached chemistry tools. Tools
+are configured separately; the built-in main-agent workspace worker has no
+chemistry tools attached. A custom `PromptConfig.deepagent` is preserved
+verbatim; its default `None` selects the shared prompt.
 
 ## Sessions and diagnostics
 

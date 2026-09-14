@@ -21,7 +21,6 @@ from langgraph.types import Command
 
 from chemgraph.graphs.deep_agent import (
     DEFAULT_DEEPAGENT_PROMPT,
-    DEFAULT_DEEPAGENT_WORKSPACE_PROMPT,
     _normalize_backend,
     construct_deep_agent_graph,
 )
@@ -395,7 +394,7 @@ def test_refresh_does_not_replay_pending_approved_write(tmp_path):
     )
 
 
-def test_default_roles_and_custom_prompt_are_distinct(monkeypatch):
+def test_shared_default_prompt_and_custom_overrides(monkeypatch):
     from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
     from chemgraph.models.endpoints import PreparedModel
 
@@ -409,18 +408,15 @@ def test_default_roles_and_custom_prompt_are_distinct(monkeypatch):
             ),
         ),
     )
-    for workflow, expected in [
-        ("deep_agent", DEFAULT_DEEPAGENT_PROMPT),
-        ("main_agent", DEFAULT_DEEPAGENT_WORKSPACE_PROMPT),
-    ]:
-        agent = ChemGraph(workflow_type=workflow, enable_memory=False)
-        assert agent.deepagent_prompt == expected
-        agent = ChemGraph(
-            workflow_type=workflow,
-            prompts=PromptConfig(deepagent="Custom instructions"),
-            enable_memory=False,
-        )
-        assert agent.deepagent_prompt == "Custom instructions"
+    for workflow in ("deep_agent", "main_agent"):
+        for prompt in (None, "Custom instructions", ""):
+            agent = ChemGraph(
+                workflow_type=workflow,
+                prompts=PromptConfig(deepagent=prompt),
+                enable_memory=False,
+            )
+            expected = DEFAULT_DEEPAGENT_PROMPT if prompt is None else prompt
+            assert agent.deepagent_prompt == expected
 
 
 def test_state_skill_sources_remain_supported():
@@ -641,7 +637,7 @@ def test_standalone_reads_skill_then_uses_attached_chemistry_tool():
         "run_ase_single",
     ]
     assert '"energy_unit": "eV"' in str(state["messages"][-2].content)
-    assert "standalone Deep Agent" in _prompt(model)
+    assert DEFAULT_DEEPAGENT_PROMPT in _prompt(model)
 
 
 def test_optional_permission_error_does_not_hide_bundled_catalog(caplog):

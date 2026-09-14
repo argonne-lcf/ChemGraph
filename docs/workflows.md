@@ -47,9 +47,10 @@ See [Python API](python_api.md).
 run directly through `ChemGraph(workflow_type="deep_agent")`, or it can be
 registered under `main_agent` as the `deepagent` subagent. Both paths use
 `construct_deep_agent_graph`, so the prompt, backend, tools, recursion limit,
-and approval policy have one implementation. Standalone mode can use attached
-chemistry tools; the main-agent workspace worker delegates simulations to its
-chemistry specialist.
+and approval policy have one implementation. Both entry points use
+`DEFAULT_DEEPAGENT_PROMPT` unless a custom prompt is supplied. The prompt permits
+attached chemistry tools; available tools are configured by the caller. The
+built-in main-agent workspace worker is created without chemistry tools.
 
 ```bash
 # Direct, process-local interactive thread with action reviews.

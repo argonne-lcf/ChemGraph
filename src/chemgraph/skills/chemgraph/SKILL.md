@@ -9,10 +9,9 @@ description: Use ChemGraph Python and CLI workflows and attached chemistry MCP t
    execution system, and output location. Inspect attached tool schemas before
    selecting arguments. Ask for missing scientific choices rather than inventing
    them; do not replace the requested calculator with another one silently.
-2. Follow your assigned role. A standalone Deep Agent can use attached chemistry
-   tools. A workspace worker under `main_agent` prepares files and delegates
-   simulations back to the `chemgraph` specialist through its supervisor.
-   This skill does not grant tools or override approvals.
+2. Use attached chemistry tools for requested simulations. If a required tool
+   is unavailable, report what is missing. This skill does not grant tools or
+   override approvals.
 3. For Python or CLI setup, read [interface guidance](references/python-and-cli.md).
    For calculations through attached tools, read
    [MCP workflow guidance](references/mcp-workflows.md).

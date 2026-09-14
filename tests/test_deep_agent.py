@@ -20,7 +20,7 @@ from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
 from chemgraph.cli import commands
 from chemgraph.graphs.deep_agent import (
     DEFAULT_DEEPAGENT_INTERRUPT_ON,
-    DEFAULT_DEEPAGENT_WORKSPACE_PROMPT,
+    DEFAULT_DEEPAGENT_PROMPT,
     construct_deep_agent_graph,
 )
 from chemgraph.models.endpoints import PreparedModel
@@ -71,7 +71,7 @@ def _legacy_topology_fingerprint(agent: ChemGraph) -> str:
     }
     if (
         agent.enable_deepagent
-        and agent.deepagent_prompt != DEFAULT_DEEPAGENT_WORKSPACE_PROMPT
+        and agent.deepagent_prompt != DEFAULT_DEEPAGENT_PROMPT
     ):
         topology_payload["deepagent_prompt"] = agent.deepagent_prompt
     return hashlib.sha256(
@@ -116,6 +116,7 @@ def test_constructor_builds_safe_standalone_graph(monkeypatch):
 
     assert result is workflow
     assert captured["tools"] == []
+    assert captured["system_prompt"] == DEFAULT_DEEPAGENT_PROMPT
     assert captured["skills"] == ["/chemgraph-skills/"]
     assert isinstance(captured["backend"].default, StateBackend)
     assert isinstance(captured["checkpointer"], MemorySaver)

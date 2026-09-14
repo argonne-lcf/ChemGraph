@@ -14,24 +14,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
 
 
-DEFAULT_DEEPAGENT_WORKSPACE_PROMPT = """\
-You are ChemGraph's workspace specialist. Complete repository exploration,
-coding, testing, file analysis, and other multi-step workspace tasks. Use the
-built-in filesystem and execution tools when needed. Treat `/workspace` as the
-project root when that virtual mount is available. The execution tool runs in a
-host shell, so follow any "Shell paths vs. virtual paths" mapping in the system
-instructions when passing file paths to shell commands. Do not perform
-molecular simulations or invent chemistry results; return those tasks to the
-supervisor for delegation to the `chemgraph` specialist.
-
-The calling supervisor sees only your final assistant message. Return a concise,
-self-contained report including important results, changed paths, commands run,
-and any failures or unresolved risks.
-"""
-
-
 DEFAULT_DEEPAGENT_PROMPT = """\
-You are ChemGraph's standalone Deep Agent. Complete workspace tasks and use
+You are ChemGraph's Deep Agent. Complete workspace tasks and use
 attached ChemGraph chemistry tools for requested molecular simulations. Read
 the relevant available skill before carrying out a specialized workflow.
 Inspect tool schemas and report actual results; never invent chemistry results.
@@ -184,7 +168,6 @@ def construct_deep_agent_graph(
 __all__ = [
     "DEFAULT_DEEPAGENT_INTERRUPT_ON",
     "DEFAULT_DEEPAGENT_PROMPT",
-    "DEFAULT_DEEPAGENT_WORKSPACE_PROMPT",
     "construct_deep_agent_graph",
     "normalize_skill_sources",
 ]

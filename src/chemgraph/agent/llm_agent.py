@@ -57,7 +57,6 @@ from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.graphs.deep_agent import (
     DEFAULT_DEEPAGENT_PROMPT,
-    DEFAULT_DEEPAGENT_WORKSPACE_PROMPT,
     construct_deep_agent_graph,
     normalize_skill_sources,
 )
@@ -378,10 +377,9 @@ class ChemGraph:
         self.aggregator_prompt = prompts.aggregator
         self.formatter_multi_prompt = prompts.formatter_multi
         self.deepagent_prompt = (
-            prompts.deepagent if prompts.deepagent is not None else (
-                DEFAULT_DEEPAGENT_PROMPT if workflow_type == "deep_agent"
-                else DEFAULT_DEEPAGENT_WORKSPACE_PROMPT
-            )
+            prompts.deepagent
+            if prompts.deepagent is not None
+            else DEFAULT_DEEPAGENT_PROMPT
         )
         self.tools = tools
         self.data_tools = data_tools
@@ -479,7 +477,7 @@ class ChemGraph:
         }
         if (
             self.enable_deepagent
-            and self.deepagent_prompt != DEFAULT_DEEPAGENT_WORKSPACE_PROMPT
+            and self.deepagent_prompt != DEFAULT_DEEPAGENT_PROMPT
         ):
             topology_payload["deepagent_prompt"] = self.deepagent_prompt
         if self.enable_deepagent and self.deepagent_skills:
