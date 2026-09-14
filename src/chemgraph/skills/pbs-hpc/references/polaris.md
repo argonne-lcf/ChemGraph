@@ -257,6 +257,15 @@ local/testing contexts and does not submit a scheduler job. Preserve the
 application-specific MPI/GPU layout and configure worker setup through
 `CHEMGRAPH_WORKER_INIT` or the configured Python environment.
 
+For single-node Parsl jobs, ALCF documents `OSError: AF_UNIX path too long`.
+Set `export TMPDIR=/tmp` in `worker_init` for `PBSProProvider`. For
+`LocalProvider`, set it in the PBS job script **before launching the Python
+driver**, after activating the environment. Setting it only in worker setup
+does not fix temporary paths already chosen by the driver. See the
+[Parsl known issues](https://docs.alcf.anl.gov/polaris/workflows/parsl/#known-issues).
+Include the compute-node proxy exports above when outbound internet is needed;
+the ASE worker and direct PBS templates include both proxies and `TMPDIR`.
+
 Skill files, the `execute` shell, an HPC MCP server, and compute workers can have
 different filesystems. Copy templates and helper scripts into the actual execution
 workspace and check worker visibility.
