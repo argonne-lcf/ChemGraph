@@ -3,7 +3,13 @@
 import logging
 from pathlib import Path
 
-from deepagents.backends import CompositeBackend, FilesystemBackend
+from deepagents.backends import (
+    CompositeBackend,
+    FilesystemBackend,
+    StateBackend,
+    StoreBackend,
+)
+from deepagents.backends.protocol import LsResult
 from deepagents.middleware.skills import SkillsMiddleware
 
 from chemgraph.skills.backend import BundledSkillsBackend
@@ -17,7 +23,7 @@ logger = logging.getLogger(__name__)
 def local_skill_workspace(backend):
     """Return (host root, backend root) only for identifiable local workspaces."""
     if isinstance(backend, CompositeBackend):
-        workspace = backend.routes.get("/workspace/")
+        workspace = backend.routes.get("/workspace/", backend.routes.get("/workspace"))
         if isinstance(workspace, FilesystemBackend) and workspace.virtual_mode:
             return workspace.cwd, "/workspace/"
         return None
@@ -47,6 +53,10 @@ def prepare_skill_backend(
     if not isinstance(discover_skills, bool):
         raise TypeError("discover_skills must be a boolean.")
     routes = dict(backend.routes) if isinstance(backend, CompositeBackend) else {}
+    # Upstream accepts slashless routes for reads, but listing path remapping
+    # assumes the final character is a slash. Normalize only our copied map.
+    if "/workspace" in routes and "/workspace/" not in routes:
+        routes["/workspace/"] = routes.pop("/workspace")
     for route in routes:
         for reserved in (BUNDLED_SKILLS_PATH, USER_SKILLS_PATH):
             prefix = route.rstrip("/") + "/"
@@ -103,43 +113,85 @@ class ChemGraphSkillsMiddleware(SkillsMiddleware):
         super().__init__(backend=backend, sources=sources)
         self.optional = optional
 
-    def _loader(self):
-        sources = []
+    def _loaders(self, errors):
         for source in self.sources:
             if source in self.optional:
                 try:
                     self.optional[source].stat()
                 except FileNotFoundError:
                     continue
-                except OSError as exc:
-                    logger.warning(
-                        "Cannot inspect optional skills at %s: %s", source, exc
-                    )
+                except (OSError, ValueError, RuntimeError) as exc:
+                    error = f"Cannot inspect optional skills at {source}: {exc}"
+                    logger.warning("%s", error)
+                    errors.append(error)
                     continue
-            sources.append(source)
-        return SkillsMiddleware(backend=self._backend, sources=sources)
+            yield source, SkillsMiddleware(backend=self._backend, sources=[source])
 
-    def _checked_update(self, update):
-        errors = update.get("skills_load_errors", [])
-        # Missing optional roots were filtered out. Fail clearly for explicitly
-        # requested sources; state-backed paths are checked inside the graph.
-        required_errors = [
-            error
-            for error in errors
-            if not any(
-                error.startswith(f"Cannot load skills from '{source}':")
-                for source in self.optional
+    def _empty_source_backend(self, source, update):
+        if (
+            source in self.optional
+            or update["skills_metadata"]
+            or update.get("skills_load_errors")
+        ):
+            return None
+        backend, path = self._backend, source
+        # Use the same routing rules as file tools, including nested composites.
+        while isinstance(backend, CompositeBackend):
+            backend, path = backend._get_backend_and_key(path)
+        if isinstance(backend, (StateBackend, StoreBackend)):
+            return backend, path
+        return None
+
+    @staticmethod
+    def _require_files(listing):
+        if isinstance(listing, LsResult):
+            if listing.error:
+                raise ValueError(listing.error)
+            listing = listing.entries
+        if not listing:
+            raise ValueError(
+                "Explicit state/store skill sources must contain files before "
+                "the turn starts; the source is missing or empty."
             )
-        ]
-        if required_errors:
-            raise ValueError("; ".join(required_errors))
-        update["skills_load_errors"] = errors
-        return update
+
+    def _merge_update(self, source, update, skills, errors):
+        source_errors = update.get("skills_load_errors", [])
+        if source_errors:
+            if source not in self.optional:
+                raise ValueError("; ".join(source_errors))
+            for error in source_errors:
+                logger.warning("%s", error)
+            errors.extend(source_errors)
+            return
+        for skill in update["skills_metadata"]:
+            skills[skill["name"]] = skill
 
     def before_agent(self, state, runtime, config):
-        update = self._loader().before_agent({}, runtime, config)
-        return self._checked_update(update)
+        skills, errors = {}, []
+        for source, loader in self._loaders(errors):
+            try:
+                update = loader.before_agent({}, runtime, config)
+                if target := self._empty_source_backend(source, update):
+                    backend, path = target
+                    self._require_files(backend.ls(path))
+            except (OSError, ValueError, RuntimeError) as exc:
+                update = {"skills_load_errors": [
+                    f"Cannot load skills from '{source}': {exc}"
+                ]}
+            self._merge_update(source, update, skills, errors)
+        return {"skills_metadata": list(skills.values()), "skills_load_errors": errors}
 
     async def abefore_agent(self, state, runtime, config):
-        update = await self._loader().abefore_agent({}, runtime, config)
-        return self._checked_update(update)
+        skills, errors = {}, []
+        for source, loader in self._loaders(errors):
+            try:
+                update = await loader.abefore_agent({}, runtime, config)
+                if target := self._empty_source_backend(source, update):
+                    backend, path = target
+                    self._require_files(await backend.als(path))
+            except (OSError, ValueError, RuntimeError) as exc:
+                update = {"skills_load_errors": [
+                    f"Cannot load skills from '{source}': {exc}"
+                ]}
+            self._merge_update(source, update, skills, errors)
+        return {"skills_metadata": list(skills.values()), "skills_load_errors": errors}

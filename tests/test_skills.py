@@ -11,10 +11,11 @@ from deepagents.backends import (
     StateBackend,
     StoreBackend,
 )
-from deepagents.backends.protocol import ExecuteResponse, SandboxBackendProtocol
+from deepagents.backends.protocol import ExecuteResponse, LsResult, SandboxBackendProtocol
 from deepagents.backends.utils import create_file_data
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.errors import GraphInterrupt
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
 
@@ -27,6 +28,7 @@ from chemgraph.graphs.deep_agent import (
 from chemgraph.skills.backend import BundledSkillsBackend
 from chemgraph.skills.runtime import (
     BUNDLED_SKILLS_PATH,
+    ChemGraphSkillsMiddleware,
     USER_SKILLS_PATH,
     prepare_skill_backend,
 )
@@ -84,7 +86,10 @@ def test_default_state_backend_reads_bundled_skill_without_seeding(asynchronous)
     )
 
 
-@pytest.mark.parametrize("kind", ["shell", "filesystem", "nonvirtual", "composite"])
+@pytest.mark.parametrize(
+    "kind",
+    ["shell", "filesystem", "nonvirtual", "composite", "composite-no-slash", "composite-both"],
+)
 def test_local_source_precedence_and_discovery(monkeypatch, tmp_path, kind):
     home = tmp_path / "home"
     workspace = tmp_path / "workspace"
@@ -95,8 +100,15 @@ def test_local_source_precedence_and_discovery(monkeypatch, tmp_path, kind):
     cls = FilesystemBackend if kind == "filesystem" else LocalShellBackend
     kwargs = {} if cls is FilesystemBackend else {"env": {}}
     backend = cls(root_dir=workspace, virtual_mode=kind != "nonvirtual", **kwargs)
-    if kind == "composite":
-        backend = _normalize_backend(backend)
+    if kind.startswith("composite"):
+        mounted = _normalize_backend(backend)
+        routes = {"/workspace/" if kind == "composite" else "/workspace": backend}
+        if kind == "composite-both":
+            # The longer route must win, just as it does for file operations.
+            routes["/workspace"] = FilesystemBackend(root_dir=home)
+            routes["/workspace/"] = backend
+        backend = CompositeBackend(default=mounted.default, routes=routes)
+        original_routes = dict(routes)
     model = _RecordingChatModel(responses=[AIMessage(content="Done")] * 3)
     graph = construct_deep_agent_graph(model, backend=backend)
     config = {"configurable": {"thread_id": kind}}
@@ -121,6 +133,8 @@ def test_local_source_precedence_and_discovery(monkeypatch, tmp_path, kind):
     override.invoke(data, {"configurable": {"thread_id": "override"}})
     assert "Explicit chemistry instructions" in _prompt(model)
     assert str(explicit.name) in _prompt(model)
+    if kind.startswith("composite"):
+        assert backend.routes == original_routes
 
 
 def test_discovery_disabled_keeps_bundled_and_explicit(monkeypatch, tmp_path):
@@ -170,28 +184,90 @@ def test_new_optional_directory_and_restored_catalog(
     assert "New skill" in _prompt(model)
     _skill(tmp_path / ".agents/skills", "new-skill", "Updated skill")
     restored = construct_deep_agent_graph(model, backend=backend, checkpointer=saver)
-    state = invoke(restored)
+    invoke(restored)
     assert "Updated skill" in _prompt(model) and "New skill" not in _prompt(model)
-    assert not state.get("skills_load_errors")
+    assert restored.get_state(config).values["skills_load_errors"] == []
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
 def test_explicit_missing_source_errors_and_invalid_optional_warns(
-    monkeypatch, tmp_path, caplog
+    monkeypatch, tmp_path, caplog, asynchronous
 ):
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
     backend = LocalShellBackend(root_dir=tmp_path, env={})
-    model = _RecordingChatModel(responses=[AIMessage(content="Done")])
+    model = _RecordingChatModel(responses=[AIMessage(content="Done")] * 2)
     graph = construct_deep_agent_graph(
         model, backend=backend, skills=["/workspace/missing/"]
     )
     data = {"messages": [HumanMessage(content="List skills")]}
+
+    def invoke(graph, thread):
+        config = {"configurable": {"thread_id": thread}}
+        return (
+            asyncio.run(graph.ainvoke(data, config))
+            if asynchronous else graph.invoke(data, config)
+        )
+
     with pytest.raises(ValueError, match="Cannot load skills.*missing"):
-        graph.invoke(data, {"configurable": {"thread_id": "missing"}})
+        invoke(graph, "missing")
+    assert not model.received_messages
+    (tmp_path / "missing").mkdir()
+    invoke(graph, "empty-directory")
+    assert "pbs-hpc" in _prompt(model)
     _skill(tmp_path / ".agents/skills", "broken").write_text("no frontmatter")
     graph = construct_deep_agent_graph(model, backend=backend)
-    graph.invoke(data, {"configurable": {"thread_id": "optional"}})
+    invoke(graph, "optional")
     assert "failed metadata parse" in caplog.text
     assert "pbs-hpc" in _prompt(model)
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_optional_symlink_failure_and_recovery(monkeypatch, tmp_path, caplog, asynchronous):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    _skill(tmp_path / "home/.chemgraph/skills", "personal", "Personal instructions")
+    workspace = tmp_path / "workspace"
+    (workspace / ".agents").mkdir(parents=True)
+    _skill(tmp_path / "shared", "shared", "Outside instructions")
+    source = workspace / ".agents/skills"
+    try:
+        source.symlink_to(tmp_path / "shared", target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Directory symlinks are unavailable: {exc}")
+    backend = LocalShellBackend(root_dir=workspace, env={})
+    model = _RecordingChatModel(responses=[AIMessage(content="Done")] * 2)
+    saver = InMemorySaver()
+    graph = construct_deep_agent_graph(model, backend=backend, checkpointer=saver)
+    config = {"configurable": {"thread_id": "symlink"}}
+    data = {"messages": [HumanMessage(content="Hello")]}
+
+    def invoke(graph):
+        return (
+            asyncio.run(graph.ainvoke(data, config))
+            if asynchronous else graph.invoke(data, config)
+        )
+
+    invoke(graph)
+    assert "pbs-hpc" in _prompt(model) and "Personal instructions" in _prompt(model)
+    assert "Outside instructions" not in _prompt(model)
+    errors = graph.get_state(config).values["skills_load_errors"]
+    assert len(errors) == 1 and "/workspace/.agents/skills/" in errors[0]
+    assert "outside root directory" in caplog.text
+
+    required_model = _RecordingChatModel(responses=[AIMessage(content="Done")])
+    required = construct_deep_agent_graph(
+        required_model, backend=backend, skills=["/workspace/.agents/skills/"],
+    )
+    with pytest.raises(ValueError, match="Cannot load skills.*outside root directory"):
+        invoke(required)
+    assert not required_model.received_messages
+
+    source.unlink()
+    _skill(source, "repaired", "Repaired instructions")
+    restored = construct_deep_agent_graph(model, backend=backend, checkpointer=saver)
+    invoke(restored)
+    assert "Repaired instructions" in _prompt(model)
+    assert restored.get_state(config).values["skills_load_errors"] == []
+    assert "outside root directory" not in _prompt(model)
 
 
 @pytest.mark.parametrize(
@@ -225,7 +301,7 @@ def test_nonlocal_backends_keep_execution_and_routes_without_host_discovery(
     default = (
         _RemoteBackend()
         if kind == "remote"
-        else StoreBackend(store=InMemoryStore(), namespace=("skills-test",))
+        else StoreBackend(store=InMemoryStore(), namespace=lambda _: ("skills-test",))
     )
     caller = CompositeBackend(
         default=default, routes={"/notes/": StateBackend()}, artifacts_root="/notes/"
@@ -239,6 +315,11 @@ def test_nonlocal_backends_keep_execution_and_routes_without_host_discovery(
     assert backend.read(BUNDLED_SKILLS_PATH + "chemgraph/SKILL.md").error is None
     if kind == "remote":
         assert backend.execute("pwd").output == "remote:pwd"
+    else:
+        assert backend.write("/result.txt", "Stored result").error is None
+        assert backend.read("/result.txt").file_data["content"] == "Stored result"
+        assert default.read("/result.txt").file_data["content"] == "Stored result"
+        assert backend.write(BUNDLED_SKILLS_PATH + "chemgraph/SKILL.md", "changed").error
 
 
 def test_skill_reads_work_inside_default_child_agent():
@@ -359,6 +440,117 @@ def test_state_skill_sources_remain_supported():
     assert "Seeded instructions" in _prompt(model)
 
 
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("kind", ["state", "store"])
+@pytest.mark.parametrize("routed", [False, True])
+@pytest.mark.parametrize("valid_skill", [False, True])
+def test_required_virtual_sources_need_files(
+    asynchronous, kind, routed, valid_skill, caplog,
+):
+    leaf = (
+        StateBackend() if kind == "state" else
+        StoreBackend(store=InMemoryStore(), namespace=lambda _: ("skills-test",))
+    )
+    backend = leaf
+    source = "/extra/"
+    if routed:
+        backend = CompositeBackend(
+            default=StateBackend(),
+            routes={"/library/": CompositeBackend(
+                default=StateBackend(), routes={"/nested/": leaf},
+            )},
+        )
+        source = "/library/nested/extra/"
+    model = _RecordingChatModel(responses=[
+        _read_skill(source + "example/SKILL.md"), AIMessage(content="Done"),
+    ])
+    graph = construct_deep_agent_graph(model, backend=backend, skills=[source])
+    config = {"configurable": {"thread_id": "required-source"}}
+
+    def invoke(files=None):
+        data = {"messages": [HumanMessage(content="Read the configured skill")]}
+        if files is not None:
+            data["files"] = files
+        return (
+            asyncio.run(graph.ainvoke(data, config))
+            if asynchronous else graph.invoke(data, config)
+        )
+
+    with pytest.raises(ValueError, match="Cannot load skills.*missing or empty") as exc:
+        invoke()
+    assert source in str(exc.value)
+    assert not model.received_messages
+
+    path = "/extra/example/SKILL.md"
+    content = "Seeded instructions"
+    if valid_skill:
+        content = "---\nname: example\ndescription: Seeded instructions\n---\n" + content
+    files = {path: create_file_data(content)} if kind == "state" else None
+    if kind == "store":
+        assert leaf.write(path, content).error is None
+    state = invoke(files)
+    assert any(m.type == "tool" and "Seeded instructions" in str(m.content)
+               for m in state["messages"])
+    values = graph.get_state(config).values
+    assert ("example" in {s["name"] for s in values["skills_metadata"]}) == valid_skill
+    assert values["skills_load_errors"] == []
+    if not valid_skill:
+        assert "failed metadata parse" in caplog.text
+    assert "pbs-hpc" in _prompt(model)
+
+    if kind == "store":
+        assert leaf.delete(path).error is None
+    calls = model.response_index
+    with pytest.raises(ValueError, match="Cannot load skills.*missing or empty"):
+        invoke({path: None} if kind == "state" else None)
+    assert model.response_index == calls
+
+
+def test_empty_custom_source_keeps_backend_semantics():
+    class EmptyBackend(BundledSkillsBackend):
+        def ls(self, path):
+            return LsResult(entries=[])
+
+    model = _RecordingChatModel(responses=[AIMessage(content="Done")])
+    graph = construct_deep_agent_graph(model, backend=EmptyBackend(), skills=["/extra/"])
+    graph.invoke(
+        {"messages": [HumanMessage(content="List skills")]},
+        {"configurable": {"thread_id": "custom-empty"}},
+    )
+    assert "pbs-hpc" in _prompt(model)
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize(
+    "error_type", [OSError, ValueError, RuntimeError, TypeError, GraphInterrupt, asyncio.CancelledError],
+)
+def test_optional_download_failure_handling(tmp_path, asynchronous, error_type):
+    class FailingBackend(FilesystemBackend):
+        def download_files(self, paths):
+            raise error_type("Download failed")
+
+    _skill(tmp_path / ".agents/skills")
+    backend, sources, optional = prepare_skill_backend(
+        FailingBackend(root_dir=tmp_path), (), user_skills_dir=str(tmp_path / "missing"),
+    )
+    middleware = ChemGraphSkillsMiddleware(backend=backend, sources=sources, optional=optional)
+
+    def load():
+        return (
+            asyncio.run(middleware.abefore_agent({}, None, {}))
+            if asynchronous else middleware.before_agent({}, None, {})
+        )
+
+    if error_type in (OSError, ValueError, RuntimeError):
+        update = load()
+        assert {s["name"] for s in update["skills_metadata"]} == {"chemgraph", "pbs-hpc"}
+        assert len(update["skills_load_errors"]) == 1
+        assert "Cannot load skills from '/.agents/skills/': Download failed" in update["skills_load_errors"]
+    else:
+        with pytest.raises(error_type):
+            load()
+
+
 def test_personal_root_and_discovery_are_persisted(monkeypatch, tmp_path):
     from chemgraph.agent.llm_agent import ChemGraph
     from chemgraph.memory.schemas import MainAgentGraphConfig
@@ -453,8 +645,6 @@ def test_standalone_reads_skill_then_uses_attached_chemistry_tool():
 
 
 def test_optional_permission_error_does_not_hide_bundled_catalog(caplog):
-    from chemgraph.skills.runtime import ChemGraphSkillsMiddleware
-
     class InaccessibleDirectory:
         def stat(self):
             raise PermissionError("permission denied")
