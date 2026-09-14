@@ -72,8 +72,23 @@ filesystems = "home:eagle"
 nodes_per_block = 1
 max_blocks = 1
 max_workers_per_node = 1
-worker_init = "source '/absolute/path/to/environment.sh'"
+worker_init = '''
+source '/absolute/path/to/environment.sh'
+export http_proxy="http://proxy.alcf.anl.gov:3128"
+export https_proxy="http://proxy.alcf.anl.gov:3128"
+export TMPDIR=/tmp
+'''
 ```
+
+The proxy variables enable outbound internet access on compute nodes; the
+calculation still uses the staged local model. Keep `TMPDIR=/tmp` after
+environment activation to avoid Parsl's `OSError: AF_UNIX path too long` on
+single-node jobs. ALCF documents the [proxy settings](https://docs.alcf.anl.gov/polaris/running-jobs/#compute-node-access-to-the-internet)
+and [Parsl workaround](https://docs.alcf.anl.gov/polaris/workflows/parsl/#known-issues).
+For `PBSProProvider`, these exports belong in `worker_init`. When using
+`LocalProvider` inside an existing allocation, put them in the PBS job script
+before starting the Python driver; worker initialization alone is too late for
+the driver's temporary paths. The bundled direct PBS template includes them.
 
 Confirm current [queue limits](https://docs.alcf.anl.gov/polaris/running-jobs/)
 and declare every filesystem used by your inputs, environment, and outputs.

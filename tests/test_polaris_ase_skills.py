@@ -31,14 +31,24 @@ def test_rendered_batch_template_runs_staged_entrypoint(tmp_path):
         (SKILLS / "chemgraph/scripts/run_ase.py").read_bytes()
     )
     environment = tmp_path / "environment script's.sh"
-    environment.write_text("printf ready > initialized\n")
+    environment.write_text(
+        "printf ready > initialized\n"
+        "export TMPDIR=/some/long/site/scratch/path\n"
+    )
+    python_wrapper = tmp_path / "python-wrapper.sh"
+    python_wrapper.write_text(
+        "#!/bin/bash\n"
+        'printf "%s\\n" "$TMPDIR" "$http_proxy" "$https_proxy" > worker-environment.txt\n'
+        f'exec {shlex.quote(sys.executable)} "$@"\n'
+    )
+    python_wrapper.chmod(0o755)
     script = (SKILLS / "pbs-hpc/assets/polaris-ase.pbs.template").read_text()
     for name, value in {
         "JOB_NAME": "cg-test",
         "PROJECT": "test",
         "FILESYSTEMS": "home:eagle",
         "ENVIRONMENT_FILE_SHELL": shlex.quote(str(environment)),
-        "PYTHON_SHELL": shlex.quote(sys.executable),
+        "PYTHON_SHELL": shlex.quote(str(python_wrapper)),
     }.items():
         script = script.replace("{{" + name + "}}", value)
     batch = tmp_path / "job.pbs"
@@ -56,9 +66,46 @@ def test_rendered_batch_template_runs_staged_entrypoint(tmp_path):
     result = subprocess.run([bash, str(batch)], env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert (tmp_path / "initialized").read_text() == "ready"
+    assert (tmp_path / "worker-environment.txt").read_text().splitlines() == [
+        "/tmp",
+        "http://proxy.alcf.anl.gov:3128",
+        "http://proxy.alcf.anl.gov:3128",
+    ]
     summary = json.loads((tmp_path / "run_summary.json").read_text())
     assert summary["pbs_job_id"] == "321.test" and summary["converged"]
     assert (tmp_path / "final.xyz").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Polaris workers require a POSIX shell")
+def test_parsl_template_initializes_compute_environment(tmp_path, monkeypatch):
+    pytest.importorskip("parsl")
+    import toml
+    from chemgraph.hpc_configs.loader import load_parsl_config
+
+    monkeypatch.delenv("PBS_JOBID", raising=False)
+    environment = tmp_path / "environment script.sh"
+    environment.write_text("export TMPDIR=/some/long/site/scratch/path\n")
+    template = (SKILLS / "pbs-hpc/assets/polaris-parsl.toml.template").read_text()
+    template = template.replace(
+        "{{ENVIRONMENT_FILE_SHELL}}", shlex.quote(str(environment))
+    )
+    template = template.replace("{{PROJECT}}", "test").replace(
+        "{{PARSL_RUN_DIR}}", str(tmp_path)
+    )
+    options = toml.loads(template)["execution"]["parsl"]
+    config = load_parsl_config("polaris", address="127.0.0.1", **options)
+    snippet = config.executors[0].provider.worker_init
+    command = snippet + (
+        '\nprintf "%s\\n" "$TMPDIR" "$http_proxy" "$https_proxy"\n'
+    )
+    result = subprocess.run(
+        [shutil.which("bash"), "-c", command], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.splitlines() == [
+        "/tmp",
+        "http://proxy.alcf.anl.gov:3128",
+        "http://proxy.alcf.anl.gov:3128",
+    ]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="PBS submission requires a POSIX shell")

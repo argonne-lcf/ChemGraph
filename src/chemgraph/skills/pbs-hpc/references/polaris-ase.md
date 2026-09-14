@@ -33,6 +33,21 @@ the input reference. Fill paths with JSON/TOML serialization; shell-quote the
 environment script path in `worker_init`. The environment must include
 ChemGraph, Parsl, CUDA PyTorch, MACE, and the MACE-Polar add-on.
 
+Preserve the template's compute-node proxy and temporary-directory exports
+after sourcing the environment:
+
+```bash
+export http_proxy="http://proxy.alcf.anl.gov:3128"
+export https_proxy="http://proxy.alcf.anl.gov:3128"
+export TMPDIR=/tmp
+```
+
+With `PBSProProvider`, place these in `worker_init`. With `LocalProvider`, set
+them in the PBS job script before the Python driver starts. `TMPDIR=/tmp`
+avoids the single-node `OSError: AF_UNIX path too long` documented in
+[ALCF's Parsl guide](https://docs.alcf.anl.gov/polaris/workflows/parsl/#known-issues).
+The direct PBS template also exports these values before launching Python.
+
 The user starts the ASE MCP server in a persistent login-node session with
 `--pbs-workers --execution-config /absolute/path/execution.toml` and attaches
 ChemGraph via its streamable-HTTP URL. Keep server and client on the same login

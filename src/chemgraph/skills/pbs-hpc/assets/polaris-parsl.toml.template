@@ -14,6 +14,10 @@ max_blocks = 1
 max_workers_per_node = 1
 worker_init = '''
 source {{ENVIRONMENT_FILE_SHELL}}
+export http_proxy="http://proxy.alcf.anl.gov:3128"
+export https_proxy="http://proxy.alcf.anl.gov:3128"
+# Keep Parsl's Unix-domain socket paths short on single-node jobs.
+export TMPDIR=/tmp
 '''
 # Defaults to the login node's bond0 address; override only if needed:
 # address = "COMPUTE_REACHABLE_LOGIN_ADDRESS"
