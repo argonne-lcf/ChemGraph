@@ -75,6 +75,11 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
         If *system_name* is not recognised.
     """
     system_name = system_name.lower().strip()
+    allocation_mode = kwargs.pop("allocation_mode", "existing")
+    if allocation_mode not in {"existing", "pbs"}:
+        raise ValueError("allocation_mode must be 'existing' or 'pbs'.")
+    if allocation_mode == "pbs" and system_name != "polaris":
+        raise ValueError("PBS allocation mode currently supports Polaris only.")
     if run_dir is None:
         run_dir = os.getcwd()
 
@@ -86,6 +91,10 @@ def load_parsl_config(system_name: str, run_dir: str | None = None, **kwargs):
         return get_local_config(run_dir=run_dir, **kwargs)
 
     elif system_name == "polaris":
+        if allocation_mode == "pbs":
+            from chemgraph.hpc_configs.polaris_pbs import get_polaris_pbs_config
+
+            return get_polaris_pbs_config(run_dir=run_dir, **kwargs)
         from chemgraph.hpc_configs.polaris_parsl import get_polaris_config
 
         return get_polaris_config(run_dir=run_dir, **kwargs)

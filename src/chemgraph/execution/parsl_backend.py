@@ -35,6 +35,12 @@ class ParslBackend(ExecutionBackend):
         super().__init__()
         self._python_app = None
         self._bash_app = None
+        self._is_async_remote = False
+        self._executors = []
+
+    @property
+    def is_async_remote(self) -> bool:
+        return self._is_async_remote
 
     def initialize(self, system: str = "polaris", **kwargs: Any) -> None:
         try:
@@ -48,18 +54,10 @@ class ParslBackend(ExecutionBackend):
 
         from chemgraph.hpc_configs.loader import load_parsl_config
 
-        run_dir = kwargs.pop("run_dir", None)
-        worker_init = kwargs.pop("worker_init", None)
-
-        # Build kwargs for the config loader
-        loader_kwargs: dict[str, Any] = {}
-        if run_dir is not None:
-            loader_kwargs["run_dir"] = run_dir
-        if worker_init is not None:
-            loader_kwargs["worker_init"] = worker_init
-
-        config = load_parsl_config(system, **loader_kwargs)
+        config = load_parsl_config(system, **kwargs)
         parsl.load(config)
+        self._is_async_remote = kwargs.get("allocation_mode") == "pbs"
+        self._executors = config.executors
 
         # Create generic app wrappers ------------------------------------------
         # These are created once and reused for all submitted tasks.
@@ -114,6 +112,28 @@ class ParslBackend(ExecutionBackend):
                 f"Task '{task.task_id}': unsupported task_type '{task.task_type}'."
             )
 
+    def get_execution_status(self) -> dict:
+        """Report allocation IDs separately from ChemGraph calculation batches."""
+        allocations = []
+        for executor in self._executors:
+            if not hasattr(executor, "blocks_to_job_id"):
+                continue
+            statuses = executor.status_facade
+            for block_id, job_id in list(executor.blocks_to_job_id.items()):
+                status = statuses.get(block_id)
+                allocations.append({
+                    "executor": executor.label, "block_id": block_id,
+                    "scheduler_job_id": job_id,
+                    "state": status.state.name if status else "UNKNOWN",
+                    "message": status.message if status else None,
+                })
+        return {
+            "backend": "parsl",
+            "allocation_mode": "pbs" if self.is_async_remote else "existing",
+            "status_source": "Parsl cached provider status",
+            "allocations": allocations,
+        }
+
     def shutdown(self) -> None:
         if self._initialized:
             try:
@@ -132,3 +152,4 @@ class ParslBackend(ExecutionBackend):
             except Exception:
                 logger.warning("Error during Parsl shutdown.", exc_info=True)
         self._initialized = False
+        self._executors = []
