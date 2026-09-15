@@ -66,7 +66,11 @@ TOML paths follow the same rule. ChemGraph resolves and validates each directory
 then exposes it through a stable backend route without copying files or creating
 symlinks. Supported saved sessions retain canonical host paths and rebuild these
 routes when resumed from a different directory. Missing or unreadable explicit
-directories fail with a path-specific error.
+directories fail with a path-specific error when Deep Agent is selected. Other
+interactive workflows retain saved directories without checking their access.
+Switching into Deep Agent validates them; if validation fails, the current
+workflow stays active. Restore the directory and retry the switch. Relative
+paths keep their invocation-directory meaning throughout the session.
 
 ```sh
 chemgraph run --interactive --workflow deep_agent --deepagent-workspace . \
@@ -161,9 +165,13 @@ write/upload to a path that actually exists in that sandbox before execution.
 Virtual skill/state/store paths are not shell mounts, and MCP servers can have
 different filesystems again.
 
-The read-only route does not confine a local shell. Existing write/execute
-approvals remain in force. Skill frontmatter does not grant additional tools or
-permissions. Standalone and main-agent workspace Deep Agents share
+Personal, project, and explicit host skill routes are writable: file-tool edits
+modify the original host collection, including shared checkouts. Existing
+write/edit/delete and execute approvals apply; disabling approvals also permits
+these skill edits without review. Updated instructions can affect future turns.
+Bundled resources remain read-only through their route, which does not confine
+a local shell. Skill frontmatter does not grant additional tools or permissions.
+Standalone and main-agent workspace Deep Agents share
 `DEFAULT_DEEPAGENT_PROMPT`, which permits using attached chemistry tools. Tools
 are configured separately; the built-in main-agent workspace worker has no
 chemistry tools attached. A custom `PromptConfig.deepagent` is preserved
@@ -183,12 +191,26 @@ root alongside existing workspace/source settings. Legacy session records defaul
 to local discovery disabled. Bundled skills remain available. Adding/editing
 skills is reflected on the next new turn, not midway through a pending approval.
 
-Missing optional directories are skipped. Invalid optional skill files produce
-upstream diagnostics. Optional sources rejected by the backend (for example, a
-project skill directory symlinked outside the virtual workspace) are skipped
+The resolved personal root is part of the topology fingerprint. Moving a session
+database to another account or container retains the original account's path;
+it does not adopt the new home directory. To use a different personal root, start
+a new session with that configuration. Changing the root while restoring the
+existing session produces an incompatible-topology error.
+
+Missing optional directories are skipped. With Deep Agents 0.7.5, invalid YAML or
+missing required metadata causes a skill to be skipped with log warnings; valid
+siblings remain available. Name/directory mismatches are accepted with warnings.
+These file-level warnings do not populate `skills_load_errors`. If a skill is
+absent from the catalog, check the logs and inspect its `SKILL.md` frontmatter
+using `read_file` at the collection's backend path.
+
+Optional sources rejected by the backend (for example, a project skill directory
+symlinked outside the virtual workspace) are skipped
 with a warning; other sources remain available. These failures do not relax the
 backend's filesystem boundaries. Warnings clear after the source recovers on a
 new turn.
+If an optional backend returns partial results with an error, valid skills are
+retained alongside the warning and still override earlier sources.
 
 Unreadable explicitly configured sources raise a clear configuration error before
 the model call. Explicit state/store sources must contain files before each turn

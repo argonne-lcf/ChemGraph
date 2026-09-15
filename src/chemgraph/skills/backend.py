@@ -14,6 +14,8 @@ from deepagents.backends.protocol import (
     ReadResult,
     WriteResult,
 )
+# Upstream internals are coupled to deepagents==0.7.5. Recheck the skill backend
+# and distribution tests when upgrading its parser or file-protocol helpers.
 from deepagents.backends.utils import (
     compile_recursive_glob,
     create_file_data,
