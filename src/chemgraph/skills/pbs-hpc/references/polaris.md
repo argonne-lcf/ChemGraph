@@ -245,8 +245,8 @@ Guidance:
 
 ## ChemGraph execution
 
-For the complete login-node ASE MCP + PBS-managed Parsl example, and a direct
-batch alternative, read [ASE calculations](polaris-ase.md). The explicit
+For direct PBS ASE jobs and optional MCP/Parsl worker reuse, read
+[ASE calculations](polaris-ase.md). The explicit
 `allocation_mode="pbs"` uses `PBSProProvider` to acquire nodes from a login node.
 The existing configuration described below remains the default.
 

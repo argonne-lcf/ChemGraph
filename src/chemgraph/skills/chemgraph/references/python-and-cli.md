@@ -9,6 +9,11 @@ chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
 chemgraph run --interactive --workflow main_agent --deepagent --deepagent-workspace .
 ```
 
+For individual Polaris ASE jobs, the [direct PBS recipe](../../pbs-hpc/references/polaris-ase.md)
+uses the standalone Deep Agent's shell to stage, submit, and inspect a batch job.
+Launch it on the submission host with a shared workspace; no `--mcp-url` or Parsl
+installation is required for that route.
+
 Attach an externally managed MCP server with `--mcp-url URL`. Starting a server
 and attaching to one are separate actions. Do not assume that an HTTP MCP server
 shares the CLI machine's filesystem.
