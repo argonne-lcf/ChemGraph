@@ -44,7 +44,7 @@ def test_skill_resources_in_wheel_and_sdist(skill_distributions):
     expected = {
         path.relative_to(root / "src").as_posix()
         for path in (root / "src/chemgraph/skills").rglob("*")
-        if path.is_file() and path.suffix not in {".py", ".pyc"}
+        if path.is_file() and path.suffix != ".pyc"
     }
     with zipfile.ZipFile(next(distribution.glob("*.whl"))) as wheel:
         assert expected <= set(wheel.namelist())
@@ -100,6 +100,14 @@ assert hashlib.sha256(download.content).hexdigest() == sys.argv[2]
 read = backend.read(aurora_path)
 assert read.error is None
 assert read.file_data['content'] == aurora_resource.decode('utf-8').replace('\\r\\n', '\\n')
+for path in (
+    '/chemgraph/scripts/run_ase.py', '/chemgraph/assets/water.xyz',
+    '/chemgraph/assets/water-ase.json.template', '/pbs-hpc/scripts/submit_ase.sh',
+    '/pbs-hpc/assets/polaris-ase.pbs.template', '/pbs-hpc/assets/polaris-parsl.toml.template',
+):
+    expected = resources.files('chemgraph.skills').joinpath(path.lstrip('/')).read_bytes()
+    assert backend.download_files([path])[0].content == expected
+    assert backend.read(path).error is None
 """
     result = subprocess.run(
         [sys.executable, "-c", script, str(installed), expected_aurora_hash],

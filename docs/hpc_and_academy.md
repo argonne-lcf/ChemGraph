@@ -5,6 +5,10 @@ locally or through a facility backend. HPC integrations require site modules,
 allocations, scheduler policies, endpoint identifiers, credentials, and
 shared-filesystem planning beyond a normal PyPI install.
 
+Start with the [Polaris ASE walkthrough](polaris_ase_workflows.md) to keep
+ChemGraph on a login node while direct PBS jobs run optimization, frequencies,
+IR, or thermochemistry. It also covers optional MCP/Parsl worker reuse.
+
 ## Execution backends
 
 | Backend | Extra | Typical role |

@@ -1,0 +1,23 @@
+#!/bin/bash -l
+#PBS -N {{JOB_NAME}}
+#PBS -A {{PROJECT}}
+#PBS -q debug
+#PBS -l select=1:system=polaris
+#PBS -l walltime=00:30:00
+#PBS -l filesystems={{FILESYSTEMS}}
+#PBS -j oe
+#PBS -r n
+
+set -eo pipefail
+cd "${PBS_O_WORKDIR:?PBS submission directory is required}"
+source {{ENVIRONMENT_FILE_SHELL}}
+export http_proxy="http://proxy.alcf.anl.gov:3128"
+export https_proxy="http://proxy.alcf.anl.gov:3128"
+# Set before Python starts, including when adapting this job for LocalProvider.
+export TMPDIR=/tmp
+set -u
+export CHEMGRAPH_LOG_DIR="$PWD"
+export OMP_NUM_THREADS=8
+# One process on the batch job's compute node, using one of its four GPUs.
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+exec {{PYTHON_SHELL}} run_ase.py --input input.json --require-pbs

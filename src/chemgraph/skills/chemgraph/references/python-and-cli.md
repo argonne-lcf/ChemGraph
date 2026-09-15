@@ -9,6 +9,11 @@ chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
 chemgraph run --interactive --workflow main_agent --deepagent --deepagent-workspace .
 ```
 
+For individual Polaris ASE jobs, the [direct PBS recipe](../../pbs-hpc/references/polaris-ase.md)
+uses the standalone Deep Agent's shell to stage, submit, and inspect a batch job.
+Launch it on the submission host with a shared workspace; no `--mcp-url` or Parsl
+installation is required for that route.
+
 Attach an externally managed MCP server with `--mcp-url URL`. Starting a server
 and attaching to one are separate actions. Do not assume that an HTTP MCP server
 shares the CLI machine's filesystem.
@@ -21,8 +26,10 @@ the existing approval policy; preserve structured interrupts when resuming.
 
 Bundled skills load automatically. Personal `~/.chemgraph/skills/` and workspace
 `.agents/skills/` directories are discovered for supported local backends.
-`deepagent_skills` / repeated `--deepagent-skill` values are additional,
-backend-relative sources, with later sources overriding earlier ones.
+CLI `--deepagent-skill` and TOML `deepagent_skills` values are host directories,
+relative to the invocation directory. Python `deepagent_skills` remains
+backend-relative; Python `deepagent_skill_dirs` mounts host directories.
+Later sources override earlier ones.
 
 For chemistry tool artifacts, relative writes use `CHEMGRAPH_LOG_DIR` through
 `chemgraph.tools.ase_core._resolve_path`; readers use `_resolve_existing_path`.
