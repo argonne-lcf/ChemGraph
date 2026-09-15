@@ -45,6 +45,7 @@ from chemgraph.tools.ase_core import extract_output_json_core, run_ase_core
 logger = logging.getLogger(__name__)
 
 _JOBS_FILE = Path("~/.chemgraph/ase_jobs.json").expanduser()
+_PBS_WORKERS = False
 
 mcp = CGFastMCP(
     name="ChemGraph ASE Tools",
@@ -56,10 +57,13 @@ mcp = CGFastMCP(
            directory (local or pre-staged remote).
         3. extract_output_json: load simulation results from a JSON file.
         4. check_job_status / get_job_results / list_jobs / cancel_job: HPC
-           job batch management. Job state persists across sessions.
+           job batch management. Metadata persists; keep the server alive for
+           in-flight Parsl futures.
         5. transfer_files / check_transfer_status / list_remote_files
            (when Globus Transfer is configured): stage input files on the
            remote HPC filesystem before running ensembles in remote mode.
+        6. get_execution_status: allocation IDs and cached scheduler states,
+           separate from calculation batch IDs.
 
         Guidelines:
         - Use each tool only when its input schema matches the user request.
@@ -72,7 +76,7 @@ mcp = CGFastMCP(
         - When a tool returns status='submitted' with a batch_id, call
           get_job_results(batch_id) to retrieve results. If still pending,
           report the batch_id so the user can check later -- job state is
-          persisted across sessions.
+          persisted across sessions. Parsl futures require the same live server.
     """
     + get_calculator_selection_context(),
 )
@@ -91,6 +95,7 @@ def _ase_worker(job: dict) -> dict:
     import tempfile
 
     job = dict(job)
+    pbs_worker = job.pop("_pbs_worker", False)
 
     # Pre-staged remote file: use the path directly on the worker FS.
     remote_file = job.pop("remote_structure_file", None)
@@ -127,6 +132,10 @@ def _ase_worker(job: dict) -> dict:
     if output_file:
         os.makedirs(os.path.dirname(os.path.abspath(output_file)), exist_ok=True)
 
+    if pbs_worker:
+        from chemgraph.tools.ase_runner import run_pbs_calculation
+
+        return run_pbs_calculation(job)
     params = ASEInputSchema(**job)
     result = run_ase_core(params)
     return result
@@ -198,12 +207,16 @@ def _ase_transport_hook(task: TaskSpec) -> TaskSpec:
         job = (
             params.model_dump() if hasattr(params, "model_dump") else dict(params)
         )
+        if _PBS_WORKERS:
+            job["_pbs_worker"] = True
         if not _backend_shares_fs():
             _embed_inline_if_local(job)
         task.callable = _ase_worker
         task.kwargs = {"job": job}
     elif task.callable is _ase_worker:
         job = dict(task.kwargs.get("job", {}))
+        if _PBS_WORKERS:
+            job["_pbs_worker"] = True
         if not _backend_shares_fs():
             _embed_inline_if_local(job)
         task.kwargs = {"job": job}
@@ -268,6 +281,12 @@ def _expand_ase_ensemble(params: ase_input_schema_ensemble) -> list[dict]:
     }
     base_output = Path(params.output_results_file)
 
+    def output_for(structure):
+        if _PBS_WORKERS:
+            # Each task owns its derived frequency/mode/spectrum filenames.
+            return base_output.parent / Path(structure).name / base_output.name
+        return make_per_structure_output(Path(structure), base_output)
+
     if params.remote_structure_directory:
         remote_dir = params.remote_structure_directory
         mcp._ensure_backend()
@@ -287,7 +306,7 @@ def _expand_ase_ensemble(params: ase_input_schema_ensemble) -> list[dict]:
 
         jobs = []
         for fname in file_names:
-            per_output = make_per_structure_output(Path(fname), base_output)
+            per_output = output_for(fname)
             job = {**shared}
             job["remote_structure_file"] = f"{remote_dir}/{fname}"
             job["output_results_file"] = str(per_output)
@@ -305,7 +324,7 @@ def _expand_ase_ensemble(params: ase_input_schema_ensemble) -> list[dict]:
         {
             **shared,
             "input_structure_file": str(f),
-            "output_results_file": str(make_per_structure_output(f, base_output)),
+            "output_results_file": str(output_for(f)),
         }
         for f in structure_files
     ]
@@ -321,6 +340,16 @@ def run_ase_ensemble(params: ase_input_schema_ensemble) -> list[dict]:
 def extract_output_json(json_file: str) -> dict:
     """Load simulation results from an output JSON file."""
     return extract_output_json_core(json_file)
+
+
+def get_execution_status() -> dict:
+    """Inspect allocation IDs and cached states, separate from task batch IDs."""
+    mcp._ensure_backend()
+    status = getattr(mcp._backend, "get_execution_status", None)
+    return status() if status else {"status": "not_applicable"}
+
+
+mcp.add_tool(get_execution_status)
 
 
 mcp.add_tool(
@@ -348,7 +377,14 @@ if __name__ == "__main__":
                          help="Processes per node for backend tasks")
     _parser.add_argument("--ngpus-per-process", type=int, default=0,
                          help="GPUs per process for backend tasks")
+    _parser.add_argument("--pbs-workers", action="store_true",
+                         help="Isolate each calculation and require a PBS compute node")
+    _parser.add_argument("--execution-config", default=None,
+                         help="TOML file containing the execution configuration")
+    _parser.add_argument("--jobs-file", default=str(_JOBS_FILE),
+                         help="Persist batch metadata here; keep separate per server")
     _args, _remaining = _parser.parse_known_args()
+    _PBS_WORKERS = _args.pbs_workers
     sys.argv = [sys.argv[0]] + _remaining
 
     mcp.tool(
@@ -371,7 +407,10 @@ if __name__ == "__main__":
         gpus_per_task=_args.ngpus_per_process,
     )(run_ase_ensemble)
 
-    mcp.init_backend(tracker_kwargs={"persist_file": _JOBS_FILE})
+    mcp.init_backend(
+        config_path=_args.execution_config,
+        tracker_kwargs={"persist_file": Path(_args.jobs_file).expanduser()},
+    )
 
     try:
         run_mcp_server(mcp, default_port=9005)
