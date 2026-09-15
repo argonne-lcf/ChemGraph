@@ -5,8 +5,8 @@ MCP workflows, and **pbs-hpc** for PBS job preparation, monitoring, and facility
 guidance. They are available to standalone Deep Agents, registry-created Deep
 Agent workers, and the optional `main_agent` workspace worker.
 
-Try the [Polaris ASE walkthrough](polaris_ase_workflows.md) for login-node
-ChemGraph with PBS-managed MCP/Parsl workers, or the direct PBS batch example.
+Try the [Polaris ASE walkthrough](polaris_ase_workflows.md) for skills-driven
+direct PBS jobs from a login node, with optional MCP/Parsl worker reuse.
 
 ## Where skills live
 

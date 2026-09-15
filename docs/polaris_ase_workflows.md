@@ -1,9 +1,11 @@
 # ASE workflows on Polaris from a login node
 
-Run ChemGraph and a persistent ASE MCP server on a Polaris login node. The
-server uses Parsl's `PBSProProvider` to acquire compute nodes and reuse their
-GPU workers across calculations. Skills guide the requests; the existing
-ChemGraph ASE engine performs the science. A direct PBS example is also included.
+Run ChemGraph's Deep Agent on a Polaris login node and use its bundled skills
+to prepare, submit, and monitor an ASE calculation through PBS. This is the
+recommended route for individual geometry optimizations and frequency jobs.
+The agent's shell calls the packaged submission helper; the existing ChemGraph
+ASE engine performs the science on a compute node. No ASE MCP server or Parsl
+is required. An optional MCP/Parsl route below supports reusable worker pools.
 
 These examples have hermetic tests; a real Polaris run has **not yet been
 validated**. Record the actual job IDs, transcript, and artifacts during site validation.
@@ -11,9 +13,12 @@ validated**. Record the actual job IDs, transcript, and artifacts during site va
 ## Prepare the environment
 
 Use a shared project directory accessible from login and compute nodes and a
-ChemGraph installation containing these examples. Both the server and compute
-environment need `chemgraph[parsl]`, CUDA-enabled PyTorch, MACE, and the optional
-MACE-Polar add-on. For a matching checkout, install the add-on with:
+ChemGraph installation containing the ASE runner and packaged skills. The login
+environment needs ChemGraph and its configured LLM provider, with `qsub` and
+`qstat` available to its shell.
+The compute environment needs ChemGraph and the requested calculator dependencies.
+For this MACE-Polar water example, use CUDA-enabled PyTorch, MACE, and the optional
+MACE-Polar add-on. In a matching checkout, install the add-on with:
 
 ```bash
 python -m pip install -r requirements/mace-polar.txt
@@ -22,8 +27,9 @@ python -m pip install -r requirements/mace-polar.txt
 Follow the [Polaris Parsl guide](https://docs.alcf.anl.gov/polaris/workflows/parsl/)
 for site modules and environment setup. Create an initialization script that
 loads those modules and activates your shared environment without prompting.
-Supply its absolute path. The login-side server uses the same environment so
-its calculator schemas match the workers' capabilities.
+Supply its absolute path and the absolute Python executable for that environment.
+Only the optional MCP/Parsl route needs `chemgraph[parsl]`; its server and workers
+also need matching calculator dependencies so their schemas agree.
 
 Stage an explicit local MACE-Polar `polar-1-m` model file before submitting
 calculations. Use the [MACE foundation-model instructions](https://github.com/ACEsuit/mace)
@@ -31,10 +37,28 @@ for the installed engine version. The calculation runner records the model's
 path and SHA-256 and never downloads weights. Configure your LLM provider in
 the login environment; the compute workers do not call an LLM.
 
-## Start the persistent ASE MCP server
+## Choose the calculation
 
-Create a shared workspace and copy the installed templates into it. This step
-only copies small package resources; it does not initialize a calculator:
+| Driver | Behavior |
+| --- | --- |
+| `opt` | Optimize the geometry |
+| `vib` | Optimize and calculate frequencies/normal modes |
+| `ir` | Optimize and calculate frequencies plus an IR spectrum |
+| `thermo` | Optimize, calculate vibrations, and compute ideal-gas thermochemistry |
+
+For optimization and frequencies together, submit one `vib` job. `thermo`
+already includes both steps but does not produce IR; requesting thermochemistry
+and IR needs separate `thermo` and `ir` calculations in separate directories.
+The engine currently repeats their shared preparatory work. MACE-Polar supports
+dipoles needed for IR; MACE-OFF does not. Preserve the user's calculator and
+scientific settings for other molecules. EMT is only an infrastructure test
+calculator for this walkthrough, not a substitute for the requested model.
+
+## Direct PBS jobs
+
+Create a fresh shared workspace. The agent can stage the bundled resources
+from its skills; the following commands also let you stage them manually.
+They only copy small package resources and do not initialize a calculator:
 
 ```bash
 WORKDIR=/eagle/YOUR_PROJECT/YOUR_USER/chemgraph-demo
@@ -45,12 +69,111 @@ from importlib.resources import files
 from pathlib import Path
 root = files("chemgraph.skills")
 for source, target in {
-    "pbs-hpc/assets/polaris-parsl.toml.template": "execution.toml",
+    "chemgraph/scripts/run_ase.py": "run_ase.py",
+    "pbs-hpc/assets/polaris-ase.pbs.template": "job.pbs",
+    "pbs-hpc/scripts/submit_ase.sh": "submit_ase.sh",
     "chemgraph/assets/water.xyz": "water.xyz",
-    "chemgraph/assets/water-ase.json.template": "input.template.json",
+    "chemgraph/assets/water-ase.json.template": "input.json",
 }.items():
     with Path(target).open("xb") as stream:
         stream.write(root.joinpath(source).read_bytes())
+PY
+```
+
+Use a fresh directory for each calculation. Complete `input.json` with the
+driver, absolute structure/model/result paths, and scientific settings using
+`ASEInputSchema`. Place the result JSON in this run directory. Complete `job.pbs`
+with the project account, job name, filesystems, and shell-quoted environment
+and Python paths. Use JSON serialization for input values and `shlex.quote`
+for shell paths. The agent can fill these files from the prompt below.
+
+The template requests one node for 30 minutes in `debug`, with one process
+using one GPU. Confirm current [queue limits](https://docs.alcf.anl.gov/polaris/running-jobs/)
+and adapt the queue/walltime to the calculation. Declare every filesystem used
+by inputs, environment, and outputs. Keep the proxy exports and `TMPDIR=/tmp`
+after environment activation. Keep `--require-pbs`: the runner checks PBS
+metadata and verifies that its hostname appears in `PBS_NODEFILE` before setup.
+
+### Ask ChemGraph to prepare and submit
+
+On the **login node**, with your configured LLM provider:
+
+```bash
+chemgraph run --interactive --workflow deep_agent \
+  --deepagent-workspace "$WORKDIR" --model "$LLM_MODEL"
+```
+
+Bundled skills load automatically. The CLI enables a host shell with its existing
+action approvals. Replace the deployment placeholders in this example prompt:
+
+> Read the chemgraph and pbs-hpc skills and their Polaris ASE recipe. Use direct
+> PBS to optimize water.xyz and calculate its vibrational frequencies in one
+> vib job. Use MACE-Polar with model /absolute/path/to/polar-1-m.model, CUDA,
+> float64, charge 0, multiplicity 1, BFGS, fmax 0.01 eV/Å, and 200 steps.
+> Use project YOUR_PROJECT, queue debug, walltime 00:30:00, and filesystems
+> home:eagle. The compute initialization script is /absolute/path/to/environment.sh
+> and its Python is /absolute/path/to/environment/bin/python. Stage any missing
+> bundled resources and complete input.json and job.pbs in this fresh workspace,
+> with result.json here.
+> Validate the files and submit once using submit_ase.sh. Save the PBS job ID
+> and report its state and run directory. Read the actual results when available.
+
+For geometry optimization alone, ask for `opt`. The batch script runs
+`python run_ase.py --input input.json --require-pbs` on a compute node.
+Do not execute this calculation command on the login node.
+
+After completing and inspecting the files, the submission commands from the
+real host run directory are:
+
+```bash
+bash -n job.pbs
+bash submit_ase.sh
+```
+
+The helper records the attempt in `submission.started` before calling `qsub`,
+saves `job.id` and `qsub.stderr`, and refuses a repeated attempt. A failed call
+or missing ID can mean an uncertain submission; preserve the marker and inspect
+PBS records using the job name and directory before considering a replacement.
+
+### Monitor now or from another agent session
+
+Read the saved full PBS job ID and inspect that same job:
+
+```bash
+qstat -f "$(cat job.id)"
+```
+
+After the job leaves the active queue, inspect retained history with
+`qstat -xf "$(cat job.id)"`. Report queued, held, or running states with the ID
+and run directory. Inspect scheduler comments, PBS stdout/stderr, and the result
+files before reporting completion. A missing job or missing results leaves the
+outcome unresolved. Use `qdel JOB_ID` only for a requested cancellation.
+
+An accepted direct PBS job runs independently of the agent process. To inspect
+it later, launch the same CLI command with the existing workspace and ask:
+
+> Inspect the existing PBS calculation in this workspace. Read job.id and
+> input.json, check that job's status or history, and inspect run_summary.json
+> and result.json when available. Report convergence, energy, frequencies,
+> and artifact paths. Do not submit another job.
+
+Inspection uses the saved files and scheduler evidence across agent sessions.
+On failure, preserve the original artifacts and submission marker. An explicitly
+requested retry uses a fresh directory after the prior job's state is resolved.
+
+## Optional MCP/Parsl worker reuse
+
+Use this route for ensembles or repeated calculations sharing allocated workers,
+or when explicitly requested. Keep the direct workflow above for individual
+jobs. In the shared workspace, copy the installed Parsl template:
+
+```bash
+python - <<'PY'
+from importlib.resources import files
+from pathlib import Path
+template = files("chemgraph.skills").joinpath("pbs-hpc/assets/polaris-parsl.toml.template")
+with Path("execution.toml").open("xb") as stream:
+    stream.write(template.read_bytes())
 PY
 ```
 
@@ -90,8 +213,6 @@ For `PBSProProvider`, these exports belong in `worker_init`. When using
 before starting the Python driver; worker initialization alone is too late for
 the driver's temporary paths. The bundled direct PBS template includes them.
 
-Confirm current [queue limits](https://docs.alcf.anl.gov/polaris/running-jobs/)
-and declare every filesystem used by your inputs, environment, and outputs.
 The worker connection defaults to the login host's `bond0` address; set `address`
 only when your deployment needs a different compute-reachable login address.
 Backend/system environment variables override TOML; remove stale
@@ -114,7 +235,7 @@ seconds. `max_blocks` limits concurrent allocations, not lifetime submissions.
 Each frequency calculation remains one task; its finite-difference displacements
 are not individually distributed by this configuration.
 
-## Ask ChemGraph for calculations
+### Ask ChemGraph through MCP
 
 In another terminal on the **same login host**, using the configured LLM provider:
 
@@ -135,23 +256,7 @@ Bundled skills load automatically. Replace the model path in this prompt:
 > those batches without resubmitting. Report convergence, energy, frequencies,
 > thermochemistry, and links to the IR and geometry artifacts as they become available.
 
-The same `run_ase_single` input supports these drivers:
-
-| Driver | Behavior |
-| --- | --- |
-| `opt` | Optimize the geometry |
-| `vib` | Optimize and calculate frequencies/normal modes |
-| `ir` | Optimize and calculate frequencies plus an IR spectrum |
-| `thermo` | Optimize, calculate vibrations, and compute ideal-gas thermochemistry |
-
-The input template has explicit calculator/model settings and the driver's
-parameters. `thermo` already includes optimization and vibrations; it does not
-produce IR. The combined prompt therefore submits a `thermo` task and an `ir`
-task. Each uses its own directory; the engine currently repeats their shared
-preparatory work. MACE-Polar supports dipoles needed for IR; MACE-OFF does not.
-The model and method choices remain explicit for other molecules.
-
-## Monitor and collect results
+### Monitor MCP batches
 
 MCP returns `status="submitted"` and a **calculation batch ID** without waiting
 for PBS. Use `check_job_status` and `get_job_results` with that ID. Use
@@ -159,19 +264,9 @@ for PBS. Use `check_job_status` and `get_job_results` with that ID. Use
 states. Several calculations can share an allocation. For scheduler diagnosis,
 use `qstat -f PBS_JOB_ID` and `qstat -xf PBS_JOB_ID`, inspecting comments and logs.
 
-Each isolated calculation directory contains `ase_input.json`, `calculation.log`,
-`run_summary.json`, the requested result JSON, `final.xyz`, and driver-specific
-artifacts: optimization trajectories, frequency CSVs, normal-mode trajectories,
-and IR plots/spectrum/peak CSVs. The summary records the driver, compute host,
-PBS ID, model path/hash, potential energy in eV, convergence, optimization steps,
-timestamps, and artifact paths. Full thermochemistry and spectrum metadata are
-in the result JSON. Artifacts use absolute paths on the shared filesystem.
-
 A completed batch means futures finished; check each result's status and
-convergence. Nonconverged calculations retain artifacts and report
-`status="not_converged"`. Missing files or scheduler records leave the outcome
-unresolved. The process exits 0 for successful convergence, 2 for nonconvergence,
-and 1 for failure; early precondition failures may leave only the calculation log.
+convergence. Parsl owns allocation submission here; do not also invoke the direct
+submission helper for the same calculation.
 
 Keep the MCP server alive while tasks are outstanding. Metadata and saved
 results survive restart, but in-flight Parsl futures cannot be reattached by
@@ -180,30 +275,21 @@ Batch cancellation attempts to cancel pending tasks; it does not guarantee
 termination of a running calculation or deletion of its shared allocation.
 Stopping the server normally releases its Parsl workers and allocations.
 
-## Direct PBS alternative
+## Results and failures for both routes
 
-For one batch calculation, ask the Deep Agent to use the recipe's **direct PBS
-alternative**, specifying the desired driver and the same deployment inputs.
-It stages `run_ase.py`, `job.pbs`, `submit_ase.sh`, `water.xyz`, and `input.json`
-in a fresh shared run directory. These are packaged under the `chemgraph` and
-`pbs-hpc` skills. Fill every placeholder with correctly escaped JSON or shell
-paths. The batch script sources the compute environment and runs:
+Each calculation produces `run_summary.json`, the configured result JSON,
+`final.xyz`, and driver-specific artifacts: optimization trajectories, frequency
+CSVs, normal-mode trajectories, and IR plots/spectrum/peak CSVs. The summary records
+the driver, compute host, PBS ID, model path/hash, potential energy in eV,
+convergence, optimization steps, timestamps, and artifact paths. Full frequency,
+thermochemistry, and spectrum data are in the result JSON.
 
-```bash
-python run_ase.py --input input.json --require-pbs
-```
+Direct jobs retain the staged `input.json` and PBS stdout/stderr. MCP jobs also
+write `ase_input.json` and `calculation.log`. Use absolute result paths on the
+shared filesystem and a fresh output directory for each calculation.
 
-From the **login node**, validate and submit the completed batch script:
-
-```bash
-bash -n job.pbs
-bash submit_ase.sh
-qstat -f "$(cat job.id)"
-```
-
-The submission helper records its attempt before calling `qsub`, saves `job.id`
-and `qsub.stderr`, and refuses a repeated attempt in that directory. Preserve the
-marker when submission is uncertain and inspect PBS before a replacement job.
-The compute helper requires PBS metadata and a hostname listed in `PBS_NODEFILE`.
-It uses the same ASE drivers and result summaries as the MCP example. This path
-does not use the MCP server or Parsl-managed allocation.
+Nonconverged calculations retain artifacts and report `status="not_converged"`.
+The runner exits 0 for successful convergence, 2 for nonconvergence, and 1 for
+failure. Early precondition failures may leave only stderr or the calculation
+log. Missing files or scheduler records leave the outcome unresolved; scheduler
+completion alone does not establish scientific success.
