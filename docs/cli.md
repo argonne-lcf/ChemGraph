@@ -97,7 +97,7 @@ Or add the same graph to the supervisor as the `deepagent` subagent:
 ```bash
 chemgraph run --interactive --workflow main_agent --deepagent \
   --deepagent-workspace /path/to/disposable-checkout \
-  --deepagent-skill /workspace/.agents/skills/
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/
 ```
 
 The direct interactive workflow keeps one process-local thread until the model
@@ -110,19 +110,22 @@ The selected directory is mounted for file tools at `/workspace`. Thus,
 absolute host-path mapping supplied to the model. Existing files under a
 previously created `test/workspace/` directory are not migrated.
 
-Skills are opt-in. Repeat `--deepagent-skill PATH` to provide ordered,
-backend-relative source directories; the later source wins when two sources
-contain the same skill name. For the virtual CLI workspace, a conventional
-project source can be selected explicitly as
-`/workspace/.agents/skills/`. ChemGraph does not scan project or user
-directories automatically.
+Bundled `chemgraph` and `pbs-hpc` skills load automatically, followed by
+`~/.chemgraph/skills/` and the workspace's `.agents/skills/` when present.
+Skill paths are resolved against the CLI invocation directory, independently of
+`--deepagent-workspace`. Absolute paths, `~`, and `../` paths work automatically
+without copies or symlinks. Old CLI `/workspace/...` examples must be replaced
+with host paths; agent file tools continue to use virtual workspace paths.
 
-Each source must contain one directory per skill, and each skill directory
-must contain a `SKILL.md` with `name` and `description` YAML frontmatter.
-Metadata is cached in the checkpoint for the life of the thread, so restart or
-reinitialize the workflow after changing the available skill set. Reading a
-skill does not require an action review, while executing a bundled script or
-mutating its files continues to use the normal Deep Agent approval policy.
+Repeat `--deepagent-skill PATH` to add host directories; later sources
+win for matching skill names. `--no-deepagent-discover-skills` disables personal
+and project discovery while retaining bundled and explicit sources.
+
+Each source contains a directory per skill with a `SKILL.md` and `name` and
+`description` YAML frontmatter. Metadata refreshes at each new turn, including
+on reconstructed graphs. Bundled resources are read-only; templates/helpers
+must be copied into the execution filesystem before use by the shell. Normal
+file mutation and execution approvals apply. See [skills](skills.md).
 
 Deep Agent run logs use the normal ChemGraph locations rather than the selected
 workspace. The default is `cg_logs/session_*` for state JSON plus the configured
@@ -134,7 +137,7 @@ For automation, headless execution must opt out of those prompts explicitly:
 ```bash
 chemgraph run --workflow deep_agent \
   --deepagent-workspace /path/to/disposable-checkout \
-  --deepagent-skill /workspace/.agents/skills/ \
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/ \
   --deepagent-dangerously-skip-approvals \
   --query "Run the repository tests and summarize failures."
 ```

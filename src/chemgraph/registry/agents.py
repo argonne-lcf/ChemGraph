@@ -57,7 +57,7 @@ BUILTIN_AGENT_SPECS: tuple[AgentSpec, ...] = (
     ),
     AgentSpec(
         "deep_agent",
-        "Workspace and coding worker for repository-scale tasks.",
+        "Workspace worker with support for attached chemistry tools.",
         "chemgraph.graphs.deep_agent:construct_deep_agent_graph",
         aliases=("deepagent",),
         tags=frozenset({"coding", "workspace"}),

@@ -16,6 +16,7 @@ from langgraph.types import interrupt
 from pydantic import Field
 
 from chemgraph.agent.main_session import MainAgentSession
+from chemgraph.graphs.deep_agent import DEFAULT_DEEPAGENT_PROMPT
 from chemgraph.graphs.main_agent import (
     construct_main_agent_graph,
     latest_assistant_text,
@@ -519,7 +520,17 @@ def test_default_worker_forwards_options_and_inherits_parent_checkpoint(monkeypa
     assert isinstance(graph.checkpointer, InMemorySaver)
 
 
-def test_deepagent_is_opt_in_and_receives_backend_configuration(monkeypatch):
+@pytest.mark.parametrize(
+    ("prompt_kwargs", "expected_prompt"),
+    [
+        ({}, DEFAULT_DEEPAGENT_PROMPT),
+        ({"deepagent_system_prompt": "Custom instructions"}, "Custom instructions"),
+        ({"deepagent_system_prompt": ""}, ""),
+    ],
+)
+def test_deepagent_is_opt_in_and_receives_backend_configuration(
+    monkeypatch, tmp_path, prompt_kwargs, expected_prompt,
+):
     captured = {}
 
     class FakeDeepAgent:
@@ -550,12 +561,16 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(monkeypatch):
         enable_deepagent=True,
         deepagent_backend=backend,
         deepagent_skills=["/workspace/skills/"],
+        deepagent_skill_dirs=[str(tmp_path)],
         deepagent_recursion_limit=17,
+        **prompt_kwargs,
     )
 
     assert captured["kwargs"]["backend"] is backend
     assert captured["kwargs"]["tools"] == []
+    assert captured["kwargs"]["system_prompt"] == expected_prompt
     assert captured["kwargs"]["skills"] == ["/workspace/skills/"]
+    assert captured["kwargs"]["skill_dirs"] == [str(tmp_path)]
     assert captured["kwargs"]["checkpointer"] is None
     assert captured["kwargs"]["recursion_limit"] == 17
     assert captured["kwargs"]["name"] == "deepagent"
@@ -566,6 +581,7 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(monkeypatch):
     [
         ({"deepagent_backend": object()}, "requires enable_deepagent"),
         ({"deepagent_skills": ["/skills/"]}, "requires enable_deepagent"),
+        ({"deepagent_skill_dirs": ["/skills/"]}, "requires enable_deepagent"),
         (
             {"enable_deepagent": True, "deepagent_recursion_limit": 0},
             "must be positive",

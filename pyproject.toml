@@ -153,6 +153,7 @@ chemgraph-eval = "chemgraph.eval.cli:main"
 where = ["src/"]
 
 [tool.setuptools.package-data]
+"chemgraph.skills" = ["*/SKILL.md", "*/references/*.md", "*/assets/*", "*/scripts/*"]
 "chemgraph.eval" = ["data/*.json"]
 # ocsr_models reads ocsr_registry.json through importlib.resources, so it has to ship.
 "chemgraph.tools" = ["ocsr_registry.json"]
