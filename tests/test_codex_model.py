@@ -596,7 +596,7 @@ def test_codex_corrected_actions_still_require_approval(
     assert "__interrupt__" not in state
     assert len(effects) == (1 if decision == "approve" else 0)
     if tool_name == "write_file" and decision == "approve":
-        assert (tmp_path / "result.txt").read_text() == content
+        assert (tmp_path / "result.txt").read_text(encoding="utf-8") == content
     elif tool_name == "execute" and decision == "approve":
         assert effects == [content]
     assert len(fake_codex_sdk.run_calls) == 4
