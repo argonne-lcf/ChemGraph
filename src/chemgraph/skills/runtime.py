@@ -183,6 +183,7 @@ class ChemGraphSkillsMiddleware(SkillsMiddleware):
             return None
         backend, path = self._backend, source
         # Use the same routing rules as file tools, including nested composites.
+        # Private deepagents==0.7.5 API: recheck skill routing tests on upgrades.
         while isinstance(backend, CompositeBackend):
             backend, path = backend._get_backend_and_key(path)
         if isinstance(backend, (StateBackend, StoreBackend)):
@@ -209,8 +210,7 @@ class ChemGraphSkillsMiddleware(SkillsMiddleware):
             for error in source_errors:
                 logger.warning("%s", error)
             errors.extend(source_errors)
-            return
-        for skill in update["skills_metadata"]:
+        for skill in update.get("skills_metadata", []):
             skills[skill["name"]] = skill
 
     def before_agent(self, state, runtime, config):

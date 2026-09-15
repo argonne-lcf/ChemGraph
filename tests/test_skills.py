@@ -214,10 +214,13 @@ def test_explicit_missing_source_errors_and_invalid_optional_warns(
     invoke(graph, "empty-directory")
     assert "pbs-hpc" in _prompt(model)
     _skill(tmp_path / ".agents/skills", "broken").write_text("no frontmatter")
+    _skill(tmp_path / ".agents/skills", description="Valid project sibling")
     graph = construct_deep_agent_graph(model, backend=backend)
     invoke(graph, "optional")
     assert "failed metadata parse" in caplog.text
     assert "pbs-hpc" in _prompt(model)
+    assert "Valid project sibling" in _prompt(model)
+    assert graph.get_state({"configurable": {"thread_id": "optional"}}).values["skills_load_errors"] == []
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
@@ -545,6 +548,46 @@ def test_optional_download_failure_handling(tmp_path, asynchronous, error_type):
     else:
         with pytest.raises(error_type):
             load()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("required", [False, True])
+def test_partial_source_results_preserve_valid_overrides(
+    tmp_path, caplog, asynchronous, required
+):
+    class PartialBackend(FilesystemBackend):
+        def ls(self, path):
+            result = super().ls(path)
+            return LsResult(entries=result.entries, error="Partial listing")
+
+    _skill(tmp_path / ".agents/skills", description="Valid project override")
+    backend, sources, optional = prepare_skill_backend(
+        PartialBackend(root_dir=tmp_path, virtual_mode=True), (),
+        user_skills_dir=str(tmp_path / "missing"),
+    )
+    if required:
+        optional.pop("/.agents/skills/")
+    middleware = ChemGraphSkillsMiddleware(
+        backend=backend, sources=sources, optional=optional,
+    )
+
+    def load():
+        return (
+            asyncio.run(middleware.abefore_agent({}, None, {}))
+            if asynchronous else middleware.before_agent({}, None, {})
+        )
+
+    if required:
+        with pytest.raises(ValueError, match="Partial listing"):
+            load()
+    else:
+        update = load()
+        skills = {skill["name"]: skill for skill in update["skills_metadata"]}
+        assert skills["chemgraph"]["description"] == "Valid project override"
+        assert "pbs-hpc" in skills
+        assert len(update["skills_load_errors"]) == 1
+        assert "Partial listing" in update["skills_load_errors"][0]
+        assert "Partial listing" in caplog.text
 
 
 def test_personal_root_and_discovery_are_persisted(monkeypatch, tmp_path):
