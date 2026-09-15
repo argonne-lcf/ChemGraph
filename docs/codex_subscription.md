@@ -79,6 +79,50 @@ comparisons with Codex or Claude Code, use identical starting checkouts and
 tasks, record the runtime and safety mode, and score resulting patches and
 tests independently.
 
+## Tool arguments and response recovery
+
+Common tools such as `execute`, `write_file`, `read_file`, and `task` use JSON
+objects for arguments in Codex's output schema. Commands and file contents need
+only one layer of JSON encoding. Optional arguments stay omitted when the tool's
+default should apply; an explicit `null` remains distinct from omission.
+
+The adapter supports flat, named scalar arguments, enums, nullable scalars, and
+supported scalar constraints. Named objects with unspecified
+`additionalProperties` are closed for generation. Explicitly open, nested,
+referenced, or otherwise unsupported schemas retain JSON-encoded argument
+strings. The same fallback applies when optional arguments would require more
+than 32 schema alternatives or the combined output schema would exceed provider
+limits. The prompt identifies the selected encoding for each tool.
+
+Codex's runtime enforces the output schema. ChemGraph checks response structure,
+argument encoding, tool names, and tool-choice constraints before returning the
+complete batch to the graph. LangChain/Pydantic retain parameter validation at
+tool execution; those errors follow the graph's existing tool-error handling.
+ChemGraph continues to execute tools through its configured approval flow.
+
+An empty or malformed response receives up to two correction attempts in the
+same ephemeral Codex thread (three attempts total). Corrections replace only the
+pending decision; they do not replay completed tool operations. Authentication,
+SDK/transport errors, and tool-choice violations fail immediately.
+
+If correction fails, the error includes the stage, known tool name, attempt
+count, and parser location when available. For example:
+
+```text
+Codex response invalid after 3 attempts: Codex arguments JSON for 'my_tool': Expecting value at line 1, column 12.
+```
+
+Argument values, commands, and file contents are excluded from these adapter
+error messages. A decoding failure means that no tool calls from that rejected
+response were returned for execution. It does not indicate a PBS or ASE failure;
+inspect earlier tool results separately when checking already submitted jobs.
+
+Successful `AIMessage.response_metadata` includes `codex_decision_attempts`.
+Token usage sums all attempts when each attempt reports usage; otherwise the
+aggregate is omitted. No new CLI options or dependencies are required. After
+updating the checkout, reinstall with `python -m pip install -e ".[codex]"` and
+use the same `chemgraph run` command.
+
 ## Limitations
 
 - Only `single_agent`, `main_agent`, and `deep_agent` are supported.

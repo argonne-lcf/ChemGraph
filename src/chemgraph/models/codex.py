@@ -19,7 +19,10 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
+from chemgraph.models._codex_schema import argument_schema, within_limits
+
 CODEX_MODEL_PREFIX = "codex:"
+_MAX_DECISION_ATTEMPTS = 3
 
 _BASE_INSTRUCTIONS = """\
 You are acting only as a language-model backend for ChemGraph.
@@ -36,6 +39,10 @@ class CodexAuthenticationError(RuntimeError):
 
 class CodexResponseError(RuntimeError):
     """Raised when Codex returns an invalid ChemGraph model decision."""
+
+
+class _MalformedDecision(CodexResponseError):
+    """A response encoding failure that can be corrected without executing tools."""
 
 
 def _load_codex_sdk():
@@ -151,19 +158,23 @@ def _normalize_tool_choice(tool_choice: Any, tool_names: set[str]) -> str | None
 
 
 def _decision_schema(
-    tool_names: list[str],
+    argument_schemas: dict[str, dict[str, Any] | None],
     tool_choice: str | None,
     parallel_tool_calls: bool,
 ) -> dict[str, Any]:
+    tool_names = list(argument_schemas)
     if tool_names:
+        allowed_names = [tool_choice] if tool_choice in tool_names else tool_names
         item_schema: dict[str, Any] = {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "enum": tool_names},
-                "arguments": {"type": "string"},
-            },
-            "required": ["name", "arguments"],
-            "additionalProperties": False,
+            "anyOf": [{
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "enum": [name]},
+                    "arguments": argument_schemas[name] or {"type": "string"},
+                },
+                "required": ["name", "arguments"],
+                "additionalProperties": False,
+            } for name in allowed_names],
         }
     else:
         item_schema = {
@@ -181,7 +192,7 @@ def _decision_schema(
         calls_schema["maxItems"] = 0
     elif tool_choice == "required" or tool_choice in tool_names:
         calls_schema["minItems"] = 1
-    if not parallel_tool_calls:
+    if not parallel_tool_calls and calls_schema.get("maxItems") != 0:
         calls_schema["maxItems"] = 1
 
     return {
@@ -195,10 +206,24 @@ def _decision_schema(
     }
 
 
+def _tool_argument_schemas(tools, tool_choice, parallel_tool_calls):
+    schemas = {tool["function"]["name"]: None for tool in tools}
+    if not within_limits(_decision_schema(schemas, tool_choice, parallel_tool_calls)):
+        raise ValueError("Codex output schema exceeds provider limits; bind fewer tools.")
+    for tool in tools:
+        function = tool["function"]
+        name = function["name"]
+        schemas[name] = argument_schema(function.get("parameters"))
+        if not within_limits(_decision_schema(schemas, tool_choice, parallel_tool_calls)):
+            schemas[name] = None
+    return schemas
+
+
 def _decision_prompt(
     messages: list[BaseMessage],
     tools: tuple[dict[str, Any], ...],
     tool_choice: str | None,
+    argument_schemas: dict[str, dict[str, Any] | None],
 ) -> str:
     tool_instruction = (
         "No tools are available. Return the answer in content and an empty "
@@ -207,8 +232,7 @@ def _decision_prompt(
     if tools:
         tool_instruction = (
             "Either answer in content with an empty tool_calls array, or request "
-            "the necessary tools. Each tool call's arguments field must be a "
-            "JSON-encoded object string matching that tool's parameters schema."
+            "the necessary tools."
         )
     if tool_choice == "required":
         tool_instruction = "Request at least one of the available tools."
@@ -217,15 +241,85 @@ def _decision_prompt(
     elif tool_choice:
         tool_instruction = f"Request the {tool_choice!r} tool."
 
+    if tools and tool_choice != "none":
+        tool_instruction += (
+            " Follow argument_encodings for each tool: object means return arguments "
+            "as a JSON object; json_string means a JSON-encoded object string. "
+            "Match that tool's parameters schema. Omit optional arguments when "
+            "using their defaults; do not substitute null for omission. "
+            "ChemGraph will execute these requests and return their results."
+        )
+
     payload = {
         "conversation": _serialize_messages(messages),
         "available_tools": list(tools),
+        "argument_encodings": {
+            name: "object" if schema is not None else "json_string"
+            for name, schema in argument_schemas.items()
+        },
     }
     return (
         f"{tool_instruction}\n"
         "Return only the schema-constrained decision for this conversation:\n"
         f"{json.dumps(payload, ensure_ascii=False, default=str)}"
     )
+
+
+def _reject_json_constant(_value):
+    raise ValueError("Non-finite numbers are not JSON values.")
+
+
+def _decode_json(raw, stage):
+    try:
+        return json.loads(raw, parse_constant=_reject_json_constant)
+    except json.JSONDecodeError as exc:
+        raise _MalformedDecision(
+            f"{stage}: {exc.msg} at line {exc.lineno}, column {exc.colno}."
+        ) from None
+    except ValueError:
+        raise _MalformedDecision(f"{stage}: non-finite number in JSON.") from None
+
+
+def _parse_decision(raw_response, argument_schemas, tool_choice, parallel_tool_calls):
+    """Decode the entire batch; tool frameworks validate individual parameters."""
+    if not isinstance(raw_response, str) or not raw_response.strip():
+        raise _MalformedDecision("Codex returned no final response.")
+    decision = _decode_json(raw_response, "Codex decision JSON")
+    if not isinstance(decision, dict) or set(decision) != {"content", "tool_calls"}:
+        raise _MalformedDecision("Codex decision must contain only content and tool_calls.")
+    content, calls = decision["content"], decision["tool_calls"]
+    if not isinstance(content, str) or not isinstance(calls, list):
+        raise _MalformedDecision(
+            "Codex decision must contain string content and a tool_calls list."
+        )
+    if not parallel_tool_calls and len(calls) > 1:
+        raise CodexResponseError("Codex returned parallel tool calls when disabled.")
+    if tool_choice in {"required", *argument_schemas} and not calls:
+        raise CodexResponseError("Codex did not return the required tool call.")
+    if tool_choice == "none" and calls:
+        raise CodexResponseError("Codex returned a tool call when tools were disabled.")
+
+    decoded = []
+    for call in calls:
+        if not isinstance(call, dict) or set(call) != {"name", "arguments"}:
+            raise _MalformedDecision("Codex tool call must contain only name and arguments.")
+        name, arguments = call["name"], call["arguments"]
+        if not isinstance(name, str) or name not in argument_schemas:
+            raise CodexResponseError("Codex returned an unknown tool call.")
+        if tool_choice not in {None, "required", name}:
+            raise CodexResponseError(
+                f"Codex called {name!r} instead of required tool {tool_choice!r}."
+            )
+        if argument_schemas[name] is None:
+            if not isinstance(arguments, str):
+                raise _MalformedDecision(
+                    f"Codex arguments for {name!r} must be a JSON-encoded object string."
+                )
+            arguments = _decode_json(arguments, f"Codex arguments JSON for {name!r}")
+        if not isinstance(arguments, dict):
+            raise _MalformedDecision(f"Codex arguments for {name!r} must be a JSON object.")
+        decoded.append({"name": name, "args": arguments})
+    return content, [{**call, "id": f"call_{uuid.uuid4().hex}"} for call in decoded]
 
 
 def _usage_metadata(result: Any) -> dict[str, int] | None:
@@ -282,6 +376,8 @@ class CodexChatModel(BaseChatModel):
         if not all(isinstance(function, Mapping) for function in functions):
             raise ValueError("CodexChatModel supports only function tools.")
         tool_names = {function["name"] for function in functions}
+        if len(tool_names) != len(functions):
+            raise ValueError("Codex function tools must have distinct names.")
         normalized_choice = _normalize_tool_choice(tool_choice, tool_names)
         parallel = bool(kwargs.pop("parallel_tool_calls", True))
         if kwargs:
@@ -323,13 +419,18 @@ class CodexChatModel(BaseChatModel):
             raise ValueError(f"Unsupported Codex invocation options: {unsupported}.")
 
         Codex, CodexConfig, Sandbox, ApprovalMode = _load_codex_sdk()
-        tool_names = [tool["function"]["name"] for tool in self.bound_tools]
+        argument_schemas = _tool_argument_schemas(
+            self.bound_tools, self.tool_choice, self.parallel_tool_calls,
+        )
         schema = _decision_schema(
-            tool_names,
+            argument_schemas,
             self.tool_choice,
             self.parallel_tool_calls,
         )
-        prompt = _decision_prompt(messages, self.bound_tools, self.tool_choice)
+        prompt = _decision_prompt(
+            messages, self.bound_tools, self.tool_choice, argument_schemas,
+        )
+        usages = []
 
         with tempfile.TemporaryDirectory(prefix="chemgraph-codex-") as temp_dir:
             config = CodexConfig(
@@ -348,71 +449,44 @@ class CodexChatModel(BaseChatModel):
                     model=self.model_id,
                     sandbox=Sandbox.read_only,
                 )
-                result = thread.run(
-                    prompt,
-                    approval_mode=ApprovalMode.deny_all,
-                    output_schema=schema,
-                    sandbox=Sandbox.read_only,
-                )
-
-        raw_response = getattr(result, "final_response", None)
-        if not isinstance(raw_response, str) or not raw_response.strip():
-            raise CodexResponseError("Codex returned no final response.")
-        try:
-            decision = json.loads(raw_response)
-        except json.JSONDecodeError as exc:
-            raise CodexResponseError("Codex returned an invalid JSON decision.") from exc
-        if not isinstance(decision, Mapping):
-            raise CodexResponseError("Codex decision must be a JSON object.")
-
-        content = decision.get("content")
-        calls = decision.get("tool_calls")
-        if not isinstance(content, str) or not isinstance(calls, list):
-            raise CodexResponseError(
-                "Codex decision must contain string content and a tool_calls list."
-            )
-        if not self.parallel_tool_calls and len(calls) > 1:
-            raise CodexResponseError("Codex returned parallel tool calls when disabled.")
-        if self.tool_choice in {"required", *tool_names} and not calls:
-            raise CodexResponseError("Codex did not return the required tool call.")
-        if self.tool_choice == "none" and calls:
-            raise CodexResponseError("Codex returned a tool call when tools were disabled.")
-
-        tool_calls = []
-        for call in calls:
-            if not isinstance(call, Mapping):
-                raise CodexResponseError("Codex returned an invalid tool call.")
-            name = call.get("name")
-            arguments = call.get("arguments")
-            if name not in tool_names or not isinstance(arguments, str):
-                raise CodexResponseError(f"Codex returned an unknown tool call: {name!r}.")
-            if self.tool_choice not in {None, "required", name}:
-                raise CodexResponseError(
-                    f"Codex called {name!r} instead of required tool {self.tool_choice!r}."
-                )
-            try:
-                parsed_arguments = json.loads(arguments)
-            except json.JSONDecodeError as exc:
-                raise CodexResponseError(
-                    f"Codex returned invalid arguments for tool {name!r}."
-                ) from exc
-            if not isinstance(parsed_arguments, dict):
-                raise CodexResponseError(
-                    f"Codex tool arguments for {name!r} must be a JSON object."
-                )
-            tool_calls.append(
-                {
-                    "name": name,
-                    "args": parsed_arguments,
-                    "id": f"call_{uuid.uuid4().hex}",
-                }
-            )
+                for attempt in range(1, _MAX_DECISION_ATTEMPTS + 1):
+                    result = thread.run(
+                        prompt,
+                        approval_mode=ApprovalMode.deny_all,
+                        output_schema=schema,
+                        sandbox=Sandbox.read_only,
+                    )
+                    usages.append(_usage_metadata(result))
+                    try:
+                        content, tool_calls = _parse_decision(
+                            getattr(result, "final_response", None), argument_schemas,
+                            self.tool_choice, self.parallel_tool_calls,
+                        )
+                        break
+                    except _MalformedDecision as exc:
+                        if attempt == _MAX_DECISION_ATTEMPTS:
+                            raise CodexResponseError(
+                                f"Codex response invalid after {attempt} attempts: {exc}"
+                            ) from None
+                        prompt = (
+                            f"The previous response was unusable: {exc}\n"
+                            "No tool requests from that response were executed. Return a "
+                            "complete replacement decision using the same output schema, "
+                            "argument_encodings, and tool-choice constraint. Do not repeat "
+                            "already completed operations from the supplied conversation."
+                        )
 
         message = AIMessage(
             content=content,
             tool_calls=tool_calls,
-            usage_metadata=_usage_metadata(result),
-            response_metadata={"model": self.model_id, "provider": "codex"},
+            usage_metadata=(
+                {key: sum(usage[key] for usage in usages) for key in usages[0]}
+                if all(usage is not None for usage in usages) else None
+            ),
+            response_metadata={
+                "model": self.model_id, "provider": "codex",
+                "codex_decision_attempts": attempt,
+            },
         )
         return ChatResult(generations=[ChatGeneration(message=message)])
 
