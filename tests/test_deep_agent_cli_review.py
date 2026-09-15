@@ -32,9 +32,11 @@ def dispatch(monkeypatch):
 
 @pytest.mark.parametrize("interactive", [False, True])
 @pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("missing", [False, True])
 def test_saved_deepagent_settings_do_not_block_other_workflows(
-    tmp_path, dispatch, interactive, enabled
+    tmp_path, dispatch, interactive, enabled, missing
 ):
+    skill_dir = tmp_path / "moved-away" if missing else tmp_path
     path = tmp_path / "config.toml"
     path.write_text(
         toml.dumps(
@@ -43,7 +45,7 @@ def test_saved_deepagent_settings_do_not_block_other_workflows(
                     "workflow": "single_agent",
                     "enable_deepagent": enabled,
                     "deepagent_workspace": str(tmp_path),
-                    "deepagent_skills": [str(tmp_path)],
+                    "deepagent_skills": [str(skill_dir)],
                 }
             }
         )
@@ -55,7 +57,7 @@ def test_saved_deepagent_settings_do_not_block_other_workflows(
     assert dispatch["workflow"] == "single_agent"
     assert dispatch["deepagent_workspace"] == (str(tmp_path) if interactive else None)
     assert dispatch["deepagent_skill_dirs"] == (
-        (str(tmp_path.resolve()),) if interactive else None
+        (str(skill_dir),) if interactive else None
     )
     if interactive:
         assert dispatch["enable_deepagent"] is enabled
@@ -277,7 +279,7 @@ def test_cli_host_paths_use_invocation_directory_and_override_toml(
 @pytest.mark.parametrize("name", ["missing", "[missing][/red]"])
 def test_invalid_cli_host_path_fails_before_initialization(tmp_path, dispatch, name):
     args = cli_main.create_argument_parser().parse_args([
-        "run", "--interactive", "-w", "deep_agent", "--deepagent-skill",
+        "run", "-w", "deep_agent", "--deepagent-skill",
         (tmp_path / name).as_posix(),
     ])
     with commands.console.capture() as capture, pytest.raises(SystemExit) as exc:

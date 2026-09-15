@@ -853,6 +853,137 @@ def test_interactive_deepagent_setting_survives_workflow_switches(monkeypatch, t
     ]
 
 
+@pytest.fixture
+def skill_repl(monkeypatch):
+    created, shells, queries = [], [], []
+
+    def create(**kwargs):
+        created.append(kwargs)
+        return SimpleNamespace(session_id="test", **kwargs)
+
+    monkeypatch.setattr("chemgraph.agent.llm_agent.ChemGraph", create)
+    monkeypatch.setattr(commands, "check_api_keys", lambda *_, **__: (True, None))
+    monkeypatch.setattr(commands.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        commands, "_create_experimental_deepagent_backend",
+        lambda *args, **kwargs: shells.append((args, kwargs)) or object(),
+    )
+    monkeypatch.setattr(
+        commands, "create_main_agent_session",
+        lambda *_, **__: SimpleNamespace(thread_id="main", failed=False),
+    )
+    monkeypatch.setattr(
+        commands, "run_query",
+        lambda agent, *_, **__: queries.append(agent.workflow_type),
+    )
+    return created, shells, queries
+
+
+@pytest.mark.parametrize("startup_workflow", ["single_agent", "deep_agent"])
+@pytest.mark.parametrize("target_workflow", ["deep_agent", "main_agent"])
+@pytest.mark.parametrize("via_cli", [False, True])
+def test_interactive_defers_skill_access_and_retries_switch(
+    monkeypatch, tmp_path, skill_repl, startup_workflow, target_workflow, via_cli
+):
+    collection = tmp_path / "external skills"
+    other_cwd = tmp_path / "other"
+    other_cwd.mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    def answers():
+        yield "first-model"
+        monkeypatch.chdir(other_cwd)
+        yield "single_agent"
+        yield "/model second-model"
+        yield f"/workflow {target_workflow}"
+        yield "still using the current agent"
+        collection.mkdir()
+        yield f"/workflow {target_workflow}"
+        yield "/model third-model"
+        yield "quit"
+
+    responses = answers()
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_, **__: next(responses))
+    settings = dict(
+        workflow=startup_workflow,
+        enable_deepagent=target_workflow == "main_agent",
+        deepagent_workspace=str(tmp_path),
+    )
+    with console.capture() as capture:
+        if via_cli:
+            path = tmp_path / "config.toml"
+            path.write_text(toml.dumps({"general": {
+                **settings, "deepagent_skills": ["./external skills"],
+            }}))
+            cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+                "run", "--interactive", "--config", str(path),
+            ]))
+        else:
+            commands.interactive_mode(
+                **settings, deepagent_skill_dirs=["./external skills"],
+            )
+
+    created, shells, queries = skill_repl
+    assert [item["workflow_type"] for item in created] == [
+        "single_agent", "single_agent", target_workflow, target_workflow,
+    ]
+    assert [item["deepagent_skill_dirs"] for item in created] == [
+        (), (), (str(collection),), (str(collection),),
+    ]
+    assert len(shells) == 2  # Failed validation never enables the shell.
+    assert queries == ["single_agent"]
+    assert "Cannot access skill directory" in capture.get()
+    assert capture.get().count(f"Workflow changed to: {target_workflow}") == 1
+
+
+@pytest.mark.parametrize("activate_at_startup", [False, True])
+def test_interactive_retains_canonical_skills_after_activation(
+    monkeypatch, tmp_path, skill_repl, activate_at_startup
+):
+    original, replacement = tmp_path / "original", tmp_path / "replacement"
+    original.mkdir()
+    replacement.mkdir()
+    link = tmp_path / "skills"
+    link.symlink_to(original, target_is_directory=True)
+    monkeypatch.chdir(tmp_path)
+
+    def answers():
+        yield "first-model"
+        yield "deep_agent" if activate_at_startup else "single_agent"
+        if not activate_at_startup:
+            yield "/workflow deep_agent"
+        link.unlink()
+        link.symlink_to(replacement, target_is_directory=True)
+        yield "/model second-model"
+        yield "/workflow single_agent"
+        yield "/workflow deep_agent"
+        yield "quit"
+
+    responses = answers()
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_, **__: next(responses))
+    with console.capture():
+        commands.interactive_mode(deepagent_skill_dirs=["./skills"])
+
+    created, _, _ = skill_repl
+    active_dirs = [
+        item["deepagent_skill_dirs"] for item in created
+        if item["workflow_type"] == "deep_agent"
+    ]
+    assert active_dirs == [(str(original),)] * 3
+
+
+def test_interactive_invalid_active_directory_fails_before_shell(
+    monkeypatch, tmp_path, skill_repl
+):
+    responses = iter(["fake-model", "deep_agent"])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_, **__: next(responses))
+    with console.capture() as capture:
+        commands.interactive_mode(deepagent_skill_dirs=[str(tmp_path / "missing")])
+    created, shells, _ = skill_repl
+    assert not created and not shells
+    assert "Cannot access skill directory" in capture.get()
+
+
 def test_interactive_standalone_deepagent_reuses_one_thread(monkeypatch):
     answers = iter(
         ["gpt-4o-mini", "deep_agent", "inspect files", "run tests", "quit"]

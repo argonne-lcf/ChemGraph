@@ -28,6 +28,7 @@ from chemgraph.utils.config_utils import (
 from chemgraph.cli.commands import (
     ALL_WORKFLOW_TYPES,
     WORKFLOW_ALIASES,
+    _anchor_skill_dirs,
     resolve_workflow,
     delete_session_cmd,
     initialize_agent,
@@ -584,8 +585,11 @@ def _handle_run(args: argparse.Namespace) -> None:
     deepagent_skill_dirs = None
     if deepagent_skills is not None:
         try:
-            deepagent_skill_dirs = resolve_skill_dirs(deepagent_skills)
-        except (TypeError, ValueError) as exc:
+            deepagent_skill_dirs = (
+                _anchor_skill_dirs(deepagent_skills)
+                if interactive else resolve_skill_dirs(deepagent_skills)
+            )
+        except (TypeError, ValueError, RuntimeError, OSError) as exc:
             console.print(f"[red]Invalid Deep Agent skills: {escape(str(exc))}[/red]")
             sys.exit(2)
     if enable_deepagent and args.workflow == "main_agent" and not interactive:

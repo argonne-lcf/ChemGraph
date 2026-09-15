@@ -50,6 +50,14 @@ from chemgraph.cli.formatting import (
 # Workflow helpers
 # ---------------------------------------------------------------------------
 
+def _anchor_skill_dirs(skill_dirs: Sequence[str] | None) -> tuple[str, ...]:
+    """Retain invocation-relative host paths without checking filesystem access."""
+    return tuple(
+        str(Path(source).expanduser().absolute())
+        for source in normalize_skill_sources(skill_dirs)
+    )
+
+
 # All workflow types registered in ChemGraph.workflow_map
 ALL_WORKFLOW_TYPES = [
     "single_agent",
@@ -1225,6 +1233,13 @@ def interactive_mode(
         terminal_tool_names = stored_graph_config.terminal_tool_names
         checkpoint_db = stored_metadata.checkpoint_db or checkpoint_db
     else:
+        try:
+            # Freeze paths before startup prompts or later workflow commands can
+            # change cwd. Strict access checks belong to Deep Agent initialization.
+            deepagent_skill_dirs = _anchor_skill_dirs(deepagent_skill_dirs)
+        except (TypeError, ValueError, RuntimeError, OSError) as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            return
         # Allow the user to override model/workflow at startup.
         model = Prompt.ask(
             "Select model (or type a custom model ID)", default=model
@@ -1234,12 +1249,6 @@ def interactive_mode(
             choices=ALL_WORKFLOW_TYPES,
             default=resolve_workflow(workflow),
         )
-
-    try:
-        deepagent_skill_dirs = resolve_skill_dirs(deepagent_skill_dirs)
-    except (TypeError, ValueError) as exc:
-        console.print(f"[red]{escape(str(exc))}[/red]")
-        return
 
     if workflow == "main_agent":
         checkpoint_runtime = CheckpointRuntime()
@@ -1298,6 +1307,8 @@ def interactive_mode(
         if checkpoint_runtime is not None:
             checkpoint_runtime.close()
         return
+    if workflow == "deep_agent" or (enable_deepagent and workflow == "main_agent"):
+        deepagent_skill_dirs = getattr(agent, "deepagent_skill_dirs", deepagent_skill_dirs)
 
     main_session = (
         create_main_agent_session(
@@ -1748,6 +1759,12 @@ Example queries:
                     if new_agent:
                         workflow = new_workflow
                         agent = new_agent
+                        if workflow == "deep_agent" or (
+                            enable_deepagent and workflow == "main_agent"
+                        ):
+                            deepagent_skill_dirs = getattr(
+                                agent, "deepagent_skill_dirs", deepagent_skill_dirs,
+                            )
                         main_session = (
                             create_main_agent_session(
                                 agent,
