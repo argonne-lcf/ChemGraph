@@ -7,7 +7,7 @@ Python. `single_agent` is the recommended first choice.
 | --- | --- | --- |
 | `single_agent` | One general chemistry agent with local tools | Default; CLI and Python |
 | `main_agent` | Durable supervisor with checkpointed subagents | Interactive CLI or `MainAgentSession` only |
-| `deep_agent` | Repository exploration, coding, and workspace tasks | CLI and Python; alias `deepagent`; broad local shell access |
+| `deep_agent` | Workspace tasks and attached chemistry tools | CLI and Python; alias `deepagent`; broad local shell access |
 | `multi_agent` | Routes tasks among specialized agents | More model calls and orchestration overhead |
 | `python_relp` | Chemistry agent with Python REPL capability | Executes Python in the current process; alias `python_repl` |
 | `graspa` | gRASPA-oriented agent | Site-specific executable/configuration; alias `graspa_agent` |
@@ -43,11 +43,14 @@ See [Python API](python_api.md).
 
 ## Deep Agent
 
-`deep_agent` is one reusable workspace workflow with two entry points. It can
+`deep_agent` is a reusable workflow with two entry points. It can
 run directly through `ChemGraph(workflow_type="deep_agent")`, or it can be
 registered under `main_agent` as the `deepagent` subagent. Both paths use
 `construct_deep_agent_graph`, so the prompt, backend, tools, recursion limit,
-and approval policy have one implementation.
+and approval policy have one implementation. Both entry points use
+`DEFAULT_DEEPAGENT_PROMPT` unless a custom prompt is supplied. The prompt permits
+attached chemistry tools; available tools are configured by the caller. The
+built-in main-agent workspace worker is created without chemistry tools.
 
 ```bash
 # Direct, process-local interactive thread with action reviews.
@@ -56,7 +59,7 @@ chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
 # The same worker delegated by the durable supervisor.
 chemgraph run --interactive --workflow main_agent --deepagent \
   --deepagent-workspace . \
-  --deepagent-skill /workspace/.agents/skills/
+  --deepagent-skill ../external/AtomisticSkills/.agents/skills/
 ```
 
 The standalone interactive workflow keeps one thread while that CLI process is
@@ -65,12 +68,12 @@ File mutations and shell commands require structured approve/reject decisions.
 Headless execution is rejected unless both an explicit workspace and
 `--deepagent-dangerously-skip-approvals` are supplied.
 
-Agent Skills are loaded only from explicitly supplied backend-relative source
-directories. Repeat `--deepagent-skill` to layer sources; the later source wins
-for duplicate skill names. The equivalent Python options are `skills=` on
-`construct_deep_agent_graph` and `deepagent_skills=` on `ChemGraph` or
-`construct_main_agent_graph`. Skill metadata uses progressive disclosure and
-is cached for the thread after its first load.
+Bundled skills and local personal/project skills load automatically. Repeat
+`--deepagent-skill` to add explicit sources with higher priority. Use
+`--no-deepagent-discover-skills` to disable local discovery. Python provides
+`skills=` / `discover_skills=` on `construct_deep_agent_graph` and
+`deepagent_skills=` / `deepagent_discover_skills=` on the higher-level APIs.
+Metadata refreshes before each new turn. See [skills](skills.md).
 
 With the CLI's virtual local backend, `/workspace` is the project root exposed
 to the Deep Agent. For example, `--deepagent-workspace test/` maps

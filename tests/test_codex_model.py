@@ -1,9 +1,13 @@
+import asyncio
 import json
 from types import SimpleNamespace
 
 import pytest
-from langchain_core.messages import HumanMessage
+from deepagents.backends import LocalShellBackend
+from deepagents.backends.protocol import ExecuteResponse
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
+from langgraph.types import Command
 
 from chemgraph.agent import llm_agent
 from chemgraph.agent.llm_agent import ChemGraph
@@ -11,6 +15,7 @@ from chemgraph.agent.main_session import MainAgentSession
 from chemgraph.cli import commands
 from chemgraph.cli.commands import check_api_keys
 from chemgraph.cli.formatting import console
+from chemgraph.graphs.deep_agent import construct_deep_agent_graph
 from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.models import codex as codex_model
@@ -258,6 +263,170 @@ def test_codex_adapter_runs_existing_single_agent_tool_loop(fake_codex_sdk):
     assert state["messages"][-2].name == "lookup_smiles"
     assert state["messages"][-1].content.startswith("The aspirin SMILES")
     assert len(fake_codex_sdk.run_calls) == 2
+
+
+def _codex_payload(sdk, index=-1):
+    prompt = sdk.run_calls[index][0]
+    return json.loads(prompt.split("decision for this conversation:\n", 1)[1])
+
+
+def test_codex_preserves_parallel_tool_history_and_errors(fake_codex_sdk):
+    calls = [
+        {"name": "read_file", "args": {"file_path": path}, "id": call_id}
+        for path, call_id in (("/first.txt", "first"), ("/second.txt", "second"))
+    ]
+    messages = [
+        SystemMessage(content="Inspect the files."),
+        HumanMessage(content="Compare them.", name="chemist"),
+        AIMessage(content="", name="deepagent", tool_calls=calls),
+        ToolMessage(
+            content="Permission denied", name="read_file",
+            tool_call_id="second", status="error",
+        ),
+        ToolMessage(
+            content=[{"type": "text", "text": "First file contents"}],
+            name="read_file", tool_call_id="first",
+        ),
+    ]
+    fake_codex_sdk.responses.append(json.dumps({"content": "Done", "tool_calls": []}))
+    CodexChatModel(model_id="test-model").invoke(messages)
+    history = _codex_payload(fake_codex_sdk)["conversation"]
+    assert history[0] == {"role": "system", "content": "Inspect the files."}
+    assert history[1]["name"] == "chemist"
+    assert history[2]["name"] == "deepagent"
+    assert history[2]["tool_calls"] == messages[2].tool_calls
+    assert history[3] == {
+        "role": "tool", "content": "Permission denied", "name": "read_file",
+        "tool_call_id": "second", "status": "error",
+    }
+    assert history[4]["tool_call_id"] == "first"
+    assert history[4]["status"] == "success"
+    assert json.loads(history[4]["content"]) == messages[4].content
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_codex_deep_agent_reads_skill_and_receives_result(
+    fake_codex_sdk, tmp_path, asynchronous,
+):
+    skill_dir = tmp_path / "skills/test-analysis"
+    skill_dir.mkdir(parents=True)
+    body = "Required environment: analysis-env. Helper: scripts/analyze.py."
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: test-analysis\ndescription: Analyze test results.\n---\n" + body
+    )
+    path = "/workspace/skills/test-analysis/SKILL.md"
+    fake_codex_sdk.responses.extend([
+        json.dumps({"content": "", "tool_calls": [{
+            "name": "read_file",
+            "arguments": json.dumps({"file_path": path, "limit": 1000}),
+        }]}),
+        json.dumps({"content": body, "tool_calls": []}),
+    ])
+    graph = construct_deep_agent_graph(
+        CodexChatModel(model_id="test-model"),
+        backend=LocalShellBackend(root_dir=tmp_path, env={}),
+        discover_skills=False,
+        skills=["/workspace/skills/"],
+    )
+    data = {"messages": [HumanMessage(content="Read the test-analysis skill.")]}
+    config = {"configurable": {"thread_id": "codex-skill"}}
+    result = (
+        asyncio.run(graph.ainvoke(data, config))
+        if asynchronous else graph.invoke(data, config)
+    )
+    first = _codex_payload(fake_codex_sdk, 0)
+    names = {tool["function"]["name"] for tool in first["available_tools"]}
+    assert {"read_file", "write_file", "execute", "task"} <= names
+    assert any(path in m["content"] for m in first["conversation"] if m["role"] == "system")
+    instructions = fake_codex_sdk.thread_start_calls[0]["base_instructions"]
+    assert "You may request any applicable tool listed" in instructions
+    assert "Do not inspect files" not in instructions
+    assert "Do not invoke Codex-native tools" in instructions
+    history = _codex_payload(fake_codex_sdk)["conversation"]
+    call = history[-2]["tool_calls"][0]
+    assert call["name"] == "read_file" and call["args"]["file_path"] == path
+    assert history[-1]["tool_call_id"] == call["id"]
+    assert history[-1]["name"] == "read_file"
+    assert history[-1]["status"] == "success"
+    assert body in history[-1]["content"]
+    assert result["messages"][-1].content == body
+
+
+@pytest.mark.parametrize("tool_name", ["write_file", "execute"])
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_codex_deep_agent_actions_require_approval(
+    fake_codex_sdk, tmp_path, tool_name, decision,
+):
+    effects = []
+
+    class RecordingBackend(LocalShellBackend):
+        def write(self, file_path, content):
+            effects.append((file_path, content))
+            return super().write(file_path, content)
+
+        def execute(self, command, *, timeout=None):
+            effects.append(command)
+            return ExecuteResponse(output="Recorded execution", exit_code=0)
+
+    arguments = (
+        {"file_path": "/workspace/result.txt", "content": "Written once"}
+        if tool_name == "write_file" else {"command": "echo recorded"}
+    )
+    fake_codex_sdk.responses.extend([
+        json.dumps({"content": "", "tool_calls": [{
+            "name": tool_name, "arguments": json.dumps(arguments),
+        }]}),
+        json.dumps({"content": "Done", "tool_calls": []}),
+    ])
+    graph = construct_deep_agent_graph(
+        CodexChatModel(model_id="test-model"),
+        backend=RecordingBackend(root_dir=tmp_path, env={}),
+        discover_skills=False,
+    )
+    config = {"configurable": {"thread_id": "codex-approval"}}
+    state = graph.invoke({"messages": [HumanMessage(content="Perform the task.")]}, config)
+    assert state["__interrupt__"]
+    assert effects == []
+    assert not (tmp_path / "result.txt").exists()
+    state = graph.invoke(Command(resume={"decisions": [{"type": decision}]}), config)
+    assert "__interrupt__" not in state
+    assert len(effects) == (1 if decision == "approve" else 0)
+    if tool_name == "write_file" and decision == "approve":
+        assert (tmp_path / "result.txt").read_text() == "Written once"
+    else:
+        assert not (tmp_path / "result.txt").exists()
+    history = _codex_payload(fake_codex_sdk)["conversation"]
+    assert history[-1]["tool_call_id"] == history[-2]["tool_calls"][0]["id"]
+    assert history[-1]["name"] == tool_name
+    for thread in fake_codex_sdk.thread_start_calls:
+        assert thread["sandbox"] == _FakeSandbox.read_only
+        assert thread["approval_mode"] == _FakeApprovalMode.deny_all
+
+
+@pytest.mark.parametrize("choice", ["none", "required"])
+@pytest.mark.parametrize("request_tool", [False, True])
+def test_codex_tool_choice_constraints_remain_enforced(
+    fake_codex_sdk, choice, request_tool,
+):
+    calls = [{"name": "lookup_smiles", "arguments": json.dumps({"name": "aspirin"})}]
+    fake_codex_sdk.responses.append(json.dumps({
+        "content": "", "tool_calls": calls if request_tool else [],
+    }))
+    model = CodexChatModel(model_id="test-model").bind_tools([lookup_smiles], tool_choice=choice)
+    if request_tool == (choice == "required"):
+        response = model.invoke([HumanMessage(content="Look up aspirin.")])
+        assert bool(response.tool_calls) == request_tool
+    else:
+        with pytest.raises(CodexResponseError, match="required tool call|tools were disabled"):
+            model.invoke([HumanMessage(content="Look up aspirin.")])
+    prompt, kwargs = fake_codex_sdk.run_calls[-1]
+    schema = kwargs["output_schema"]["properties"]["tool_calls"]
+    if choice == "none":
+        assert schema["maxItems"] == 0
+        assert "Do not request a tool" in prompt
+    else:
+        assert schema["minItems"] == 1
+        assert "JSON-encoded object string" in prompt
 
 
 def test_shared_loader_routes_codex_prefix(monkeypatch):

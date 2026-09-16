@@ -116,8 +116,9 @@ def test_constructor_builds_safe_standalone_graph(monkeypatch):
 
     assert result is workflow
     assert captured["tools"] == []
-    assert captured["skills"] is None
-    assert isinstance(captured["backend"], StateBackend)
+    assert captured["system_prompt"] == DEFAULT_DEEPAGENT_PROMPT
+    assert captured["skills"] == ["/chemgraph-skills/"]
+    assert isinstance(captured["backend"].default, StateBackend)
     assert isinstance(captured["checkpointer"], MemorySaver)
     assert captured["interrupt_on"] == DEFAULT_DEEPAGENT_INTERRUPT_ON
     assert captured["interrupt_on"] is not DEFAULT_DEEPAGENT_INTERRUPT_ON
@@ -201,7 +202,8 @@ def test_constructor_mounts_virtual_local_backend_at_workspace(
     assert isinstance(mounted, CompositeBackend)
     assert isinstance(mounted.default, LocalShellBackend)
     assert isinstance(mounted.default, StateBackend)
-    assert mounted.routes == {"/workspace/": backend}
+    assert mounted.routes["/workspace/"] is backend
+    assert "/chemgraph-skills/" in mounted.routes
 
     write_result = mounted.write(
         "/workspace/probe.py",
@@ -256,7 +258,7 @@ def test_constructor_preserves_nonvirtual_local_backend(monkeypatch, tmp_path):
 
     construct_deep_agent_graph(object(), backend=backend)
 
-    assert captured["backend"] is backend
+    assert captured["backend"].default is backend
 
 
 def test_constructor_supports_parent_checkpoint_and_unsafe_execution(monkeypatch):
@@ -276,7 +278,7 @@ def test_constructor_supports_parent_checkpoint_and_unsafe_execution(monkeypatch
         interrupt_on=None,
     )
 
-    assert captured["backend"] is backend
+    assert captured["backend"].default is backend
     assert captured["checkpointer"] is None
     assert captured["interrupt_on"] is None
 
@@ -337,6 +339,7 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
         tools=[tool],
         deepagent_backend=backend,
         deepagent_skills=["/workspace/base/", "/workspace/project/"],
+        deepagent_skill_dirs=[str(tmp_path)],
         deepagent_auto_approve=True,
         checkpointer=checkpointer,
         enable_memory=False,
@@ -348,6 +351,9 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
     assert captured["kwargs"] == {
         "tools": [tool],
         "skills": ("/workspace/base/", "/workspace/project/"),
+        "skill_dirs": (str(tmp_path),),
+        "discover_skills": True,
+        "user_skills_dir": None,
         "system_prompt": "custom workspace prompt",
         "backend": backend,
         "recursion_limit": 50,
@@ -523,6 +529,7 @@ def test_main_agent_metadata_persists_skills_in_topology(monkeypatch, tmp_path):
         ChemGraph(
             workflow_type="main_agent",
             enable_deepagent=enable_deepagent,
+            deepagent_discover_skills=False,
             enable_memory=False,
             log_dir=str(tmp_path),
         )

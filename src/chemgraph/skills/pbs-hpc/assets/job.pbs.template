@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N {{JOB_NAME}}
+#PBS -A {{PROJECT}}
+#PBS -q {{QUEUE}}
+#PBS -l select={{NODES}}:system={{SYSTEM}}
+#PBS -l walltime={{WALLTIME}}
+#PBS -l filesystems={{FILESYSTEMS}}
+#PBS -j oe
+
+# Replace all placeholders and validate site-specific directives before use.
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?PBS submission directory is required}"
+{{ENVIRONMENT_SETUP}}
+{{APPLICATION_LAUNCH_COMMAND}}

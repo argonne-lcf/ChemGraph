@@ -208,6 +208,9 @@ def construct_main_agent_graph(
     enable_deepagent: bool = False,
     deepagent_backend: BackendProtocol | None = None,
     deepagent_skills: Sequence[str] | None = None,
+    deepagent_discover_skills: bool = True,
+    deepagent_user_skills_dir: str | None = None,
+    deepagent_skill_dirs: Sequence[str] | None = None,
     deepagent_recursion_limit: int = 50,
     deepagent_system_prompt: str = DEFAULT_DEEPAGENT_PROMPT,
     system_prompt: str = DEFAULT_MAIN_AGENT_PROMPT,
@@ -221,6 +224,9 @@ def construct_main_agent_graph(
         raise ValueError("deepagent_backend requires enable_deepagent=True.")
     if deepagent_skills and not enable_deepagent:
         raise ValueError("deepagent_skills requires enable_deepagent=True.")
+
+    if deepagent_skill_dirs and not enable_deepagent:
+        raise ValueError("deepagent_skill_dirs requires enable_deepagent=True.")
 
     if subagents is None:
         worker_kwargs: dict[str, Any] = {
@@ -257,6 +263,9 @@ def construct_main_agent_graph(
             llm,
             tools=[],
             skills=deepagent_skills,
+            skill_dirs=deepagent_skill_dirs,
+            discover_skills=deepagent_discover_skills,
+            user_skills_dir=deepagent_user_skills_dir,
             system_prompt=deepagent_system_prompt,
             backend=(
                 deepagent_backend

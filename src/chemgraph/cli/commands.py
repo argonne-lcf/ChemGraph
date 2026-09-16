@@ -24,6 +24,7 @@ from chemgraph.agent.interrupts import (
     interrupt_question as _interrupt_question,
     normalize_interrupts,
 )
+from chemgraph.skills.runtime import resolve_skill_dirs
 from chemgraph.graphs.deep_agent import normalize_skill_sources
 from chemgraph.memory.store import SessionStore
 from chemgraph.memory.durable import delete_durable_session
@@ -48,6 +49,14 @@ from chemgraph.cli.formatting import (
 # ---------------------------------------------------------------------------
 # Workflow helpers
 # ---------------------------------------------------------------------------
+
+def _anchor_skill_dirs(skill_dirs: Sequence[str] | None) -> tuple[str, ...]:
+    """Retain invocation-relative host paths without checking filesystem access."""
+    return tuple(
+        str(Path(source).expanduser().absolute())
+        for source in normalize_skill_sources(skill_dirs)
+    )
+
 
 # All workflow types registered in ChemGraph.workflow_map
 ALL_WORKFLOW_TYPES = [
@@ -208,6 +217,9 @@ def initialize_agent(
     reasoning_effort: str | None = None,
     max_retries: int = 1,
     terminal_tool_names: tuple[str, ...] = (),
+    deepagent_discover_skills: bool = True,
+    deepagent_user_skills_dir: str | None = None,
+    deepagent_skill_dirs: Sequence[str] | None = None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -243,6 +255,12 @@ def initialize_agent(
         Enable the development-only workspace worker for ``main_agent``.
     deepagent_workspace : str, optional
         Root directory exposed to the development-only local backend.
+    deepagent_discover_skills : bool, optional
+        Discover personal and project skill directories for local workspaces.
+    deepagent_user_skills_dir : str, optional
+        Resolved personal skill root retained when restoring a session.
+    deepagent_skill_dirs : sequence of str, optional
+        Host skill collections, resolved independently of the workspace.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
@@ -273,6 +291,11 @@ def initialize_agent(
                 "deepagent_skills requires enable_deepagent=True or the "
                 "deep_agent workflow."
             )
+        if deepagent_skill_dirs and not uses_deepagent:
+            raise ValueError(
+                "deepagent_skill_dirs requires enable_deepagent=True or the "
+                "deep_agent workflow."
+            )
         if deepagent_auto_approve and workflow_type != "deep_agent":
             raise ValueError(
                 "deepagent_auto_approve is available only for the deep_agent workflow."
@@ -283,6 +306,7 @@ def initialize_agent(
             )
 
         deepagent_skills = normalize_skill_sources(deepagent_skills)
+        deepagent_skill_dirs = resolve_skill_dirs(deepagent_skill_dirs)
     except (TypeError, ValueError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         return None
@@ -310,6 +334,8 @@ def initialize_agent(
         console.print(f"  Deep Agent: {uses_deepagent}")
         if deepagent_skills:
             console.print(f"  Deep Agent Skills: {len(deepagent_skills)} source(s)")
+        for directory in deepagent_skill_dirs:
+            console.print(f"  Deep Agent Host Skills: {escape(directory)}")
         if base_url:
             console.print(f"  Base URL: {base_url}")
         if argo_user:
@@ -356,6 +382,9 @@ def initialize_agent(
                 enable_deepagent=enable_deepagent,
                 deepagent_backend=deepagent_backend,
                 deepagent_skills=deepagent_skills,
+                deepagent_skill_dirs=deepagent_skill_dirs,
+                deepagent_discover_skills=deepagent_discover_skills,
+                deepagent_user_skills_dir=deepagent_user_skills_dir,
                 deepagent_auto_approve=deepagent_auto_approve,
                 checkpointer=checkpointer,
                 reasoning_effort=reasoning_effort,
@@ -1092,6 +1121,9 @@ def interactive_mode(
     deepagent_auto_approve: bool = False,
     checkpoint_db: str | None = None,
     resume_session: str | None = None,
+    deepagent_discover_skills: bool = True,
+    deepagent_user_skills_dir: str | None = None,
+    deepagent_skill_dirs: Sequence[str] | None = None,
 ) -> None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -1128,6 +1160,12 @@ def interactive_mode(
         selected workflow is ``main_agent``.
     deepagent_workspace : str, optional
         Local workspace used by the experimental host-shell backend.
+    deepagent_discover_skills : bool, optional
+        Discover personal and project skill directories for local workspaces.
+    deepagent_user_skills_dir : str, optional
+        Resolved personal skill root retained when restoring a session.
+    deepagent_skill_dirs : sequence of str, optional
+        Host skill collections, resolved independently of the workspace.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
@@ -1187,11 +1225,21 @@ def interactive_mode(
         enable_deepagent = stored_graph_config.enable_deepagent
         deepagent_workspace = stored_graph_config.deepagent_workspace
         deepagent_skills = stored_graph_config.deepagent_skills
+        deepagent_skill_dirs = stored_graph_config.deepagent_skill_dirs
+        deepagent_discover_skills = stored_graph_config.deepagent_discover_skills
+        deepagent_user_skills_dir = stored_graph_config.deepagent_user_skills_dir
         reasoning_effort = stored_graph_config.reasoning_effort
         max_retries = stored_graph_config.max_retries
         terminal_tool_names = stored_graph_config.terminal_tool_names
         checkpoint_db = stored_metadata.checkpoint_db or checkpoint_db
     else:
+        try:
+            # Freeze paths before startup prompts or later workflow commands can
+            # change cwd. Strict access checks belong to Deep Agent initialization.
+            deepagent_skill_dirs = _anchor_skill_dirs(deepagent_skill_dirs)
+        except (TypeError, ValueError, RuntimeError, OSError) as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            return
         # Allow the user to override model/workflow at startup.
         model = Prompt.ask(
             "Select model (or type a custom model ID)", default=model
@@ -1233,8 +1281,16 @@ def interactive_mode(
             or (enable_deepagent and workflow == "main_agent")
             else None
         ),
+        deepagent_discover_skills=deepagent_discover_skills,
+        deepagent_user_skills_dir=deepagent_user_skills_dir,
         deepagent_skills=(
             deepagent_skills
+            if workflow == "deep_agent"
+            or (enable_deepagent and workflow == "main_agent")
+            else None
+        ),
+        deepagent_skill_dirs=(
+            deepagent_skill_dirs
             if workflow == "deep_agent"
             or (enable_deepagent and workflow == "main_agent")
             else None
@@ -1251,6 +1307,8 @@ def interactive_mode(
         if checkpoint_runtime is not None:
             checkpoint_runtime.close()
         return
+    if workflow == "deep_agent" or (enable_deepagent and workflow == "main_agent"):
+        deepagent_skill_dirs = getattr(agent, "deepagent_skill_dirs", deepagent_skill_dirs)
 
     main_session = (
         create_main_agent_session(
@@ -1260,6 +1318,9 @@ def interactive_mode(
         )
         if workflow == "main_agent"
         else None
+    )
+    deepagent_user_skills_dir = getattr(
+        agent, "deepagent_user_skills_dir", deepagent_user_skills_dir,
     )
     standalone_thread_id = _next_thread_id() if workflow == "deep_agent" else None
 
@@ -1435,6 +1496,9 @@ Example queries:
                             enable_deepagent=target_config.enable_deepagent,
                             deepagent_workspace=target_config.deepagent_workspace,
                             deepagent_skills=target_config.deepagent_skills,
+                            deepagent_skill_dirs=target_config.deepagent_skill_dirs,
+                            deepagent_discover_skills=target_config.deepagent_discover_skills,
+                            deepagent_user_skills_dir=target_config.deepagent_user_skills_dir,
                             checkpointer=candidate_saver,
                             reasoning_effort=target_config.reasoning_effort,
                             max_retries=target_config.max_retries,
@@ -1484,6 +1548,9 @@ Example queries:
                     enable_deepagent = target_config.enable_deepagent
                     deepagent_workspace = target_config.deepagent_workspace
                     deepagent_skills = target_config.deepagent_skills
+                    deepagent_skill_dirs = target_config.deepagent_skill_dirs
+                    deepagent_discover_skills = target_config.deepagent_discover_skills
+                    deepagent_user_skills_dir = target_config.deepagent_user_skills_dir
                     if (
                         previous_db is not None
                         and os.path.abspath(os.path.expanduser(previous_db))
@@ -1576,8 +1643,16 @@ Example queries:
                         or (enable_deepagent and workflow == "main_agent")
                         else None
                     ),
+                    deepagent_discover_skills=deepagent_discover_skills,
+                    deepagent_user_skills_dir=deepagent_user_skills_dir,
                     deepagent_skills=(
                         deepagent_skills
+                        if workflow == "deep_agent"
+                        or (enable_deepagent and workflow == "main_agent")
+                        else None
+                    ),
+                    deepagent_skill_dirs=(
+                        deepagent_skill_dirs
                         if workflow == "deep_agent"
                         or (enable_deepagent and workflow == "main_agent")
                         else None
@@ -1657,8 +1732,16 @@ Example queries:
                             or (enable_deepagent and new_workflow == "main_agent")
                             else None
                         ),
+                        deepagent_discover_skills=deepagent_discover_skills,
+                        deepagent_user_skills_dir=deepagent_user_skills_dir,
                         deepagent_skills=(
                             deepagent_skills
+                            if new_workflow == "deep_agent"
+                            or (enable_deepagent and new_workflow == "main_agent")
+                            else None
+                        ),
+                        deepagent_skill_dirs=(
+                            deepagent_skill_dirs
                             if new_workflow == "deep_agent"
                             or (enable_deepagent and new_workflow == "main_agent")
                             else None
@@ -1676,6 +1759,12 @@ Example queries:
                     if new_agent:
                         workflow = new_workflow
                         agent = new_agent
+                        if workflow == "deep_agent" or (
+                            enable_deepagent and workflow == "main_agent"
+                        ):
+                            deepagent_skill_dirs = getattr(
+                                agent, "deepagent_skill_dirs", deepagent_skill_dirs,
+                            )
                         main_session = (
                             create_main_agent_session(
                                 agent,
