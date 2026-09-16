@@ -647,6 +647,8 @@
       
         
       
+        
+      
     
     
     
@@ -819,6 +821,34 @@
     
   
     Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deep Agent Skills
   
 
     
@@ -1322,6 +1352,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#skills-and-tool-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skills and tool access
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1649,6 +1690,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#skills-and-tool-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skills and tool access
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#limitations" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1733,6 +1785,30 @@ policy, and checkpoint loop. It is not a native Codex runtime comparison. For
 comparisons with Codex or Claude Code, use identical starting checkouts and
 tasks, record the runtime and safety mode, and score resulting patches and
 tests independently.</p>
+<h2 id="skills-and-tool-access">Skills and tool access<a class="headerlink" href="#skills-and-tool-access" title="Permanent link">&para;</a></h2>
+<p>The Codex adapter can request every tool exposed by the selected ChemGraph
+workflow, including file reads and edits, execution, delegation, and attached
+chemistry tools. It returns structured tool requests; ChemGraph executes them
+through its configured backends and applies the usual approvals. Codex's own
+native tools remain unused, and its temporary read-only thread does not limit
+access through ChemGraph's tools.</p>
+<p>Deep Agent skills are discovered by Python code. Their names, descriptions, and
+paths are added to the model's system context, and the model requests <code>read_file</code>
+to inspect full instructions. For an additional collection outside the workspace:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--model<span class="w"> </span><span class="s2">"codex:&lt;codex-model-id&gt;"</span><span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../external/AtomisticSkills/.agents/skills/
+</code></pre></div>
+<p>The source directory must already exist. See <a href="../skills/">skills</a> for directory
+layout, discovery, and the distinction between file-tool and shell paths.
+Loading a skill does not install its dependencies or attach its MCP tools.</p>
+<p>When diagnosing an access refusal, inspect <code>skills_metadata</code>,
+<code>skills_load_errors</code>, and the tool-call trace in the saved graph state. A skill
+listed without loading errors was discovered successfully. A response claiming
+it cannot inspect that skill without attempting <code>read_file</code> is a model decision;
+an attempted read with an error provides evidence about the backend, path, or
+request. The adapter preserves tool-call identities, arguments, and results
+across model calls so the model can reason from the actual operations performed.</p>
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Only <code>single_agent</code>, <code>main_agent</code>, and <code>deep_agent</code> are supported.</li>
@@ -1741,7 +1817,7 @@ tests independently.</p>
 <li>The integration pins <code>openai-codex==0.144.4</code>; check the installed ChemGraph
   release before changing that dependency.</li>
 <li>ChemGraph starts ephemeral, read-only Codex threads. ChemGraph's graph executes
-  chemistry tools; Codex supplies model decisions.</li>
+  all exposed tools; Codex supplies model decisions.</li>
 <li>ChemGraph does not initiate login. Authenticate before constructing a
   <code>codex:</code> model.</li>
 </ul>

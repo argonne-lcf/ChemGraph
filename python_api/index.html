@@ -16,7 +16,7 @@
         <link rel="prev" href="../calculators/">
       
       
-        <link rel="next" href="../streamlit_web_interface/">
+        <link rel="next" href="../skills/">
       
       
         
@@ -649,6 +649,8 @@
       
         
       
+        
+      
     
     
     
@@ -978,6 +980,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deep Agent Skills
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1878,13 +1908,23 @@ artifacts.</p>
 tool path <code>/workspace/src/example.py</code> maps directly to
 <code>/path/to/checkout/src/example.py</code>. The generated Deep Agents system context
 also supplies that host path for shell commands. Custom backends, existing
-composite backends, and non-virtual local backends are passed through unchanged.</p>
-<p><code>deepagent_skills</code> contains ordered POSIX paths interpreted by that same
-backend. ChemGraph passes them to Deep Agents without scanning any implicit
-user or project locations. Each source contains skill directories with a
-required <code>SKILL.md</code>; later sources override earlier sources with the same
-skill name. With <code>StateBackend</code>, callers invoking the graph directly must seed
-the corresponding files in graph state before the skills can load.</p>
+composite routes, and non-virtual local execution are preserved when adding
+the bundled skill route.</p>
+<p>Bundled skills load without configuration. For supported local workspaces,
+personal <code>~/.chemgraph/skills/</code> and project <code>.agents/skills/</code> directories are
+also discovered. <code>deepagent_skill_dirs=["../shared-skills/"]</code> mounts host collections independently
+of the workspace. <code>deepagent_skills</code> adds ordered POSIX backend-relative sources;
+later sources override matching names. Set <code>deepagent_discover_skills=False</code>
+to use only bundled and explicit sources. On <code>construct_deep_agent_graph</code>, the
+same options are <code>skills=</code> and <code>discover_skills=</code>. See <a href="../skills/">skills</a> for
+custom backends, source precedence, and session behavior.</p>
+<p>With <code>StateBackend</code>, only explicitly supplied state-backed skills need files
+seeded in graph state. Bundled resources work without seeding. Standalone and
+supervisor-hosted Deep Agents share <code>DEFAULT_DEEPAGENT_PROMPT</code>, which permits
+using attached chemistry tools. Tool availability is configured separately;
+the built-in supervisor workspace worker has no chemistry tools attached.
+<code>PromptConfig.deepagent=None</code> selects the shared default; a supplied string,
+including an empty string, is preserved.</p>
 <p>The default approval policy interrupts before shell commands and file
 mutations. Without a <code>human_input_handler</code>, <code>run()</code> raises
 <code>HumanInputRequired</code>; its <code>payload</code> retains the structured Deep Agents action
@@ -1985,13 +2025,13 @@ applications, and check release notes before upgrading.</p>
         
         
           
-          <a href="../streamlit_web_interface/" class="md-footer__link md-footer__link--next" aria-label="Next: Streamlit interface">
+          <a href="../skills/" class="md-footer__link md-footer__link--next" aria-label="Next: Deep Agent Skills">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Streamlit interface
+                Deep Agent Skills
               </div>
             </div>
             <div class="md-footer__button md-icon">

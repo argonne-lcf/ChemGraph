@@ -649,6 +649,8 @@
       
         
       
+        
+      
     
     
     
@@ -948,6 +950,34 @@
     
   
     Python API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deep Agent Skills
   
 
     
@@ -1852,7 +1882,7 @@ runs still require an explicit workspace and the approval-skip flag.</p>
 <p>Or add the same graph to the supervisor as the <code>deepagent</code> subagent:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent<span class="w"> </span>--deepagent<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--deepagent-workspace<span class="w"> </span>/path/to/disposable-checkout<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>/workspace/.agents/skills/
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../external/AtomisticSkills/.agents/skills/
 </code></pre></div>
 <p>The direct interactive workflow keeps one process-local thread until the model
 or workflow changes. It is not restored across CLI processes. Shell and file
@@ -1862,18 +1892,20 @@ mutations use structured approve/reject prompts.</p>
 <code>test/example.py</code>, not <code>test/workspace/example.py</code>. Shell execution uses the
 absolute host-path mapping supplied to the model. Existing files under a
 previously created <code>test/workspace/</code> directory are not migrated.</p>
-<p>Skills are opt-in. Repeat <code>--deepagent-skill PATH</code> to provide ordered,
-backend-relative source directories; the later source wins when two sources
-contain the same skill name. For the virtual CLI workspace, a conventional
-project source can be selected explicitly as
-<code>/workspace/.agents/skills/</code>. ChemGraph does not scan project or user
-directories automatically.</p>
-<p>Each source must contain one directory per skill, and each skill directory
-must contain a <code>SKILL.md</code> with <code>name</code> and <code>description</code> YAML frontmatter.
-Metadata is cached in the checkpoint for the life of the thread, so restart or
-reinitialize the workflow after changing the available skill set. Reading a
-skill does not require an action review, while executing a bundled script or
-mutating its files continues to use the normal Deep Agent approval policy.</p>
+<p>Bundled <code>chemgraph</code> and <code>pbs-hpc</code> skills load automatically, followed by
+<code>~/.chemgraph/skills/</code> and the workspace's <code>.agents/skills/</code> when present.
+Skill paths are resolved against the CLI invocation directory, independently of
+<code>--deepagent-workspace</code>. Absolute paths, <code>~</code>, and <code>../</code> paths work automatically
+without copies or symlinks. Old CLI <code>/workspace/...</code> examples must be replaced
+with host paths; agent file tools continue to use virtual workspace paths.</p>
+<p>Repeat <code>--deepagent-skill PATH</code> to add host directories; later sources
+win for matching skill names. <code>--no-deepagent-discover-skills</code> disables personal
+and project discovery while retaining bundled and explicit sources.</p>
+<p>Each source contains a directory per skill with a <code>SKILL.md</code> and <code>name</code> and
+<code>description</code> YAML frontmatter. Metadata refreshes at each new turn, including
+on reconstructed graphs. Bundled resources are read-only; templates/helpers
+must be copied into the execution filesystem before use by the shell. Normal
+file mutation and execution approvals apply. See <a href="../skills/">skills</a>.</p>
 <p>Deep Agent run logs use the normal ChemGraph locations rather than the selected
 workspace. The default is <code>cg_logs/session_*</code> for state JSON plus the configured
 session database. Pending approval state and the final resumed state are both
@@ -1881,7 +1913,7 @@ recorded.</p>
 <p>For automation, headless execution must opt out of those prompts explicitly:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--deepagent-workspace<span class="w"> </span>/path/to/disposable-checkout<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>/workspace/.agents/skills/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../external/AtomisticSkills/.agents/skills/<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--deepagent-dangerously-skip-approvals<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--query<span class="w"> </span><span class="s2">"Run the repository tests and summarize failures."</span>
 </code></pre></div>

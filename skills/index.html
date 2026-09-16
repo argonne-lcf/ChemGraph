@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/mcp_servers/">
+        <link rel="canonical" href="https://argonne-lcf.github.io/ChemGraph/skills/">
       
       
-        <link rel="prev" href="../example_usage/">
+        <link rel="prev" href="../python_api/">
       
       
-        <link rel="next" href="../docker_support/">
+        <link rel="next" href="../streamlit_web_interface/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>MCP servers - ChemGraph</title>
+        <title>Deep Agent Skills - ChemGraph</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mcp-servers" class="md-skip">
+        <a href="#deep-agent-skills" class="md-skip">
           Skip to content
         </a>
       
@@ -113,7 +113,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              MCP servers
+              Deep Agent Skills
             
           </span>
         </div>
@@ -265,10 +265,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../cli/" class="md-tabs__link">
           
   
@@ -287,13 +289,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../mcp_servers/" class="md-tabs__link">
           
   
   
@@ -626,8 +626,10 @@
       
   
   
+    
   
   
+  
     
     
       
@@ -653,19 +655,22 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -683,7 +688,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -838,10 +843,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../skills/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deep Agent Skills
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -857,6 +889,70 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#where-skills-live" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where skills live
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-and-other-filesystems" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python and other filesystems
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reading-skills-and-executing-helpers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading skills and executing helpers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sessions-and-diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sessions and diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -957,10 +1053,8 @@
       
   
   
-    
   
   
-  
     
     
       
@@ -978,22 +1072,19 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
   
@@ -1011,7 +1102,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1026,37 +1117,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    MCP servers
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../mcp_servers/" class="md-nav__link">
         
   
   
@@ -1072,98 +1136,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#general-chemistry-server" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        General chemistry server
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="General chemistry server">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#stdio" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stdio
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#streamable-http" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Streamable HTTP
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#load-mcp-tools-into-chemgraph" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Load MCP tools into ChemGraph
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#specialized-servers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Specialized servers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#artifacts-and-security" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Artifacts and security
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1674,49 +1646,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#general-chemistry-server" class="md-nav__link">
+  <a href="#where-skills-live" class="md-nav__link">
     <span class="md-ellipsis">
       
-        General chemistry server
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="General chemistry server">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#stdio" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Stdio
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#streamable-http" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Streamable HTTP
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#load-mcp-tools-into-chemgraph" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Load MCP tools into ChemGraph
+        Where skills live
       
     </span>
   </a>
@@ -1724,10 +1657,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#specialized-servers" class="md-nav__link">
+  <a href="#python-and-other-filesystems" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Specialized servers
+        Python and other filesystems
       
     </span>
   </a>
@@ -1735,10 +1668,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#artifacts-and-security" class="md-nav__link">
+  <a href="#reading-skills-and-executing-helpers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Artifacts and security
+        Reading skills and executing helpers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sessions-and-diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sessions and diagnostics
       
     </span>
   </a>
@@ -1765,62 +1709,255 @@
   
 
 
-<h1 id="mcp-servers">MCP servers<a class="headerlink" href="#mcp-servers" title="Permanent link">&para;</a></h1>
-<p>ChemGraph can expose chemistry tools to Model Context Protocol clients or load
-tools from an MCP server into a ChemGraph agent.</p>
-<h2 id="general-chemistry-server">General chemistry server<a class="headerlink" href="#general-chemistry-server" title="Permanent link">&para;</a></h2>
-<p>The general server provides molecule-name lookup, SMILES-to-3D conversion, ASE
-calculations, and result extraction.</p>
-<h3 id="stdio">Stdio<a class="headerlink" href="#stdio" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools
+<h1 id="deep-agent-skills">Deep Agent skills<a class="headerlink" href="#deep-agent-skills" title="Permanent link">&para;</a></h1>
+<p>ChemGraph ships two Agent Skills: <strong>chemgraph</strong> for its Python, CLI, and chemistry
+MCP workflows, and <strong>pbs-hpc</strong> for PBS job preparation, monitoring, and facility
+guidance. They are available to standalone Deep Agents, registry-created Deep
+Agent workers, and the optional <code>main_agent</code> workspace worker.</p>
+<h2 id="where-skills-live">Where skills live<a class="headerlink" href="#where-skills-live" title="Permanent link">&para;</a></h2>
+<p>Maintained skills live in <code>src/chemgraph/skills/</code> and ship in the Python wheel
+and source distribution. Each skill is an immediate child directory containing
+<code>SKILL.md</code>, with YAML <code>name</code> and <code>description</code> fields:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>skills/
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>└── example-workflow/
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    ├── SKILL.md
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    ├── references/          # optional documentation
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    ├── assets/              # optional templates/data
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    └── scripts/             # optional executable helpers
 </code></pre></div>
-<p>A client configuration launches that command directly, for example:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">{</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">"mcpServers"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">"chemgraph"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">      </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"python"</span><span class="p">,</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">      </span><span class="nt">"args"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"-m"</span><span class="p">,</span><span class="w"> </span><span class="s2">"chemgraph.mcp.mcp_tools"</span><span class="p">]</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="p">}</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="p">}</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">}</span>
+<p>Use the <a href="https://agentskills.io/specification">Agent Skills format</a>. Keep skill
+directories flat at the source root; place longer supporting material under the
+skill. Add future bundled skills as siblings and include their resources in
+package data. Keep facility accounts, private paths, and endpoints in deployment
+configuration, not in bundled instructions.</p>
+<p>For local workspaces, sources load in this order; later sources override earlier
+ones with the same skill name:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Storage</th>
+<th>Agent-visible path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bundled</td>
+<td>Installed ChemGraph package</td>
+<td><code>/chemgraph-skills/</code></td>
+</tr>
+<tr>
+<td>Personal</td>
+<td><code>~/.chemgraph/skills/</code></td>
+<td><code>/chemgraph-user-skills/</code></td>
+</tr>
+<tr>
+<td>Project</td>
+<td><code>&lt;workspace&gt;/.agents/skills/</code></td>
+<td><code>/workspace/.agents/skills/</code> with the CLI backend</td>
+</tr>
+<tr>
+<td>Explicit host</td>
+<td>CLI directories or Python <code>skill_dirs</code></td>
+<td><code>/chemgraph-external-skills/&lt;stable-id&gt;/</code></td>
+</tr>
+<tr>
+<td>Explicit backend</td>
+<td>Python <code>skills</code></td>
+<td>Paths supplied by the caller</td>
+</tr>
+</tbody>
+</table>
+<p>The personal and project directories are optional and are not created on startup.
+Shared <code>~/.agents/skills/</code> collections can be configured explicitly. Do not keep
+another maintained copy of the bundled skills in project directories.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Bundled, personal, and project skills are available automatically.</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Add a site collection, overriding earlier sources with matching names.</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../shared-skills/
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Load only bundled and explicitly configured skills.</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span>--no-deepagent-discover-skills
 </code></pre></div>
-<p>The client and server must use the same Python environment. Server logs go to
-stderr so stdout remains the JSON-RPC channel.</p>
-<h3 id="streamable-http">Streamable HTTP<a class="headerlink" href="#streamable-http" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>-m<span class="w"> </span>chemgraph.mcp.mcp_tools<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--transport<span class="w"> </span>streamable_http<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--port<span class="w"> </span><span class="m">9003</span>
+<p>In <code>[general]</code> TOML, use <code>deepagent_discover_skills = false</code> to disable automatic
+local discovery. <code>deepagent_skills</code> remains an ordered list of additional paths.
+CLI skill paths replace that TOML list, while the discovery CLI flag overrides
+the TOML boolean. An empty explicit list leaves bundled/discovered skills enabled.</p>
+<p>CLI skill paths are host directories independent of <code>--deepagent-workspace</code>.
+Relative paths (including <code>../</code>) resolve against the directory where you launch
+ChemGraph; absolute paths, <code>~</code>, spaces, and existing symlinks are supported.
+TOML paths follow the same rule. ChemGraph resolves and validates each directory,
+then exposes it through a stable backend route without copying files or creating
+symlinks. Supported saved sessions retain canonical host paths and rebuild these
+routes when resumed from a different directory. Missing or unreadable explicit
+directories fail with a path-specific error when Deep Agent is selected. Other
+interactive workflows retain saved directories without checking their access.
+Switching into Deep Agent validates them; if validation fails, the current
+workflow stays active. Restore the directory and retry the switch. Relative
+paths keep their invocation-directory meaning throughout the session.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../external/AtomisticSkills/.agents/skills/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--model<span class="w"> </span>argo:gpt-5.6-luna
 </code></pre></div>
-<p>The endpoint is <code>http://localhost:9003/mcp/</code>. The <code>/mcp/</code> path and trailing
-slash matter. Binding to <code>127.0.0.1</code> keeps the server local; do not expose an
-unauthenticated tool server to an untrusted network.</p>
-<h2 id="load-mcp-tools-into-chemgraph">Load MCP tools into ChemGraph<a class="headerlink" href="#load-mcp-tools-into-chemgraph" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--mcp-url<span class="w"> </span>http://localhost:9003/mcp/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Build a coordinate file for methane."</span>
+<p>Pass the collection directory containing <code>&lt;skill-name&gt;/SKILL.md</code>; this does not
+recursively search a repository or install its environments and tools. For
+AtomisticSkills, the Widom insertion skill is <code>chem-sorption-widom</code>.</p>
+<p><strong>CLI migration:</strong> <code>/workspace/...</code> is now a literal host path when passed to
+<code>--deepagent-skill</code>. Replace older virtual-path examples with the actual host
+path or a path relative to your invocation directory. Agent file tools still
+use <code>/workspace/...</code> for project files.</p>
+<h2 id="python-and-other-filesystems">Python and other filesystems<a class="headerlink" href="#python-and-other-filesystems" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">deepagents.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalShellBackend</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.graphs.deep_agent</span><span class="w"> </span><span class="kn">import</span> <span class="n">construct_deep_agent_graph</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">construct_deep_agent_graph</span><span class="p">(</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">model</span><span class="p">,</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="n">backend</span><span class="o">=</span><span class="n">LocalShellBackend</span><span class="p">(</span><span class="n">root_dir</span><span class="o">=</span><span class="s2">"/path/to/project"</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="p">{}),</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">discover_skills</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">skill_dirs</span><span class="o">=</span><span class="p">[</span><span class="s2">"../external/AtomisticSkills/.agents/skills/"</span><span class="p">],</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">skills</span><span class="o">=</span><span class="p">[</span><span class="s2">"/workspace/site-skills/"</span><span class="p">],</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="p">)</span>
 </code></pre></div>
-<p>Or put one connection in <code>config.toml</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">[mcp]</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"http://localhost:9003/mcp/"</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">server_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"ChemGraph General Tools"</span>
-</code></pre></div>
-<p>For stdio, use <code>--mcp-command</code> or the matching config key. Run
-<code>chemgraph run --help</code> for installed-version syntax.</p>
-<h2 id="specialized-servers">Specialized servers<a class="headerlink" href="#specialized-servers" title="Permanent link">&para;</a></h2>
-<p>The source tree also contains advanced servers for ASE and MACE HPC jobs,
-gRASPA and XANES direct/Parsl jobs, data analysis, HPC utility operations, and
-file transfer. These are deployment building blocks, not zero-configuration
-public services. They can require ALCF filesystems, scheduler configuration,
-Parsl, external executables, and credentials.</p>
-<p>Start from the <a href="https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_example">general examples</a>,
-<a href="https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_parsl_example">Parsl example</a>,
-or <a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/xanes_mcp">XANES examples</a>.</p>
-<h2 id="artifacts-and-security">Artifacts and security<a class="headerlink" href="#artifacts-and-security" title="Permanent link">&para;</a></h2>
-<p>Set <code>CHEMGRAPH_LOG_DIR</code> before starting a server to choose its log/artifact
-directory. Keep server and client filesystem visibility in mind across hosts or
-containers. Restrict network access, use least-privilege credentials, validate
-inputs, and avoid mounting sensitive directories into the server process.</p>
+<p>The corresponding <code>ChemGraph</code> and <code>construct_main_agent_graph</code> options are
+<code>deepagent_discover_skills</code>, <code>deepagent_skill_dirs</code>, and <code>deepagent_skills</code>.
+<code>skill_dirs</code> explicitly mounts host collections with any backend, even when
+automatic discovery is disabled. <code>skills</code> retains its backend-relative meaning
+and has precedence over host collections. <code>user_skills_dir</code> on the
+constructor (<code>deepagent_user_skills_dir</code> on the higher-level APIs) fixes or
+overrides the personal directory for a supported local workspace; saved sessions
+use this to retain the original resolved root.</p>
+<p>Automatic host directory discovery applies to <code>LocalShellBackend</code>,
+<code>FilesystemBackend</code>, and composites with an identifiable virtual local
+<code>/workspace/</code> route. Pure virtual filesystem backends use <code>/.agents/skills/</code> for
+their project source; non-virtual local backends use the absolute project path.
+For state, store, and arbitrary remote backends, bundled resources are still
+available. Use <code>skill_dirs</code> to explicitly mount host collections, or <code>skills</code>
+for sources already mapped into the backend.
+There is no implicit inspection of the agent host's home for remote backends.</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>File operations</th>
+<th><code>execute</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>StateBackend</code></td>
+<td>Conversation state/checkpointer</td>
+<td>No shell</td>
+</tr>
+<tr>
+<td><code>StoreBackend</code></td>
+<td>Configured LangGraph store</td>
+<td>No shell</td>
+</tr>
+<tr>
+<td><code>FilesystemBackend</code></td>
+<td>Host filesystem</td>
+<td>No shell</td>
+</tr>
+<tr>
+<td><code>LocalShellBackend</code></td>
+<td>Host filesystem</td>
+<td>Host shell</td>
+</tr>
+<tr>
+<td>Sandbox/custom executor</td>
+<td>Provider's filesystem</td>
+<td>Provider's execution environment</td>
+</tr>
+<tr>
+<td><code>CompositeBackend</code></td>
+<td>Routed by file path</td>
+<td>Default backend's executor</td>
+</tr>
+</tbody>
+</table>
+<p>Custom file backends implement <code>BackendProtocol</code>. Execution additionally needs
+<code>SandboxBackendProtocol</code>. ChemGraph's own Parsl/Globus execution backends implement
+a separate <code>ExecutionBackend</code> interface; selecting one does not create a remote
+Deep Agent shell. See the <a href="https://docs.langchain.com/oss/python/deepagents/backends">upstream backend guide</a>.</p>
+<p>Bundled resources are loaded using <code>importlib.resources</code> and exposed through a
+read-only route. They require neither a checkout nor files seeded in graph state.
+File operations and downloads work with local, state, store, and remote defaults;
+write/edit/delete/upload operations on this route fail. The bundled backend does
+not expose host paths or execute commands. Reserved skill routes must not overlap
+caller-supplied composite routes. Existing routes, the default executor, and the
+artifact root are retained without an extra composite layer.</p>
+<h2 id="reading-skills-and-executing-helpers">Reading skills and executing helpers<a class="headerlink" href="#reading-skills-and-executing-helpers" title="Permanent link">&para;</a></h2>
+<p>Deep Agents 0.7.5 advertises names, descriptions, and paths in the prompt, then
+uses <strong><code>read_file</code></strong> to load <code>SKILL.md</code> on demand. There is no separate
+<code>read_skill</code> tool. Relative references in a skill resolve against its directory
+in the file backend. See <a href="https://docs.langchain.com/oss/python/deepagents/skills">upstream skills documentation</a>.</p>
+<p>External filesystem collections also appear in the prompt's "Shell paths vs.
+virtual paths" mapping when using a local shell. Use these host paths for helper
+scripts; a command in an external skill may assume its own repository root, so
+resolve script paths against that collection rather than the workspace. With a
+remote executor, transfer required files to its filesystem first.</p>
+<p>The initial bundles contain text instructions and a PBS template. To execute a
+future helper stored in the catalog, first copy it into the executor's filesystem.
+For example, read the PBS template at
+<code>/chemgraph-skills/pbs-hpc/assets/job.pbs.template</code>, fill its placeholders, and
+write it to <code>/workspace/job.pbs</code>. With the CLI's local backend, execute commands
+using the host workspace path supplied in the system prompt. With a sandbox,
+write/upload to a path that actually exists in that sandbox before execution.
+Virtual skill/state/store paths are not shell mounts, and MCP servers can have
+different filesystems again.</p>
+<p>Personal, project, and explicit host skill routes are writable: file-tool edits
+modify the original host collection, including shared checkouts. Existing
+write/edit/delete and execute approvals apply; disabling approvals also permits
+these skill edits without review. Updated instructions can affect future turns.
+Bundled resources remain read-only through their route, which does not confine
+a local shell. Skill frontmatter does not grant additional tools or permissions.
+Standalone and main-agent workspace Deep Agents share
+<code>DEFAULT_DEEPAGENT_PROMPT</code>, which permits using attached chemistry tools. Tools
+are configured separately; the built-in main-agent workspace worker has no
+chemistry tools attached. A custom <code>PromptConfig.deepagent</code> is preserved
+verbatim; its default <code>None</code> selects the shared prompt.</p>
+<h2 id="sessions-and-diagnostics">Sessions and diagnostics<a class="headerlink" href="#sessions-and-diagnostics" title="Permanent link">&para;</a></h2>
+<p>Skill metadata is rediscovered before each new agent turn, including after graph
+reconstruction; an old checkpoint catalog cannot hide newly added skills. The
+default general-purpose child receives the same discovery middleware. Refreshing
+does not restart an interrupted file mutation or bypass its pending approval.
+Independently compiled external subagents retain their own configuration; use
+the shared ChemGraph constructor for a Deep Agent worker that needs this catalog.</p>
+<p>Durable main-agent metadata retains the discovery setting and resolved personal
+root alongside existing workspace/source settings. Legacy session records default
+to local discovery disabled. Bundled skills remain available. Adding/editing
+skills is reflected on the next new turn, not midway through a pending approval.</p>
+<p>The resolved personal root is part of the topology fingerprint. Moving a session
+database to another account or container retains the original account's path;
+it does not adopt the new home directory. To use a different personal root, start
+a new session with that configuration. Changing the root while restoring the
+existing session produces an incompatible-topology error.</p>
+<p>Missing optional directories are skipped. With Deep Agents 0.7.5, invalid YAML or
+missing required metadata causes a skill to be skipped with log warnings; valid
+siblings remain available. Name/directory mismatches are accepted with warnings.
+These file-level warnings do not populate <code>skills_load_errors</code>. If a skill is
+absent from the catalog, check the logs and inspect its <code>SKILL.md</code> frontmatter
+using <code>read_file</code> at the collection's backend path.</p>
+<p>Optional sources rejected by the backend (for example, a project skill directory
+symlinked outside the virtual workspace) are skipped
+with a warning; other sources remain available. These failures do not relax the
+backend's filesystem boundaries. Warnings clear after the source recovers on a
+new turn.
+If an optional backend returns partial results with an error, valid skills are
+retained alongside the warning and still override earlier sources.</p>
+<p>Unreadable explicitly configured sources raise a clear configuration error before
+the model call. Explicit state/store sources must contain files before each turn
+starts: seed state files in the graph input or populate the store first. These
+backends cannot distinguish missing directories from empty ones, so both are
+rejected. Existing empty filesystem directories remain valid; custom backends
+retain their reported-error semantics. Populated sources with invalid skill
+metadata retain upstream diagnostics. Missing or invalid bundled skills fail
+graph construction, so a broken installation cannot silently lose defaults.</p>
+<p>Availability does not guarantee that an LLM follows every instruction. Enforce
+mandatory scientific or operational requirements in tools or middleware.</p>
 
 
 
@@ -1850,7 +1987,7 @@ inputs, and avoid mounting sensitive directories into the server process.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../example_usage/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Examples">
+          <a href="../python_api/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Python API">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1860,20 +1997,20 @@ inputs, and avoid mounting sensitive directories into the server process.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Examples
+                Python API
               </div>
             </div>
           </a>
         
         
           
-          <a href="../docker_support/" class="md-footer__link md-footer__link--next" aria-label="Next: Docker">
+          <a href="../streamlit_web_interface/" class="md-footer__link md-footer__link--next" aria-label="Next: Streamlit interface">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Docker
+                Streamlit interface
               </div>
             </div>
             <div class="md-footer__button md-icon">
