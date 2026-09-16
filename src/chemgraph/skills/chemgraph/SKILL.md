@@ -9,9 +9,12 @@ description: Use ChemGraph Python and CLI workflows and attached chemistry MCP t
    execution system, and output location. Inspect attached tool schemas before
    selecting arguments. Ask for missing scientific choices rather than inventing
    them; do not replace the requested calculator with another one silently.
-2. Use attached chemistry tools for requested simulations. If a required tool
-   is unavailable, report what is missing. This skill does not grant tools or
-   override approvals.
+2. Use attached chemistry tools by default. For an explicitly requested direct
+   PBS job, use the bundled [ASE runner](scripts/run_ase_pbs.py) following the
+   [direct PBS instructions](references/python-and-cli.md#direct-pbs-ase-jobs).
+   If a required tool is unavailable, report what is missing; that alone does
+   not authorize shell execution. This skill does not grant tools or override
+   approvals.
 3. For Python or CLI setup, read [interface guidance](references/python-and-cli.md).
    For calculations through attached tools, read
    [MCP workflow guidance](references/mcp-workflows.md).
@@ -33,6 +36,6 @@ available skill catalog. Facility-specific values belong in user configuration.
 
 Resolve these relative references against this SKILL.md's directory using file
 tools. `/chemgraph-skills/` is a virtual, read-only resource route. To use a
-template or future helper with `execute`, first write/copy it into the execution
+template or helper with `execute`, first write/copy it into the execution
 backend's workspace and use that environment's actual path. State/store files
 are not automatically visible to a shell or an MCP server.

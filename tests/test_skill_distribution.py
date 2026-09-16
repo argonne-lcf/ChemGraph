@@ -44,7 +44,9 @@ def test_skill_resources_in_wheel_and_sdist(skill_distributions):
     expected = {
         path.relative_to(root / "src").as_posix()
         for path in (root / "src/chemgraph/skills").rglob("*")
-        if path.is_file() and path.suffix not in {".py", ".pyc"}
+        if path.is_file()
+        and path.suffix != ".pyc"
+        and (path.suffix != ".py" or "scripts" in path.parts)
     }
     with zipfile.ZipFile(next(distribution.glob("*.whl"))) as wheel:
         assert expected <= set(wheel.namelist())
@@ -77,8 +79,16 @@ def test_installed_skills_readable_outside_checkout(
     expected_aurora_hash = hashlib.sha256(
         (root / "src/chemgraph/skills/pbs-hpc/references/aurora.md").read_bytes()
     ).hexdigest()
+    expected_runner_hash = hashlib.sha256(
+        (root / "src/chemgraph/skills/chemgraph/scripts/run_ase_pbs.py").read_bytes()
+    ).hexdigest()
     script = """
 import hashlib
+import json
+import os
+from pathlib import Path
+import socket
+import subprocess
 import sys
 from importlib import resources
 sys.path.insert(0, sys.argv[1])
@@ -100,9 +110,52 @@ assert hashlib.sha256(download.content).hexdigest() == sys.argv[2]
 read = backend.read(aurora_path)
 assert read.error is None
 assert read.file_data['content'] == aurora_resource.decode('utf-8').replace('\\r\\n', '\\n')
+runner_resource = resources.files('chemgraph.skills').joinpath(
+    'chemgraph', 'scripts', 'run_ase_pbs.py'
+).read_bytes()
+download = backend.download_files(['/chemgraph/scripts/run_ase_pbs.py'])[0]
+assert download.error is None
+assert download.content == runner_resource
+assert hashlib.sha256(runner_resource).hexdigest() == sys.argv[3]
+Path('run_ase_pbs.py').write_bytes(runner_resource)
+environment = dict(os.environ)
+environment.pop('PBS_JOBID', None)
+# -S excludes site packages, proving help/preflight need no scientific imports.
+for arguments, code in [(['--help'], 0), ([], 1), (['--input', 'input.json'], 1)]:
+    run = subprocess.run(
+        [sys.executable, '-S', 'run_ase_pbs.py', *arguments],
+        capture_output=True, text=True, env=environment,
+    )
+    assert run.returncode == code, run.stdout + run.stderr
+    if code:
+        assert json.loads(run.stdout)['status'] == 'failure'
+    else:
+        assert '--input' in run.stdout
+# Exercise the copied helper with installed code and a simulated allocation.
+environment['PYTHONPATH'] = os.pathsep.join([sys.argv[1], environment['PYTHONPATH']])
+environment['PBS_JOBID'] = 'test.server'
+environment['PBS_NODEFILE'] = str(Path('nodes').absolute())
+environment['CHEMGRAPH_LOG_DIR'] = str(Path('results').absolute())
+Path('nodes').write_text(socket.gethostname())
+Path('water.xyz').write_text('3\\nwater\\nO 0 0 0\\nH 0 0 0.96\\nH 0.92 0 -0.24\\n')
+Path('input.json').write_text(json.dumps({
+    'input_structure_file': str(Path('water.xyz').absolute()),
+    'output_results_file': 'energy.json',
+    'calculator': {'calculator_type': 'EMT'}, 'driver': 'energy',
+}))
+run = subprocess.run(
+    [sys.executable, 'run_ase_pbs.py', '--input', 'input.json'],
+    capture_output=True, text=True, env=environment,
+)
+assert run.returncode == 0, run.stdout + run.stderr
+summary = json.loads(run.stdout)
+assert summary['status'] == 'success'
+assert summary['results_file'] == str(Path('results/energy.json').absolute())
+assert json.loads(Path(summary['results_file']).read_text())['success'] is True
 """
     result = subprocess.run(
-        [sys.executable, "-c", script, str(installed), expected_aurora_hash],
+        [sys.executable, "-c", script, str(installed), expected_aurora_hash,
+         expected_runner_hash],
         cwd=tmp_path,
         env=environment,
         capture_output=True,
