@@ -5,6 +5,10 @@ MCP workflows, and **pbs-hpc** for PBS job preparation, monitoring, and facility
 guidance. They are available to standalone Deep Agents, registry-created Deep
 Agent workers, and the optional `main_agent` workspace worker.
 
+For direct submission from a login-node shell, see [PBS jobs with skills](pbs_jobs_with_skills.md).
+Deep Agent writes calculation and batch scripts using the skills and existing
+Python APIs; it does not need attached chemistry MCP tools for this route.
+
 ## Where skills live
 
 Maintained skills live in `src/chemgraph/skills/` and ship in the Python wheel

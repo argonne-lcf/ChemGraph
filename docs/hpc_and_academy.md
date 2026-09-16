@@ -5,6 +5,9 @@ locally or through a facility backend. HPC integrations require site modules,
 allocations, scheduler policies, endpoint identifiers, credentials, and
 shared-filesystem planning beyond a normal PyPI install.
 
+For individual PBS jobs, [Deep Agent can read skills and write batch scripts](pbs_jobs_with_skills.md)
+using its submission-host shell and the existing ASE Python engine.
+
 ## Execution backends
 
 | Backend | Extra | Typical role |

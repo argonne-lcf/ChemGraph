@@ -1,6 +1,6 @@
 ---
 name: chemgraph
-description: Use ChemGraph Python and CLI workflows and attached chemistry MCP tools. Use for molecular simulations, ASE calculations, staging structures, tracking calculation batches, and reporting computed results.
+description: Use ChemGraph Python and CLI workflows, agent-written batch scripts, and attached chemistry MCP tools. Use for molecular simulations, ASE calculations, staging structures, tracking calculations, and reporting computed results.
 ---
 
 # Use ChemGraph
@@ -9,9 +9,11 @@ description: Use ChemGraph Python and CLI workflows and attached chemistry MCP t
    execution system, and output location. Inspect attached tool schemas before
    selecting arguments. Ask for missing scientific choices rather than inventing
    them; do not replace the requested calculator with another one silently.
-2. Use attached chemistry tools for requested simulations. If a required tool
-   is unavailable, report what is missing. This skill does not grant tools or
-   override approvals.
+2. Use attached chemistry tools or write a script using ChemGraph's existing
+   Python APIs. For direct PBS jobs, read [the ASE batch example](references/ase-batch.md)
+   and the `pbs-hpc` skill; no chemistry MCP server or Parsl is required.
+   Preserve an explicitly requested execution method. Report missing dependencies.
+   This skill does not grant tools or override approvals.
 3. For Python or CLI setup, read [interface guidance](references/python-and-cli.md).
    For calculations through attached tools, read
    [MCP workflow guidance](references/mcp-workflows.md).

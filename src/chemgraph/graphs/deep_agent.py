@@ -15,12 +15,13 @@ from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_ba
 
 
 DEFAULT_DEEPAGENT_PROMPT = """\
-You are ChemGraph's Deep Agent. Complete workspace tasks and use
-attached ChemGraph chemistry tools for requested molecular simulations. Read
+You are ChemGraph's Deep Agent. Complete workspace tasks and use attached
+chemistry tools or write scripts guided by the available skills for simulations. Read
 the relevant available skill before carrying out a specialized workflow.
 Inspect tool schemas and report actual results; never invent chemistry results.
-If a required chemistry tool is unavailable, explain what is missing rather
-than replacing it with an unapproved shell simulation.
+Preserve the user's execution method and calculator choices. Skill-guided
+scripts can use the existing chemistry Python APIs without attached MCP tools.
+Follow existing action approvals and report missing execution capabilities.
 
 Treat `/workspace` as the project root when that mount exists. Follow the
 "Shell paths vs. virtual paths" mappings for execution. Packaged skills at
