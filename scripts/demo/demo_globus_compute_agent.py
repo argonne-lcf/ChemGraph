@@ -120,7 +120,7 @@ def main() -> None:
         "--workload",
         choices=["thermo", "ase", "graspa"],
         default="thermo",
-        help="thermo = MACE; ase = general ASE; graspa = GCMC (needs --graspa-cifs).",
+        help="thermo = MACE; ase = general ASE; graspa = GCMC (needs --graspa-remote-directory).",
     )
     parser.add_argument(
         "--calculator",
@@ -131,7 +131,15 @@ def main() -> None:
         "--graspa-cifs",
         nargs="+",
         default=None,
-        help="Remote-reachable CIF paths for --workload graspa.",
+        help="Legacy file-list option; use --graspa-remote-directory for this remote demo.",
+    )
+    parser.add_argument(
+        "--graspa-remote-directory", default=None,
+        help="Pre-staged worker directory; gRASPA runs every CIF in it.",
+    )
+    parser.add_argument(
+        "--graspa-output-directory", default="graspa_runs",
+        help="Output root resolved on the gRASPA worker.",
     )
     parser.add_argument("--query", default=None, help="Override the default query")
     parser.add_argument("-v", "--verbose", action="count", default=0)
@@ -146,10 +154,15 @@ def main() -> None:
     elif args.workload == "graspa":
         from _demo_chemistry import agent_prompt_graspa
 
-        if not args.graspa_cifs:
-            print("ERROR: --workload graspa requires --graspa-cifs <CIF> [<CIF> ...].")
-            sys.exit(2)
-        query = agent_prompt_graspa(args.graspa_cifs)
+        if args.graspa_cifs or not args.graspa_remote_directory:
+            parser.error(
+                "Remote gRASPA requires --graspa-remote-directory; "
+                "pre-stage the requested CIFs there instead of using --graspa-cifs."
+            )
+        query = agent_prompt_graspa(
+            remote_directory=args.graspa_remote_directory,
+            output_directory=args.graspa_output_directory,
+        )
     else:
         query = prompt_for(args.workload, device=args.device, calculator=args.calculator)
 

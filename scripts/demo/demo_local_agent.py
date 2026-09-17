@@ -124,8 +124,8 @@ def main() -> None:
         "--workload",
         choices=["thermo", "ase"],
         default="thermo",
-        help="thermo = MACE server; ase = general ASE server. gRASPA is HPC-only "
-        "(use the HPC agent demos).",
+        help="thermo = MACE server; ase = general ASE server. "
+        "For gRASPA, use demo_local_direct.py or the gRASPA MCP examples.",
     )
     parser.add_argument(
         "--calculator",

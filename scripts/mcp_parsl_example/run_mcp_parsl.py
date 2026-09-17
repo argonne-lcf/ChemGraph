@@ -3,7 +3,12 @@ import asyncio
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from chemgraph.agent.llm_agent import ChemGraph
 
-prompt_single = "Run geometry optimization using MACE with cuda for the structures located in structures/. Save the output files in outputs/"
+prompt_single = (
+    "Use run_graspa_ensemble for H2O adsorption on the shared CIF directory "
+    "structures/ at 298.15 K and 1000 Pa. Set output_directory='water-screening'. "
+    "If a batch is submitted, poll check_job_status and retrieve get_job_results. "
+    "Report uptake in mol/kg, failures, and actual returned artifact paths."
+)
 
 client = MultiServerMCPClient(
     {
