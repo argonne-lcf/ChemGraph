@@ -210,6 +210,8 @@ class ChemGraph:
         stored in checkpointed agent state.
     deepagent_tool_registry : ToolRegistry, optional
         Local tools available on demand to the standalone ``deep_agent``.
+        Defaults to the built-in catalog, excluding already attached names.
+        Pass an empty ``ToolRegistry([])`` to disable discovery.
     deepagent_discover_skills : bool, optional
         Discover personal and project skill directories for local workspaces.
         Bundled skills are always available. Defaults to True.
@@ -405,6 +407,19 @@ class ChemGraph:
         self.terminal_tool_names = tuple(terminal_tool_names)
         self.enable_deepagent = enable_deepagent
         self.deepagent_backend = deepagent_backend
+        if workflow_type == "deep_agent" and deepagent_tool_registry is None:
+            from chemgraph.registry.tools import ToolRegistry
+
+            attached_names = {
+                entry.get("function", entry).get("name", entry.get("type"))
+                if isinstance(entry, dict)
+                else getattr(entry, "name", getattr(entry, "__name__", None))
+                for entry in tools or ()
+            }
+            deepagent_tool_registry = ToolRegistry(
+                spec for spec in ToolRegistry().specs()
+                if spec.name not in attached_names
+            )
         self.deepagent_tool_registry = deepagent_tool_registry
         self.deepagent_skills = normalized_deepagent_skills
         self.deepagent_skill_dirs = normalized_skill_dirs

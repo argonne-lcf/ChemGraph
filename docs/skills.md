@@ -184,22 +184,28 @@ verbatim; its default `None` selects the shared prompt.
 ## On-demand local tools
 
 Skills describe workflows; tools implement their operations. With standalone
-`deep_agent`, configure a local catalog without sending every tool schema to the
-model:
+`deep_agent`, the built-in local catalog is searchable by default without sending
+every tool schema to the model:
 
 ```sh
-chemgraph run --interactive -w deep_agent --deepagent-workspace . \
-  --tool smiles_to_coordinate_file --tool file_to_atomsdata \
-  --tool extract_output_json
+chemgraph run --interactive -w deep_agent --deepagent-workspace .
 ```
 
-In `[general]` TOML, use `tools = ["smiles_to_coordinate_file", "file_to_atomsdata"]`.
-Repeated `--tool` values replace that list, and duplicates are collapsed. Omitted
-or empty catalogs preserve existing behavior. The option applies to standalone
-Deep Agent; configured names are ignored for other workflows. Interactive model
-and workflow changes retain the catalog for switching back to Deep Agent.
+To restrict discovery, use repeated `--tool NAME` flags or `[general]` TOML
+`tools = ["smiles_to_coordinate_file", "file_to_atomsdata"]`. CLI names replace
+the TOML list loaded with `--config`, and duplicates are collapsed. Omitting the
+setting selects all built-ins; `tools = []` disables discovery. This is independent of
+`--no-deepagent-discover-skills`, which controls personal/project skills only.
+The CLI displays the catalog size or disabled status at initialization.
+The option applies to standalone Deep Agent; configured names are ignored for
+other workflows. Interactive model and workflow changes retain the catalog for
+switching back to Deep Agent.
 
-Python callers can supply a catalog to the shared constructor:
+`ChemGraph(workflow_type="deep_agent")` also defaults to the built-in catalog.
+Pass `deepagent_tool_registry=preparation` to replace it, or
+`deepagent_tool_registry=ToolRegistry([])` to disable it. Explicit `None` selects
+the default. The lower-level shared constructor remains opt-in so existing
+delegated workers do not gain tools; supply a catalog explicitly:
 
 ```python
 from chemgraph.registry import ToolRegistry
@@ -211,16 +217,19 @@ preparation = ToolRegistry(catalog.get_spec(name) for name in (
 graph = construct_deep_agent_graph(model, backend=backend, tool_registry=preparation)
 ```
 
-Use `deepagent_tool_registry=preparation` with `ChemGraph(workflow_type="deep_agent", ...)`.
 Existing `tools=` objects, including MCP tools, remain attached as before. Their
-names must not collide with the registry or its discovery tools. Custom tools can
+names are excluded from the automatic catalog. Names in an explicitly supplied
+catalog must not collide with attached tools or discovery tools. Custom tools can
 be registered using the existing `ToolSpec`/`BaseTool` interfaces. Registering a
 `BaseTool` uses an already-created object; `ToolSpec` defers importing its module.
 
 The agent initially sees workspace tools plus `search_tools` and `load_tools`.
 Search returns bounded name/description matches without imports. Skills can name
-tools directly, skipping search. `load_tools(names)` replaces the active selection
-and exposes native schemas on the next model call; `load_tools([])` clears it.
+tools directly, skipping search. Use native tools for supported local operations
+before considering scripts or reading their implementation source. Scripts remain
+appropriate for unavailable capabilities and separate batch jobs.
+`load_tools(names)` replaces the active selection and exposes native schemas on
+the next model call; `load_tools([])` clears it.
 It returns names rather than duplicating schemas in chat. Missing dependencies or
 unknown names leave the previous selection intact. Active names are checkpointed
 per conversation, survive approval pauses, and clear at the end of a completed
@@ -230,8 +239,9 @@ worker has its own tools; keep this preparation workflow in the standalone agent
 Registry tools execute on the agent host, independently of the file/shell backend.
 Use absolute host paths and returned artifact paths. The default approval policy
 also covers `smiles_to_coordinate_file` and `save_atomsdata_to_file`; custom tools
-need appropriate `interrupt_on` entries when constructing the graph. Explicit
-approval overrides retain their existing meaning.
+need appropriate `interrupt_on` entries when constructing the graph. `python_repl`
+requires the same execution review as `execute`. Explicit approval overrides
+retain their existing meaning.
 
 On-demand loading reduces repeated schema input for larger catalogs, but adds a
 round trip. A few always-attached tools can be cheaper for a short task. Keep

@@ -173,6 +173,10 @@ ChemGraph bundles `chemgraph` and `pbs-hpc` skills and automatically discovers
 use one directory per `SKILL.md`; their catalog refreshes each new turn. See
 [skills and filesystem backends](docs/skills.md).
 
+Standalone Deep Agent also discovers the built-in local tool catalog by default,
+loading tool schemas only when needed. Use repeated `--tool NAME` flags to restrict
+the catalog, or `[general] tools = []` in TOML to disable tool discovery.
+
 Headless workspace mutation is disabled unless the command includes an
 explicit workspace and `--deepagent-dangerously-skip-approvals`. Use that mode
 only in a disposable, isolated checkout.

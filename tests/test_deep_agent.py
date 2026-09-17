@@ -350,6 +350,7 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
     assert captured["args"] == ("fake-llm",)
     assert captured["kwargs"] == {
         "tools": [tool],
+        "tool_registry": agent.deepagent_tool_registry,
         "skills": ("/workspace/base/", "/workspace/project/"),
         "skill_dirs": (str(tmp_path),),
         "discover_skills": True,
@@ -705,3 +706,27 @@ def test_chemgraph_forwards_deferred_catalog(monkeypatch, tmp_path):
     assert agent.deepagent_tool_registry is registry
     with pytest.raises(ValueError, match="requires workflow_type"):
         ChemGraph(workflow_type="single_agent", deepagent_tool_registry=registry)
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_default_catalog_preserves_attached_tools(monkeypatch, tmp_path, restricted):
+    from langchain_core.tools import tool
+    from chemgraph.registry import ToolRegistry
+    from tests.test_deep_agent_review import _agent
+
+    @tool
+    def calculator(expression: str) -> str:
+        """Use the caller's calculator."""
+        return expression
+
+    monkeypatch.setattr(ToolRegistry, "get", lambda *_a, **_k: pytest.fail("must stay lazy"))
+    options = {"tools": [calculator], "deepagent_discover_skills": False}
+    if restricted:
+        options["deepagent_tool_registry"] = ToolRegistry()
+        with pytest.raises(ValueError, match="conflict"):
+            _agent(monkeypatch, tmp_path, **options)
+        return
+    agent = _agent(monkeypatch, tmp_path, **options)
+    assert set(agent.deepagent_tool_registry.names()) == set(ToolRegistry().names()) - {"calculator"}
+    assert agent.deepagent_tool_registry._tools == {}
+    assert agent.tools == [calculator]

@@ -264,6 +264,7 @@ def initialize_agent(
         Host skill collections, resolved independently of the workspace.
     deepagent_tool_registry : ToolRegistry, optional
         Local catalog available on demand in the standalone Deep Agent.
+        None selects built-ins; an empty registry disables discovery.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
@@ -404,6 +405,13 @@ def initialize_agent(
                 agent = future.result(timeout=_INIT_TIMEOUT_SECONDS)
 
             progress.update(task, description="[green]Agent initialized successfully!")
+            if workflow_type == "deep_agent":
+                registry = getattr(agent, "deepagent_tool_registry", None)
+                count = len(registry.names()) if registry is not None else 0
+                console.print(
+                    f"Local tools: {count} discoverable (loaded on demand)"
+                    if count else "Local tools: discovery disabled"
+                )
             time.sleep(0.5)
             return agent
 
@@ -1175,6 +1183,7 @@ def interactive_mode(
         Host skill collections, resolved independently of the workspace.
     deepagent_tool_registry : ToolRegistry, optional
         Local catalog available on demand in the standalone Deep Agent.
+        None selects built-ins; an empty registry disables discovery.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional

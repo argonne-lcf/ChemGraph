@@ -110,7 +110,10 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--tool", dest="local_tool_names", action="append", metavar="NAME",
-        help="Local registry tool available on demand to deep_agent; repeat to add tools",
+        help=(
+            "Restrict deep_agent's on-demand catalog to these names; repeat to add "
+            "tools (default: all built-in registry tools)"
+        ),
     )
     parser.add_argument(
         "--deepagent",
@@ -634,11 +637,11 @@ def _handle_run(args: argparse.Namespace) -> None:
     # Register metadata without importing local implementations or sending schemas.
     deepagent_tool_registry = None
     cli_tools = getattr(args, "local_tool_names", None)
-    local_names = cli_tools if cli_tools is not None else config.get("tools", [])
+    local_names = cli_tools if cli_tools is not None else config.get("tools")
     if cli_tools is not None and args.workflow != "deep_agent":
         console.print("[red]--tool requires -w deep_agent.[/red]")
         sys.exit(2)
-    if args.workflow == "deep_agent":
+    if args.workflow == "deep_agent" and local_names is not None:
         from chemgraph.registry.tools import RegistryError, ToolRegistry
 
         try:
@@ -647,10 +650,9 @@ def _handle_run(args: argparse.Namespace) -> None:
             ):
                 raise ValueError("tools must be a list of non-empty registry names")
             catalog = ToolRegistry()
-            if local_names:
-                deepagent_tool_registry = ToolRegistry(
-                    catalog.get_spec(name) for name in dict.fromkeys(local_names)
-                )
+            deepagent_tool_registry = ToolRegistry(
+                catalog.get_spec(name) for name in dict.fromkeys(local_names)
+            )
         except (RegistryError, ValueError) as exc:
             console.print(f"[red]Invalid local tools: {escape(str(exc))}[/red]")
             sys.exit(2)

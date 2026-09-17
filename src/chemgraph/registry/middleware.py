@@ -130,7 +130,12 @@ class RegistryToolsMiddleware(AgentMiddleware):
         message = request.system_message
         guidance = (
             "Local ChemGraph tools are available through search_tools and load_tools. "
-            "Skills can name tools to load directly. Load only the tools needed now; "
+            "For supported local operations, load and call native tools before "
+            "considering Python scripts or reading tool implementation source. "
+            "Search for unfamiliar capabilities; skills can name tools to load directly. "
+            "Use scripts when a capability is unavailable or a separate batch script "
+            "is required, preserving the user's execution method. "
+            "Load only the tools needed now; "
             "loading replaces the selection, which clears after this turn. "
             "Local tools run in the agent process on this host, independently of "
             "the file/shell backend. Use absolute host paths for their artifacts. "

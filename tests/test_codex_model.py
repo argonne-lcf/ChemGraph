@@ -352,6 +352,69 @@ def test_codex_deep_agent_reads_skill_and_receives_result(
     assert result["messages"][-1].content == body
 
 
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_codex_default_catalog_prepares_carbonic_acid(fake_codex_sdk, tmp_path, monkeypatch, decision):
+    from math import isfinite
+    from chemgraph.registry import ToolRegistry
+    from chemgraph.tools.ase_tools import file_to_atomsdata
+
+    structure = tmp_path / "carbonic_acid.xyz"
+    readbacks = []
+    read_structure = file_to_atomsdata.func
+
+    def record_readback(fname):
+        atoms = read_structure(fname)
+        readbacks.append(atoms)
+        return atoms
+
+    monkeypatch.setattr(file_to_atomsdata, "func", record_readback)
+
+    def response(name, **arguments):
+        return json.dumps({"content": "", "tool_calls": [{
+            "name": name, "arguments": json.dumps(arguments),
+        }]})
+
+    fake_codex_sdk.responses.extend([
+        response("search_tools", query="coordinate"),
+        response("load_tools", names=["smiles_to_coordinate_file", "file_to_atomsdata"]),
+        response("smiles_to_coordinate_file", smiles="O=C(O)O", output_file=str(structure), randomSeed=2025),
+    ])
+    if decision == "approve":
+        fake_codex_sdk.responses.append(response("file_to_atomsdata", fname=str(structure)))
+    fake_codex_sdk.responses.append(json.dumps({"content": "Done", "tool_calls": []}))
+    agent = ChemGraph(
+        model_name="codex:gpt-5.6-sol", workflow_type="deep_agent",
+        deepagent_discover_skills=False,
+        deepagent_backend=LocalShellBackend(root_dir=tmp_path, env={}),
+        enable_memory=False, log_dir=str(tmp_path / "logs"),
+    )
+    assert agent.deepagent_tool_registry.names() == ToolRegistry().names()
+    assert agent.deepagent_tool_registry._tools == {}
+    config = {"configurable": {"thread_id": "carbonic-acid"}}
+    state = agent.workflow.invoke(
+        {"messages": [HumanMessage(content="Generate and validate carbonic acid locally.")]}, config,
+    )
+    assert state["__interrupt__"] and not structure.exists()
+    first = {t["function"]["name"] for t in _codex_payload(fake_codex_sdk, 0)["available_tools"]}
+    assert {"search_tools", "load_tools"} <= first
+    assert not set(ToolRegistry().names()) & first
+    loaded = {t["function"]["name"] for t in _codex_payload(fake_codex_sdk, 2)["available_tools"]}
+    assert {"smiles_to_coordinate_file", "file_to_atomsdata"} <= loaded
+    assert "run_ase" not in loaded
+    state = agent.workflow.invoke(Command(resume={"decisions": [{"type": decision}]}), config)
+    assert "__interrupt__" not in state
+    assert structure.exists() == (decision == "approve")
+    outputs = [m for m in state["messages"] if m.type == "tool"]
+    assert "execute" not in {m.name for m in outputs}
+    assert len(readbacks) == (1 if decision == "approve" else 0)
+    if decision == "approve":
+        artifact = json.loads(next(m.content for m in outputs if m.name == "smiles_to_coordinate_file"))
+        assert artifact["ok"] and artifact["natoms"] == 6 and artifact["path"] == str(structure)
+        assert next(m for m in outputs if m.name == "file_to_atomsdata").status == "success"
+        assert sorted(readbacks[0].numbers) == [1, 1, 6, 8, 8, 8]
+        assert all(isfinite(value) for position in readbacks[0].positions for value in position)
+
+
 @pytest.mark.parametrize("tool_name", ["write_file", "execute"])
 @pytest.mark.parametrize("decision", ["approve", "reject"])
 def test_codex_deep_agent_actions_require_approval(

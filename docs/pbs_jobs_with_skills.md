@@ -22,9 +22,7 @@ own project, paths, and scientific choices in this example:
 
 ```bash
 chemgraph run --interactive --workflow deep_agent \
-  --deepagent-workspace /absolute/shared/run --model "$LLM_MODEL" \
-  --tool smiles_to_coordinate_file --tool file_to_atomsdata \
-  --tool extract_output_json
+  --deepagent-workspace /absolute/shared/run --model "$LLM_MODEL"
 ```
 
 > Read the chemgraph and pbs-hpc skills, the local structure preparation guide,
@@ -41,9 +39,9 @@ chemgraph run --interactive --workflow deep_agent \
 > Use result.json in this directory. Validate the scripts without running the
 > calculation on the login node, submit once, and save the PBS job ID.
 
-`--tool` configures which local tools may be loaded on demand; it does not
-import all implementations or send their schemas at startup. The skill names
-which tools to load. The agent can replace its selection for result inspection
+The built-in tool catalog is searchable by default; implementations and schemas
+load only when requested. Optional `--tool` flags restrict the catalog. The skill
+names which tools to load. The agent can replace its selection for result inspection
 with `load_tools(["extract_output_json"])`. See [tool loading](skills.md#on-demand-local-tools).
 
 The agent reads the Python example at

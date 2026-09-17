@@ -5,12 +5,15 @@ calculation inputs. For water, use SMILES `O`; no name lookup is needed. For oth
 names, `molecule_name_to_smiles` uses PubChem and requires network access. Preserve
 stereochemistry when it matters.
 
-If `load_tools` is available, request the names needed for the current step, for
+Standalone Deep Agent exposes the built-in tool catalog by default. If
+`load_tools` is available, request the names needed for the current step, for
 example `load_tools(["smiles_to_coordinate_file", "file_to_atomsdata"])`. This
 replaces the active selection; use the returned native schemas on the next step.
 Use `search_tools` for unfamiliar capabilities. Loading does not execute tools or
 grant permissions, and the selection clears when the turn completes. A missing
-tool must be added to the configured catalog; searching cannot enable it.
+tool may have been excluded by a configured filter; searching cannot enable it.
+Call the loaded native tools instead of invoking their implementation through
+`execute` or inspecting source to rediscover their arguments.
 
 For the PBS water workflow:
 
