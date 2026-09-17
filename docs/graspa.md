@@ -136,8 +136,12 @@ Discovered POSIX and Windows absolute paths are preserved regardless of the
 MCP server's operating system.
 No implicit file transfer or inline-CIF transport is performed. Discovery is
 awaited without blocking the MCP event loop. Its timeout defaults to 30 seconds,
-includes queue time, and can be disabled with `null`. Discovery failure submits
-no simulations; check the directory/backend or increase the discovery timeout.
+includes submission, queueing, and discovery execution, and can be disabled with
+`null`. A timeout or cancelled request stops waiting but cannot forcibly stop a
+blocking SDK submission or an already-running discovery probe. Late discovery
+results do not start simulations. Discovery failure, including a probe cancelled
+by the backend, returns a tool error without closing the MCP connection and
+submits no simulations; check the directory/backend or increase the timeout.
 
 `timeout_seconds` independently limits each simulation process after startup.
 It is unset by default and excludes backend queue time. Output roots and legacy

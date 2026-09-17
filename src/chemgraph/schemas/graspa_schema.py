@@ -104,7 +104,7 @@ class graspa_input_schema_ensemble(_GraspaOptions):
         default=30.0,
         gt=0,
         allow_inf_nan=False,
-        description="Remote directory discovery timeout, including queue time; null disables it.",
+        description="Remote directory discovery timeout, including submission and queue time; null disables it.",
     )
 
     @model_validator(mode="after")

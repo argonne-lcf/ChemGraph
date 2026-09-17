@@ -120,6 +120,12 @@ def _remote_cif_path(path: str) -> PurePath:
     raise ValueError("Discovery must return absolute CIF paths")
 
 
+def _consume_discovery_exception(future: asyncio.Future) -> None:
+    """Retrieve late errors after the request stops waiting for discovery."""
+    if not future.cancelled():
+        future.exception()
+
+
 def _local_structure_files(source: str | list[str]) -> list[str]:
     from chemgraph.tools.ase_core import _resolve_existing_path
 
@@ -159,10 +165,19 @@ async def _expand_graspa_ensemble(
             callable=_ls_remote_files, kwargs={"path": params.remote_structure_directory},
         )
         try:
-            future = backend.submit(probe)
-            paths = await asyncio.wait_for(
-                asyncio.wrap_future(future), params.discovery_timeout_seconds,
-            )
+            async with asyncio.timeout(params.discovery_timeout_seconds):
+                # First submission can synchronously register the function over
+                # HTTP. Include that work in the deadline without blocking MCP.
+                future = await asyncio.to_thread(backend.submit, probe)
+                wrapped = asyncio.wrap_future(future)
+                wrapped.add_done_callback(_consume_discovery_exception)
+                try:
+                    # Backends such as Parsl do not implement Future.cancel().
+                    paths = await asyncio.shield(wrapped)
+                except asyncio.CancelledError as exc:
+                    if asyncio.current_task().cancelling():
+                        raise
+                    raise RuntimeError("Discovery probe was cancelled by the backend") from exc
             if not paths:
                 raise ValueError("No CIF files found")
             if not isinstance(paths, list):
@@ -171,7 +186,7 @@ async def _expand_graspa_ensemble(
         except Exception as exc:
             raise RuntimeError(
                 f"Could not discover CIFs in {params.remote_structure_directory}: "
-                f"{type(exc).__name__}: {exc}. Discovery includes queue time; "
+                f"{type(exc).__name__}: {exc}. Discovery includes submission and queue time; "
                 "check the staged directory and backend, or adjust "
                 "discovery_timeout_seconds. No simulations were submitted."
             ) from exc

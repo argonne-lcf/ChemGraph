@@ -2,12 +2,14 @@
 
 import asyncio
 from concurrent.futures import Future
+import gc
 import importlib
 import json
 from pathlib import Path
 import re
 import subprocess
 import sys
+import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -50,6 +52,45 @@ class Backend:
             return resolved(task.callable(**task.kwargs))
         except Exception as exc:
             return resolved(error=exc)
+
+
+class DiscoveryFuture(Future):
+    """Signal when the server starts awaiting a discovery result."""
+
+    def __init__(self, loop):
+        super().__init__()
+        self.loop = loop
+        self.awaited = asyncio.Event()
+
+    def add_done_callback(self, callback):
+        super().add_done_callback(callback)
+        self.loop.call_soon_threadsafe(self.awaited.set)
+
+
+class BlockingDiscovery:
+    """Hold backend submission until the test explicitly releases its thread."""
+
+    def __init__(self):
+        self.loop = asyncio.get_running_loop()
+        self.started = asyncio.Event()
+        self.finished = asyncio.Event()
+        self.release = threading.Event()
+        self.future = DiscoveryFuture(self.loop)
+        self.future.cancel = Mock(side_effect=NotImplementedError("Cancel not implemented"))
+        self.error = None
+
+    def __call__(self, task, count):
+        if count != 1:
+            return resolved(task.callable(**task.kwargs))
+        self.loop.call_soon_threadsafe(self.started.set)
+        try:
+            if not self.release.wait(5):
+                raise RuntimeError("Test did not release discovery submission")
+            if self.error is not None:
+                raise self.error
+            return self.future
+        finally:
+            self.loop.call_soon_threadsafe(self.finished.set)
 
 
 @pytest.fixture
@@ -207,10 +248,11 @@ async def test_remote_discovery_is_awaited_and_responsive(ensemble, timeout):
     ensemble.backend.shares_filesystem = False
     discovery = Future()
     submitted = asyncio.Event()
+    loop = asyncio.get_running_loop()
 
     def submit(task, count):
         if count == 1:
-            submitted.set()
+            loop.call_soon_threadsafe(submitted.set)
             assert task.kwargs == {"path": "~/staged"}
             return discovery
         return resolved(task.callable(**task.kwargs))
@@ -233,6 +275,122 @@ async def test_remote_discovery_is_awaited_and_responsive(ensemble, timeout):
     assert worker_input.output_directory == "worker-output"
     assert worker_input.output_result_file == "raspa.log"
     assert worker_input.timeout_seconds == 7
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("already_cancelled", [True, False])
+async def test_cancelled_probe_keeps_mcp_connection_usable(ensemble, already_cancelled):
+    loop = asyncio.get_running_loop()
+    discovery = DiscoveryFuture(loop)
+    submitted = asyncio.Event()
+
+    def submit(task, count):
+        loop.call_soon_threadsafe(submitted.set)
+        return discovery
+
+    ensemble.backend.on_submit = submit
+    if already_cancelled:
+        discovery.cancel()
+    async with Client(ensemble.server) as client:
+        request = asyncio.create_task(client.call_tool("run_graspa_ensemble", {"params": {
+            "remote_structure_directory": "~/staged", "adsorbate": "H2O",
+        }}))
+        await asyncio.wait_for(submitted.wait(), 2)
+        if not already_cancelled:
+            await asyncio.wait_for(discovery.awaited.wait(), 2)
+            discovery.cancel()
+        with pytest.raises(ToolError, match="Discovery probe was cancelled.*No simulations were submitted"):
+            await asyncio.wait_for(request, 2)
+        assert await client.list_tools()
+    assert len(ensemble.backend.tasks) == 1
+    ensemble.core.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("timeout", [30, None])
+async def test_blocking_discovery_submission_keeps_mcp_responsive(ensemble, timeout):
+    control = BlockingDiscovery()
+    ensemble.backend.on_submit = control
+    async with Client(ensemble.server) as client:
+        request = asyncio.create_task(client.call_tool("run_graspa_ensemble", {"params": {
+            "remote_structure_directory": "~/staged", "adsorbate": "H2O",
+            "discovery_timeout_seconds": timeout,
+        }}))
+        try:
+            await asyncio.wait_for(control.started.wait(), 2)
+            # Another protocol request completes while submit() is blocked.
+            assert await asyncio.wait_for(client.list_tools(), 2)
+            assert not control.finished.is_set()
+            assert not request.done()
+            control.future.set_result(["/worker/staged/MOF.CIF"])
+            control.release.set()
+            result = await asyncio.wait_for(request, 2)
+            assert result.structured_content["results"][0]["status"] == "success"
+        finally:
+            control.release.set()
+            await asyncio.wait_for(control.finished.wait(), 2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop", ["timeout", "cancel"])
+@pytest.mark.parametrize("phase,late", [
+    ("submit", "result"), ("submit", "error"), ("submit", "submit_error"),
+    ("result", "result"), ("result", "error"),
+])
+async def test_abandoned_discovery_never_fans_out(ensemble, stop, phase, late):
+    control = BlockingDiscovery()
+    ensemble.backend.on_submit = control
+    loop = asyncio.get_running_loop()
+    errors = []
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda loop, context: errors.append(context))
+    if phase == "result":
+        control.release.set()
+    if late == "submit_error":
+        control.error = RuntimeError("late submission failure")
+    params = {
+        "remote_structure_directory": "~/staged", "adsorbate": "H2O",
+        "discovery_timeout_seconds": 0.2 if stop == "timeout" else None,
+    }
+    # Cancel the registered server coroutine directly to verify propagation,
+    # rather than only cancelling the client-side wait for an MCP response.
+    invocation = (
+        run(ensemble, input_structures="", **params) if stop == "timeout"
+        else ensemble.server.call_tool("run_graspa_ensemble", {"params": params})
+    )
+    request = asyncio.create_task(invocation)
+    try:
+        await asyncio.wait_for(control.started.wait(), 2)
+        if phase == "result":
+            await asyncio.wait_for(control.future.awaited.wait(), 2)
+        if stop == "cancel":
+            request.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(request, 2)
+            assert request.cancelled()
+        else:
+            with pytest.raises(ToolError, match="TimeoutError.*No simulations were submitted"):
+                await asyncio.wait_for(request, 2)
+        if phase == "submit":
+            assert not control.finished.is_set()
+        assert not control.future.done()
+        control.future.cancel.assert_not_called()
+    finally:
+        control.release.set()
+        await asyncio.wait_for(control.finished.wait(), 2)
+        if late == "error":
+            control.future.set_exception(RuntimeError("late discovery failure"))
+        else:
+            control.future.set_result(["/worker/staged/MOF.CIF"])
+        # Flush callbacks and collect discarded futures to surface late errors.
+        for _ in range(3):
+            await asyncio.sleep(0)
+        control.future = None
+        gc.collect()
+        loop.set_exception_handler(previous_handler)
+    assert not errors
+    assert len(ensemble.backend.tasks) == 1
+    ensemble.core.assert_not_called()
 
 
 @pytest.mark.asyncio
