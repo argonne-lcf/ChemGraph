@@ -382,7 +382,9 @@ def test_codex_command_defaults_to_discovery_with_skills_disabled(
         {"messages": [HumanMessage(content="Ready?")]},
         {"configurable": {"thread_id": "default-discovery"}},
     )
-    expected = () if explicit_empty else ToolRegistry().names()
+    expected = () if explicit_empty else tuple(
+        spec.name for spec in ToolRegistry().specs() if not spec.interactive
+    )
     assert agent.deepagent_tool_registry.names() == expected
     assert agent.deepagent_tool_registry._tools == {}
     discovery = set() if explicit_empty else {"search_tools", "load_tools"}

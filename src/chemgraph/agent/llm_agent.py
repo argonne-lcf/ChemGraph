@@ -210,7 +210,9 @@ class ChemGraph:
         stored in checkpointed agent state.
     deepagent_tool_registry : ToolRegistry, optional
         Local tools available on demand to the standalone ``deep_agent``.
-        Defaults to the built-in catalog, excluding already attached names.
+        Defaults to the built-in catalog, excluding already attached names and
+        interactive tools unless ``human_supervised`` is enabled. Explicit
+        catalogs and attached tools count as an opt-in to interactive tools.
         Pass an empty ``ToolRegistry([])`` to disable discovery.
     deepagent_discover_skills : bool, optional
         Discover personal and project skill directories for local workspaces.
@@ -419,6 +421,7 @@ class ChemGraph:
             deepagent_tool_registry = ToolRegistry(
                 spec for spec in ToolRegistry().specs()
                 if spec.name not in attached_names
+                and (human_supervised or not spec.interactive)
             )
         self.deepagent_tool_registry = deepagent_tool_registry
         self.deepagent_skills = normalized_deepagent_skills

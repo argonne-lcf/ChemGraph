@@ -15,7 +15,7 @@ enable_deepagent = false
 deepagent_discover_skills = true
 # Additional host skill directories, relative to the invocation directory (later entries win).
 # deepagent_skills = ["../external/AtomisticSkills/.agents/skills/"]
-# Standalone deep_agent discovers all built-in tools by default; schemas load on demand.
+# Standalone deep_agent discovers built-ins on demand; interactive tools need opt-in.
 # Optionally restrict the catalog, or set tools = [] to disable discovery.
 # tools = ["smiles_to_coordinate_file", "file_to_atomsdata", "extract_output_json"]
 # Durable main-agent checkpoint database.

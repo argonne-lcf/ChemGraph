@@ -112,7 +112,8 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         "--tool", dest="local_tool_names", action="append", metavar="NAME",
         help=(
             "Restrict deep_agent's on-demand catalog to these names; repeat to add "
-            "tools (default: all built-in registry tools)"
+            "tools (default: non-interactive built-ins; --human-supervised also "
+            "enables interactive tools)"
         ),
     )
     parser.add_argument(

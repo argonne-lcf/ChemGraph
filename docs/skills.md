@@ -194,14 +194,18 @@ chemgraph run --interactive -w deep_agent --deepagent-workspace .
 To restrict discovery, use repeated `--tool NAME` flags or `[general]` TOML
 `tools = ["smiles_to_coordinate_file", "file_to_atomsdata"]`. CLI names replace
 the TOML list loaded with `--config`, and duplicates are collapsed. Omitting the
-setting selects all built-ins; `tools = []` disables discovery. This is independent of
+setting selects the built-ins except interactive tools such as `ask_human`, which
+require `--human-supervised`. Explicitly listing `ask_human` also opts in.
+`tools = []` disables discovery. This is independent of
 `--no-deepagent-discover-skills`, which controls personal/project skills only.
 The CLI displays the catalog size or disabled status at initialization.
 The option applies to standalone Deep Agent; configured names are ignored for
 other workflows. Interactive model and workflow changes retain the catalog for
 switching back to Deep Agent.
 
-`ChemGraph(workflow_type="deep_agent")` also defaults to the built-in catalog.
+`ChemGraph(workflow_type="deep_agent")` uses the same default catalog, enabling
+interactive tools when `human_supervised=True`. Explicit catalogs and attached
+tools count as deliberate opt-in, independently of that flag.
 Pass `deepagent_tool_registry=preparation` to replace it, or
 `deepagent_tool_registry=ToolRegistry([])` to disable it. Explicit `None` selects
 the default. The lower-level shared constructor remains opt-in so existing

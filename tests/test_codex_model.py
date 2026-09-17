@@ -388,7 +388,9 @@ def test_codex_default_catalog_prepares_carbonic_acid(fake_codex_sdk, tmp_path, 
         deepagent_backend=LocalShellBackend(root_dir=tmp_path, env={}),
         enable_memory=False, log_dir=str(tmp_path / "logs"),
     )
-    assert agent.deepagent_tool_registry.names() == ToolRegistry().names()
+    assert agent.deepagent_tool_registry.names() == tuple(
+        spec.name for spec in ToolRegistry().specs() if not spec.interactive
+    )
     assert agent.deepagent_tool_registry._tools == {}
     config = {"configurable": {"thread_id": "carbonic-acid"}}
     state = agent.workflow.invoke(

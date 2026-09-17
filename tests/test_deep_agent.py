@@ -727,6 +727,38 @@ def test_default_catalog_preserves_attached_tools(monkeypatch, tmp_path, restric
             _agent(monkeypatch, tmp_path, **options)
         return
     agent = _agent(monkeypatch, tmp_path, **options)
-    assert set(agent.deepagent_tool_registry.names()) == set(ToolRegistry().names()) - {"calculator"}
+    assert set(agent.deepagent_tool_registry.names()) == set(ToolRegistry().names()) - {"calculator", "ask_human"}
     assert agent.deepagent_tool_registry._tools == {}
     assert agent.tools == [calculator]
+
+
+@pytest.mark.parametrize("mode", ["automatic", "supervised", "catalog", "attached"])
+def test_interactive_tools_require_opt_in(monkeypatch, tmp_path, mode):
+    from chemgraph.registry import ToolRegistry
+    from chemgraph.tools.generic_tools import ask_human
+    from tests.test_deep_agent_review import _agent
+    from tests.test_registry_middleware import call, outputs
+
+    options = {"human_supervised": mode == "supervised"}
+    if mode == "catalog":
+        options["deepagent_tool_registry"] = ToolRegistry([
+            ToolRegistry().get_spec("ask_human"),
+        ])
+    elif mode == "attached":
+        options["tools"] = [ask_human]
+    responses = [] if mode == "attached" else [call("load_tools", names=["ask_human"])]
+    responses += [call("ask_human", question="Which calculator?"), AIMessage(content="Done")]
+    agent = _agent(
+        monkeypatch, tmp_path, responses=responses, deepagent_auto_approve=True,
+        deepagent_discover_skills=False, enable_memory=False, **options,
+    )
+    state = agent.workflow.invoke(
+        {"messages": [HumanMessage(content="Run the calculation.")]},
+        {"configurable": {"thread_id": "supervision"}},
+    )
+    if mode == "automatic":
+        assert "ask_human" not in agent.deepagent_tool_registry.names()
+        assert "__interrupt__" not in state
+        assert all(message.status == "error" for message in outputs(state))
+    else:
+        assert state["__interrupt__"][0].value == {"question": "Which calculator?"}
