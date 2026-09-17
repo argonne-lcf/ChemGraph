@@ -1,353 +1,252 @@
-"""Pure-Python gRASPA simulation helpers (no LangChain / MCP decorators).
-
-Contains the core workflow functions for running gRASPA-SYCL
-simulations, parsing output, and mock simulations for testing.
-Used by the LangChain ``@tool`` wrapper in :mod:`graspa_tools` and the
-MCP/Parsl wrappers in :mod:`chemgraph.mcp.graspa_mcp_parsl`.
-"""
+"""Prepare, execute, and parse isolated H2O gRASPA-SYCL simulations."""
 
 from __future__ import annotations
 
-import glob
+from importlib.resources import files
+import json
+import logging
+import math
 import os
-import random
+from pathlib import Path
+import re
 import shutil
 import subprocess
+import tempfile
 import time
-from pathlib import Path
+import warnings
 
-import ase
 import numpy as np
 from ase.io import read as ase_read
 
 from chemgraph.schemas.graspa_schema import graspa_input_schema
+from chemgraph.utils.executables import resolve_executable
 
-# Template directory for gRASPA-SYCL input files
-_file_dir = Path(__file__).parent / "files" / "template_graspa_sycl"
-
-# gRASPA-SYCL command
-graspa_cmd = (
-    "export OMP_NUM_THREADS=1; "
-    "export ZE_FLAT_DEVICE_HIERARCHY=FLAT; "
-    "/lus/flare/projects/IQC/thang/soft/gRASPA/graspa-sycl/bin/sycl.out"
+logger = logging.getLogger(__name__)
+TEMPLATE_FILES = (
+    "simulation.input",
+    "H2O.def",
+    "force_field.def",
+    "force_field_mixing_rules.def",
+    "pseudo_atoms.def",
 )
 
 
-# ---------------------------------------------------------------------------
-# Output parsing
-# ---------------------------------------------------------------------------
+def _failure(result: dict, exc: Exception) -> dict:
+    result.update(
+        status="failure",
+        uptake_in_mol_kg=None,
+        error_type=type(exc).__name__,
+        message=str(exc),
+    )
+    logger.warning("gRASPA failed: %s", exc)
+    return result
 
 
 def _read_graspa_sycl_output(
     output_path: str,
     adsorbate: str = "H2O",
-    cifname: str = None,
+    cifname: str | None = None,
     output_fname: str = "raspa.log",
-    temperature: float = None,
-    pressure: float = None,
+    temperature: float | None = None,
+    pressure: float | None = None,
 ) -> dict:
-    """Parse gRASPA output and return uptake results.
+    """Parse the SYCL UnitCells and Overall: Average sections into mol/kg.
 
-    Parameters
-    ----------
-    output_path : str
-        Directory containing the gRASPA output files.
-    adsorbate : str
-        Name of the adsorbate molecule.
-    cifname : str, optional
-        Stem name of the CIF file (without extension).
-    output_fname : str
-        Name of the gRASPA log file.
-    temperature : float, optional
-        Simulation temperature in Kelvin.
-    pressure : float, optional
-        Simulation pressure in Pascal.
-
-    Returns
-    -------
-    dict
-        Parsed results including uptake, status, and CIF path.
+    This standalone parser cannot establish process completion. The runner
+    additionally requires a zero exit status before accepting parsed results.
     """
+    directory = Path(output_path).resolve()
+    candidates = (
+        list(directory.glob("*.cif"))
+        if cifname is None
+        else [directory / f"{cifname}.cif"]
+    )
+    cif_path = candidates[0] if len(candidates) == 1 else None
     result = {
         "status": "failure",
-        "uptake_in_mol_kg": 0,
+        "uptake_in_mol_kg": None,
         "adsorbate": adsorbate,
-        "temperature_in_K": None,
-        "pressure_in_Pa": None,
-        "cif_path": None,
+        "temperature_in_K": temperature,
+        "pressure_in_Pa": pressure,
+        "cif_path": str(cif_path) if cif_path else None,
     }
-
-    target_file = Path(output_path) / Path(output_fname).name
-
-    # --- Resolve CIF Path ---
-    if cifname is None:
-        cif_list = glob.glob(os.path.join(output_path, "*.cif"))
-        if len(cif_list) != 1:
-            cifpath = None
-        else:
-            cifpath = os.path.abspath(cif_list[0])
-    else:
-        cifpath = os.path.abspath(os.path.join(output_path, f"{cifname}.cif"))
-
-    result["cif_path"] = cifpath
-
-    # --- Check Log Existence ---
-    if not os.path.exists(target_file):
-        return result
-
-    # --- Parse Log ---
-    unitcell_line = None
-    uptake_line = None
-
-    with open(target_file, "r") as rf:
-        for line in rf:
-            if "UnitCells" in line:
-                unitcell_line = line.strip()
-            elif "Overall: Average:" in line:
-                uptake_line = line.strip()
-
-    if unitcell_line is None or uptake_line is None:
-        return result
-
     try:
-        if cifpath is None:
-            raise ValueError(f"Could not resolve CIF path in {output_path}")
-
-        uptake_total_molecule = float(uptake_line.split()[2][:-1])
-        unitcell = unitcell_line.split()[4:]
-        unitcell = [int(float(i)) for i in unitcell]
-
-        atoms = ase_read(cifpath)
-        framework_mass = (
-            sum(atoms.get_masses()) * unitcell[0] * unitcell[1] * unitcell[2]
-        )
-
-        uptake_mol_kg = round((uptake_total_molecule / framework_mass) * 1000, 2)
-        result["uptake_in_mol_kg"] = float(uptake_mol_kg)
-        result["status"] = "success"
-        result["temperature_in_K"] = temperature
-        result["pressure_in_Pa"] = pressure
-    except Exception as e:
-        print(f"Error parsing results in {output_path}: {e}")
-        result["status"] = "failure"
-
+        if cif_path is None:
+            raise ValueError(f"Could not resolve a single CIF in {directory}")
+        unitcell_line = uptake_line = None
+        with (directory / Path(output_fname).name).open() as stream:
+            for line in stream:
+                if "UnitCells" in line:
+                    unitcell_line = line
+                elif "Overall: Average:" in line:
+                    uptake_line = line
+        if unitcell_line is None or uptake_line is None:
+            raise ValueError("Missing UnitCells or Overall: Average output section")
+        # The SYCL output prefixes the three replication factors. Take only
+        # the trailing numeric triple, also accepting its echoed input form.
+        cells = [float(token) for token in unitcell_line.split()[-3:]]
+        if len(cells) != 3 or any(
+            not math.isfinite(v) or v <= 0 or not v.is_integer() for v in cells
+        ):
+            raise ValueError("UnitCells must contain three positive integers")
+        token = uptake_line.split("Overall: Average:", 1)[1].split()[0].rstrip(",;")
+        molecules = float(token)
+        if not math.isfinite(molecules) or molecules < 0:
+            raise ValueError("Uptake must be finite and nonnegative")
+        atoms = ase_read(cif_path)
+        _calculate_cell_size(atoms)
+        mass = float(sum(atoms.get_masses())) * math.prod(cells)
+        if not math.isfinite(mass) or mass <= 0:
+            raise ValueError("Framework mass must be finite and positive")
+        uptake = molecules / mass * 1000
+        if not math.isfinite(uptake):
+            raise ValueError("Converted uptake is nonfinite")
+        result.update(status="success", uptake_in_mol_kg=uptake)
+    except Exception as exc:
+        _failure(result, exc)
     return result
 
 
-# ---------------------------------------------------------------------------
-# Mock simulation (for testing)
-# ---------------------------------------------------------------------------
-
-
 def mock_graspa(params: graspa_input_schema) -> dict:
-    """Return mock gRASPA results for testing without the SYCL runtime.
-
-    Parameters
-    ----------
-    params : graspa_input_schema
-        Input parameters (only ``adsorbates`` is used to determine output shape).
-
-    Returns
-    -------
-    dict
-        Simulated uptake results.
-    """
-
-    def rand_uptake(
-        low: float, high: float, ndigits: int = 3, min_positive: float | None = None
-    ) -> float:
-        """Generate a rounded mock uptake value.
-
-        Parameters
-        ----------
-        low : float
-            Lower bound for the random value.
-        high : float
-            Upper bound for the random value.
-        ndigits : int, optional
-            Number of decimal places to round to.
-        min_positive : float, optional
-            Replacement value when rounding produces zero.
-
-        Returns
-        -------
-        float
-            Mock uptake value.
-        """
-        value = random.uniform(low, high)
-        value = round(value, ndigits)
-        if min_positive is not None and value == 0.0:
-            value = min_positive
-        return value
-
-    time.sleep(random.uniform(20, 40))
-    n_ads = len(params.adsorbates)
-
-    if n_ads == 1:
-        uptake_co2 = rand_uptake(0, 2, ndigits=3)
-        return {"co2_uptake_mol_per_kg": uptake_co2}
-
-    elif n_ads == 2:
-        uptake_co2 = rand_uptake(0, 2, ndigits=3)
-        uptake_n2 = rand_uptake(0, 0.5, ndigits=3, min_positive=1e-3)
-        try:
-            selectivity = uptake_co2 / uptake_n2
-        except Exception:
-            selectivity = 1e4
-        return {
-            "co2_uptake_mol_per_kg": uptake_co2,
-            "n2_uptake_mol_per_kg": uptake_n2,
-            "co2_n2_selectivity": round(selectivity, 2),
-        }
-
-    elif n_ads == 3:
-        uptake_co2 = rand_uptake(0, 2, ndigits=3)
-        uptake_n2 = rand_uptake(0, 0.5, ndigits=3, min_positive=1e-3)
-        uptake_h2o = rand_uptake(0, 5, ndigits=3)
-        try:
-            selectivity = uptake_co2 / uptake_n2
-        except Exception:
-            selectivity = 1e4
-        return {
-            "co2_uptake_mol_per_kg": uptake_co2,
-            "n2_uptake_mol_per_kg": uptake_n2,
-            "h2o_uptake_mol_per_kg": uptake_h2o,
-            "co2_n2_selectivity": round(selectivity, 2),
-        }
-
-    else:
-        raise ValueError("Only supports 1-3 adsorbates only.")
+    """Return clearly marked deterministic H2O test data, without running gRASPA."""
+    return {
+        "status": "success",
+        "is_mock": True,
+        "uptake_in_mol_kg": 1.0,
+        "adsorbate": params.adsorbate,
+        "temperature_in_K": params.temperature,
+        "pressure_in_Pa": params.pressure,
+        "cif_path": params.input_structure_file,
+        "input_structure_file": params.input_structure_file,
+    }
 
 
-# ---------------------------------------------------------------------------
-# Core simulation runner
-# ---------------------------------------------------------------------------
+def _calculate_cell_size(atoms, cutoff: float = 12.8) -> list[int]:
+    """Replicate each cell width to at least twice the interaction cutoff."""
+    cell = np.asarray(atoms.cell)
+    volume = abs(float(np.linalg.det(cell)))
+    if not np.isfinite(cell).all() or not math.isfinite(volume) or volume <= 0:
+        raise ValueError("CIF must have a finite, nondegenerate unit cell")
+    widths = [
+        volume / np.linalg.norm(np.cross(cell[(i + 1) % 3], cell[(i + 2) % 3]))
+        for i in range(3)
+    ]
+    if any(not math.isfinite(w) or w <= 0 for w in widths):
+        raise ValueError("CIF must have positive finite cell widths")
+    return [int(np.ceil(2 * cutoff / w)) for w in widths]
+
+
+def resolve_output_directory(params) -> Path:
+    """Resolve the run root on the executing host, retaining legacy parents."""
+    from chemgraph.tools.ase_core import _resolve_path
+
+    legacy_parent = Path(params.output_result_file).parent
+    if legacy_parent != Path("."):
+        warnings.warn(
+            "Directory-qualified output_result_file is deprecated; use output_directory. "
+            "The log is placed inside a unique run directory under that parent.",
+            FutureWarning,
+            stacklevel=2,
+        )
+    root = params.output_directory or (
+        str(legacy_parent) if legacy_parent != Path(".") else "graspa_runs"
+    )
+    return Path(_resolve_path(os.path.expanduser(root))).resolve()
 
 
 def run_graspa_core(params: graspa_input_schema) -> dict:
-    """Run a single gRASPA calculation using specified input parameters.
+    """Run in a fresh directory and return results or a diagnostic failure.
 
-    Parameters
-    ----------
-    params : graspa_input_schema
-        Input parameters for the gRASPA calculation.
-
-    Returns
-    -------
-    dict
-        Parsed simulation results including uptake and status.
+    Invalid input paths raise before preparation. Prepared runs always retain
+    logs and an atomic results.json, including process and parsing failures.
     """
-
-    def _calculate_cell_size(
-        atoms: ase.Atoms, cutoff: float = 12.8
-    ) -> list[int]:
-        """Calculate unit-cell replication for GCMC with the given cutoff.
-
-        Parameters
-        ----------
-        atoms : ase.Atoms
-            Unit-cell structure.
-        cutoff : float, optional
-            Minimum replicated cell length in angstrom.
-
-        Returns
-        -------
-        list[int]
-            Replication factors along the three lattice vectors.
-        """
-        unit_cell = atoms.cell[:]
-        a = unit_cell[0]
-        b = unit_cell[1]
-        c = unit_cell[2]
-
-        wa = np.divide(
-            np.linalg.norm(np.dot(np.cross(b, c), a)),
-            np.linalg.norm(np.cross(b, c)),
-        )
-        wb = np.divide(
-            np.linalg.norm(np.dot(np.cross(c, a), b)),
-            np.linalg.norm(np.cross(c, a)),
-        )
-        wc = np.divide(
-            np.linalg.norm(np.dot(np.cross(a, b), c)),
-            np.linalg.norm(np.cross(a, b)),
-        )
-
-        uc_x = int(np.ceil(cutoff / (0.5 * wa)))
-        uc_y = int(np.ceil(cutoff / (0.5 * wb)))
-        uc_z = int(np.ceil(cutoff / (0.5 * wc)))
-
-        return [uc_x, uc_y, uc_z]
-
-    # Resolve a bare relative name against CHEMGRAPH_LOG_DIR (where a sibling
-    # tool wrote the file) before falling back to a cwd-relative absolute path.
     from chemgraph.tools.ase_core import _resolve_existing_path
 
-    cif_path = Path(_resolve_existing_path(params.input_structure_file)).resolve()
-    if not cif_path.exists():
-        raise FileNotFoundError(f"CIF file does not exist: {cif_path}")
-
-    base_dir = cif_path.parent
-
-    cifname = cif_path.stem
-    temperature = params.temperature
-    pressure = params.pressure
-    adsorbate = params.adsorbate
-    n_cycle = params.n_cycles
-
-    folder_name = f"{cifname}--{adsorbate}-{temperature}-{pressure:g}"
-    sim_dir = base_dir / folder_name
-    sim_dir.mkdir(parents=True, exist_ok=True)
-
-    for item in _file_dir.iterdir():
-        dest = sim_dir / item.name
-        if item.is_dir():
-            if dest.exists():
-                shutil.rmtree(dest)
-            shutil.copytree(item, dest)
-        else:
-            shutil.copy2(item, sim_dir)
-
-    # Copy the specific CIF file
-    shutil.copy2(cif_path, sim_dir / f"{cifname}.cif")
-
-    atoms = ase_read(cif_path)
-    [uc_x, uc_y, uc_z] = _calculate_cell_size(atoms)
-
-    input_file = sim_dir / "simulation.input"
-    temp_file = sim_dir / "simulation.input.tmp"
-
-    with open(input_file, "r") as f_in, open(temp_file, "w") as f_out:
-        for line in f_in:
-            if "NCYCLE" in line:
-                line = line.replace("NCYCLE", str(n_cycle))
-            if "ADSORBATE" in line:
-                line = line.replace("ADSORBATE", adsorbate)
-            if "TEMPERATURE" in line:
-                line = line.replace("TEMPERATURE", str(temperature))
-            if "PRESSURE" in line:
-                line = line.replace("PRESSURE", str(pressure))
-            if "UC_X UC_Y UC_Z" in line:
-                line = line.replace("UC_X UC_Y UC_Z", f"{uc_x} {uc_y} {uc_z}")
-            if "CUTOFF" in line:
-                line = line.replace("CUTOFF", str(12.8))
-            if "CIFFILE" in line:
-                line = line.replace("CIFFILE", cifname)
-            f_out.write(line)
-
-    shutil.move(temp_file, input_file)
-    output_filename = Path(params.output_result_file).name
-    with (
-        open(os.path.join(sim_dir, output_filename), "w") as fp,
-        open(os.path.join(sim_dir, "raspa.err"), "w") as fe,
-    ):
-        subprocess.run(graspa_cmd, cwd=sim_dir, stdout=fp, stderr=fe, shell=True)
-
-    return _read_graspa_sycl_output(
-        output_path=str(sim_dir),
-        adsorbate=adsorbate,
-        cifname=cifname,
-        output_fname=params.output_result_file,
-        temperature=temperature,
-        pressure=pressure,
-    )
+    params = graspa_input_schema.model_validate(params.model_dump())
+    source = Path(_resolve_existing_path(params.input_structure_file)).resolve()
+    if not source.is_file() or source.suffix.lower() != ".cif":
+        raise ValueError(f"Input must be an existing CIF file: {source}")
+    root = resolve_output_directory(params)
+    root.mkdir(parents=True, exist_ok=True)
+    prefix = re.sub(r"[^A-Za-z0-9_-]", "_", source.stem)[:60] + "-"
+    run_dir = Path(tempfile.mkdtemp(prefix=prefix, dir=root))
+    # Keep a recognizable, engine-safe filename and the exact source identity.
+    copied_cif = run_dir / f"{prefix[:-1]}.cif"
+    stdout = run_dir / Path(params.output_result_file).name
+    stderr = run_dir / "raspa.err"
+    results_path = run_dir / "results.json"
+    result = {
+        "status": "failure",
+        "uptake_in_mol_kg": None,
+        "adsorbate": params.adsorbate,
+        "temperature_in_K": params.temperature,
+        "pressure_in_Pa": params.pressure,
+        "cif_path": str(copied_cif),
+        "input_structure_file": str(source),
+        "run_id": run_dir.name,
+        "run_dir": str(run_dir),
+        "stdout_path": str(stdout),
+        "stderr_path": str(stderr),
+        "results_path": str(results_path),
+        "returncode": None,
+        "wall_time": None,
+    }
+    started = time.monotonic()
+    try:
+        stdout.touch()
+        stderr.touch()
+        executable = resolve_executable("sycl.out", "CHEMGRAPH_GRASPA_EXECUTABLE")
+        shutil.copyfile(source, copied_cif)
+        cells = _calculate_cell_size(ase_read(copied_cif))
+        assets = files("chemgraph.tools.files.template_graspa_sycl")
+        for name in TEMPLATE_FILES:
+            (run_dir / name).write_bytes(assets.joinpath(name).read_bytes())
+        replacements = {
+            "NCYCLE": str(params.n_cycles),
+            "ADSORBATE": params.adsorbate,
+            "TEMPERATURE": str(params.temperature),
+            "PRESSURE": str(params.pressure),
+            "UC_X UC_Y UC_Z": " ".join(map(str, cells)),
+            "CUTOFF": "12.8",
+            "CIFFILE": copied_cif.stem,
+        }
+        input_path = run_dir / "simulation.input"
+        template = input_path.read_text()
+        for key, value in replacements.items():
+            template = template.replace(key, value)
+        input_path.write_text(template)
+        env = os.environ.copy()
+        env.setdefault("OMP_NUM_THREADS", "1")
+        env.setdefault("ZE_FLAT_DEVICE_HIERARCHY", "FLAT")
+        with stdout.open("w") as out, stderr.open("w") as err:
+            process = subprocess.run(
+                [executable],
+                cwd=run_dir,
+                stdout=out,
+                stderr=err,
+                env=env,
+                timeout=params.timeout_seconds,
+                check=False,
+            )
+        result["returncode"] = process.returncode
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"gRASPA exited with code {process.returncode}; see {stderr}"
+            )
+        result.update(
+            _read_graspa_sycl_output(
+                str(run_dir),
+                params.adsorbate,
+                copied_cif.stem,
+                stdout.name,
+                params.temperature,
+                params.pressure,
+            )
+        )
+    except Exception as exc:
+        _failure(result, exc)
+    result["wall_time"] = time.monotonic() - started
+    temporary = results_path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
+    temporary.replace(results_path)
+    return result

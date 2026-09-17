@@ -157,6 +157,7 @@ where = ["src/"]
 "chemgraph.eval" = ["data/*.json"]
 # ocsr_models reads ocsr_registry.json through importlib.resources, so it has to ship.
 "chemgraph.tools" = ["ocsr_registry.json"]
+"chemgraph.tools.files.template_graspa_sycl" = ["*.def", "simulation.input"]
 "chemgraph.academy.campaigns" = [
     "example-*/*.json",
     "example-*/*.jsonc",
