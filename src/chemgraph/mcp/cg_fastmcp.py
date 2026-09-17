@@ -12,6 +12,7 @@ FastMCP) which bypasses the backend wrapper entirely.
 """
 
 import asyncio
+from concurrent.futures import Future
 import functools
 import inspect
 import logging
@@ -471,6 +472,7 @@ class CGFastMCP(FastMCP):
         self,
         *,
         worker: Callable,
+        metadata: Optional[Callable[[Any], dict]] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
         annotations: Optional[ToolAnnotations] = None,
@@ -501,6 +503,11 @@ class CGFastMCP(FastMCP):
             The per-item function executed on the backend. Must take
             a single positional argument (the item produced by the
             expander).
+        metadata : Callable, optional
+            Build per-item identity metadata retained even if submission or
+            worker execution fails. An optional ``task_id`` identifies the
+            backend task and tracker entry; it must be unique in the batch.
+            Expanders may be synchronous or async.
         name, description, annotations
             Passed through to :meth:`FastMCP.add_tool`.
         num_nodes, processes_per_node, gpus_per_task, env, working_dir
@@ -560,18 +567,33 @@ class CGFastMCP(FastMCP):
                 batch_counter = self._task_counter
                 ensemble_params = kwargs[param.name]
                 items = expander(ensemble_params)
+                if inspect.isawaitable(items):
+                    items = await items
+                items = list(items)
+                item_metadata = [
+                    {"index": i, **(metadata(item) if metadata else {})}
+                    for i, item in enumerate(items)
+                ]
                 pending = []
                 for i, item in enumerate(items):
-                    task = TaskSpec(
-                        task_id=f"{tool_name}_{batch_counter}_{i}",
-                        task_type="python",
-                        callable=worker,
-                        kwargs={worker_param_name: to_picklable(item)},
-                        **task_spec_kwargs,
-                    )
-                    task = self._apply_pre_submit_hook(task)
-                    fut = self._backend.submit(task)
-                    pending.append(({"index": i}, fut))
+                    try:
+                        task = TaskSpec(
+                            task_id=item_metadata[i].get(
+                                "task_id", f"{tool_name}_{batch_counter}_{i}"
+                            ),
+                            task_type="python",
+                            callable=worker,
+                            kwargs={worker_param_name: to_picklable(item)},
+                            **task_spec_kwargs,
+                        )
+                        task = self._apply_pre_submit_hook(task)
+                        fut = self._backend.submit(task)
+                    except Exception as exc:
+                        # Keep already-submitted work reachable and include the
+                        # failed item in the same batch/result contract.
+                        fut = Future()
+                        fut.set_exception(exc)
+                    pending.append((item_metadata[i], fut))
 
                 return await submit_or_gather(
                     self._backend,
