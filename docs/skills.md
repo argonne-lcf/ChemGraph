@@ -243,10 +243,14 @@ worker has its own tools; keep this preparation workflow in the standalone agent
 
 Registry tools execute on the agent host, independently of the file/shell backend.
 Use absolute host paths and returned artifact paths. The default approval policy
-also covers `smiles_to_coordinate_file` and `save_atomsdata_to_file`; custom tools
-need appropriate `interrupt_on` entries when constructing the graph. `python_repl`
-requires the same execution review as `execute`. Explicit approval overrides
-retain their existing meaning.
+also covers `smiles_to_coordinate_file` and `save_atomsdata_to_file`. Registry
+calculations (`run_ase`, `run_docking`, `run_graspa`, `run_xanes`), report generation
+(`generate_html`), and XANES artifact writers (`fetch_xanes_data`, `plot_xanes_data`)
+require approval before execution. These additional checks apply to registry tools;
+existing attached tools retain their policy. Custom tools need appropriate
+`interrupt_on` entries when constructing the graph. `python_repl` requires the same
+execution review as `execute`. Discovery and loading do not require approval.
+Explicit approval overrides retain their existing meaning.
 
 On-demand loading reduces repeated schema input for larger catalogs, but adds a
 round trip. A few always-attached tools can be cheaper for a short task. Keep

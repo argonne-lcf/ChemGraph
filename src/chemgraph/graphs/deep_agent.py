@@ -46,6 +46,13 @@ DEFAULT_DEEPAGENT_INTERRUPT_ON = {
     "save_atomsdata_to_file": {"allowed_decisions": ["approve", "reject"]},
 }
 
+# Additional built-ins that write artifacts or launch calculations. Apply these
+# only to registry tools, preserving the policy for explicitly attached tools.
+_REGISTRY_REVIEW_TOOLS = {
+    "run_ase", "run_docking", "run_graspa", "run_xanes", "generate_html",
+    "fetch_xanes_data", "plot_xanes_data",
+}
+
 
 _DEFAULT_CHECKPOINTER = object()
 _DEFAULT_INTERRUPT_POLICY = object()
@@ -165,6 +172,11 @@ def construct_deep_agent_graph(
         backend=effective_backend, sources=sources, optional=optional,
     )]
     if tool_registry is not None and tool_registry.names():
+        if interrupt_on is _DEFAULT_INTERRUPT_POLICY:
+            effective_interrupt_on.update({
+                tool_name: {"allowed_decisions": ["approve", "reject"]}
+                for tool_name in _REGISTRY_REVIEW_TOOLS.intersection(tool_registry.names())
+            })
         loader = RegistryToolsMiddleware(tool_registry)
         attached_names = {
             entry.get("function", entry).get("name", entry.get("type"))
