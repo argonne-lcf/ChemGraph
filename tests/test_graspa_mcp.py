@@ -162,6 +162,46 @@ async def test_nonshared_local_mode_rejected(ensemble):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("path", [
+    "/worker/staged/My MOF.CIF",
+    r"C:\staged\My MOF.CIF",
+    r"\\server\share\My MOF.CIF",
+])
+async def test_remote_paths_use_worker_syntax_and_preserve_source(ensemble, path):
+    ensemble.backend.shares_filesystem = False
+
+    def submit(task, count):
+        if count == 1:
+            return resolved([path])
+        return resolved(task.callable(**task.kwargs))
+
+    ensemble.backend.on_submit = submit
+    record, = (await run(
+        ensemble, input_structures="", remote_structure_directory="~/staged",
+    ))["results"]
+    assert record["status"] == "success"
+    assert record["structure"] == "My MOF"
+    assert record["input_structure_file"] == path
+    assert ensemble.core.call_args.args[0].input_structure_file == path
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("paths", [
+    "not a list", [None], [12], ["relative.cif"], ["~/MOF.cif"],
+    [r"C:relative.cif"], [r"\staged\MOF.cif"],
+    ["/worker/MOF.xyz"], [r"C:\staged\MOF.xyz"],
+])
+async def test_invalid_remote_paths_submit_no_simulations(ensemble, paths):
+    ensemble.backend.on_submit = lambda task, count: resolved(paths)
+    with pytest.raises(ToolError, match="Discovery must return absolute CIF paths"):
+        await run(
+            ensemble, input_structures="", remote_structure_directory="~/staged",
+        )
+    assert len(ensemble.backend.tasks) == 1
+    ensemble.core.assert_not_called()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("timeout", [30, None])
 async def test_remote_discovery_is_awaited_and_responsive(ensemble, timeout):
     ensemble.backend.shares_filesystem = False
