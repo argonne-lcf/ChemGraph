@@ -13,12 +13,14 @@ export https_proxy="proxy.alcf.anl.gov:3128"
 export NO_PROXY=127.0.0.1,localhost,::1
 export no_proxy=127.0.0.1,localhost,::1
 export COMPUTE_SYSTEM=aurora
+export CHEMGRAPH_EXECUTION_BACKEND=parsl
 export CHEMGRAPH_LOG_DIR="$PBS_O_WORKDIR/chemgraph_mcp_logs"
+export CHEMGRAPH_GRASPA_EXECUTABLE=/path/to/graspa-sycl/bin/sycl.out
 
 module load frameworks
 source /path/to/venv/bin/activate
 
-python -m chemgraph.mcp.graspa_mcp_parsl \
+python -m chemgraph.mcp.graspa_mcp_hpc \
   --transport streamable_http \
   --host 0.0.0.0 \
   --port 9001
