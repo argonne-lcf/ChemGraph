@@ -688,3 +688,20 @@ def test_cli_resume_persists_deepagent_logs_and_session(
 def test_chemgraph_rejects_deepagent_options_for_other_workflows(kwargs, message):
     with pytest.raises(ValueError, match=message):
         ChemGraph(enable_memory=False, **kwargs)
+
+
+def test_chemgraph_forwards_deferred_catalog(monkeypatch, tmp_path):
+    from chemgraph.registry import ToolRegistry
+    from tests.test_deep_agent_review import _agent
+
+    registry = ToolRegistry([])
+    received = {}
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.construct_deep_agent_graph",
+        lambda *_args, **kwargs: received.update(kwargs) or _FakeWorkflow(),
+    )
+    agent = _agent(monkeypatch, tmp_path, deepagent_tool_registry=registry)
+    assert received["tool_registry"] is registry
+    assert agent.deepagent_tool_registry is registry
+    with pytest.raises(ValueError, match="requires workflow_type"):
+        ChemGraph(workflow_type="single_agent", deepagent_tool_registry=registry)

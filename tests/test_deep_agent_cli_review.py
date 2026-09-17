@@ -289,3 +289,73 @@ def test_invalid_cli_host_path_fails_before_initialization(tmp_path, dispatch, n
     assert "Cannot access skill directory" in output
     assert name in output.replace("\n", "")
     assert not dispatch
+
+
+@pytest.mark.parametrize("interactive", [False, True])
+@pytest.mark.parametrize("override", [False, True])
+def test_local_catalog_cli_precedence_is_lazy(tmp_path, dispatch, monkeypatch, interactive, override):
+    from chemgraph.registry import ToolRegistry
+
+    monkeypatch.setattr(ToolRegistry, "get", lambda *_a, **_k: pytest.fail("must not import tools"))
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {
+        "workflow": "deep_agent", "tools": ["file_to_atomsdata"],
+    }}))
+    argv = ["run", "--config", str(path)]
+    argv += ["--interactive"] if interactive else [
+        "-q", "test", "--deepagent-workspace", str(tmp_path),
+        "--deepagent-dangerously-skip-approvals",
+    ]
+    if override:
+        argv += ["--tool", "smiles_to_coordinate_file", "--tool", "smiles_to_coordinate_file"]
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
+    assert dispatch["deepagent_tool_registry"].names() == (
+        ("smiles_to_coordinate_file",) if override else ("file_to_atomsdata",)
+    )
+
+
+@pytest.mark.parametrize("value", ["run_ase", "", False, 0, [""], [123], ["unknown"]])
+def test_invalid_local_catalog_fails_before_initialization(tmp_path, dispatch, value):
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {"workflow": "deep_agent", "tools": value}}))
+    args = cli_main.create_argument_parser().parse_args(["run", "--interactive", "--config", str(path)])
+    with commands.console.capture() as capture, pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(args)
+    assert exc.value.code == 2
+    assert "Invalid local tools" in capture.get()
+    assert not dispatch
+
+
+def test_explicit_local_catalog_requires_standalone_deep_agent(dispatch):
+    args = cli_main.create_argument_parser().parse_args([
+        "run", "--interactive", "-w", "main_agent", "--tool", "file_to_atomsdata",
+    ])
+    with pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(args)
+    assert exc.value.code == 2
+    assert not dispatch
+
+
+def test_empty_catalog_keeps_existing_behavior(dispatch):
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+        "run", "--interactive", "-w", "deep_agent",
+    ]))
+    assert dispatch["deepagent_tool_registry"] is None
+
+
+def test_interactive_catalog_survives_model_and_workflow_changes(monkeypatch):
+    from chemgraph.registry import ToolRegistry
+
+    registry = ToolRegistry([])
+    initialized = []
+    prompts = iter(["initial-model", "deep_agent", "/model another-model", "/workflow single_agent", "/workflow deep_agent", "/quit"])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: next(prompts))
+    monkeypatch.setattr(commands, "create_banner", lambda: None)
+    monkeypatch.setattr(commands, "initialize_agent", lambda *args, **kwargs: (
+        initialized.append((args[1], kwargs.get("deepagent_tool_registry"))) or SimpleNamespace()
+    ))
+    commands.interactive_mode(workflow="deep_agent", deepagent_tool_registry=registry)
+    assert initialized == [
+        ("deep_agent", registry), ("deep_agent", registry),
+        ("single_agent", None), ("deep_agent", registry),
+    ]

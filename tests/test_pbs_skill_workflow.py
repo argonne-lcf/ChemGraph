@@ -168,3 +168,94 @@ def test_agent_writes_submits_and_new_session_monitors(job, scheduler, tmp_path,
     outputs = "\n".join(_message_content_text(m) for m in state["messages"] if m.type == "tool")
     assert "123.test" in outputs and "job_state = Q" in outputs
     assert (tmp_path / "calls").read_text().splitlines() == ["called"]
+
+
+@pytest.mark.parametrize("preparation", ["success", "invalid", "reject"])
+def test_local_water_preparation_to_batch_result(job, scheduler, tmp_path, preparation):
+    from ase.io import read
+    from chemgraph.registry import ToolRegistry
+    from chemgraph.schemas.ase_input import ASEInputSchema
+    from tests.test_registry_middleware import call
+
+    payload, env = job
+    payload["driver"] = "energy"
+    water = tmp_path / "water.xyz"
+    # This fake scheduler executes the real batch example with a fake allocation.
+    (tmp_path / "qsub").write_text(
+        '#!/bin/bash\necho called >> calls\nbash "$1" > batch.stdout 2>&1 || exit $?\necho 123.test\n'
+    )
+    (tmp_path / "qstat").write_text('#!/bin/bash\necho "job_state = F"\n')
+    scheduler = {**env, **scheduler}
+    catalog = ToolRegistry()
+    registry = ToolRegistry(catalog.get_spec(name) for name in (
+        "smiles_to_coordinate_file", "file_to_atomsdata",
+    ))
+
+    class WaterModel(_RecordingChatModel):
+        def _generate(self, messages, *args, **kwargs):
+            next_response = self.responses[self.response_index]
+            # Fill the downstream input from the actual returned artifact path.
+            if next_response.tool_calls and next_response.tool_calls[0]["name"] == "write_file":
+                artifact = next(
+                    json.loads(m.content) for m in reversed(messages)
+                    if m.type == "tool" and m.name == "smiles_to_coordinate_file"
+                )
+                params = ASEInputSchema.model_validate({**payload, "input_structure_file": artifact["path"]})
+                next_response.tool_calls[0]["args"]["content"] = params.model_dump_json()
+            return super()._generate(messages, *args, **kwargs)
+
+    def shell(command):
+        return f"cd {shlex.quote(str(tmp_path))} && bash -c {shlex.quote(command)}"
+    responses = [
+        call("read_file", file_path="/chemgraph-skills/chemgraph/references/structure-preparation.md"),
+        call("load_tools", names=["smiles_to_coordinate_file", "file_to_atomsdata"]),
+        call("smiles_to_coordinate_file", smiles="invalid!" if preparation == "invalid" else "O", output_file=str(water)),
+    ]
+    if preparation != "reject":
+        responses += [
+            call("file_to_atomsdata", fname=str(water)),
+            call("write_file", file_path="/workspace/input.json", content=""),
+            call("execute", command=shell(example("pbs-hpc/SKILL.md", "bash"))),
+        ]
+    responses.append(AIMessage(content="Done."))
+    agent = construct_deep_agent_graph(
+        WaterModel(responses=responses), tool_registry=registry, discover_skills=False,
+        backend=LocalShellBackend(root_dir=tmp_path, virtual_mode=True, inherit_env=False, env=scheduler),
+    )
+    config = {"configurable": {"thread_id": "prepare-water"}}
+    state = agent.invoke({"messages": [HumanMessage(content="Prepare water locally and run ASE through PBS.")]}, config)
+    assert state["__interrupt__"] and not water.exists()
+    resume = Command(resume={"decisions": [{"type": "reject" if preparation == "reject" else "approve"}]})
+    if preparation == "invalid":
+        with pytest.raises(ValueError, match="Invalid SMILES"):
+            agent.invoke(resume, config)
+        assert not (tmp_path / "calls").exists()
+        return
+    state = agent.invoke(resume, config)
+    if preparation == "reject":
+        assert not water.exists() and not (tmp_path / "calls").exists()
+        return
+    assert read(water).get_chemical_formula() == "H2O"
+    assert state["__interrupt__"] and not (tmp_path / "input.json").exists()
+    state = agent.invoke(Command(resume={"decisions": [{"type": "approve"}]}), config)
+    assert json.loads((tmp_path / "input.json").read_text())["input_structure_file"] == str(water)
+    assert state["__interrupt__"] and not (tmp_path / "calls").exists()
+    state = agent.invoke(Command(resume={"decisions": [{"type": "approve"}]}), config)
+    assert "__interrupt__" not in state
+    assert (tmp_path / "job.id").read_text().strip() == "123.test"
+    data = json.loads((tmp_path / "result.json").read_text())
+    assert data["success"] and isinstance(data["potential_energy"], float)
+    monitor = construct_deep_agent_graph(
+        _RecordingChatModel(responses=[
+            call("read_file", file_path="/workspace/job.id"),
+            call("execute", command=shell('qstat -xf "$(cat job.id)"')),
+            call("read_file", file_path="/workspace/result.json"), AIMessage(content="Completed."),
+        ]), discover_skills=False,
+        backend=LocalShellBackend(root_dir=tmp_path, virtual_mode=True, inherit_env=False, env=scheduler),
+    )
+    config = {"configurable": {"thread_id": "monitor-water"}}
+    state = monitor.invoke({"messages": [HumanMessage(content="Inspect the saved job and results.")]}, config)
+    state = monitor.invoke(Command(resume={"decisions": [{"type": "approve"}]}), config)
+    assert "__interrupt__" not in state
+    assert (tmp_path / "calls").read_text().splitlines() == ["called"]
+    assert any("potential_energy" in m.content for m in state["messages"] if m.type == "tool")
