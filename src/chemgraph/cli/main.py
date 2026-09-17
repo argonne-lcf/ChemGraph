@@ -642,7 +642,7 @@ def _handle_run(args: argparse.Namespace) -> None:
     if cli_tools is not None and args.workflow != "deep_agent":
         console.print("[red]--tool requires -w deep_agent.[/red]")
         sys.exit(2)
-    if args.workflow == "deep_agent" and local_names is not None:
+    if (interactive or args.workflow == "deep_agent") and local_names is not None:
         from chemgraph.registry.tools import RegistryError, ToolRegistry
 
         try:

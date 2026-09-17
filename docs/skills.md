@@ -200,8 +200,9 @@ require `--human-supervised`. Explicitly listing `ask_human` also opts in.
 `--no-deepagent-discover-skills`, which controls personal/project skills only.
 The CLI displays the catalog size or disabled status at initialization.
 The option applies to standalone Deep Agent; configured names are ignored for
-other workflows. Interactive model and workflow changes retain the catalog for
-switching back to Deep Agent.
+other noninteractive workflows. Interactive sessions validate and retain configured
+names even when starting in another workflow, so startup selection, model changes,
+and workflow switches preserve the restriction.
 
 `ChemGraph(workflow_type="deep_agent")` uses the same default catalog, enabling
 interactive tools when `human_supervised=True`. Explicit catalogs and attached

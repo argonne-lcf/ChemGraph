@@ -431,3 +431,51 @@ def test_interactive_catalog_survives_model_and_workflow_changes(monkeypatch, ca
         ("deep_agent", registry), ("deep_agent", registry),
         ("single_agent", None), ("deep_agent", registry),
     ]
+
+
+@pytest.mark.parametrize("restriction", [None, [], ["calculator"], ["ask_human"]])
+@pytest.mark.parametrize("startup_workflow", ["single_agent", "deep_agent"])
+def test_cli_retains_catalog_before_selecting_deep_agent(
+    monkeypatch, tmp_path, restriction, startup_workflow,
+):
+    from chemgraph.registry import ToolRegistry
+
+    settings = {"workflow": "single_agent"}
+    if restriction is not None:
+        settings["tools"] = restriction
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": settings}))
+    prompts = iter([
+        "initial-model", startup_workflow, "/workflow deep_agent",
+        "/model another-model", "/workflow single_agent", "/workflow deep_agent", "/quit",
+    ])
+    initialized = []
+    monkeypatch.setattr(ToolRegistry, "get", lambda *_a, **_k: pytest.fail("must stay lazy"))
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: next(prompts))
+    monkeypatch.setattr(commands, "create_banner", lambda: None)
+    monkeypatch.setattr(commands, "initialize_agent", lambda *args, **kwargs: (
+        initialized.append((args[1], kwargs["deepagent_tool_registry"])) or SimpleNamespace()
+    ))
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+        "run", "--interactive", "--config", str(path),
+    ]))
+    assert [workflow for workflow, _ in initialized] == [
+        startup_workflow, "deep_agent", "deep_agent", "single_agent", "deep_agent",
+    ]
+    for workflow, registry in initialized:
+        if workflow != "deep_agent" or restriction is None:
+            assert registry is None
+        else:
+            assert registry.names() == tuple(restriction)
+    assert initialized[1][1] is initialized[-1][1]
+
+
+def test_noninteractive_other_workflow_ignores_catalog(tmp_path, dispatch):
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {
+        "workflow": "single_agent", "tools": ["unknown"],
+    }}))
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+        "run", "-q", "test", "--config", str(path),
+    ]))
+    assert dispatch["deepagent_tool_registry"] is None
