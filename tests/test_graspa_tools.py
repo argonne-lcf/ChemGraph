@@ -85,6 +85,25 @@ def test_process_failure_cannot_be_parsed_as_success(simulation):
         run_graspa.invoke({"graspa_input": params.model_dump()})
 
 
+@pytest.mark.parametrize("absolute_root", [False, True])
+def test_public_tool_forwards_single_run_controls(simulation, tmp_path, absolute_root):
+    params, runner = simulation
+    output_root = tmp_path / "custom-runs" if absolute_root else "custom-runs"
+    request = {
+        **params.model_dump(),
+        "output_directory": str(output_root),
+        "output_result_file": "custom.log",
+        "timeout_seconds": 2.5,
+    }
+    assert run_graspa.invoke({"graspa_input": request}) == pytest.approx(1000.0)
+    expected_root = output_root if absolute_root else tmp_path / "logs" / output_root
+    directory = runner.call_args.kwargs["cwd"]
+    assert directory.parent == expected_root
+    assert runner.call_args.kwargs["timeout"] == 2.5
+    result = json.loads((directory / "results.json").read_text())
+    assert Path(result["stdout_path"]) == directory / "custom.log"
+
+
 def test_timeout_and_launch_error_preserve_diagnostics(simulation):
     params, runner = simulation
     params.timeout_seconds = 0.5
@@ -187,6 +206,56 @@ def test_invalid_inputs_rejected(updates):
 def test_ensemble_requires_unambiguous_nonempty_request(updates):
     with pytest.raises(ValueError):
         graspa_input_schema_ensemble(adsorbate="H2O", **updates)
+
+
+def test_ensemble_schema_does_not_advertise_deferred_controls():
+    properties = graspa_input_schema_ensemble.model_json_schema()["properties"]
+    assert not {
+        "output_directory", "timeout_seconds", "discovery_timeout_seconds"
+    }.intersection(properties)
+    single_properties = graspa_input_schema.model_json_schema()["properties"]
+    assert {"output_directory", "timeout_seconds"} <= single_properties.keys()
+
+
+@pytest.mark.parametrize(
+    "source",
+    [{"input_structures": "local"}, {"remote_structure_directory": "/remote"}],
+)
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("output_directory", "runs"),
+        ("output_directory", None),
+        ("timeout_seconds", 5),
+        ("timeout_seconds", None),
+        ("discovery_timeout_seconds", 60),
+        ("discovery_timeout_seconds", None),
+    ],
+)
+def test_ensemble_rejects_deferred_controls(source, field, value):
+    with pytest.raises(ValueError, match=f"Unsupported ensemble controls: {field}"):
+        graspa_input_schema_ensemble(adsorbate="H2O", **source, **{field: value})
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        {"input_structures": "local"},
+        {"input_structures": ["one.cif", "two.cif"]},
+        {"remote_structure_directory": "/remote"},
+    ],
+)
+def test_ensemble_preserves_supported_requests(source):
+    request = {
+        **source,
+        "adsorbate": "H2O",
+        "output_result_file": "legacy/custom.log",
+        "n_cycles": 25,
+        "conditions": [{"temperature": 300, "pressure": 1000}],
+    }
+    params = graspa_input_schema_ensemble(**request)
+    assert params.model_dump().items() >= request.items()
+    assert graspa_input_schema_ensemble.model_validate(params.model_dump()) == params
 
 
 @pytest.mark.parametrize("token", ["12.011,", "12.011", "1.2011e1;"])

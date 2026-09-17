@@ -41,6 +41,12 @@ on failure. The core function returns a result dictionary; invalid input paths
 or schemas fail before execution. A prepared run retains its diagnostics even
 when process startup, execution, or parsing fails.
 
+`output_directory` and `timeout_seconds` currently apply only to single
+calculations. Ensemble requests reject these fields and
+`discovery_timeout_seconds`, including explicit `null` values. Ensemble support
+for these controls is deferred to a separate change; remote directory discovery
+in the backend-agnostic MCP server still uses a fixed 30-second timeout.
+
 ## Artifacts and migration
 
 Every invocation creates a new run directory. Relative output roots resolve
@@ -49,9 +55,9 @@ default root is `graspa_runs`. The input CIF is never modified.
 
 `output_result_file` is the stdout filename within that unique directory,
 defaulting to `raspa.log`. Legacy directory-qualified values still select the
-parent output root, with a warning; migrate to `output_directory` plus a bare
-filename. Do not combine both root specifications. Names reserved for the CIF,
-templates, stderr, or JSON metadata are rejected.
+parent output root, with a warning; for single calculations, migrate to
+`output_directory` plus a bare filename. Do not combine both root specifications.
+Names reserved for the CIF, templates, stderr, or JSON metadata are rejected.
 
 Use the returned `run_dir`, `stdout_path`, `stderr_path`, and `results_path`;
 do not reconstruct paths from temperature or pressure. `input_structure_file`
