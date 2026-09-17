@@ -181,6 +181,64 @@ are configured separately; the built-in main-agent workspace worker has no
 chemistry tools attached. A custom `PromptConfig.deepagent` is preserved
 verbatim; its default `None` selects the shared prompt.
 
+## On-demand local tools
+
+Skills describe workflows; tools implement their operations. With standalone
+`deep_agent`, configure a local catalog without sending every tool schema to the
+model:
+
+```sh
+chemgraph run --interactive -w deep_agent --deepagent-workspace . \
+  --tool smiles_to_coordinate_file --tool file_to_atomsdata \
+  --tool extract_output_json
+```
+
+In `[general]` TOML, use `tools = ["smiles_to_coordinate_file", "file_to_atomsdata"]`.
+Repeated `--tool` values replace that list, and duplicates are collapsed. Omitted
+or empty catalogs preserve existing behavior. The option applies to standalone
+Deep Agent; configured names are ignored for other workflows. Interactive model
+and workflow changes retain the catalog for switching back to Deep Agent.
+
+Python callers can supply a catalog to the shared constructor:
+
+```python
+from chemgraph.registry import ToolRegistry
+
+catalog = ToolRegistry()
+preparation = ToolRegistry(catalog.get_spec(name) for name in (
+    "smiles_to_coordinate_file", "file_to_atomsdata", "extract_output_json",
+))
+graph = construct_deep_agent_graph(model, backend=backend, tool_registry=preparation)
+```
+
+Use `deepagent_tool_registry=preparation` with `ChemGraph(workflow_type="deep_agent", ...)`.
+Existing `tools=` objects, including MCP tools, remain attached as before. Their
+names must not collide with the registry or its discovery tools. Custom tools can
+be registered using the existing `ToolSpec`/`BaseTool` interfaces. Registering a
+`BaseTool` uses an already-created object; `ToolSpec` defers importing its module.
+
+The agent initially sees workspace tools plus `search_tools` and `load_tools`.
+Search returns bounded name/description matches without imports. Skills can name
+tools directly, skipping search. `load_tools(names)` replaces the active selection
+and exposes native schemas on the next model call; `load_tools([])` clears it.
+It returns names rather than duplicating schemas in chat. Missing dependencies or
+unknown names leave the previous selection intact. Active names are checkpointed
+per conversation, survive approval pauses, and clear at the end of a completed
+turn. Restore pending checkpoints with the same catalog. The built-in delegated
+worker has its own tools; keep this preparation workflow in the standalone agent.
+
+Registry tools execute on the agent host, independently of the file/shell backend.
+Use absolute host paths and returned artifact paths. The default approval policy
+also covers `smiles_to_coordinate_file` and `save_atomsdata_to_file`; custom tools
+need appropriate `interrupt_on` entries when constructing the graph. Explicit
+approval overrides retain their existing meaning.
+
+On-demand loading reduces repeated schema input for larger catalogs, but adds a
+round trip. A few always-attached tools can be cheaper for a short task. Keep
+results compact and large artifacts in files; do not equate schema bytes with
+billed tokens or assume a fixed saving. This route needs neither an extra LLM
+selector nor provider-specific tool search.
+
 ## Sessions and diagnostics
 
 Skill metadata is rediscovered before each new agent turn, including after graph

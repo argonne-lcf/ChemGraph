@@ -5,6 +5,9 @@ ChemGraph and the requested calculator must be installed in the compute environm
 Keep the agent and LLM calls on the submission host; run the calculation through PBS.
 Read the `pbs-hpc` skill and its site reference for environment and launch settings.
 
+If the structure is missing, first follow [local preparation](structure-preparation.md)
+and use the returned artifact path.
+
 Write `input.json` with the user's structure, calculator/model, and scientific
 settings. Use absolute host paths visible on compute nodes, and a fresh shared
 directory for each calculation. Put the result JSON in that directory. For example,

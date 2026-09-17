@@ -9,8 +9,10 @@ description: Use ChemGraph Python and CLI workflows, agent-written batch scripts
    execution system, and output location. Inspect attached tool schemas before
    selecting arguments. Ask for missing scientific choices rather than inventing
    them; do not replace the requested calculator with another one silently.
-2. Use attached chemistry tools or write a script using ChemGraph's existing
-   Python APIs. For direct PBS jobs, read [the ASE batch example](references/ase-batch.md)
+2. Prefer available chemistry tools for supported operations; scripts can reuse
+   ChemGraph's existing Python APIs. When inputs need construction, read
+   [local structure preparation](references/structure-preparation.md), including
+   on-demand tool loading when available. For direct PBS jobs, read [the ASE batch example](references/ase-batch.md)
    and the `pbs-hpc` skill; no chemistry MCP server or Parsl is required.
    Preserve an explicitly requested execution method. Report missing dependencies.
    This skill does not grant tools or override approvals.
