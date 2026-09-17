@@ -41,18 +41,13 @@ def run_graspa(graspa_input: graspa_input_schema):
     float
         Uptake in mol/kg from the core gRASPA result.
     """
-    params = graspa_input_schema(
-        input_structure_file=graspa_input.cif_path,
-        adsorbate=graspa_input.adsorbate,
-        temperature=graspa_input.temperature,
-        pressure=graspa_input.pressure,
-        n_cycles=graspa_input.n_cycle,
-        output_result_file="raspa.log",
-    )
-
-    result = run_graspa_core(params)
+    result = run_graspa_core(graspa_input)
 
     if result["status"] == "success":
         return result["uptake_in_mol_kg"]
     else:
-        raise RuntimeError(f"gRASPA simulation failed for {graspa_input.mof_name}")
+        raise RuntimeError(
+            f"gRASPA failed for {graspa_input.input_structure_file}: "
+            f"{result.get('message', 'unknown error')}; "
+            f"stdout={result.get('stdout_path')}, stderr={result.get('stderr_path')}"
+        )

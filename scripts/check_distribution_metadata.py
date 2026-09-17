@@ -8,15 +8,22 @@ import zipfile
 
 from packaging.requirements import Requirement
 
+GRASPA_ASSETS = (
+    "simulation.input", "H2O.def", "force_field.def",
+    "force_field_mixing_rules.def", "pseudo_atoms.def",
+)
+
 
 def check_distribution(path: Path) -> None:
     """Check built metadata, including extras, and the sdist add-on files."""
     if path.suffix == ".whl":
         with zipfile.ZipFile(path) as archive:
+            contents = archive.namelist()
             names = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
             if len(names) != 1:
                 raise ValueError(f"{path}: expected exactly one wheel METADATA file")
             metadata = archive.read(names[0])
+            package_prefix = "chemgraph/"
     elif path.name.endswith(".tar.gz"):
         with tarfile.open(path) as archive:
             names = archive.getnames()
@@ -24,6 +31,8 @@ def check_distribution(path: Path) -> None:
             if len(roots) != 1:
                 raise ValueError(f"{path}: expected exactly one root PKG-INFO file")
             root = roots[0].split("/")[0]
+            contents = names
+            package_prefix = f"{root}/src/chemgraph/"
             for filename in ("mace-polar.txt", "ocsr-models.txt"):
                 if f"{root}/requirements/{filename}" not in names:
                     raise ValueError(f"{path}: missing requirements/{filename}")
@@ -36,6 +45,10 @@ def check_distribution(path: Path) -> None:
     for raw in requirements:
         if Requirement(raw).url is not None:
             raise ValueError(f"{path}: direct-URL dependency is not publishable: {raw}")
+    for asset in GRASPA_ASSETS:
+        name = f"{package_prefix}tools/files/template_graspa_sycl/{asset}"
+        if name not in contents:
+            raise ValueError(f"{path}: missing gRASPA asset {asset}")
 
 
 if __name__ == "__main__":

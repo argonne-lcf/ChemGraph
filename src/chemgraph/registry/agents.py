@@ -35,9 +35,6 @@ class AgentSpec:
     test_only: bool = False
 
 
-_GRASPA_EXECUTABLE = (
-    "/lus/flare/projects/IQC/thang/soft/gRASPA/graspa-sycl/bin/sycl.out"
-)
 _CORE_TOOLS = (
     "smiles_to_coordinate_file",
     "molecule_name_to_smiles",
@@ -85,7 +82,8 @@ BUILTIN_AGENT_SPECS: tuple[AgentSpec, ...] = (
         default_tool_names=("run_graspa",),
         requirements=(
             RuntimeRequirement(
-                "path", _GRASPA_EXECUTABLE, "configure the gRASPA-SYCL runtime"
+                "executable", "sycl.out", "configure the gRASPA-SYCL runtime",
+                env_var="CHEMGRAPH_GRASPA_EXECUTABLE",
             ),
         ),
         tags=frozenset({"graspa", "adsorption"}),

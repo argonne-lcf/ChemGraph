@@ -8,10 +8,11 @@ import os
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-import shutil
 from typing import Literal
 
 from langchain_core.tools import BaseTool
+
+from chemgraph.utils.executables import resolve_executable
 
 
 class RegistryError(Exception):
@@ -50,6 +51,7 @@ class RuntimeRequirement:
     kind: RequirementKind
     value: str
     hint: str = ""
+    env_var: str | None = None
 
     def issue(self) -> str | None:
         """Return an actionable issue when this requirement is not met."""
@@ -62,7 +64,11 @@ class RuntimeRequirement:
         elif self.kind == "environment":
             available = bool(os.environ.get(self.value))
         elif self.kind == "executable":
-            available = shutil.which(self.value) is not None
+            try:
+                resolve_executable(self.value, self.env_var)
+                available = True
+            except FileNotFoundError as exc:
+                return f"{exc} ({self.hint})" if self.hint else str(exc)
         elif self.kind == "path":
             path = Path(self.value)
             available = path.is_file() and os.access(path, os.X_OK)
@@ -103,11 +109,6 @@ class ToolSpec:
     requirements: tuple[RuntimeRequirement, ...] = ()
     interactive: bool = False
     executes_code: bool = False
-
-
-_GRASPA_EXECUTABLE = (
-    "/lus/flare/projects/IQC/thang/soft/gRASPA/graspa-sycl/bin/sycl.out"
-)
 
 
 BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
@@ -204,7 +205,8 @@ BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
         frozenset({"graspa", "simulation"}),
         (
             RuntimeRequirement(
-                "path", _GRASPA_EXECUTABLE, "configure the gRASPA-SYCL runtime"
+                "executable", "sycl.out", "configure the gRASPA-SYCL runtime",
+                env_var="CHEMGRAPH_GRASPA_EXECUTABLE",
             ),
         ),
     ),

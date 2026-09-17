@@ -169,11 +169,15 @@ def test_built_metadata_rejects_urls_including_extras(tmp_path, kind, requiremen
     if kind == "whl":
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("chemgraph-0.6.0.dist-info/METADATA", metadata)
+            for asset in ("simulation.input", "H2O.def", "force_field.def", "force_field_mixing_rules.def", "pseudo_atoms.def"):
+                archive.writestr(f"chemgraph/tools/files/template_graspa_sycl/{asset}", b"fixture")
     else:
         with tarfile.open(path, "w:gz") as archive:
             for name, data in {
                 "PKG-INFO": metadata, "requirements/mace-polar.txt": b"",
                 "requirements/ocsr-models.txt": b"",
+                **{f"src/chemgraph/tools/files/template_graspa_sycl/{asset}": b"fixture"
+                   for asset in ("simulation.input", "H2O.def", "force_field.def", "force_field_mixing_rules.def", "pseudo_atoms.def")},
             }.items():
                 member = tarfile.TarInfo(f"chemgraph-0.6.0/{name}")
                 member.size = len(data)
@@ -182,6 +186,15 @@ def test_built_metadata_rejects_urls_including_extras(tmp_path, kind, requiremen
         with pytest.raises(ValueError, match="direct-URL dependency"):
             check(path)
     else:
+        check(path)
+
+
+def test_distribution_rejects_missing_graspa_assets(tmp_path):
+    check = runpy.run_path(str(_REPO_ROOT / "scripts/check_distribution_metadata.py"))["check_distribution"]
+    path = tmp_path / "incomplete.whl"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("chemgraph.dist-info/METADATA", "Metadata-Version: 2.4\n")
+    with pytest.raises(ValueError, match="missing gRASPA asset"):
         check(path)
 
 
