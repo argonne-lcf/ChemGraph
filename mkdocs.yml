@@ -56,6 +56,7 @@ nav:
       - Workflows: workflows.md
       - Tool and agent registries: registries.md
       - Calculators: calculators.md
+      - gRASPA-SYCL: graspa.md
       - Python API: python_api.md
       - Deep Agent Skills: skills.md
       - Streamlit interface: streamlit_web_interface.md

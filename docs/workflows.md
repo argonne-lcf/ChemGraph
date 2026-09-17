@@ -10,7 +10,7 @@ Python. `single_agent` is the recommended first choice.
 | `deep_agent` | Workspace tasks and attached chemistry tools | CLI and Python; alias `deepagent`; broad local shell access |
 | `multi_agent` | Routes tasks among specialized agents | More model calls and orchestration overhead |
 | `python_relp` | Chemistry agent with Python REPL capability | Executes Python in the current process; alias `python_repl` |
-| `graspa` | gRASPA-oriented agent | Site-specific executable/configuration; alias `graspa_agent` |
+| `graspa` | [H2O adsorption with gRASPA-SYCL](graspa.md) | Configured SYCL executable; alias `graspa_agent` |
 | `mock_agent` | Deterministic development/testing route | Not intended for scientific work |
 | `graspa_mcp` | gRASPA through MCP | Site and MCP setup required |
 | `rag_agent` | Retrieval-augmented questions over documents | Install `chemgraph[rag]` |
