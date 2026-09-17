@@ -220,6 +220,7 @@ def initialize_agent(
     deepagent_discover_skills: bool = True,
     deepagent_user_skills_dir: str | None = None,
     deepagent_skill_dirs: Sequence[str] | None = None,
+    deepagent_tool_registry: Any | None = None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -261,6 +262,8 @@ def initialize_agent(
         Resolved personal skill root retained when restoring a session.
     deepagent_skill_dirs : sequence of str, optional
         Host skill collections, resolved independently of the workspace.
+    deepagent_tool_registry : ToolRegistry, optional
+        Local catalog available on demand in the standalone Deep Agent.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
@@ -296,6 +299,8 @@ def initialize_agent(
                 "deepagent_skill_dirs requires enable_deepagent=True or the "
                 "deep_agent workflow."
             )
+        if deepagent_tool_registry is not None and workflow_type != "deep_agent":
+            raise ValueError("deepagent_tool_registry requires the deep_agent workflow.")
         if deepagent_auto_approve and workflow_type != "deep_agent":
             raise ValueError(
                 "deepagent_auto_approve is available only for the deep_agent workflow."
@@ -381,6 +386,7 @@ def initialize_agent(
                 on_event=on_event,
                 enable_deepagent=enable_deepagent,
                 deepagent_backend=deepagent_backend,
+                deepagent_tool_registry=deepagent_tool_registry,
                 deepagent_skills=deepagent_skills,
                 deepagent_skill_dirs=deepagent_skill_dirs,
                 deepagent_discover_skills=deepagent_discover_skills,
@@ -1124,6 +1130,7 @@ def interactive_mode(
     deepagent_discover_skills: bool = True,
     deepagent_user_skills_dir: str | None = None,
     deepagent_skill_dirs: Sequence[str] | None = None,
+    deepagent_tool_registry: Any | None = None,
 ) -> None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -1166,6 +1173,8 @@ def interactive_mode(
         Resolved personal skill root retained when restoring a session.
     deepagent_skill_dirs : sequence of str, optional
         Host skill collections, resolved independently of the workspace.
+    deepagent_tool_registry : ToolRegistry, optional
+        Local catalog available on demand in the standalone Deep Agent.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
@@ -1294,6 +1303,9 @@ def interactive_mode(
             if workflow == "deep_agent"
             or (enable_deepagent and workflow == "main_agent")
             else None
+        ),
+        deepagent_tool_registry=(
+            deepagent_tool_registry if workflow == "deep_agent" else None
         ),
         deepagent_auto_approve=(
             deepagent_auto_approve and workflow == "deep_agent"
@@ -1657,6 +1669,9 @@ Example queries:
                         or (enable_deepagent and workflow == "main_agent")
                         else None
                     ),
+                    deepagent_tool_registry=(
+                        deepagent_tool_registry if workflow == "deep_agent" else None
+                    ),
                     deepagent_auto_approve=(
                         deepagent_auto_approve and workflow == "deep_agent"
                     ),
@@ -1745,6 +1760,9 @@ Example queries:
                             if new_workflow == "deep_agent"
                             or (enable_deepagent and new_workflow == "main_agent")
                             else None
+                        ),
+                        deepagent_tool_registry=(
+                            deepagent_tool_registry if new_workflow == "deep_agent" else None
                         ),
                         deepagent_auto_approve=(
                             deepagent_auto_approve and new_workflow == "deep_agent"

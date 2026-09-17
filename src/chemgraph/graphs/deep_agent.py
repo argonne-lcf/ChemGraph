@@ -11,6 +11,8 @@ from deepagents.backends import CompositeBackend, LocalShellBackend, StateBacken
 from deepagents.backends.protocol import BackendProtocol
 from langgraph.checkpoint.memory import InMemorySaver
 
+from chemgraph.registry.middleware import RegistryToolsMiddleware
+from chemgraph.registry.tools import ToolRegistry
 from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
 
 
@@ -39,6 +41,8 @@ DEFAULT_DEEPAGENT_INTERRUPT_ON = {
     "write_file": {"allowed_decisions": ["approve", "reject"]},
     "edit_file": {"allowed_decisions": ["approve", "reject"]},
     "delete": {"allowed_decisions": ["approve", "reject"]},
+    "smiles_to_coordinate_file": {"allowed_decisions": ["approve", "reject"]},
+    "save_atomsdata_to_file": {"allowed_decisions": ["approve", "reject"]},
 }
 
 
@@ -107,6 +111,7 @@ def construct_deep_agent_graph(
     llm: Any,
     *,
     tools: Sequence[Any] | None = None,
+    tool_registry: ToolRegistry | None = None,
     skills: Sequence[str] | None = None,
     discover_skills: bool = True,
     user_skills_dir: str | None = None,
@@ -129,6 +134,8 @@ def construct_deep_agent_graph(
     ``skill_dirs`` mounts explicit host directories, independently of the workspace
     and discovery setting, before backend-relative ``skills`` sources.
     ``user_skills_dir`` fixes the personal root when restoring a session.
+    ``tool_registry`` adds metadata discovery and on-demand local tools; ``tools``
+    remains the always-attached tool list. Registry tools run on the agent host.
     Passing ``interrupt_on=None`` disables approval interrupts and should be
     reserved for an externally isolated, explicitly trusted execution context.
     """
@@ -153,13 +160,26 @@ def construct_deep_agent_graph(
         effective_backend, skill_sources, discover_skills=discover_skills,
         user_skills_dir=user_skills_dir, skill_dirs=skill_dirs,
     )
+    middleware = [ChemGraphSkillsMiddleware(
+        backend=effective_backend, sources=sources, optional=optional,
+    )]
+    if tool_registry is not None:
+        loader = RegistryToolsMiddleware(tool_registry)
+        attached_names = {
+            entry.get("function", entry).get("name", entry.get("type"))
+            if isinstance(entry, dict)
+            else getattr(entry, "name", getattr(entry, "__name__", None))
+            for entry in tools or []
+        }
+        loader.validate_names(attached_names)
+        if attached_names & {"search_tools", "load_tools"}:
+            raise ValueError("Attached tools conflict with registry discovery tool names.")
+        middleware.append(loader)
     workflow = create_deep_agent(
         model=llm,
         tools=list(tools or []),
         skills=sources,
-        middleware=[ChemGraphSkillsMiddleware(
-            backend=effective_backend, sources=sources, optional=optional,
-        )],
+        middleware=middleware,
         system_prompt=system_prompt,
         backend=effective_backend,
         interrupt_on=effective_interrupt_on,
