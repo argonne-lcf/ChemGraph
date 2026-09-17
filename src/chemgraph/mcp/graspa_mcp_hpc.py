@@ -2,7 +2,7 @@
 
 import asyncio
 import math
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 import uuid
 
 from chemgraph.execution.base import TaskSpec
@@ -109,6 +109,17 @@ def _ls_remote_files(path: str) -> list[str]:
 CGFastMCP._fix_module_for_pickle(_ls_remote_files)
 
 
+def _remote_cif_path(path: str) -> PurePath:
+    """Validate worker paths without applying the MCP host's OS rules."""
+    if isinstance(path, str):
+        parsed = PureWindowsPath(path)
+        if not parsed.is_absolute():
+            parsed = PurePosixPath(path)
+        if parsed.is_absolute() and parsed.suffix.lower() == ".cif":
+            return parsed
+    raise ValueError("Discovery must return absolute CIF paths")
+
+
 def _local_structure_files(source: str | list[str]) -> list[str]:
     from chemgraph.tools.ase_core import _resolve_existing_path
 
@@ -154,13 +165,9 @@ async def _expand_graspa_ensemble(
             )
             if not paths:
                 raise ValueError("No CIF files found")
-            if not isinstance(paths, list) or any(
-                not isinstance(path, str)
-                or not Path(path).is_absolute()
-                or Path(path).suffix.lower() != ".cif"
-                for path in paths
-            ):
+            if not isinstance(paths, list):
                 raise ValueError("Discovery must return absolute CIF paths")
+            names = [_remote_cif_path(path).stem for path in paths]
         except Exception as exc:
             raise RuntimeError(
                 f"Could not discover CIFs in {params.remote_structure_directory}: "
@@ -175,6 +182,7 @@ async def _expand_graspa_ensemble(
                 "and use remote_structure_directory"
             )
         paths = _local_structure_files(params.input_structures)
+        names = [Path(path).stem for path in paths]
     options = params.model_dump(exclude={
         "input_structures", "remote_structure_directory",
         "conditions", "discovery_timeout_seconds",
@@ -182,8 +190,8 @@ async def _expand_graspa_ensemble(
     input_key = "remote_structure_file" if remote else "input_structure_file"
     return [
         {**options, **condition.model_dump(), input_key: path,
-         "_structure_name": Path(path).stem, "_job_id": uuid.uuid4().hex}
-        for path in paths for condition in params.conditions
+         "_structure_name": name, "_job_id": uuid.uuid4().hex}
+        for path, name in zip(paths, names) for condition in params.conditions
     ]
 
 

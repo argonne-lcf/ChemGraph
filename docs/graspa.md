@@ -132,6 +132,8 @@ Local input mode is rejected on backends without a shared filesystem. Replace
 ```
 
 The worker resolves the remote directory and discovers all regular CIFs in it.
+Discovered POSIX and Windows absolute paths are preserved regardless of the
+MCP server's operating system.
 No implicit file transfer or inline-CIF transport is performed. Discovery is
 awaited without blocking the MCP event loop. Its timeout defaults to 30 seconds,
 includes queue time, and can be disabled with `null`. Discovery failure submits
