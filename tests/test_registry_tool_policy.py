@@ -4,12 +4,13 @@ import json
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import tool
+from langchain_core.tools import ToolException, tool
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from chemgraph.graphs.deep_agent import construct_deep_agent_graph
 from chemgraph.registry import ToolRegistry
-from tests.test_registry_middleware import CatalogModel, call
+from tests.test_registry_middleware import CatalogModel, call, names, outputs
 
 
 async def invoke(graph, value, config, asynchronous):
@@ -119,3 +120,119 @@ def test_registry_reviews_preserve_explicit_policies(mode):
         {"configurable": {"thread_id": mode}},
     )
     assert "__interrupt__" not in state and executed == [name]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("local_direct,other_direct,placement", [
+    (True, True, "none"), (True, True, "registry"),
+    (True, False, "registry"), (True, True, "attached"),
+    (True, False, "attached"), (False, True, "attached"),
+])
+async def test_direct_return_batches_and_next_turn(
+    asynchronous, local_direct, other_direct, placement,
+):
+    executed = []
+
+    @tool(return_direct=local_direct)
+    def local_answer() -> str:
+        """Return a local result."""
+        executed.append("local")
+        return "local result"
+
+    @tool(return_direct=other_direct)
+    def other_answer() -> str:
+        """Return another result."""
+        executed.append("other")
+        return "other result"
+
+    registry = ToolRegistry([])
+    registry.register(local_answer)
+    if placement == "registry":
+        registry.register(other_answer)
+    calls = [call("local_answer").tool_calls[0]]
+    if placement != "none":
+        calls += call("other_answer").tool_calls
+    direct = local_direct and other_direct
+    responses = [call("load_tools", names=list(registry.names())), AIMessage(content="", tool_calls=calls)]
+    if not direct:
+        responses.append(AIMessage(content="Processed the results"))
+    responses.append(AIMessage(content="New turn"))
+    model = CatalogModel(responses=responses)
+    graph = construct_deep_agent_graph(
+        model, tool_registry=registry, discover_skills=False,
+        tools=[other_answer] if placement == "attached" else [],
+    )
+    config = {"configurable": {"thread_id": "direct"}}
+    state = await invoke(graph, {"messages": [HumanMessage(content="Get results.")]}, config, asynchronous)
+    assert sorted(executed) == (["local"] if placement == "none" else ["local", "other"])
+    assert model.response_index == (2 if direct else 3)
+    assert state["messages"][-1].type == ("tool" if direct else "ai")
+    assert any(message.content == "local result" for message in outputs(state))
+    snapshot = await graph.aget_state(config) if asynchronous else graph.get_state(config)
+    assert snapshot.values["active_registry_tools"] == []
+    state = await invoke(graph, {"messages": [HumanMessage(content="A new turn.")]}, config, asynchronous)
+    assert state["messages"][-1].content == "New turn"
+    assert "local_answer" not in names(model.schemas[-1])
+    assert local_answer.return_direct == local_direct
+    assert other_answer.return_direct == other_direct
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("outcome", ["approve", "reject", "validation", "error"])
+async def test_direct_return_approval_reconstruction_and_errors(asynchronous, outcome):
+    executed = []
+
+    @tool(return_direct=True)
+    def final_answer(value: int) -> str:
+        """Return a final result, or a recoverable tool error."""
+        executed.append(value)
+        if value < 0:
+            raise ToolException("calculation failed")
+        return str(value)
+
+    final_answer.handle_tool_error = True
+
+    @tool(return_direct=True)
+    def attached_answer() -> str:
+        """Return an attached result to exercise static routing."""
+        return "attached result"
+
+    saver = InMemorySaver()
+    config = {"configurable": {"thread_id": "resume"}}
+
+    def graph(responses):
+        # A fresh registry on reconstruction must recover from checkpoint state.
+        registry = ToolRegistry([])
+        registry.register(final_answer)
+        model = CatalogModel(responses=responses)
+        agent = construct_deep_agent_graph(
+            model, tool_registry=registry, tools=[attached_answer], discover_skills=False,
+            checkpointer=saver, interrupt_on={"final_answer": True},
+        )
+        return agent, model
+
+    value = "invalid" if outcome == "validation" else -1 if outcome == "error" else 42
+    agent, _ = graph([
+        call("load_tools", names=["final_answer"]),
+        AIMessage(content="", tool_calls=[
+            *call("final_answer", value=value).tool_calls, *call("attached_answer").tool_calls,
+        ]),
+    ])
+    state = await invoke(agent, {"messages": [HumanMessage(content="Get results.")]}, config, asynchronous)
+    assert state["__interrupt__"] and not executed
+    isolated, _ = graph([AIMessage(content="Unrelated turn")])
+    await invoke(isolated, {"messages": [HumanMessage(content="Hello")]}, {"configurable": {"thread_id": "other"}}, asynchronous)
+    agent, model = graph([AIMessage(content="Recover from the rejected or failed call")])
+    decision = "reject" if outcome == "reject" else "approve"
+    state = await invoke(agent, Command(resume={"decisions": [{"type": decision}]}), config, asynchronous)
+    assert "__interrupt__" not in state
+    assert model.response_index == (0 if outcome == "approve" else 1)
+    assert executed == ([42] if outcome == "approve" else [-1] if outcome == "error" else [])
+    if outcome == "approve":
+        assert any(message.content == "42" for message in outputs(state))
+    else:
+        assert any(message.status == "error" for message in outputs(state))
+    snapshot = await agent.aget_state(config) if asynchronous else agent.get_state(config)
+    assert snapshot.values["active_registry_tools"] == []

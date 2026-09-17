@@ -241,6 +241,11 @@ per conversation, survive approval pauses, and clear at the end of a completed
 turn. Restore pending checkpoints with the same catalog. The built-in delegated
 worker has its own tools; keep this preparation workflow in the standalone agent.
 
+Loaded custom tools retain `return_direct=True`: a successful batch containing
+only direct-return tools ends the turn without another model call. Mixed batches,
+rejected calls, and error results return to the model. The same rule applies when
+the batch combines loaded and attached tools.
+
 Registry tools execute on the agent host, independently of the file/shell backend.
 Use absolute host paths and returned artifact paths. The default approval policy
 also covers `smiles_to_coordinate_file` and `save_atomsdata_to_file`. Registry

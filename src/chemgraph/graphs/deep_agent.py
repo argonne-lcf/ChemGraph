@@ -177,7 +177,7 @@ def construct_deep_agent_graph(
                 tool_name: {"allowed_decisions": ["approve", "reject"]}
                 for tool_name in _REGISTRY_REVIEW_TOOLS.intersection(tool_registry.names())
             })
-        loader = RegistryToolsMiddleware(tool_registry)
+        loader = RegistryToolsMiddleware(tool_registry, attached_tools=tools or ())
         attached_names = {
             entry.get("function", entry).get("name", entry.get("type"))
             if isinstance(entry, dict)

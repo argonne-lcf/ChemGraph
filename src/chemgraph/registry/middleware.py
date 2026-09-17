@@ -4,7 +4,7 @@ import json
 import re
 from typing import Annotated, NotRequired
 
-from langchain.agents.middleware import AgentMiddleware, AgentState
+from langchain.agents.middleware import AgentMiddleware, AgentState, hook_config
 from langchain.agents.middleware.types import PrivateStateAttr
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
@@ -26,9 +26,13 @@ class RegistryToolsMiddleware(AgentMiddleware):
 
     state_schema = RegistryToolState
 
-    def __init__(self, registry: ToolRegistry):
+    def __init__(self, registry: ToolRegistry, *, attached_tools=()):
         self.registry = registry
         self.specs = {spec.name: spec for spec in registry.specs()}
+        self.attached_direct_names = frozenset(
+            entry.name for entry in attached_tools
+            if getattr(entry, "return_direct", False)
+        )
 
         @tool
         def search_tools(query: str, limit: int = 5) -> dict:
@@ -179,6 +183,43 @@ class RegistryToolsMiddleware(AgentMiddleware):
             selected if isinstance(selected, ToolMessage) else await handler(selected)
         )
 
+    def _batch_returns_direct(self, state):
+        """Classify only a completed, current batch involving registry tools."""
+        results = {}
+        for message in reversed(state.get("messages", [])):
+            if message.type == "tool":
+                results.setdefault(message.tool_call_id, message)
+                continue
+            calls = getattr(message, "tool_calls", [])
+            break
+        else:
+            return None
+        if not calls or not any(call["name"] in self.specs for call in calls):
+            return None
+        if any(call["id"] not in results for call in calls):
+            return None
+        if any(results[call["id"]].status == "error" for call in calls):
+            return False
+        for call in calls:
+            name = call["name"]
+            if name in self.specs:
+                # Successful results mean the tool was already resolved; do not
+                # recheck runtime availability after execution or during resume.
+                if not self.registry.get(name).return_direct:
+                    return False
+            elif name not in self.attached_direct_names:
+                return False
+        return True
+
+    @hook_config(can_jump_to=["end"])
+    def before_model(self, state, runtime):
+        if self._batch_returns_direct(state) is True:
+            return {"jump_to": "end"}
+        return None
+
+    async def abefore_model(self, state, runtime):
+        return self.before_model(state, runtime)
+
     def before_agent(self, state, runtime):
         # New user input also resets a selection left by a failed turn. Resuming
         # an interrupted tool continues its checkpoint instead of this entry node.
@@ -189,7 +230,12 @@ class RegistryToolsMiddleware(AgentMiddleware):
     async def abefore_agent(self, state, runtime):
         return self.before_agent(state, runtime)
 
+    @hook_config(can_jump_to=["model"])
     def after_agent(self, state, runtime):
+        # LangChain's static-tool routing can exit early when a batch mixes an
+        # attached direct-return tool with a non-direct or failed registry tool.
+        if self._batch_returns_direct(state) is False:
+            return {"jump_to": "model"}
         return {"active_registry_tools": []}
 
     async def aafter_agent(self, state, runtime):
