@@ -18,6 +18,8 @@ spec.loader.exec_module(runner)
 
 @pytest.fixture
 def batch(tmp_path):
+    if sys.platform != "linux":
+        pytest.skip("Aurora launcher requires Linux, Bash 4.3+, and GNU coreutils")
     stub = tmp_path / "python"
     stub.write_text(f"#!{sys.executable}\n" + r"""
 import json

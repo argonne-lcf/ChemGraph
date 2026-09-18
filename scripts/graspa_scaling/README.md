@@ -6,6 +6,10 @@ ranks working capacity, and the LLM explains the saved summary. Counts, paths,
 and up to five preview rows enter the reporting context. The scripts are
 self-contained and do not depend on local demo files.
 
+The PBS shell launcher targets Aurora Linux and requires Bash 4.3+ and GNU
+coreutils (`timeout` and `tail --pid`). Its shell integration tests run only on
+Linux; the Python client and native workflow tests run on all supported platforms.
+
 The selected CIFs are referenced by symlinks in the run's `inputs/` directory;
 shared-file discovery resolves these links to the original full source paths.
 The model receives a directory reference, even for a 4,608-CIF run. Source CIFs
