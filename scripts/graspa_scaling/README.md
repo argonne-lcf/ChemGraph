@@ -7,8 +7,7 @@ and up to five preview rows enter the reporting context. The scripts are
 self-contained and do not depend on local demo files.
 
 The PBS shell launcher targets Aurora Linux and requires Bash 4.3+ and GNU
-coreutils (`timeout` and `tail --pid`). Its shell integration tests run only on
-Linux; the Python client and native workflow tests run on all supported platforms.
+coreutils (`timeout` and `tail --pid`).
 
 The selected CIFs are referenced by symlinks in the run's `inputs/` directory;
 shared-file discovery resolves these links to the original full source paths.
@@ -71,9 +70,8 @@ Account `IQC` is inherited from the script; use `-A PROJECT` if needed.
 qsub -v CG_ENV,ALCF_ACCESS_TOKEN scripts/graspa_scaling/sub.graspa.aurora
 ```
 
-A live native-graph smoke remains outstanding; hermetic tests cover the runner
-and launcher lifecycle. No production workload was submitted during
-implementation. This command spends the 512-node allocation when scheduled. The three-hour walltime is inherited
+A live native-graph smoke remains outstanding. No production workload was
+submitted during implementation. This command spends the 512-node allocation when scheduled. The three-hour walltime is inherited
 from the reference and is not a runtime guarantee.
 
 Results go to `graspa_scaling_runs/PBS_JOBID/` under the PR worktree.
