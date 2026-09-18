@@ -1,5 +1,6 @@
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -186,7 +187,7 @@ async def test_relative_log_directory_is_resolved_once(tmp_path, monkeypatch, lo
     monkeypatch.setenv("CHEMGRAPH_LOG_DIR", "logs")
     workflow = construct_graspa_mcp_graph(model, executor_tools=backend.tools(), checkpointer=None, log_dir=log_dir)
     state = await workflow.ainvoke({"messages": "screen"})
-    assert state["run_directory"].startswith(str(tmp_path / "logs/graspa_workflows") + "/")
+    assert Path(state["run_directory"]).parent == tmp_path / "logs" / "graspa_workflows"
 
 
 @pytest.mark.asyncio
