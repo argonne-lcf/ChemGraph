@@ -598,7 +598,7 @@ async def test_aggregate_and_rank(tmp_path):
         text = res_rank.content[0].text
         assert "Analysis Complete" in text
         assert "mof_1.cif" in text
-        assert "mof_2.cif" in text  # Should find both due to tolerance
+        assert "mof_2.cif" not in text  # Only the exact requested condition is ranked
 
 
 # ---------------------------------------------------------------------------

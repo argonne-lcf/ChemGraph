@@ -1,11 +1,7 @@
 import math
 import os
 import shutil
-import logging
-import json
 from typing import Optional
-
-import pandas as pd
 
 from mcp.server.fastmcp import FastMCP
 
@@ -89,98 +85,37 @@ def split_cif_dataset(
 
 @mcp.tool(
     name="aggregate_simulation_results",
-    description="""Reads a list of JSONL simulation files (one JSON object per line) and 
-    combines them into a CSV. Extracts nested result data (uptake, T, P) and splits file paths 
-    into base directory and filename.
-""",
+    description="Combine JSONL simulation records, including failures, into a CSV with original source identity.",
 )
-def aggregate_simulation_results(
-    file_paths: list[str],
-    output_csv_path: str,
-) -> str:
-    """Aggregate JSONL simulation records into a CSV summary.
-
-    Parameters
-    ----------
-    file_paths : list[str]
-        JSONL files to read. Each line should contain one simulation result.
-    output_csv_path : str
-        Destination CSV path.
-
-    Returns
-    -------
-    str
-        Human-readable success or error message.
-    """
-    from chemgraph.tools.ase_core import _resolve_existing_path
-
-    all_data = []
-
-    for file_path in file_paths:
-        if not file_path or not isinstance(file_path, str):
-            continue
-
-        # A small model may pass a bare name for a result file a sibling tool
-        # wrote into CHEMGRAPH_LOG_DIR. Resolve it against the log dir; an
-        # absolute or cwd-relative path is returned unchanged.
-        file_path = _resolve_existing_path(file_path)
-
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-
-                    try:
-                        entry = json.loads(line)
-
-                        if entry.get("status") == "success":
-                            # Extract the full path first
-                            full_cif_path = entry.get('cif_path', '')
-
-                            flat_entry = {
-                                # Split the path into directory and filename
-                                'cif_base_path': os.path.dirname(full_cif_path),
-                                'cif_filename': os.path.basename(full_cif_path),
-                                'uptake_in_mol_kg': entry.get('uptake_in_mol_kg'),
-                                # Map 'temperature_in_K' -> 'temperature'
-                                'temperature': entry.get('temperature_in_K'),
-                                # Map 'pressure_in_Pa' -> 'pressure'
-                                'pressure': entry.get('pressure_in_Pa'),
-                                'source_file': file_path,
-                            }
-                            all_data.append(flat_entry)
-
-                    except json.JSONDecodeError:
-                        continue
-
-        except (IOError, FileNotFoundError):
-            logging.warning("Could not read file %s", file_path)
-            continue
-
-    if not all_data:
-        return "Error: No valid success data found in the provided file list."
-
-    # Create DataFrame
-    df = pd.DataFrame(all_data)
-
-    # Ensure numeric columns are actually numeric
-    cols = ['uptake_in_mol_kg', 'temperature', 'pressure']
-    for col in cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+def aggregate_simulation_results(file_paths: list[str], output_csv_path: str) -> str:
+    """Preserve all outcomes and provenance; fail clearly on unreadable inputs."""
+    from pathlib import Path, PureWindowsPath
+    from chemgraph.tools.ase_core import _resolve_path
+    from chemgraph.tools.graspa_analysis import read_records, write_csv, RECORD_COLUMNS
 
     try:
-        df.to_csv(output_csv_path, index=False)
-    except IOError as e:
-        return f"Error saving CSV: {str(e)}"
-
-    return f"Success: Aggregated {len(df)} records into '{os.path.abspath(output_csv_path)}'."
+        rows = []
+        for source_file in file_paths:
+            for row in read_records(source_file):
+                source = row["input_structure_file"]
+                path = PureWindowsPath(source) if PureWindowsPath(source).is_absolute() else Path(source)
+                rows.append({**row, "cif_base_path": str(path.parent), "cif_filename": path.name,
+                             "temperature": row["temperature_in_K"], "pressure": row["pressure_in_Pa"],
+                             "source_file": source_file})
+        if not rows:
+            return "Error: No simulation records found in the provided file list."
+        output = Path(_resolve_path(output_csv_path)).resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        write_csv(output, rows, RECORD_COLUMNS + ["cif_base_path", "cif_filename", "temperature", "pressure", "source_file"])
+    except (OSError, ValueError, TypeError) as exc:
+        return f"Error aggregating results: {exc}"
+    failures = sum(row["status"] != "success" for row in rows)
+    return f"Success: Aggregated {len(rows)} records ({failures} failed) into '{output}'."
 
 
 @mcp.tool(
     name="rank_mofs_performance",
-    description="Ranks MOFs by performance using the aggregated CSV containing split file paths.",
+    description="Rank exact adsorption conditions by uptake or working capacity, retaining full source identity.",
 )
 def rank_mofs_performance(
     input_csv_path: str,
@@ -191,141 +126,42 @@ def rank_mofs_performance(
     top_percentile: float = 0.10,
     min_cutoff: Optional[float] = None,
 ) -> str:
-    """
-    Ranks MOFs from a CSV simulation summary.
-
-    Args:
-        input_csv_path: Path to the CSV file.
-        ads_pressure: Adsorption pressure (Pa).
-        ads_temp: Adsorption temperature (K).
-        des_pressure: Optional. Desorption pressure (Pa).
-        des_temp: Optional. Desorption temperature (K).
-        top_percentile: Fraction to return (e.g. 0.10 for top 10%).
-        min_cutoff: Optional. Minimum value (mol/kg) to include.
-    """
-    if not os.path.exists(input_csv_path):
-        return f"Error: CSV file '{input_csv_path}' not found."
+    """Rank complete successful repeats; return a bounded preview and a CSV."""
+    from pathlib import Path
+    import uuid
+    from chemgraph.schemas.graspa_workflow import GraspaAnalysis
+    from chemgraph.tools.ase_core import _resolve_path
+    from chemgraph.tools.graspa_analysis import read_records, rank_records, write_csv, RANK_COLUMNS
 
     try:
-        df = pd.read_csv(input_csv_path)
-    except Exception as e:
-        return f"Error reading CSV: {str(e)}"
-
-    # Check for required column
-    if 'cif_filename' not in df.columns:
-        return (
-            "Error: CSV is missing 'cif_filename' column. "
-            "Ensure it was created by the updated aggregator."
+        if (des_pressure is None) != (des_temp is None):
+            raise ValueError("Provide both desorption pressure and temperature")
+        analysis = GraspaAnalysis(
+            adsorption={"temperature": ads_temp, "pressure": ads_pressure},
+            desorption=({"temperature": des_temp, "pressure": des_pressure} if des_temp is not None else None),
+            top_fraction=top_percentile,
         )
-
-    # Ensure numeric types
-    for col in ['uptake_in_mol_kg', 'temperature', 'pressure']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-
-    # Determine Mode: Working Capacity (WC) vs Single Uptake
-    is_wc_mode = (des_pressure is not None) and (des_temp is not None)
-    metric_name = "working_capacity" if is_wc_mode else "absolute_uptake"
-
-    results = []
-
-    # CHANGED: Group by 'cif_filename' instead of 'cif_path'
-    grouped = df.groupby('cif_filename')
-
-    for cif_name, group in grouped:
-        # Helper: Robust lookup with tolerances
-        def get_uptake(target_p, target_t):
-            """Return the uptake matching target pressure and temperature.
-
-            Parameters
-            ----------
-            target_p : float or None
-                Target pressure in Pa.
-            target_t : float or None
-                Target temperature in K.
-
-            Returns
-            -------
-            float or None
-                Mean uptake for matching rows, or ``None`` when no match exists.
-            """
-            if target_p is None or target_t is None:
-                return None
-
-            # 1. Temp filter (0.2K tolerance)
-            t_matches = group[abs(group['temperature'] - target_t) < 0.2]
-            if t_matches.empty:
-                return None
-
-            # 2. Pressure filter (5% tolerance)
-            p_matches = t_matches[
-                abs(t_matches['pressure'] - target_p) < (target_p * 0.05)
-            ]
-
-            if not p_matches.empty:
-                return p_matches['uptake_in_mol_kg'].mean()
-            return None
-
-        val_ads = get_uptake(ads_pressure, ads_temp)
-        val_des = get_uptake(des_pressure, des_temp) if is_wc_mode else 0.0
-
-        if is_wc_mode:
-            # Mode A: Working Capacity
-            if val_ads is not None and val_des is not None:
-                metric_val = val_ads - val_des
-                results.append(
-                    {
-                        "mof_name": cif_name,
-                        metric_name: metric_val,
-                        "uptake_ads": val_ads,
-                        "uptake_des": val_des,
-                        "conditions": (
-                            f"Ads({ads_temp}K, {ads_pressure}Pa) -> Des({des_temp}K, {des_pressure}Pa)"
-                        ),
-                    }
-                )
+        ranked, excluded = rank_records(read_records(input_csv_path), analysis)
+        metric = "working_capacity" if analysis.desorption else "absolute_uptake"
+        if min_cutoff is not None:
+            if not math.isfinite(min_cutoff):
+                raise ValueError("min_cutoff must be finite")
+            selected = [row for row in ranked if row[metric] >= min_cutoff]
+            description = f"Values >= {min_cutoff} mol/kg"
         else:
-            # Mode B: Absolute Uptake
-            if val_ads is not None:
-                results.append(
-                    {
-                        "mof_name": cif_name,
-                        metric_name: val_ads,
-                        "conditions": (f"Point({ads_temp}K, {ads_pressure}Pa)"),
-                    }
-                )
-
-    if not results:
-        cond_str = f"Ads({ads_temp}K, {ads_pressure}Pa)"
-        if is_wc_mode:
-            cond_str += f" -> Des({des_temp}K, {des_pressure}Pa)"
-        return f"Error: No valid data found for conditions: {cond_str}"
-
-    # Create DataFrame
-    res_df = pd.DataFrame(results)
-
-    # Sort
-    res_df = res_df.sort_values(by=metric_name, ascending=False)
-
-    # Filter Strategy
-    total_count = len(res_df)
-
-    if min_cutoff is not None:
-        res_df = res_df[res_df[metric_name] >= min_cutoff]
-        filter_desc = f"Values >= {min_cutoff} mol/kg"
-    else:
-        count = max(1, int(total_count * top_percentile))
-        res_df = res_df.head(count)
-        filter_desc = f"Top {int(top_percentile * 100)}%"
-
-    cols_to_show = ['mof_name', metric_name]
-    output_str = res_df[cols_to_show].to_string(index=False)
-
+            selected = ranked[:math.ceil(len(ranked) * top_percentile)]
+            description = f"Top {top_percentile * 100:g}%"
+        output = Path(_resolve_path(f"rankings_{uuid.uuid4().hex}.csv")).resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        write_csv(output, selected, RANK_COLUMNS)
+    except (OSError, ValueError, TypeError) as exc:
+        return f"Error ranking results: {exc}"
+    preview = "\n".join(f"{row['input_structure_file']}: {row[metric]}" for row in selected[:5])
     return (
-        f"Analysis Complete ({'Working Capacity' if is_wc_mode else 'Absolute Uptake'}).\n"
-        f"Filter Used: {filter_desc}\n"
-        f"Found {len(res_df)} candidates (out of {total_count} valid MOFs).\n\n"
-        f"{output_str}"
+        f"Analysis Complete ({metric}, mol/kg).\nFilter Used: {description}\n"
+        f"Found {len(selected)} candidates (out of {len(ranked)} valid MOFs); "
+        f"excluded {len(excluded)} incomplete/failed structures.\n"
+        f"Full selected ranking: '{output}'. Preview (at most five rows):\n{preview}"
     )
 
 
