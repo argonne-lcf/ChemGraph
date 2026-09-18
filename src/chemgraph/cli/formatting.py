@@ -8,19 +8,89 @@ from __future__ import annotations
 
 import json
 import os
+from difflib import unified_diff
 from typing import Any
 
 from rich.align import Align
-from rich.console import Console
+from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 
 from chemgraph.models.endpoints.registry import CATALOG_ENDPOINTS, catalog_entries
 
 # Shared console instance for the CLI package.
 console = Console()
+
+
+def format_token_usage(usage: dict) -> Text:
+    """Render provider counters locally; never generate a model summary."""
+    keys = ("input_tokens", "output_tokens", "total_tokens")
+    if usage.get("call_count") and all(usage.get(key) is None for key in keys):
+        return Text("Tokens: unavailable (provider did not report usage)", style="dim")
+    parts = [
+        f"{usage[key]:,} {label}" if usage.get(key) is not None else f"unknown {label}"
+        for key, label in zip(keys, ("input", "output", "total"), strict=True)
+    ]
+    prefix = "Tokens (partial): " if usage.get("partial") else "Tokens: "
+    details = []
+    for key, label in (("cached_input_tokens", "cached input"), ("reasoning_output_tokens", "reasoning output")):
+        if usage.get(key) is not None and usage.get("call_count"):
+            qualifier = "known " if usage.get("unreported_counts", {}).get(key) else ""
+            details.append(f"{usage[key]:,} {qualifier}{label}")
+    suffix = f" (included: {'; '.join(details)})" if details else ""
+    if usage.get("partial"):
+        suffix += f"; incomplete usage for {usage['incomplete_calls']} call(s)"
+    return Text(prefix + " · ".join(parts) + suffix, style="dim")
+
+
+def format_action_review(action: dict, index: int, total: int) -> Panel:
+    """Preview an action using only its arguments, without reading host files."""
+    name = str(action.get("name", "unknown"))
+    args = action.get("args", {})
+    preview = []
+    if isinstance(args, dict):
+        args = dict(args)
+        if name == "execute" and isinstance(args.get("command"), str):
+            preview = [
+                Text("Command:"),
+                Syntax(args.pop("command"), "bash", word_wrap=True),
+            ]
+        elif name == "write_file" and isinstance(args.get("content"), str):
+            preview = [Text("Content:"), Text(args.pop("content"))]
+        elif name == "edit_file" and all(
+            isinstance(args.get(key), str) for key in ("old_string", "new_string")
+        ):
+            lines = unified_diff(
+                args.pop("old_string").splitlines(keepends=True),
+                args.pop("new_string").splitlines(keepends=True),
+                fromfile="before", tofile="after",
+            )
+            diff = "".join(
+                line if line.endswith("\n") else line + "\n\\ No newline at end of file\n"
+                for line in lines
+            )
+            preview = [
+                Text("Proposed replacement snippet:"),
+                Syntax(diff or "(No changes)", "diff", word_wrap=True),
+            ]
+    try:
+        arguments = Syntax(
+            json.dumps(args, indent=2, ensure_ascii=False, default=str),
+            "json", word_wrap=True,
+        )
+    except (TypeError, ValueError):
+        arguments = Text(repr(args))
+    details = [Text(f"Tool: {name}")]
+    if args or not preview:
+        details.append(arguments)
+    return Panel(
+        Group(*details, *preview),
+        title=Text(f"Review action {index} of {total}"),
+        border_style="yellow",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ output = "state"
 structured = true
 report = true
 thread = 1
-recursion_limit = 20
+recursion_limit = 200
 human_supervised = false
 # Development-only: add a workspace Deep Agent to interactive main_agent.
 # To call it directly, set workflow = "deep_agent" instead.
@@ -134,6 +134,6 @@ enable_cache = false
 [eval.profiles.standard]
 workflow_types = [ "single_agent",]
 judge_model = "gpt4o"
-recursion_limit = 50
+recursion_limit = 200
 structured_output = true
 max_queries = 0

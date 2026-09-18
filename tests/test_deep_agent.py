@@ -99,7 +99,8 @@ def _shell_command(*parts: str) -> str:
     return shlex.join(parts)
 
 
-def test_constructor_builds_safe_standalone_graph(monkeypatch):
+@pytest.mark.parametrize("options,expected_limit", [({}, 200), ({"recursion_limit": 17}, 17)])
+def test_constructor_builds_safe_standalone_graph(monkeypatch, options, expected_limit):
     captured = {}
     workflow = _FakeWorkflow()
 
@@ -112,7 +113,7 @@ def test_constructor_builds_safe_standalone_graph(monkeypatch):
         fake_create_deep_agent,
     )
 
-    result = construct_deep_agent_graph(object(), recursion_limit=17)
+    result = construct_deep_agent_graph(object(), **options)
 
     assert result is workflow
     assert captured["tools"] == []
@@ -123,7 +124,7 @@ def test_constructor_builds_safe_standalone_graph(monkeypatch):
     assert captured["interrupt_on"] == DEFAULT_DEEPAGENT_INTERRUPT_ON
     assert captured["interrupt_on"] is not DEFAULT_DEEPAGENT_INTERRUPT_ON
     assert captured["name"] == "deepagent"
-    assert workflow.config == {"recursion_limit": 17}
+    assert workflow.config == {"recursion_limit": expected_limit}
 
 
 def test_constructor_loads_ordered_workspace_skills(tmp_path):
@@ -357,7 +358,7 @@ def test_chemgraph_routes_standalone_deep_agent_configuration(
         "user_skills_dir": None,
         "system_prompt": "custom workspace prompt",
         "backend": backend,
-        "recursion_limit": 50,
+        "recursion_limit": 200,
         "name": "deepagent",
         "checkpointer": checkpointer,
         "interrupt_on": None,

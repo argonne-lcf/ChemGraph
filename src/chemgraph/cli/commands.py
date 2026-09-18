@@ -6,9 +6,12 @@ starting interactive mode, managing sessions, etc.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from contextvars import ContextVar
+from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
@@ -26,6 +29,7 @@ from chemgraph.agent.interrupts import (
 )
 from chemgraph.skills.runtime import resolve_skill_dirs
 from chemgraph.graphs.deep_agent import normalize_skill_sources
+from chemgraph.agent.usage import UsageCollector, combine_usage
 from chemgraph.memory.store import SessionStore
 from chemgraph.memory.durable import delete_durable_session
 from chemgraph.cli.checkpoint_runtime import (
@@ -43,8 +47,12 @@ from chemgraph.utils.async_utils import run_async_callable
 from chemgraph.cli.formatting import (
     console,
     create_banner,
+    format_action_review,
     format_response,
+    format_token_usage,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Workflow helpers
@@ -452,6 +460,7 @@ def initialize_agent(
 
 # Thread-ID counter for interactive mode so each query gets unique state.
 _thread_counter: int = 0
+_interactive_usage: ContextVar[dict | None] = ContextVar("interactive_usage", default=None)
 
 
 def _next_thread_id() -> int:
@@ -467,6 +476,59 @@ def _next_thread_id() -> int:
     return _thread_counter
 
 
+def print_token_usage(owner: Any) -> None:
+    """Print locally collected counters without adding conversation messages."""
+    usage = getattr(owner, "last_usage", None)
+    if isinstance(usage, dict):
+        console.print(format_token_usage(usage))
+
+
+def _report_failed_usage(operation):
+    """Print failures/cancellation here; callers print successes after answers."""
+    @wraps(operation)
+    def run(owner, *args, **kwargs):
+        result = None
+        cancelled = False
+        try:
+            result = operation(owner, *args, **kwargs)
+            return result
+        except (KeyboardInterrupt, EOFError):
+            cancelled = True
+            raise
+        finally:
+            collector = getattr(owner, "_usage", None)
+            if isinstance(collector, UsageCollector):
+                owners = _interactive_usage.get()
+                if owners is not None:
+                    key = (getattr(collector.store, "db_path", None), collector.session_id)
+                    owners[key] = owner
+                collector.finish(
+                    "cancelled" if cancelled else "failed" if result is None
+                    else getattr(result, "status", "completed")
+                )
+                if result is None:
+                    print_token_usage(owner)
+    return run
+
+
+def _report_session_usage(operation):
+    """Print session counters once when the interactive CLI exits."""
+    @wraps(operation)
+    def run(*args, **kwargs):
+        owners = {}
+        token = _interactive_usage.set(owners)
+        try:
+            return operation(*args, **kwargs)
+        finally:
+            _interactive_usage.reset(token)
+            if owners:
+                totals = combine_usage([owner.session_usage for owner in owners.values()])
+                rendered = format_token_usage(totals).plain
+                console.print("Session " + rendered[0].lower() + rendered[1:], markup=False)
+    return run
+
+
+@_report_failed_usage
 def run_query(
     agent: Any,
     query: str,
@@ -536,6 +598,7 @@ def run_query(
             progress.update(task, description="[yellow]Agent needs your input")
             time.sleep(0.2)
             pending_interrupts = hir.interrupts
+            config = hir.resume_config or config
         except Exception as e:
             progress.update(task, description="[red]Query failed!")
             console.print(f"[red]Error processing query: {e}[/red]")
@@ -586,7 +649,7 @@ def run_query(
         # Resume the graph, streaming messages so tool-call parameters
         # are printed just like the initial invocation.
         resume_config = dict(config)
-        resume_config["recursion_limit"] = agent.recursion_limit
+        resume_config.setdefault("recursion_limit", agent.recursion_limit)
 
         async def _resume_stream():
             """Resume an interrupted graph and stream updates until completion.
@@ -622,6 +685,12 @@ def run_query(
                 raw = exc.args[0] if exc.args else ()
                 found_interrupts.extend(normalize_interrupts(raw))
                 bare_interrupt = not raw
+            except BaseException:
+                try:
+                    await agent.apersist_run_state(resume_config)
+                except Exception:
+                    logger.debug("Could not save the resumed workflow checkpoint.", exc_info=True)
+                raise
             try:
                 snapshot = await agent.workflow.aget_state(resume_config)
             except Exception:
@@ -714,11 +783,10 @@ def _prompt_for_interrupt(payload: Any) -> Any:
         if isinstance(item, dict)
     }
     decisions = []
-    for action in payload["action_requests"]:
+    for index, action in enumerate(payload["action_requests"], start=1):
         if not isinstance(action, dict):
             raise ValueError("Invalid Deep Agent approval request.")
         name = str(action.get("name", "unknown"))
-        args = action.get("args", {})
         config = review_configs.get(name, {})
         allowed = [
             item
@@ -729,19 +797,37 @@ def _prompt_for_interrupt(payload: Any) -> Any:
             raise ValueError(
                 f"Deep Agent action {name!r} does not allow approve/reject."
             )
-        console.print(
-            Panel(
-                f"Tool: {escape(name)}\nArguments: {escape(repr(args))}",
-                title="[bold red]Deep Agent approval required[/bold red]",
-                style="red",
+        console.print(format_action_review(action, index, len(payload["action_requests"])))
+        default = "approve" if "approve" in allowed else "reject"
+        if "approve" in allowed:
+            console.print("1. Approve this action (Enter / y)", markup=False)
+        if "reject" in allowed:
+            shortcut = "Enter / n" if default == "reject" else "n"
+            console.print(f"2. Reject this action ({shortcut})", markup=False)
+            console.print(
+                "Or type instructions to skip this action and revise it.",
+                markup=False,
             )
-        )
-        decision = Prompt.ask(
-            "[bold cyan]Decision[/bold cyan]",
-            choices=allowed,
-            default="reject" if "reject" in allowed else allowed[0],
-        )
-        decisions.append({"type": decision})
+        while True:
+            answer = Prompt.ask(
+                "[bold cyan]Decision[/bold cyan]", default=default, console=console,
+            ).strip()
+            command = answer.casefold()
+            if not command:
+                decision = {"type": default}
+            elif command in {"1", "y", "yes", "a", "approve"}:
+                decision = {"type": "approve"}
+            elif command in {"2", "n", "no", "r", "reject"}:
+                decision = {"type": "reject"}
+            else:
+                decision = {"type": "reject", "message": answer}
+            if decision["type"] in allowed:
+                decisions.append(decision)
+                break
+            console.print(
+                "[yellow]That response is not allowed for this action. "
+                "Use one of the displayed choices.[/yellow]"
+            )
     return {"decisions": decisions}
 
 
@@ -752,6 +838,7 @@ def _main_agent_failure_hint(session: Any) -> None:
         )
 
 
+@_report_failed_usage
 def _run_main_agent_operation(
     session: Any,
     operation: Any,
@@ -1117,6 +1204,7 @@ def _parse_interactive_input(query: str) -> tuple[str, str] | None:
     return name, argument.strip()
 
 
+@_report_session_usage
 def interactive_mode(
     model: str = "gpt-4o-mini",
     workflow: str = "single_agent",
@@ -1124,7 +1212,7 @@ def interactive_mode(
     return_option: str = "state",
     generate_report: bool = True,
     human_supervised: bool = False,
-    recursion_limit: int = 20,
+    recursion_limit: int = 200,
     base_url: Optional[str] = None,
     argo_user: Optional[str] = None,
     verbose: bool = False,
@@ -1360,6 +1448,7 @@ def interactive_mode(
             )
         elif result.assistant_response:
             format_response(result, verbose=verbose)
+            print_token_usage(main_session if main_session is not None else agent)
 
     console.print(
         "[green]Ready! You can now ask computational chemistry questions.[/green]\n"
@@ -1419,6 +1508,10 @@ as "show", "model", or "workflow" are sent to the agent.
 main_agent keeps one durable checkpointed thread. `/resume <id>` restores
 completed, interrupted, or retryable threads. Nested chemistry workers may
 pause to request input.
+
+Deep Agent action reviews: Enter or y approves; n rejects. Type instructions
+instead to skip the displayed action and ask the agent to revise it. Each
+action in a batch is reviewed separately.
 
 Example queries:
   What is the SMILES string for water?
@@ -1591,6 +1684,7 @@ Example queries:
                         )
                     elif restored.assistant_response:
                         format_response(restored, verbose=verbose)
+                        print_token_usage(main_session)
                     continue
                 if main_session is not None:
                     console.print(
@@ -1613,6 +1707,7 @@ Example queries:
                     )
                     if result:
                         format_response(result, verbose=verbose)
+                        print_token_usage(main_session if main_session is not None else agent)
                 continue
             elif command == "retry":
                 if argument:
@@ -1634,6 +1729,7 @@ Example queries:
                     )
                 if result:
                     format_response(result, verbose=verbose)
+                    print_token_usage(main_session if main_session is not None else agent)
                     console.print(f"[dim]Thread: {main_session.thread_id}[/dim]")
                 continue
             elif command == "model":
@@ -1843,6 +1939,7 @@ Example queries:
                 )
             if result:
                 format_response(result, verbose=verbose)
+                print_token_usage(main_session if main_session is not None else agent)
                 if main_session is not None:
                     console.print(f"[dim]Thread: {main_session.thread_id}[/dim]")
                 elif hasattr(agent, "session_id") and agent.session_id:

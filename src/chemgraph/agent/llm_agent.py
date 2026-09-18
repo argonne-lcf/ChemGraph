@@ -10,6 +10,7 @@ from typing import Any, Callable, Collection, List, Optional, Sequence
 import uuid
 
 from chemgraph.agent.events import EventCallback, _AstreamEventCallback
+from chemgraph.agent.usage import UsageCollector, add_callbacks, session_usage
 from chemgraph.agent.interrupts import (
     PendingInterrupt,
     collect_pending_interrupts,
@@ -179,7 +180,7 @@ class ChemGraph:
         - "state"
         by default "last_message"
     recursion_limit : int, optional
-        Maximum number of recursive steps in the workflow, by default 50
+        Maximum number of graph steps in the workflow, by default 200
     max_retries : int, optional
         Maximum number of LLM retry attempts when an agent
         fails to parse its output, by default 1
@@ -250,7 +251,7 @@ class ChemGraph:
         prompts: Optional["PromptConfig"] = None,
         structured_output: bool = False,
         return_option: str = "last_message",
-        recursion_limit: int = 50,
+        recursion_limit: int = 200,
         generate_report: bool = False,
         support_structured_output: bool = True,
         tools: List = None,
@@ -433,6 +434,8 @@ class ChemGraph:
         self.deepagent_auto_approve = deepagent_auto_approve
         self.checkpointer = checkpointer
         self.on_event = on_event
+        self._usage: UsageCollector | None = None
+        self._usage_turns: list[UsageCollector] = []
 
         # Record whether the caller relied on the default system prompt before
         # any mutation below rewrites it (e.g. stripping ask_human when
@@ -894,6 +897,16 @@ class ChemGraph:
         """Current session ID (always available, derived from self.uuid)."""
         return self.uuid
 
+    @property
+    def last_usage(self) -> dict | None:
+        """Provider usage for the latest query, including approval continuations."""
+        return self._usage.summary if self._usage is not None else None
+
+    @property
+    def session_usage(self) -> dict:
+        """All recorded turns in this session, including in-memory usage."""
+        return session_usage(self._usage_turns, self.session_store, self.session_id)
+
     def _ensure_session(self, query: str) -> None:
         """Create a session record on first run if memory is enabled."""
         if self.session_store is None:
@@ -1163,6 +1176,12 @@ class ChemGraph:
                     f"`config` must be a dictionary, got {type(cfg).__name__}"
                 )
 
+            cfg = dict(cfg)
+            cfg["configurable"] = dict(cfg.get("configurable") or {})
+            limit = cfg.get("recursion_limit", self.recursion_limit)
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+                raise ValueError("recursion_limit must be a positive integer.")
+
             # Support top-level thread_id for convenience
             if "thread_id" in cfg:
                 if "configurable" not in cfg:
@@ -1170,7 +1189,7 @@ class ChemGraph:
                 cfg["configurable"]["thread_id"] = str(cfg["thread_id"])
 
             cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
-            cfg["recursion_limit"] = self.recursion_limit
+            cfg["recursion_limit"] = limit
             return cfg
 
         async def _stream_until_interrupt(stream_input, cfg):
@@ -1242,9 +1261,7 @@ class ChemGraph:
         started = time.time()
         event = self.on_event or (lambda _event, _payload: None)
         if self.on_event:
-            callbacks = list(config.get("callbacks") or [])
-            callbacks.append(_AstreamEventCallback(self.on_event, thread_id))
-            config["callbacks"] = callbacks
+            config = add_callbacks(config, [_AstreamEventCallback(self.on_event, thread_id)])
         logger.debug("validated config=%s", config)
 
         # Initialize logging directory before determining inputs or running workflow
@@ -1254,6 +1271,11 @@ class ChemGraph:
 
         # Ensure session exists in memory store
         self._ensure_session(query)
+        usage = self._usage = UsageCollector(
+            self.session_id, thread_id, store=self.session_store, model=self.model_name,
+        )
+        self._usage_turns.append(usage)
+        config = add_callbacks(config, [usage])
 
         # If resuming from a previous session, prepend context
         if resume_from and self.session_store:
@@ -1364,12 +1386,16 @@ class ChemGraph:
                 },
             )
 
-            return await self.afinalize_completed_run(last_state, config, query)
+            result = await self.afinalize_completed_run(last_state, config, query)
+            usage.finish("completed")
+            return result
 
-        except HumanInputRequired:
+        except HumanInputRequired as exc:
             # No human_input_handler configured — propagate so the
             # caller (CLI / UI) can prompt the user and resume.
             await self.apersist_run_state(config)
+            exc.resume_config = config
+            usage.finish("waiting_for_user")
             raise
         except Exception as e:
             event(
@@ -1383,6 +1409,14 @@ class ChemGraph:
                 },
             )
             logger.error(f"Error running workflow {self.workflow_type}: {e}")
+            usage.finish("failed")
+            try:
+                await self.apersist_run_state(config)
+            except Exception:
+                logger.debug("Could not save the failed workflow checkpoint.", exc_info=True)
+            raise
+        except BaseException:
+            usage.finish("cancelled")
             raise
 
 
@@ -1402,6 +1436,7 @@ class HumanInputRequired(Exception):
         interrupts: Sequence[PendingInterrupt] = (),
     ):
         self.question = question
+        self.resume_config: dict | None = None
         self.payload = question if payload is None else payload
         self.interrupts = tuple(interrupts) or (
             PendingInterrupt(id="", payload=self.payload),

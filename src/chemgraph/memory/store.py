@@ -6,6 +6,7 @@ enabling session listing, resumption, and context injection.
 """
 
 import logging
+import json
 import os
 import sqlite3
 import stat
@@ -97,6 +98,21 @@ CREATE INDEX IF NOT EXISTS idx_subagent_runs_session
 
 CREATE INDEX IF NOT EXISTS idx_subagent_messages_run
     ON subagent_messages(run_id, ordinal);
+
+CREATE TABLE IF NOT EXISTS usage_turns (
+    turn_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    thread_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS model_usage (
+    call_id TEXT PRIMARY KEY,
+    turn_id TEXT NOT NULL REFERENCES usage_turns(turn_id) ON DELETE CASCADE,
+    record TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_usage_turn_session ON usage_turns(session_id, thread_id);
+CREATE INDEX IF NOT EXISTS idx_model_usage_turn ON model_usage(turn_id);
 """
 
 _SESSION_COLUMNS = {
@@ -706,6 +722,72 @@ class SessionStore:
         with self._connect() as conn:
             row = conn.execute("SELECT COUNT(*) as cnt FROM sessions").fetchone()
             return row["cnt"]
+
+    def create_usage_turn(self, session_id: str, turn_id: str, thread_id: str) -> None:
+        """Register a turn without resetting an existing continuation."""
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO usage_turns (turn_id, session_id, thread_id, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (turn_id, session_id, thread_id, datetime.now().isoformat()),
+            )
+
+    def save_usage_call(self, turn_id: str, record: dict) -> None:
+        """Commit one cumulative call snapshot; repeated delivery is idempotent."""
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO model_usage (call_id, turn_id, record) VALUES (?, ?, ?) "
+                "ON CONFLICT(call_id) DO UPDATE SET record = excluded.record",
+                (record["call_id"], turn_id, json.dumps(record)),
+            )
+
+    def update_usage_turn(self, turn_id: str, status: str) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE usage_turns SET status = ? WHERE turn_id = ?", (status, turn_id))
+
+    def latest_usage_turn(self, session_id: str, thread_id: str) -> dict | None:
+        """Load the most recent accounting context for checkpoint restoration."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM usage_turns WHERE session_id = ? AND thread_id = ? "
+                "ORDER BY rowid DESC LIMIT 1", (session_id, thread_id),
+            ).fetchone()
+            if row is None:
+                return None
+            records = conn.execute("SELECT record FROM model_usage WHERE turn_id = ?", (row["turn_id"],))
+            return {**dict(row), "records": [json.loads(r["record"]) for r in records]}
+
+    def get_usage(self, session_id: str, turn_id: str | None = None) -> dict:
+        """Return known provider totals and coverage for a session or one turn."""
+        from chemgraph.agent.usage import summarize_usage
+
+        resolved = self._resolve_session_id(session_id)
+        with self._connect() as conn:
+            recorded = conn.execute(
+                "SELECT 1 FROM usage_turns WHERE session_id = ? "
+                "AND (? IS NULL OR turn_id = ?) LIMIT 1", (resolved, turn_id, turn_id),
+            ).fetchone() is not None
+            rows = conn.execute(
+                "SELECT m.record FROM model_usage m JOIN usage_turns t USING (turn_id) "
+                "WHERE t.session_id = ? AND (? IS NULL OR t.turn_id = ?)",
+                (resolved, turn_id, turn_id),
+            ).fetchall()
+        result = summarize_usage([json.loads(row["record"]) for row in rows])
+        result["recorded"] = recorded
+        if not recorded:
+            from chemgraph.agent.usage import TOKEN_FIELDS
+
+            result.update(dict.fromkeys(TOKEN_FIELDS))
+        return result
+
+    def usage_records(self, session_id: str) -> list[dict]:
+        """Read call records for merging durable and in-memory session usage."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT m.record FROM model_usage m JOIN usage_turns t USING (turn_id) "
+                "WHERE t.session_id = ?", (session_id,),
+            ).fetchall()
+        return [json.loads(row["record"]) for row in rows]
 
     # ------------------------------------------------------------------
     # Context building for session resume

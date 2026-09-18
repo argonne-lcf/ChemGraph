@@ -1,9 +1,57 @@
 import json
 
+import pytest
 from langchain_core.messages import AIMessage
+from rich.console import Console
 
 from chemgraph.agent.main_session import MainAgentTurnResult
-from chemgraph.cli.formatting import _content_text, console, format_response
+from chemgraph.cli.formatting import (
+    _content_text, console, format_action_review, format_response,
+)
+
+
+@pytest.mark.parametrize("name,args,expected", [
+    (
+        "execute", {"command": "echo [red]literal[/red]\necho done"},
+        ["echo [red]literal[/red]", "echo done"],
+    ),
+    (
+        "write_file",
+        {"file_path": "/new.txt", "content": "[red]literal[/red]\nsecond line"},
+        ["/new.txt", "[red]literal[/red]", "second line"],
+    ),
+    (
+        "edit_file",
+        {"file_path": "/file.txt", "old_string": "old\n", "new_string": "new\n", "replace_all": True},
+        ["Proposed replacement snippet", "-old", "+new", '"replace_all": true'],
+    ),
+    (
+        "edit_file", {"old_string": "same", "new_string": "same\n"},
+        ["-same", "+same", "No newline at end of file"],
+    ),
+    (
+        "[red]custom[/red]", {"params": {"calculator": "EMT"}},
+        ["[red]custom[/red]", '"calculator": "EMT"'],
+    ),
+    ("custom", {(1, 2): "fallback"}, ["(1, 2)", "fallback"]),
+])
+def test_action_preview_is_literal_and_does_not_read_files(
+    monkeypatch, name, args, expected,
+):
+    from copy import deepcopy
+
+    original = deepcopy(args)
+    monkeypatch.setattr(
+        "builtins.open", lambda *_, **__: pytest.fail("preview must not read files"),
+    )
+    terminal = Console(width=120)
+    with terminal.capture() as capture:
+        terminal.print(format_action_review({"name": name, "args": args}, 2, 3))
+    output = capture.get()
+    assert "Review action 2 of 3" in output
+    assert all(text in output for text in expected)
+    assert "\\n" not in output
+    assert args == original
 
 
 def test_content_text_normalizes_structured_blocks():

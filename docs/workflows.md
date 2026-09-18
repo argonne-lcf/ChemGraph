@@ -65,6 +65,10 @@ chemgraph run --interactive --workflow main_agent --deepagent \
 The standalone interactive workflow keeps one thread while that CLI process is
 open; it does not provide cross-process restoration in this first version.
 File mutations and shell commands require structured approve/reject decisions.
+In both CLI entry points, Enter approves the displayed action, `n` rejects it,
+and typed instructions skip that action and give the agent feedback for a
+revision. Other actions in the batch keep their individual decisions. See the
+[CLI action reviews](cli.md) for shortcuts and previews.
 Headless execution is rejected unless both an explicit workspace and
 `--deepagent-dangerously-skip-approvals` are supplied.
 

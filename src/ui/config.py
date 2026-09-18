@@ -162,7 +162,7 @@ def get_default_config() -> Dict[str, Any]:
             "structured": False,
             "report": False,
             "thread": 1,
-            "recursion_limit": 20,
+            "recursion_limit": 200,
             "human_supervised": False,
             "verbose": False,
         },

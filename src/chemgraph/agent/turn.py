@@ -16,6 +16,8 @@ from chemgraph.agent.events import (
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.models.loader import load_chat_model
 from chemgraph.models.settings import LLMSettings
+from chemgraph.agent.usage import UsageCollector
+from chemgraph.memory.store import SessionStore
 from chemgraph.prompt.single_agent_prompt import (
     formatter_prompt as default_formatter_prompt,
 )
@@ -151,6 +153,7 @@ class TurnResult:
     terminal_tool: str | None
     thread_id: str
     duration_s: float
+    usage: dict[str, Any] | None = None
 
 
 _TOOL_ROLES = {"tool", "tool_message", "toolmessage"}
@@ -271,52 +274,62 @@ async def run_turn(
     structured_output: bool = False,
     generate_report: bool = False,
     report_prompt: str = default_report_prompt,
-    recursion_limit: int = 50,
+    recursion_limit: int = 200,
     thread_id: str | None = None,
     terminal_tool_names: Collection[str] = (),
     human_supervised: bool = False,
     on_event: EventCallback | None = None,
+    session_store: SessionStore | None = None,
 ) -> TurnResult:
     """Run one bounded single-agent ChemGraph LangGraph turn."""
 
     started = time.time()
     thread_id = thread_id or str(uuid.uuid4())
     callbacks = [_TurnEventCallback(on_event, thread_id)] if on_event else []
+    if session_store is not None:
+        try:
+            if session_store.get_session(thread_id) is None:
+                session_store.create_session(
+                    session_id=thread_id, model_name=model_name, workflow_type="single_agent",
+                    title=SessionStore.generate_title(query),
+                )
+        except Exception:
+            logger.warning("Could not register usage session.", exc_info=True)
+    usage = UsageCollector(thread_id, thread_id, store=session_store, model=model_name)
+    callbacks.append(usage)
     event = on_event or (lambda _event, _payload: None)
-    event(
-        "workflow_started",
-        {
-            "workflow_type": "single_agent",
-            "thread_id": thread_id,
-            "tool_names": [getattr(tool, "name", str(tool)) for tool in tools or []],
-        },
-    )
-    llm = _load_turn_llm(
-        model_name=model_name,
-        base_url=base_url,
-        api_key=api_key,
-        argo_user=argo_user,
-    )
-    workflow = construct_single_agent_graph(
-        llm,
-        system_prompt,
-        structured_output,
-        formatter_prompt,
-        generate_report,
-        report_prompt,
-        tools,
-        human_supervised=human_supervised,
-        terminal_tool_names=terminal_tool_names,
-    )
-    config: dict[str, Any] = {
-        "configurable": {"thread_id": thread_id},
-        "recursion_limit": recursion_limit,
-    }
-    if callbacks:
-        config["callbacks"] = callbacks
-
     last_state: Any = None
     try:
+        event(
+            "workflow_started",
+            {
+                "workflow_type": "single_agent",
+                "thread_id": thread_id,
+                "tool_names": [getattr(tool, "name", str(tool)) for tool in tools or []],
+            },
+        )
+        llm = _load_turn_llm(
+            model_name=model_name,
+            base_url=base_url,
+            api_key=api_key,
+            argo_user=argo_user,
+        )
+        workflow = construct_single_agent_graph(
+            llm,
+            system_prompt,
+            structured_output,
+            formatter_prompt,
+            generate_report,
+            report_prompt,
+            tools,
+            human_supervised=human_supervised,
+            terminal_tool_names=terminal_tool_names,
+        )
+        config: dict[str, Any] = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": recursion_limit,
+            "callbacks": callbacks,
+        }
         async for state in workflow.astream(
             {"messages": query},
             stream_mode="values",
@@ -324,6 +337,7 @@ async def run_turn(
         ):
             last_state = state
     except Exception as exc:
+        usage.finish("failed")
         event(
             "workflow_finished",
             {
@@ -335,8 +349,12 @@ async def run_turn(
             },
         )
         raise
+    except BaseException:
+        usage.finish("cancelled")
+        raise
 
     if last_state is None:
+        usage.finish("failed")
         raise RuntimeError("ChemGraph turn produced no states.")
 
     messages = _state_messages(last_state)
@@ -349,7 +367,9 @@ async def run_turn(
         terminal_tool=terminal_tool,
         thread_id=thread_id,
         duration_s=round(time.time() - started, 3),
+        usage=usage.summary,
     )
+    usage.finish("completed")
     event(
         "workflow_finished",
         {
@@ -362,4 +382,3 @@ async def run_turn(
         },
     )
     return result
-

@@ -64,6 +64,7 @@ def configure_logging(level: int = logging.WARNING) -> None:
     # Configure the root "chemgraph" namespace logger.
     root = logging.getLogger("chemgraph")
     root.setLevel(level)
+    root.propagate = False
     if not root.handlers:
         handler = logging.StreamHandler(sys.stderr)
         formatter = logging.Formatter(_LOG_FORMAT)

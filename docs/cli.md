@@ -37,9 +37,37 @@ Common options:
 | `-s`, `--structured` | Request a structured final response |
 | `-r`, `--report` | Enable HTML report generation |
 | `--human-supervised` | Allow supported tools to pause for confirmation |
-| `--recursion-limit` | Maximum graph steps; defaults to 20 |
+| `--recursion-limit` | Maximum graph steps; defaults to 200 |
 | `--output-file` | Save the printed result to a file |
 | `-v`, `-vv` | INFO or DEBUG diagnostics |
+
+The recursion limit counts graph steps, including middleware and tool execution,
+not just model calls. Raising it allows longer workflows; it does not reduce
+token consumption. Explicit configuration and saved session limits are retained.
+
+After each query, the CLI prints provider-reported token usage locally:
+
+```text
+Tokens: 12,340 input · 520 output · 12,860 total
+```
+
+This is the total for that user turn, including all model calls, delegated
+workers, and approval continuations. `/retry` adds to the same turn's total.
+Input includes conversation history sent on each call, so these counts are not
+the size of a single context window. Cached input and reasoning output are
+labeled separately when reported and are already included in input/output.
+Missing usage is displayed as unavailable or partial, never assumed to be zero.
+
+On leaving interactive mode with `/quit` or EOF, `Session tokens:` reports the
+recorded totals for the sessions used in that CLI process, including any restored
+session history. Model/workflow switches retain the earlier session's counts.
+Ctrl+C during a query prints the available turn counts and keeps the REPL open.
+Failed queries also retain their reported usage.
+
+These lines use numeric counters already returned by the provider. They make no
+additional model requests and are not inserted into the conversation or saved
+answer. Usage is persisted per call in the existing session database when memory
+is enabled. Older sessions have no reconstructed usage for their historical calls.
 
 The legacy no-subcommand form, such as `chemgraph -q "..."`, remains supported,
 but new scripts should use `chemgraph run`.
@@ -103,6 +131,22 @@ chemgraph run --interactive --workflow main_agent --deepagent \
 The direct interactive workflow keeps one process-local thread until the model
 or workflow changes. It is not restored across CLI processes. Shell and file
 mutations use structured approve/reject prompts.
+
+At each action review, press **Enter** to approve the displayed action. You can
+also enter `1`, `y`, `yes`, `a`, or `approve`. To reject it, enter `2`, `n`, `no`,
+`r`, or `reject`. These shortcuts are case-insensitive.
+
+Type any other nonempty text to **skip that action and give the agent feedback**,
+for example `Use EMT instead of MACE for this test.` The agent receives your
+instructions and can propose a revised action, which is reviewed normally.
+Each action in a batch is reviewed separately; feedback does not discard other
+decisions. Custom policies expose only the permitted choices; Enter approves
+only when approval is allowed. Ctrl+C and EOF do not submit a decision.
+
+Reviews show multiline commands, file content, and proposed replacement
+snippets. Replacement diffs use the requested before/after text, not a read of
+the current file. The startup host-access confirmation is separate from these
+per-action reviews.
 
 The selected directory is mounted for file tools at `/workspace`. Thus,
 `--deepagent-workspace test/` makes `/workspace/example.py` refer to

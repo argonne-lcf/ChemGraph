@@ -114,7 +114,7 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
         "--recursion-limit",
         type=int,
         default=None,
-        help="Max LangGraph recursion steps per query (default: 50).",
+        help="Maximum graph steps per query (default: 200).",
     )
     parser.add_argument(
         "--max-queries",
@@ -258,7 +258,7 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             "workflow_types": args.workflows or ["single_agent"],
             "output_dir": args.output_dir,
             "structured_output": not args.no_structured_output,
-            "recursion_limit": args.recursion_limit or 50,
+            "recursion_limit": args.recursion_limit or 200,
             "tags": args.tags or [],
             "max_queries": args.max_queries or 0,
             "config_file": args.config,

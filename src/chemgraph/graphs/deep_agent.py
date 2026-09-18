@@ -128,7 +128,7 @@ def construct_deep_agent_graph(
     system_prompt: str = DEFAULT_DEEPAGENT_PROMPT,
     backend: BackendProtocol | None = None,
     interrupt_on: dict[str, Any] | None | object = _DEFAULT_INTERRUPT_POLICY,
-    recursion_limit: int = 50,
+    recursion_limit: int = 200,
     checkpointer: Any = _DEFAULT_CHECKPOINTER,
     name: str = "deepagent",
 ):
