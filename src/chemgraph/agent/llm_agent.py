@@ -1163,6 +1163,12 @@ class ChemGraph:
                     f"`config` must be a dictionary, got {type(cfg).__name__}"
                 )
 
+            cfg = dict(cfg)
+            cfg["configurable"] = dict(cfg.get("configurable") or {})
+            limit = cfg.get("recursion_limit", self.recursion_limit)
+            if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+                raise ValueError("recursion_limit must be a positive integer.")
+
             # Support top-level thread_id for convenience
             if "thread_id" in cfg:
                 if "configurable" not in cfg:
@@ -1170,7 +1176,7 @@ class ChemGraph:
                 cfg["configurable"]["thread_id"] = str(cfg["thread_id"])
 
             cfg.setdefault("configurable", {}).setdefault("thread_id", "1")
-            cfg["recursion_limit"] = self.recursion_limit
+            cfg["recursion_limit"] = limit
             return cfg
 
         async def _stream_until_interrupt(stream_input, cfg):
@@ -1366,10 +1372,11 @@ class ChemGraph:
 
             return await self.afinalize_completed_run(last_state, config, query)
 
-        except HumanInputRequired:
+        except HumanInputRequired as exc:
             # No human_input_handler configured — propagate so the
             # caller (CLI / UI) can prompt the user and resume.
             await self.apersist_run_state(config)
+            exc.resume_config = config
             raise
         except Exception as e:
             event(
@@ -1402,6 +1409,7 @@ class HumanInputRequired(Exception):
         interrupts: Sequence[PendingInterrupt] = (),
     ):
         self.question = question
+        self.resume_config: dict | None = None
         self.payload = question if payload is None else payload
         self.interrupts = tuple(interrupts) or (
             PendingInterrupt(id="", payload=self.payload),

@@ -537,6 +537,7 @@ def run_query(
             progress.update(task, description="[yellow]Agent needs your input")
             time.sleep(0.2)
             pending_interrupts = hir.interrupts
+            config = hir.resume_config or config
         except Exception as e:
             progress.update(task, description="[red]Query failed!")
             console.print(f"[red]Error processing query: {e}[/red]")
@@ -587,7 +588,7 @@ def run_query(
         # Resume the graph, streaming messages so tool-call parameters
         # are printed just like the initial invocation.
         resume_config = dict(config)
-        resume_config["recursion_limit"] = agent.recursion_limit
+        resume_config.setdefault("recursion_limit", agent.recursion_limit)
 
         async def _resume_stream():
             """Resume an interrupted graph and stream updates until completion.
