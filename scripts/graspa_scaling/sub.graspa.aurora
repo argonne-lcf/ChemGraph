@@ -1,0 +1,11 @@
+#!/bin/bash -l
+#PBS -N graspa_pr244_scaling
+#PBS -l select=512,walltime=03:00:00,place=scatter
+#PBS -l filesystems=home:flare
+#PBS -q prod
+#PBS -A IQC
+#PBS -j oe
+
+set -euo pipefail
+cd "${PBS_O_WORKDIR:?Submit from the PR checkout}"
+exec bash scripts/graspa_scaling/run.sh
