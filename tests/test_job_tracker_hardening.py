@@ -6,6 +6,7 @@
 
 import time
 from concurrent.futures import Future
+from unittest.mock import Mock
 
 from chemgraph.execution.job_tracker import JobTracker
 
@@ -42,3 +43,18 @@ def test_register_batch_does_not_block_for_plain_futures():
     # Must not wait out the 3s globus task-id deadline for a plain future.
     assert elapsed < 1.0, f"register_batch blocked for {elapsed:.2f}s"
     fut.set_result({"status": "success"})  # let the future resolve cleanly
+
+
+def test_registration_does_not_reprocess_a_result_collected_by_a_poll(monkeypatch):
+    tracker = JobTracker()
+    future = Future()
+    future.set_result({"status": "success"})
+    post = Mock(side_effect=lambda meta, raw: {**meta, **raw})
+
+    def poll_during_registration(tasks, timeout):
+        tracker.get_status(next(iter(tracker._batches)))
+
+    monkeypatch.setattr(tracker, "_wait_for_globus_task_ids", poll_during_registration)
+    batch_id = tracker.register_batch("tool", [({"task_id": "one"}, future)], post_fn=post)
+    assert tracker.get_results(batch_id)["status"] == "completed"
+    post.assert_called_once()

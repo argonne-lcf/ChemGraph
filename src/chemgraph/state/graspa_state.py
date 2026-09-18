@@ -32,15 +32,11 @@ class ExecutorState(TypedDict):
 
 class PlannerState(TypedDict):
     messages: Annotated[list, add_messages]
-    next_step: Literal[
-        "batch_orchestrator",
-        "executor_subgraph",
-        "insight_analyst",
-        "FINISH",
-    ]
-    tasks: list[dict[str, Any]]
-    executor_results: Annotated[list, add_messages]
-    executor_logs: Annotated[dict[str, list], merge_dicts]
+    run_directory: str
+    plan_path: str
+    executor_results: dict[str, dict]
+    analysis: dict
+    workflow_status: str
 
 
 class ExecutorTask(BaseModel):

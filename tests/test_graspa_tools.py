@@ -208,11 +208,11 @@ def test_ensemble_requires_unambiguous_nonempty_request(updates):
         graspa_input_schema_ensemble(adsorbate="H2O", **updates)
 
 
-def test_ensemble_schema_does_not_advertise_deferred_controls():
+def test_ensemble_schema_advertises_supported_controls():
     properties = graspa_input_schema_ensemble.model_json_schema()["properties"]
-    assert not {
+    assert {
         "output_directory", "timeout_seconds", "discovery_timeout_seconds"
-    }.intersection(properties)
+    } <= properties.keys()
     single_properties = graspa_input_schema.model_json_schema()["properties"]
     assert {"output_directory", "timeout_seconds"} <= single_properties.keys()
 
@@ -232,9 +232,27 @@ def test_ensemble_schema_does_not_advertise_deferred_controls():
         ("discovery_timeout_seconds", None),
     ],
 )
-def test_ensemble_rejects_deferred_controls(source, field, value):
-    with pytest.raises(ValueError, match=f"Unsupported ensemble controls: {field}"):
-        graspa_input_schema_ensemble(adsorbate="H2O", **source, **{field: value})
+def test_ensemble_accepts_supported_controls(source, field, value):
+    params = graspa_input_schema_ensemble(adsorbate="H2O", **source, **{field: value})
+    assert getattr(params, field) == value
+    assert graspa_input_schema_ensemble.model_validate(params.model_dump()) == params
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"output_directory": ""},
+        {"output_directory": "runs", "output_result_file": "other/raspa.log"},
+        {"timeout_seconds": 0},
+        {"discovery_timeout_seconds": 0},
+        {"discovery_timeout_seconds": -1},
+        {"discovery_timeout_seconds": float("nan")},
+        {"discovery_timeout_seconds": float("inf")},
+    ],
+)
+def test_ensemble_controls_are_validated(updates):
+    with pytest.raises(ValueError):
+        graspa_input_schema_ensemble(adsorbate="H2O", input_structures="local", **updates)
 
 
 @pytest.mark.parametrize(

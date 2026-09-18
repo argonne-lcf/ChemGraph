@@ -166,14 +166,13 @@ def test_replacement_rejects_a_canonical_name_owned_as_an_alias():
     assert registry.resolve_name("second") == "first"
 
 
-def test_graspa_mcp_requires_both_external_tool_groups():
+def test_graspa_mcp_requires_executor_tools_only():
     registry = AgentRegistry()
 
     status = registry.availability("graspa_mcp")
     assert status.available is False
     assert status.issues == (
         "missing non-empty constructor argument 'executor_tools'",
-        "missing non-empty constructor argument 'analysis_tools'",
     )
 
     with pytest.raises(RegistryUnavailableError, match="executor_tools"):
@@ -223,11 +222,11 @@ def test_batch_validation_occurs_before_any_worker_is_built(monkeypatch):
     calls = []
     monkeypatch.setattr(registry, "_get_constructor", lambda _spec: calls.append)
 
-    with pytest.raises(RegistryUnavailableError, match="analysis_tools"):
+    with pytest.raises(RegistryUnavailableError, match="executor_tools"):
         registry.as_subagents(
             ["single_agent", "graspa_mcp"],
             llm=object(),
-            options={"graspa_mcp": {"executor_tools": [calculator]}},
+            options={"graspa_mcp": {"analysis_tools": [calculator]}},
         )
     assert calls == []
 
