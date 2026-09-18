@@ -271,7 +271,7 @@ async def run_turn(
     structured_output: bool = False,
     generate_report: bool = False,
     report_prompt: str = default_report_prompt,
-    recursion_limit: int = 50,
+    recursion_limit: int = 200,
     thread_id: str | None = None,
     terminal_tool_names: Collection[str] = (),
     human_supervised: bool = False,

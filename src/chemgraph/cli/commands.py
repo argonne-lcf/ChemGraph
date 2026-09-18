@@ -43,6 +43,7 @@ from chemgraph.utils.async_utils import run_async_callable
 from chemgraph.cli.formatting import (
     console,
     create_banner,
+    format_action_review,
     format_response,
 )
 
@@ -714,11 +715,10 @@ def _prompt_for_interrupt(payload: Any) -> Any:
         if isinstance(item, dict)
     }
     decisions = []
-    for action in payload["action_requests"]:
+    for index, action in enumerate(payload["action_requests"], start=1):
         if not isinstance(action, dict):
             raise ValueError("Invalid Deep Agent approval request.")
         name = str(action.get("name", "unknown"))
-        args = action.get("args", {})
         config = review_configs.get(name, {})
         allowed = [
             item
@@ -729,19 +729,37 @@ def _prompt_for_interrupt(payload: Any) -> Any:
             raise ValueError(
                 f"Deep Agent action {name!r} does not allow approve/reject."
             )
-        console.print(
-            Panel(
-                f"Tool: {escape(name)}\nArguments: {escape(repr(args))}",
-                title="[bold red]Deep Agent approval required[/bold red]",
-                style="red",
+        console.print(format_action_review(action, index, len(payload["action_requests"])))
+        default = "approve" if "approve" in allowed else "reject"
+        if "approve" in allowed:
+            console.print("1. Approve this action (Enter / y)", markup=False)
+        if "reject" in allowed:
+            shortcut = "Enter / n" if default == "reject" else "n"
+            console.print(f"2. Reject this action ({shortcut})", markup=False)
+            console.print(
+                "Or type instructions to skip this action and revise it.",
+                markup=False,
             )
-        )
-        decision = Prompt.ask(
-            "[bold cyan]Decision[/bold cyan]",
-            choices=allowed,
-            default="reject" if "reject" in allowed else allowed[0],
-        )
-        decisions.append({"type": decision})
+        while True:
+            answer = Prompt.ask(
+                "[bold cyan]Decision[/bold cyan]", default=default, console=console,
+            ).strip()
+            command = answer.casefold()
+            if not command:
+                decision = {"type": default}
+            elif command in {"1", "y", "yes", "a", "approve"}:
+                decision = {"type": "approve"}
+            elif command in {"2", "n", "no", "r", "reject"}:
+                decision = {"type": "reject"}
+            else:
+                decision = {"type": "reject", "message": answer}
+            if decision["type"] in allowed:
+                decisions.append(decision)
+                break
+            console.print(
+                "[yellow]That response is not allowed for this action. "
+                "Use one of the displayed choices.[/yellow]"
+            )
     return {"decisions": decisions}
 
 
@@ -1124,7 +1142,7 @@ def interactive_mode(
     return_option: str = "state",
     generate_report: bool = True,
     human_supervised: bool = False,
-    recursion_limit: int = 20,
+    recursion_limit: int = 200,
     base_url: Optional[str] = None,
     argo_user: Optional[str] = None,
     verbose: bool = False,
@@ -1419,6 +1437,10 @@ as "show", "model", or "workflow" are sent to the agent.
 main_agent keeps one durable checkpointed thread. `/resume <id>` restores
 completed, interrupted, or retryable threads. Nested chemistry workers may
 pause to request input.
+
+Deep Agent action reviews: Enter or y approves; n rejects. Type instructions
+instead to skip the displayed action and ask the agent to revise it. Each
+action in a batch is reviewed separately.
 
 Example queries:
   What is the SMILES string for water?

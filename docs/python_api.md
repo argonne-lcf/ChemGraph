@@ -146,6 +146,17 @@ supported. Setting
 `deepagent_auto_approve=True` removes this boundary and should be limited to an
 externally isolated, explicitly trusted workspace.
 
+Handlers can reject an action with feedback using the existing decision format:
+
+```python
+response = {"decisions": [{"type": "reject", "message": "Use EMT instead of MACE."}]}
+```
+
+The rejected tool is not executed; its feedback is returned to the model, and
+revised tool calls follow the normal approval policy. Supply one decision per
+action in request order. The CLI builds this response from typed guidance;
+Enter at a CLI review approves only that action, not future actions.
+
 The same constructor can be composed as a worker:
 
 ```python

@@ -117,7 +117,7 @@ dataset = "evaluation/questions.json"
 workflow_types = ["single_agent"]
 judge_type = "structured"
 structured_output = true
-recursion_limit = 50
+recursion_limit = 200
 max_queries = 0
 ```
 

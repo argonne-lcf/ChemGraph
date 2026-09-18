@@ -61,7 +61,7 @@ class MainAgentSession:
         workflow: Any,
         *,
         thread_id: str | None = None,
-        recursion_limit: int = 50,
+        recursion_limit: int = 200,
         session_store: SessionStore | None = None,
         session_metadata: MainAgentSessionMetadata | None = None,
         on_event: EventCallback | None = None,

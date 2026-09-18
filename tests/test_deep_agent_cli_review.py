@@ -1,5 +1,7 @@
 """CLI configuration and error-handling regressions for Deep Agent."""
 
+import io
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -83,6 +85,28 @@ def test_missing_workflow_defaults_to_single_agent(dispatch):
         cli_main.create_argument_parser().parse_args(["run", "--interactive"])
     )
     assert dispatch["workflow"] == "single_agent"
+
+
+@pytest.mark.parametrize("subcommand", [[], ["run"]])
+@pytest.mark.parametrize(
+    "config_limit,flag,expected",
+    [(None, None, 200), ({}, None, 200), (17, None, 17),
+     (None, 33, 33), ({}, 33, 33), (17, 33, 33)],
+)
+def test_recursion_limit_defaults_and_overrides(
+    tmp_path, monkeypatch, dispatch, subcommand, config_limit, flag, expected
+):
+    argv = [*subcommand, "--interactive"]
+    if config_limit is not None:
+        path = tmp_path / "config.toml"
+        general = {} if config_limit == {} else {"recursion_limit": config_limit}
+        path.write_text(toml.dumps({"general": general}))
+        argv += ["--config", str(path)]
+    if flag is not None:
+        argv += ["--recursion-limit", str(flag)]
+    monkeypatch.setattr(sys, "argv", ["chemgraph", *argv])
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
+    assert dispatch["recursion_limit"] == expected
 
 
 @pytest.mark.parametrize(
@@ -174,6 +198,91 @@ def _review(allowed):
         "action_requests": [{"name": "execute", "args": {"command": "test"}}],
         "review_configs": [{"action_name": "execute", "allowed_decisions": allowed}],
     }
+
+
+def _review_terminal(monkeypatch, text):
+    output = io.StringIO()
+    monkeypatch.setattr(sys, "stdin", io.StringIO(text))
+    monkeypatch.setattr(commands, "console", Console(file=output, width=120))
+    return output
+
+
+@pytest.mark.parametrize("answer", ["", "  ", "1", "y", "YES", "a", " Approve "])
+def test_review_approves_from_terminal_input(monkeypatch, answer):
+    output = _review_terminal(monkeypatch, answer + "\n")
+    assert commands._prompt_for_interrupt(_review(["approve", "reject"])) == {
+        "decisions": [{"type": "approve"}]
+    }
+    assert "Enter / y" in output.getvalue()
+
+
+@pytest.mark.parametrize("answer", ["2", "n", "NO", "r", " Reject "])
+def test_review_rejects_from_terminal_input(monkeypatch, answer):
+    _review_terminal(monkeypatch, answer + "\n")
+    assert commands._prompt_for_interrupt(_review(["approve", "reject"])) == {
+        "decisions": [{"type": "reject"}]
+    }
+
+
+def test_review_feedback_preserves_text(monkeypatch):
+    _review_terminal(monkeypatch, "  Use EMT  instead of [red]MACE[/red].  \n")
+    assert commands._prompt_for_interrupt(_review(["approve", "reject"])) == {
+        "decisions": [{"type": "reject", "message": "Use EMT  instead of [red]MACE[/red]."}]
+    }
+
+
+@pytest.mark.parametrize("allowed,text,expected", [
+    (["approve"], "n\nUse EMT\n\n", {"type": "approve"}),
+    (["reject"], "y\n\n", {"type": "reject"}),
+    (["reject"], "y\nUse EMT\n", {"type": "reject", "message": "Use EMT"}),
+])
+def test_review_respects_restricted_policy(monkeypatch, allowed, text, expected):
+    output = _review_terminal(monkeypatch, text)
+    assert commands._prompt_for_interrupt(_review(allowed)) == {"decisions": [expected]}
+    assert "not allowed" in output.getvalue()
+    assert ("1. Approve" in output.getvalue()) == ("approve" in allowed)
+    assert ("skip this action" in output.getvalue()) == ("reject" in allowed)
+
+
+def test_review_batches_keep_order_and_interrupt_ids(monkeypatch):
+    output = _review_terminal(monkeypatch, "\nn\nUse EMT\ny\n")
+    batch = _review(["approve", "reject"])
+    batch["action_requests"] *= 3
+    session = _FakeMainSession([
+        _turn_result(
+            PendingInterrupt("batch", batch),
+            PendingInterrupt("other", _review(["approve"])),
+        ),
+        _turn_result(),
+    ])
+    assert commands.run_main_agent_query(session, "test") is not None
+    assert session.calls[-1] == ("resume", {
+        "batch": {"decisions": [
+            {"type": "approve"}, {"type": "reject"},
+            {"type": "reject", "message": "Use EMT"},
+        ]},
+        "other": {"decisions": [{"type": "approve"}]},
+    })
+    assert "Review action 3 of 3" in output.getvalue()
+
+
+@pytest.mark.parametrize("error", [EOFError, KeyboardInterrupt])
+def test_cancelled_review_never_resumes(monkeypatch, error):
+    _review_terminal(monkeypatch, "")
+
+    def cancel(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr("builtins.input", cancel)
+    session = _FakeMainSession([
+        _turn_result(PendingInterrupt("review", _review(["approve", "reject"]))),
+    ])
+    if error is KeyboardInterrupt:
+        with pytest.raises(KeyboardInterrupt):
+            commands.run_main_agent_query(session, "test")
+    else:
+        assert commands.run_main_agent_query(session, "test") is None
+    assert session.calls == [("run", "test")]
 
 
 @pytest.mark.parametrize("main_agent", [False, True])

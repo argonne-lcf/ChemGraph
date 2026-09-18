@@ -164,8 +164,8 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--recursion-limit",
         type=int,
-        default=20,
-        help="Recursion limit for agent workflows (default: 20)",
+        default=200,
+        help="Maximum graph steps for agent workflows (default: 200)",
     )
     parser.add_argument(
         "--interactive", action="store_true", help="Start interactive mode"
@@ -437,7 +437,7 @@ def load_config(config_file: str) -> Dict[str, Any]:
                 "structured": False,
                 "report": False,
                 "thread": 1,
-                "recursion_limit": 20,
+                "recursion_limit": 200,
                 "human_supervised": False,
                 "enable_deepagent": False,
                 "deepagent_workspace": None,

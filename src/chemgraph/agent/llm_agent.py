@@ -179,7 +179,7 @@ class ChemGraph:
         - "state"
         by default "last_message"
     recursion_limit : int, optional
-        Maximum number of recursive steps in the workflow, by default 50
+        Maximum number of graph steps in the workflow, by default 200
     max_retries : int, optional
         Maximum number of LLM retry attempts when an agent
         fails to parse its output, by default 1
@@ -250,7 +250,7 @@ class ChemGraph:
         prompts: Optional["PromptConfig"] = None,
         structured_output: bool = False,
         return_option: str = "last_message",
-        recursion_limit: int = 50,
+        recursion_limit: int = 200,
         generate_report: bool = False,
         support_structured_output: bool = True,
         tools: List = None,

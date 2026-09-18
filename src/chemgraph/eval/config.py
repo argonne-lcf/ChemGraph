@@ -81,7 +81,7 @@ class BenchmarkConfig(BaseModel):
         description="Enable structured output on ChemGraph agent.",
     )
     recursion_limit: int = Field(
-        default=50,
+        default=200,
         description="Max LangGraph recursion steps per query.",
     )
     judge_model: Optional[str] = Field(
