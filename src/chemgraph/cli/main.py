@@ -109,6 +109,14 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         help="Enable the ask_human tool for human-in-the-loop interaction",
     )
     parser.add_argument(
+        "--tool", dest="local_tool_names", action="append", metavar="NAME",
+        help=(
+            "Restrict deep_agent's on-demand catalog to these names; repeat to add "
+            "tools (default: non-interactive built-ins; --human-supervised also "
+            "enables interactive tools)"
+        ),
+    )
+    parser.add_argument(
         "--deepagent",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -627,6 +635,29 @@ def _handle_run(args: argparse.Namespace) -> None:
             )
             sys.exit(2)
 
+    # Register metadata without importing local implementations or sending schemas.
+    deepagent_tool_registry = None
+    cli_tools = getattr(args, "local_tool_names", None)
+    local_names = cli_tools if cli_tools is not None else config.get("tools")
+    if cli_tools is not None and args.workflow != "deep_agent":
+        console.print("[red]--tool requires -w deep_agent.[/red]")
+        sys.exit(2)
+    if (interactive or args.workflow == "deep_agent") and local_names is not None:
+        from chemgraph.registry.tools import RegistryError, ToolRegistry
+
+        try:
+            if not isinstance(local_names, list) or not all(
+                isinstance(name, str) and name.strip() for name in local_names
+            ):
+                raise ValueError("tools must be a list of non-empty registry names")
+            catalog = ToolRegistry()
+            deepagent_tool_registry = ToolRegistry(
+                catalog.get_spec(name) for name in dict.fromkeys(local_names)
+            )
+        except (RegistryError, ValueError) as exc:
+            console.print(f"[red]Invalid local tools: {escape(str(exc))}[/red]")
+            sys.exit(2)
+
     # ---- MCP tool loading ----------------------------------------------
     mcp_tools = None
     mcp_url = getattr(args, "mcp_url", None) or config.get("mcp_url")
@@ -661,6 +692,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             argo_user=argo_user,
             verbose=(args.verbose > 0),
             tools=mcp_tools,
+            deepagent_tool_registry=deepagent_tool_registry,
             enable_deepagent=enable_deepagent,
             deepagent_workspace=deepagent_workspace,
             deepagent_skill_dirs=deepagent_skill_dirs,
@@ -736,6 +768,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         verbose=(args.verbose > 0),
         human_supervised=args.human_supervised,
         tools=mcp_tools,
+        deepagent_tool_registry=deepagent_tool_registry,
         on_event=trace.on_event if trace else None,
         deepagent_workspace=deepagent_workspace,
         deepagent_skill_dirs=deepagent_skill_dirs,

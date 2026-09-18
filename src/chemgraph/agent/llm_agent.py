@@ -208,6 +208,12 @@ class ChemGraph:
     deepagent_backend : BackendProtocol, optional
         Backend used by the workspace Deep Agent. When omitted, its files are
         stored in checkpointed agent state.
+    deepagent_tool_registry : ToolRegistry, optional
+        Local tools available on demand to the standalone ``deep_agent``.
+        Defaults to the built-in catalog, excluding already attached names and
+        interactive tools unless ``human_supervised`` is enabled. Explicit
+        catalogs and attached tools count as an opt-in to interactive tools.
+        Pass an empty ``ToolRegistry([])`` to disable discovery.
     deepagent_discover_skills : bool, optional
         Discover personal and project skill directories for local workspaces.
         Bundled skills are always available. Defaults to True.
@@ -267,7 +273,10 @@ class ChemGraph:
         deepagent_discover_skills: bool = True,
         deepagent_user_skills_dir: str | None = None,
         deepagent_skill_dirs: Sequence[str] | None = None,
+        deepagent_tool_registry: Any | None = None,
     ):
+        if deepagent_tool_registry is not None and workflow_type != "deep_agent":
+            raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."
@@ -400,6 +409,21 @@ class ChemGraph:
         self.terminal_tool_names = tuple(terminal_tool_names)
         self.enable_deepagent = enable_deepagent
         self.deepagent_backend = deepagent_backend
+        if workflow_type == "deep_agent" and deepagent_tool_registry is None:
+            from chemgraph.registry.tools import ToolRegistry
+
+            attached_names = {
+                entry.get("function", entry).get("name", entry.get("type"))
+                if isinstance(entry, dict)
+                else getattr(entry, "name", getattr(entry, "__name__", None))
+                for entry in tools or ()
+            }
+            deepagent_tool_registry = ToolRegistry(
+                spec for spec in ToolRegistry().specs()
+                if spec.name not in attached_names
+                and (human_supervised or not spec.interactive)
+            )
+        self.deepagent_tool_registry = deepagent_tool_registry
         self.deepagent_skills = normalized_deepagent_skills
         self.deepagent_skill_dirs = normalized_skill_dirs
         self.deepagent_discover_skills = deepagent_discover_skills
@@ -597,6 +621,8 @@ class ChemGraph:
             )
         elif self.workflow_type == "deep_agent":
             deepagent_options: dict[str, Any] = {}
+            if self.deepagent_tool_registry is not None:
+                deepagent_options["tool_registry"] = self.deepagent_tool_registry
             if self.checkpointer is not None:
                 deepagent_options["checkpointer"] = self.checkpointer
             if self.deepagent_auto_approve:

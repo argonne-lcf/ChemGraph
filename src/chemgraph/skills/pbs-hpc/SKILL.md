@@ -15,8 +15,9 @@ allocation, endpoint, private path, or environment.
 
 Check whether `execute` runs on that host. A local shell on a laptop cannot run
 remote PBS commands merely because a skill or an HPC MCP server is attached.
-Use attached HPC tools where available; otherwise prepare the script and state
-where the user must submit it.
+When the shell runs on the submission host, write the job files and submit with
+PBS commands directly. Otherwise use suitable attached HPC tools, or prepare the
+script and state where the user must submit it.
 
 Read the applicable site reference before choosing launch settings:
 [Polaris](references/polaris.md), [Aurora](references/aurora.md), or
@@ -33,6 +34,10 @@ operations and environment troubleshooting as well as job submission.
 
 ## Prepare and track a job
 
+For ASE calculations, also read the `chemgraph` skill's
+[Python batch example](../chemgraph/references/ase-batch.md). Write the calculation
+script in the workspace and run it inside PBS; no MCP server or Parsl is needed.
+
 1. Read [the PBS template](assets/job.pbs.template) and write a completed copy
    into the execution filesystem. Replace every placeholder, keep PBS directives
    before executable statements, and quote shell paths. Choose the launch command
@@ -40,13 +45,36 @@ operations and environment troubleshooting as well as job submission.
 2. Check input visibility on compute nodes. Arrange staging first when the
    submitting host and workers do not share files. Validate the script syntax
    with `bash -n` when the execution environment provides Bash.
-3. Submit once with `qsub job.pbs` on the authorized submission host, following
-   existing tool approvals. Record the complete returned scheduler job ID.
+3. Submit once on the authorized submission host, following existing tool approvals.
+   Save submission evidence and the complete scheduler ID in the run directory.
 4. Inspect with `qstat -f JOB_ID`; distinguish queued, held, running, and terminal
    states. Explain scheduler comments rather than submitting duplicate jobs.
 5. Inspect stdout/stderr and application result files. A job disappearing from
    the active queue does not prove success. Use available job history and exit
    status, and report missing evidence explicitly. Cancel only the requested job.
+
+Run this submission sequence from the fresh host run directory after completing
+and inspecting the files:
+
+```bash
+set -euo pipefail
+bash -n job.pbs
+test ! -e job.id
+if ! (set -C; : > submission.started) 2>/dev/null; then
+    echo "Submission already attempted; inspect PBS before retrying." >&2
+    exit 1
+fi
+qsub job.pbs > job.id 2> qsub.stderr
+test -s job.id
+cat job.id
+```
+
+Keep the marker and stderr if `qsub` fails or returns no ID: acceptance can be
+uncertain. Inspect PBS by job name and run directory before any retry. A later
+agent session reads the existing `job.id`, checks that job with `qstat -f` (or
+`qstat -xf` for retained history), and inspects output files without resubmitting.
+An explicitly requested retry uses a fresh directory after resolving the prior
+job's state. Cancellation uses `qdel JOB_ID` only when requested.
 
 PBS command reference: [ALCF running jobs](https://docs.alcf.anl.gov/running-jobs/).
 

@@ -5,6 +5,10 @@ MCP workflows, and **pbs-hpc** for PBS job preparation, monitoring, and facility
 guidance. They are available to standalone Deep Agents, registry-created Deep
 Agent workers, and the optional `main_agent` workspace worker.
 
+For direct submission from a login-node shell, see [PBS jobs with skills](pbs_jobs_with_skills.md).
+Deep Agent writes calculation and batch scripts using the skills and existing
+Python APIs; it does not need attached chemistry MCP tools for this route.
+
 ## Where skills live
 
 Maintained skills live in `src/chemgraph/skills/` and ship in the Python wheel
@@ -176,6 +180,93 @@ Standalone and main-agent workspace Deep Agents share
 are configured separately; the built-in main-agent workspace worker has no
 chemistry tools attached. A custom `PromptConfig.deepagent` is preserved
 verbatim; its default `None` selects the shared prompt.
+
+## On-demand local tools
+
+Skills describe workflows; tools implement their operations. With standalone
+`deep_agent`, the built-in local catalog is searchable by default without sending
+every tool schema to the model:
+
+```sh
+chemgraph run --interactive -w deep_agent --deepagent-workspace .
+```
+
+To restrict discovery, use repeated `--tool NAME` flags or `[general]` TOML
+`tools = ["smiles_to_coordinate_file", "file_to_atomsdata"]`. CLI names replace
+the TOML list loaded with `--config`, and duplicates are collapsed. Omitting the
+setting selects the built-ins except interactive tools such as `ask_human`, which
+require `--human-supervised`. Explicitly listing `ask_human` also opts in.
+`tools = []` disables discovery. This is independent of
+`--no-deepagent-discover-skills`, which controls personal/project skills only.
+The CLI displays the catalog size or disabled status at initialization.
+The option applies to standalone Deep Agent; configured names are ignored for
+other noninteractive workflows. Interactive sessions validate and retain configured
+names even when starting in another workflow, so startup selection, model changes,
+and workflow switches preserve the restriction.
+
+`ChemGraph(workflow_type="deep_agent")` uses the same default catalog, enabling
+interactive tools when `human_supervised=True`. Explicit catalogs and attached
+tools count as deliberate opt-in, independently of that flag.
+Pass `deepagent_tool_registry=preparation` to replace it, or
+`deepagent_tool_registry=ToolRegistry([])` to disable it. Explicit `None` selects
+the default. The lower-level shared constructor remains opt-in so existing
+delegated workers do not gain tools; supply a catalog explicitly:
+
+```python
+from chemgraph.registry import ToolRegistry
+
+catalog = ToolRegistry()
+preparation = ToolRegistry(catalog.get_spec(name) for name in (
+    "smiles_to_coordinate_file", "file_to_atomsdata", "extract_output_json",
+))
+graph = construct_deep_agent_graph(model, backend=backend, tool_registry=preparation)
+```
+
+Existing `tools=` objects, including MCP tools, remain attached as before. Their
+names are excluded from the automatic catalog. Names in an explicitly supplied
+catalog must not collide with attached tools or discovery tools. Custom tools can
+be registered using the existing `ToolSpec`/`BaseTool` interfaces. Registering a
+`BaseTool` uses an already-created object; `ToolSpec` defers importing its module.
+
+The agent initially sees workspace tools plus `search_tools` and `load_tools`.
+Search returns bounded name/description matches without imports. Skills can name
+tools directly, skipping search. Use native tools for supported local operations
+before considering scripts or reading their implementation source. Scripts remain
+appropriate for unavailable capabilities and separate batch jobs.
+`load_tools(names)` replaces the active selection and exposes native schemas on
+the next model call; `load_tools([])` clears it.
+It returns names rather than duplicating schemas in chat. Missing dependencies or
+unknown names leave the previous selection intact. Active names are checkpointed
+per conversation, survive approval pauses, and clear at the end of a completed
+turn. Restore pending checkpoints with the same catalog. The built-in delegated
+worker has its own tools; keep this preparation workflow in the standalone agent.
+
+Loaded custom tools retain `return_direct=True`: a successful batch containing
+only direct-return tools ends the turn without another model call. Mixed batches,
+rejected calls, and error results return to the model. The same rule applies when
+the batch combines loaded and attached tools.
+
+Registry tools execute on the agent host, independently of the file/shell backend.
+Use absolute host paths and returned artifact paths. `molecule_name_to_smiles`
+contacts PubChem over the network and does not require approval by default.
+The default approval policy also covers `smiles_to_coordinate_file` and
+`save_atomsdata_to_file`. Registry
+calculations (`run_ase`, `run_docking`, `run_graspa`, `run_xanes`), report generation
+(`generate_html`), XANES artifact writers (`fetch_xanes_data`, `plot_xanes_data`),
+and host-file readers (`load_document`, `file_to_atomsdata`, `extract_output_json`)
+require approval before execution, including when no workspace is configured.
+`query_knowledge_base` searches documents already loaded into the RAG store and
+does not require approval by default. These additional checks apply to registry tools;
+existing attached tools retain their policy. Custom tools need appropriate
+`interrupt_on` entries when constructing the graph. `python_repl` requires the same
+execution review as `execute`. Discovery and loading do not require approval.
+Explicit approval overrides retain their existing meaning.
+
+On-demand loading reduces repeated schema input for larger catalogs, but adds a
+round trip. A few always-attached tools can be cheaper for a short task. Keep
+results compact and large artifacts in files; do not equate schema bytes with
+billed tokens or assume a fixed saving. This route needs neither an extra LLM
+selector nor provider-specific tool search.
 
 ## Sessions and diagnostics
 

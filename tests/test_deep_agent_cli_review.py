@@ -289,3 +289,193 @@ def test_invalid_cli_host_path_fails_before_initialization(tmp_path, dispatch, n
     assert "Cannot access skill directory" in output
     assert name in output.replace("\n", "")
     assert not dispatch
+
+
+@pytest.mark.parametrize("interactive", [False, True])
+@pytest.mark.parametrize("override", [False, True])
+def test_local_catalog_cli_precedence_is_lazy(tmp_path, dispatch, monkeypatch, interactive, override):
+    from chemgraph.registry import ToolRegistry
+
+    monkeypatch.setattr(ToolRegistry, "get", lambda *_a, **_k: pytest.fail("must not import tools"))
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {
+        "workflow": "deep_agent", "tools": ["file_to_atomsdata"],
+    }}))
+    argv = ["run", "--config", str(path)]
+    argv += ["--interactive"] if interactive else [
+        "-q", "test", "--deepagent-workspace", str(tmp_path),
+        "--deepagent-dangerously-skip-approvals",
+    ]
+    if override:
+        argv += ["--tool", "smiles_to_coordinate_file", "--tool", "smiles_to_coordinate_file"]
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
+    assert dispatch["deepagent_tool_registry"].names() == (
+        ("smiles_to_coordinate_file",) if override else ("file_to_atomsdata",)
+    )
+
+
+@pytest.mark.parametrize("value", ["run_ase", "", False, 0, [""], [123], ["unknown"]])
+def test_invalid_local_catalog_fails_before_initialization(tmp_path, dispatch, value):
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {"workflow": "deep_agent", "tools": value}}))
+    args = cli_main.create_argument_parser().parse_args(["run", "--interactive", "--config", str(path)])
+    with commands.console.capture() as capture, pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(args)
+    assert exc.value.code == 2
+    assert "Invalid local tools" in capture.get()
+    assert not dispatch
+
+
+def test_explicit_local_catalog_requires_standalone_deep_agent(dispatch):
+    args = cli_main.create_argument_parser().parse_args([
+        "run", "--interactive", "-w", "main_agent", "--tool", "file_to_atomsdata",
+    ])
+    with pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(args)
+    assert exc.value.code == 2
+    assert not dispatch
+
+
+def test_omitted_catalog_selects_python_default(dispatch):
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+        "run", "--interactive", "-w", "deep_agent",
+    ]))
+    assert dispatch["deepagent_tool_registry"] is None
+
+
+@pytest.mark.parametrize("explicit_empty", [False, True])
+def test_codex_command_defaults_to_discovery_with_skills_disabled(
+    monkeypatch, tmp_path, dispatch, explicit_empty,
+):
+    from chemgraph.registry import ToolRegistry
+    from chemgraph.models.endpoints import PreparedModel
+    from tests.test_registry_middleware import CatalogModel, names
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    monkeypatch.chdir(tmp_path)
+    if explicit_empty:
+        (tmp_path / "config.toml").write_text("[general]\ntools = []\n")
+    model = CatalogModel(responses=[AIMessage(content="Ready")])
+    monkeypatch.setattr(ToolRegistry, "get", lambda *_a, **_k: pytest.fail("must stay lazy"))
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.load_chat_model_prepared",
+        lambda **_: (model, PreparedModel(endpoint_name="test", protocol="openai_compatible", client_kwargs={})),
+    )
+    argv = [
+        "run", "--interactive", "--model", "codex:gpt-5.6-sol",
+        "--deepagent-workspace", ".", "--no-deepagent-discover-skills",
+        "--workflow", "deepagent",
+    ]
+    if explicit_empty:
+        argv += ["--config", str(tmp_path / "config.toml")]
+    args = cli_main.create_argument_parser().parse_args(argv)
+    cli_main._handle_run(args)
+    assert dispatch["workflow"] == "deep_agent"
+    assert dispatch["deepagent_discover_skills"] is False
+    agent = ChemGraph(
+        model_name=dispatch["model"], workflow_type=dispatch["workflow"],
+        deepagent_tool_registry=dispatch["deepagent_tool_registry"],
+        deepagent_discover_skills=dispatch["deepagent_discover_skills"],
+        enable_memory=False, log_dir=str(tmp_path),
+    )
+    agent.workflow.invoke(
+        {"messages": [HumanMessage(content="Ready?")]},
+        {"configurable": {"thread_id": "default-discovery"}},
+    )
+    expected = () if explicit_empty else tuple(
+        spec.name for spec in ToolRegistry().specs() if not spec.interactive
+    )
+    assert agent.deepagent_tool_registry.names() == expected
+    assert agent.deepagent_tool_registry._tools == {}
+    discovery = set() if explicit_empty else {"search_tools", "load_tools"}
+    assert names(model.schemas[0]) & {"search_tools", "load_tools"} == discovery
+    assert not set(ToolRegistry().names()) & names(model.schemas[0])
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_initialization_reports_catalog_status(monkeypatch, enabled):
+    from chemgraph.registry import ToolRegistry
+
+    registry = ToolRegistry() if enabled else ToolRegistry([])
+    monkeypatch.setattr(commands, "check_api_keys", lambda *_a, **_k: (True, ""))
+    monkeypatch.setattr(commands, "_create_experimental_deepagent_backend", lambda *_a, **_k: None)
+    monkeypatch.setattr(commands.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(
+        "chemgraph.agent.llm_agent.ChemGraph",
+        lambda **_: SimpleNamespace(deepagent_tool_registry=registry),
+    )
+    with commands.console.capture() as capture:
+        agent = commands.initialize_agent("fake", "deep_agent", False, "state", False, 20)
+    assert agent is not None
+    expected = f"{len(registry.names())} discoverable" if enabled else "discovery disabled"
+    assert expected in capture.get()
+
+
+@pytest.mark.parametrize("catalog_mode", ["default", "empty", "restricted"])
+def test_interactive_catalog_survives_model_and_workflow_changes(monkeypatch, catalog_mode):
+    from chemgraph.registry import ToolRegistry
+
+    registry = (
+        None if catalog_mode == "default" else ToolRegistry([])
+        if catalog_mode == "empty" else ToolRegistry([ToolRegistry().get_spec("calculator")])
+    )
+    initialized = []
+    prompts = iter(["initial-model", "deep_agent", "/model another-model", "/workflow single_agent", "/workflow deep_agent", "/quit"])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: next(prompts))
+    monkeypatch.setattr(commands, "create_banner", lambda: None)
+    monkeypatch.setattr(commands, "initialize_agent", lambda *args, **kwargs: (
+        initialized.append((args[1], kwargs.get("deepagent_tool_registry"))) or SimpleNamespace()
+    ))
+    commands.interactive_mode(workflow="deep_agent", deepagent_tool_registry=registry)
+    assert initialized == [
+        ("deep_agent", registry), ("deep_agent", registry),
+        ("single_agent", None), ("deep_agent", registry),
+    ]
+
+
+@pytest.mark.parametrize("restriction", [None, [], ["calculator"], ["ask_human"]])
+@pytest.mark.parametrize("startup_workflow", ["single_agent", "deep_agent"])
+def test_cli_retains_catalog_before_selecting_deep_agent(
+    monkeypatch, tmp_path, restriction, startup_workflow,
+):
+    from chemgraph.registry import ToolRegistry
+
+    settings = {"workflow": "single_agent"}
+    if restriction is not None:
+        settings["tools"] = restriction
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": settings}))
+    prompts = iter([
+        "initial-model", startup_workflow, "/workflow deep_agent",
+        "/model another-model", "/workflow single_agent", "/workflow deep_agent", "/quit",
+    ])
+    initialized = []
+    monkeypatch.setattr(ToolRegistry, "get", lambda *_a, **_k: pytest.fail("must stay lazy"))
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_a, **_k: next(prompts))
+    monkeypatch.setattr(commands, "create_banner", lambda: None)
+    monkeypatch.setattr(commands, "initialize_agent", lambda *args, **kwargs: (
+        initialized.append((args[1], kwargs["deepagent_tool_registry"])) or SimpleNamespace()
+    ))
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+        "run", "--interactive", "--config", str(path),
+    ]))
+    assert [workflow for workflow, _ in initialized] == [
+        startup_workflow, "deep_agent", "deep_agent", "single_agent", "deep_agent",
+    ]
+    for workflow, registry in initialized:
+        if workflow != "deep_agent" or restriction is None:
+            assert registry is None
+        else:
+            assert registry.names() == tuple(restriction)
+    assert initialized[1][1] is initialized[-1][1]
+
+
+def test_noninteractive_other_workflow_ignores_catalog(tmp_path, dispatch):
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {
+        "workflow": "single_agent", "tools": ["unknown"],
+    }}))
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+        "run", "-q", "test", "--config", str(path),
+    ]))
+    assert dispatch["deepagent_tool_registry"] is None
