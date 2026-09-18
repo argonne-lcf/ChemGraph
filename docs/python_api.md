@@ -29,6 +29,43 @@ asyncio.run(main())
 In an async notebook or application, call `await agent.run(...)` directly
 instead of starting a second event loop.
 
+## Token usage and per-call limits
+
+`ChemGraph.run` honors an explicit positive integer `config["recursion_limit"]`
+before the agent's configured limit and does not mutate your configuration.
+The default remains 200 graph steps; this is not a model-call or token budget.
+
+```python
+result = await agent.run(query, config={"recursion_limit": 350})
+print(agent.last_usage)     # current user turn, including approvals and retries
+print(agent.session_usage)  # all recorded turns in this session
+
+if agent.session_store is not None:
+    session_counts = agent.session_store.get_usage(agent.session_id)
+    turn_counts = agent.session_store.get_usage(
+        agent.session_id, turn_id=agent.last_usage["turn_id"]
+    )
+```
+
+Usage mappings include `input_tokens`, `output_tokens`, `total_tokens`,
+`cached_input_tokens`, `reasoning_output_tokens`, `call_count`,
+`incomplete_calls`, `partial`, and per-field `unreported_counts`. Counts are
+known subtotals; unknown fields are `None`. Cache/reasoning details are subsets
+of input/output. A store query with no recorded usage has `recorded=False`;
+old conversation history is not retroactively counted.
+
+`MainAgentSession` exposes the same `last_usage` and `session_usage` properties;
+its turn result also includes `usage`. `resume()` and `retry()` retain the
+original usage turn. `run_turn` returns `usage` and accepts an optional
+`session_store`; without it, it does not write a session database. Setting
+`enable_memory=False` on `ChemGraph` retains in-memory counters only.
+
+Accounting runs independently of `on_event`. Model-finished events retain their
+existing payloads and include a `call_id` and provider `token_counts` when
+available. Available usage remains readable after a workflow fails. Python
+callers decide how to display it; the CLI prints numeric counters locally,
+without making another model call.
+
 ## Return values
 
 Use `return_option="last_message"` for the final message object or

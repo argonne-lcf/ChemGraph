@@ -35,6 +35,7 @@ from chemgraph.cli.commands import (
     interactive_mode,
     list_sessions,
     run_query,
+    print_token_usage,
     save_output,
     show_session,
 )
@@ -798,6 +799,7 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     if result:
         format_response(result, verbose=(args.verbose > 0))
+        print_token_usage(agent)
 
         # Save output if requested
         if args.output_file:

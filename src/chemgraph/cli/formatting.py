@@ -25,6 +25,27 @@ from chemgraph.models.endpoints.registry import CATALOG_ENDPOINTS, catalog_entri
 console = Console()
 
 
+def format_token_usage(usage: dict) -> Text:
+    """Render provider counters locally; never generate a model summary."""
+    keys = ("input_tokens", "output_tokens", "total_tokens")
+    if usage.get("call_count") and all(usage.get(key) is None for key in keys):
+        return Text("Tokens: unavailable (provider did not report usage)", style="dim")
+    parts = [
+        f"{usage[key]:,} {label}" if usage.get(key) is not None else f"unknown {label}"
+        for key, label in zip(keys, ("input", "output", "total"), strict=True)
+    ]
+    prefix = "Tokens (partial): " if usage.get("partial") else "Tokens: "
+    details = []
+    for key, label in (("cached_input_tokens", "cached input"), ("reasoning_output_tokens", "reasoning output")):
+        if usage.get(key) is not None and usage.get("call_count"):
+            qualifier = "known " if usage.get("unreported_counts", {}).get(key) else ""
+            details.append(f"{usage[key]:,} {qualifier}{label}")
+    suffix = f" (included: {'; '.join(details)})" if details else ""
+    if usage.get("partial"):
+        suffix += f"; incomplete usage for {usage['incomplete_calls']} call(s)"
+    return Text(prefix + " · ".join(parts) + suffix, style="dim")
+
+
 def format_action_review(action: dict, index: int, total: int) -> Panel:
     """Preview an action using only its arguments, without reading host files."""
     name = str(action.get("name", "unknown"))
