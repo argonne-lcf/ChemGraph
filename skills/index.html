@@ -16,7 +16,7 @@
         <link rel="prev" href="../python_api/">
       
       
-        <link rel="next" href="../streamlit_web_interface/">
+        <link rel="next" href="../pbs_jobs_with_skills/">
       
       
         
@@ -653,6 +653,8 @@
       
         
       
+        
+      
     
     
     
@@ -969,6 +971,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#on-demand-local-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        On-demand local tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sessions-and-diagnostics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -983,6 +996,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pbs_jobs_with_skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PBS Jobs with Skills
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1709,6 +1750,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#on-demand-local-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        On-demand local tools
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sessions-and-diagnostics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1744,6 +1796,9 @@
 MCP workflows, and <strong>pbs-hpc</strong> for PBS job preparation, monitoring, and facility
 guidance. They are available to standalone Deep Agents, registry-created Deep
 Agent workers, and the optional <code>main_agent</code> workspace worker.</p>
+<p>For direct submission from a login-node shell, see <a href="../pbs_jobs_with_skills/">PBS jobs with skills</a>.
+Deep Agent writes calculation and batch scripts using the skills and existing
+Python APIs; it does not need attached chemistry MCP tools for this route.</p>
 <h2 id="where-skills-live">Where skills live<a class="headerlink" href="#where-skills-live" title="Permanent link">&para;</a></h2>
 <p>Maintained skills live in <code>src/chemgraph/skills/</code> and ship in the Python wheel
 and source distribution. Each skill is an immediate child directory containing
@@ -1949,6 +2004,80 @@ Standalone and main-agent workspace Deep Agents share
 are configured separately; the built-in main-agent workspace worker has no
 chemistry tools attached. A custom <code>PromptConfig.deepagent</code> is preserved
 verbatim; its default <code>None</code> selects the shared prompt.</p>
+<h2 id="on-demand-local-tools">On-demand local tools<a class="headerlink" href="#on-demand-local-tools" title="Permanent link">&para;</a></h2>
+<p>Skills describe workflows; tools implement their operations. With standalone
+<code>deep_agent</code>, the built-in local catalog is searchable by default without sending
+every tool schema to the model:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.
+</code></pre></div>
+<p>To restrict discovery, use repeated <code>--tool NAME</code> flags or <code>[general]</code> TOML
+<code>tools = ["smiles_to_coordinate_file", "file_to_atomsdata"]</code>. CLI names replace
+the TOML list loaded with <code>--config</code>, and duplicates are collapsed. Omitting the
+setting selects the built-ins except interactive tools such as <code>ask_human</code>, which
+require <code>--human-supervised</code>. Explicitly listing <code>ask_human</code> also opts in.
+<code>tools = []</code> disables discovery. This is independent of
+<code>--no-deepagent-discover-skills</code>, which controls personal/project skills only.
+The CLI displays the catalog size or disabled status at initialization.
+The option applies to standalone Deep Agent; configured names are ignored for
+other noninteractive workflows. Interactive sessions validate and retain configured
+names even when starting in another workflow, so startup selection, model changes,
+and workflow switches preserve the restriction.</p>
+<p><code>ChemGraph(workflow_type="deep_agent")</code> uses the same default catalog, enabling
+interactive tools when <code>human_supervised=True</code>. Explicit catalogs and attached
+tools count as deliberate opt-in, independently of that flag.
+Pass <code>deepagent_tool_registry=preparation</code> to replace it, or
+<code>deepagent_tool_registry=ToolRegistry([])</code> to disable it. Explicit <code>None</code> selects
+the default. The lower-level shared constructor remains opt-in so existing
+delegated workers do not gain tools; supply a catalog explicitly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolRegistry</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">catalog</span> <span class="o">=</span> <span class="n">ToolRegistry</span><span class="p">()</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">preparation</span> <span class="o">=</span> <span class="n">ToolRegistry</span><span class="p">(</span><span class="n">catalog</span><span class="o">.</span><span class="n">get_spec</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="s2">"smiles_to_coordinate_file"</span><span class="p">,</span> <span class="s2">"file_to_atomsdata"</span><span class="p">,</span> <span class="s2">"extract_output_json"</span><span class="p">,</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">))</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">construct_deep_agent_graph</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">tool_registry</span><span class="o">=</span><span class="n">preparation</span><span class="p">)</span>
+</code></pre></div>
+<p>Existing <code>tools=</code> objects, including MCP tools, remain attached as before. Their
+names are excluded from the automatic catalog. Names in an explicitly supplied
+catalog must not collide with attached tools or discovery tools. Custom tools can
+be registered using the existing <code>ToolSpec</code>/<code>BaseTool</code> interfaces. Registering a
+<code>BaseTool</code> uses an already-created object; <code>ToolSpec</code> defers importing its module.</p>
+<p>The agent initially sees workspace tools plus <code>search_tools</code> and <code>load_tools</code>.
+Search returns bounded name/description matches without imports. Skills can name
+tools directly, skipping search. Use native tools for supported local operations
+before considering scripts or reading their implementation source. Scripts remain
+appropriate for unavailable capabilities and separate batch jobs.
+<code>load_tools(names)</code> replaces the active selection and exposes native schemas on
+the next model call; <code>load_tools([])</code> clears it.
+It returns names rather than duplicating schemas in chat. Missing dependencies or
+unknown names leave the previous selection intact. Active names are checkpointed
+per conversation, survive approval pauses, and clear at the end of a completed
+turn. Restore pending checkpoints with the same catalog. The built-in delegated
+worker has its own tools; keep this preparation workflow in the standalone agent.</p>
+<p>Loaded custom tools retain <code>return_direct=True</code>: a successful batch containing
+only direct-return tools ends the turn without another model call. Mixed batches,
+rejected calls, and error results return to the model. The same rule applies when
+the batch combines loaded and attached tools.</p>
+<p>Registry tools execute on the agent host, independently of the file/shell backend.
+Use absolute host paths and returned artifact paths. <code>molecule_name_to_smiles</code>
+contacts PubChem over the network and does not require approval by default.
+The default approval policy also covers <code>smiles_to_coordinate_file</code> and
+<code>save_atomsdata_to_file</code>. Registry
+calculations (<code>run_ase</code>, <code>run_docking</code>, <code>run_graspa</code>, <code>run_xanes</code>), report generation
+(<code>generate_html</code>), XANES artifact writers (<code>fetch_xanes_data</code>, <code>plot_xanes_data</code>),
+and host-file readers (<code>load_document</code>, <code>file_to_atomsdata</code>, <code>extract_output_json</code>)
+require approval before execution, including when no workspace is configured.
+<code>query_knowledge_base</code> searches documents already loaded into the RAG store and
+does not require approval by default. These additional checks apply to registry tools;
+existing attached tools retain their policy. Custom tools need appropriate
+<code>interrupt_on</code> entries when constructing the graph. <code>python_repl</code> requires the same
+execution review as <code>execute</code>. Discovery and loading do not require approval.
+Explicit approval overrides retain their existing meaning.</p>
+<p>On-demand loading reduces repeated schema input for larger catalogs, but adds a
+round trip. A few always-attached tools can be cheaper for a short task. Keep
+results compact and large artifacts in files; do not equate schema bytes with
+billed tokens or assume a fixed saving. This route needs neither an extra LLM
+selector nor provider-specific tool search.</p>
 <h2 id="sessions-and-diagnostics">Sessions and diagnostics<a class="headerlink" href="#sessions-and-diagnostics" title="Permanent link">&para;</a></h2>
 <p>Skill metadata is rediscovered before each new agent turn, including after graph
 reconstruction; an old checkpoint catalog cannot hide newly added skills. The
@@ -2034,13 +2163,13 @@ mandatory scientific or operational requirements in tools or middleware.</p>
         
         
           
-          <a href="../streamlit_web_interface/" class="md-footer__link md-footer__link--next" aria-label="Next: Streamlit interface">
+          <a href="../pbs_jobs_with_skills/" class="md-footer__link md-footer__link--next" aria-label="Next: PBS Jobs with Skills">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Streamlit interface
+                PBS Jobs with Skills
               </div>
             </div>
             <div class="md-footer__button md-icon">
