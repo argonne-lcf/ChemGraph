@@ -175,8 +175,120 @@ initializes Parsl lazily. Its `run_graspa_parsl_app` callable still returns a
 future. Its ensemble tool waits for all results and returns text containing an
 absolute `simulation_results.jsonl` path. Each batch writes a fresh summary
 directory under the worker-resolved output root, including failed records.
-Existing JSONL analysis remains available; graph/analysis support for returned
-record lists is separate work. New clients should use the maintained server.
+The native graph accepts this response when the JSONL file is readable on the
+client. New clients should use the maintained server, whose record responses
+also support workers without a shared filesystem.
+
+## Native ChemGraph workflow
+
+`ChemGraph(workflow_type="graspa_mcp")` plans logical ensembles, prepares their
+validated requests, then submits, polls, and collects in Python. All tasks join
+before Python analysis runs; the final LLM call explains the saved analysis.
+One directory with adsorption and desorption conditions needs one ensemble,
+not one model call per CIF. File lists and complete records remain in artifacts;
+model messages and checkpoints contain counts, paths, and at most five preview
+rows. Optional `data_tools` can supplement the explanation.
+
+```python
+from chemgraph.agent.llm_agent import ChemGraph
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
+
+client = MultiServerMCPClient({"graspa": {
+    "transport": "streamable_http", "url": "http://127.0.0.1:9001/mcp/",
+}})
+async with client.session("graspa") as session:
+    agent = ChemGraph(
+        workflow_type="graspa_mcp",
+        tools=await load_mcp_tools(session),
+        graspa_options={
+            "run_directory": "/shared/screening/run-001",
+            "poll_interval_seconds": 15,
+            "wait_timeout_seconds": 3600,
+            "resume": False,
+        },
+        return_option="state",
+        enable_memory=False,
+    )
+    state = await agent.run(
+        "Screen H2O on all CIFs in /shared/cifs at 298 K, adsorption 960 Pa "
+        "and desorption 320 Pa, with 2000000 cycles per phase. Use one ensemble "
+        "and rank the top 20% by adsorption minus desorption uptake."
+    )
+    print(state["workflow_status"], state["analysis"])
+```
+
+The asynchronous snippet belongs inside your application coroutine. Configure
+`model_name` and provider authentication as for other ChemGraph workflows.
+`return_option="last_message"` returns the explanation message instead;
+`workflow_finished` events carry the scientific status with either return option.
+Statuses are `completed`, `partial`, `failed`, or `incomplete`. An incomplete
+collection never generates a new ranking. A report-generation error is saved
+in `report_error.json` and does not erase the collected scientific outcome.
+
+`graspa_options` accepts only the four fields above. Intervals and timeouts must
+be positive finite seconds. The collection timeout applies per logical task,
+including submission, queueing, and polling; it does not stop remote work or
+replace each simulation's `timeout_seconds`. With no explicit run directory,
+the graph creates a unique `graspa_workflows/<id>` beneath `log_dir` (or
+`CHEMGRAPH_LOG_DIR`). Relative explicit run directories resolve against
+`CHEMGRAPH_LOG_DIR`. A populated workflow directory requires `resume=True`.
+`config={"max_concurrency": 4}` on `agent.run` bounds model preparation and
+concurrent ensemble collection; it does not configure Parsl workers.
+
+Use `PromptConfig.planner`, `.executor`, and `.aggregator` to override planning,
+request preparation, and explanation respectively. Planning must return a
+`GraspaPlan` and preparation a `graspa_input_schema_ensemble`; old prompts that
+route between agents or perform model-driven polling are incompatible. The
+workflow always owns the join and canonical numerical analysis.
+
+### Artifacts and ranking rules
+
+- `workflow.json`: query, frozen plan and requests, submission intent, accepted
+  batch IDs, progress, collection errors, and task artifact paths.
+- `plan.json`, `task_<index>.jsonl`: the plan and collected per-task records.
+- `results.jsonl`, `results.csv`: all collected outcomes, including failures and
+  original source identities; `analysis.json`: bounded summary and conditions.
+- `rankings.csv`, `top_candidates.csv`, `excluded.json`: full valid ranking,
+  selected candidates, and exclusions when ranking is requested and collection
+  is complete. `response.txt` contains the final explanation.
+
+Ranking uses exact temperature/pressure matches (298 K does not match 298.15 K)
+and full source paths, so equal CIF basenames in different directories stay
+separate. All requested repeats at each ranking condition must succeed. Failed,
+mock, negative, or nonfinite uptake is never treated as zero. Legacy records
+with missing conditions exclude their source from ranking because they could
+be unidentified failed repeats. Successful repeats are averaged before
+computing adsorption minus desorption uptake, in mol/kg. The selected count is
+`ceil(top_fraction * valid_candidates)`; the fraction must be in `(0, 1]`.
+
+The analysis MCP tools `aggregate_simulation_results` and
+`rank_mofs_performance` share these numerical rules, retain JSONL input support,
+and preserve failure records and full source paths. They are optional for the
+native graph, which performs canonical analysis locally.
+
+### Recovery limits
+
+To resume, use the original query, the same `run_directory`, and `resume=True`.
+The graph loads its frozen requests without calling the planner/preparer again,
+reuses accepted batch IDs, and validates saved records. It never automatically
+resubmits an accepted batch. Concurrent writers to one run directory are rejected.
+A timeout or cancelled client can leave remote simulations running.
+
+A lost or cancelled submission acknowledgment leaves `phase="submission_unknown"`
+(or crash-time `submitting`) in `workflow.json`. Resume stops that task and marks
+collection incomplete. Reconcile against the original server's `list_jobs()`
+and saved request before editing the journal: a confirmed accepted batch needs
+`phase="submitted"`, its `batch_id`, and positive `n_tasks`; only reset to
+`unsubmitted` after confirming no work was accepted. Back up the journal first.
+There is no automatic reconciliation or exactly-once guarantee across network
+failures. Ordinary Parsl futures require the original server/allocation to stay
+alive; restarting PBS is not recovery of unfinished work. Legacy JSONL summaries
+must remain readable on the client. Do not change the frozen scientific request
+while resuming.
+
+The self-contained [Aurora runner](../scripts/graspa_scaling/README.md) uses this
+native graph with the 4,608-CIF reference workload and supports a four-CIF smoke.
 
 ## Validation status
 

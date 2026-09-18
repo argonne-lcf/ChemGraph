@@ -70,6 +70,7 @@ from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
 from chemgraph.graphs.graspa_mcp import construct_graspa_mcp_graph
+from chemgraph.schemas.graspa_workflow import GraspaWorkflowOptions
 from chemgraph.graphs.rag_agent import construct_rag_agent_graph
 from chemgraph.graphs.single_agent_xanes import construct_single_agent_xanes_graph
 from chemgraph.graphs.molecular_docking import construct_molecular_docking_graph
@@ -232,6 +233,12 @@ class ChemGraph:
         trusted workspace, by default False.
     on_event : callable, optional
         Callback invoked with dashboard workflow events, by default None.
+    graspa_options : GraspaWorkflowOptions or dict, optional
+        Native ``graspa_mcp`` run directory, polling interval, collection timeout,
+        and resume flag. Use ``return_option="state"`` to inspect scientific
+        completion status and artifact paths. ``PromptConfig.planner``,
+        ``executor``, and ``aggregator`` override its planning, preparation,
+        and explanation prompts respectively.
 
     Raises
     ------
@@ -275,9 +282,13 @@ class ChemGraph:
         deepagent_user_skills_dir: str | None = None,
         deepagent_skill_dirs: Sequence[str] | None = None,
         deepagent_tool_registry: Any | None = None,
+        graspa_options: GraspaWorkflowOptions | dict | None = None,
     ):
         if deepagent_tool_registry is not None and workflow_type != "deep_agent":
             raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
+        if graspa_options is not None and workflow_type != "graspa_mcp":
+            raise ValueError("graspa_options requires workflow_type='graspa_mcp'")
+        self.graspa_options = GraspaWorkflowOptions.model_validate({} if graspa_options is None else graspa_options)
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."
@@ -673,10 +684,20 @@ class ChemGraph:
                 system_prompt=self.system_prompt,
             )
         elif self.workflow_type == "graspa_mcp":
+            graspa_prompts = {
+                name: value for name, value, default in (
+                    ("planner_prompt", prompts.planner, default_planner_prompt),
+                    ("executor_prompt", prompts.executor, default_executor_prompt),
+                    ("analyst_prompt", prompts.aggregator, default_aggregator_prompt),
+                ) if value != default
+            }
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 executor_tools=self.tools,
                 analysis_tools=self.data_tools,
+                options=self.graspa_options,
+                log_dir=self.log_dir,
+                **graspa_prompts,
             )
         elif self.workflow_type == "rag_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -1381,7 +1402,8 @@ class ChemGraph:
                 {
                     "workflow_type": self.workflow_type,
                     "thread_id": thread_id,
-                    "status": "completed",
+                    "status": ((last_state or {}).get("workflow_status", "incomplete")
+                               if self.workflow_type == "graspa_mcp" else "completed"),
                     "executed_tool_names": list(executed_tools),
                     "terminal_tool": terminal_tool,
                     "duration_s": round(time.time() - started, 3),
