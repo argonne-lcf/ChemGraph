@@ -192,6 +192,11 @@ def test_turn_event_callback_emits_llm_decision_for_tool_calls():
             {
                 "thread_id": "thread-1",
                 "llm_output": {"token_usage": {"total_tokens": 12}},
+                "token_counts": {
+                    "input_tokens": None, "output_tokens": None, "total_tokens": 12,
+                    "cached_input_tokens": None, "reasoning_output_tokens": None,
+                    "raw_usage": {"total_tokens": 12}, "source": "provider",
+                },
             },
         ),
         (
@@ -276,8 +281,8 @@ async def test_cli_trace_events_are_emitted_from_astream_path(monkeypatch, tmp_p
 
         async def astream(self, inputs, *, stream_mode, config):
             for callback in config.get("callbacks", []):
-                callback.on_chat_model_start({"name": "FakeChatModel"}, [["hello"]])
-                callback.on_llm_end(SimpleNamespace(generations=[]))
+                callback.on_chat_model_start({"name": "FakeChatModel"}, [["hello"]], run_id="test-call")
+                callback.on_llm_end(SimpleNamespace(generations=[]), run_id="test-call")
             yield self.state
 
         def get_state(self, config):

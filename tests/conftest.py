@@ -1,5 +1,6 @@
 import pytest
 import warnings
+import logging
 from ase import Atoms
 
 # Configure pytest-asyncio
@@ -8,6 +9,20 @@ from ase import Atoms
 # Test modules that require the optional ``academy`` extra guard themselves with
 # ``pytest.importorskip("academy")`` at module top, so they skip cleanly (rather
 # than erroring collection) when the extra is not installed.
+
+
+@pytest.fixture(autouse=True)
+def isolate_cli_logging():
+    """CLI configuration must not disable caplog in subsequent tests."""
+    package = logging.getLogger("chemgraph")
+    level, propagate, handlers = package.level, package.propagate, list(package.handlers)
+    yield
+    for handler in package.handlers:
+        if handler not in handlers:
+            handler.close()
+    package.handlers[:] = handlers
+    package.setLevel(level)
+    package.propagate = propagate
 
 
 @pytest.fixture(autouse=True)
