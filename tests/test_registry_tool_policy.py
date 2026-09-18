@@ -1,8 +1,13 @@
 """Approval and completion policies for dynamically loaded native tools."""
 
 import json
+import sys
+from types import ModuleType
+from unittest.mock import Mock
 
 import pytest
+from deepagents.backends import LocalShellBackend
+from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import ToolException, tool
 from langgraph.checkpoint.memory import InMemorySaver
@@ -87,14 +92,100 @@ def test_optional_operations_wait_for_approval(operation, decision):
     assert executed == ([operation] if decision == "approve" else [])
 
 
-@pytest.mark.parametrize("mode", ["attached", "disabled", "override", "custom"])
-def test_registry_reviews_preserve_explicit_policies(mode):
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("workspace", [False, True])
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+@pytest.mark.parametrize("operation", ["extract_output_json", "file_to_atomsdata", "load_document"])
+async def test_host_readers_wait_for_approval(
+    monkeypatch, tmp_path, operation, decision, workspace, asynchronous,
+):
+    registry = ToolRegistry()
+    if operation == "load_document":
+        from chemgraph.tools import rag_tools
+
+        target = tmp_path / "document.txt"
+        target.write_text("Host document contents")
+        args = {"file_path": str(target)}
+        splitter_module = ModuleType("langchain_text_splitters")
+        splitter = Mock()
+        splitter.create_documents.side_effect = lambda texts, metadatas: [
+            Document(page_content=text, metadata=metadata)
+            for text, metadata in zip(texts, metadatas)
+        ]
+        splitter_module.RecursiveCharacterTextSplitter = Mock(return_value=splitter)
+        vector_module = ModuleType("langchain_community.vectorstores")
+        vector_module.FAISS = Mock()
+        embeddings = Mock(return_value=object())
+        monkeypatch.setitem(sys.modules, splitter_module.__name__, splitter_module)
+        monkeypatch.setitem(sys.modules, vector_module.__name__, vector_module)
+        monkeypatch.setattr(rag_tools, "_get_embeddings", embeddings)
+        monkeypatch.setattr(rag_tools, "_vector_stores", {})
+        # Exercise the real reader with mocked optional dependencies.
+        registry.register(rag_tools.load_document, replace=True)
+    elif operation == "file_to_atomsdata":
+        target = tmp_path / "hydrogen.xyz"
+        target.write_text("2\nHost structure\nH 0 0 0\nH 0 0 1\n")
+        args = {"fname": str(target)}
+    else:
+        target = tmp_path / "host.json"
+        target.write_text('{"host_value": 42}')
+        args = {"json_file": str(target)}
+    reader = registry.get(operation)
+    executed = Mock(wraps=reader.func)
+
+    def record_read(*args, **kwargs):
+        return executed(*args, **kwargs)
+
+    monkeypatch.setattr(reader, "func", record_read)
+    options = {}
+    if workspace:
+        root = tmp_path / "workspace"
+        root.mkdir()
+        options["backend"] = LocalShellBackend(root_dir=root, virtual_mode=True, env={})
+    graph = construct_deep_agent_graph(
+        CatalogModel(responses=[
+            call("load_tools", names=[operation]), call(operation, **args), AIMessage(content="Done"),
+        ]), tool_registry=registry, discover_skills=False, **options,
+    )
+    config = {"configurable": {"thread_id": "host-read"}}
+    state = await invoke(graph, {"messages": [HumanMessage(content="Read the host file.")]}, config, asynchronous)
+    assert state["__interrupt__"][0].value["action_requests"][0]["name"] == operation
+    executed.assert_not_called()
+    assert not any(message.name == operation for message in outputs(state))
+    if operation == "load_document":
+        assert not rag_tools._vector_stores
+        embeddings.assert_not_called()
+        vector_module.FAISS.from_documents.assert_not_called()
+    state = await invoke(graph, Command(resume={"decisions": [{"type": decision}]}), config, asynchronous)
+    assert "__interrupt__" not in state
+    assert executed.call_count == (1 if decision == "approve" else 0)
+    result = next(message for message in outputs(state) if message.name == operation)
+    assert result.status == ("success" if decision == "approve" else "error")
+    if operation == "load_document":
+        if decision == "approve":
+            embeddings.assert_called_once()
+            vector_module.FAISS.from_documents.assert_called_once()
+            chunks = vector_module.FAISS.from_documents.call_args.args[0]
+            assert chunks[0].page_content == "Host document contents"
+            assert rag_tools._vector_stores[str(target)] is vector_module.FAISS.from_documents.return_value
+        else:
+            assert not rag_tools._vector_stores
+            embeddings.assert_not_called()
+            vector_module.FAISS.from_documents.assert_not_called()
+
+
+@pytest.mark.parametrize("mode,name", [("custom", "custom_writer")] + [
+    (mode, name)
+    for mode in ("attached", "disabled", "override")
+    for name in ("run_ase", "load_document", "file_to_atomsdata", "extract_output_json")
+])
+def test_registry_reviews_preserve_explicit_policies(mode, name):
     executed = []
-    name = "custom_writer" if mode == "custom" else "run_ase"
 
     @tool(name)
     def operation() -> str:
-        """Record execution without a real calculator."""
+        """Record execution without accessing host files or a real calculator."""
         executed.append(name)
         return "completed"
 

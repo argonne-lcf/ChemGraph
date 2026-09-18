@@ -247,11 +247,16 @@ rejected calls, and error results return to the model. The same rule applies whe
 the batch combines loaded and attached tools.
 
 Registry tools execute on the agent host, independently of the file/shell backend.
-Use absolute host paths and returned artifact paths. The default approval policy
-also covers `smiles_to_coordinate_file` and `save_atomsdata_to_file`. Registry
+Use absolute host paths and returned artifact paths. `molecule_name_to_smiles`
+contacts PubChem over the network and does not require approval by default.
+The default approval policy also covers `smiles_to_coordinate_file` and
+`save_atomsdata_to_file`. Registry
 calculations (`run_ase`, `run_docking`, `run_graspa`, `run_xanes`), report generation
-(`generate_html`), and XANES artifact writers (`fetch_xanes_data`, `plot_xanes_data`)
-require approval before execution. These additional checks apply to registry tools;
+(`generate_html`), XANES artifact writers (`fetch_xanes_data`, `plot_xanes_data`),
+and host-file readers (`load_document`, `file_to_atomsdata`, `extract_output_json`)
+require approval before execution, including when no workspace is configured.
+`query_knowledge_base` searches documents already loaded into the RAG store and
+does not require approval by default. These additional checks apply to registry tools;
 existing attached tools retain their policy. Custom tools need appropriate
 `interrupt_on` entries when constructing the graph. `python_repl` requires the same
 execution review as `execute`. Discovery and loading do not require approval.

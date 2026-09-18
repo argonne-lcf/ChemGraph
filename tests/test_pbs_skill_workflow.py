@@ -170,7 +170,7 @@ def test_agent_writes_submits_and_new_session_monitors(job, scheduler, tmp_path,
     assert (tmp_path / "calls").read_text().splitlines() == ["called"]
 
 
-@pytest.mark.parametrize("preparation", ["success", "invalid", "reject"])
+@pytest.mark.parametrize("preparation", ["success", "invalid", "reject", "reject_read"])
 def test_local_water_preparation_to_batch_result(job, scheduler, tmp_path, preparation):
     from ase.io import read
     from chemgraph.registry import ToolRegistry
@@ -212,8 +212,9 @@ def test_local_water_preparation_to_batch_result(job, scheduler, tmp_path, prepa
         call("smiles_to_coordinate_file", smiles="invalid!" if preparation == "invalid" else "O", output_file=str(water)),
     ]
     if preparation != "reject":
+        responses.append(call("file_to_atomsdata", fname=str(water)))
+    if preparation not in {"reject", "reject_read"}:
         responses += [
-            call("file_to_atomsdata", fname=str(water)),
             call("write_file", file_path="/workspace/input.json", content=""),
             call("execute", command=shell(example("pbs-hpc/SKILL.md", "bash"))),
         ]
@@ -225,6 +226,7 @@ def test_local_water_preparation_to_batch_result(job, scheduler, tmp_path, prepa
     config = {"configurable": {"thread_id": "prepare-water"}}
     state = agent.invoke({"messages": [HumanMessage(content="Prepare water locally and run ASE through PBS.")]}, config)
     assert state["__interrupt__"] and not water.exists()
+    assert state["__interrupt__"][0].value["action_requests"][0]["name"] == "smiles_to_coordinate_file"
     resume = Command(resume={"decisions": [{"type": "reject" if preparation == "reject" else "approve"}]})
     if preparation == "invalid":
         with pytest.raises(ValueError, match="Invalid SMILES"):
@@ -236,10 +238,23 @@ def test_local_water_preparation_to_batch_result(job, scheduler, tmp_path, prepa
         assert not water.exists() and not (tmp_path / "calls").exists()
         return
     assert read(water).get_chemical_formula() == "H2O"
+    assert state["__interrupt__"][0].value["action_requests"][0]["name"] == "file_to_atomsdata"
+    assert not any(m.type == "tool" and m.name == "file_to_atomsdata" for m in state["messages"])
+    assert not (tmp_path / "input.json").exists() and not (tmp_path / "calls").exists()
+    read_decision = "reject" if preparation == "reject_read" else "approve"
+    state = agent.invoke(Command(resume={"decisions": [{"type": read_decision}]}), config)
+    if preparation == "reject_read":
+        assert "__interrupt__" not in state
+        assert not (tmp_path / "input.json").exists() and not (tmp_path / "calls").exists()
+        result = next(m for m in state["messages"] if m.type == "tool" and m.name == "file_to_atomsdata")
+        assert result.status == "error"
+        return
     assert state["__interrupt__"] and not (tmp_path / "input.json").exists()
+    assert state["__interrupt__"][0].value["action_requests"][0]["name"] == "write_file"
     state = agent.invoke(Command(resume={"decisions": [{"type": "approve"}]}), config)
     assert json.loads((tmp_path / "input.json").read_text())["input_structure_file"] == str(water)
     assert state["__interrupt__"] and not (tmp_path / "calls").exists()
+    assert state["__interrupt__"][0].value["action_requests"][0]["name"] == "execute"
     state = agent.invoke(Command(resume={"decisions": [{"type": "approve"}]}), config)
     assert "__interrupt__" not in state
     assert (tmp_path / "job.id").read_text().strip() == "123.test"

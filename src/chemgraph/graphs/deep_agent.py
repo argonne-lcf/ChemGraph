@@ -46,11 +46,12 @@ DEFAULT_DEEPAGENT_INTERRUPT_ON = {
     "save_atomsdata_to_file": {"allowed_decisions": ["approve", "reject"]},
 }
 
-# Additional built-ins that write artifacts or launch calculations. Apply these
-# only to registry tools, preserving the policy for explicitly attached tools.
+# Additional built-ins that read host files, write artifacts, or launch calculations.
+# Apply only to registry tools, preserving the policy for explicitly attached tools.
 _REGISTRY_REVIEW_TOOLS = {
     "run_ase", "run_docking", "run_graspa", "run_xanes", "generate_html",
     "fetch_xanes_data", "plot_xanes_data",
+    "load_document", "file_to_atomsdata", "extract_output_json",
 }
 
 
