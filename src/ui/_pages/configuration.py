@@ -526,7 +526,6 @@ def _render_general_settings(config: dict) -> None:
         config["general"]["recursion_limit"] = st.number_input(
             "Recursion Limit",
             min_value=1,
-            max_value=100,
             value=config["general"]["recursion_limit"],
             key=_wkey("config_recursion"),
         )

@@ -211,7 +211,7 @@ def construct_main_agent_graph(
     deepagent_discover_skills: bool = True,
     deepagent_user_skills_dir: str | None = None,
     deepagent_skill_dirs: Sequence[str] | None = None,
-    deepagent_recursion_limit: int = 50,
+    deepagent_recursion_limit: int = 200,
     deepagent_system_prompt: str = DEFAULT_DEEPAGENT_PROMPT,
     system_prompt: str = DEFAULT_MAIN_AGENT_PROMPT,
     checkpointer: Any | None = None,

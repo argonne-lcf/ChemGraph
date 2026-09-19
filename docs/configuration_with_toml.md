@@ -17,7 +17,7 @@ workflow = "single_agent"
 output = "last_message"
 structured = false
 report = false
-recursion_limit = 20
+recursion_limit = 200
 human_supervised = false
 
 [logging]
@@ -149,7 +149,7 @@ dataset = "./evaluation/questions.json"
 workflow_types = ["single_agent"]
 judge_type = "structured"
 structured_output = true
-recursion_limit = 50
+recursion_limit = 200
 max_queries = 0
 ```
 

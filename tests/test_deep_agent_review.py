@@ -122,6 +122,80 @@ def _approval():
     }
 
 
+@pytest.mark.parametrize("main_agent", [False, True])
+def test_cli_feedback_skips_write_and_reviews_revision(
+    monkeypatch, tmp_path, main_agent,
+):
+    from rich.console import Console
+    from chemgraph.agent.main_session import MainAgentSession
+    from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+    from chemgraph.graphs.main_agent import construct_main_agent_graph
+    from tests.test_deep_agent import _RecordingChatModel
+    from tests.test_main_agent import _deepagent_task_call
+
+    feedback = "Write revised.txt instead; keep blocked.txt untouched."
+    model = _RecordingChatModel(responses=[
+        AIMessage(content="", tool_calls=[{
+            "name": "write_file", "id": name,
+            "args": {"file_path": f"/workspace/{name}.txt", "content": name},
+        }])
+        for name in ("blocked", "revised")
+    ] + [AIMessage(content="Done")])
+    saver = InMemorySaver()
+    worker = construct_deep_agent_graph(
+        model, backend=LocalShellBackend(root_dir=tmp_path, env={}),
+        discover_skills=False, checkpointer=None if main_agent else saver,
+    )
+    prompts = []
+
+    def answer(*_args, **_kwargs):
+        assert not (tmp_path / "blocked.txt").exists()
+        assert not (tmp_path / "revised.txt").exists()
+        prompts.append(True)
+        if len(prompts) == 1:
+            return feedback
+        assert len(prompts) == 2
+        assert any(
+            m.type == "tool" and feedback in str(m.content)
+            for m in model.received_messages
+        )
+        return ""
+
+    monkeypatch.setattr("builtins.input", answer)
+    monkeypatch.setattr(commands, "console", Console(width=120))
+    monkeypatch.setattr(commands.time, "sleep", lambda _: None)
+    with commands.console.capture():
+        if main_agent:
+            graph = construct_main_agent_graph(
+                _ScriptedChatModel(responses=[
+                    AIMessage(content="", tool_calls=[_deepagent_task_call("delegate")]),
+                    AIMessage(content="Done"),
+                ]),
+                subagents=[{
+                    "name": "deepagent", "description": "Workspace worker",
+                    "runnable": worker,
+                }],
+                checkpointer=saver,
+            )
+            result = commands.run_main_agent_query(
+                MainAgentSession(graph), "Write a file",
+            )
+            assert result.status == "completed"
+        else:
+            agent = _agent(monkeypatch, tmp_path, workflow=worker)
+            result = commands.run_query(agent, "Write a file")
+            assert result.content == "Done"
+            assert any(
+                feedback in log.read_text()
+                for log in (tmp_path / "logs").glob("*.json")
+            )
+    assert len(prompts) == 2
+    assert not (tmp_path / "blocked.txt").exists()
+    assert (tmp_path / "revised.txt").read_text() == "revised"
+    # LangGraph persists message deltas as checkpoint writes.
+    assert any(feedback in str(item.pending_writes) for item in saver.list(None))
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("via_cli", [False, True])
 async def test_twelve_file_approvals_complete(monkeypatch, tmp_path, via_cli):
