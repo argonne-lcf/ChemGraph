@@ -82,6 +82,7 @@ class BenchmarkConfig(BaseModel):
     )
     recursion_limit: int = Field(
         default=200,
+        ge=1,
         description="Max LangGraph recursion steps per query.",
     )
     judge_model: Optional[str] = Field(

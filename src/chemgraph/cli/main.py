@@ -164,7 +164,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--recursion-limit",
         type=int,
-        default=200,
+        default=None,
         help="Maximum graph steps for agent workflows (default: 200)",
     )
     parser.add_argument(
@@ -524,11 +524,11 @@ def _handle_run(args: argparse.Namespace) -> None:
         for key, value in config.items():
             if hasattr(args, key) and getattr(args, key) is None:
                 setattr(args, key, value)
-        # Honour config recursion_limit unless user gave explicit flag.
-        if "recursion_limit" in config and "--recursion-limit" not in sys.argv:
-            args.recursion_limit = config["recursion_limit"]
         if getattr(args, "deepagent", None) is None and "enable_deepagent" in config:
             args.deepagent = bool(config["enable_deepagent"])
+
+    if args.recursion_limit is None:
+        args.recursion_limit = 200
 
     # ---- Configure logging verbosity --------------------------------
     import logging as _logging

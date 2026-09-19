@@ -258,7 +258,7 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             "workflow_types": args.workflows or ["single_agent"],
             "output_dir": args.output_dir,
             "structured_output": not args.no_structured_output,
-            "recursion_limit": args.recursion_limit or 200,
+            "recursion_limit": args.recursion_limit if args.recursion_limit is not None else 200,
             "tags": args.tags or [],
             "max_queries": args.max_queries or 0,
             "config_file": args.config,

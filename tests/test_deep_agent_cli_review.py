@@ -88,13 +88,14 @@ def test_missing_workflow_defaults_to_single_agent(dispatch):
 
 
 @pytest.mark.parametrize("subcommand", [[], ["run"]])
+@pytest.mark.parametrize("flag_style", ["separate", "equals"])
 @pytest.mark.parametrize(
     "config_limit,flag,expected",
     [(None, None, 200), ({}, None, 200), (17, None, 17),
-     (None, 33, 33), ({}, 33, 33), (17, 33, 33)],
+     (None, 33, 33), ({}, 33, 33), (17, 33, 33), (17, 200, 200)],
 )
 def test_recursion_limit_defaults_and_overrides(
-    tmp_path, monkeypatch, dispatch, subcommand, config_limit, flag, expected
+    tmp_path, monkeypatch, dispatch, subcommand, flag_style, config_limit, flag, expected
 ):
     argv = [*subcommand, "--interactive"]
     if config_limit is not None:
@@ -103,8 +104,10 @@ def test_recursion_limit_defaults_and_overrides(
         path.write_text(toml.dumps({"general": general}))
         argv += ["--config", str(path)]
     if flag is not None:
-        argv += ["--recursion-limit", str(flag)]
-    monkeypatch.setattr(sys, "argv", ["chemgraph", *argv])
+        argv += (["--recursion-limit", str(flag)] if flag_style == "separate"
+                 else [f"--recursion-limit={flag}"])
+    # Programmatic parsing must work independently of the process's argv.
+    monkeypatch.setattr(sys, "argv", ["chemgraph"])
     cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
     assert dispatch["recursion_limit"] == expected
 
