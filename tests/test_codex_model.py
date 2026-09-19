@@ -363,6 +363,56 @@ def test_codex_metadata_preserves_details_and_does_not_use_last():
     assert usage["output_token_details"] == {"reasoning": 15}
 
 
+@pytest.mark.parametrize("status", ["completed", "interrupted"])
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_codex_pinned_sdk_notification_contract(fake_codex_sdk, monkeypatch, status, asynchronous):
+    from chemgraph.agent.usage import UsageCollector
+    sdk = pytest.importorskip("openai_codex.generated.v2_all")
+    closed = []
+    total = {"inputTokens": 30, "outputTokens": 4, "totalTokens": 34,
+             "cachedInputTokens": 5, "reasoningOutputTokens": 2}
+    last = {**total, "inputTokens": 1, "outputTokens": 1, "totalTokens": 2}
+
+    def turn(self, prompt, **kwargs):
+        def stream():
+            try:
+                yield SimpleNamespace(method="thread/tokenUsage/updated", payload=
+                    sdk.ThreadTokenUsageUpdatedNotification.model_validate({
+                        "threadId": "thread", "turnId": "turn",
+                        "tokenUsage": {"total": total, "last": last},
+                    }))
+                for index, phase in enumerate(("final_answer", "commentary", None)):
+                    yield SimpleNamespace(method="item/completed", payload=
+                        sdk.ItemCompletedNotification.model_validate({
+                            "threadId": "thread", "turnId": "turn", "completedAtMs": 1,
+                            "item": {"id": str(index), "type": "agentMessage", "phase": phase,
+                                     "text": json.dumps({"content": f"answer {index}", "tool_calls": []})},
+                        }))
+                yield SimpleNamespace(method="turn/completed", payload=
+                    sdk.TurnCompletedNotification.model_validate({
+                        "threadId": "thread", "turn": {"id": "turn", "items": [], "status": status},
+                    }))
+            finally:
+                closed.append(True)
+        return SimpleNamespace(id="turn", stream=stream)
+
+    monkeypatch.setattr(_FakeThread, "turn", turn)
+    collector = UsageCollector("session", "thread")
+    model = CodexChatModel(model_id="test")
+    def invoke():
+        config = {"callbacks": [collector]}
+        return asyncio.run(model.ainvoke("test", config=config)) if asynchronous else model.invoke("test", config=config)
+    if status == "interrupted":
+        with pytest.raises(RuntimeError, match="Codex turn interrupted"):
+            invoke()
+    else:
+        assert invoke().content == "answer 0"
+    assert closed == [True]
+    assert collector.summary["total_tokens"] == 34
+    assert collector.summary["call_count"] == 1
+    assert collector.summary["partial"] is (status == "interrupted")
+
+
 def test_codex_preserves_parallel_tool_history_and_errors(fake_codex_sdk):
     calls = [
         {"name": "read_file", "args": {"file_path": path}, "id": call_id}

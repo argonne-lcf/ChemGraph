@@ -45,7 +45,10 @@ The recursion limit counts graph steps, including middleware and tool execution,
 not just model calls. Raising it allows longer workflows; it does not reduce
 token consumption. Explicit configuration and saved session limits are retained.
 
-After each query, the CLI prints provider-reported token usage locally:
+After each query, the CLI prints provider-reported token usage locally.
+Non-interactive runs send usage lines to stderr, including failures and
+cancellation, so usage does not appear in captured stdout. Interactive runs
+display usage alongside the conversation.
 
 ```text
 Tokens: 12,340 input · 520 output · 12,860 total
@@ -68,6 +71,15 @@ These lines use numeric counters already returned by the provider. They make no
 additional model requests and are not inserted into the conversation or saved
 answer. Usage is persisted per call in the existing session database when memory
 is enabled. Older sessions have no reconstructed usage for their historical calls.
+Their session totals remain partial after new calls are recorded, with an
+explicit historical-usage note; entirely unaccounted history displays unavailable.
+Rejected operations that fail validation do not print or alter a previous turn's
+usage.
+
+The CLI configures logging to stop propagation at the `chemgraph` logger to
+avoid duplicate output. Applications embedding the CLI should attach handlers
+to that namespace if they need its records; Python root handlers will not receive
+them after CLI logging configuration. Library use alone does not configure this.
 
 The legacy no-subcommand form, such as `chemgraph -q "..."`, remains supported,
 but new scripts should use `chemgraph run`.

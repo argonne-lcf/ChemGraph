@@ -93,6 +93,7 @@ ocsr = [
     "timm>=1.0,<1.1",
 ]
 codex = [
+    # The adapter parses SDK notification methods/payloads; verify its contract tests before upgrading.
     "openai-codex==0.144.4",
 ]
 calculators = [

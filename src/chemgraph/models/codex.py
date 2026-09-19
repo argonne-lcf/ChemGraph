@@ -305,6 +305,8 @@ def _run_codex_turn(thread, prompt, *, run_manager, model, **kwargs):
     Each ChemGraph model invocation owns a fresh ephemeral SDK thread, so its
     cumulative total includes all internal requests. Reusing this helper for
     correction attempts on that thread replaces, rather than adds, totals.
+    Unlike SDK ``thread.run``, interrupted turns raise rather than returning a
+    potentially unfinished decision; their available usage is still retained.
     """
     turn = thread.turn(prompt, **kwargs)
     stream = turn.stream()

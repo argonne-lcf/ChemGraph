@@ -23,6 +23,14 @@ Model/token budgets and prompt/runtime optimizations remain future work.
 - Logging stops propagation at the ChemGraph namespace while preserving child
   file handlers.
 
+Review follow-ups preserve earlier turn status when an operation is rejected,
+mark legacy session accounting gaps explicitly, send non-interactive usage to
+stderr, retain copied summaries instead of replaced agents, and close SQLite
+connections deterministically. Usage snapshots are still persisted individually;
+moving writes off async callback threads and optimizing long-session aggregation
+remain separate work. The Codex notification contract is tested against the
+pinned SDK, and interrupted SDK turns intentionally raise.
+
 The measurements below are historical observations from the original run; they
 have not been regenerated using the new accounting.
 

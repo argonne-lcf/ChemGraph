@@ -54,6 +54,13 @@ known subtotals; unknown fields are `None`. Cache/reasoning details are subsets
 of input/output. A store query with no recorded usage has `recorded=False`;
 old conversation history is not retroactively counted.
 
+Session summaries also expose `history_unaccounted`. When true, `partial` stays
+true regardless of complete counts for new turns. No calls or tokens are
+estimated for the missing history. On database upgrade, existing transcripts
+without the coverage marker are conservatively flagged, even if some usage rows
+exist; newly created sessions start with complete coverage. Individual new-turn
+summaries are independent of that historical gap.
+
 `MainAgentSession` exposes the same `last_usage` and `session_usage` properties;
 its turn result also includes `usage`. `resume()` and `retry()` retain the
 original usage turn. `run_turn` returns `usage` and accepts an optional
