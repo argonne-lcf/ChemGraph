@@ -10,6 +10,8 @@ import json
 import os
 import sqlite3
 import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -196,16 +198,21 @@ class SessionStore:
         except OSError:
             logger.warning("Could not restrict permissions for %s", path)
 
-    def _connect(self) -> sqlite3.Connection:
-        """Return a new connection with WAL mode and FK enforcement."""
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Commit or roll back a WAL/FK transaction and always close it."""
         conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.row_factory = sqlite3.Row
-        self._restrict_permissions(self.db_path, 0o600)
-        self._restrict_permissions(self.db_path + "-wal", 0o600)
-        self._restrict_permissions(self.db_path + "-shm", 0o600)
-        return conn
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.row_factory = sqlite3.Row
+            self._restrict_permissions(self.db_path, 0o600)
+            self._restrict_permissions(self.db_path + "-wal", 0o600)
+            self._restrict_permissions(self.db_path + "-shm", 0o600)
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     # ------------------------------------------------------------------
     # Session CRUD

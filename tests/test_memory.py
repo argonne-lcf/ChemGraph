@@ -3,6 +3,7 @@ Tests for ChemGraph session memory storage.
 """
 
 import os
+import sqlite3
 from datetime import datetime
 
 import pytest
@@ -21,6 +22,37 @@ def tmp_db(tmp_path):
 def store(tmp_db):
     """Create a SessionStore with a temporary database."""
     return SessionStore(db_path=tmp_db)
+
+
+def test_connections_close_after_commit_and_rollback(store):
+    store.create_session("session", "fake", "single_agent")
+    with store._connect() as committed:
+        assert committed.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert committed.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        committed.execute("UPDATE sessions SET title = 'committed'")
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        committed.execute("SELECT 1")
+    assert store.get_session("session").title == "committed"
+    with pytest.raises(RuntimeError, match="rollback"):
+        with store._connect() as rolled_back:
+            rolled_back.execute("UPDATE sessions SET title = 'discarded'")
+            raise RuntimeError("rollback")
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        rolled_back.execute("SELECT 1")
+    assert store.get_session("session").title == "committed"
+
+
+def test_connection_closes_when_setup_fails(store, monkeypatch):
+    connection = sqlite3.connect(store.db_path)
+    monkeypatch.setattr(sqlite3, "connect", lambda *_: connection)
+    def fail(*_):
+        raise OSError("setup failed")
+    monkeypatch.setattr(store, "_restrict_permissions", fail)
+    with pytest.raises(OSError, match="setup failed"):
+        with store._connect():
+            pytest.fail("Connection setup should have failed")
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        connection.execute("SELECT 1")
 
 
 # ------------------------------------------------------------------
