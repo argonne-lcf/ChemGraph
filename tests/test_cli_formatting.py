@@ -83,10 +83,11 @@ def test_action_reviews_escape_terminal_controls(monkeypatch, name, args, full):
     assert action == original
 
 
+# Pytest stores IDs in PYTEST_CURRENT_TEST, which has a size limit on Windows.
 @pytest.mark.parametrize("content", [
     "\n".join(f"line-{n:04d}" for n in range(5000)),
     "first " + "x" * 10000 + " hidden-middle " + "y" * 10000 + " last",
-])
+], ids=["many-lines", "single-long-line"])
 def test_large_action_preview_is_bounded_and_full_view_keeps_everything(content):
     action = {"name": "write_file", "args": {"file_path": "/large.txt", "content": content}}
     terminal = Console(width=120, color_system=None)
