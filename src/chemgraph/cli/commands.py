@@ -7,6 +7,7 @@ starting interactive mode, managing sessions, etc.
 from __future__ import annotations
 
 import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
@@ -43,7 +44,8 @@ from chemgraph.utils.async_utils import run_async_callable
 from chemgraph.cli.formatting import (
     console,
     create_banner,
-    format_action_review,
+    action_review_summary,
+    build_action_review,
     format_response,
 )
 
@@ -697,6 +699,28 @@ def _render_main_agent_event(event: str, payload: dict[str, Any]) -> None:
     )
 
 
+def _clear_pending_review_input() -> None:
+    """Discard TTY typeahead so an earlier Enter cannot approve a new action."""
+    try:
+        if not sys.stdin.isatty():
+            return
+        if sys.platform == "win32":
+            import msvcrt
+
+            while msvcrt.kbhit():
+                msvcrt.getwch()
+        else:
+            import termios
+
+            try:
+                termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
+            except termios.error:
+                pass
+    except (ImportError, AttributeError, OSError, ValueError):
+        # Embedded consoles may advertise a TTY without a usable file descriptor.
+        pass
+
+
 def _prompt_for_interrupt(payload: Any) -> Any:
     """Render one interrupt and collect its resume value."""
     if not _is_tool_review(payload):
@@ -729,7 +753,8 @@ def _prompt_for_interrupt(payload: Any) -> Any:
             raise ValueError(
                 f"Deep Agent action {name!r} does not allow approve/reject."
             )
-        console.print(format_action_review(action, index, len(payload["action_requests"])))
+        panel, truncated = build_action_review(action, index, len(payload["action_requests"]))
+        console.print(panel)
         default = "approve" if "approve" in allowed else "reject"
         if "approve" in allowed:
             console.print("1. Approve this action (Enter / y)", markup=False)
@@ -741,10 +766,21 @@ def _prompt_for_interrupt(payload: Any) -> Any:
                 markup=False,
             )
         while True:
+            console.print(action_review_summary(action))
+            if truncated:
+                console.print("v. View the full action before deciding", markup=False)
+            _clear_pending_review_input()
             answer = Prompt.ask(
                 "[bold cyan]Decision[/bold cyan]", default=default, console=console,
             ).strip()
             command = answer.casefold()
+            if truncated and command in {"v", "view"}:
+                full_panel, _ = build_action_review(
+                    action, index, len(payload["action_requests"]), full=True,
+                )
+                with console.pager(styles=False, links=False):
+                    console.print(full_panel)
+                continue
             if not command:
                 decision = {"type": default}
             elif command in {"1", "y", "yes", "a", "approve"}:
