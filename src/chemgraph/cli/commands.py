@@ -9,13 +9,16 @@ from __future__ import annotations
 import logging
 import os
 import time
+from asyncio import CancelledError
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from copy import deepcopy
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 from rich.panel import Panel
+from rich.console import Console
 from rich.markup import escape
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
@@ -476,11 +479,12 @@ def _next_thread_id() -> int:
     return _thread_counter
 
 
-def print_token_usage(owner: Any) -> None:
+def print_token_usage(owner: Any, *, stderr: bool = False) -> None:
     """Print locally collected counters without adding conversation messages."""
     usage = getattr(owner, "last_usage", None)
     if isinstance(usage, dict):
-        console.print(format_token_usage(usage))
+        destination = Console(stderr=True) if stderr else console
+        destination.print(format_token_usage(usage))
 
 
 def _report_failed_usage(operation):
@@ -489,25 +493,30 @@ def _report_failed_usage(operation):
     def run(owner, *args, **kwargs):
         result = None
         cancelled = False
+        previous_operation = getattr(owner, "_usage_operation", 0)
         try:
             result = operation(owner, *args, **kwargs)
             return result
-        except (KeyboardInterrupt, EOFError):
+        except (KeyboardInterrupt, EOFError, CancelledError):
             cancelled = True
             raise
         finally:
             collector = getattr(owner, "_usage", None)
-            if isinstance(collector, UsageCollector):
-                owners = _interactive_usage.get()
-                if owners is not None:
-                    key = (getattr(collector.store, "db_path", None), collector.session_id)
-                    owners[key] = owner
+            executed = getattr(owner, "_usage_operation", 0) != previous_operation
+            if executed and isinstance(collector, UsageCollector):
                 collector.finish(
                     "cancelled" if cancelled else "failed" if result is None
                     else getattr(result, "status", "completed")
                 )
                 if result is None:
-                    print_token_usage(owner)
+                    print_token_usage(owner, stderr=kwargs.get("usage_stderr", False))
+            summaries = _interactive_usage.get()
+            if summaries is not None and (executed or result is not None):
+                summary = getattr(owner, "session_usage", None)
+                if isinstance(summary, dict):
+                    store = getattr(owner, "session_store", None)
+                    session_id = getattr(owner, "session_id", None) or getattr(owner, "thread_id", None)
+                    summaries[(getattr(store, "db_path", None), session_id)] = deepcopy(summary)
     return run
 
 
@@ -515,14 +524,14 @@ def _report_session_usage(operation):
     """Print session counters once when the interactive CLI exits."""
     @wraps(operation)
     def run(*args, **kwargs):
-        owners = {}
-        token = _interactive_usage.set(owners)
+        summaries = {}
+        token = _interactive_usage.set(summaries)
         try:
             return operation(*args, **kwargs)
         finally:
             _interactive_usage.reset(token)
-            if owners:
-                totals = combine_usage([owner.session_usage for owner in owners.values()])
+            if summaries:
+                totals = combine_usage(list(summaries.values()))
                 rendered = format_token_usage(totals).plain
                 console.print("Session " + rendered[0].lower() + rendered[1:], markup=False)
     return run
@@ -535,6 +544,8 @@ def run_query(
     thread_id: Optional[int] = None,
     verbose: bool = False,
     resume_from: Optional[str] = None,
+    *,
+    usage_stderr: bool = False,
 ) -> Any:
     """Execute a query with the agent.
 
@@ -556,6 +567,8 @@ def run_query(
         Whether to print execution details.
     resume_from : str, optional
         Previous ChemGraph session ID to load as context.
+    usage_stderr : bool
+        Send failure/cancellation usage to stderr for non-interactive callers.
 
     Returns
     -------

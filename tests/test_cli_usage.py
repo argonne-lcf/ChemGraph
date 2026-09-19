@@ -1,6 +1,9 @@
 """Usage printing uses counters only, with no additional model requests."""
 
 import io
+import gc
+import weakref
+from asyncio import CancelledError
 
 import pytest
 from rich.console import Console
@@ -77,7 +80,7 @@ def test_cli_failure_prints_known_usage_once(monkeypatch, tmp_path, terminal, ma
     assert "12 total" in terminal.getvalue()
 
 
-@pytest.mark.parametrize("error", [EOFError, KeyboardInterrupt])
+@pytest.mark.parametrize("error", [EOFError, KeyboardInterrupt, CancelledError])
 def test_cli_cancelled_review_prints_usage_without_resuming(monkeypatch, tmp_path, terminal, error):
     model = FakeMessagesListChatModel(responses=[answer(), answer()])
     agent = _agent(monkeypatch, tmp_path, workflow=graph(model, pause=True))
@@ -89,6 +92,9 @@ def test_cli_cancelled_review_prints_usage_without_resuming(monkeypatch, tmp_pat
     assert terminal.getvalue().count("Tokens:") == 1
     assert "12 total" in terminal.getvalue()
     assert model.i == 1
+    assert agent.session_store.latest_usage_turn(
+        agent.session_id, agent.last_usage["thread_id"],
+    )["status"] == "cancelled"
 
 
 def test_exit_usage_counts_turns_once_even_after_retry(monkeypatch, tmp_path, terminal):
@@ -106,21 +112,34 @@ def test_exit_usage_counts_turns_once_even_after_retry(monkeypatch, tmp_path, te
     assert "Session tokens: 20 input · 4 output · 24 total" in terminal.getvalue()
 
 
-def test_one_shot_prints_usage_after_answer(monkeypatch, tmp_path, terminal):
+@pytest.mark.parametrize("outcome", ["success", "failure", "cancelled"])
+def test_one_shot_prints_usage_only_to_stderr(monkeypatch, tmp_path, terminal, capsys, outcome):
     import importlib
     cli = importlib.import_module("chemgraph.cli.main")
     agent = _agent(monkeypatch, tmp_path, enable_memory=False,
-                   workflow=graph(FakeMessagesListChatModel(responses=[answer()])))
+                   workflow=graph(FakeMessagesListChatModel(responses=[answer()]),
+                                  fail=outcome == "failure", pause=outcome == "cancelled"))
     monkeypatch.setattr(cli, "initialize_agent", lambda *args, **kwargs: agent)
     monkeypatch.setattr(cli, "console", commands.console)
     monkeypatch.setattr(cli, "format_response", lambda *args, **kwargs: commands.console.print("ANSWER"))
     parser = cli.create_argument_parser()
     monkeypatch.setattr(cli.sys, "argv", ["chemgraph", "run", "-q", "test"])
     args = parser.parse_args(["run", "-q", "test"])
-    cli._handle_run(args)
+    if outcome == "cancelled":
+        def cancel(*_):
+            raise KeyboardInterrupt()
+        monkeypatch.setattr(commands, "_prompt_for_interrupt", cancel)
+        with pytest.raises(KeyboardInterrupt):
+            cli._handle_run(args)
+    else:
+        cli._handle_run(args)
     output = terminal.getvalue()
-    assert output.count("Tokens:") == 1
-    assert output.index("ANSWER") < output.index("Tokens:")
+    captured = capsys.readouterr()
+    assert "Tokens:" not in output + captured.out
+    assert captured.err.count("Tokens:") == 1
+    assert "12 total" in captured.err
+    if outcome == "success":
+        assert "ANSWER" in output
 
 
 @pytest.mark.parametrize("exit_command", ["/quit", None])
@@ -172,6 +191,125 @@ def test_exit_totals_include_restored_history_and_session_switch(monkeypatch, tm
         commands.restore_main_agent_session(restored)
         commands.run_main_agent_query(restored, "new query")
         commands.run_query(other, "different model")
+        # Revisit the same durable session: replace its cumulative summary.
+        commands.restore_main_agent_session(restored)
     repl()
     assert terminal.getvalue().count("Session tokens:") == 1
     assert "Session tokens: 30 input · 6 output · 36 total" in terminal.getvalue()
+
+
+@pytest.mark.parametrize("prior_status", ["completed", "failed", "waiting_for_user"])
+def test_rejected_main_operation_does_not_change_prior_usage(tmp_path, terminal, prior_status):
+    store = SessionStore(str(tmp_path / "history.db"))
+    workflow = graph(FakeMessagesListChatModel(responses=[answer()]),
+                     fail=prior_status == "failed", pause=prior_status == "waiting_for_user")
+    session = MainAgentSession(workflow, thread_id="history", session_store=store)
+    try:
+        commands.run_async_callable(lambda: session.run("first"))
+    except RuntimeError:
+        assert prior_status == "failed"
+    before = store.latest_usage_turn("history", "history")
+    assert before["status"] == prior_status
+    terminal.seek(0)
+    terminal.truncate()
+    assert commands.run_main_agent_query(session, " ") is None
+    assert "Tokens:" not in terminal.getvalue()
+    assert store.latest_usage_turn("history", "history") == before
+    assert session.last_usage["total_tokens"] == 12
+
+
+def test_rejected_retry_after_idle_restore_preserves_completed_turn(tmp_path, terminal):
+    store = SessionStore(str(tmp_path / "history.db"))
+    workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
+    session = MainAgentSession(workflow, thread_id="history", session_store=store)
+    commands.run_main_agent_query(session, "first")
+    restored = MainAgentSession(workflow, thread_id="history", session_store=store)
+    before = store.latest_usage_turn("history", "history")
+    commands.restore_main_agent_session(restored)
+    assert commands.retry_main_agent_session(restored) is None
+    assert "Tokens:" not in terminal.getvalue()
+    assert store.latest_usage_turn("history", "history") == before
+
+
+def test_rejected_resume_keeps_pending_turn(tmp_path, terminal):
+    store = SessionStore(str(tmp_path / "pending.db"))
+    session = MainAgentSession(graph(FakeMessagesListChatModel(responses=[answer()]), pause=True),
+                               thread_id="pending", session_store=store)
+    commands.run_async_callable(lambda: session.run("first"))
+    before = store.latest_usage_turn("pending", "pending")
+    assert commands._run_main_agent_operation(
+        session, lambda: session.resume(""), progress_description="Resuming",
+    ) is None
+    assert "Tokens:" not in terminal.getvalue()
+    assert store.latest_usage_turn("pending", "pending") == before
+
+
+def test_rejected_standalone_query_keeps_prior_turn(monkeypatch, tmp_path, terminal):
+    agent = _agent(monkeypatch, tmp_path, workflow=graph(FakeMessagesListChatModel(responses=[answer()])))
+    commands.run_query(agent, "first")
+    before = agent.session_store.latest_usage_turn(agent.session_id, agent.last_usage["thread_id"])
+    agent.recursion_limit = 0
+    assert commands.run_query(agent, "second") is None
+    assert "Tokens:" not in terminal.getvalue()
+    assert agent.session_store.latest_usage_turn(agent.session_id, agent.last_usage["thread_id"]) == before
+
+
+def test_interactive_registry_does_not_retain_replaced_owner(monkeypatch, tmp_path, terminal):
+    @commands._report_session_usage
+    def repl():
+        agent = _agent(monkeypatch, tmp_path, enable_memory=False,
+                       workflow=graph(FakeMessagesListChatModel(responses=[answer()])))
+        commands.run_query(agent, "first")
+        reference = weakref.ref(agent)
+        del agent
+        gc.collect()
+        assert reference() is None
+    repl()
+    assert "Session tokens: 10 input · 2 output · 12 total" in terminal.getvalue()
+
+
+def test_cli_retry_counts_reexecuted_calls_in_same_turn(tmp_path, terminal):
+    model = FakeMessagesListChatModel(responses=[answer()])
+    attempts = 0
+    def node(state):
+        nonlocal attempts
+        attempts += 1
+        result = model.invoke(state["messages"])
+        if attempts == 1:
+            raise RuntimeError("retry this node")
+        return {"messages": [result]}
+    builder = StateGraph(MessagesState)
+    builder.add_node("model", node)
+    builder.add_edge(START, "model")
+    builder.add_edge("model", END)
+    store = SessionStore(str(tmp_path / "retry.db"))
+    session = MainAgentSession(builder.compile(checkpointer=InMemorySaver()), session_store=store)
+    assert commands.run_main_agent_query(session, "first") is None
+    turn_id = session.last_usage["turn_id"]
+    result = commands.retry_main_agent_session(session)
+    assert result.status == "completed"
+    assert result.usage["turn_id"] == turn_id
+    assert result.usage["total_tokens"] == 24
+    assert store.latest_usage_turn(session.thread_id, session.thread_id)["status"] == "completed"
+
+
+@pytest.mark.parametrize("new_query", [False, True])
+def test_legacy_restore_is_included_in_interactive_exit_usage(tmp_path, terminal, new_query):
+    store = SessionStore(str(tmp_path / "legacy.db"))
+    store.create_session("legacy", "fake", "main_agent")
+    workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
+    commands.run_async_callable(lambda: workflow.ainvoke(
+        {"messages": [("human", "legacy query")]}, config={"configurable": {"thread_id": "legacy"}},
+    ))
+    session = MainAgentSession(workflow, thread_id="legacy", session_store=store)
+    @commands._report_session_usage
+    def repl():
+        commands.restore_main_agent_session(session)
+        if new_query:
+            commands.run_main_agent_query(session, "new")
+    repl()
+    output = terminal.getvalue()
+    assert "historical usage was not recorded" in output
+    assert "incomplete usage for 0 call(s)" not in output
+    expected = "Session tokens (partial): 10 input" if new_query else "Session tokens: unavailable"
+    assert expected in output

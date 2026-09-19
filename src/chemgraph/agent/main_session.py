@@ -86,6 +86,8 @@ class MainAgentSession:
         self.session_metadata = session_metadata
         self._usage: UsageCollector | None = None
         self._usage_turns: list[UsageCollector] = []
+        self._usage_operation = 0
+        self._history_unaccounted = False
         self._registered = False
         if self.session_store is not None:
             try:
@@ -112,7 +114,10 @@ class MainAgentSession:
     @property
     def session_usage(self) -> dict:
         """All recorded turns in this session, including restored history."""
-        return session_usage(self._usage_turns, self.session_store, self.thread_id)
+        return session_usage(
+            self._usage_turns, self.session_store, self.thread_id,
+            history_unaccounted=self._history_unaccounted,
+        )
 
     def _start_usage(self, restored: dict | None = None) -> None:
         metadata = self.session_metadata
@@ -208,14 +213,26 @@ class MainAgentSession:
         self._pending = result.interrupts
         self._failed = result.status == "failed"
         self._registered = True
-        self._synchronize(snapshot.values, result.status)
+        has_history = bool((snapshot.values or {}).get("messages"))
+        restored = None
         if self.session_store is not None:
             try:
                 restored = self.session_store.latest_usage_turn(self.thread_id, self.thread_id)
                 if restored is not None:
-                    self._start_usage(restored)
+                    # Preserve any in-memory calls whose persistence failed.
+                    if self._usage is None or self._usage.turn_id != restored["turn_id"]:
+                        self._start_usage(restored)
+                self._history_unaccounted |= self.session_store.usage_history_unaccounted(self.thread_id)
             except Exception:
                 logger.warning("Could not restore token usage.", exc_info=True)
+        if has_history and restored is None and not self._usage_turns:
+            self._history_unaccounted = True
+        if self._history_unaccounted and self.session_store is not None:
+            try:
+                self.session_store.mark_usage_history_unaccounted(self.thread_id)
+            except Exception:
+                logger.warning("Could not persist historical usage coverage.", exc_info=True)
+        self._synchronize(snapshot.values, result.status)
         return replace(result, usage=self.last_usage)
 
     def _resume_value(self, response: str | Mapping[str, Any]) -> Any:
@@ -244,6 +261,7 @@ class MainAgentSession:
     async def _run(self, stream_input: Any) -> MainAgentTurnResult:
         if self._usage is None:
             self._start_usage()
+        self._usage_operation += 1
         self._update_status("running")
         try:
             result, state_values = await self._run_once(stream_input)

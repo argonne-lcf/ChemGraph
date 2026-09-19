@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     graph_config TEXT,
     topology_fingerprint TEXT,
     checkpoint_backend TEXT,
-    checkpoint_db TEXT
+    checkpoint_db TEXT,
+    history_unaccounted INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -123,6 +124,7 @@ _SESSION_COLUMNS = {
     "topology_fingerprint": "TEXT",
     "checkpoint_backend": "TEXT",
     "checkpoint_db": "TEXT",
+    "history_unaccounted": "INTEGER NOT NULL DEFAULT 0",
 }
 
 _MESSAGE_COLUMNS = {
@@ -168,8 +170,17 @@ class SessionStore:
         """Create tables and migrate legacy databases in place."""
         with self._connect() as conn:
             conn.executescript(_SCHEMA_SQL)
+            conn.execute("BEGIN")
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
             self._add_missing_columns(conn, "sessions", _SESSION_COLUMNS)
             self._add_missing_columns(conn, "messages", _MESSAGE_COLUMNS)
+            if "history_unaccounted" not in columns:
+                # Pre-marker transcripts cannot prove full accounting coverage,
+                # even if some calls were recorded by an earlier installation.
+                conn.execute(
+                    "UPDATE sessions SET history_unaccounted = 1 WHERE query_count > 0 "
+                    "OR EXISTS (SELECT 1 FROM messages WHERE messages.session_id = sessions.session_id)"
+                )
             conn.execute("PRAGMA user_version = 1")
 
     @staticmethod
@@ -734,10 +745,34 @@ class SessionStore:
         """Register a turn without resetting an existing continuation."""
         with self._connect() as conn:
             conn.execute(
+                "UPDATE sessions SET history_unaccounted = 1 WHERE session_id = ? "
+                "AND (query_count > 0 OR EXISTS (SELECT 1 FROM messages WHERE session_id = ?)) "
+                "AND NOT EXISTS (SELECT 1 FROM usage_turns WHERE session_id = ?)",
+                (session_id, session_id, session_id),
+            )
+            conn.execute(
                 "INSERT OR IGNORE INTO usage_turns (turn_id, session_id, thread_id, created_at) "
                 "VALUES (?, ?, ?, ?)",
                 (turn_id, session_id, thread_id, datetime.now().isoformat()),
             )
+
+    def mark_usage_history_unaccounted(self, session_id: str) -> None:
+        """Remember a historical accounting gap independently of later turns."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE sessions SET history_unaccounted = 1 WHERE session_id = ?", (session_id,),
+            )
+
+    def usage_history_unaccounted(self, session_id: str) -> bool:
+        """Include transcripts that have not yet started usage accounting."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT history_unaccounted OR ((query_count > 0 OR EXISTS "
+                "(SELECT 1 FROM messages WHERE session_id = ?)) AND NOT EXISTS "
+                "(SELECT 1 FROM usage_turns WHERE session_id = ?)) "
+                "FROM sessions WHERE session_id = ?", (session_id, session_id, session_id),
+            ).fetchone()
+        return bool(row and row[0])
 
     def save_usage_call(self, turn_id: str, record: dict) -> None:
         """Commit one cumulative call snapshot; repeated delivery is idempotent."""
@@ -766,7 +801,7 @@ class SessionStore:
 
     def get_usage(self, session_id: str, turn_id: str | None = None) -> dict:
         """Return known provider totals and coverage for a session or one turn."""
-        from chemgraph.agent.usage import summarize_usage
+        from chemgraph.agent.usage import apply_history_coverage, summarize_usage
 
         resolved = self._resolve_session_id(session_id)
         with self._connect() as conn:
@@ -785,7 +820,9 @@ class SessionStore:
             from chemgraph.agent.usage import TOKEN_FIELDS
 
             result.update(dict.fromkeys(TOKEN_FIELDS))
-        return result
+        return apply_history_coverage(
+            result, turn_id is None and self.usage_history_unaccounted(resolved),
+        )
 
     def usage_records(self, session_id: str) -> list[dict]:
         """Read call records for merging durable and in-memory session usage."""

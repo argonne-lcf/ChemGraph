@@ -150,17 +150,32 @@ def add_callbacks(config: dict, callbacks: list) -> dict:
     return result
 
 
-def session_usage(collectors, store, session_id) -> dict:
+def apply_history_coverage(summary: dict, history_unaccounted: bool) -> dict:
+    """Label known subtotals without inventing calls for unaccounted history."""
+    result = {**summary, "history_unaccounted": history_unaccounted}
+    if history_unaccounted:
+        result["partial"] = True
+        if not result["call_count"]:
+            result.update(dict.fromkeys(TOKEN_FIELDS))
+    return result
+
+
+def session_usage(collectors, store, session_id, *, history_unaccounted=False) -> dict:
     """Combine restored records with in-memory calls, including failed writes."""
     records = {}
     if store is not None:
+        try:
+            history_unaccounted = store.usage_history_unaccounted(session_id) or history_unaccounted
+        except Exception:
+            history_unaccounted = True
+            logger.debug("Could not read historical usage coverage.", exc_info=True)
         try:
             records = {r["call_id"]: r for r in store.usage_records(session_id)}
         except Exception:
             logger.debug("Could not read stored session usage.", exc_info=True)
     for collector in collectors:
         records.update({r["call_id"]: r for r in collector.records})
-    return summarize_usage(list(records.values()))
+    return apply_history_coverage(summarize_usage(list(records.values())), history_unaccounted)
 
 
 def combine_usage(summaries: list[dict]) -> dict:
@@ -174,7 +189,7 @@ def combine_usage(summaries: list[dict]) -> dict:
     result["unreported_counts"] = {
         key: sum(s["unreported_counts"][key] for s in summaries) for key in TOKEN_FIELDS
     }
-    return result
+    return apply_history_coverage(result, any(s.get("history_unaccounted", False) for s in summaries))
 
 
 class UsageCollector(BaseCallbackHandler):

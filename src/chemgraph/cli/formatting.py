@@ -28,8 +28,14 @@ console = Console()
 def format_token_usage(usage: dict) -> Text:
     """Render provider counters locally; never generate a model summary."""
     keys = ("input_tokens", "output_tokens", "total_tokens")
-    if usage.get("call_count") and all(usage.get(key) is None for key in keys):
-        return Text("Tokens: unavailable (provider did not report usage)", style="dim")
+    history_unaccounted = usage.get("history_unaccounted", False)
+    if (usage.get("call_count") or history_unaccounted) and all(usage.get(key) is None for key in keys):
+        reasons = []
+        if usage.get("call_count"):
+            reasons.append("provider did not report usage")
+        if history_unaccounted:
+            reasons.append("historical usage was not recorded")
+        return Text("Tokens: unavailable (" + "; ".join(reasons) + ")", style="dim")
     parts = [
         f"{usage[key]:,} {label}" if usage.get(key) is not None else f"unknown {label}"
         for key, label in zip(keys, ("input", "output", "total"), strict=True)
@@ -41,8 +47,10 @@ def format_token_usage(usage: dict) -> Text:
             qualifier = "known " if usage.get("unreported_counts", {}).get(key) else ""
             details.append(f"{usage[key]:,} {qualifier}{label}")
     suffix = f" (included: {'; '.join(details)})" if details else ""
-    if usage.get("partial"):
+    if usage.get("incomplete_calls"):
         suffix += f"; incomplete usage for {usage['incomplete_calls']} call(s)"
+    if history_unaccounted:
+        suffix += "; historical usage was not recorded"
     return Text(prefix + " · ".join(parts) + suffix, style="dim")
 
 

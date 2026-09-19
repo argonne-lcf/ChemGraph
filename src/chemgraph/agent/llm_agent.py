@@ -436,6 +436,7 @@ class ChemGraph:
         self.on_event = on_event
         self._usage: UsageCollector | None = None
         self._usage_turns: list[UsageCollector] = []
+        self._usage_operation = 0
 
         # Record whether the caller relied on the default system prompt before
         # any mutation below rewrites it (e.g. stripping ask_human when
@@ -1275,6 +1276,7 @@ class ChemGraph:
             self.session_id, thread_id, store=self.session_store, model=self.model_name,
         )
         self._usage_turns.append(usage)
+        self._usage_operation += 1
         config = add_callbacks(config, [usage])
 
         # If resuming from a previous session, prepend context

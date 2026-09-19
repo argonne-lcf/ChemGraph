@@ -13,8 +13,9 @@ from langgraph.types import interrupt
 
 from chemgraph.agent.main_session import MainAgentSession
 from chemgraph.agent.usage import (
-    UsageCollector, add_callbacks, normalize_usage, response_usage,
+    UsageCollector, add_callbacks, combine_usage, normalize_usage, response_usage, session_usage,
 )
+from chemgraph.memory.schemas import SessionMessage
 from chemgraph.memory.store import SessionStore
 
 
@@ -303,3 +304,91 @@ async def test_session_totals_include_prior_turns_with_memory_disabled(monkeypat
     assert agent.last_usage["total_tokens"] == 12
     assert agent.session_usage["total_tokens"] == 24
     assert not (tmp_path / "memory.db").exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("durable", [False, True])
+async def test_legacy_checkpoint_history_stays_partial_after_new_turn(store, durable):
+    workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
+    await workflow.ainvoke({"messages": [("human", "legacy")]},
+                          config={"configurable": {"thread_id": "session"}})
+    session = MainAgentSession(workflow, thread_id="session", session_store=store if durable else None)
+    await session.restore()
+    assert session.session_usage["history_unaccounted"] is True
+    assert session.session_usage["total_tokens"] is None
+    assert session.session_usage["call_count"] == 0
+    result = await session.run("new query")
+    assert result.usage["partial"] is False
+    assert session.session_usage["total_tokens"] == 12
+    assert session.session_usage["partial"] is True
+    assert session.session_usage["incomplete_calls"] == 0
+    if durable:
+        assert store.get_usage("session")["history_unaccounted"] is True
+        assert store.get_usage("session", result.usage["turn_id"])["partial"] is False
+        session = MainAgentSession(workflow, thread_id="session", session_store=SessionStore(store.db_path))
+    await session.restore()
+    totals = combine_usage([session.session_usage])
+    assert totals["total_tokens"] == 12
+    assert totals["history_unaccounted"] is True
+    assert totals["partial"] is True
+
+
+@pytest.mark.parametrize("recorded", [False, True])
+def test_usage_history_migration_is_conservative_and_sticky(store, recorded):
+    if recorded:
+        complete(UsageCollector("session", "thread", store=store))
+    store.save_messages("session", [SessionMessage(role="human", content="historical query")])
+    store.create_session("empty", "fake", "main_agent")
+    with store._connect() as conn:
+        conn.execute("ALTER TABLE sessions DROP COLUMN history_unaccounted")
+    migrated = SessionStore(store.db_path)
+    assert migrated.get_usage("session")["history_unaccounted"] is True
+    assert migrated.get_usage("session")["partial"] is True
+    assert migrated.get_usage("session")["total_tokens"] == (12 if recorded else None)
+    assert migrated.get_usage("empty")["history_unaccounted"] is False
+    complete(UsageCollector("session", "thread", store=migrated))
+    reopened = SessionStore(store.db_path)
+    assert reopened.get_usage("session")["history_unaccounted"] is True
+    assert reopened.get_usage("session")["total_tokens"] == (24 if recorded else 12)
+    empty = UsageCollector("empty", "thread", store=reopened)
+    assert reopened.get_usage("empty", empty.turn_id)["total_tokens"] == 0
+    assert reopened.get_usage("empty")["partial"] is False
+
+
+def test_first_usage_turn_preserves_existing_transcript_gap(store):
+    store.save_messages("session", [SessionMessage(role="human", content="legacy")])
+    assert store.get_usage("session")["history_unaccounted"] is True
+    collector = UsageCollector("session", "thread", store=store)
+    complete(collector)
+    assert store.get_usage("session")["partial"] is True
+    assert store.get_usage("session", collector.turn_id)["partial"] is False
+
+
+@pytest.mark.asyncio
+async def test_legacy_coverage_survives_storage_failure(store, monkeypatch):
+    workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
+    await workflow.ainvoke({"messages": [("human", "legacy")]},
+                          config={"configurable": {"thread_id": "session"}})
+    def fail(*_):
+        raise OSError("storage unavailable")
+    for method in ("mark_usage_history_unaccounted", "create_usage_turn", "save_usage_call",
+                   "update_usage_turn", "usage_history_unaccounted", "usage_records"):
+        monkeypatch.setattr(store, method, fail)
+    session = MainAgentSession(workflow, thread_id="session", session_store=store)
+    await session.restore()
+    assert session.session_usage["total_tokens"] is None
+    await session.run("new query")
+    await session.restore()
+    assert session.session_usage["total_tokens"] == 12
+    assert session.session_usage["history_unaccounted"] is True
+    assert session.session_usage["partial"] is True
+
+
+def test_coverage_read_failure_does_not_hide_durable_counts(store, monkeypatch):
+    complete(UsageCollector("session", "thread", store=store))
+    def fail(*_):
+        raise OSError("coverage unavailable")
+    monkeypatch.setattr(store, "usage_history_unaccounted", fail)
+    summary = session_usage([], store, "session")
+    assert summary["total_tokens"] == 12
+    assert summary["partial"] is True
