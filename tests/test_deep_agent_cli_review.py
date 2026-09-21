@@ -1,7 +1,11 @@
 """CLI configuration and error-handling regressions for Deep Agent."""
 
 import io
+import os
+import select
+import subprocess
 import sys
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -88,13 +92,14 @@ def test_missing_workflow_defaults_to_single_agent(dispatch):
 
 
 @pytest.mark.parametrize("subcommand", [[], ["run"]])
+@pytest.mark.parametrize("flag_style", ["separate", "equals"])
 @pytest.mark.parametrize(
     "config_limit,flag,expected",
     [(None, None, 200), ({}, None, 200), (17, None, 17),
-     (None, 33, 33), ({}, 33, 33), (17, 33, 33)],
+     (None, 33, 33), ({}, 33, 33), (17, 33, 33), (17, 200, 200)],
 )
 def test_recursion_limit_defaults_and_overrides(
-    tmp_path, monkeypatch, dispatch, subcommand, config_limit, flag, expected
+    tmp_path, monkeypatch, dispatch, subcommand, flag_style, config_limit, flag, expected
 ):
     argv = [*subcommand, "--interactive"]
     if config_limit is not None:
@@ -103,8 +108,10 @@ def test_recursion_limit_defaults_and_overrides(
         path.write_text(toml.dumps({"general": general}))
         argv += ["--config", str(path)]
     if flag is not None:
-        argv += ["--recursion-limit", str(flag)]
-    monkeypatch.setattr(sys, "argv", ["chemgraph", *argv])
+        argv += (["--recursion-limit", str(flag)] if flag_style == "separate"
+                 else [f"--recursion-limit={flag}"])
+    # Programmatic parsing must work independently of the process's argv.
+    monkeypatch.setattr(sys, "argv", ["chemgraph"])
     cli_main._handle_run(cli_main.create_argument_parser().parse_args(argv))
     assert dispatch["recursion_limit"] == expected
 
@@ -229,6 +236,128 @@ def test_review_feedback_preserves_text(monkeypatch):
     assert commands._prompt_for_interrupt(_review(["approve", "reject"])) == {
         "decisions": [{"type": "reject", "message": "Use EMT  instead of [red]MACE[/red]."}]
     }
+
+
+@pytest.mark.parametrize("answer", ["v", "VIEW"])
+def test_full_view_returns_to_same_action_without_approving(monkeypatch, answer):
+    from contextlib import contextmanager
+
+    output = _review_terminal(monkeypatch, f"{answer}\nUse EMT\n")
+    payload = _review(["approve", "reject"])
+    payload["action_requests"][0] = {"name": "write_file", "args": {
+        "file_path": "/large.txt", "content": "before\n" * 50 + "middle\x1b[2K\n" + "after\n" * 50,
+    }}
+    payload["review_configs"][0]["action_name"] = "write_file"
+    pages = []
+    drains = []
+
+    @contextmanager
+    def pager(**kwargs):
+        assert kwargs == {"styles": False, "links": False}
+        with commands.console.capture() as capture:
+            yield
+        pages.append(capture.get())
+
+    monkeypatch.setattr(commands.console, "pager", pager)
+    monkeypatch.setattr(commands, "_clear_pending_review_input", lambda: drains.append(True))
+    result = commands._prompt_for_interrupt(payload)
+    assert result == {"decisions": [{"type": "reject", "message": "Use EMT"}]}
+    assert len(pages) == 1 and "middle\\x1b[2K" in pages[0]
+    assert "\x1b" not in pages[0]
+    assert len(drains) == 2
+    assert output.getvalue().count("Tool: write_file | Path: /large.txt") == 2
+
+
+def test_view_word_remains_feedback_for_complete_preview(monkeypatch):
+    _review_terminal(monkeypatch, "view\n")
+    assert commands._prompt_for_interrupt(_review(["approve", "reject"])) == {
+        "decisions": [{"type": "reject", "message": "view"}]
+    }
+
+
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_review_input_drain_is_tty_only_and_portable(monkeypatch, platform):
+    calls = []
+    tty = SimpleNamespace(isatty=lambda: True, fileno=lambda: 123)
+    monkeypatch.setattr(sys, "stdin", tty)
+    monkeypatch.setattr(sys, "platform", platform)
+    keys = iter([True, True, False])
+    monkeypatch.setitem(sys.modules, "msvcrt", SimpleNamespace(
+        kbhit=lambda: next(keys), getwch=lambda: calls.append("key"),
+    ))
+    monkeypatch.setitem(sys.modules, "termios", SimpleNamespace(
+        tcflush=lambda fd, mode: calls.append((fd, mode)), TCIFLUSH=0, error=RuntimeError,
+    ))
+    commands._clear_pending_review_input()
+    assert calls == (["key", "key"] if platform == "win32" else [(123, 0)])
+    monkeypatch.setattr(sys, "stdin", io.StringIO("\n"))
+    calls.clear()
+    commands._clear_pending_review_input()
+    assert not calls and sys.stdin.read() == "\n"
+
+
+@pytest.mark.parametrize("error", [OSError, ValueError, RuntimeError])
+def test_review_input_drain_tolerates_unavailable_terminal(monkeypatch, error):
+    def fail(*_):
+        raise error("unavailable")
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: True, fileno=lambda: 123))
+    monkeypatch.setitem(sys.modules, "termios", SimpleNamespace(
+        tcflush=fail, TCIFLUSH=0, error=RuntimeError,
+    ))
+    commands._clear_pending_review_input()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires a POSIX pseudo-terminal")
+def test_tty_queued_enters_cannot_approve_next_action():
+    import pty
+
+    script = """
+from chemgraph.cli import commands
+from rich.console import Console
+commands.console = Console(color_system=None, width=100)
+payload = {
+    'action_requests': [{'name': 'execute', 'args': {'command': 'echo test'}}] * 2,
+    'review_configs': [{'action_name': 'execute', 'allowed_decisions': ['approve', 'reject']}],
+}
+input('START> ')
+print('RESULT', commands._prompt_for_interrupt(payload), flush=True)
+"""
+    master, slave = pty.openpty()
+    process = subprocess.Popen(
+        [sys.executable, "-u", "-c", script], stdin=slave, stdout=slave, stderr=slave,
+    )
+    os.close(slave)
+    pending = b""
+
+    def read_until(marker):
+        nonlocal pending
+        deadline = time.monotonic() + 30
+        while marker not in pending:
+            remaining = deadline - time.monotonic()
+            assert remaining > 0, pending.decode(errors="replace")
+            assert select.select([master], [], [], remaining)[0], pending.decode(errors="replace")
+            pending += os.read(master, 65536)
+        prefix, pending = pending.split(marker, 1)
+        return prefix
+
+    try:
+        read_until(b"START> ")
+        os.write(master, b"\n\n")  # Input queued before the first review.
+        read_until(b"Decision (approve): ")
+        os.write(master, b"\n\n")  # Approve once and accidentally double-tap Enter.
+        read_until(b"Decision (approve): ")
+        os.write(master, b"n\n")
+        read_until(b"RESULT ")
+        result = read_until(b"\r\n")
+        assert result == b"{'decisions': [{'type': 'approve'}, {'type': 'reject'}]}"
+        assert process.wait(timeout=10) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        os.close(master)
 
 
 @pytest.mark.parametrize("allowed,text,expected", [
