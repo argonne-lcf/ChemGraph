@@ -1998,17 +1998,24 @@ raw structured request; both synchronous and asynchronous handlers are
 supported. Setting
 <code>deepagent_auto_approve=True</code> removes this boundary and should be limited to an
 externally isolated, explicitly trusted workspace.</p>
+<p>Handlers can reject an action with feedback using the existing decision format:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">response</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"decisions"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"reject"</span><span class="p">,</span> <span class="s2">"message"</span><span class="p">:</span> <span class="s2">"Use EMT instead of MACE."</span><span class="p">}]}</span>
+</code></pre></div>
+<p>The rejected tool is not executed; its feedback is returned to the model, and
+revised tool calls follow the normal approval policy. Supply one decision per
+action in request order. The CLI builds this response from typed guidance;
+Enter at a CLI review approves only that action, not future actions.</p>
 <p>The same constructor can be composed as a worker:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.graphs.deep_agent</span><span class="w"> </span><span class="kn">import</span> <span class="n">construct_deep_agent_graph</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRegistry</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">standalone_graph</span> <span class="o">=</span> <span class="n">construct_deep_agent_graph</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">)</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">AgentRegistry</span><span class="p">()</span><span class="o">.</span><span class="n">as_subagent</span><span class="p">(</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="s2">"deepagent"</span><span class="p">,</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">llm</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="n">skills</span><span class="o">=</span><span class="p">[</span><span class="s2">"/workspace/.agents/skills/"</span><span class="p">],</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.graphs.deep_agent</span><span class="w"> </span><span class="kn">import</span> <span class="n">construct_deep_agent_graph</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">AgentRegistry</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">standalone_graph</span> <span class="o">=</span> <span class="n">construct_deep_agent_graph</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">)</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">AgentRegistry</span><span class="p">()</span><span class="o">.</span><span class="n">as_subagent</span><span class="p">(</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="s2">"deepagent"</span><span class="p">,</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">llm</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">skills</span><span class="o">=</span><span class="p">[</span><span class="s2">"/workspace/.agents/skills/"</span><span class="p">],</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="p">)</span>
 </code></pre></div>
 <p><code>as_subagent()</code> compiles the graph with <code>checkpointer=None</code> so it inherits its
 parent checkpoint. The registry returns the canonical worker name <code>deep_agent</code>,
@@ -2031,9 +2038,9 @@ and treat an approval boundary as part of the application's security model.</p>
 <h2 id="artifacts">Artifacts<a class="headerlink" href="#artifacts" title="Permanent link">&para;</a></h2>
 <p>Set <code>CHEMGRAPH_LOG_DIR</code> before constructing the agent to choose the parent
 directory for session artifacts:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"CHEMGRAPH_LOG_DIR"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"/absolute/path/to/runs"</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"CHEMGRAPH_LOG_DIR"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"/absolute/path/to/runs"</span>
 </code></pre></div>
 <h2 id="api-stability">API stability<a class="headerlink" href="#api-stability" title="Permanent link">&para;</a></h2>
 <p>ChemGraph is evolving and does not currently re-export <code>ChemGraph</code> from the

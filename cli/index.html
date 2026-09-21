@@ -1894,7 +1894,7 @@ version.</p>
 </tr>
 <tr>
 <td><code>--recursion-limit</code></td>
-<td>Maximum graph steps; defaults to 20</td>
+<td>Maximum graph steps; defaults to 200</td>
 </tr>
 <tr>
 <td><code>--output-file</code></td>
@@ -1906,6 +1906,9 @@ version.</p>
 </tr>
 </tbody>
 </table>
+<p>The recursion limit counts graph steps, including middleware and tool execution,
+not just model calls. Raising it allows longer workflows; it does not reduce
+token consumption. Explicit configuration and saved session limits are retained.</p>
 <p>The legacy no-subcommand form, such as <code>chemgraph -q "..."</code>, remains supported,
 but new scripts should use <code>chemgraph run</code>.</p>
 <h2 id="validate-credentials">Validate credentials<a class="headerlink" href="#validate-credentials" title="Permanent link">&para;</a></h2>
@@ -1947,6 +1950,26 @@ runs still require an explicit workspace and the approval-skip flag.</p>
 <p>The direct interactive workflow keeps one process-local thread until the model
 or workflow changes. It is not restored across CLI processes. Shell and file
 mutations use structured approve/reject prompts.</p>
+<p>At each action review, press <strong>Enter</strong> to approve the displayed action. You can
+also enter <code>1</code>, <code>y</code>, <code>yes</code>, <code>a</code>, or <code>approve</code>. To reject it, enter <code>2</code>, <code>n</code>, <code>no</code>,
+<code>r</code>, or <code>reject</code>. These shortcuts are case-insensitive.</p>
+<p>For a shortened preview, enter <code>v</code> or <code>view</code> to inspect the full action in a
+pager, then return to the same decision. Viewing does not approve the action.
+Type any other nonempty text to <strong>skip that action and give the agent feedback</strong>,
+for example <code>Use EMT instead of MACE for this test.</code> The agent receives your
+instructions and can propose a revised action, which is reviewed normally.
+Each action in a batch is reviewed separately; feedback does not discard other
+decisions. Custom policies expose only the permitted choices; Enter approves
+only when approval is allowed. Ctrl+C and EOF do not submit a decision.</p>
+<p>Reviews show multiline commands, file content, and proposed replacement
+snippets. Terminal control characters are displayed as visible escapes. Large
+previews retain their head and tail within 40 source lines and 8,000 characters,
+with an omission notice and access to the complete arguments through <code>v</code>.
+Replacement diffs use the requested before/after text, not a read of the current
+file, and flag replacements that apply to all occurrences. Pending terminal
+input is cleared before each decision where supported, so an Enter queued during
+earlier work does not approve the next action. Redirected input is preserved.
+The startup host-access confirmation is separate from these per-action reviews.</p>
 <p>The selected directory is mounted for file tools at <code>/workspace</code>. Thus,
 <code>--deepagent-workspace test/</code> makes <code>/workspace/example.py</code> refer to
 <code>test/example.py</code>, not <code>test/workspace/example.py</code>. Shell execution uses the

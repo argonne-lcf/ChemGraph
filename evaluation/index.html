@@ -1979,7 +1979,7 @@ was produced, and review it independently of every model being measured.</p>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">workflow_types</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"single_agent"</span><span class="p">]</span>
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">judge_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"structured"</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">structured_output</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">recursion_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">50</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="n">recursion_limit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">200</span>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">max_queries</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span>
 </code></pre></div>
 <p>Then run:</p>
@@ -1991,6 +1991,12 @@ was produced, and review it independently of every model being measured.</p>
 <p><code>--profile</code> requires <code>--config</code>. CLI values override matching profile values.
 If <code>[eval] default_profile</code> exists, providing <code>--config</code> without <code>--profile</code>
 selects it automatically.</p>
+<p>The default recursion limit is 200 graph steps per query, increased from 50.
+A looping query can therefore run for four times as many steps before stopping,
+which can increase runtime and model/tool costs. Steps include middleware and
+tool execution; they are not a token or monetary budget, so cost does not scale
+by a fixed factor. Use <code>--recursion-limit 50</code> to retain the previous budget, or
+set <code>recursion_limit = 50</code> in an evaluation profile. Limits must be at least 1.</p>
 <h2 id="reports-and-diagnostics">Reports and diagnostics<a class="headerlink" href="#reports-and-diagnostics" title="Permanent link">&para;</a></h2>
 <p>Select <code>--report json</code>, <code>markdown</code>, <code>console</code>, or <code>all</code> (the default). Structured
 results include:</p>

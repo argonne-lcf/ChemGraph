@@ -1938,6 +1938,10 @@ built-in main-agent workspace worker is created without chemistry tools.</p>
 <p>The standalone interactive workflow keeps one thread while that CLI process is
 open; it does not provide cross-process restoration in this first version.
 File mutations and shell commands require structured approve/reject decisions.
+In both CLI entry points, Enter approves the displayed action, <code>n</code> rejects it,
+and typed instructions skip that action and give the agent feedback for a
+revision. Other actions in the batch keep their individual decisions. See the
+<a href="../cli/">CLI action reviews</a> for shortcuts and previews.
 Headless execution is rejected unless both an explicit workspace and
 <code>--deepagent-dangerously-skip-approvals</code> are supplied.</p>
 <p>Bundled skills and local personal/project skills load automatically. Repeat
