@@ -81,23 +81,31 @@ def test_registry_resolves_expected_endpoint(model, expected_endpoint):
     assert _route(model) == expected_endpoint
 
 
-def test_argo_models_build_protocol_specific_clients():
-    from langchain_anthropic import ChatAnthropic
+def test_anthropic_routes_build_caching_protocol_clients():
     from langchain_openai import ChatOpenAI
+
+    from chemgraph.models.protocols.anthropic_native import CachingChatAnthropic
 
     claude_client, claude_prepared = load_chat_model_prepared(
         model_name="argo:claude-opus-4.8",
         argo_user="alice",
+    )
+    direct_anthropic_client, direct_anthropic_prepared = load_chat_model_prepared(
+        model_name="claude-3-5-sonnet-20241022",
+        api_key="test-key",
     )
     gpt_client, gpt_prepared = load_chat_model_prepared(
         model_name="argo:gpt-4o",
         argo_user="alice",
     )
 
-    assert isinstance(claude_client, ChatAnthropic)
+    assert isinstance(claude_client, CachingChatAnthropic)
     assert claude_prepared.protocol == "anthropic_native"
     assert claude_prepared.client_kwargs["model"] == "claudeopus48"
     assert claude_prepared.client_kwargs["base_url"].endswith("/argoapi")
+    assert isinstance(direct_anthropic_client, CachingChatAnthropic)
+    assert direct_anthropic_prepared.endpoint_name == "anthropic_direct"
+    assert direct_anthropic_prepared.protocol == "anthropic_native"
     assert isinstance(gpt_client, ChatOpenAI)
     assert gpt_prepared.protocol == "openai_compatible"
     assert gpt_prepared.client_kwargs["model"] == "gpt4o"
