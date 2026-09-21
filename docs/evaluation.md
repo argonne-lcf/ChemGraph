@@ -117,7 +117,7 @@ dataset = "evaluation/questions.json"
 workflow_types = ["single_agent"]
 judge_type = "structured"
 structured_output = true
-recursion_limit = 50
+recursion_limit = 200
 max_queries = 0
 ```
 
@@ -133,6 +133,13 @@ chemgraph eval \
 `--profile` requires `--config`. CLI values override matching profile values.
 If `[eval] default_profile` exists, providing `--config` without `--profile`
 selects it automatically.
+
+The default recursion limit is 200 graph steps per query, increased from 50.
+A looping query can therefore run for four times as many steps before stopping,
+which can increase runtime and model/tool costs. Steps include middleware and
+tool execution; they are not a token or monetary budget, so cost does not scale
+by a fixed factor. Use `--recursion-limit 50` to retain the previous budget, or
+set `recursion_limit = 50` in an evaluation profile. Limits must be at least 1.
 
 ## Reports and diagnostics
 

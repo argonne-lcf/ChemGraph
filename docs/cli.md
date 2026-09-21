@@ -37,9 +37,13 @@ Common options:
 | `-s`, `--structured` | Request a structured final response |
 | `-r`, `--report` | Enable HTML report generation |
 | `--human-supervised` | Allow supported tools to pause for confirmation |
-| `--recursion-limit` | Maximum graph steps; defaults to 20 |
+| `--recursion-limit` | Maximum graph steps; defaults to 200 |
 | `--output-file` | Save the printed result to a file |
 | `-v`, `-vv` | INFO or DEBUG diagnostics |
+
+The recursion limit counts graph steps, including middleware and tool execution,
+not just model calls. Raising it allows longer workflows; it does not reduce
+token consumption. Explicit configuration and saved session limits are retained.
 
 The legacy no-subcommand form, such as `chemgraph -q "..."`, remains supported,
 but new scripts should use `chemgraph run`.
@@ -103,6 +107,29 @@ chemgraph run --interactive --workflow main_agent --deepagent \
 The direct interactive workflow keeps one process-local thread until the model
 or workflow changes. It is not restored across CLI processes. Shell and file
 mutations use structured approve/reject prompts.
+
+At each action review, press **Enter** to approve the displayed action. You can
+also enter `1`, `y`, `yes`, `a`, or `approve`. To reject it, enter `2`, `n`, `no`,
+`r`, or `reject`. These shortcuts are case-insensitive.
+
+For a shortened preview, enter `v` or `view` to inspect the full action in a
+pager, then return to the same decision. Viewing does not approve the action.
+Type any other nonempty text to **skip that action and give the agent feedback**,
+for example `Use EMT instead of MACE for this test.` The agent receives your
+instructions and can propose a revised action, which is reviewed normally.
+Each action in a batch is reviewed separately; feedback does not discard other
+decisions. Custom policies expose only the permitted choices; Enter approves
+only when approval is allowed. Ctrl+C and EOF do not submit a decision.
+
+Reviews show multiline commands, file content, and proposed replacement
+snippets. Terminal control characters are displayed as visible escapes. Large
+previews retain their head and tail within 40 source lines and 8,000 characters,
+with an omission notice and access to the complete arguments through `v`.
+Replacement diffs use the requested before/after text, not a read of the current
+file, and flag replacements that apply to all occurrences. Pending terminal
+input is cleared before each decision where supported, so an Enter queued during
+earlier work does not approve the next action. Redirected input is preserved.
+The startup host-access confirmation is separate from these per-action reviews.
 
 The selected directory is mounted for file tools at `/workspace`. Thus,
 `--deepagent-workspace test/` makes `/workspace/example.py` refer to

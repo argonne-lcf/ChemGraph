@@ -8,19 +8,130 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from difflib import unified_diff
 from typing import Any
 
 from rich.align import Align
-from rich.console import Console
+from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 
 from chemgraph.models.endpoints.registry import CATALOG_ENDPOINTS, catalog_entries
 
 # Shared console instance for the CLI package.
 console = Console()
+
+
+def _safe_review_text(value: str) -> str:
+    """Make terminal controls visible while retaining multiline previews."""
+    return re.sub(
+        r"[\x00-\x08\x0b-\x1f\x7f-\x9f]",
+        lambda match: f"\\x{ord(match.group()):02x}",
+        value,
+    )
+
+
+def _limit_review_text(
+    value: str, max_lines: int = 40, max_chars: int = 8000,
+) -> tuple[str, bool]:
+    """Keep the head and tail within both source-line and character budgets."""
+    lines = value.splitlines(keepends=True)
+    if len(lines) <= max_lines and len(value) <= max_chars:
+        return value, False
+    head = "".join(lines[:max_lines // 2])[:max_chars // 2]
+    tail = "".join(lines[-(max_lines // 2):])[-(max_chars // 2):]
+    omitted = value[len(head):len(value) - len(tail)]
+    note = f"… {len(omitted)} characters omitted ({omitted.count(chr(10))} line breaks) …"
+    return f"{head}\n{note}\n{tail}", True
+
+
+def action_review_summary(action: dict) -> Text:
+    """Repeat a short, literal tool/path identity beside the decision prompt."""
+    values = [f"Tool: {action.get('name', 'unknown')}"]
+    args = action.get("args", {})
+    if isinstance(args, dict) and "file_path" in args:
+        values.append(f"Path: {args['file_path']}")
+    text = _safe_review_text(" | ".join(values)).replace("\n", "\\n").replace("\t", "\\t")
+    if len(text) > 240:
+        text = text[:120] + " … " + text[-120:]
+    return Text(text)
+
+
+def build_action_review(
+    action: dict, index: int, total: int, *, full: bool = False,
+) -> tuple[Panel, bool]:
+    """Build a sanitized preview and report omissions, using only supplied args."""
+    name = str(action.get("name", "unknown"))
+    args = action.get("args", {})
+    label = ""
+    preview = []
+    if isinstance(args, dict):
+        args = dict(args)
+        if name == "execute" and isinstance(args.get("command"), str):
+            label = "Command:"
+            preview = [(args.pop("command"), "bash")]
+        elif name == "write_file" and isinstance(args.get("content"), str):
+            label = "Content:"
+            preview = [(args.pop("content"), None)]
+        elif name == "edit_file" and all(
+            isinstance(args.get(key), str) for key in ("old_string", "new_string")
+        ):
+            before = _safe_review_text(args.pop("old_string")).splitlines(keepends=True)
+            after = _safe_review_text(args.pop("new_string")).splitlines(keepends=True)
+            lines = unified_diff(
+                before, after, fromfile="before", tofile="after",
+                n=max(len(before), len(after)),
+            )
+            diff = "".join(
+                line if line.endswith("\n") else line + "\n\\ No newline at end of file\n"
+                for line in lines
+            )
+            label = "Proposed replacement snippet:"
+            if args.get("replace_all") is True:
+                label += " Applies to all occurrences."
+            preview = [(diff or "(No changes)", "diff")]
+    if full:
+        # Include exact arguments as well as the human-readable replacement diff.
+        args = action.get("args", {})
+    try:
+        arguments = (json.dumps(args, indent=2, ensure_ascii=False, default=str), "json")
+    except (TypeError, ValueError):
+        arguments = (repr(args), None)
+    parts = [(f"Tool: {name}", None)]
+    if args or not preview:
+        parts.append(arguments)
+    if preview:
+        parts.append((label, None))
+        parts.extend(preview)
+    details = []
+    truncated = False
+    lines_left, chars_left = 40, 8000
+    for position, (value, lexer) in enumerate(parts):
+        value = _safe_review_text(value)
+        if not full:
+            parts_left = len(parts) - position
+            line_budget, char_budget = lines_left // parts_left, chars_left // parts_left
+            lines_left -= min(len(value.splitlines()), line_budget)
+            chars_left -= min(len(value), char_budget)
+            value, omitted = _limit_review_text(value, line_budget, char_budget)
+            truncated |= omitted
+        details.append(Syntax(value, lexer, word_wrap=True) if lexer else Text(value))
+    if truncated:
+        details.append(Text("Preview shortened. Type v to inspect the full action."))
+    return Panel(
+        Group(*details),
+        title=Text(f"Review action {index} of {total}"),
+        border_style="yellow",
+    ), truncated
+
+
+def format_action_review(action: dict, index: int, total: int) -> Panel:
+    """Preview an action using only its arguments, without reading host files."""
+    return build_action_review(action, index, total)[0]
 
 
 # ---------------------------------------------------------------------------

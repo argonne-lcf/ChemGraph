@@ -41,7 +41,7 @@ class MainAgentGraphConfig(BaseModel):
     """Non-secret configuration needed to validate a durable graph topology."""
 
     model_name: str
-    recursion_limit: int = 50
+    recursion_limit: int = 200
     reasoning_effort: Optional[str] = None
     structured_output: bool = False
     generate_report: bool = False

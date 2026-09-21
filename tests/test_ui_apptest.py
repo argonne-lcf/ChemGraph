@@ -108,6 +108,19 @@ def test_configuration_save_preserves_automatic_selection(configuration_app, tmp
     assert "default" not in toml.load(tmp_path / "config.toml")["chemistry"]["calculators"]
 
 
+def test_configuration_recursion_limit_defaults_and_persists(configuration_app, tmp_path):
+    import toml
+
+    at = configuration_app.run()
+    assert not at.exception
+    limit = next(widget for widget in at.number_input if widget.label == "Recursion Limit")
+    assert limit.value == 200
+    limit.set_value(350).run()
+    next(b for b in at.button if "Save Configuration" in b.label).click().run()
+    assert not at.exception
+    assert toml.load(tmp_path / "config.toml")["general"]["recursion_limit"] == 350
+
+
 def test_raw_toml_can_restore_automatic_selection(configuration_app, tmp_path):
     import toml
 
