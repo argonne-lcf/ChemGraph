@@ -444,3 +444,27 @@ def test_coverage_read_failure_does_not_hide_durable_counts(store, monkeypatch):
     summary = session_usage([], store, "session")
     assert summary["total_tokens"] == 12
     assert summary["partial"] is True
+
+
+@pytest.mark.parametrize("retain_collector", [False, True])
+def test_usage_read_failure_keeps_subtotals_partial_until_recovery(store, monkeypatch, retain_collector):
+    complete(UsageCollector("session", "old-thread", store=store))
+    latest = UsageCollector("session", "new-thread", store=store)
+    complete(latest)
+    collectors = [latest] if retain_collector else []
+
+    def fail(*_):
+        raise OSError("usage unavailable")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store, "usage_records", fail)
+        summary = session_usage(collectors, store, "session")
+        assert summary["total_tokens"] == (12 if retain_collector else None)
+        assert summary["partial"] is True
+        assert summary["call_count"] == int(retain_collector)
+        assert summary["incomplete_calls"] == 0
+        assert summary["history_unaccounted"] is False
+    recovered = session_usage(collectors, store, "session")
+    assert recovered["total_tokens"] == 24
+    assert recovered["partial"] is False
+    assert recovered["history_unaccounted"] is False

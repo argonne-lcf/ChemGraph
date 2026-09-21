@@ -30,13 +30,14 @@ def format_token_usage(usage: dict) -> Text:
     """Render provider counters locally; never generate a model summary."""
     keys = ("input_tokens", "output_tokens", "total_tokens")
     history_unaccounted = usage.get("history_unaccounted", False)
-    if (usage.get("call_count") or history_unaccounted) and all(usage.get(key) is None for key in keys):
+    if all(usage.get(key) is None for key in keys):
         reasons = []
         if usage.get("call_count"):
             reasons.append("provider did not report usage")
         if history_unaccounted:
             reasons.append("historical usage was not recorded")
-        return Text("Tokens: unavailable (" + "; ".join(reasons) + ")", style="dim")
+        suffix = " (" + "; ".join(reasons) + ")" if reasons else ""
+        return Text("Tokens: unavailable" + suffix, style="dim")
     parts = [
         f"{usage[key]:,} {label}" if usage.get(key) is not None else f"unknown {label}"
         for key, label in zip(keys, ("input", "output", "total"), strict=True)

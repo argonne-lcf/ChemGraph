@@ -39,6 +39,8 @@ def test_format_usage_unknown_partial_and_subsets():
     assert format_token_usage(counts).plain.startswith("Tokens: unavailable")
     counts.update(input_tokens=100, partial=True, incomplete_calls=1)
     assert "Tokens (partial): 100 input · unknown output · unknown total" in format_token_usage(counts).plain
+    counts.update(input_tokens=None, call_count=0, incomplete_calls=0)
+    assert format_token_usage(counts).plain == "Tokens: unavailable"
 
 
 def test_standalone_approval_counts_calls_on_both_sides(monkeypatch, tmp_path, terminal):
@@ -196,6 +198,27 @@ def test_exit_totals_include_restored_history_and_session_switch(monkeypatch, tm
     repl()
     assert terminal.getvalue().count("Session tokens:") == 1
     assert "Session tokens: 30 input · 6 output · 36 total" in terminal.getvalue()
+
+
+def test_exit_totals_are_partial_when_restored_usage_cannot_be_read(monkeypatch, tmp_path, terminal):
+    store = SessionStore(str(tmp_path / "history.db"))
+    workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
+    session = MainAgentSession(workflow, thread_id="history", session_store=store)
+    commands.run_main_agent_query(session, "first")
+    commands.run_main_agent_query(session, "second")
+    restored = MainAgentSession(workflow, thread_id="history", session_store=store)
+
+    def fail(*_):
+        raise OSError("usage unavailable")
+
+    monkeypatch.setattr(store, "usage_records", fail)
+    @commands._report_session_usage
+    def repl():
+        commands.restore_main_agent_session(restored)
+    repl()
+    output = terminal.getvalue()
+    assert "Session tokens (partial): 10 input · 2 output · 12 total" in output
+    assert "historical usage was not recorded" not in output
 
 
 @pytest.mark.parametrize("prior_status", ["completed", "failed", "waiting_for_user"])

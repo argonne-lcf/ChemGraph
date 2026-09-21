@@ -163,6 +163,7 @@ def apply_history_coverage(summary: dict, history_unaccounted: bool) -> dict:
 def session_usage(collectors, store, session_id, *, history_unaccounted=False) -> dict:
     """Combine restored records with in-memory calls, including failed writes."""
     records = {}
+    read_failed = False
     if store is not None:
         try:
             history_unaccounted = store.usage_history_unaccounted(session_id) or history_unaccounted
@@ -172,10 +173,16 @@ def session_usage(collectors, store, session_id, *, history_unaccounted=False) -
         try:
             records = {r["call_id"]: r for r in store.usage_records(session_id)}
         except Exception:
+            read_failed = True
             logger.debug("Could not read stored session usage.", exc_info=True)
     for collector in collectors:
         records.update({r["call_id"]: r for r in collector.records})
-    return apply_history_coverage(summarize_usage(list(records.values())), history_unaccounted)
+    summary = summarize_usage(list(records.values()))
+    if read_failed:
+        summary["partial"] = True
+        if not records:
+            summary.update(dict.fromkeys(TOKEN_FIELDS))
+    return apply_history_coverage(summary, history_unaccounted)
 
 
 def combine_usage(summaries: list[dict]) -> dict:
