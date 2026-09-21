@@ -5,8 +5,8 @@ import uuid
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
-from langchain_core.messages import AIMessage
-from langchain_core.outputs import ChatGeneration, LLMResult
+from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.types import interrupt
@@ -100,6 +100,58 @@ def test_calls_are_durable_before_finalization_and_deduplicated(store):
     assert totals["total_tokens"] == 12
     assert totals["incomplete_calls"] == 1
     assert totals["partial"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("reported", [False, True])
+async def test_failed_stream_preserves_usage(store, monkeypatch, asynchronous, reported):
+    def stream(*args, **kwargs):
+        yield ChatGenerationChunk(message=AIMessageChunk(
+            content="partial", usage_metadata=answer().usage_metadata if reported else None,
+        ))
+        raise RuntimeError("stream disconnected")
+
+    monkeypatch.setattr(FakeMessagesListChatModel, "_stream", stream)
+    collector = UsageCollector("session", "thread", store=store)
+    model = FakeMessagesListChatModel(responses=[answer()])
+    with pytest.raises(RuntimeError, match="stream disconnected"):
+        if asynchronous:
+            async for _ in model.astream("test", config={"callbacks": [collector]}):
+                pass
+        else:
+            list(model.stream("test", config={"callbacks": [collector]}))
+    expected = 12 if reported else None
+    assert collector.summary["total_tokens"] == expected
+    reopened = SessionStore(store.db_path)
+    totals = reopened.get_usage("session")
+    assert totals["total_tokens"] == expected
+    assert totals["call_count"] == 1 and totals["partial"] is True
+    record, = reopened.usage_records("session")
+    assert record["status"] == "failed" and record["complete"] is False
+    if reported:
+        assert record["raw_usage"] == [answer().usage_metadata]
+
+
+@pytest.mark.parametrize("adapter_complete", [None, False, True])
+def test_repeated_errors_preserve_usage_and_adapter_snapshots(store, adapter_complete):
+    collector = UsageCollector("session", "thread", store=store)
+    key = uuid.uuid4()
+    collector.on_chat_model_start({}, [], run_id=key)
+    raw = {"total": {"inputTokens": 20, "outputTokens": 4, "totalTokens": 24}}
+    if adapter_complete is not None:
+        collector.on_custom_event("chemgraph_usage", {
+            "call_id": str(key), "counts": normalize_usage(raw["total"]),
+            "raw_usage": raw, "complete": adapter_complete,
+        })
+    for result in (response(), response(), None):
+        collector.on_llm_error(RuntimeError("failed"), run_id=key, response=result)
+    totals = store.get_usage("session")
+    assert totals["total_tokens"] == (12 if adapter_complete is None else 24)
+    assert totals["call_count"] == 1
+    assert totals["partial"] is (adapter_complete is not True)
+    record, = store.usage_records("session")
+    assert record["raw_usage"] == ([answer().usage_metadata] if adapter_complete is None else raw)
 
 
 def test_concurrent_workers_share_one_turn(store):

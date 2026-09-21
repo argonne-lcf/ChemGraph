@@ -287,8 +287,14 @@ class UsageCollector(BaseCallbackHandler):
             self._end(record, "completed")
 
     def on_llm_error(self, error, *, run_id, **kwargs):
+        counts = response_usage(kwargs.get("response"))
         with self._lock:
             record = self._record(run_id)
+            if counts is not None and not record.get("adapter_usage"):
+                record["counts"] = {key: counts.get(key) for key in TOKEN_FIELDS}
+                record["raw_usage"] = counts.get("raw_usage")
+                # A failed stream may only contain usage for its received chunks.
+                record["complete"] = False
             self._end(record, "failed")
 
     def _end(self, record, status):
