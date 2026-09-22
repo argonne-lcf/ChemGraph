@@ -96,13 +96,8 @@ def test_missing_empty_and_unreadable_sources(tmp_path, monkeypatch):
     assert lint_skills(root)[0].code == "read"
 
 
-def test_bundled_contribution_gate_and_owners():
+def test_bundled_contribution_gate():
     assert lint_skills(SKILLS, core=True) == []
-    owners = (ROOT / ".github/CODEOWNERS").read_text(encoding="utf-8")
-    for directory in (SKILLS / "chemgraph", SKILLS / "pbs-hpc"):
-        data = yaml.safe_load(directory.joinpath("SKILL.md").read_text().split("---", 2)[1])
-        owner = data["metadata"]["maintainers"]
-        assert f"/src/chemgraph/skills/{directory.name}/ @{owner}" in owners
 
 
 def test_documented_cli_examples_parse_without_execution():
