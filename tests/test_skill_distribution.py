@@ -86,6 +86,13 @@ import chemgraph
 assert chemgraph.__file__.startswith(sys.argv[1]), chemgraph.__file__
 from chemgraph.skills.backend import BundledSkillsBackend
 backend = BundledSkillsBackend()
+from chemgraph.skills.catalog import list_skills
+records = list_skills(discover=False)['skills']
+assert {record['name'] for record in records} == {'chemgraph', 'pbs-hpc'}
+assert {record['name']: record['metadata']['authors'] for record in records} == {
+    'chemgraph': 'Thang Pham', 'pbs-hpc': 'Murat Keceli',
+}
+assert all(record['license'] == 'Apache-2.0' for record in records)
 assert backend.read('/pbs-hpc/SKILL.md').error is None
 assert b'PBS' in backend.download_files(['/pbs-hpc/assets/job.pbs.template'])[0].content
 assert backend.write('/pbs-hpc/SKILL.md', 'overwrite').error

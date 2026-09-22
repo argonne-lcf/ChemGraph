@@ -11,6 +11,51 @@ Python APIs; it does not need attached chemistry MCP tools for this route.
 
 ## Where skills live
 
+### Bundled catalog
+
+<!-- BEGIN BUNDLED SKILL CATALOG -->
+
+| Name | Description | Authors | Maintainers | License | Version | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| chemgraph | Use ChemGraph Python and CLI workflows, agent-written batch scripts, and attached chemistry MCP tools. Use for molecular simulations, ASE calculations, staging structures, tracking calculations, and reporting computed results. | Thang Pham | tdpham2 | Apache-2.0 | — | — |
+| pbs-hpc | Prepare PBS HPC jobs, choose allocation and filesystem settings, submit and monitor jobs, and diagnose job output. Use for qsub, qstat, PBS scripts, allocations, and ChemGraph execution on Polaris, Aurora, or Crux; also Polaris and Aurora environments, MPI/GPU affinity, monitoring, and Aurora /soft access troubleshooting. | Murat Keceli | tdpham2 | Apache-2.0 | — | — |
+
+<!-- END BUNDLED SKILL CATALOG -->
+
+Bundled content is versioned with ChemGraph; a dash means no independent version
+or maturity claim is declared. This catalog reports availability and attribution,
+not measured performance or evidence that a particular run used a skill.
+
+Regenerate it with `python scripts/update_skill_catalog.py`. The test suite checks
+that this table matches the installed bundled metadata. For contribution rules,
+see [Contributing skills](https://github.com/argonne-lcf/ChemGraph/blob/main/CONTRIBUTING.md#contributing-skills).
+
+### Inspecting local sources
+
+```sh
+chemgraph skills list
+chemgraph skills list --workspace ./project --skill-dir ../shared-skills --all
+chemgraph skills list --no-discover --json
+chemgraph skills lint src/chemgraph/skills --core
+```
+
+Listing uses the same source resolution, metadata parser, and overrides as agent
+turns. It does not construct a model or connect to MCP servers. The inspection
+workspace defaults to the current directory; explicit host paths resolve against
+the invocation directory. These commands take their own arguments and do not
+load a run's TOML configuration or saved session. Pass the corresponding local
+workspace and collections to inspect that run's sources.
+
+The default list contains effective definitions; `--all` includes shadowed ones.
+`--no-discover` keeps bundled and explicit collections while omitting personal and
+project discovery. JSON includes complete parsed metadata, source routes, host
+collection paths, active flags, and source warnings. Fatal source errors produce
+a nonzero exit status. Invalid individual skills retain the runtime's log
+warnings and are skipped. Python-only backend/state/store sources cannot be
+inspected through this local CLI. All commands operate offline.
+
+### Directory layout
+
 Maintained skills live in `src/chemgraph/skills/` and ship in the Python wheel
 and source distribution. Each skill is an immediate child directory containing
 `SKILL.md`, with YAML `name` and `description` fields:
