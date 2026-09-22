@@ -105,6 +105,39 @@ pytest tests/ -k "not tblite"
 - See [docs/code_formatting_and_linting.md](docs/code_formatting_and_linting.md)
   for style details. New code should read like the surrounding code.
 
+## Contributing skills
+
+Core skills ship with ChemGraph and should cover broadly useful workflows using
+shipped or documented tools. Specialized or frequently changing workflows belong
+in external collections; personal and project skills remain user-owned. See
+[skill discovery](docs/skills.md) for loading all three tiers.
+
+For a bundled skill change:
+
+- Add `license`, `metadata.authors`, and `metadata.maintainers` to `SKILL.md`.
+  Metadata keys and values must be strings. Use verified attribution and the
+  repository's Apache-2.0 license for bundled contributions.
+- Add a CODEOWNERS entry with at least one accountable maintainer; a backup is
+  encouraged. Follow the normal approving-review requirement and seek domain
+  review for scientific or facility-specific instructions.
+- Run `chemgraph skills lint src/chemgraph/skills --core` and the normal test
+  gates. Include a runnable example and expected result shape; existing tested
+  examples in `references/` count. Update their hermetic tests when behavior changes.
+- Review instructions and helper scripts for changes to tool use and approvals.
+  Text linting does not detect prompt injection or enforce permissions.
+
+Bundled skills are versioned with ChemGraph. Optional `version`, `chemgraph`,
+`tested-with`, `citation`, `tags`, and `status` metadata are descriptive, not
+runtime enforcement. Record only testing and citations that can be substantiated.
+Contributions to a listed external collection must declare their license.
+Personal skills need only satisfy the Agent Skills format.
+
+`chemgraph skills lint <dir> [--core] [--json]` accepts one skill or a collection.
+It checks raw frontmatter and relative Markdown file links without executing
+examples or contacting websites. Cross-skill links are allowed; URL targets and
+heading anchors are not checked. Concrete CLI/tool examples are checked by tests,
+not inferred from arbitrary prose. Any error produces a nonzero exit status.
+
 ## Opening the pull request
 
 - Fill out the PR template checklist.

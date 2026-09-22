@@ -68,6 +68,8 @@ dependencies = [
     "plotly",
     "langsmith==0.10.10",
     "rich==14.1.0",
+    "PyYAML==6.0.3",
+    "markdown-it-py==4.2.0",
     "toml==0.10.2",
     "mcp==1.28.1",
     "fastmcp==3.4.4",

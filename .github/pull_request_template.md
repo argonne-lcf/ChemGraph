@@ -30,3 +30,5 @@ See CONTRIBUTING.md for the full workflow.
 - [ ] `pytest tests/ -k "not tblite"` passes (plus extras tests if Academy/backends touched)
 - [ ] Added/updated tests for the change
 - [ ] Updated docs / README for any user-facing change
+
+For bundled skill changes, also follow the [skill contribution checklist](../CONTRIBUTING.md#contributing-skills).

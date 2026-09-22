@@ -9,6 +9,8 @@ dependencies:
   - pandas=2.2.3
   - pytest=9.0.3
   - rich=14.1.0
+  - pyyaml=6.0.3
+  - markdown-it-py=4.2.0
   - toml=0.10.2
   - tblite=0.4.0
   - nwchem

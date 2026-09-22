@@ -1,6 +1,10 @@
 ---
 name: chemgraph
 description: Use ChemGraph Python and CLI workflows, agent-written batch scripts, and attached chemistry MCP tools. Use for molecular simulations, ASE calculations, staging structures, tracking calculations, and reporting computed results.
+license: Apache-2.0
+metadata:
+  authors: Thang Pham
+  maintainers: tdpham2
 ---
 
 # Use ChemGraph
