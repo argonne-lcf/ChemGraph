@@ -117,7 +117,7 @@ For a bundled skill change:
 - Add `license`, `metadata.authors`, and `metadata.maintainers` to `SKILL.md`.
   Metadata keys and values must be strings. Use verified attribution and the
   repository's Apache-2.0 license for bundled contributions.
-- Add a CODEOWNERS entry with at least one accountable maintainer; a backup is
+- Name at least one accountable maintainer in the skill metadata; a backup is
   encouraged. Follow the normal approving-review requirement and seek domain
   review for scientific or facility-specific instructions.
 - Run `chemgraph skills lint src/chemgraph/skills --core` and the normal test
