@@ -4,7 +4,7 @@ description: Prepare PBS HPC jobs, choose allocation and filesystem settings, su
 compatibility: Submission requires PBS commands on an authorized submission host; compute execution requires an allocation and the site's application environment.
 license: Apache-2.0
 metadata:
-  authors: Thang Pham
+  authors: Murat Keceli
   maintainers: tdpham2
 ---
 
