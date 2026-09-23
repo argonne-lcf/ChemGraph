@@ -11,13 +11,20 @@ import json
 import tempfile
 import uuid
 from copy import deepcopy
+from dataclasses import dataclass
+import logging
 from typing import Any, Callable, Mapping, Sequence
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.callbacks.manager import CallbackManager
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
+
+from chemgraph.agent.usage import TOKEN_FIELDS, USAGE_EVENT, normalize_usage
+
+logger = logging.getLogger(__name__)
 
 CODEX_MODEL_PREFIX = "codex:"
 
@@ -255,28 +262,83 @@ def _decision_prompt(
     )
 
 
-def _usage_metadata(result: Any) -> dict[str, int] | None:
-    usage = getattr(result, "usage", None)
-    last = getattr(usage, "last", None)
-    if last is None:
+def _usage_metadata(result: Any) -> dict | None:
+    usage = _model_dump(getattr(result, "usage", None))
+    if not isinstance(usage, Mapping) or not isinstance(usage.get("total"), Mapping):
         return None
-    values = _model_dump(last)
-    if not isinstance(values, Mapping):
+    counts = normalize_usage(usage["total"])
+    if any(counts[key] is None for key in TOKEN_FIELDS[:3]):
         return None
+    metadata = {key: counts[key] for key in TOKEN_FIELDS[:3]}
+    if counts["cached_input_tokens"] is not None:
+        metadata["input_token_details"] = {"cache_read": counts["cached_input_tokens"]}
+    if counts["reasoning_output_tokens"] is not None:
+        metadata["output_token_details"] = {"reasoning": counts["reasoning_output_tokens"]}
+    return metadata
 
-    def token_value(camel_name: str, snake_name: str) -> Any:
-        if camel_name in values:
-            return values[camel_name]
-        return values.get(snake_name)
 
+@dataclass
+class _CodexResult:
+    final_response: str | None
+    usage: dict | None
+
+
+def _emit_usage(run_manager, usage, model, *, complete):
+    if run_manager is None or not isinstance(usage, Mapping):
+        return
+    counts = normalize_usage(usage.get("total"))
     try:
-        return {
-            "input_tokens": int(token_value("inputTokens", "input_tokens")),
-            "output_tokens": int(token_value("outputTokens", "output_tokens")),
-            "total_tokens": int(token_value("totalTokens", "total_tokens")),
-        }
-    except (KeyError, TypeError, ValueError):
-        return None
+        CallbackManager(handlers=run_manager.handlers).on_custom_event(
+            USAGE_EVENT,
+            {"call_id": str(run_manager.run_id), "counts": counts,
+             "raw_usage": usage, "model": model, "provider": "codex",
+             "complete": complete},
+            run_id=run_manager.run_id,
+        )
+    except Exception:
+        logger.debug("Could not emit Codex usage.", exc_info=True)
+
+
+def _run_codex_turn(thread, prompt, *, run_manager, model, **kwargs):
+    """Collect public SDK notifications, retaining usage before SDK/parser errors.
+
+    Each ChemGraph model invocation owns a fresh ephemeral SDK thread, so its
+    cumulative total includes all internal requests. Reusing this helper for
+    correction attempts on that thread replaces, rather than adds, totals.
+    Unlike SDK ``thread.run``, interrupted turns raise rather than returning a
+    potentially unfinished decision; their available usage is still retained.
+    """
+    turn = thread.turn(prompt, **kwargs)
+    stream = turn.stream()
+    usage = None
+    messages = []
+    completed = None
+    try:
+        for event in stream:
+            payload = _model_dump(event.payload)
+            if not isinstance(payload, Mapping):
+                continue
+            if event.method == "thread/tokenUsage/updated" and payload.get("turnId") == turn.id:
+                usage = payload.get("tokenUsage")
+                _emit_usage(run_manager, usage, model, complete=False)
+            elif event.method == "item/completed" and payload.get("turnId") == turn.id:
+                item = payload.get("item", {})
+                if item.get("type") == "agentMessage":
+                    messages.append(item)
+            elif event.method == "turn/completed" and payload.get("turn", {}).get("id") == turn.id:
+                completed = payload["turn"]
+    finally:
+        stream.close()
+    if completed is None:
+        raise RuntimeError("Codex turn completed event not received")
+    if completed.get("status") != "completed":
+        error = completed.get("error") or {}
+        raise RuntimeError(error.get("message") or f"Codex turn {completed.get('status')}")
+    _emit_usage(run_manager, usage, model, complete=True)
+    final = next((item["text"] for item in reversed(messages) if item.get("phase") == "final_answer"), None)
+    if final is None:
+        final = next((item["text"] for item in reversed(messages) if item.get("phase") is None), None)
+    return _CodexResult(final, usage)
 
 
 class CodexChatModel(BaseChatModel):
@@ -342,7 +404,6 @@ class CodexChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
-        del run_manager
         if stop:
             raise ValueError("CodexChatModel does not support stop sequences.")
         if kwargs:
@@ -375,8 +436,11 @@ class CodexChatModel(BaseChatModel):
                     model=self.model_id,
                     sandbox=Sandbox.read_only,
                 )
-                result = thread.run(
+                result = _run_codex_turn(
+                    thread,
                     prompt,
+                    run_manager=run_manager,
+                    model=self.model_id,
                     approval_mode=ApprovalMode.deny_all,
                     output_schema=schema,
                     sandbox=Sandbox.read_only,
@@ -439,7 +503,10 @@ class CodexChatModel(BaseChatModel):
             content=content,
             tool_calls=tool_calls,
             usage_metadata=_usage_metadata(result),
-            response_metadata={"model": self.model_id, "provider": "codex"},
+            response_metadata={
+                "model": self.model_id, "provider": "codex",
+                "usage": (result.usage or {}).get("total"), "codex_usage": result.usage,
+            },
         )
         return ChatResult(generations=[ChatGeneration(message=message)])
 

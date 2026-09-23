@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 from langchain_core.callbacks import BaseCallbackHandler
 
+from chemgraph.agent.usage import response_usage
+
 logger = logging.getLogger(__name__)
 
 EventCallback = Callable[[str, dict], None]
@@ -108,6 +110,10 @@ class _BaseDashboardEventCallback(BaseCallbackHandler):
 
     def on_llm_end(self, response, **kwargs) -> None:
         payload: dict[str, Any] = {}
+        if kwargs.get("run_id") is not None:
+            payload["call_id"] = str(kwargs["run_id"])
+        if counts := response_usage(response):
+            payload["token_counts"] = counts
         usage = getattr(response, "llm_output", None)
         if isinstance(usage, dict):
             payload["llm_output"] = usage

@@ -6,9 +6,12 @@ enabling session listing, resumption, and context injection.
 """
 
 import logging
+import json
 import os
 import sqlite3
 import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -44,7 +47,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     graph_config TEXT,
     topology_fingerprint TEXT,
     checkpoint_backend TEXT,
-    checkpoint_db TEXT
+    checkpoint_db TEXT,
+    history_unaccounted INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -97,6 +101,21 @@ CREATE INDEX IF NOT EXISTS idx_subagent_runs_session
 
 CREATE INDEX IF NOT EXISTS idx_subagent_messages_run
     ON subagent_messages(run_id, ordinal);
+
+CREATE TABLE IF NOT EXISTS usage_turns (
+    turn_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    thread_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS model_usage (
+    call_id TEXT PRIMARY KEY,
+    turn_id TEXT NOT NULL REFERENCES usage_turns(turn_id) ON DELETE CASCADE,
+    record TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_usage_turn_session ON usage_turns(session_id, thread_id);
+CREATE INDEX IF NOT EXISTS idx_model_usage_turn ON model_usage(turn_id);
 """
 
 _SESSION_COLUMNS = {
@@ -105,6 +124,7 @@ _SESSION_COLUMNS = {
     "topology_fingerprint": "TEXT",
     "checkpoint_backend": "TEXT",
     "checkpoint_db": "TEXT",
+    "history_unaccounted": "INTEGER NOT NULL DEFAULT 0",
 }
 
 _MESSAGE_COLUMNS = {
@@ -150,8 +170,17 @@ class SessionStore:
         """Create tables and migrate legacy databases in place."""
         with self._connect() as conn:
             conn.executescript(_SCHEMA_SQL)
+            conn.execute("BEGIN")
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
             self._add_missing_columns(conn, "sessions", _SESSION_COLUMNS)
             self._add_missing_columns(conn, "messages", _MESSAGE_COLUMNS)
+            if "history_unaccounted" not in columns:
+                # Pre-marker transcripts cannot prove full accounting coverage,
+                # even if some calls were recorded by an earlier installation.
+                conn.execute(
+                    "UPDATE sessions SET history_unaccounted = 1 WHERE query_count > 0 "
+                    "OR EXISTS (SELECT 1 FROM messages WHERE messages.session_id = sessions.session_id)"
+                )
             conn.execute("PRAGMA user_version = 1")
 
     @staticmethod
@@ -180,16 +209,21 @@ class SessionStore:
         except OSError:
             logger.warning("Could not restrict permissions for %s", path)
 
-    def _connect(self) -> sqlite3.Connection:
-        """Return a new connection with WAL mode and FK enforcement."""
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Commit or roll back a WAL/FK transaction and always close it."""
         conn = sqlite3.connect(self.db_path)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.row_factory = sqlite3.Row
-        self._restrict_permissions(self.db_path, 0o600)
-        self._restrict_permissions(self.db_path + "-wal", 0o600)
-        self._restrict_permissions(self.db_path + "-shm", 0o600)
-        return conn
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.row_factory = sqlite3.Row
+            self._restrict_permissions(self.db_path, 0o600)
+            self._restrict_permissions(self.db_path + "-wal", 0o600)
+            self._restrict_permissions(self.db_path + "-shm", 0o600)
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     # ------------------------------------------------------------------
     # Session CRUD
@@ -706,6 +740,98 @@ class SessionStore:
         with self._connect() as conn:
             row = conn.execute("SELECT COUNT(*) as cnt FROM sessions").fetchone()
             return row["cnt"]
+
+    def create_usage_turn(self, session_id: str, turn_id: str, thread_id: str) -> None:
+        """Register a turn without resetting an existing continuation."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE sessions SET history_unaccounted = 1 WHERE session_id = ? "
+                "AND (query_count > 0 OR EXISTS (SELECT 1 FROM messages WHERE session_id = ?)) "
+                "AND NOT EXISTS (SELECT 1 FROM usage_turns WHERE session_id = ?)",
+                (session_id, session_id, session_id),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO usage_turns (turn_id, session_id, thread_id, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (turn_id, session_id, thread_id, datetime.now().isoformat()),
+            )
+
+    def mark_usage_history_unaccounted(self, session_id: str) -> None:
+        """Remember a historical accounting gap independently of later turns."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE sessions SET history_unaccounted = 1 WHERE session_id = ?", (session_id,),
+            )
+
+    def usage_history_unaccounted(self, session_id: str) -> bool:
+        """Include transcripts that have not yet started usage accounting."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT history_unaccounted OR ((query_count > 0 OR EXISTS "
+                "(SELECT 1 FROM messages WHERE session_id = ?)) AND NOT EXISTS "
+                "(SELECT 1 FROM usage_turns WHERE session_id = ?)) "
+                "FROM sessions WHERE session_id = ?", (session_id, session_id, session_id),
+            ).fetchone()
+        return bool(row and row[0])
+
+    def save_usage_call(self, turn_id: str, record: dict) -> None:
+        """Commit one cumulative call snapshot; repeated delivery is idempotent."""
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO model_usage (call_id, turn_id, record) VALUES (?, ?, ?) "
+                "ON CONFLICT(call_id) DO UPDATE SET record = excluded.record",
+                (record["call_id"], turn_id, json.dumps(record)),
+            )
+
+    def update_usage_turn(self, turn_id: str, status: str) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE usage_turns SET status = ? WHERE turn_id = ?", (status, turn_id))
+
+    def latest_usage_turn(self, session_id: str, thread_id: str) -> dict | None:
+        """Load the most recent accounting context for checkpoint restoration."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM usage_turns WHERE session_id = ? AND thread_id = ? "
+                "ORDER BY rowid DESC LIMIT 1", (session_id, thread_id),
+            ).fetchone()
+            if row is None:
+                return None
+            records = conn.execute("SELECT record FROM model_usage WHERE turn_id = ?", (row["turn_id"],))
+            return {**dict(row), "records": [json.loads(r["record"]) for r in records]}
+
+    def get_usage(self, session_id: str, turn_id: str | None = None) -> dict:
+        """Return known provider totals and coverage for a session or one turn."""
+        from chemgraph.agent.usage import apply_history_coverage, summarize_usage
+
+        resolved = self._resolve_session_id(session_id)
+        with self._connect() as conn:
+            recorded = conn.execute(
+                "SELECT 1 FROM usage_turns WHERE session_id = ? "
+                "AND (? IS NULL OR turn_id = ?) LIMIT 1", (resolved, turn_id, turn_id),
+            ).fetchone() is not None
+            rows = conn.execute(
+                "SELECT m.record FROM model_usage m JOIN usage_turns t USING (turn_id) "
+                "WHERE t.session_id = ? AND (? IS NULL OR t.turn_id = ?)",
+                (resolved, turn_id, turn_id),
+            ).fetchall()
+        result = summarize_usage([json.loads(row["record"]) for row in rows])
+        result["recorded"] = recorded
+        if not recorded:
+            from chemgraph.agent.usage import TOKEN_FIELDS
+
+            result.update(dict.fromkeys(TOKEN_FIELDS))
+        return apply_history_coverage(
+            result, turn_id is None and self.usage_history_unaccounted(resolved),
+        )
+
+    def usage_records(self, session_id: str) -> list[dict]:
+        """Read call records for merging durable and in-memory session usage."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT m.record FROM model_usage m JOIN usage_turns t USING (turn_id) "
+                "WHERE t.session_id = ?", (session_id,),
+            ).fetchall()
+        return [json.loads(row["record"]) for row in rows]
 
     # ------------------------------------------------------------------
     # Context building for session resume

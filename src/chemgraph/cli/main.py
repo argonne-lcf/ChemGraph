@@ -35,6 +35,7 @@ from chemgraph.cli.commands import (
     interactive_mode,
     list_sessions,
     run_query,
+    print_token_usage,
     save_output,
     show_session,
 )
@@ -787,7 +788,8 @@ def _handle_run(args: argparse.Namespace) -> None:
         console.print(f"[bold blue]Resuming from:[/bold blue] {args.resume}")
     try:
         result = run_query(
-            agent, args.query, verbose=(args.verbose > 0), resume_from=args.resume
+            agent, args.query, verbose=(args.verbose > 0), resume_from=args.resume,
+            usage_stderr=True,
         )
     except Exception:
         if trace is not None:
@@ -798,6 +800,7 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     if result:
         format_response(result, verbose=(args.verbose > 0))
+        print_token_usage(agent, stderr=True)
 
         # Save output if requested
         if args.output_file:

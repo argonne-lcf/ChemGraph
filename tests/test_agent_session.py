@@ -145,6 +145,42 @@ async def test_cumulative_turns_are_saved_once(cumulative_agent, config):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("override", [1, 350, None])
+async def test_run_recursion_override_and_config_ownership(cumulative_agent, override):
+    from copy import deepcopy
+    from langgraph.errors import GraphRecursionError
+
+    agent = cumulative_agent
+    config = {"thread_id": 7, "configurable": {"custom": "kept"}}
+    if override is not None:
+        config["recursion_limit"] = override
+    original = deepcopy(config)
+    captured = []
+    stream = agent.workflow.astream
+
+    async def recording_stream(*args, **kwargs):
+        captured.append(kwargs["config"]["recursion_limit"])
+        async for state in stream(*args, **kwargs):
+            yield state
+
+    agent.workflow.astream = recording_stream
+    if override == 1:
+        with pytest.raises(GraphRecursionError):
+            await agent.run("test", config=config)
+    else:
+        await agent.run("test", config=config)
+    assert captured == [override if override is not None else agent.recursion_limit]
+    assert config == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [0, -1, True, 1.5, "20", None])
+async def test_run_rejects_invalid_recursion_override(cumulative_agent, limit):
+    with pytest.raises(ValueError, match="positive integer"):
+        await cumulative_agent.run("test", config={"recursion_limit": limit})
+
+
+@pytest.mark.asyncio
 async def test_cumulative_history_survives_alternating_threads(cumulative_agent):
     agent = cumulative_agent
     for count, thread_id in enumerate(["a", "b", "a", "b"], start=1):

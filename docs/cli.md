@@ -45,6 +45,42 @@ The recursion limit counts graph steps, including middleware and tool execution,
 not just model calls. Raising it allows longer workflows; it does not reduce
 token consumption. Explicit configuration and saved session limits are retained.
 
+After each query, the CLI prints provider-reported token usage locally.
+Non-interactive runs send usage lines to stderr, including failures and
+cancellation, so usage does not appear in captured stdout. Interactive runs
+display usage alongside the conversation.
+
+```text
+Tokens: 12,340 input · 520 output · 12,860 total
+```
+
+This is the total for that user turn, including all model calls, delegated
+workers, and approval continuations. `/retry` adds to the same turn's total.
+Input includes conversation history sent on each call, so these counts are not
+the size of a single context window. Cached input and reasoning output are
+labeled separately when reported and are already included in input/output.
+Missing usage is displayed as unavailable or partial, never assumed to be zero.
+
+On leaving interactive mode with `/quit` or EOF, `Session tokens:` reports the
+recorded totals for the sessions used in that CLI process, including any restored
+session history. Model/workflow switches retain the earlier session's counts.
+Ctrl+C during a query prints the available turn counts and keeps the REPL open.
+Failed queries also retain their reported usage.
+
+These lines use numeric counters already returned by the provider. They make no
+additional model requests and are not inserted into the conversation or saved
+answer. Usage is persisted per call in the existing session database when memory
+is enabled. Older sessions have no reconstructed usage for their historical calls.
+Their session totals remain partial after new calls are recorded, with an
+explicit historical-usage note; entirely unaccounted history displays unavailable.
+Rejected operations that fail validation do not print or alter a previous turn's
+usage.
+
+The CLI configures logging to stop propagation at the `chemgraph` logger to
+avoid duplicate output. Applications embedding the CLI should attach handlers
+to that namespace if they need its records; Python root handlers will not receive
+them after CLI logging configuration. Library use alone does not configure this.
+
 The legacy no-subcommand form, such as `chemgraph -q "..."`, remains supported,
 but new scripts should use `chemgraph run`.
 

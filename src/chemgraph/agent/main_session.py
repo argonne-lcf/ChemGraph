@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from langchain_core.messages import HumanMessage
@@ -13,6 +13,7 @@ from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 
 from chemgraph.agent.events import EventCallback, _AstreamEventCallback
+from chemgraph.agent.usage import UsageCollector, add_callbacks, session_usage
 from chemgraph.agent.interrupts import (
     PendingInterrupt,
     collect_pending_interrupts,
@@ -51,6 +52,7 @@ class MainAgentTurnResult:
     assistant_response: str
     interrupts: tuple[PendingInterrupt, ...]
     state: dict[str, Any]
+    usage: dict[str, Any] | None = None
 
 
 class MainAgentSession:
@@ -82,6 +84,10 @@ class MainAgentSession:
         self._pending: tuple[PendingInterrupt, ...] = ()
         self.session_store = session_store
         self.session_metadata = session_metadata
+        self._usage: UsageCollector | None = None
+        self._usage_turns: list[UsageCollector] = []
+        self._usage_operation = 0
+        self._history_unaccounted = False
         self._registered = False
         if self.session_store is not None:
             try:
@@ -99,6 +105,29 @@ class MainAgentSession:
     def thread_id(self) -> str:
         """Return the stable LangGraph thread identifier."""
         return self._thread_id
+
+    @property
+    def last_usage(self) -> dict | None:
+        """Provider usage for the latest query, including retries and workers."""
+        return self._usage.summary if self._usage is not None else None
+
+    @property
+    def session_usage(self) -> dict:
+        """All recorded turns in this session, including restored history."""
+        return session_usage(
+            self._usage_turns, self.session_store, self.thread_id,
+            history_unaccounted=self._history_unaccounted,
+        )
+
+    def _start_usage(self, restored: dict | None = None) -> None:
+        metadata = self.session_metadata
+        self._usage = UsageCollector(
+            self.thread_id, self.thread_id, store=self.session_store,
+            model=metadata.graph_config.model_name if metadata else None,
+            turn_id=restored["turn_id"] if restored else None,
+            records=restored["records"] if restored else (),
+        )
+        self._usage_turns.append(self._usage)
 
     @property
     def pending_interrupts(self) -> tuple[PendingInterrupt, ...]:
@@ -123,6 +152,7 @@ class MainAgentSession:
         if not isinstance(message, str) or not message.strip():
             raise ValueError("The user message must be a non-empty string.")
         self._ensure_registered(message)
+        self._start_usage()
         return await self._run({"messages": [HumanMessage(content=message)]})
 
     async def resume(
@@ -183,8 +213,27 @@ class MainAgentSession:
         self._pending = result.interrupts
         self._failed = result.status == "failed"
         self._registered = True
+        has_history = bool((snapshot.values or {}).get("messages"))
+        restored = None
+        if self.session_store is not None:
+            try:
+                restored = self.session_store.latest_usage_turn(self.thread_id, self.thread_id)
+                if restored is not None:
+                    # Preserve any in-memory calls whose persistence failed.
+                    if self._usage is None or self._usage.turn_id != restored["turn_id"]:
+                        self._start_usage(restored)
+                self._history_unaccounted |= self.session_store.usage_history_unaccounted(self.thread_id)
+            except Exception:
+                logger.warning("Could not restore token usage.", exc_info=True)
+        if has_history and restored is None and not self._usage_turns:
+            self._history_unaccounted = True
+        if self._history_unaccounted and self.session_store is not None:
+            try:
+                self.session_store.mark_usage_history_unaccounted(self.thread_id)
+            except Exception:
+                logger.warning("Could not persist historical usage coverage.", exc_info=True)
         self._synchronize(snapshot.values, result.status)
-        return result
+        return replace(result, usage=self.last_usage)
 
     def _resume_value(self, response: str | Mapping[str, Any]) -> Any:
         if isinstance(response, str):
@@ -210,10 +259,14 @@ class MainAgentSession:
         return {str(key): value for key, value in response.items()}
 
     async def _run(self, stream_input: Any) -> MainAgentTurnResult:
+        if self._usage is None:
+            self._start_usage()
+        self._usage_operation += 1
         self._update_status("running")
         try:
             result, state_values = await self._run_once(stream_input)
         except Exception:
+            self._usage.finish("failed")
             self._failed = True
             try:
                 snapshot = await self.workflow.aget_state(self.config)
@@ -228,9 +281,13 @@ class MainAgentSession:
             else:
                 self._update_status("failed")
             raise
+        except BaseException:
+            self._usage.finish("cancelled")
+            raise
         self._failed = False
         self._synchronize(state_values, result.status)
-        return result
+        self._usage.finish(result.status)
+        return replace(result, usage=self.last_usage)
 
     async def _run_once(
         self, stream_input: Any
@@ -241,7 +298,7 @@ class MainAgentSession:
             async for state in self.workflow.astream(
                 stream_input,
                 stream_mode="values",
-                config=self.config,
+                config=add_callbacks(self.config, [self._usage]) if self._usage else self.config,
             ):
                 last_state = state
                 found.extend(normalize_interrupts(state.get("__interrupt__")))

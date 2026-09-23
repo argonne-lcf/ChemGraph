@@ -35,8 +35,8 @@ class _FakeWorkflow:
             {"inputs": inputs, "stream_mode": stream_mode, "config": config},
         )
         for callback in config.get("callbacks", []):
-            callback.on_chat_model_start({"name": "FakeChatModel"}, [["hello"]])
-            callback.on_llm_end(SimpleNamespace(generations=[]))
+            callback.on_chat_model_start({"name": "FakeChatModel"}, [["hello"]], run_id="test-call")
+            callback.on_llm_end(SimpleNamespace(generations=[]), run_id="test-call")
         yield self.last_state
 
     def get_state(self, config):
