@@ -16,7 +16,7 @@ to see the identifiers registered by your installed version.
 | ALCF endpoints | Listed by `chemgraph models` | `ALCF_ACCESS_TOKEN` |
 | Ollama | Curated local ID such as `llama3.2` | Running Ollama server; no key |
 | vLLM/custom | Custom ID plus a configured base URL | `VLLM_API_KEY` or placeholder |
-| Codex | `codex:<model-id>` | Experimental subscription setup |
+| Codex | `codex:<model-id>` | ChatGPT subscription setup |
 
 Only set credentials for providers you use. Do not commit secrets to
 `config.toml`, shell scripts, notebooks, or Git history.
@@ -92,8 +92,9 @@ configuration file. Environment variables remain the recommended place for token
 See [Configuration](configuration_with_toml.md) for supported sections and
 interface-specific behavior.
 
-## Experimental Codex route
+## Codex subscription route
 
-The Codex subscription integration has separate dependencies and authentication
-and is not an OpenAI API-key replacement for every workflow. See
+The Codex subscription integration is available across all registered workflows
+through the shared model loader. It has separate dependencies and ChatGPT login
+requirements; workflow-specific tools and dependencies still apply. See
 [Codex subscription](codex_subscription.md) before using a `codex:` model.

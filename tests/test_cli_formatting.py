@@ -7,8 +7,19 @@ from rich.console import Console
 from chemgraph.agent.main_session import MainAgentTurnResult
 from chemgraph.cli.formatting import (
     _content_text, action_review_summary, build_action_review, console,
-    format_action_review, format_response,
+    format_action_review, format_response, list_models,
 )
+from chemgraph.models.endpoints.codex import SPEC as CODEX_SPEC
+
+
+def test_list_models_displays_codex_subscription():
+    with console.capture() as capture:
+        list_models()
+    row = next(line for line in capture.get().splitlines() if "codex:<model-id>" in line)
+    assert "Codex / ChatGPT" in row
+    assert "Subscription" in row
+    assert CODEX_SPEC.model_type == "Subscription"
+    assert "Experimental" not in row
 
 
 @pytest.mark.parametrize("name,args,expected", [

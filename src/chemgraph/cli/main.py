@@ -78,7 +78,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         default="gpt-4o-mini",
         help=(
-            "LLM model to use; experimental Codex subscription models use "
+            "LLM model to use; Codex subscription models use "
             "codex:<model-id> (default: gpt-4o-mini)"
         ),
     )
@@ -709,11 +709,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         )
         return
 
-    if args.model.startswith("codex:"):
-        console.print(
-            "[yellow]Using experimental Codex subscription support.[/yellow]"
-        )
-    elif match_endpoint(args.model) is None:
+    if match_endpoint(args.model) is None:
         console.print(
             f"[yellow]Using custom model ID: {args.model} (not in curated list)[/yellow]"
         )

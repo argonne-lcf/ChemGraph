@@ -206,7 +206,7 @@ def list_models() -> None:
     table.add_row(
         "codex:<model-id>",
         "Codex / ChatGPT",
-        "Experimental",
+        "Subscription",
     )
 
     console.print(table)

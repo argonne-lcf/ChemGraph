@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import json
 from types import SimpleNamespace
 
@@ -8,6 +9,7 @@ from deepagents.backends.protocol import ExecuteResponse
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.types import Command
+from pydantic import BaseModel, ValidationError
 
 from chemgraph.agent import llm_agent
 from chemgraph.agent.llm_agent import ChemGraph
@@ -17,6 +19,8 @@ from chemgraph.cli.commands import check_api_keys
 from chemgraph.cli.formatting import console
 from chemgraph.graphs.deep_agent import construct_deep_agent_graph
 from chemgraph.graphs.main_agent import construct_main_agent_graph
+from chemgraph.graphs.multi_agent import construct_multi_agent_graph
+from chemgraph.graphs.graspa_mcp import planner_agent as graspa_planner_agent
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.models import codex as codex_model
 from chemgraph.models.codex import (
@@ -667,6 +671,16 @@ def test_shared_loader_routes_codex_prefix(monkeypatch):
         ("single_agent", "construct_single_agent_graph"),
         ("main_agent", "construct_main_agent_graph"),
         ("deep_agent", "construct_deep_agent_graph"),
+        ("multi_agent", "construct_multi_agent_graph"),
+        ("python_relp", "construct_relp_graph"),
+        ("graspa", "construct_graspa_graph"),
+        ("mock_agent", "construct_mock_agent_graph"),
+        ("graspa_mcp", "construct_graspa_mcp_graph"),
+        ("rag_agent", "construct_rag_agent_graph"),
+        ("single_agent_xanes", "construct_single_agent_xanes_graph"),
+        ("molecular_docking", "construct_molecular_docking_graph"),
+        ("ocsr", "construct_ocsr_graph"),
+        ("single_agent_iri", "construct_iri_graph"),
     ],
 )
 def test_chemgraph_routes_codex_to_supported_workflow(
@@ -697,9 +711,13 @@ def test_chemgraph_routes_codex_to_supported_workflow(
     assert captured["llm"] == ("codex-model", "codex:test-model")
 
 
-def test_chemgraph_rejects_codex_for_unsupported_workflows():
-    with pytest.raises(ValueError, match="single_agent, main_agent, and deep_agent"):
-        ChemGraph(model_name="codex:test-model", workflow_type="multi_agent")
+def test_chemgraph_rejects_unknown_workflow_with_codex(monkeypatch, tmp_path):
+    monkeypatch.setattr(codex_native, "load_codex_model", lambda **_: object())
+    with pytest.raises(ValueError, match="Unsupported workflow type: unknown"):
+        ChemGraph(
+            model_name="codex:test-model", workflow_type="unknown",
+            enable_memory=False, log_dir=str(tmp_path),
+        )
 
 
 @pytest.mark.asyncio
@@ -781,6 +799,138 @@ async def test_codex_adapter_runs_main_agent_delegation(fake_codex_sdk):
 def test_codex_models_never_require_openai_api_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert check_api_keys("codex:o3") == (True, "")
+
+
+class _StructuredAnswer(BaseModel):
+    answer: str
+
+
+def _tool_decision(name, arguments):
+    return json.dumps({
+        "content": "", "tool_calls": [
+            {"name": name, "arguments": json.dumps(arguments)},
+        ],
+    })
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("dictionary_schema", [False, True])
+@pytest.mark.parametrize("include_raw", [False, True])
+def test_codex_structured_output(
+    fake_codex_sdk, asynchronous, dictionary_schema, include_raw,
+):
+    schema = _StructuredAnswer.model_json_schema() if dictionary_schema else _StructuredAnswer
+    fake_codex_sdk.responses.append(_tool_decision("_StructuredAnswer", {"answer": "done"}))
+    original = CodexChatModel(model_id="test")
+    model = original.with_structured_output(schema, include_raw=include_raw)
+    result = asyncio.run(model.ainvoke("test")) if asynchronous else model.invoke("test")
+    if include_raw:
+        assert isinstance(result["raw"], AIMessage)
+        assert result["parsing_error"] is None
+        result = result["parsed"]
+    assert result == ({"answer": "done"} if dictionary_schema else _StructuredAnswer(answer="done"))
+    assert original.bound_tools == ()
+    assert fake_codex_sdk.run_calls[-1][1]["output_schema"]["properties"]["tool_calls"]["minItems"] == 1
+    assert "ls_structured_output_format" not in fake_codex_sdk.run_calls[-1][1]
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("include_raw", [False, True])
+def test_codex_structured_output_validation_errors(fake_codex_sdk, asynchronous, include_raw):
+    fake_codex_sdk.responses.append(_tool_decision("_StructuredAnswer", {"answer": ["invalid"]}))
+    model = CodexChatModel(model_id="test").with_structured_output(
+        _StructuredAnswer, include_raw=include_raw,
+    )
+
+    def invoke():
+        return asyncio.run(model.ainvoke("test")) if asynchronous else model.invoke("test")
+
+    if include_raw:
+        result = invoke()
+        assert isinstance(result["raw"], AIMessage)
+        assert result["parsed"] is None
+        assert isinstance(result["parsing_error"], ValidationError)
+    else:
+        with pytest.raises(ValidationError):
+            invoke()
+
+
+def test_codex_structured_output_rejects_malformed_decision(fake_codex_sdk):
+    fake_codex_sdk.responses.append("{invalid")
+    model = CodexChatModel(model_id="test").with_structured_output(
+        _StructuredAnswer, include_raw=True,
+    )
+    with pytest.raises(CodexResponseError, match="invalid JSON decision"):
+        model.invoke("test")
+
+
+def test_codex_binding_still_rejects_unknown_options():
+    with pytest.raises(ValueError, match="Unsupported Codex tool options: unknown"):
+        CodexChatModel(model_id="test").bind_tools(
+            [lookup_smiles], ls_structured_output_format={}, unknown=True,
+        )
+
+
+@pytest.mark.asyncio
+async def test_codex_runs_multi_agent_planner_executor_loop(fake_codex_sdk):
+    def answer(content):
+        return json.dumps({"content": content, "tool_calls": []})
+
+    fake_codex_sdk.responses.extend([
+        answer(json.dumps({
+            "thought_process": "Look up aspirin.", "next_step": "executor_subgraph",
+            "tasks": [{"task_index": 1, "prompt": "Look up aspirin SMILES."}],
+        })),
+        _tool_decision("lookup_smiles", {"name": "aspirin"}),
+        answer("The aspirin SMILES is CC(=O)OC1=CC=CC=C1C(=O)O."),
+        answer(json.dumps({"thought_process": "Lookup complete.", "next_step": "FINISH"})),
+    ])
+    graph = construct_multi_agent_graph(
+        CodexChatModel(model_id="test"), executor_tools=[lookup_smiles], checkpointer=None,
+    )
+    state = await graph.ainvoke({"messages": [HumanMessage(content="Find aspirin SMILES")]})
+    assert state["next_step"] == "FINISH"
+    assert state["messages"][-1].content == "Lookup complete."
+    history = _codex_payload(fake_codex_sdk, 2)["conversation"]
+    assert any(m["role"] == "tool" and m.get("name") == "lookup_smiles" for m in history)
+    assert "CC(=O)OC1=CC=CC=C1C(=O)O" in _codex_payload(fake_codex_sdk)["conversation"][-1]["content"]
+    assert len(fake_codex_sdk.run_calls) == 4
+
+
+def test_codex_runs_graspa_structured_planner(fake_codex_sdk):
+    fake_codex_sdk.responses.append(_tool_decision("PlannerResponse", {
+        "thought_process": "Run a worker.", "next_step": "executor_subgraph",
+        "tasks": [{"task_index": 1, "prompt": "Run worker batch 1."}],
+    }))
+    result = graspa_planner_agent(
+        {"messages": [HumanMessage(content="Plan a calculation")]},
+        CodexChatModel(model_id="test"), "Plan the calculation.",
+    )
+    assert result["next_step"] == "executor_subgraph"
+    assert result["tasks"][0].task_index == 1
+    assert result["tasks"][0].prompt == "Run worker batch 1."
+
+
+def test_codex_cli_help_and_run_have_no_experimental_notice(monkeypatch, tmp_path, capsys):
+    cli = importlib.import_module("chemgraph.cli.main")
+    monkeypatch.chdir(tmp_path)
+    parser = cli.create_argument_parser()
+    with pytest.raises(SystemExit) as exc:
+        parser.parse_args(["run", "--help"])
+    assert exc.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "Codex subscription models use" in help_text
+    assert "experimental Codex" not in help_text
+
+    calls = []
+    monkeypatch.setattr(cli, "initialize_agent", lambda *args, **_: calls.append(args) or object())
+    monkeypatch.setattr(cli, "run_query", lambda *_args, **_kwargs: None)
+    args = parser.parse_args(["run", "--model", "codex:test", "-w", "multi_agent", "-q", "test"])
+    with console.capture() as capture:
+        cli._handle_run(args)
+    assert calls[0][:2] == ("codex:test", "multi_agent")
+    assert "experimental" not in capture.get().lower()
+    assert "Using custom model ID" not in capture.get()
 
 
 def test_codex_install_hint_preserves_extra_name(monkeypatch):

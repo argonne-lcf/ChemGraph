@@ -63,7 +63,7 @@ model is `gpt-4o-mini`.
 
 See [Models and authentication](https://argonne-lcf.github.io/ChemGraph/models/)
 for endpoint setup, ALCF token instructions, supported model identifiers, and
-the experimental Codex subscription route.
+the Codex subscription route.
 
 Check the installation and run a small tool-using query:
 
@@ -292,7 +292,7 @@ available in that environment.
 | AIMNet2 | Install `aimnet2calc` separately | Detected lazily when installed |
 
 Other extras are available for `rag`, `docking`, `xanes`, `parsl`,
-`ensemble_launcher`, `globus_compute`, `academy`, and experimental `codex`
+`ensemble_launcher`, `globus_compute`, `academy`, and `codex`
 support. See [Installation](https://argonne-lcf.github.io/ChemGraph/installation/)
 and [Calculators](https://argonne-lcf.github.io/ChemGraph/calculators/).
 

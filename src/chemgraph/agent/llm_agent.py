@@ -146,9 +146,8 @@ class ChemGraph:
     ----------
     model_name : str, optional
         Name of the language model to use, by default "gpt-4o-mini".
-        Experimental ChatGPT subscription-backed Codex models use the
-        ``codex:<model-id>`` prefix and support ``single_agent``,
-        ``main_agent``, and ``deep_agent``.
+        ChatGPT subscription-backed Codex models use the ``codex:<model-id>``
+        prefix and are available across all registered workflows.
     workflow_type : str, optional
         Type of workflow to use. Options:
         - "single_agent"
@@ -315,15 +314,6 @@ class ChemGraph:
             raise ValueError(
                 "checkpointer is supported only for the main_agent and "
                 "deep_agent workflows."
-            )
-        if model_name.startswith("codex:") and workflow_type not in {
-            "single_agent",
-            "main_agent",
-            "deep_agent",
-        }:
-            raise ValueError(
-                "Experimental codex: models currently support only the "
-                "single_agent, main_agent, and deep_agent workflows."
             )
         if not isinstance(deepagent_discover_skills, bool):
             raise TypeError("deepagent_discover_skills must be a boolean.")
