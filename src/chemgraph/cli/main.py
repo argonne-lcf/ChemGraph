@@ -299,6 +299,10 @@ Examples:
 
     add_eval_args(eval_parser)
 
+    from chemgraph.skills.cli import add_skill_args
+
+    add_skill_args(subparsers.add_parser("skills", help="Inspect and validate skills."))
+
     # ---- "session" subcommand --------------------------------------------
     session_parser = subparsers.add_parser(
         "session",
@@ -889,6 +893,11 @@ def main() -> None:
         from chemgraph.eval.cli import run_eval
 
         run_eval(args)
+
+    elif args.command == "skills":
+        from chemgraph.skills.cli import run_skills
+
+        raise SystemExit(run_skills(args))
 
     elif args.command == "session":
         sc = getattr(args, "session_command", None)

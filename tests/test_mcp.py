@@ -24,6 +24,25 @@ except ModuleNotFoundError:
 TEST_DIR = Path(__file__).parent
 
 
+@pytest.mark.asyncio
+async def test_skill_documented_mcp_tools_exist(monkeypatch):
+    """Check the skill's named tools without a server, backend, or credentials."""
+    import runpy
+
+    servers = []
+    monkeypatch.setattr(sys, "argv", ["ase-server"])
+    monkeypatch.setattr("chemgraph.execution.config.get_transfer_manager", lambda: object())
+    monkeypatch.setattr("chemgraph.mcp.server_utils.run_mcp_server", lambda server, **kw: servers.append(server))
+    runpy.run_path(str(TEST_DIR.parent / "src/chemgraph/mcp/ase_mcp_hpc.py"), run_name="__main__")
+
+    text = (TEST_DIR.parent / "src/chemgraph/skills/chemgraph/references/mcp-workflows.md").read_text()
+    names = {tool.name for tool in await servers[0].list_tools()}
+    for name in ("run_ase_single", "run_ase_ensemble", "check_job_status",
+                 "get_job_results", "list_jobs", "cancel_job",
+                 "transfer_files", "check_transfer_status"):
+        assert f"`{name}`" in text and name in names
+
+
 def _fanout_worker(item: dict) -> dict:
     return item
 
