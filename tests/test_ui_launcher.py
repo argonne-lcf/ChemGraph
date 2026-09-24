@@ -16,8 +16,9 @@ def test_app_path_points_at_real_file():
 def test_launch_builds_streamlit_command(monkeypatch):
     captured = {}
 
-    def fake_call(cmd):
+    def fake_call(cmd, env=None):
         captured["cmd"] = cmd
+        captured["env"] = env
         return 0
 
     monkeypatch.setattr(streamlit_launcher.subprocess, "call", fake_call)
@@ -52,3 +53,33 @@ def test_cli_ui_subcommand_dispatches_to_launcher(monkeypatch):
     assert args.command == "ui"
     assert args.port == 9001
     assert args.headless is True
+
+
+def test_deep_agent_is_off_unless_enabled_at_launch(monkeypatch, tmp_path):
+    from ui.deepagent_policy import ENABLE_ENV, ROOTS_ENV
+
+    captured = {}
+    monkeypatch.delenv(ENABLE_ENV, raising=False)
+    monkeypatch.delenv(ROOTS_ENV, raising=False)
+    monkeypatch.setattr(
+        streamlit_launcher.subprocess,
+        "call",
+        lambda cmd, env=None: captured.update(env=env) or 0,
+    )
+    streamlit_launcher.launch()
+    assert ENABLE_ENV not in captured["env"]
+    assert ROOTS_ENV not in captured["env"]
+
+    streamlit_launcher.launch(enable_deep_agent=True, deep_agent_roots=[str(tmp_path)])
+    assert captured["env"][ENABLE_ENV] == "1"
+    assert captured["env"][ROOTS_ENV] == str(tmp_path.resolve())
+
+
+def test_cli_ui_forwards_deep_agent_flags():
+    from chemgraph.cli.main import create_argument_parser
+
+    parser = create_argument_parser()
+    args = parser.parse_args(["ui", "--enable-deep-agent", "--deep-agent-root", "a", "--deep-agent-root", "b"])
+    assert args.enable_deep_agent is True
+    assert args.deep_agent_root == ["a", "b"]
+    assert parser.parse_args(["ui"]).enable_deep_agent is False

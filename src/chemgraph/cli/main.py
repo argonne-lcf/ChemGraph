@@ -336,6 +336,25 @@ Examples:
         help="Do not open a browser window.",
     )
     ui_parser.add_argument(
+        "--enable-deep-agent",
+        action="store_true",
+        help=(
+            "Offer the experimental deep_agent workflow in the UI (host shell "
+            "after in-chat approval). Off by default; only enable it for a "
+            "UI that only you can reach."
+        ),
+    )
+    ui_parser.add_argument(
+        "--deep-agent-root",
+        action="append",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Directory the UI's Deep Agent workspace and skill paths must stay "
+            "inside (repeatable; default: the launch directory)."
+        ),
+    )
+    ui_parser.add_argument(
         "ui_args",
         nargs=argparse.REMAINDER,
         help="Extra arguments forwarded to 'streamlit run'.",
@@ -922,6 +941,8 @@ def main() -> None:
                 port=args.port,
                 headless=args.headless,
                 extra_args=_strip_remainder_separator(args.ui_args),
+                enable_deep_agent=args.enable_deep_agent,
+                deep_agent_roots=args.deep_agent_root,
             )
         )
 

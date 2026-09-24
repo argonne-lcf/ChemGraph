@@ -1026,6 +1026,7 @@ def _deep_agent_config(tmp_path, **general):
 
 
 def test_deep_agent_initialization_waits_for_acknowledgment(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHEMGRAPH_UI_DEEPAGENT", "1")
     fake_st = _FakeStreamlitOptimization()
     fake_st.session_state.agent = None
     fake_st.session_state.last_config = None
@@ -1083,6 +1084,7 @@ def test_non_deep_agent_workflows_pass_no_deep_agent_kwargs(monkeypatch, tmp_pat
 
 
 def test_unacknowledged_deep_agent_drops_the_cached_agent(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHEMGRAPH_UI_DEEPAGENT", "1")
     fake_st = _FakeStreamlitOptimization()
     fake_st.session_state.agent = None
     fake_st.session_state.last_config = None
@@ -1143,3 +1145,29 @@ def test_optimization_section_reads_trajectory_once(monkeypatch, tmp_path):
     total = steps[-1]["step"] + 1
     assert ("expander", f"\U0001f4c9 Optimization ({total} steps)", False) in fake_st.calls
     assert len(steps) < total
+
+
+def test_deep_agent_disabled_on_server_is_refused_even_if_acknowledged(monkeypatch, tmp_path):
+    from ui import deepagent_policy
+
+    monkeypatch.delenv(deepagent_policy.ENABLE_ENV, raising=False)
+    fake_st = _FakeStreamlitOptimization()
+    fake_st.session_state.agent = SimpleNamespace(workflow_type="single_agent")
+    fake_st.session_state.last_config = {"workflow": "single_agent"}
+    fake_st.session_state[main_ui.DEEPAGENT_ACK_KEY] = True
+    fake_st.session_state.current_chat_log_dir = str(tmp_path)
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    built = []
+    monkeypatch.setattr(main_ui, "initialize_agent", lambda *a, **k: built.append(a))
+
+    main_ui._auto_initialize_agent(
+        _deep_agent_config(tmp_path), "gpt-4o-mini", "deep_agent",
+        False, "state", False, False, None,
+    )
+    assert built == []
+    assert fake_st.session_state.agent is None
+    assert any(
+        call[0] == "error" and "disabled on this server" in str(call[1])
+        for call in fake_st.calls
+    )

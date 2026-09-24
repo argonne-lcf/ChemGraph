@@ -39,6 +39,7 @@ from chemgraph.utils.config_utils import (
 from ui import alcf_auth
 from ui import artifacts as artifact_utils
 from ui import codex_auth
+from ui import deepagent_policy
 from ui import providers
 from ui.agent_manager import initialize_agent, transfer_conversation_state
 from ui.provider_widgets import apply_api_key, render_alcf_login, render_codex_login
@@ -1057,6 +1058,12 @@ def _auto_initialize_agent(
     credential_fingerprint = _provider_credential_fingerprint(provider_info, alcf_token)
 
     deepagent_settings = _deepagent_settings(config, selected_workflow)
+    if selected_workflow == "deep_agent" and not deepagent_policy.deep_agent_enabled():
+        # Server-side opt-in: a browser user cannot enable a host shell.
+        st.error(deepagent_policy.DISABLED_MESSAGE)
+        st.session_state.agent = None
+        st.session_state.last_config = None
+        return
     if selected_workflow == "deep_agent" and not _deepagent_access_acknowledged():
         # Same gate as the CLI's confirmation prompt: no host-shell backend
         # is built until the user acknowledges what the Deep Agent can do.

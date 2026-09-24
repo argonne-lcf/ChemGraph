@@ -305,8 +305,11 @@ def test_raw_toml_can_restore_automatic_selection(configuration_app, tmp_path):
     assert "default" not in toml.load(tmp_path / "config.toml")["chemistry"]["calculators"]
 
 
-def test_deep_agent_tab_persists_cli_compatible_keys(configuration_app, tmp_path):
+def test_deep_agent_tab_persists_cli_compatible_keys(configuration_app, tmp_path, monkeypatch):
     import toml
+
+    monkeypatch.setenv("CHEMGRAPH_UI_DEEPAGENT", "1")
+    monkeypatch.setenv("CHEMGRAPH_UI_DEEPAGENT_ROOTS", str(tmp_path))
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -345,3 +348,31 @@ def test_deep_agent_tab_persists_cli_compatible_keys(configuration_app, tmp_path
     assert at.session_state["deepagent_host_shell_acknowledged"] is False
     next(c for c in at.checkbox if c.label.startswith("I understand the Deep Agent")).check().run()
     assert at.session_state["deepagent_host_shell_acknowledged"] is True
+
+
+def test_deep_agent_hidden_unless_operator_enables_it(configuration_app, monkeypatch):
+    monkeypatch.delenv("CHEMGRAPH_UI_DEEPAGENT", raising=False)
+    at = configuration_app.run()
+    assert not at.exception
+    workflow = next(s for s in at.selectbox if s.label == "Workflow")
+    assert "deep_agent" not in workflow.options
+    # No path inputs (and so no filesystem probing) on the Deep Agent tab.
+    assert not any(t.label == "Workspace directory" for t in at.text_input)
+    assert any("disabled on this server" in i.value for i in at.info)
+
+
+def test_deep_agent_tab_rejects_paths_outside_allowed_roots(configuration_app, tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    root.mkdir()
+    monkeypatch.setenv("CHEMGRAPH_UI_DEEPAGENT", "1")
+    monkeypatch.setenv("CHEMGRAPH_UI_DEEPAGENT_ROOTS", str(root))
+    at = configuration_app.run()
+    next(t for t in at.text_input if t.label == "Workspace directory").set_value(
+        str(tmp_path)
+    ).run()
+    next(t for t in at.text_area if t.label == "One directory per line").set_value(
+        "/etc\n"
+    ).run()
+    assert not at.exception
+    errors = [e.value for e in at.error]
+    assert sum("outside the directories" in e for e in errors) == 2

@@ -2,13 +2,13 @@
 
 import copy
 import os
-from pathlib import Path
 from typing import Any, Dict
 
 import streamlit as st
 import toml
 
 from ui import config as ui_config
+from ui import deepagent_policy
 from ui import providers
 from ui.config import (
     get_default_config, load_config, merge_config_defaults,
@@ -43,6 +43,28 @@ WORKFLOW_OPTIONS: list[str] = [
 #: host-shell access in this browser session (the CLI asks the same
 #: question once per process).
 DEEPAGENT_ACK_KEY = "deepagent_host_shell_acknowledged"
+
+
+def available_workflow_options(current: str = "") -> list[str]:
+    """Return the workflows this server offers.
+
+    ``deep_agent`` is listed only when the operator enabled it (see
+    :mod:`ui.deepagent_policy`), or when it is already the configured
+    workflow so the selector does not silently change it on save.
+
+    Parameters
+    ----------
+    current : str, optional
+        Currently configured workflow.
+
+    Returns
+    -------
+    list[str]
+        Workflow names for the selector.
+    """
+    if deepagent_policy.deep_agent_enabled() or current == "deep_agent":
+        return list(WORKFLOW_OPTIONS)
+    return [name for name in WORKFLOW_OPTIONS if name != "deep_agent"]
 
 
 def normalize_workflow_name(value: str) -> str:
@@ -552,16 +574,22 @@ def _render_general_settings(config: dict) -> None:
         config["general"]["workflow"] = normalize_workflow_name(
             config["general"]["workflow"]
         )
+        workflow_options = available_workflow_options(config["general"]["workflow"])
         config["general"]["workflow"] = st.selectbox(
             "Workflow",
-            WORKFLOW_OPTIONS,
+            workflow_options,
             index=(
-                WORKFLOW_OPTIONS.index(config["general"]["workflow"])
-                if config["general"]["workflow"] in WORKFLOW_OPTIONS
+                workflow_options.index(config["general"]["workflow"])
+                if config["general"]["workflow"] in workflow_options
                 else 0
             ),
             key=_wkey("config_workflow"),
         )
+        if (
+            config["general"]["workflow"] == "deep_agent"
+            and not deepagent_policy.deep_agent_enabled()
+        ):
+            st.warning(deepagent_policy.DISABLED_MESSAGE)
 
         config["general"]["output"] = st.selectbox(
             "Output Format",
@@ -748,6 +776,12 @@ def _render_deepagent_settings(config: dict) -> None:
     """
     general = config["general"]
     st.subheader("Deep Agent")
+    if not deepagent_policy.deep_agent_enabled():
+        # Nothing path-related is rendered (or probed) unless the operator
+        # enabled the workflow for this server.
+        st.info(deepagent_policy.DISABLED_MESSAGE, icon="\U0001f512")
+        return
+    roots = deepagent_policy.allowed_roots()
     st.markdown(
         "The experimental **deep_agent** workflow gives the model a shell and "
         "file tools rooted at a workspace directory, plus on-demand chemistry "
@@ -771,16 +805,22 @@ def _render_deepagent_settings(config: dict) -> None:
             key=_wkey("config_deepagent_workspace"),
             help=(
                 "Directory the agent's file tools are rooted at. Leave empty "
-                "to use the directory the UI was launched from."
+                "to use the first allowed root (the directory the UI was "
+                "launched from, unless the operator configured roots). Paths "
+                "must stay inside the allowed roots."
             ),
         ).strip()
         general["deepagent_workspace"] = workspace
+        st.caption("Allowed roots: " + ", ".join(f"`{root}`" for root in roots))
         if workspace:
-            path = Path(workspace).expanduser()
-            if path.is_dir():
-                st.caption(f"Resolved: `{path.resolve()}`")
+            try:
+                resolved = deepagent_policy.confine_directory(
+                    workspace, roots=roots, label="Workspace"
+                )
+            except ValueError as exc:
+                st.error(str(exc))
             else:
-                st.error("This directory does not exist.")
+                st.caption(f"Resolved: `{resolved}`")
         general["deepagent_discover_skills"] = st.checkbox(
             "Discover personal and project skills",
             value=bool(general.get("deepagent_discover_skills", True)),
@@ -812,8 +852,12 @@ def _render_deepagent_settings(config: dict) -> None:
             line.strip() for line in skills_text.splitlines() if line.strip()
         ]
         for item in general["deepagent_skills"]:
-            if not Path(item).expanduser().is_dir():
-                st.error(f"Skill directory does not exist: `{item}`")
+            try:
+                deepagent_policy.confine_directory(
+                    item, roots=roots, label="Skill directory"
+                )
+            except ValueError as exc:
+                st.error(str(exc))
 
     st.write("**On-demand tool catalog**")
     catalog = _registry_tool_names()

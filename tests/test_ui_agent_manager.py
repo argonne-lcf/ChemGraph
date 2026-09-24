@@ -7,7 +7,15 @@ from chemgraph.agent.deepagent_backend import (
     create_host_shell_backend,
     resolve_workspace,
 )
+from ui import deepagent_policy
 from ui.agent_manager import build_deepagent_options
+
+
+@pytest.fixture(autouse=True)
+def _deep_agent_enabled_in(monkeypatch, tmp_path):
+    """Operator enabled the Deep Agent with tmp_path as the only root."""
+    monkeypatch.setenv(deepagent_policy.ENABLE_ENV, "1")
+    monkeypatch.setenv(deepagent_policy.ROOTS_ENV, str(tmp_path))
 
 
 def test_non_deep_agent_workflows_get_no_options(tmp_path):
@@ -35,14 +43,18 @@ def test_deep_agent_backend_is_rooted_at_workspace(tmp_path, monkeypatch):
     assert set(env) <= set(DEEPAGENT_ENV_ALLOWLIST)
 
 
-def test_deep_agent_skill_dirs_are_anchored_and_tools_restricted(tmp_path):
+def test_deep_agent_skill_dirs_are_confined_and_tools_restricted(tmp_path):
     skills = tmp_path / "skills"
+    skills.mkdir()
+    (tmp_path / "rel" / "skills").mkdir(parents=True)
     options = build_deepagent_options(
         "deep_agent", str(tmp_path), [str(skills), "rel/skills"], False, ["run_ase", "run_ase"]
     )
     anchored = options["deepagent_skill_dirs"]
-    assert anchored[0] == str(skills.absolute())
-    assert all(anchored_dir.startswith("/") or ":" in anchored_dir for anchored_dir in anchored)
+    # Relative entries are anchored at the first allowed root.
+    assert anchored == (
+        str(skills.resolve()), str((tmp_path / "rel" / "skills").resolve())
+    )
     assert options["deepagent_discover_skills"] is False
     assert options["deepagent_tool_registry"].names() == ("run_ase",)
 
@@ -55,8 +67,48 @@ def test_deep_agent_empty_tool_list_disables_catalog(tmp_path):
 def test_deep_agent_rejects_unknown_tool_and_missing_workspace(tmp_path):
     with pytest.raises(ValueError, match="Invalid Deep Agent tools"):
         build_deepagent_options("deep_agent", str(tmp_path), None, True, ["no_such_tool"])
-    with pytest.raises(ValueError, match="not a directory"):
+    with pytest.raises(ValueError, match="does not exist"):
         build_deepagent_options("deep_agent", str(tmp_path / "missing"), None, True, None)
+
+
+def test_deep_agent_requires_operator_opt_in(tmp_path, monkeypatch):
+    monkeypatch.delenv(deepagent_policy.ENABLE_ENV)
+    with pytest.raises(ValueError, match="disabled on this server"):
+        build_deepagent_options("deep_agent", str(tmp_path), None, True, None)
+
+
+@pytest.mark.parametrize("escape", ["..", "/", "~", "ws/../../"])
+def test_deep_agent_paths_must_stay_inside_allowed_roots(tmp_path, escape):
+    (tmp_path / "ws").mkdir()
+    with pytest.raises(ValueError, match="outside the directories"):
+        build_deepagent_options("deep_agent", escape, None, True, None)
+    with pytest.raises(ValueError, match="outside the directories"):
+        build_deepagent_options("deep_agent", str(tmp_path), [escape], True, None)
+
+
+def test_symlink_out_of_the_root_is_rejected(tmp_path):
+    import os
+
+    outside = tmp_path.parent / (tmp_path.name + "_outside")
+    outside.mkdir()
+    link = tmp_path / "link"
+    os.symlink(outside, link)
+    with pytest.raises(ValueError, match="outside the directories"):
+        build_deepagent_options("deep_agent", str(link), None, True, None)
+
+
+def test_empty_workspace_uses_first_allowed_root(tmp_path):
+    options = build_deepagent_options("deep_agent", "", None, True, None)
+    assert str(options["deepagent_backend"].cwd) == str(tmp_path.resolve())
+
+
+def test_policy_defaults(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    assert deepagent_policy.deep_agent_enabled({}) is False
+    assert deepagent_policy.deep_agent_enabled({deepagent_policy.ENABLE_ENV: "yes"}) is True
+    assert deepagent_policy.allowed_roots({}) == (str(tmp_path.resolve()),)
+    with pytest.raises(ValueError, match="NUL"):
+        deepagent_policy.confine_directory("a\x00b", roots=[str(tmp_path)])
 
 
 def test_shared_backend_helper_matches_cli_defaults(tmp_path, monkeypatch):

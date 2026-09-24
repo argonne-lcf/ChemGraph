@@ -91,6 +91,25 @@ need their dependencies and external programs.
 
 ### Deep Agent
 
+The `deep_agent` workflow is **off in the web UI unless the operator enables
+it when starting the server**, because whoever reaches the page can approve
+shell commands that run as the server's user:
+
+```bash
+chemgraph ui --enable-deep-agent                          # launch dir is the allowed root
+chemgraph ui --enable-deep-agent --deep-agent-root ~/work --deep-agent-root ~/skills
+```
+
+(or set `CHEMGRAPH_UI_DEEPAGENT=1` and, optionally,
+`CHEMGRAPH_UI_DEEPAGENT_ROOTS` as an `os.pathsep`-separated list when running
+`streamlit run` directly). Only enable it for a UI that only you can reach;
+leave it off for `--server.address 0.0.0.0`, Docker and Kubernetes
+deployments. A browser user cannot change either setting. The workspace and
+every extra skill directory entered in the UI (or in the raw TOML editor)
+must resolve, after following symlinks and `..`, inside an allowed root;
+relative paths are taken from the first root, and an empty workspace means
+the first root. The CLI is unaffected.
+
 The **Configuration → Deep Agent** tab edits the same `[general]` keys the
 CLI reads from `config.toml`, so one file drives both front ends:
 
