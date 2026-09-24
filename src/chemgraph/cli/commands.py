@@ -25,6 +25,11 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from chemgraph.agent.deepagent_backend import (
+    DEEPAGENT_ENV_ALLOWLIST,
+    create_host_shell_backend,
+    resolve_workspace,
+)
 from chemgraph.agent.interrupts import (
     collect_pending_interrupts,
     is_tool_review as _is_tool_review,
@@ -154,14 +159,9 @@ def check_api_keys(
 
 _INIT_TIMEOUT_SECONDS = 30
 
-_DEEPAGENT_ENV_ALLOWLIST = (
-    "PATH",
-    "PYTHONPATH",
-    "VIRTUAL_ENV",
-    "CONDA_PREFIX",
-    "TMPDIR",
-    "CHEMGRAPH_LOG_DIR",
-)
+# Kept as an alias for existing imports; the list lives with the shared
+# backend builder used by both the CLI and the Streamlit UI.
+_DEEPAGENT_ENV_ALLOWLIST = DEEPAGENT_ENV_ALLOWLIST
 
 
 def _create_experimental_deepagent_backend(
@@ -170,11 +170,7 @@ def _create_experimental_deepagent_backend(
     require_confirmation: bool = True,
 ):
     """Create the explicitly approved development-only host-shell backend."""
-    from deepagents.backends import LocalShellBackend
-
-    root = Path(workspace or Path.cwd()).expanduser().resolve()
-    if not root.is_dir():
-        raise ValueError(f"Deep Agent workspace is not a directory: {root}")
+    root = resolve_workspace(workspace)
 
     console.print(
         Panel(
@@ -196,17 +192,7 @@ def _create_experimental_deepagent_backend(
     ):
         raise RuntimeError("Experimental Deep Agent access was not approved.")
 
-    environment = {
-        name: os.environ[name]
-        for name in _DEEPAGENT_ENV_ALLOWLIST
-        if name in os.environ
-    }
-    return LocalShellBackend(
-        root_dir=root,
-        virtual_mode=True,
-        env=environment,
-        inherit_env=False,
-    )
+    return create_host_shell_backend(str(root))
 
 
 def initialize_agent(

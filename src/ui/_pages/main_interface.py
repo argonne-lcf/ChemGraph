@@ -72,7 +72,11 @@ from ui.visualization import (
 )
 
 # Re-use the constants from the configuration page
-from ui._pages.configuration import normalize_workflow_name
+from ui._pages.configuration import (
+    DEEPAGENT_ACK_KEY,
+    normalize_workflow_name,
+    render_deepagent_acknowledgment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -830,6 +834,11 @@ def _render_agent_status(
         st.sidebar.success("\u2705 Agents Ready")
         st.sidebar.info(f"\U0001f9e0 Model: {selected_model}")
         st.sidebar.info(f"\u2699\ufe0f Workflow: {selected_workflow}")
+        workspace = getattr(
+            getattr(st.session_state.agent, "deepagent_backend", None), "cwd", None
+        )
+        if selected_workflow == "deep_agent" and workspace:
+            st.sidebar.caption(f"Deep Agent workspace: `{workspace}`")
         st.sidebar.info(f"\U0001f517 Thread ID: {thread_id}")
         st.sidebar.info(
             f"\U0001f4ac Messages: {len(st.session_state.conversation_history)}"
@@ -902,6 +911,74 @@ def _provider_credential_fingerprint(provider_info, alcf_token: Optional[str]) -
     return hashlib.sha256(credential.encode("utf-8")).hexdigest()
 
 
+def _deepagent_settings(config: dict, selected_workflow: str) -> Optional[tuple]:
+    """Return the hashable Deep Agent settings for the agent cache key.
+
+    Parameters
+    ----------
+    config : dict
+        Nested UI configuration.
+    selected_workflow : str
+        Selected workflow name.
+
+    Returns
+    -------
+    tuple or None
+        ``(workspace, skill_dirs, discover_skills, tool_names)`` for the
+        ``deep_agent`` workflow, ``None`` otherwise.
+    """
+    if selected_workflow != "deep_agent":
+        return None
+    general = config.get("general", {})
+    skills = general.get("deepagent_skills") or []
+    if isinstance(skills, str):
+        skills = [skills]
+    tools = general.get("tools")
+    return (
+        str(general.get("deepagent_workspace") or ""),
+        tuple(str(item) for item in skills),
+        bool(general.get("deepagent_discover_skills", True)),
+        tuple(str(item) for item in tools) if isinstance(tools, list) else None,
+    )
+
+
+def _deepagent_init_kwargs(settings: Optional[tuple]) -> dict:
+    """Expand :func:`_deepagent_settings` into ``initialize_agent`` kwargs."""
+    if settings is None:
+        return {}
+    workspace, skill_dirs, discover, tools = settings
+    return {
+        "deepagent_workspace": workspace or None,
+        "deepagent_skill_dirs": list(skill_dirs) or None,
+        "deepagent_discover_skills": discover,
+        "deepagent_tool_names": list(tools) if tools is not None else None,
+    }
+
+
+def _deepagent_access_acknowledged() -> bool:
+    """Gate Deep Agent initialization on the host-shell acknowledgment.
+
+    Renders the acknowledgment checkbox in the chat when it is missing and
+    reruns once it is ticked.
+
+    Returns
+    -------
+    bool
+        Whether the Deep Agent may be initialized in this session.
+    """
+    if st.session_state.get(DEEPAGENT_ACK_KEY):
+        return True
+    st.warning(
+        "The **deep_agent** workflow can run shell commands on this host and "
+        "modify files under its workspace. Every command and file change will "
+        "pause for your approval in this chat.",
+        icon="\u26a0\ufe0f",
+    )
+    if render_deepagent_acknowledgment(key="chat_deepagent_ack"):
+        st.rerun()
+    return False
+
+
 def _auto_initialize_agent(
     config: dict,
     selected_model: str,
@@ -943,6 +1020,12 @@ def _auto_initialize_agent(
     # applied or cleared key rebuilds the agent instead of reusing the old one.
     credential_fingerprint = _provider_credential_fingerprint(provider_info, alcf_token)
 
+    deepagent_settings = _deepagent_settings(config, selected_workflow)
+    if selected_workflow == "deep_agent" and not _deepagent_access_acknowledged():
+        # Same gate as the CLI's confirmation prompt: no host-shell backend
+        # is built until the user acknowledges what the Deep Agent can do.
+        return
+
     current_config = (
         selected_model,
         selected_workflow,
@@ -954,6 +1037,7 @@ def _auto_initialize_agent(
         selected_base_url,
         get_argo_user_from_nested_config(config),
         st.session_state.get("current_chat_log_dir"),
+        deepagent_settings,
         credential_fingerprint,
     )
 
@@ -982,6 +1066,7 @@ def _auto_initialize_agent(
                 selected_base_url,
                 get_argo_user_from_nested_config(config),
                 log_dir=chat_log_dir,
+                **_deepagent_init_kwargs(deepagent_settings),
             )
             if agent is not None:
                 if credential_only_change:
@@ -998,6 +1083,7 @@ def _auto_initialize_agent(
                     selected_base_url,
                     get_argo_user_from_nested_config(config),
                     chat_log_dir,
+                    deepagent_settings,
                     credential_fingerprint,
                 )
             elif credential_only_change:

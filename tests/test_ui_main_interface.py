@@ -913,6 +913,9 @@ class _FakeStreamlitOptimization(_FakeStreamlitRich):
     def info(self, text):
         self.calls.append(("info", text))
 
+    def warning(self, text, icon=None):
+        self.calls.append(("warning", text))
+
 
 def _write_optimization_trajectory(path):
     from ase import Atoms
@@ -1007,3 +1010,73 @@ def test_credential_fingerprint_tracks_codex_login_state(monkeypatch):
         ),
     )
     assert main_ui._provider_credential_fingerprint(info, None) != signed_in
+
+
+def _deep_agent_config(tmp_path, **general):
+    base = {
+        "model": "gpt-4o-mini",
+        "workflow": "deep_agent",
+        "recursion_limit": 200,
+        "deepagent_workspace": str(tmp_path),
+        "deepagent_skills": [],
+        "deepagent_discover_skills": True,
+    }
+    base.update(general)
+    return {"general": base, "api": {"openai": {}}}
+
+
+def test_deep_agent_initialization_waits_for_acknowledgment(monkeypatch, tmp_path):
+    fake_st = _FakeStreamlitOptimization()
+    fake_st.session_state.agent = None
+    fake_st.session_state.last_config = None
+    fake_st.session_state.current_chat_log_dir = str(tmp_path)
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    calls = []
+    monkeypatch.setattr(main_ui, "initialize_agent", lambda *a, **k: calls.append(k) or _FakeAgent())
+    # The acknowledgment widget lives on the configuration page; stub it.
+    monkeypatch.setattr(main_ui, "render_deepagent_acknowledgment", lambda key: False)
+
+    def _run():
+        main_ui._auto_initialize_agent(
+            _deep_agent_config(tmp_path, tools=["run_ase"]),
+            "gpt-4o-mini", "deep_agent", False, "state", False, False, None,
+        )
+
+    _run()
+    assert calls == []
+    assert fake_st.session_state.agent is None
+    assert any(call[0] == "warning" for call in fake_st.calls)
+
+    fake_st.session_state[main_ui.DEEPAGENT_ACK_KEY] = True
+    _run()
+    assert len(calls) == 1
+    assert calls[0]["deepagent_workspace"] == str(tmp_path)
+    assert calls[0]["deepagent_skill_dirs"] is None
+    assert calls[0]["deepagent_discover_skills"] is True
+    assert calls[0]["deepagent_tool_names"] == ["run_ase"]
+    assert fake_st.session_state.agent is not None
+    # Deep Agent settings are part of the cache key: changing the workspace
+    # rebuilds the agent, an unchanged config reuses it.
+    _run()
+    assert len(calls) == 1
+    other = tmp_path / "other"
+    other.mkdir()
+    main_ui._auto_initialize_agent(
+        _deep_agent_config(other),
+        "gpt-4o-mini", "deep_agent", False, "state", False, False, None,
+    )
+    assert len(calls) == 2
+
+
+def test_non_deep_agent_workflows_pass_no_deep_agent_kwargs(monkeypatch, tmp_path):
+    fake_st = _fresh_streamlit(tmp_path)
+    calls = []
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(main_ui, "initialize_agent", lambda *a, **k: calls.append(k) or _FakeAgent())
+    main_ui._auto_initialize_agent(
+        {"general": {"recursion_limit": 20}, "api": {"openai": {}}},
+        "gpt-4o-mini", "single_agent", False, "state", False, False, None,
+    )
+    assert calls == [{"log_dir": str(tmp_path)}]

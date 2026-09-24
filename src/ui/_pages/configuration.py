@@ -2,6 +2,7 @@
 
 import copy
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 import streamlit as st
@@ -30,12 +31,18 @@ WORKFLOW_ALIASES: Dict[str, str] = {
 WORKFLOW_OPTIONS: list[str] = [
     "single_agent",
     "multi_agent",
+    "deep_agent",
     "python_relp",
     "graspa",
     "molecular_docking",
     "single_agent_iri",
     "mock_agent",
 ]
+
+#: Session-state flag recording that the user acknowledged the Deep Agent's
+#: host-shell access in this browser session (the CLI asks the same
+#: question once per process).
+DEEPAGENT_ACK_KEY = "deepagent_host_shell_acknowledged"
 
 
 def normalize_workflow_name(value: str) -> str:
@@ -126,11 +133,12 @@ def render() -> None:
     draft = st.session_state._config_draft
 
     # ----- Tabs -----
-    tab_providers, tab_general, tab_chem, tab_toml = st.tabs(
+    tab_providers, tab_general, tab_chem, tab_deep, tab_toml = st.tabs(
         [
             "\U0001f50c Providers",
             "\U0001f527 General",
             "\U0001f9ea Chemistry",
+            "\U0001f916 Deep Agent",
             "\U0001f4dd Raw TOML",
         ]
     )
@@ -143,6 +151,9 @@ def render() -> None:
 
     with tab_chem:
         _render_chemistry_settings(draft)
+
+    with tab_deep:
+        _render_deepagent_settings(draft)
 
     with tab_toml:
         _render_raw_toml(draft)
@@ -632,6 +643,146 @@ def _render_chemistry_settings(config: dict) -> None:
             ),
             key=_wkey("config_calc_fallback"),
         )
+
+
+def _registry_tool_names() -> list[str]:
+    """Return the names in the built-in Deep Agent tool catalog."""
+    try:
+        from chemgraph.registry.tools import ToolRegistry
+
+        return list(ToolRegistry().names())
+    except Exception:
+        return []
+
+
+def render_deepagent_acknowledgment(key: str) -> bool:
+    """Render the host-shell acknowledgment checkbox and return its state.
+
+    Parameters
+    ----------
+    key : str
+        Unique widget key (the checkbox appears on two pages).
+
+    Returns
+    -------
+    bool
+        Whether the user has acknowledged host-shell access this session.
+    """
+    acknowledged = st.checkbox(
+        "I understand the Deep Agent can run shell commands on this host and "
+        "modify files under the workspace; every command and file change "
+        "will ask for my approval in the chat.",
+        value=bool(st.session_state.get(DEEPAGENT_ACK_KEY, False)),
+        key=key,
+    )
+    st.session_state[DEEPAGENT_ACK_KEY] = bool(acknowledged)
+    return bool(acknowledged)
+
+
+def _render_deepagent_settings(config: dict) -> None:
+    """Render Deep Agent workspace, skills and tool-catalog settings.
+
+    The keys match what ``chemgraph run --config`` reads, so a config.toml
+    saved here also drives the CLI.
+
+    Parameters
+    ----------
+    config : dict
+        Mutable draft configuration dictionary.
+    """
+    general = config["general"]
+    st.subheader("Deep Agent")
+    st.markdown(
+        "The experimental **deep_agent** workflow gives the model a shell and "
+        "file tools rooted at a workspace directory, plus on-demand chemistry "
+        "tools and skills. Select `deep_agent` as the workflow on the General "
+        "tab to use these settings."
+    )
+    st.warning(
+        "The shell is **not** confined to the workspace directory. Shell "
+        "commands and file mutations pause for your approval in the chat "
+        "(Approve / Reject buttons); approvals cannot be disabled in the UI.",
+        icon="\u26a0\ufe0f",
+    )
+    render_deepagent_acknowledgment(key="config_deepagent_ack")
+
+    col_ws, col_skills = st.columns(2)
+    with col_ws:
+        st.write("**Workspace**")
+        workspace = st.text_input(
+            "Workspace directory",
+            value=str(general.get("deepagent_workspace") or ""),
+            key=_wkey("config_deepagent_workspace"),
+            help=(
+                "Directory the agent's file tools are rooted at. Leave empty "
+                "to use the directory the UI was launched from."
+            ),
+        ).strip()
+        general["deepagent_workspace"] = workspace
+        if workspace:
+            path = Path(workspace).expanduser()
+            if path.is_dir():
+                st.caption(f"Resolved: `{path.resolve()}`")
+            else:
+                st.error("This directory does not exist.")
+        general["deepagent_discover_skills"] = st.checkbox(
+            "Discover personal and project skills",
+            value=bool(general.get("deepagent_discover_skills", True)),
+            key=_wkey("config_deepagent_discover"),
+            help=(
+                "Also load skills from the personal skills directory and "
+                "the workspace's project skills; bundled skills are always "
+                "available."
+            ),
+        )
+
+    with col_skills:
+        st.write("**Extra skill directories**")
+        current_dirs = general.get("deepagent_skills") or []
+        if isinstance(current_dirs, str):
+            current_dirs = [current_dirs]
+        skills_text = st.text_area(
+            "One directory per line",
+            value="\n".join(str(item) for item in current_dirs),
+            key=_wkey("config_deepagent_skills"),
+            height=120,
+            help=(
+                "Host directories containing skills (each skill is a "
+                "subdirectory with a SKILL.md). Mounted in addition to the "
+                "bundled skills; equivalent to repeated --deepagent-skill."
+            ),
+        )
+        general["deepagent_skills"] = [
+            line.strip() for line in skills_text.splitlines() if line.strip()
+        ]
+        for item in general["deepagent_skills"]:
+            if not Path(item).expanduser().is_dir():
+                st.error(f"Skill directory does not exist: `{item}`")
+
+    st.write("**On-demand tool catalog**")
+    catalog = _registry_tool_names()
+    restrict = st.checkbox(
+        "Restrict the catalog to selected tools",
+        value="tools" in general,
+        key=_wkey("config_deepagent_restrict_tools"),
+        help=(
+            "By default the agent can discover every built-in registry tool. "
+            "Restricting to a subset mirrors --tool; selecting none disables "
+            "discovery."
+        ),
+    )
+    if restrict:
+        selected_default = [
+            name for name in (general.get("tools") or []) if name in catalog
+        ]
+        general["tools"] = st.multiselect(
+            "Tools",
+            catalog,
+            default=selected_default,
+            key=_wkey("config_deepagent_tools"),
+        )
+    else:
+        general.pop("tools", None)
 
 
 def _render_raw_toml(config: dict) -> None:

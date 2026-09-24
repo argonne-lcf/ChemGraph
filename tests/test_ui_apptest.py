@@ -184,7 +184,8 @@ def test_raw_toml_can_restore_automatic_selection(configuration_app, tmp_path):
     assert not at.exception
     assert toml.load(tmp_path / "config.toml")["chemistry"]["calculators"]["default"] == "mace_mp"
     previous_nonce = at.session_state["_config_widget_nonce"]
-    at.text_area[0].set_value('[chemistry.calculators]\nfallback = "emt"\n')
+    toml_area = next(t for t in at.text_area if t.label == "TOML Content")
+    toml_area.set_value('[chemistry.calculators]\nfallback = "emt"\n')
     at.button(key="update_from_toml").click().run()
     assert not at.exception
     assert at.session_state["_config_widget_nonce"] > previous_nonce
@@ -194,3 +195,45 @@ def test_raw_toml_can_restore_automatic_selection(configuration_app, tmp_path):
     next(b for b in at.button if "Save Configuration" in b.label).click().run()
     assert not at.exception
     assert "default" not in toml.load(tmp_path / "config.toml")["chemistry"]["calculators"]
+
+
+def test_deep_agent_tab_persists_cli_compatible_keys(configuration_app, tmp_path):
+    import toml
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    skills = tmp_path / "skills"
+    skills.mkdir()
+
+    at = configuration_app.run()
+    assert not at.exception
+    workflow = next(s for s in at.selectbox if s.label == "Workflow")
+    assert "deep_agent" in workflow.options
+    workflow.select("deep_agent").run()
+
+    next(t for t in at.text_input if t.label == "Workspace directory").set_value(
+        str(workspace)
+    ).run()
+    next(t for t in at.text_area if t.label == "One directory per line").set_value(
+        f"{skills}\n"
+    ).run()
+    next(c for c in at.checkbox if c.label.startswith("Discover personal")).uncheck().run()
+    next(c for c in at.checkbox if c.label.startswith("Restrict the catalog")).check().run()
+    tools = next(m for m in at.multiselect if m.label == "Tools")
+    assert "run_ase" in tools.options
+    tools.select("run_ase").run()
+    next(b for b in at.button if "Save Configuration" in b.label).click().run()
+    assert not at.exception
+
+    general = toml.load(tmp_path / "config.toml")["general"]
+    assert general["workflow"] == "deep_agent"
+    assert general["deepagent_workspace"] == str(workspace)
+    assert general["deepagent_skills"] == [str(skills)]
+    assert general["deepagent_discover_skills"] is False
+    assert general["tools"] == ["run_ase"]
+
+    # The acknowledgment is per-session, never written to disk.
+    assert "deepagent_host_shell_acknowledged" not in general
+    assert at.session_state["deepagent_host_shell_acknowledged"] is False
+    next(c for c in at.checkbox if c.label.startswith("I understand the Deep Agent")).check().run()
+    assert at.session_state["deepagent_host_shell_acknowledged"] is True
