@@ -1810,6 +1810,76 @@ def _render_interactive_ir_spectrum(
     return True
 
 
+@st.cache_data(show_spinner=False)
+def _cached_optimization_steps(traj_path: str, mtime: float):
+    """Load per-step energies/forces and geometries of an optimization (cached).
+
+    Parameters
+    ----------
+    traj_path : str
+        Path to the optimizer's ``.traj`` file.
+    mtime : float
+        File modification time; part of the cache key so rewritten files
+        re-load.
+
+    Returns
+    -------
+    tuple[list[dict], str] or None
+        ``(steps, frames_xyz)`` as returned by
+        :func:`ui.opt_explorer.read_optimization_steps`.
+    """
+    from ui.opt_explorer import read_optimization_steps
+
+    return read_optimization_steps(traj_path)
+
+
+def _render_optimization_explorer(idx: int, traj_path: str) -> bool:
+    """Render the linked convergence plot + per-step 3D viewer.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    traj_path : str
+        Resolved optimizer trajectory path.
+
+    Returns
+    -------
+    bool
+        ``True`` when the explorer was rendered.
+    """
+    try:
+        from ui.opt_explorer import render_opt_explorer
+    except ImportError:
+        return False
+    try:
+        loaded = _cached_optimization_steps(traj_path, os.path.getmtime(traj_path))
+    except OSError:
+        return False
+    if loaded is None:
+        return False
+    steps, frames_xyz = loaded
+    if len(steps) < 2:
+        return False
+
+    col_speed, col_note = st.columns([1, 3], vertical_alignment="bottom")
+    with col_speed:
+        interval_ms = st.select_slider(
+            "Playback speed",
+            options=[600, 400, 250, 150, 80],
+            value=250,
+            format_func=lambda ms: f"{1000 / ms:.0f} fps",
+            key=f"opt_speed_{idx}",
+        )
+    with col_note:
+        st.caption(
+            "Hover or click a step to see its geometry; use Play/Pause or the "
+            "slider to animate the optimization path."
+        )
+    render_opt_explorer(steps, frames_xyz, interval_ms=int(interval_ms))
+    return True
+
+
 def _render_optimization_section(
     idx: int, entry: dict, artifact_kinds: dict
 ) -> None:
@@ -1843,6 +1913,12 @@ def _render_optimization_section(
     with st.expander(
         f"\U0001f4c9 Optimization ({len(energies)} steps)", expanded=False
     ):
+        # Linked explorer: every step in the plot maps to its geometry,
+        # with Play/Pause and a step slider.  Falls back to the separate
+        # chart + auto-looping viewer when the frames cannot be embedded.
+        if _render_optimization_explorer(idx, traj_path):
+            return
+
         col_chart, col_anim = st.columns(2, border=True)
         with col_chart:
             st.plotly_chart(

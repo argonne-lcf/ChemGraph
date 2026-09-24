@@ -890,3 +890,87 @@ def test_first_run_setup_reports_failed_config_save(monkeypatch):
     assert "CHEMGRAPH_CONFIG" in fake_st.session_state.setup_save_error
     assert fake_st.session_state._setup_skipped is True
     fake_st.rerun.assert_called_once()
+
+
+class _FakeStreamlitOptimization(_FakeStreamlitRich):
+    """Rich fake with the layout widgets used by the optimization section."""
+
+    def columns(self, spec, **kwargs):
+        count = spec if isinstance(spec, int) else len(spec)
+        self.calls.append(("columns", count))
+        return [nullcontext() for _ in range(count)]
+
+    def select_slider(self, label, options, value=None, format_func=None, key=None):
+        self.calls.append(("select_slider", label, key))
+        return value
+
+    def caption(self, text):
+        self.calls.append(("caption", text))
+
+    def plotly_chart(self, fig, **kwargs):
+        self.calls.append(("plotly_chart", kwargs.get("key")))
+
+    def info(self, text):
+        self.calls.append(("info", text))
+
+
+def _write_optimization_trajectory(path):
+    from ase import Atoms
+    from ase.calculators.emt import EMT
+    from ase.optimize import BFGS
+
+    atoms = Atoms("Cu2", positions=[[0, 0, 0], [0, 0, 2.9]])
+    atoms.calc = EMT()
+    BFGS(atoms, logfile=None, trajectory=str(path)).run(fmax=0.05, steps=20)
+
+
+def test_optimization_section_renders_linked_step_explorer(monkeypatch, tmp_path):
+    from ui import opt_explorer
+
+    traj = tmp_path / "cu2_opt.traj"
+    _write_optimization_trajectory(traj)
+    fake_st = _FakeStreamlitOptimization()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(opt_explorer, "st", fake_st)
+    # Bypass st.cache_data outside a Streamlit runtime.
+    monkeypatch.setattr(
+        main_ui,
+        "_cached_optimization_steps",
+        lambda path, mtime: opt_explorer.read_optimization_steps(path),
+    )
+
+    main_ui._render_optimization_section(
+        3,
+        {"log_dir": str(tmp_path)},
+        {"trajectories": ["cu2_opt.traj"]},
+    )
+
+    html_calls = [call for call in fake_st.calls if call[0] == "html"]
+    assert len(html_calls) == 1
+    html = html_calls[0][1]
+    # Every optimization step is embedded as its own frame and the
+    # Play/Pause control is present.
+    steps, _frames = opt_explorer.read_optimization_steps(str(traj))
+    assert html.count('"step": ') == len(steps)
+    assert 'id="playbtn"' in html
+    assert ("select_slider", "Playback speed", "opt_speed_3") in fake_st.calls
+    # The legacy separate chart is not drawn when the explorer renders.
+    assert not any(call[0] == "plotly_chart" for call in fake_st.calls)
+
+
+def test_optimization_section_falls_back_when_frames_unavailable(monkeypatch, tmp_path):
+    traj = tmp_path / "cu2_opt.traj"
+    _write_optimization_trajectory(traj)
+    fake_st = _FakeStreamlitOptimization()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_cached_optimization_steps", lambda path, mtime: None)
+    monkeypatch.setattr(main_ui, "PY3DMOL_AVAILABLE", False)
+
+    main_ui._render_optimization_section(
+        1,
+        {"log_dir": str(tmp_path)},
+        {"trajectories": ["cu2_opt.traj"]},
+    )
+
+    assert ("plotly_chart", "convergence_1") in fake_st.calls
+    assert not any(call[0] == "html" for call in fake_st.calls)
