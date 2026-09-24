@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 import uuid
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
+from pydantic import ValidationError
 
 from chemgraph.execution.graspa_workflow import (
     GraspaCollector, call_tool, gather_limited, load_journal, run_lock, save_journal, validate_records,
@@ -19,6 +21,40 @@ from chemgraph.state.graspa_state import PlannerState
 from chemgraph.tools.graspa_analysis import analyze_records, read_records, write_json
 
 _DEFAULT_CHECKPOINTER = object()
+
+
+def _validation_feedback(exc):
+    if isinstance(exc, ValidationError):
+        return "; ".join(
+            f"{'.'.join(map(str, item['loc'])) or 'response'}: {item['msg']}"
+            for item in exc.errors(include_input=False, include_context=False, include_url=False)[:5]
+        )[:1000]
+    if isinstance(exc, (OutputParserException, json.JSONDecodeError)):
+        # Parser exceptions can embed the entire raw response.
+        return "Response could not be parsed; return only the requested structured output"
+    return str(exc)[:1000]
+
+
+async def _validated_response(llm, schema, messages, validate, root, stage, config):
+    """Correct structured output at most twice, retaining the original context."""
+    model = llm.with_structured_output(schema)
+    diagnostics = root / f"validation-{stage}-{uuid.uuid4().hex}.json"
+    failures = []
+    feedback = []
+    for attempt in range(1, 4):
+        try:
+            value = await model.ainvoke(messages + feedback, config=config)
+        except (ValidationError, OutputParserException, json.JSONDecodeError) as exc:
+            error = _validation_feedback(exc)
+        else:
+            try:
+                return validate(schema.model_validate(value))
+            except (ValueError, FileNotFoundError) as exc:
+                error = _validation_feedback(exc)
+        failures.append({"attempt": attempt, "error": error})
+        write_json(diagnostics, {"stage": stage, "failures": failures})
+        feedback = [HumanMessage(content=f"Correct your previous response: {error}. Preserve the original request and selected task.")]
+    raise ValueError(f"{stage} validation failed after 3 attempts: {error}. See {diagnostics}") from None
 
 
 def construct_graspa_mcp_graph(
@@ -38,6 +74,7 @@ def construct_graspa_mcp_graph(
     executor tools may come from the maintained HPC or deprecated Parsl server.
     """
     options = GraspaWorkflowOptions.model_validate({} if options is None else options)
+    contract = options.request_contract
     tools = executor_tools or []
     if checkpointer is _DEFAULT_CHECKPOINTER:
         checkpointer = MemorySaver()
@@ -64,17 +101,27 @@ def construct_graspa_mcp_graph(
                 journal = load_journal(root)
                 if journal["query"] != query:
                     raise ValueError("Resume requires the original query and frozen plan")
+                if journal.get("request_contract") != (contract.model_dump(mode="json") if contract else None):
+                    raise ValueError("Resume requires the original request contract")
             else:
                 if options.resume:
                     raise ValueError("No saved workflow exists in run_directory")
-                journal = {"version": 1, "query": query, "plan": None, "requests": {}, "batches": {}}
+                journal = {"version": 1, "query": query, "plan": None, "requests": {}, "batches": {},
+                           "request_contract": contract.model_dump(mode="json") if contract else None}
                 save_journal(root, journal)
             if journal["plan"] is None:
-                result = await llm.with_structured_output(GraspaPlan).ainvoke(
-                    [SystemMessage(content=planner_prompt), HumanMessage(content=query)], config=config,
+                def validate_plan(result):
+                    if contract:
+                        contract.check_plan(result)
+                    return result.model_dump(mode="json")
+
+                journal["plan"] = await _validated_response(
+                    llm, GraspaPlan, [SystemMessage(content=planner_prompt), HumanMessage(content=query)],
+                    validate_plan, root, "planning", config,
                 )
-                journal["plan"] = GraspaPlan.model_validate(result).model_dump(mode="json")
                 save_journal(root, journal)
+            if contract:
+                contract.check_plan(GraspaPlan.model_validate(journal["plan"]))
             write_json(root / "plan.json", journal["plan"])
         return {"run_directory": str(root), "plan_path": str(root / "plan.json"),
                 "executor_results": {}, "analysis": {}, "workflow_status": "planned"}
@@ -86,19 +133,36 @@ def construct_graspa_mcp_graph(
         with run_lock(root):
             journal = load_journal(root)
             if journal["requests"]:
+                if contract:
+                    if len(journal["requests"]) != 1:
+                        raise ValueError("Request contract requires exactly one saved ensemble")
+                    for params in journal["requests"].values():
+                        contract.check_request(params, frozen=True)
                 return {"workflow_status": "prepared"}
             planned = GraspaPlan.model_validate(journal["plan"])
 
             async def request(task):
-                value = await llm.with_structured_output(graspa_input_schema_ensemble).ainvoke(
-                    [SystemMessage(content=executor_prompt), HumanMessage(content=task.prompt)], config=config,
+                context = json.dumps({"original_request": journal["query"], "selected_task_index": task.task_index,
+                                      "analysis": planned.analysis.model_dump(mode="json") if planned.analysis else None})
+
+                def validate_request(value):
+                    params = value.model_dump(mode="json")
+                    if contract:
+                        contract.check_request(params)
+                    if not params["remote_structure_directory"]:
+                        # Freeze discovery before submitting any task; preserve duplicates.
+                        params["input_structures"] = _local_structure_files(params["input_structures"])
+                        if params["output_directory"] is None and Path(params["output_result_file"]).parent == Path("."):
+                            params["output_directory"] = str(root / "simulations")
+                    if contract:
+                        contract.check_request(params, frozen=True)
+                    return params
+
+                params = await _validated_response(
+                    llm, graspa_input_schema_ensemble,
+                    [SystemMessage(content=executor_prompt), HumanMessage(content=context), HumanMessage(content=task.prompt)],
+                    validate_request, root, f"preparation-task_{task.task_index}", config,
                 )
-                params = graspa_input_schema_ensemble.model_validate(value).model_dump(mode="json")
-                if not params["remote_structure_directory"]:
-                    # Freeze discovery before submitting any task; preserve duplicates.
-                    params["input_structures"] = _local_structure_files(params["input_structures"])
-                    if params["output_directory"] is None and Path(params["output_result_file"]).parent == Path("."):
-                        params["output_directory"] = str(root / "simulations")
                 return f"task_{task.task_index}", params
 
             # No submissions occur until every prepared request validates.

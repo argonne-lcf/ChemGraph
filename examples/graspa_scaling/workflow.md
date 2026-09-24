@@ -1,4 +1,6 @@
-# gRASPA-SYCL: H2O adsorption
+# gRASPA example workflow reference
+
+Companion reference for the [Aurora scaling example](README.md).
 
 ChemGraph supports the SYCL gRASPA engine with its bundled H2O model. CUDA,
 CO2, and N2 simulations are not supported by this integration. The force-field
@@ -226,7 +228,8 @@ Statuses are `completed`, `partial`, `failed`, or `incomplete`. An incomplete
 collection never generates a new ranking. A report-generation error is saved
 in `report_error.json` and does not erase the collected scientific outcome.
 
-`graspa_options` accepts only the four fields above. Intervals and timeouts must
+`graspa_options` accepts the four fields above and an optional `request_contract`.
+Intervals and timeouts must
 be positive finite seconds. The collection timeout applies per logical task,
 including submission, queueing, and polling; it does not stop remote work or
 replace each simulation's `timeout_seconds`. With no explicit run directory,
@@ -241,6 +244,21 @@ request preparation, and explanation respectively. Planning must return a
 `GraspaPlan` and preparation a `graspa_input_schema_ensemble`; old prompts that
 route between agents or perform model-driven polling are incompatible. The
 workflow always owns the join and canonical numerical analysis.
+
+Preparation also receives the original query, selected task index, and analysis
+conditions, so abbreviated task prose cannot lose the operator's settings.
+Planning and preparation each allow three attempts for invalid structured output
+or workload mismatches. Bounded validation feedback is saved in
+`validation-<stage>-<id>.json`; raw model responses are not recorded there.
+Provider/connection errors and cancellation propagate without validation retries.
+
+The scaling runner supplies a `GraspaRequestContract` with `request` (one shared
+directory ensemble with an explicit output root), `sources` (resolved paths,
+including duplicates), and `analysis`. Python verifies the selected directory,
+complete source multiset, adsorbate, conditions, cycles, simulation timeout,
+output root, and ranking settings before submitting any work. Source lists stay
+in local artifacts, outside model messages and graph state. Omit the contract
+for general natural-language requests and multiple ensembles.
 
 ### Artifacts and ranking rules
 
@@ -261,6 +279,11 @@ with missing conditions exclude their source from ranking because they could
 be unidentified failed repeats. Successful repeats are averaged before
 computing adsorption minus desorption uptake, in mol/kg. The selected count is
 `ceil(top_fraction * valid_candidates)`; the fraction must be in `(0, 1]`.
+Paired ranking rows and CSVs contain only `input_structure_file`, `uptake_ads`,
+`uptake_des`, and `working_capacity`. Single-condition rankings contain only
+`input_structure_file` and `absolute_uptake`. JSON previews use the same fields;
+repeat counts and unused metric columns are omitted. Per-simulation records
+retain their full provenance and diagnostics.
 
 The analysis MCP tools `aggregate_simulation_results` and
 `rank_mofs_performance` share these numerical rules, retain JSONL input support,
@@ -270,6 +293,9 @@ native graph, which performs canonical analysis locally.
 ### Recovery limits
 
 To resume, use the original query, the same `run_directory`, and `resume=True`.
+If a request contract was supplied, it must also match the saved contract.
+Older journals without a contract can still resume without one; use a fresh run
+directory to enable a contract for an older run.
 The graph loads its frozen requests without calling the planner/preparer again,
 reuses accepted batch IDs, and validates saved records. It never automatically
 resubmits an accepted batch. Concurrent writers to one run directory are rejected.
@@ -287,10 +313,15 @@ alive; restarting PBS is not recovery of unfinished work. Legacy JSONL summaries
 must remain readable on the client. Do not change the frozen scientific request
 while resuming.
 
-The self-contained [Aurora runner](../scripts/graspa_scaling/README.md) uses this
-native graph with the 4,608-CIF reference workload and supports a four-CIF smoke.
+The [Aurora runner](README.md) uses this native graph with the 4,608-CIF
+reference workload, a four-CIF batch smoke, and an interactive 20-CIF run.
 
 ## Validation status
+
+A 20-CIF native workflow completed on Aurora with Parsl and ALCF
+`openai/gpt-oss-120b` on 2026-09-23: 40 successful records at the two H2O
+conditions, 20 ranked structures, and four selected candidates. Full-scale and
+Ensemble Launcher runs remain unverified.
 
 Hermetic tests validate preparation, parsing, isolation, and failure handling
 without downloading models or requiring a GPU. Before using this integration

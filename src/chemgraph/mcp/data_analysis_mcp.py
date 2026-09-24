@@ -131,7 +131,7 @@ def rank_mofs_performance(
     import uuid
     from chemgraph.schemas.graspa_workflow import GraspaAnalysis
     from chemgraph.tools.ase_core import _resolve_path
-    from chemgraph.tools.graspa_analysis import read_records, rank_records, write_csv, RANK_COLUMNS
+    from chemgraph.tools.graspa_analysis import read_records, rank_records, write_csv, ranking_columns
 
     try:
         if (des_pressure is None) != (des_temp is None):
@@ -153,7 +153,7 @@ def rank_mofs_performance(
             description = f"Top {top_percentile * 100:g}%"
         output = Path(_resolve_path(f"rankings_{uuid.uuid4().hex}.csv")).resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
-        write_csv(output, selected, RANK_COLUMNS)
+        write_csv(output, selected, ranking_columns(analysis))
     except (OSError, ValueError, TypeError) as exc:
         return f"Error ranking results: {exc}"
     preview = "\n".join(f"{row['input_structure_file']}: {row[metric]}" for row in selected[:5])

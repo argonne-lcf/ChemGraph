@@ -103,10 +103,13 @@ RECORD_COLUMNS = [
     "uptake_in_mol_kg", "is_mock", "run_dir", "stdout_path", "stderr_path",
     "results_path", "cif_path", "error_type", "message",
 ]
-RANK_COLUMNS = [
-    "input_structure_file", "uptake_ads", "uptake_des", "working_capacity",
-    "absolute_uptake", "ads_repeats", "des_repeats",
-]
+
+
+def ranking_columns(analysis: GraspaAnalysis) -> list[str]:
+    """Use the same ranking fields in JSON rows and both CSV interfaces."""
+    if analysis.desorption is not None:
+        return ["input_structure_file", "uptake_ads", "uptake_des", "working_capacity"]
+    return ["input_structure_file", "absolute_uptake"]
 
 
 def rank_records(records: list[dict], analysis: GraspaAnalysis) -> tuple[list[dict], list[dict]]:
@@ -132,10 +135,10 @@ def rank_records(records: list[dict], analysis: GraspaAnalysis) -> tuple[list[di
             excluded.append({"input_structure_file": source, "reason": "Missing or failed requested condition/repeat"})
             continue
         mean_ads = _mean_uptake(ads_rows)
-        row = {"input_structure_file": source, "uptake_ads": mean_ads, "ads_repeats": len(ads_rows)}
+        row = {"input_structure_file": source}
         if des:
             mean_des = _mean_uptake(des_rows)
-            row.update(uptake_des=mean_des, working_capacity=mean_ads - mean_des, des_repeats=len(des_rows))
+            row.update(uptake_ads=mean_ads, uptake_des=mean_des, working_capacity=mean_ads - mean_des)
         else:
             row["absolute_uptake"] = mean_ads
         ranked.append(row)
@@ -161,8 +164,9 @@ def analyze_records(records: list[dict], root: Path, analysis: GraspaAnalysis | 
     if analysis is not None:
         ranked, excluded = rank_records(rows, analysis)
         selected = ranked[:math.ceil(analysis.top_fraction * len(ranked))]
-        write_csv(root / "rankings.csv", ranked, RANK_COLUMNS)
-        write_csv(root / "top_candidates.csv", selected, RANK_COLUMNS)
+        columns = ranking_columns(analysis)
+        write_csv(root / "rankings.csv", ranked, columns)
+        write_csv(root / "top_candidates.csv", selected, columns)
         write_json(root / "excluded.json", excluded)
         summary.update(conditions=analysis.model_dump(mode="json"),
                        valid_structures=len(ranked), excluded_structures=len(excluded),

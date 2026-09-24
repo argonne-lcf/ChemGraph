@@ -122,7 +122,7 @@ It requests H2O adsorption for the shared `structures/` CIF directory with
 `output_directory="water-screening"`. Edit that input directory for your
 deployment. Simulation output roots resolve on workers; use returned artifact
 paths, not a guessed log filename. Uptake is in mol/kg and `raspa.log` is plain
-stdout. See the [gRASPA guide](../../docs/graspa.md) for remote discovery,
+stdout. See the [example workflow reference](../../examples/graspa_scaling/workflow.md) for remote discovery,
 timeouts, polling, and cancellation.
 
 ## Troubleshooting

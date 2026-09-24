@@ -24,7 +24,8 @@ def test_full_source_identity_repeats_and_failed_pairs(tmp_path):
     ranked, excluded = rank_records(rows, spec())
     assert len(ranked) == 1
     assert ranked[0]["working_capacity"] == 5
-    assert ranked[0]["ads_repeats"] == ranked[0]["des_repeats"] == 2
+    assert ranked[0] == {"input_structure_file": "/one/same.cif", "uptake_ads": 9,
+                         "uptake_des": 4, "working_capacity": 5}
     assert {r["input_structure_file"] for r in excluded} == {"/two/same.cif", "/three/same.cif"}
     summary = analyze_records(rows, tmp_path, spec())
     assert summary["status"] == "partial"
@@ -42,7 +43,7 @@ def test_mock_zero_pressure_and_close_conditions():
     rows = [row(pressure=0, uptake=0), row(pressure=0.001, uptake=100),
             row("/two/same.cif", pressure=0, uptake=2, is_mock=True)]
     ranked, excluded = rank_records(rows, GraspaAnalysis(adsorption={"temperature": 298, "pressure": 0}))
-    assert len(ranked) == 1 and ranked[0]["absolute_uptake"] == 0
+    assert ranked == [{"input_structure_file": "/one/same.cif", "absolute_uptake": 0}]
     assert excluded[0]["input_structure_file"] == "/two/same.cif"
 
 

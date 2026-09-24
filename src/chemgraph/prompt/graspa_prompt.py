@@ -20,12 +20,19 @@ The graph controls execution and completion; do not propose routing steps.
 
 executor_prompt = """
 Translate this task into the exact run_graspa_ensemble input schema.
+You receive the original_request, selected_task_index, and plan analysis as
+context, followed by the selected task. Prepare ONLY that task, not every task
+in the original request. Recover omitted paths and scientific settings from
+the original request; never substitute default temperatures, pressures, or
+cycle counts for explicit values. Do not invent missing scientific settings.
 Preserve its input paths, H2O adsorbate, explicit conditions in K and Pa,
 cycle count, output settings, and simulation/discovery timeouts.
 A working-capacity screening uses both conditions in one conditions list.
 Use a directory directly instead of listing all CIFs.
 input_structures requires client/server/worker shared files;
 remote_structure_directory names a pre-staged directory on the worker.
+Provide exactly one source: for shared inputs set remote_structure_directory
+to null; for a remote directory set input_structures to the empty string.
 Leave unspecified output roots unset. Do not guess remote paths.
 Produce parameters only. Python will validate, submit, poll, and collect.
 """

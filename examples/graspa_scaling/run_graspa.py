@@ -89,6 +89,20 @@ def prepare_query(root, sources, manifest, resume):
     return query
 
 
+def request_contract(root, sources, manifest):
+    """Freeze CLI settings independently of the model's interpretation."""
+    from chemgraph.schemas.graspa_workflow import GraspaRequestContract
+
+    return GraspaRequestContract(
+        request={"input_structures": str(root / "inputs"), "adsorbate": "H2O",
+                 "conditions": manifest["conditions"], "n_cycles": manifest["n_cycles_per_phase"],
+                 "timeout_seconds": manifest["simulation_timeout"], "output_directory": str(root / "simulations")},
+        sources=sources,
+        analysis={"adsorption": manifest["conditions"][0], "desorption": manifest["conditions"][1],
+                  "top_fraction": manifest["top_fraction"]},
+    )
+
+
 async def run(args, root, sources, manifest):
     from chemgraph.agent.llm_agent import ChemGraph
     from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -108,7 +122,8 @@ async def run(args, root, sources, manifest):
         agent = ChemGraph(
             model_name=args.model, base_url=args.base_url, workflow_type="graspa_mcp", tools=tools,
             graspa_options={"run_directory": str(root), "poll_interval_seconds": args.poll_interval,
-                            "wait_timeout_seconds": args.wait_timeout, "resume": args.resume},
+                            "wait_timeout_seconds": args.wait_timeout, "resume": args.resume,
+                            "request_contract": request_contract(root, sources, manifest)},
             return_option="state", enable_memory=False, log_dir=str(root), recursion_limit=12,
         )
         state = await agent.run(query)
@@ -133,7 +148,7 @@ def parse_args(argv=None):
     parser.add_argument("--wait-timeout", type=finite_positive, default=9900)
     parser.add_argument("--poll-interval", type=finite_positive, default=30)
     parser.add_argument("--model", default="alcf:openai/gpt-oss-120b")
-    parser.add_argument("--base-url", default="https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1")
+    parser.add_argument("--base-url", default=os.environ.get("CG_BASE_URL") or None)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="Validate paths and print counts; no server, LLM, or writes")
     args = parser.parse_args(argv)
