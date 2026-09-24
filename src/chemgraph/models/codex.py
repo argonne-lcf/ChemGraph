@@ -124,6 +124,47 @@ def _require_chatgpt_account(account_response: Any) -> None:
     )
 
 
+def inspect_account() -> Any:
+    """Return the SDK's active account response for the reusable Codex login.
+
+    The lookup mirrors what a model call does: an ephemeral working
+    directory and cleared API-key variables, so only the login established
+    by ``codex login`` is consulted.  Raises ``ImportError`` when the SDK is
+    missing; SDK/transport failures propagate unchanged.
+    """
+    Codex, CodexConfig, _Sandbox, _ApprovalMode = _load_codex_sdk()
+    with tempfile.TemporaryDirectory(prefix="chemgraph-codex-") as temp_dir:
+        config = CodexConfig(
+            cwd=temp_dir,
+            env={"OPENAI_API_KEY": "", "CODEX_API_KEY": ""},
+            client_name="chemgraph",
+            client_title="ChemGraph",
+        )
+        with Codex(config=config) as codex:
+            return codex.account()
+
+
+def account_summary(account_response: Any) -> dict[str, Any]:
+    """Reduce an SDK account response to ``{"type", "identity"}``.
+
+    ``type`` is the login kind (``"chatgpt"``, ``"apiKey"``, ``None`` when
+    logged out); ``identity`` is a display/identity string (email or
+    account id) when the SDK exposes one.  Never raises.
+    """
+    data = _model_dump(account_response)
+    account = _model_dump(data.get("account")) if isinstance(data, Mapping) else None
+    if not isinstance(account, Mapping):
+        return {"type": None, "identity": None}
+    identity = None
+    for key in ("email", "accountId", "account_id", "id", "planType", "plan_type"):
+        value = account.get(key)
+        if isinstance(value, str) and value:
+            identity = value
+            break
+    kind = account.get("type")
+    return {"type": kind if isinstance(kind, str) else None, "identity": identity}
+
+
 def _message_content(message: BaseMessage) -> str:
     content = message.content
     if isinstance(content, str):
@@ -386,16 +427,7 @@ class CodexChatModel(BaseChatModel):
 
     def validate_authentication(self) -> None:
         """Validate that the reusable Codex login is ChatGPT-managed."""
-        Codex, CodexConfig, _Sandbox, _ApprovalMode = _load_codex_sdk()
-        with tempfile.TemporaryDirectory(prefix="chemgraph-codex-") as temp_dir:
-            config = CodexConfig(
-                cwd=temp_dir,
-                env={"OPENAI_API_KEY": "", "CODEX_API_KEY": ""},
-                client_name="chemgraph",
-                client_title="ChemGraph",
-            )
-            with Codex(config=config) as codex:
-                _require_chatgpt_account(codex.account())
+        _require_chatgpt_account(inspect_account())
 
     def _generate(
         self,

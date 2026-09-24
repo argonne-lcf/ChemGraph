@@ -14,7 +14,9 @@ from ui.config import (
     resolve_default_calculator, save_config,
 )
 from ui.endpoint import check_local_model_endpoint
-from ui.provider_widgets import apply_api_key, clear_api_key, render_alcf_login
+from ui.provider_widgets import (
+    apply_api_key, clear_api_key, render_alcf_login, render_codex_login,
+)
 
 # ---------------------------------------------------------------------------
 # Constants shared with the main app
@@ -237,6 +239,8 @@ def _render_providers(draft: dict) -> None:
                 _render_api_key_card(draft, info, status)
             elif info.auth_kind == "globus":
                 _render_alcf_card(draft, info, status)
+            elif info.auth_kind == "codex":
+                _render_codex_card(draft, info, status)
             elif info.auth_kind == "endpoint":
                 _render_vllm_card(draft, info, status)
             else:
@@ -312,6 +316,17 @@ def _render_alcf_card(draft: dict, info, status) -> None:
         "endpoints automatically; the URL below is the Sophia default."
     )
     _render_endpoint_settings(draft, "alcf", key_prefix="alcf")
+
+
+def _render_codex_card(draft: dict, info, status) -> None:
+    """Render the Codex subscription card with the in-UI device-code login."""
+    st.caption(
+        "The login is held by the Codex CLI on the machine hosting this UI "
+        "(the same login `chemgraph run --model codex:<id>` uses). API-key "
+        "logins are refused; sign in with ChatGPT."
+    )
+    if render_codex_login(key_prefix="config"):
+        st.rerun()
 
 
 def _render_local_card(draft: dict, info, status) -> None:

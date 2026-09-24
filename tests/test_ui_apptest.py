@@ -32,8 +32,17 @@ def isolated_app(monkeypatch, tmp_path):
         monkeypatch.delenv(var, raising=False)
 
     import ui.alcf_auth as alcf_auth
+    import ui.codex_auth as codex_auth
     import ui.config as ui_config
 
+    # Never spawn the Codex app-server from tests; default to "logged out".
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_LOGGED_OUT, "No Codex login is available."
+        ),
+    )
     monkeypatch.setattr(
         ui_config, "_DEFAULT_CONFIG_PATH", str(tmp_path / "config.toml")
     )
@@ -82,6 +91,50 @@ def test_chat_page_renders_with_provider_key(isolated_app, monkeypatch):
     # No wizard; chat input is present immediately.
     assert not any("Welcome" in info.value for info in at.info)
     assert len(at.chat_input) == 1
+
+
+def test_codex_setup_tab_offers_sign_in_when_logged_out(isolated_app):
+    at = isolated_app.run()
+
+    assert not at.exception
+    labels = [b.label for b in at.button]
+    assert any("Sign in with ChatGPT" in label for label in labels)
+    assert not any(b.key == "setup_codex_go" for b in at.button)
+
+
+def test_codex_setup_uses_codex_model_when_signed_in(isolated_app, monkeypatch, tmp_path):
+    import ui.codex_auth as codex_auth
+
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in to Codex with ChatGPT.", "chemist@example.com"
+        ),
+    )
+    at = isolated_app.run()
+    assert not at.exception
+    at.button(key="setup_codex_go").click()
+    at.run()
+
+    assert not at.exception
+    config = at.session_state["config"]
+    assert config["general"]["model"] == "codex:gpt-5"
+    assert len(at.chat_input) == 1
+    # A Log out action is offered on the Configuration page for a live login.
+    conf = _configuration_apptest()
+    conf.run()
+    assert not conf.exception
+    assert any(b.key == "config_codex_logout" for b in conf.button)
+
+
+def _configuration_apptest():
+    from streamlit.testing.v1 import AppTest
+
+    return AppTest.from_string(
+        "from ui._pages.configuration import render\nrender()",
+        default_timeout=60,
+    )
 
 
 @pytest.fixture

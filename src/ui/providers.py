@@ -26,6 +26,7 @@ from chemgraph.models.supported_models import (
 from chemgraph.utils.config_utils import get_argo_user_from_nested_config
 
 from ui import alcf_auth
+from ui import codex_auth
 
 OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
@@ -38,6 +39,7 @@ OPENROUTER = "openrouter"
 ALCF = "alcf"
 VLLM = "vllm"
 OLLAMA = "ollama"
+CODEX = "codex"
 
 
 @dataclass(frozen=True)
@@ -48,7 +50,8 @@ class ProviderInfo:
     label: str
     icon: str
     # How the provider authenticates: "argo" (username), "api_key",
-    # "globus" (ALCF), "endpoint" (custom server), or "none" (local server).
+    # "globus" (ALCF), "codex" (ChatGPT login held by the Codex CLI),
+    # "endpoint" (custom server), or "none" (local server).
     auth_kind: str
     # Environment variable carrying the credential, when applicable.
     env_var: Optional[str]
@@ -152,6 +155,22 @@ PROVIDERS: tuple[ProviderInfo, ...] = (
         ),
     ),
     ProviderInfo(
+        id=CODEX,
+        label="Codex (ChatGPT subscription)",
+        icon="\U0001f4ac",
+        auth_kind="codex",
+        env_var=None,
+        config_section=None,
+        default_model="codex:gpt-5",
+        models=(),
+        help_text=(
+            "Experimental: use the ChatGPT login held by the Codex CLI "
+            "instead of an API key. Any model available to that account "
+            "works as 'codex:<model-id>'. Supports the single_agent, "
+            "main_agent and deep_agent workflows."
+        ),
+    ),
+    ProviderInfo(
         id=VLLM,
         label="Custom endpoint (vLLM)",
         icon="\U0001f5a5",
@@ -235,6 +254,10 @@ def provider_status(
         status = alcf_auth.token_status()
         ready = status["state"] in ("env", "valid", "refreshable")
         return ProviderStatus(info, ready, status["detail"])
+
+    if info.auth_kind == "codex":
+        codex_status = codex_auth.account_status()
+        return ProviderStatus(info, codex_status.ready, codex_status.detail)
 
     if info.auth_kind == "endpoint":
         section = config.get("api", {}).get(info.config_section or "", {})
@@ -325,6 +348,7 @@ def provider_for_model(model_name: str) -> Optional[ProviderInfo]:
         "groq:": GROQ,
         "openrouter:": OPENROUTER,
         "alcf:": ALCF,
+        "codex:": CODEX,
     }
     for prefix, provider_id in prefix_map.items():
         if model_name.startswith(prefix):

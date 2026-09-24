@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from ui import alcf_auth, providers
+from ui import alcf_auth, codex_auth, providers
 
 
 @pytest.fixture()
@@ -29,6 +29,14 @@ def clean_env(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         alcf_auth, "HELPER_TOKENS_PATH", str(tmp_path / "helper_tokens.json")
+    )
+    # Never spawn the Codex app-server from tests; default to "logged out".
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_LOGGED_OUT, "No Codex login is available."
+        ),
     )
     return tmp_path
 
@@ -302,3 +310,40 @@ def test_alcf_logout_clears_cache_and_env(clean_env, monkeypatch):
 
     assert "ALCF_ACCESS_TOKEN" not in os.environ
     assert alcf_auth.read_token_record() == (None, None)
+
+
+def test_codex_provider_maps_prefix_and_reports_login_state(clean_env, monkeypatch):
+    info = providers.provider_for_model("codex:gpt-5")
+    assert info is not None and info.id == providers.CODEX
+    status = providers.provider_status(info, _config())
+    assert status.ready is False
+    assert "No Codex login" in status.detail
+    # A codex: model does not satisfy first-run gating while logged out.
+    config = _config()
+    config["general"] = {"model": "codex:gpt-5"}
+    assert providers.selected_provider_ready(config) is False
+
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in as chemist@example.com.", "chemist@example.com"
+        ),
+    )
+    assert providers.provider_status(info, _config()).ready is True
+    assert providers.selected_provider_ready(config) is True
+    assert providers.any_provider_ready(config) is True
+
+
+def test_codex_api_key_login_is_not_ready(clean_env, monkeypatch):
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_API_KEY, "The active Codex login uses an API key."
+        ),
+    )
+    info = providers.get_provider(providers.CODEX)
+    status = providers.provider_status(info, _config())
+    assert status.ready is False
+    assert "API key" in status.detail

@@ -32,9 +32,10 @@ from chemgraph.utils.config_utils import (
 
 from ui import alcf_auth
 from ui import artifacts as artifact_utils
+from ui import codex_auth
 from ui import providers
 from ui.agent_manager import initialize_agent, transfer_conversation_state
-from ui.provider_widgets import apply_api_key, render_alcf_login
+from ui.provider_widgets import apply_api_key, render_alcf_login, render_codex_login
 from ui.branding import LOGO_IMAGES, first_existing_asset
 from ui import config as ui_config
 from ui.config import load_config, resolve_default_calculator, save_config
@@ -245,6 +246,17 @@ def render() -> None:
 
     endpoint_status = check_local_model_endpoint(selected_base_url)
 
+    if codex_auth.is_codex_model(selected_model) and selected_workflow not in (
+        "single_agent",
+        "main_agent",
+        "deep_agent",
+    ):
+        st.warning(
+            f"Codex models support only the single_agent, main_agent and "
+            f"deep_agent workflows; **{selected_workflow}** will fail to "
+            "initialize. Change the workflow on the ⚙️ Configuration page."
+        )
+
     # Warn when the selected model's provider is not usable yet.
     provider_info = providers.provider_for_model(selected_model)
     if provider_info is not None:
@@ -375,11 +387,12 @@ def _render_first_run_setup(config: dict) -> bool:
         icon="\U0001f44b",
     )
 
-    tab_argo, tab_key, tab_alcf, tab_local = st.tabs(
+    tab_argo, tab_key, tab_alcf, tab_codex, tab_local = st.tabs(
         [
             "\U0001f3db Argo (Argonne)",
             "\U0001f511 Your own API key",
             "\U0001f310 ALCF (Globus)",
+            "\U0001f4ac Codex (ChatGPT)",
             "\U0001f4bb Local (Ollama)",
         ]
     )
@@ -430,6 +443,16 @@ def _render_first_run_setup(config: dict) -> bool:
         info = providers.get_provider(providers.ALCF)
         st.caption(info.help_text)
         if render_alcf_login(key_prefix="setup"):
+            _finish_first_run_setup(config, info)
+
+    with tab_codex:
+        info = providers.get_provider(providers.CODEX)
+        st.caption(info.help_text)
+        codex_ready = providers.provider_status(info, config).ready
+        if render_codex_login(key_prefix="setup") or (
+            codex_ready
+            and st.button("Use Codex", key="setup_codex_go", type="primary")
+        ):
             _finish_first_run_setup(config, info)
 
     with tab_local:
@@ -864,6 +887,12 @@ def _provider_credential_fingerprint(provider_info, alcf_token: Optional[str]) -
         return None
     if provider_info.auth_kind == "globus":
         credential = alcf_token
+    elif provider_info.auth_kind == "codex":
+        # No secret is readable: the Codex CLI holds the login.  Key the
+        # agent on the login state/identity so a sign-in or sign-out
+        # rebuilds the model client instead of reusing a stale one.
+        status = codex_auth.account_status()
+        credential = f"{status.state}:{status.identity or ''}" if status.ready else None
     elif provider_info.env_var:
         credential = os.environ.get(provider_info.env_var)
     else:

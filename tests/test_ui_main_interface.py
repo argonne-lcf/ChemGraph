@@ -974,3 +974,36 @@ def test_optimization_section_falls_back_when_frames_unavailable(monkeypatch, tm
 
     assert ("plotly_chart", "convergence_1") in fake_st.calls
     assert not any(call[0] == "html" for call in fake_st.calls)
+
+
+def test_credential_fingerprint_tracks_codex_login_state(monkeypatch):
+    from ui import codex_auth, providers
+
+    info = providers.get_provider(providers.CODEX)
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_LOGGED_OUT, "No Codex login is available."
+        ),
+    )
+    assert main_ui._provider_credential_fingerprint(info, None) is None
+
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in.", "chemist@example.com"
+        ),
+    )
+    signed_in = main_ui._provider_credential_fingerprint(info, None)
+    assert signed_in is not None and "chemist" not in signed_in
+
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in.", "other@example.com"
+        ),
+    )
+    assert main_ui._provider_credential_fingerprint(info, None) != signed_in
