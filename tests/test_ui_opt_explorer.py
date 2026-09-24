@@ -13,7 +13,6 @@ def traj_path(tmp_path):
     """Write a short EMT optimization trajectory of a Cu dimer."""
     from ase import Atoms
     from ase.calculators.emt import EMT
-    from ase.io.trajectory import Trajectory
     from ase.optimize import BFGS
 
     atoms = Atoms("Cu2", positions=[[0, 0, 0], [0, 0, 2.9]])

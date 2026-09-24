@@ -34,6 +34,15 @@ instead of silently moving this route to usage-based Platform billing. Review
 the [official authentication guide](https://developers.openai.com/codex/auth/)
 for current account behavior.
 
+### From the Streamlit interface
+
+The Streamlit app reuses the same CLI login. Its **Codex (ChatGPT)** provider
+card (first-run setup and *Configuration → Providers*) shows the login state
+and offers *Sign in with ChatGPT*, which runs `codex login --device-auth` on
+the machine hosting the UI and displays the sign-in URL and one-time code in
+the page, plus *Log out* (`codex logout`). Select a `codex:<model-id>` model
+afterwards; the agent is rebuilt automatically when the login changes.
+
 ## Run
 
 Prefix a model available to the signed-in Codex account with `codex:`:

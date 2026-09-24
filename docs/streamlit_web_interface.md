@@ -39,7 +39,7 @@ for artifact volumes and other modes.
 ## Configure the interface
 
 On first launch (no provider configured) the chat page shows a setup screen
-with four paths:
+with five paths:
 
 - **Argo (Argonne)** — enter your ANL domain username; no API key. Works on
   the lab network or VPN.
@@ -49,6 +49,15 @@ with four paths:
   authorization code back; tokens are cached under `~/.chemgraph/` and
   refreshed automatically. A token from ALCF's `inference_auth_token.py`
   helper (or an exported `ALCF_ACCESS_TOKEN`) is picked up automatically.
+- **Codex (ChatGPT)** — experimental; reuses the ChatGPT login held by the
+  Codex CLI on the machine running Streamlit, exactly like
+  `chemgraph run --model codex:<id>` (see
+  [Codex subscription](codex_subscription.md)). The card reports whether
+  the CLI and the optional `chemgraph[codex]` extra are installed and
+  whether a ChatGPT login is active (API-key logins are refused). *Sign in
+  with ChatGPT* runs `codex login --device-auth` and shows the sign-in URL
+  and one-time code in the page, so the login can be completed from any
+  browser even when the server is remote; *Log out* runs `codex logout`.
 - **Local (Ollama)** — point at a running OpenAI-compatible server.
 
 The **Configuration → Providers** tab offers the same per-provider cards
@@ -66,6 +75,7 @@ exposes these workflow choices:
 
 - `single_agent`
 - `multi_agent`
+- `deep_agent` (experimental; see below)
 - `python_relp`
 - `graspa`
 - `molecular_docking`
@@ -73,6 +83,40 @@ exposes these workflow choices:
 
 Not every CLI workflow is available in Streamlit. Optional workflows still
 need their dependencies and external programs.
+
+### Deep Agent
+
+The **Configuration → Deep Agent** tab edits the same `[general]` keys the
+CLI reads from `config.toml`, so one file drives both front ends:
+
+| Setting | Key | CLI equivalent |
+| --- | --- | --- |
+| Workspace directory | `deepagent_workspace` | `--deepagent-workspace` |
+| Extra skill directories (one per line) | `deepagent_skills` | `--deepagent-skill` |
+| Discover personal and project skills | `deepagent_discover_skills` | `--no-deepagent-discover-skills` |
+| Restrict the on-demand tool catalog | `tools` | `--tool` |
+
+The Deep Agent runs shell commands on the host and edits files under the
+workspace; the shell is not confined to that directory. Before the agent is
+built, the UI asks for the same acknowledgment the CLI's confirmation prompt
+does (a checkbox on the Deep Agent tab or in the chat, remembered for the
+browser session). Approvals cannot be disabled in the UI.
+
+Shell commands and file mutations pause the run and appear in the chat as
+review cards showing the command, the file content, or a diff of the
+proposed edit, with **Approve** and **Reject** buttons (several pending
+actions get a per-action choice plus *Submit*, *Approve all* and *Reject
+all*). Typing a message instead skips the action and returns your text to
+the agent as revision instructions, matching the CLI review prompt.
+
+## Optimization steps
+
+When an exchange produces an optimizer trajectory, the **Optimization**
+panel links the convergence plot to the geometries: hover or click a step
+in the energy / max-force chart to see that structure, drag the slider to
+scrub, or press **Play** to animate every step while the marker follows.
+Very long trajectories are sampled evenly (first and last step are always
+kept). The playback speed is adjustable per exchange.
 
 API credentials entered in the UI should be treated as secrets. Prefer
 environment variables for shared deployments, avoid placing tokens in a
