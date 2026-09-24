@@ -49,15 +49,17 @@ with five paths:
   authorization code back; tokens are cached under `~/.chemgraph/` and
   refreshed automatically. A token from ALCF's `inference_auth_token.py`
   helper (or an exported `ALCF_ACCESS_TOKEN`) is picked up automatically.
-- **Codex (ChatGPT)** — experimental; reuses the ChatGPT login held by the
-  Codex CLI on the machine running Streamlit, exactly like
+- **Codex (ChatGPT)** — experimental; reuses the ChatGPT login stored by
+  Codex on the machine running Streamlit, exactly like
   `chemgraph run --model codex:<id>` (see
   [Codex subscription](codex_subscription.md)). The card reports whether
-  the CLI and the optional `chemgraph[codex]` extra are installed and
-  whether a ChatGPT login is active (API-key logins are refused). *Sign in
-  with ChatGPT* runs `codex login --device-auth` and shows the sign-in URL
-  and one-time code in the page, so the login can be completed from any
-  browser even when the server is remote; *Log out* runs `codex logout`.
+  the optional `chemgraph[codex]` extra is installed (it bundles the pinned
+  Codex runtime, so no separate CLI is needed here) and whether a ChatGPT
+  login is active (API-key logins are refused). *Sign in with ChatGPT*
+  starts a device-code login through the Codex SDK and shows the
+  verification URL and one-time code in the page, so the login can be
+  completed from any browser even when the server is remote; *Log out*
+  signs the stored login out.
   Once signed in, the model picker lists the models the account can use
   (fetched from Codex, default preselected) plus an *Other model id…* entry
   for ids Codex does not list.

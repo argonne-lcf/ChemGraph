@@ -332,7 +332,7 @@ def _render_alcf_card(draft: dict, info, status) -> None:
 def _render_codex_card(draft: dict, info, status) -> None:
     """Render the Codex subscription card with the in-UI device-code login."""
     st.caption(
-        "The login is held by the Codex CLI on the machine hosting this UI "
+        "The login is stored by Codex on the machine hosting this UI "
         "(the same login `chemgraph run --model codex:<id>` uses). API-key "
         "logins are refused; sign in with ChatGPT."
     )
@@ -824,7 +824,8 @@ def _render_deepagent_settings(config: dict) -> None:
         help=(
             "By default the agent can discover every built-in registry tool. "
             "Restricting to a subset mirrors --tool; selecting none disables "
-            "discovery."
+            "discovery. This edits the shared `tools` key, which the CLI also "
+            "uses for interactive main_agent tool opt-in; unticking removes it."
         ),
     )
     if restrict:

@@ -1,32 +1,29 @@
 """Codex (ChatGPT subscription) login status and device-code login for the UI.
 
-The CLI authorizes ``codex:<model-id>`` models through the login that the
-Codex CLI stores (``codex login``); ChemGraph then validates that the
-active login is ChatGPT-managed rather than an API key.  This module
-exposes the same checks to the Streamlit UI and adds a way to start the
-CLI's headless device-code login (``codex login --device-auth``) without
-leaving the browser.  The subprocess prints a URL and a one-time code,
-which the page shows to the user; the process exits on its own once the
-code is redeemed.
+The CLI authorizes ``codex:<model-id>`` models through the login stored by
+Codex; ChemGraph then validates that the active login is ChatGPT-managed
+rather than an API key.  This module exposes the same checks to the
+Streamlit UI and drives login/logout through the pinned ``openai-codex``
+SDK, which runs its own bundled Codex runtime: a device-code login
+(``Codex.login_chatgpt_device_code``) yields a verification URL and a
+one-time code that the page shows, and a background thread waits for the
+SDK's completion notification.  No ``codex`` executable on ``PATH`` is
+needed.
 
-Streamlit-free so it can be unit-tested with a mocked SDK/subprocess.
+Streamlit-free so it can be unit-tested with a mocked SDK.
 """
 
 from __future__ import annotations
 
-import re
-import shutil
-import subprocess
 import threading
 import time
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 
 from chemgraph.models.codex import CODEX_MODEL_PREFIX
 
 #: Login states reported by :func:`account_status`.
 STATE_NO_SDK = "no_sdk"
-STATE_NO_CLI = "no_cli"
 STATE_LOGGED_OUT = "logged_out"
 STATE_API_KEY = "api_key"
 STATE_CHATGPT = "chatgpt"
@@ -35,13 +32,12 @@ STATE_ERROR = "error"
 READY_STATES = frozenset({STATE_CHATGPT})
 
 INSTALL_HINT = (
-    "Install the Codex CLI separately, install the optional "
-    "`chemgraph[codex]` extra, then sign in with ChatGPT authentication."
+    "Install the optional `chemgraph[codex]` extra (it bundles the pinned "
+    "Codex runtime), then sign in with ChatGPT authentication."
 )
 
-_URL_RE = re.compile(r"https?://\S+")
-_CODE_RE = re.compile(r"\b[A-Z0-9]{4,6}-[A-Z0-9]{4,6}\b")
-_SUCCESS_RE = re.compile(r"successfully logged in", re.IGNORECASE)
+#: Seconds :func:`start_device_login` waits for the SDK to issue a code.
+LOGIN_START_TIMEOUT = 30.0
 
 
 @dataclass(frozen=True)
@@ -57,18 +53,11 @@ class CodexStatus:
         return self.state in READY_STATES
 
 
-def codex_cli_path() -> Optional[str]:
-    """Return the ``codex`` executable on ``PATH``, if any."""
-    return shutil.which("codex")
-
-
 def sdk_available() -> bool:
     """Return whether the optional ``openai-codex`` SDK is importable."""
-    try:
-        import openai_codex  # noqa: F401
-    except ImportError:
-        return False
-    return True
+    import importlib.util
+
+    return importlib.util.find_spec("openai_codex") is not None
 
 
 #: Seconds a status lookup stays valid.  Querying the login spawns the Codex
@@ -121,12 +110,6 @@ def _account_status_uncached() -> CodexStatus:
             STATE_NO_SDK,
             "The openai-codex SDK is not installed. Run "
             "`pip install 'chemgraph[codex]'` in the UI's environment.",
-        )
-    if codex_cli_path() is None:
-        return CodexStatus(
-            STATE_NO_CLI,
-            "The `codex` CLI was not found on PATH. Install it from "
-            "developers.openai.com/codex/cli, then sign in with ChatGPT.",
         )
     from chemgraph.models.codex import account_summary, inspect_account
 
@@ -208,117 +191,132 @@ def default_model_name(models: Optional[list[dict]] = None) -> Optional[str]:
 
 
 def logout() -> tuple[bool, str]:
-    """Run ``codex logout`` and return ``(ok, output)``."""
-    cli = codex_cli_path()
-    if cli is None:
-        return False, "The `codex` CLI was not found on PATH."
+    """Sign out of the reusable Codex login through the SDK.
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(ok, message)``.
+    """
+    from chemgraph.models.codex import logout_account
+
     try:
-        proc = subprocess.run(
-            [cli, "logout"], capture_output=True, text=True, timeout=60, check=False
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+        logout_account()
+    except Exception as exc:  # SDK missing / transport failures
         return False, str(exc)
-    output = (proc.stdout + proc.stderr).strip()
-    return proc.returncode == 0, output
+    finally:
+        invalidate_status_cache()
+    return True, "Signed out of Codex."
 
 
-@dataclass
 class DeviceLogin:
-    """A running ``codex login --device-auth`` process and its parsed output."""
+    """One device-code login attempt run by the SDK in a background thread.
 
-    process: subprocess.Popen
-    started_at: float = field(default_factory=time.time)
-    _lines: list[str] = field(default_factory=list)
-    _lock: threading.Lock = field(default_factory=threading.Lock)
-    _reader: Optional[threading.Thread] = None
+    The thread owns the SDK session for the whole attempt, because the
+    login handle is bound to it: it starts the login, publishes the
+    verification URL and one-time code, then blocks on the SDK's
+    completion notification.
+    """
 
-    def start_reader(self) -> None:
-        """Drain the subprocess output in a background thread."""
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._issued = threading.Event()
+        self._done = threading.Event()
+        self._handle: Any = None
+        self.url: Optional[str] = None
+        self.code: Optional[str] = None
+        self.error: Optional[str] = None
+        self.success: Optional[bool] = None
+        self.cancelled = False
+        self.started_at = time.time()
+        self._thread: Optional[threading.Thread] = None
 
-        def _pump():
-            stream = self.process.stdout
-            if stream is None:
-                return
-            for raw in iter(stream.readline, ""):
+    # -- background thread -------------------------------------------------
+    def _run(self) -> None:
+        from chemgraph.models.codex import _model_dump, codex_session
+
+        try:
+            with codex_session() as codex:
+                handle = codex.login_chatgpt_device_code()
                 with self._lock:
-                    self._lines.append(raw.rstrip("\r\n"))
+                    self._handle = handle
+                    self.url = str(handle.verification_url)
+                    self.code = str(handle.user_code)
+                self._issued.set()
+                result = _model_dump(handle.wait())
+            success = bool(result.get("success")) if isinstance(result, dict) else False
+            error = result.get("error") if isinstance(result, dict) else None
+            with self._lock:
+                self.success = success and not self.cancelled
+                if not success:
+                    self.error = str(error or "Codex login did not complete.")
+        except Exception as exc:  # SDK missing / app-server failures
+            with self._lock:
+                self.success = False
+                self.error = str(exc) or type(exc).__name__
+        finally:
+            invalidate_status_cache()
+            self._issued.set()
+            self._done.set()
 
-        self._reader = threading.Thread(target=_pump, daemon=True)
-        self._reader.start()
+    def start(self, timeout: float = LOGIN_START_TIMEOUT) -> "DeviceLogin":
+        """Start the attempt and wait until a code is issued (or it fails)."""
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        self._issued.wait(timeout)
+        return self
 
-    def feed(self, text: str) -> None:
-        """Append output text (used by tests and non-threaded readers)."""
-        with self._lock:
-            self._lines.extend(text.splitlines())
-
-    @property
-    def output(self) -> str:
-        with self._lock:
-            return "\n".join(self._lines)
-
-    @property
-    def url(self) -> Optional[str]:
-        for line in self.output.splitlines():
-            match = _URL_RE.search(line)
-            if match:
-                return match.group(0).rstrip(".,)")
-        return None
-
-    @property
-    def code(self) -> Optional[str]:
-        # The code is printed on its own line after the instructions; the
-        # first token that looks like XXXXX-XXXXX is the one-time code.
-        for line in self.output.splitlines():
-            match = _CODE_RE.search(line)
-            if match and "://" not in line:
-                return match.group(0)
-        return None
-
+    # -- state -------------------------------------------------------------
     @property
     def finished(self) -> bool:
-        return self.process.poll() is not None
+        return self._done.is_set()
 
     @property
     def succeeded(self) -> bool:
-        return self.finished and (
-            self.process.returncode == 0 or bool(_SUCCESS_RE.search(self.output))
-        )
+        return self.finished and self.success is True
+
+    @property
+    def output(self) -> str:
+        """Human-readable failure detail (empty while pending or on success)."""
+        return self.error or ""
+
+    def wait(self, timeout: Optional[float] = None) -> bool:
+        """Block until the attempt finishes; return whether it finished."""
+        return self._done.wait(timeout)
 
     def cancel(self) -> None:
-        """Terminate the login process if it is still waiting."""
-        if not self.finished:
+        """Cancel the attempt if it is still waiting for the code."""
+        with self._lock:
+            self.cancelled = True
+            handle = self._handle
+        if handle is not None and not self.finished:
             try:
-                self.process.terminate()
-            except OSError:
+                handle.cancel()
+            except Exception:
                 pass
 
 
 def start_device_login() -> DeviceLogin:
-    """Start ``codex login --device-auth`` and return a handle to poll.
+    """Start an SDK device-code login and return a handle to poll.
 
     Raises
     ------
     RuntimeError
-        When the CLI is missing or cannot be started.
+        When the SDK is missing or does not issue a sign-in code.
     """
-    cli = codex_cli_path()
-    if cli is None:
+    if not sdk_available():
         raise RuntimeError(
-            "The `codex` CLI was not found on PATH; install it before logging in."
+            "The openai-codex SDK is not installed. Run "
+            "`pip install 'chemgraph[codex]'` in the UI's environment."
         )
-    try:
-        process = subprocess.Popen(
-            [cli, "login", "--device-auth"],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
+    login = DeviceLogin().start()
+    if login.code is None or login.url is None:
+        if not login.finished:
+            login.cancel()
+        raise RuntimeError(
+            "Codex did not issue a sign-in code"
+            + (f": {login.error}" if login.error else ".")
         )
-    except OSError as exc:
-        raise RuntimeError(f"Could not start `codex login --device-auth`: {exc}") from exc
-    login = DeviceLogin(process=process)
-    login.start_reader()
     return login
 
 
@@ -332,9 +330,9 @@ __all__ = [
     "DeviceLogin",
     "INSTALL_HINT",
     "READY_STATES",
+    "LOGIN_START_TIMEOUT",
     "account_status",
     "available_models",
-    "codex_cli_path",
     "default_model_name",
     "invalidate_status_cache",
     "is_codex_model",

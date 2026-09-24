@@ -1080,3 +1080,66 @@ def test_non_deep_agent_workflows_pass_no_deep_agent_kwargs(monkeypatch, tmp_pat
         "gpt-4o-mini", "single_agent", False, "state", False, False, None,
     )
     assert calls == [{"log_dir": str(tmp_path)}]
+
+
+def test_unacknowledged_deep_agent_drops_the_cached_agent(monkeypatch, tmp_path):
+    fake_st = _FakeStreamlitOptimization()
+    fake_st.session_state.agent = None
+    fake_st.session_state.last_config = None
+    fake_st.session_state.current_chat_log_dir = str(tmp_path)
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        main_ui, "initialize_agent",
+        lambda model, workflow, *a, **k: SimpleNamespace(
+            workflow_type=workflow, uuid="a", session_store=None,
+            checkpointer=None, workflow=SimpleNamespace(checkpointer=None),
+        ),
+    )
+    monkeypatch.setattr(main_ui, "render_deepagent_acknowledgment", lambda key: False)
+    config = _deep_agent_config(tmp_path)
+
+    def _init(workflow):
+        main_ui._auto_initialize_agent(
+            config, "gpt-4o-mini", workflow, False, "state", False, False, None
+        )
+
+    # Switching from a working single_agent to deep_agent without the
+    # acknowledgment must not leave the single_agent answering queries.
+    _init("single_agent")
+    assert fake_st.session_state.agent.workflow_type == "single_agent"
+    _init("deep_agent")
+    assert fake_st.session_state.agent is None
+    assert fake_st.session_state.last_config is None
+
+    # Withdrawing the acknowledgment drops the shell-enabled agent.
+    fake_st.session_state[main_ui.DEEPAGENT_ACK_KEY] = True
+    _init("deep_agent")
+    assert fake_st.session_state.agent.workflow_type == "deep_agent"
+    fake_st.session_state[main_ui.DEEPAGENT_ACK_KEY] = False
+    _init("deep_agent")
+    assert fake_st.session_state.agent is None
+
+
+def test_optimization_section_reads_trajectory_once(monkeypatch, tmp_path):
+    from ui import opt_explorer, plots as ui_plots
+
+    traj = tmp_path / "cu2_opt.traj"
+    _write_optimization_trajectory(traj)
+    fake_st = _FakeStreamlitOptimization()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(opt_explorer, "st", fake_st)
+    steps, frames = opt_explorer.read_optimization_steps(str(traj), max_frames=3)
+    monkeypatch.setattr(main_ui, "_cached_optimization_steps", lambda p, m: (steps, frames))
+
+    def _legacy(*_a, **_k):
+        raise AssertionError("legacy reader must not run when the explorer loads")
+
+    monkeypatch.setattr(ui_plots, "read_optimization_trajectory", _legacy)
+    main_ui._render_optimization_section(
+        2, {"log_dir": str(tmp_path)}, {"trajectories": ["cu2_opt.traj"]}
+    )
+    # The label counts every optimizer step, not just the downsampled frames.
+    total = steps[-1]["step"] + 1
+    assert ("expander", f"\U0001f4c9 Optimization ({total} steps)", False) in fake_st.calls
+    assert len(steps) < total

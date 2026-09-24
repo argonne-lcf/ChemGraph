@@ -13,7 +13,8 @@ import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 import logging
-from typing import Any, Callable, Mapping, Sequence
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.callbacks.manager import CallbackManager
@@ -124,13 +125,15 @@ def _require_chatgpt_account(account_response: Any) -> None:
     )
 
 
-def inspect_account() -> Any:
-    """Return the SDK's active account response for the reusable Codex login.
+@contextmanager
+def codex_session() -> Iterator[Any]:
+    """Open an SDK session bound to the reusable Codex login.
 
-    The lookup mirrors what a model call does: an ephemeral working
-    directory and cleared API-key variables, so only the login established
-    by ``codex login`` is consulted.  Raises ``ImportError`` when the SDK is
-    missing; SDK/transport failures propagate unchanged.
+    The session mirrors what a model call does: an ephemeral working
+    directory and cleared API-key variables, so only the stored ChatGPT
+    login is consulted.  The SDK runs its pinned, bundled Codex runtime; a
+    ``codex`` executable on ``PATH`` is not required.  Raises
+    ``ImportError`` when the SDK is missing.
     """
     Codex, CodexConfig, _Sandbox, _ApprovalMode = _load_codex_sdk()
     with tempfile.TemporaryDirectory(prefix="chemgraph-codex-") as temp_dir:
@@ -141,7 +144,23 @@ def inspect_account() -> Any:
             client_title="ChemGraph",
         )
         with Codex(config=config) as codex:
-            return codex.account()
+            yield codex
+
+
+def inspect_account() -> Any:
+    """Return the SDK's active account response for the reusable Codex login.
+
+    Raises ``ImportError`` when the SDK is missing; SDK/transport failures
+    propagate unchanged.
+    """
+    with codex_session() as codex:
+        return codex.account()
+
+
+def logout_account() -> None:
+    """Sign the reusable Codex login out (``Codex.logout``)."""
+    with codex_session() as codex:
+        codex.logout()
 
 
 def list_models(*, include_hidden: bool = False) -> list[dict[str, Any]]:
@@ -152,16 +171,8 @@ def list_models(*, include_hidden: bool = False) -> list[dict[str, Any]]:
     them.  Raises ``ImportError`` when the SDK is missing; SDK/transport
     failures propagate unchanged.
     """
-    Codex, CodexConfig, _Sandbox, _ApprovalMode = _load_codex_sdk()
-    with tempfile.TemporaryDirectory(prefix="chemgraph-codex-") as temp_dir:
-        config = CodexConfig(
-            cwd=temp_dir,
-            env={"OPENAI_API_KEY": "", "CODEX_API_KEY": ""},
-            client_name="chemgraph",
-            client_title="ChemGraph",
-        )
-        with Codex(config=config) as codex:
-            response = codex.models(include_hidden=include_hidden)
+    with codex_session() as codex:
+        response = codex.models(include_hidden=include_hidden)
     data = _model_dump(response)
     entries = data.get("data", []) if isinstance(data, Mapping) else []
     models: list[dict[str, Any]] = []

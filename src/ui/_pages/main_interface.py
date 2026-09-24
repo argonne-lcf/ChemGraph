@@ -933,7 +933,7 @@ def _provider_credential_fingerprint(provider_info, alcf_token: Optional[str]) -
     if provider_info.auth_kind == "globus":
         credential = alcf_token
     elif provider_info.auth_kind == "codex":
-        # No secret is readable: the Codex CLI holds the login.  Key the
+        # No secret is readable: Codex stores the login.  Key the
         # agent on the login state/identity so a sign-in or sign-out
         # rebuilds the model client instead of reusing a stale one.
         status = codex_auth.account_status()
@@ -1060,6 +1060,11 @@ def _auto_initialize_agent(
     if selected_workflow == "deep_agent" and not _deepagent_access_acknowledged():
         # Same gate as the CLI's confirmation prompt: no host-shell backend
         # is built until the user acknowledges what the Deep Agent can do.
+        # Drop any cached agent as well, so queries are neither sent to the
+        # previously selected workflow nor to a Deep Agent whose
+        # acknowledgment was withdrawn.
+        st.session_state.agent = None
+        st.session_state.last_config = None
         return
 
     current_config = (
@@ -1984,34 +1989,41 @@ def _cached_optimization_steps(traj_path: str, mtime: float):
     return read_optimization_steps(traj_path)
 
 
-def _render_optimization_explorer(idx: int, traj_path: str) -> bool:
+def _load_optimization_explorer(traj_path: str):
+    """Load explorer data for *traj_path*, or ``None`` when unavailable.
+
+    Parameters
+    ----------
+    traj_path : str
+        Resolved optimizer trajectory path.
+
+    Returns
+    -------
+    tuple[list[dict], str] or None
+        ``(steps, frames_xyz)`` with at least two steps.
+    """
+    try:
+        loaded = _cached_optimization_steps(traj_path, os.path.getmtime(traj_path))
+    except OSError:
+        return None
+    if loaded is None or len(loaded[0]) < 2:
+        return None
+    return loaded
+
+
+def _render_optimization_explorer(idx: int, steps: list, frames_xyz: str) -> None:
     """Render the linked convergence plot + per-step 3D viewer.
 
     Parameters
     ----------
     idx : int
         One-based exchange index.
-    traj_path : str
-        Resolved optimizer trajectory path.
-
-    Returns
-    -------
-    bool
-        ``True`` when the explorer was rendered.
+    steps : list[dict]
+        Per-frame records from :func:`_load_optimization_explorer`.
+    frames_xyz : str
+        Multi-model XYZ text aligned with *steps*.
     """
-    try:
-        from ui.opt_explorer import render_opt_explorer
-    except ImportError:
-        return False
-    try:
-        loaded = _cached_optimization_steps(traj_path, os.path.getmtime(traj_path))
-    except OSError:
-        return False
-    if loaded is None:
-        return False
-    steps, frames_xyz = loaded
-    if len(steps) < 2:
-        return False
+    from ui.opt_explorer import render_opt_explorer
 
     col_speed, col_note = st.columns([1, 3], vertical_alignment="bottom")
     with col_speed:
@@ -2028,7 +2040,6 @@ def _render_optimization_explorer(idx: int, traj_path: str) -> bool:
             "slider to animate the optimization path."
         )
     render_opt_explorer(steps, frames_xyz, interval_ms=int(interval_ms))
-    return True
 
 
 def _render_optimization_section(
@@ -2054,6 +2065,21 @@ def _render_optimization_section(
     traj_path = _resolve_artifact_path(traj_rel, entry.get("log_dir"))
     if not os.path.exists(traj_path):
         return
+
+    # Linked explorer: every step in the plot maps to its geometry, with
+    # Play/Pause and a step slider.  The separate chart + auto-looping
+    # viewer is only a fallback when the frames cannot be embedded.
+    explorer_steps = _load_optimization_explorer(traj_path)
+    if explorer_steps is not None:
+        steps, frames_xyz = explorer_steps
+        # The last step is always kept when downsampling.
+        total_steps = steps[-1]["step"] + 1
+        with st.expander(
+            f"\U0001f4c9 Optimization ({total_steps} steps)", expanded=False
+        ):
+            _render_optimization_explorer(idx, steps, frames_xyz)
+        return
+
     data = ui_plots.read_optimization_trajectory(traj_path)
     if data is None:
         return
@@ -2064,12 +2090,6 @@ def _render_optimization_section(
     with st.expander(
         f"\U0001f4c9 Optimization ({len(energies)} steps)", expanded=False
     ):
-        # Linked explorer: every step in the plot maps to its geometry,
-        # with Play/Pause and a step slider.  Falls back to the separate
-        # chart + auto-looping viewer when the frames cannot be embedded.
-        if _render_optimization_explorer(idx, traj_path):
-            return
-
         col_chart, col_anim = st.columns(2, border=True)
         with col_chart:
             st.plotly_chart(
@@ -2510,16 +2530,16 @@ def _text_answers(records: list[dict], text: str) -> list:
             for action in payload["action_requests"]:
                 name = str(action.get("name", "unknown")) if isinstance(action, dict) else "unknown"
                 allowed = allowed_decisions(payload, name)
-                if "reject" in allowed:
-                    decisions.append({"type": "reject", "message": text})
-                elif "approve" in allowed:
-                    # Rejection is not permitted; the only legal resume
-                    # value is approval, so the instructions cannot apply.
-                    decisions.append({"type": "approve"})
-                else:
+                if "reject" not in allowed:
+                    # Like the CLI: typed instructions are a rejection, and a
+                    # response the policy does not allow is refused rather
+                    # than converted into some other (e.g. approving) decision.
                     raise ValueError(
-                        f"Deep Agent action {name!r} does not allow approve/reject."
+                        f"Deep Agent action {name!r} cannot be rejected; typed "
+                        "instructions are not allowed for it. Use the buttons "
+                        "on the review card."
                     )
+                decisions.append({"type": "reject", "message": text})
             answers.append({"decisions": decisions})
         else:
             answers.append(text)
@@ -2835,8 +2855,9 @@ def _handle_human_response(
         answers = _text_answers(records, answer)
         resume_value = _build_resume_value(records, answers)
     except ValueError as exc:
+        # Keep the pause: the user can still decide with the review buttons
+        # (or cancel explicitly).
         st.error(str(exc))
-        _clear_interrupt_state()
         return
     _resume_pending_interrupts(resume_value, answer, thread_id, attachments)
 

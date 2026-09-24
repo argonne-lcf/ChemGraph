@@ -20,7 +20,7 @@ from ui import codex_auth
 _PENDING_CLIENT_KEY = "_alcf_pending_login_client"
 _PENDING_URL_KEY = "_alcf_pending_login_url"
 
-# Session-state slot holding the running ``codex login --device-auth``
+# Session-state slot holding the running Codex device-code login
 # handle between reruns (global for the same reason as the ALCF slots).
 _CODEX_LOGIN_KEY = "_codex_pending_device_login"
 
@@ -126,11 +126,11 @@ def render_alcf_login(key_prefix: str) -> bool:
 def render_codex_login(key_prefix: str) -> bool:
     """Render Codex (ChatGPT subscription) login status and device-code login.
 
-    Mirrors the CLI: the model loader accepts only a ChatGPT-managed login
-    held by the Codex CLI.  The widget shows that status, starts
-    ``codex login --device-auth`` on request, and displays the URL and
-    one-time code the CLI prints so the login can be completed from any
-    browser (the Streamlit server may be remote/headless).
+    Mirrors the CLI: the model loader accepts only a ChatGPT-managed Codex
+    login.  The widget shows that status and, on request, starts a
+    device-code login through the pinned Codex SDK, displaying the
+    verification URL and one-time code so the login can be completed from
+    any browser (the Streamlit server may be remote/headless).
 
     Parameters
     ----------
@@ -152,30 +152,25 @@ def render_codex_login(key_prefix: str) -> bool:
             if pending.succeeded:
                 st.success("Signed in to Codex with ChatGPT.")
                 return True
-            st.error("Codex login did not complete.")
-            if pending.output:
-                st.code(pending.output[-2000:], language="text")
+            if not pending.cancelled:
+                st.error(f"Codex login did not complete: {pending.output}")
             return False
 
         st.info(
             "Finish signing in with ChatGPT, then come back here.",
             icon="\U0001f510",
         )
-        url, code = pending.url, pending.code
-        if url and code:
-            st.markdown(
-                f"1. Open [{url}]({url}) and sign in to the ChatGPT account "
-                "that has Codex access.\n"
-                "2. Enter this one-time code when asked:"
-            )
-            st.code(code, language="text")
-        else:
-            st.caption("Waiting for the Codex CLI to print the sign-in code...")
-            if pending.output:
-                st.code(pending.output[-1000:], language="text")
+        st.markdown(
+            f"1. Open [{pending.url}]({pending.url}) and sign in to the ChatGPT "
+            "account that has Codex access.\n"
+            "2. Enter this one-time code when asked:"
+        )
+        st.code(pending.code, language="text")
         col_check, col_cancel = st.columns(2)
         with col_check:
             if st.button("I have signed in", key=f"{key_prefix}_codex_check"):
+                # Give the SDK a moment to deliver the completion notice.
+                pending.wait(timeout=5.0)
                 st.rerun()
         with col_cancel:
             if st.button("Cancel", key=f"{key_prefix}_codex_cancel"):
@@ -191,13 +186,13 @@ def render_codex_login(key_prefix: str) -> bool:
         st.success(status.detail)
         if st.button("Log out", key=f"{key_prefix}_codex_logout"):
             ok, output = codex_auth.logout()
-            codex_auth.invalidate_status_cache()
             if not ok:
                 st.error(f"Codex logout failed: {output}")
-            st.rerun()
+            else:
+                st.rerun()
         return False
 
-    if status.state in (codex_auth.STATE_NO_SDK, codex_auth.STATE_NO_CLI):
+    if status.state == codex_auth.STATE_NO_SDK:
         st.warning(status.detail)
         st.caption(codex_auth.INSTALL_HINT)
         return False
@@ -215,12 +210,16 @@ def render_codex_login(key_prefix: str) -> bool:
         )
         if st.button(label, key=f"{key_prefix}_codex_start"):
             if status.state == codex_auth.STATE_API_KEY:
-                codex_auth.logout()
-            try:
-                st.session_state[_CODEX_LOGIN_KEY] = codex_auth.start_device_login()
-            except RuntimeError as exc:
-                st.error(str(exc))
-                return False
+                ok, output = codex_auth.logout()
+                if not ok:
+                    st.error(f"Codex logout failed: {output}")
+                    return False
+            with st.spinner("Requesting a sign-in code from Codex..."):
+                try:
+                    st.session_state[_CODEX_LOGIN_KEY] = codex_auth.start_device_login()
+                except RuntimeError as exc:
+                    st.error(str(exc))
+                    return False
             st.rerun()
     with col_refresh:
         if st.button("Re-check login", key=f"{key_prefix}_codex_refresh"):

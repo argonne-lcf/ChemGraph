@@ -187,6 +187,55 @@ def test_codex_model_catalog_is_offered_in_setup_and_configuration(
     assert toml.load(tmp_path / "config.toml")["general"]["model"] == "codex:gpt-5.1-codex-mini"
 
 
+class _PendingLogin:
+    """Stand-in for codex_auth.DeviceLogin driven by the test."""
+
+    url = "https://auth.openai.com/codex/device"
+    code = "AAAAB-BB6TU"
+    cancelled = False
+    output = ""
+
+    def __init__(self):
+        self.finished = False
+        self.succeeded = False
+
+    def wait(self, timeout=None):
+        return self.finished
+
+    def cancel(self):
+        self.cancelled = True
+
+
+def test_codex_device_login_flow_in_setup(isolated_app, monkeypatch):
+    import ui.codex_auth as codex_auth
+
+    login = _PendingLogin()
+    monkeypatch.setattr(codex_auth, "start_device_login", lambda: login)
+    at = isolated_app.run()
+    assert not at.exception
+    next(b for b in at.button if "Sign in with ChatGPT" in b.label).click()
+    at.run()
+    assert not at.exception
+    # The verification URL and one-time code from the SDK are shown.
+    assert any(c.value == "AAAAB-BB6TU" for c in at.code)
+    assert any("auth.openai.com/codex/device" in m.value for m in at.markdown)
+
+    # Once the SDK reports success the setup completes with the Codex model.
+    login.finished = True
+    login.succeeded = True
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in to Codex with ChatGPT.", None
+        ),
+    )
+    at.button(key="setup_codex_check").click()
+    at.run()
+    assert not at.exception
+    assert at.session_state["config"]["general"]["model"].startswith("codex:")
+
+
 def _configuration_apptest():
     from streamlit.testing.v1 import AppTest
 

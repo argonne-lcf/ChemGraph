@@ -36,11 +36,13 @@ for current account behavior.
 
 ### From the Streamlit interface
 
-The Streamlit app reuses the same CLI login. Its **Codex (ChatGPT)** provider
-card (first-run setup and *Configuration → Providers*) shows the login state
-and offers *Sign in with ChatGPT*, which runs `codex login --device-auth` on
-the machine hosting the UI and displays the sign-in URL and one-time code in
-the page, plus *Log out* (`codex logout`). The model picker then lists the
+The Streamlit app reuses the same stored login. Its **Codex (ChatGPT)**
+provider card (first-run setup and *Configuration → Providers*) shows the
+login state and offers *Sign in with ChatGPT*, which starts a device-code
+login through the pinned Codex SDK on the machine hosting the UI and displays
+the verification URL and one-time code in the page, plus *Log out*. The SDK
+runs its bundled Codex runtime, so the UI does not need `codex` on `PATH`;
+running `codex login` in a terminal remains an alternative. The model picker then lists the
 models reported by Codex for the signed-in account (`codex:<model-id>`), with
 the account default preselected and a free-text entry for unlisted ids; the
 agent is rebuilt automatically when the login changes.

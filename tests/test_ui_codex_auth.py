@@ -1,7 +1,8 @@
 """Tests for the UI's Codex login status and device-code login helpers."""
 
-import io
+import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -26,8 +27,8 @@ def _fresh_status_cache():
 
 @pytest.fixture()
 def sdk_and_cli(monkeypatch):
+    """SDK importable; no ``codex`` on PATH is needed (bundled runtime)."""
     monkeypatch.setattr(codex_auth, "sdk_available", lambda: True)
-    monkeypatch.setattr(codex_auth, "codex_cli_path", lambda: "/usr/local/bin/codex")
 
 
 def test_status_reports_missing_sdk(monkeypatch):
@@ -38,12 +39,16 @@ def test_status_reports_missing_sdk(monkeypatch):
     assert "chemgraph[codex]" in status.detail
 
 
-def test_status_reports_missing_cli(monkeypatch):
+def test_status_does_not_require_codex_on_path(monkeypatch):
+    """The SDK runs its bundled runtime, so PATH is irrelevant for status."""
+    import shutil
+
     monkeypatch.setattr(codex_auth, "sdk_available", lambda: True)
-    monkeypatch.setattr(codex_auth, "codex_cli_path", lambda: None)
-    status = codex_auth.account_status()
-    assert status.state == codex_auth.STATE_NO_CLI
-    assert not status.ready
+    monkeypatch.setattr(shutil, "which", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        codex_model, "inspect_account", lambda: _FakeAccountResponse({"type": "chatgpt"})
+    )
+    assert codex_auth.account_status().state == codex_auth.STATE_CHATGPT
 
 
 @pytest.mark.parametrize(
@@ -121,96 +126,114 @@ def test_account_summary_never_raises():
     }
 
 
-class _FakeProcess:
-    """Popen stand-in whose stdout replays canned CLI output."""
-
-    def __init__(self, text: str, returncode=None):
-        self.stdout = io.StringIO(text)
-        self._returncode = returncode
-        self.returncode = None
-        self.terminated = False
-
-    def poll(self):
-        if self._returncode is not None:
-            self.returncode = self._returncode
-        return self.returncode
-
-    def terminate(self):
-        self.terminated = True
-        self._returncode = -15
+# ---------------------------------------------------------------------------
+# SDK device-code login and logout
+# ---------------------------------------------------------------------------
 
 
-_DEVICE_OUTPUT = """Welcome to Codex [v0.145.0]
-OpenAI's command-line coding agent
+class _FakeLoginHandle:
+    def __init__(self, outcome):
+        self.verification_url = "https://auth.openai.com/codex/device"
+        self.user_code = "AAAAB-BB6TU"
+        self.redeemed = threading.Event()
+        self.outcome = outcome
+        self.cancelled = False
 
-Follow these steps to sign in with ChatGPT using device code authorization:
+    def wait(self):
+        self.redeemed.wait(5)
+        return _FakeModel(**self.outcome)
 
-1. Open this link in your browser and sign in to your account
-   https://auth.openai.com/codex/device
-
-2. Enter this one-time code (expires in 15 minutes)
-   AAAAB-BB6TU
-
-Continue only if you started this login in Codex.
-"""
+    def cancel(self):
+        self.cancelled = True
+        self.outcome = {"success": False, "error": "cancelled"}
+        self.redeemed.set()
 
 
-def test_device_login_parses_url_and_code():
-    login = codex_auth.DeviceLogin(process=_FakeProcess(""))
-    login.feed(_DEVICE_OUTPUT)
+def _install_login_sdk(monkeypatch, outcome=None, fail_start=None):
+    state = SimpleNamespace(handles=[], logouts=0, configs=[])
+
+    class FakeConfig:
+        def __init__(self, **kwargs):
+            state.configs.append(kwargs)
+
+    class FakeCodex:
+        def __init__(self, config=None):
+            self.config = config
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return None
+
+        def login_chatgpt_device_code(self):
+            if fail_start:
+                raise RuntimeError(fail_start)
+            handle = _FakeLoginHandle(outcome or {"success": True, "error": None})
+            state.handles.append(handle)
+            return handle
+
+        def logout(self):
+            state.logouts += 1
+
+    monkeypatch.setattr(
+        codex_model, "_load_codex_sdk", lambda: (FakeCodex, FakeConfig, object, object)
+    )
+    monkeypatch.setattr(codex_auth, "sdk_available", lambda: True)
+    return state
+
+
+def test_device_login_publishes_code_and_completes(monkeypatch):
+    state = _install_login_sdk(monkeypatch)
+    login = codex_auth.start_device_login()
     assert login.url == "https://auth.openai.com/codex/device"
     assert login.code == "AAAAB-BB6TU"
-    assert not login.finished
-    assert not login.succeeded
+    assert not login.finished and not login.succeeded
+    # Same isolated session as model calls: API keys cleared.
+    assert state.configs[0]["env"] == {"OPENAI_API_KEY": "", "CODEX_API_KEY": ""}
+
+    state.handles[0].redeemed.set()
+    assert login.wait(timeout=5)
+    assert login.succeeded and login.output == ""
 
 
-def test_device_login_success_detection():
-    login = codex_auth.DeviceLogin(process=_FakeProcess("", returncode=0))
-    login.feed(_DEVICE_OUTPUT + "Successfully logged in\n")
-    assert login.finished and login.succeeded
-    failed = codex_auth.DeviceLogin(process=_FakeProcess("", returncode=1))
-    failed.feed("Error: device code login is not enabled\n")
-    assert failed.finished and not failed.succeeded
-
-
-def test_start_device_login_runs_cli_and_reads_output(monkeypatch):
-    calls = []
-
-    def fake_popen(cmd, **kwargs):
-        calls.append((cmd, kwargs))
-        return _FakeProcess(_DEVICE_OUTPUT)
-
-    monkeypatch.setattr(codex_auth, "codex_cli_path", lambda: "/opt/bin/codex")
-    monkeypatch.setattr(codex_auth.subprocess, "Popen", fake_popen)
+def test_device_login_reports_failure_and_cancel(monkeypatch):
+    state = _install_login_sdk(monkeypatch, outcome={"success": False, "error": "code expired"})
     login = codex_auth.start_device_login()
-    assert calls[0][0] == ["/opt/bin/codex", "login", "--device-auth"]
-    assert calls[0][1]["stdin"] is codex_auth.subprocess.DEVNULL
-    deadline = time.time() + 2
-    while login.code is None and time.time() < deadline:
-        time.sleep(0.01)
-    assert login.code == "AAAAB-BB6TU"
+    state.handles[0].redeemed.set()
+    assert login.wait(timeout=5)
+    assert not login.succeeded and login.output == "code expired"
+
+    state = _install_login_sdk(monkeypatch)
+    login = codex_auth.start_device_login()
     login.cancel()
-    assert login.process.terminated
+    assert state.handles[0].cancelled
+    assert login.wait(timeout=5)
+    assert login.cancelled and not login.succeeded
 
 
-def test_start_device_login_requires_cli(monkeypatch):
-    monkeypatch.setattr(codex_auth, "codex_cli_path", lambda: None)
-    with pytest.raises(RuntimeError):
+def test_start_device_login_surfaces_sdk_errors(monkeypatch):
+    _install_login_sdk(monkeypatch, fail_start="app-server exited")
+    with pytest.raises(RuntimeError, match="app-server exited"):
+        codex_auth.start_device_login()
+    monkeypatch.setattr(codex_auth, "sdk_available", lambda: False)
+    with pytest.raises(RuntimeError, match="not installed"):
         codex_auth.start_device_login()
 
 
-def test_logout_runs_cli(monkeypatch):
-    class _Done:
-        returncode = 0
-        stdout = "Successfully logged out\n"
-        stderr = ""
+def test_logout_uses_sdk_and_invalidates_status(monkeypatch):
+    state = _install_login_sdk(monkeypatch)
+    codex_auth._status_cache["value"] = codex_auth.CodexStatus(codex_auth.STATE_CHATGPT, "x")
+    codex_auth._status_cache["at"] = time.time()
+    ok, message = codex_auth.logout()
+    assert ok and state.logouts == 1
+    assert codex_auth._status_cache["value"] is None
 
-    monkeypatch.setattr(codex_auth, "codex_cli_path", lambda: "/opt/bin/codex")
-    monkeypatch.setattr(codex_auth.subprocess, "run", lambda *a, **k: _Done())
-    ok, output = codex_auth.logout()
-    assert ok and "logged out" in output
-    monkeypatch.setattr(codex_auth, "codex_cli_path", lambda: None)
-    assert codex_auth.logout()[0] is False
+    def _boom():
+        raise RuntimeError("no runtime")
+
+    monkeypatch.setattr(codex_model, "logout_account", _boom)
+    assert codex_auth.logout() == (False, "no runtime")
 
 
 # ---------------------------------------------------------------------------

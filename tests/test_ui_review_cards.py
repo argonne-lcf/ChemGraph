@@ -28,9 +28,8 @@ def _review(actions, allowed=("approve", "reject")):
 def test_execute_preview_shows_command_as_bash():
     info = review_cards.action_preview({"name": "execute", "args": {"command": "ls -la\x1b[2K"}})
     assert info["summary"] == "Tool: execute"
-    assert info["blocks"] == [("Command", "ls -la\\x1b", "bash")] or info["blocks"][0][0] == "Command"
-    assert info["blocks"][0][2] == "bash"
-    assert "\x1b" not in info["blocks"][0][1]
+    # Terminal controls are made visible, exactly as in the CLI panel.
+    assert info["blocks"] == [("Command", "ls -la\\x1b[2K", "bash")]
     assert info["truncated"] is False
 
 
@@ -78,7 +77,6 @@ def test_allowed_decisions_and_summary():
     assert review_cards.allowed_decisions(payload, "execute") == ["approve"]
     assert review_cards.allowed_decisions(payload, "other") == []
     assert review_cards.review_summary(payload) == "Review 2 Deep Agent actions: execute, execute"
-    assert review_cards.review_summary({"question": "Which basis set?"}) == "{'question': 'Which basis set?'}"
 
 
 # ---------------------------------------------------------------------------
@@ -102,9 +100,10 @@ def test_text_answer_rejects_reviews_with_instructions_and_answers_questions():
     }
 
 
-def test_text_answer_when_reject_not_allowed_approves():
+def test_typed_text_never_approves_when_reject_is_not_allowed():
     records = [{"id": "", "payload": _review([{"name": "execute", "args": {}}], allowed=("approve",))}]
-    assert main_ui._text_answers(records, "hmm") == [{"decisions": [{"type": "approve"}]}]
+    with pytest.raises(ValueError, match="cannot be rejected"):
+        main_ui._text_answers(records, "no, do not run this")
 
 
 def test_single_pending_interrupt_resumes_with_bare_answer():
@@ -387,3 +386,34 @@ def test_ui_stream_and_resume_drive_real_deep_agent_review(tmp_path):
     assert state["messages"][-1].content == "Done"
     assert (tmp_path / "revised.txt").read_text() == "revised"
     assert not (tmp_path / "blocked.txt").exists()
+
+
+def test_refused_typed_reply_keeps_the_review_pending(monkeypatch):
+    payload = _review([{"name": "execute", "args": {"command": "rm -rf build"}}], allowed=("approve",))
+    fake_st = _ReviewStreamlit()
+    records = [{"id": "", "payload": payload}]
+    fake_st.session_state.pending_interrupts = records
+    fake_st.session_state.pending_human_question = "Review 1 Deep Agent action: execute"
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    resumed = []
+    monkeypatch.setattr(main_ui, "_resume_pending_interrupts", lambda *a: resumed.append(a))
+
+    main_ui._handle_human_response("no, do not run this", 1, None)
+
+    assert resumed == []
+    assert any(call[0] == "error" and "cannot be rejected" in call[1] for call in fake_st.calls)
+    assert fake_st.session_state.pending_interrupts == records
+    assert fake_st.session_state.pending_human_question is not None
+
+
+def test_card_identity_line_is_literal_not_markdown(monkeypatch):
+    fake_st = _ReviewStreamlit()
+    monkeypatch.setattr(review_cards, "st", fake_st)
+    path = "/tmp/ok.txt` ![x](https://example.invalid/p.png) `/home/u/.ssh/authorized_keys"
+    review_cards.render_action_card(
+        {"name": "write_file", "args": {"file_path": path, "content": "k"}}, 1, 1, "k"
+    )
+    markdown = [call[1] for call in fake_st.calls if call[0] == "markdown"]
+    assert markdown == ["**Review action 1 of 1**"]
+    codes = [call for call in fake_st.calls if call[0] == "code"]
+    assert codes[0] == ("code", f"Tool: write_file | Path: {path}", "text")

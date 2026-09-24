@@ -50,7 +50,7 @@ class ProviderInfo:
     label: str
     icon: str
     # How the provider authenticates: "argo" (username), "api_key",
-    # "globus" (ALCF), "codex" (ChatGPT login held by the Codex CLI),
+    # "globus" (ALCF), "codex" (ChatGPT login stored by Codex),
     # "endpoint" (custom server), or "none" (local server).
     auth_kind: str
     # Environment variable carrying the credential, when applicable.
@@ -164,7 +164,7 @@ PROVIDERS: tuple[ProviderInfo, ...] = (
         default_model="codex:gpt-5",
         models=(),
         help_text=(
-            "Experimental: use the ChatGPT login held by the Codex CLI "
+            "Experimental: use a ChatGPT login stored by Codex "
             "instead of an API key. Any model available to that account "
             "works as 'codex:<model-id>'. Supports the single_agent, "
             "main_agent and deep_agent workflows."

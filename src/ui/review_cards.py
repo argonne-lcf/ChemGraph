@@ -166,7 +166,11 @@ def render_action_card(action: dict, index: int, total: int, key: str) -> None:
     """
     info = action_preview(action)
     with st.container(border=True):
-        st.markdown(f"**Review action {index} of {total}** — `{info['summary']}`")
+        st.markdown(f"**Review action {index} of {total}**")
+        # The tool/path identity comes from model-supplied arguments; render
+        # it literally (like the CLI's Text line) so backticks or Markdown in
+        # a path cannot restyle or inject content into the approval card.
+        st.code(info["summary"], language="text")
         for label, text, language in info["blocks"]:
             st.caption(label)
             st.code(text, language=language or "text")
