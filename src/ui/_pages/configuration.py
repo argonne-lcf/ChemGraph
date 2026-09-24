@@ -338,6 +338,11 @@ def _render_codex_card(draft: dict, info, status) -> None:
     )
     if render_codex_login(key_prefix="config"):
         st.rerun()
+    if status.ready and not providers.provider_models(info):
+        st.caption(
+            "Codex did not return a model catalog for this account; type a "
+            "model id below (for example `codex:gpt-5.1-codex`)."
+        )
 
 
 def _render_local_card(draft: dict, info, status) -> None:
@@ -401,13 +406,64 @@ def _render_endpoint_settings(draft: dict, section: str, key_prefix: str) -> Non
         )
 
 
+_CUSTOM_MODEL_OPTION = "__custom__"
+
+
+def _codex_model_label(name: str) -> str:
+    """Selectbox label for a Codex catalog entry: display name, id and default mark."""
+    if name == _CUSTOM_MODEL_OPTION:
+        return "Other model id…"
+    from ui import codex_auth
+
+    for item in codex_auth.available_models():
+        if item["name"] == name:
+            label = item["display_name"]
+            if item["model"] != item["display_name"]:
+                label += f" ({item['model']})"
+            if item["is_default"]:
+                label += " — default"
+            return label
+    return name
+
+
 def _render_model_picker(draft: dict, info, status, active_model: str) -> None:
     """Render the per-provider model selector and activation button."""
     st.markdown("---")
     col_model, col_use = st.columns([3, 1], vertical_alignment="bottom")
     with col_model:
-        if info.models:
-            options = list(info.models)
+        options = list(providers.provider_models(info))
+        if options and info.auth_kind == "codex":
+            # Account catalog fetched live; keep an escape hatch for ids
+            # Codex does not list (hidden/preview models).
+            options.append(_CUSTOM_MODEL_OPTION)
+            default_name = providers.default_model_for(info)
+            index = (
+                options.index(active_model)
+                if active_model in options
+                else options.index(default_name) if default_name in options else 0
+            )
+            choice = st.selectbox(
+                "Model",
+                options,
+                index=index,
+                format_func=lambda name: _codex_model_label(name),
+                key=_wkey(f"provider_model_{info.id}"),
+            )
+            if choice == _CUSTOM_MODEL_OPTION:
+                selected = st.text_input(
+                    "Model id",
+                    value=(
+                        active_model
+                        if active_model.startswith("codex:")
+                        and active_model not in options
+                        else "codex:"
+                    ),
+                    key=_wkey(f"provider_model_custom_{info.id}"),
+                    help="Any model available to the signed-in account, as codex:<model-id>.",
+                ).strip()
+            else:
+                selected = choice
+        elif options:
             index = (
                 options.index(active_model) if active_model in options else 0
             )

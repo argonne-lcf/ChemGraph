@@ -58,6 +58,9 @@ with five paths:
   with ChatGPT* runs `codex login --device-auth` and shows the sign-in URL
   and one-time code in the page, so the login can be completed from any
   browser even when the server is remote; *Log out* runs `codex logout`.
+  Once signed in, the model picker lists the models the account can use
+  (fetched from Codex, default preselected) plus an *Other model id…* entry
+  for ids Codex does not list.
 - **Local (Ollama)** — point at a running OpenAI-compatible server.
 
 The **Configuration → Providers** tab offers the same per-provider cards

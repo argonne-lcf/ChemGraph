@@ -460,11 +460,36 @@ def _render_first_run_setup(config: dict) -> bool:
         info = providers.get_provider(providers.CODEX)
         st.caption(info.help_text)
         codex_ready = providers.provider_status(info, config).ready
-        if render_codex_login(key_prefix="setup") or (
-            codex_ready
-            and st.button("Use Codex", key="setup_codex_go", type="primary")
-        ):
+        if render_codex_login(key_prefix="setup"):
             _finish_first_run_setup(config, info)
+        elif codex_ready:
+            catalog = codex_auth.available_models()
+            if catalog:
+                names = [item["name"] for item in catalog]
+                default_name = codex_auth.default_model_name(catalog)
+                chosen = st.selectbox(
+                    "Model",
+                    names,
+                    index=names.index(default_name) if default_name in names else 0,
+                    format_func=lambda name: next(
+                        (
+                            item["display_name"] + (" — default" if item["is_default"] else "")
+                            for item in catalog
+                            if item["name"] == name
+                        ),
+                        name,
+                    ),
+                    key="setup_codex_model",
+                )
+            else:
+                chosen = st.text_input(
+                    "Model id", value=info.default_model, key="setup_codex_model",
+                    help="Codex returned no catalog; enter codex:<model-id>.",
+                ).strip()
+            if st.button(
+                "Use Codex", key="setup_codex_go", type="primary", disabled=not chosen
+            ):
+                _finish_first_run_setup(config, info, chosen)
 
     with tab_local:
         info = providers.get_provider(providers.OLLAMA)
@@ -492,7 +517,7 @@ def _render_first_run_setup(config: dict) -> bool:
     return True
 
 
-def _finish_first_run_setup(config: dict, info) -> None:
+def _finish_first_run_setup(config: dict, info, model_name: Optional[str] = None) -> None:
     """Persist the chosen provider/model and enter the chat.
 
     Parameters
@@ -501,8 +526,12 @@ def _finish_first_run_setup(config: dict, info) -> None:
         Live nested UI configuration.
     info : providers.ProviderInfo
         The chosen provider.
+    model_name : str, optional
+        Explicit model choice; defaults to the provider's default model
+        (for Codex, the signed-in account's default).
     """
-    config["general"]["model"] = info.default_model
+    model_name = model_name or providers.default_model_for(info)
+    config["general"]["model"] = model_name
     providers.align_base_url_for_provider(config, info.id)
     st.session_state.config = config
     saved = save_config(config)
@@ -510,11 +539,11 @@ def _finish_first_run_setup(config: dict, info) -> None:
     # that setup finished to avoid re-gating the chat.
     st.session_state._setup_skipped = True
     if saved:
-        st.toast(f"Ready — using {info.default_model}", icon="\U0001f680")
+        st.toast(f"Ready — using {model_name}", icon="\U0001f680")
     else:
         # The session keeps the choice, but it will not survive a restart.
         st.session_state.setup_save_error = (
-            f"Using {info.default_model} for this session, but the configuration "
+            f"Using {model_name} for this session, but the configuration "
             f"could not be saved ({ui_config.last_save_error}). Set "
             f"${ui_config.CONFIG_PATH_ENV} to a writable file to persist settings."
         )

@@ -325,6 +325,35 @@ def align_base_url_for_provider(config: Dict[str, Any], provider_id: str) -> Non
         section.setdefault("base_url", OPENAI_DEFAULT_BASE_URL)
 
 
+def provider_models(info: ProviderInfo) -> tuple[str, ...]:
+    """Return the selectable model names for *info*.
+
+    Curated providers list their static catalog.  Codex has no static list:
+    the signed-in account's catalog is fetched from the SDK (empty when not
+    signed in, so the picker falls back to a typed model id).
+
+    Parameters
+    ----------
+    info : ProviderInfo
+        Provider description.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Model names as accepted by ``general.model``.
+    """
+    if info.auth_kind == "codex":
+        return tuple(item["name"] for item in codex_auth.available_models())
+    return tuple(info.models)
+
+
+def default_model_for(info: ProviderInfo) -> str:
+    """Return the model to activate when a provider is chosen without a pick."""
+    if info.auth_kind == "codex":
+        return codex_auth.default_model_name() or info.default_model
+    return info.default_model
+
+
 def provider_for_model(model_name: str) -> Optional[ProviderInfo]:
     """Return the provider that serves *model_name*, if identifiable.
 

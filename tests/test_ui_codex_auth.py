@@ -211,3 +211,117 @@ def test_logout_runs_cli(monkeypatch):
     assert ok and "logged out" in output
     monkeypatch.setattr(codex_auth, "codex_cli_path", lambda: None)
     assert codex_auth.logout()[0] is False
+
+
+# ---------------------------------------------------------------------------
+# Model catalog
+# ---------------------------------------------------------------------------
+
+
+class _FakeModel:
+    def __init__(self, **fields):
+        self._fields = fields
+
+    def model_dump(self, mode=None, by_alias=None):
+        return dict(self._fields)
+
+
+class _FakeModelList:
+    def __init__(self, models):
+        self._models = models
+
+    def model_dump(self, mode=None, by_alias=None):
+        return {"data": [m.model_dump() for m in self._models], "nextCursor": None}
+
+
+_CATALOG = [
+    _FakeModel(id="gpt-5.1-codex", model="gpt-5.1-codex", displayName="GPT-5.1 Codex",
+               description="Coding model", isDefault=True, hidden=False),
+    _FakeModel(id="gpt-5.1", model="gpt-5.1", displayName="GPT-5.1",
+               description="General", isDefault=False, hidden=False),
+    _FakeModel(id="secret", model="secret-preview", displayName="Preview",
+               description="", isDefault=False, hidden=True),
+    _FakeModel(id="legacy-id-only", displayName="Legacy", isDefault=False, hidden=False),
+    _FakeModel(displayName="No identifier", isDefault=False, hidden=False),
+]
+
+
+def _install_fake_sdk(monkeypatch, catalog=_CATALOG, calls=None):
+    class FakeConfig:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class FakeCodex:
+        def __init__(self, config=None):
+            self.config = config
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return None
+
+        def models(self, include_hidden=False):
+            if calls is not None:
+                calls.append((self.config.kwargs, include_hidden))
+            return _FakeModelList(catalog)
+
+    monkeypatch.setattr(
+        codex_model, "_load_codex_sdk", lambda: (FakeCodex, FakeConfig, object, object)
+    )
+
+
+def test_list_models_normalizes_sdk_catalog(monkeypatch):
+    calls = []
+    _install_fake_sdk(monkeypatch, calls=calls)
+    models = codex_model.list_models()
+    assert [m["model"] for m in models] == [
+        "gpt-5.1-codex", "gpt-5.1", "secret-preview", "legacy-id-only",
+    ]
+    assert models[0] == {
+        "model": "gpt-5.1-codex", "display_name": "GPT-5.1 Codex",
+        "description": "Coding model", "is_default": True, "hidden": False,
+    }
+    assert models[2]["hidden"] is True
+    # Same isolation as the account check: cleared API keys, throwaway cwd.
+    assert calls[0][0]["env"] == {"OPENAI_API_KEY": "", "CODEX_API_KEY": ""}
+    assert calls[0][1] is False
+
+
+def test_available_models_requires_login_and_hides_hidden(monkeypatch, sdk_and_cli):
+    _install_fake_sdk(monkeypatch)
+    monkeypatch.setattr(
+        codex_model, "inspect_account", lambda: _FakeAccountResponse({"type": "apiKey"})
+    )
+    assert codex_auth.available_models() == []
+    assert codex_auth.default_model_name() is None
+
+    codex_auth.invalidate_status_cache()
+    monkeypatch.setattr(
+        codex_model, "inspect_account", lambda: _FakeAccountResponse({"type": "chatgpt"})
+    )
+    models = codex_auth.available_models()
+    assert [m["name"] for m in models] == [
+        "codex:gpt-5.1-codex", "codex:gpt-5.1", "codex:legacy-id-only",
+    ]
+    assert models[0]["display_name"] == "GPT-5.1 Codex" and models[0]["is_default"]
+    assert codex_auth.default_model_name() == "codex:gpt-5.1-codex"
+    assert codex_auth.default_model_name(models[1:]) == "codex:gpt-5.1"
+
+
+def test_available_models_is_cached_and_survives_sdk_failure(monkeypatch, sdk_and_cli):
+    monkeypatch.setattr(
+        codex_model, "inspect_account", lambda: _FakeAccountResponse({"type": "chatgpt"})
+    )
+    calls = []
+    _install_fake_sdk(monkeypatch, calls=calls)
+    codex_auth.available_models()
+    codex_auth.available_models()
+    assert len(calls) == 1
+    codex_auth.invalidate_status_cache()
+
+    def _boom():
+        raise RuntimeError("app-server down")
+
+    monkeypatch.setattr(codex_model, "list_models", _boom)
+    assert codex_auth.available_models() == []

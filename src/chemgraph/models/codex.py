@@ -144,6 +144,48 @@ def inspect_account() -> Any:
             return codex.account()
 
 
+def list_models(*, include_hidden: bool = False) -> list[dict[str, Any]]:
+    """Return the models the signed-in Codex account can use.
+
+    Each entry is ``{"model": <id to use after "codex:">, "display_name",
+    "description", "is_default", "hidden"}`` in the order Codex reports
+    them.  Raises ``ImportError`` when the SDK is missing; SDK/transport
+    failures propagate unchanged.
+    """
+    Codex, CodexConfig, _Sandbox, _ApprovalMode = _load_codex_sdk()
+    with tempfile.TemporaryDirectory(prefix="chemgraph-codex-") as temp_dir:
+        config = CodexConfig(
+            cwd=temp_dir,
+            env={"OPENAI_API_KEY": "", "CODEX_API_KEY": ""},
+            client_name="chemgraph",
+            client_title="ChemGraph",
+        )
+        with Codex(config=config) as codex:
+            response = codex.models(include_hidden=include_hidden)
+    data = _model_dump(response)
+    entries = data.get("data", []) if isinstance(data, Mapping) else []
+    models: list[dict[str, Any]] = []
+    for item in entries:
+        item = _model_dump(item)
+        if not isinstance(item, Mapping):
+            continue
+        model_id = item.get("model") or item.get("id")
+        if not isinstance(model_id, str) or not model_id:
+            continue
+        models.append(
+            {
+                "model": model_id,
+                "display_name": str(
+                    item.get("displayName") or item.get("display_name") or model_id
+                ),
+                "description": str(item.get("description") or ""),
+                "is_default": bool(item.get("isDefault", item.get("is_default", False))),
+                "hidden": bool(item.get("hidden", False)),
+            }
+        )
+    return models
+
+
 def account_summary(account_response: Any) -> dict[str, Any]:
     """Reduce an SDK account response to ``{"type", "identity"}``.
 

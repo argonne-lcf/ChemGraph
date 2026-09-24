@@ -128,6 +128,65 @@ def test_codex_setup_uses_codex_model_when_signed_in(isolated_app, monkeypatch, 
     assert any(b.key == "config_codex_logout" for b in conf.button)
 
 
+_CODEX_CATALOG = [
+    {"name": "codex:gpt-5.1", "model": "gpt-5.1", "display_name": "GPT-5.1",
+     "description": "", "is_default": False},
+    {"name": "codex:gpt-5.1-codex", "model": "gpt-5.1-codex", "display_name": "GPT-5.1 Codex",
+     "description": "", "is_default": True},
+]
+
+
+def test_codex_model_catalog_is_offered_in_setup_and_configuration(
+    isolated_app, monkeypatch, tmp_path
+):
+    import toml
+    import ui.codex_auth as codex_auth
+
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in to Codex with ChatGPT.", "chemist@example.com"
+        ),
+    )
+    monkeypatch.setattr(codex_auth, "available_models", lambda use_cache=True: _CODEX_CATALOG)
+
+    # First-run setup: the account catalog is a selectbox preselecting the default.
+    at = isolated_app.run()
+    assert not at.exception
+    picker = at.selectbox(key="setup_codex_model")
+    # AppTest exposes formatted labels; the default is preselected.
+    assert picker.options == ["GPT-5.1", "GPT-5.1 Codex — default"]
+    assert picker.value == "codex:gpt-5.1-codex"
+    picker.select("codex:gpt-5.1")
+    at.button(key="setup_codex_go").click()
+    at.run()
+    assert not at.exception
+    assert at.session_state["config"]["general"]["model"] == "codex:gpt-5.1"
+    assert toml.load(tmp_path / "config.toml")["general"]["model"] == "codex:gpt-5.1"
+
+    # Configuration page: same catalog plus an escape hatch for unlisted ids.
+    conf = _configuration_apptest()
+    conf.run()
+    assert not conf.exception
+    model_picker = next(
+        s for s in conf.selectbox if s.key and s.key.startswith("provider_model_codex")
+    )
+    assert model_picker.options == [
+        "GPT-5.1 (gpt-5.1)",
+        "GPT-5.1 Codex (gpt-5.1-codex) — default",
+        "Other model id…",
+    ]
+    assert model_picker.value == "codex:gpt-5.1"  # active model preselected
+    model_picker.select("__custom__").run()
+    assert not conf.exception
+    custom = next(t for t in conf.text_input if t.label == "Model id")
+    custom.set_value("codex:gpt-5.1-codex-mini").run()
+    conf.button(key="provider_use_codex").click().run()
+    assert not conf.exception
+    assert toml.load(tmp_path / "config.toml")["general"]["model"] == "codex:gpt-5.1-codex-mini"
+
+
 def _configuration_apptest():
     from streamlit.testing.v1 import AppTest
 

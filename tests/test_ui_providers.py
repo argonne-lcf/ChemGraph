@@ -347,3 +347,22 @@ def test_codex_api_key_login_is_not_ready(clean_env, monkeypatch):
     status = providers.provider_status(info, _config())
     assert status.ready is False
     assert "API key" in status.detail
+
+
+def test_codex_provider_models_come_from_account_catalog(clean_env, monkeypatch):
+    info = providers.get_provider(providers.CODEX)
+    assert providers.provider_models(info) == ()
+    assert providers.default_model_for(info) == info.default_model
+
+    catalog = [
+        {"name": "codex:gpt-5.1", "model": "gpt-5.1", "display_name": "GPT-5.1",
+         "description": "", "is_default": False},
+        {"name": "codex:gpt-5.1-codex", "model": "gpt-5.1-codex", "display_name": "GPT-5.1 Codex",
+         "description": "", "is_default": True},
+    ]
+    monkeypatch.setattr(codex_auth, "available_models", lambda use_cache=True: catalog)
+    assert providers.provider_models(info) == ("codex:gpt-5.1", "codex:gpt-5.1-codex")
+    assert providers.default_model_for(info) == "codex:gpt-5.1-codex"
+    # Curated providers are unaffected.
+    openai = providers.get_provider(providers.OPENAI)
+    assert providers.provider_models(openai) == tuple(openai.models)

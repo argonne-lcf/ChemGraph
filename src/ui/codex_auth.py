@@ -77,10 +77,15 @@ STATUS_CACHE_TTL = 30.0
 _status_cache: dict[str, object] = {"at": 0.0, "value": None}
 
 
+_models_cache: dict[str, object] = {"at": 0.0, "value": None}
+
+
 def invalidate_status_cache() -> None:
-    """Forget the cached login status (after login/logout)."""
+    """Forget the cached login status and model catalog (after login/logout)."""
     _status_cache["at"] = 0.0
     _status_cache["value"] = None
+    _models_cache["at"] = 0.0
+    _models_cache["value"] = None
 
 
 def account_status(*, use_cache: bool = True) -> CodexStatus:
@@ -147,6 +152,59 @@ def _account_status_uncached() -> CodexStatus:
         STATE_LOGGED_OUT,
         "No Codex login is available. Sign in with ChatGPT to use codex: models.",
     )
+
+
+def available_models(*, use_cache: bool = True) -> list[dict]:
+    """Return the models the signed-in account can use, prefixed for ChemGraph.
+
+    Each entry is ``{"name": "codex:<id>", "model", "display_name",
+    "description", "is_default"}``; hidden models are omitted.  Empty when
+    the login is not usable or the catalog cannot be fetched (the picker
+    then falls back to a free-text model id).
+
+    Parameters
+    ----------
+    use_cache : bool, optional
+        Reuse a catalog younger than :data:`STATUS_CACHE_TTL` seconds.
+    """
+    cached = _models_cache["value"]
+    if (
+        use_cache
+        and isinstance(cached, list)
+        and time.time() - float(_models_cache["at"]) < STATUS_CACHE_TTL
+    ):
+        return cached
+    models: list[dict] = []
+    if account_status(use_cache=use_cache).ready:
+        from chemgraph.models.codex import list_models
+
+        try:
+            for item in list_models():
+                if item.get("hidden"):
+                    continue
+                models.append(
+                    {
+                        "name": f"{CODEX_MODEL_PREFIX}{item['model']}",
+                        "model": item["model"],
+                        "display_name": item.get("display_name") or item["model"],
+                        "description": item.get("description", ""),
+                        "is_default": bool(item.get("is_default")),
+                    }
+                )
+        except Exception:  # SDK transport / app-server failures
+            models = []
+    _models_cache["at"] = time.time()
+    _models_cache["value"] = models
+    return models
+
+
+def default_model_name(models: Optional[list[dict]] = None) -> Optional[str]:
+    """Return the account's default ``codex:<id>`` model, if the catalog has one."""
+    models = available_models() if models is None else models
+    for item in models:
+        if item.get("is_default"):
+            return item["name"]
+    return models[0]["name"] if models else None
 
 
 def logout() -> tuple[bool, str]:
@@ -275,7 +333,9 @@ __all__ = [
     "INSTALL_HINT",
     "READY_STATES",
     "account_status",
+    "available_models",
     "codex_cli_path",
+    "default_model_name",
     "invalidate_status_cache",
     "is_codex_model",
     "logout",
