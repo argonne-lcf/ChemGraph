@@ -107,7 +107,7 @@ BUILTIN_AGENT_SPECS: tuple[AgentSpec, ...] = (
         "graspa_mcp",
         "Planner-executor worker for externally supplied gRASPA MCP tools.",
         "chemgraph.graphs.graspa_mcp:construct_graspa_mcp_graph",
-        required_arguments=("executor_tools",),
+        required_arguments=("executor_tools", "analysis_tools"),
         tags=frozenset({"graspa", "mcp", "planning"}),
     ),
     AgentSpec(

@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from chemgraph.schemas.graspa_workflow import GraspaAnalysis
+from chemgraph.schemas.graspa_analysis import GraspaAnalysis
 from chemgraph.tools.graspa_analysis import analyze_records, rank_records, normalize_record
 
 

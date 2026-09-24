@@ -7,7 +7,7 @@ import math
 from pathlib import Path, PureWindowsPath
 import uuid
 
-from chemgraph.schemas.graspa_workflow import GraspaAnalysis
+from chemgraph.schemas.graspa_analysis import GraspaAnalysis
 
 
 def write_json(path: Path, value) -> None:

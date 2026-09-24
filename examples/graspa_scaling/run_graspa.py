@@ -3,11 +3,13 @@
 
 import argparse
 import asyncio
+from collections import Counter
 import json
 import math
 import os
 from pathlib import Path
 import time
+import uuid
 
 REFERENCE = "/lus/flare/projects/IQC/thang/ChemGraph_parsl/weak_scaling_rerun/random_sampling/512_nodes/cif_files"
 
@@ -27,7 +29,7 @@ def finite_positive(value):
 
 
 def prepare(args):
-    """Validate a new workload, or load the frozen manifest without rediscovery."""
+    """Validate the selected workload without invoking an agent or writing files."""
     root = Path(args.output_dir).expanduser().resolve()
     settings = {
         "conditions": [{"temperature": args.ads_temp, "pressure": args.ads_pressure},
@@ -36,13 +38,8 @@ def prepare(args):
     }
     if settings["conditions"][0] == settings["conditions"][1]:
         raise ValueError("Adsorption and desorption conditions must differ")
-    if args.resume:
-        saved = json.loads((root / "screening.json").read_text())
-        if any(saved["manifest"][key] != value for key, value in settings.items()):
-            raise ValueError("Resume requires the original simulation settings")
-        return root, saved["sources"], saved["manifest"]
     if (root / "workflow.json").exists() or (root / "screening.json").exists():
-        raise ValueError("Use a fresh output directory or --resume")
+        raise ValueError("Use a fresh output directory")
     if args.cifs:
         sources = [Path(path).expanduser().resolve() for path in args.cifs]
     else:
@@ -63,12 +60,10 @@ def prepare(args):
     return root, [str(path) for path in sources], manifest
 
 
-def prepare_query(root, sources, manifest, resume):
-    """Stage references only; graph discovery resolves links to original sources."""
+def prepare_query(root, sources, manifest):
+    """Stage references only; server discovery resolves original source paths."""
     from chemgraph.tools.graspa_analysis import write_json
 
-    if resume:
-        return (root / "request.txt").read_text()
     root.mkdir(parents=True, exist_ok=True)
     inputs = root / "inputs"
     inputs.mkdir()
@@ -82,6 +77,7 @@ def prepare_query(root, sources, manifest, resume):
         f"Set timeout_seconds to {json.dumps(manifest['simulation_timeout'])}. "
         f"Use output_directory {json.dumps(str(root / 'simulations'))}. "
         "Rank adsorption minus desorption uptake and select the top 20% of complete successful structures. "
+        f"Aggregate returned terminal JSONL files into {json.dumps(str(root / 'results.csv'))}. "
         "Use the directory reference directly; do not enumerate files or split the dataset."
     )
     write_json(root / "screening.json", {"manifest": manifest, "sources": sources})
@@ -89,46 +85,106 @@ def prepare_query(root, sources, manifest, resume):
     return query
 
 
-def request_contract(root, sources, manifest):
-    """Freeze CLI settings independently of the model's interpretation."""
-    from chemgraph.schemas.graspa_workflow import GraspaRequestContract
+def result_interceptor(root, exports):
+    """Save MCP result payloads without taking over tool selection or polling."""
+    from mcp.types import CallToolResult, TextContent
+    from chemgraph.tools.graspa_analysis import write_records
 
-    return GraspaRequestContract(
-        request={"input_structures": str(root / "inputs"), "adsorbate": "H2O",
-                 "conditions": manifest["conditions"], "n_cycles": manifest["n_cycles_per_phase"],
-                 "timeout_seconds": manifest["simulation_timeout"], "output_directory": str(root / "simulations")},
-        sources=sources,
-        analysis={"adsorption": manifest["conditions"][0], "desorption": manifest["conditions"][1],
-                  "top_fraction": manifest["top_fraction"]},
-    )
+    async def save_result(request, handler):
+        result = await handler(request)
+        if not isinstance(result, CallToolResult) or result.isError:
+            return result
+        if request.name not in {"run_graspa_ensemble", "get_job_results"}:
+            return result
+        payload = result.structuredContent
+        if payload is None:
+            try:
+                payload = json.loads("\n".join(block.text for block in result.content if block.type == "text"))
+            except (ValueError, TypeError):
+                return result
+        if isinstance(payload, dict) and set(payload) == {"result"}:
+            payload = payload["result"]
+        if not isinstance(payload, dict) or "error" in payload:
+            return result
+        key = payload.get("batch_id") or request.args.get("batch_id") or uuid.uuid4().hex
+        if payload.get("status") == "submitted":
+            exports[key] = payload
+            return result
+        rows = payload.get("results")
+        if not isinstance(rows, list):
+            return result
+        directory = root / "tool_results"
+        directory.mkdir(exist_ok=True)
+        path = directory / f"{uuid.uuid4().hex}.jsonl"
+        write_records(path, rows)
+        summary = {key: value for key, value in payload.items() if key != "results"}
+        summary.update(records_path=str(path), total_records=len(rows),
+                       failed_records=sum(row.get("status") != "success" for row in rows))
+        exports[key] = summary
+        # Replace both representations so checkpoints also contain only paths/counts.
+        return CallToolResult(content=[TextContent(type="text", text=json.dumps(summary))],
+                              structuredContent=summary)
+
+    return save_result
+
+
+def check_outcome(exports, sources, manifest):
+    """Check the observed workload after execution; ranking stays in the tools."""
+    from chemgraph.tools.graspa_analysis import read_records
+
+    terminal = {"completed", "partial", "failed"}
+    if not exports or any(item.get("status") not in terminal or not item.get("records_path")
+                          for item in exports.values()):
+        return {"status": "incomplete", "message": "Not all submitted work has terminal results"}
+    records = [row for item in exports.values() for row in read_records(item["records_path"])]
+    expected = Counter((source, c["temperature"], c["pressure"])
+                       for source in sources for c in manifest["conditions"])
+    actual = Counter((row["input_structure_file"], row["temperature_in_K"], row["pressure_in_Pa"])
+                     for row in records)
+    failed = sum(row["status"] != "success" for row in records)
+    status = "incomplete" if actual != expected else "failed" if failed else "completed"
+    return {"status": status, "total_records": len(records), "failed_records": failed,
+            "records_paths": [item["records_path"] for item in exports.values()]}
 
 
 async def run(args, root, sources, manifest):
     from chemgraph.agent.llm_agent import ChemGraph
     from langchain_mcp_adapters.client import MultiServerMCPClient
     from langchain_mcp_adapters.tools import load_mcp_tools
+    from langchain_core.tools import StructuredTool
+    from chemgraph.mcp.data_analysis_mcp import aggregate_simulation_results, rank_mofs_performance
+    from chemgraph.tools.graspa_analysis import write_json
 
-    query = prepare_query(root, sources, manifest, args.resume)
+    query = prepare_query(root, sources, manifest)
+    exports = {}
     client = MultiServerMCPClient({"graspa": {
         "transport": "streamable_http", "url": args.mcp_url,
         "timeout": 30.0, "sse_read_timeout": args.wait_timeout,
     }})
     async with client.session("graspa") as session:
-        tools = await load_mcp_tools(session)
+        tools = await load_mcp_tools(session, tool_interceptors=[result_interceptor(root, exports)])
         required = {"run_graspa_ensemble", "check_job_status", "get_job_results"}
         missing = required - {tool.name for tool in tools}
         if missing:
             raise ValueError(f"Use graspa_mcp_hpc; missing tools: {sorted(missing)}")
         agent = ChemGraph(
             model_name=args.model, base_url=args.base_url, workflow_type="graspa_mcp", tools=tools,
-            graspa_options={"run_directory": str(root), "poll_interval_seconds": args.poll_interval,
-                            "wait_timeout_seconds": args.wait_timeout, "resume": args.resume,
-                            "request_contract": request_contract(root, sources, manifest)},
-            return_option="state", enable_memory=False, log_dir=str(root), recursion_limit=12,
+            data_tools=[StructuredTool.from_function(function) for function in
+                        (aggregate_simulation_results, rank_mofs_performance)],
+            return_option="state", enable_memory=False, log_dir=str(root), recursion_limit=args.recursion_limit,
         )
         state = await agent.run(query)
-        print(json.dumps(state["analysis"], indent=2), flush=True)
-        return 0 if state["workflow_status"] == "completed" else 1
+        response = state["messages"][-1]
+        (root / "response.txt").write_text(str(response.get("content", "")) + "\n")
+        outcome = check_outcome(exports, sources, manifest)
+        ranking_done = any(message.get("type") == "tool" and message.get("name") == "rank_mofs_performance"
+                           and str(message.get("content", "")).startswith("Analysis Complete")
+                           for message in state["messages"])
+        if outcome["status"] == "completed" and not ranking_done:
+            outcome.update(status="incomplete", message="The analyst did not complete the ranking tool")
+        write_json(root / "outcome.json", outcome)
+        print(json.dumps(outcome, indent=2), flush=True)
+        return 0 if outcome["status"] == "completed" else 1
 
 
 def parse_args(argv=None):
@@ -146,14 +202,13 @@ def parse_args(argv=None):
     parser.add_argument("--limit", type=int, default=int(os.environ.get("CG_LIMIT", "0")), help="First N sorted CIFs; 0 uses all")
     parser.add_argument("--simulation-timeout", type=finite_positive)
     parser.add_argument("--wait-timeout", type=finite_positive, default=9900)
-    parser.add_argument("--poll-interval", type=finite_positive, default=30)
+    parser.add_argument("--recursion-limit", type=int, default=100)
     parser.add_argument("--model", default="alcf:openai/gpt-oss-120b")
     parser.add_argument("--base-url", default=os.environ.get("CG_BASE_URL") or None)
-    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="Validate paths and print counts; no server, LLM, or writes")
     args = parser.parse_args(argv)
-    if args.n_cycles <= 0 or args.limit < 0:
-        parser.error("--n-cycles must be positive and --limit must be nonnegative")
+    if args.n_cycles <= 0 or args.limit < 0 or args.recursion_limit <= 0:
+        parser.error("--n-cycles and --recursion-limit must be positive; --limit must be nonnegative")
     if not args.input_dir and not args.cifs:
         args.input_dir = REFERENCE
     return args

@@ -129,7 +129,7 @@ def rank_mofs_performance(
     """Rank complete successful repeats; return a bounded preview and a CSV."""
     from pathlib import Path
     import uuid
-    from chemgraph.schemas.graspa_workflow import GraspaAnalysis
+    from chemgraph.schemas.graspa_analysis import GraspaAnalysis
     from chemgraph.tools.ase_core import _resolve_path
     from chemgraph.tools.graspa_analysis import read_records, rank_records, write_csv, ranking_columns
 

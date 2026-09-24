@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start MCP and the native client inside an existing Aurora PBS allocation.
+# Start MCP and the planner/executor client inside an existing Aurora PBS allocation.
 set -eo pipefail
 abort() { echo "[ABORT] $*" >&2; exit 2; }
 CG_INTERACTIVE=0
@@ -178,7 +178,7 @@ timeout --kill-after=30s "${CG_AGENT_TIMEOUT:-10200}" \
     --ads-temp "${ADS_TEMP_K:-298}" --ads-pressure "${ADS_PRESSURE_PA:-960}" \
     --des-temp "${DES_TEMP_K:-298}" --des-pressure "${DES_PRESSURE_PA:-320}" \
     --n-cycles "${N_CYCLES:-2000000}" --wait-timeout "${CG_WAIT_TIMEOUT:-9900}" \
-    --model "$CG_MODEL" \
+    --model "$CG_MODEL" --recursion-limit "${CG_RECURSION_LIMIT:-100}" \
     "${EXTRA_ARGS[@]}" >"$CG_RUN_DIR/agent.log" 2>&1 &
 CLIENT_PID=$!
 if (( CG_INTERACTIVE )); then

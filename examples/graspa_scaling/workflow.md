@@ -181,150 +181,76 @@ The native graph accepts this response when the JSONL file is readable on the
 client. New clients should use the maintained server, whose record responses
 also support workers without a shared filesystem.
 
-## Native ChemGraph workflow
+## Planner/executor/analyst graph
 
-`ChemGraph(workflow_type="graspa_mcp")` plans logical ensembles, prepares their
-validated requests, then submits, polls, and collects in Python. All tasks join
-before Python analysis runs; the final LLM call explains the saved analysis.
-One directory with adsorption and desorption conditions needs one ensemble,
-not one model call per CIF. File lists and complete records remain in artifacts;
-model messages and checkpoints contain counts, paths, and at most five preview
-rows. Optional `data_tools` can supplement the explanation.
+`ChemGraph(workflow_type="graspa_mcp")` uses the original LangGraph agent flow:
 
-```python
-from chemgraph.agent.llm_agent import ChemGraph
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langchain_mcp_adapters.tools import load_mcp_tools
+1. The planner reads conversation history and creates tasks by scientific intent.
+2. `Send` dispatches executor subgraphs. Each executor chooses from the supplied
+   tools in an agent/tool loop. Submitted batches are polled and collected through
+   the job tools before the executor reports completion.
+3. Executor summaries and logs join before the planner runs again. It may delegate
+   more work or select the insight analyst.
+4. The analyst calls aggregation and ranking tools through its own `ToolNode`
+   loop, then returns the final answer. It can also analyze existing results
+   without submitting simulations. `FINISH` ends a request directly.
 
-client = MultiServerMCPClient({"graspa": {
-    "transport": "streamable_http", "url": "http://127.0.0.1:9001/mcp/",
-}})
-async with client.session("graspa") as session:
-    agent = ChemGraph(
-        workflow_type="graspa_mcp",
-        tools=await load_mcp_tools(session),
-        graspa_options={
-            "run_directory": "/shared/screening/run-001",
-            "poll_interval_seconds": 15,
-            "wait_timeout_seconds": 3600,
-            "resume": False,
-        },
-        return_option="state",
-        enable_memory=False,
-    )
-    state = await agent.run(
-        "Screen H2O on all CIFs in /shared/cifs at 298 K, adsorption 960 Pa "
-        "and desorption 320 Pa, with 2000000 cycles per phase. Use one ensemble "
-        "and rank the top 20% by adsorption minus desorption uptake."
-    )
-    print(state["workflow_status"], state["analysis"])
-```
+One task can contain a directory and both adsorption/desorption conditions.
+Parsl schedules individual simulations; there is no need for one model task per CIF.
+The graph preserves request context alongside each assigned task.
 
-The asynchronous snippet belongs inside your application coroutine. Configure
-`model_name` and provider authentication as for other ChemGraph workflows.
-`return_option="last_message"` returns the explanation message instead;
-`workflow_finished` events carry the scientific status with either return option.
-Statuses are `completed`, `partial`, `failed`, or `incomplete`. An incomplete
-collection never generates a new ranking. A report-generation error is saved
-in `report_error.json` and does not erase the collected scientific outcome.
+Supply simulation tools through `ChemGraph(tools=...)` and analysis tools through
+`data_tools`. The [scaling runner](run_graspa.py) demonstrates this with the
+maintained gRASPA MCP server and LangChain wrappers around
+`aggregate_simulation_results` and `rank_mofs_performance`.
+`PromptConfig.planner`, `.executor`, and `.aggregator` override the respective
+agent prompts. Planning uses `PlannerResponse` with `next_step`,
+`thought_process`, and optional tasks, rather than a frozen workflow contract.
+`return_option="state"` exposes messages, executor summaries, and executor logs;
+`last_message` returns the final agent message. A completed graph is not by itself
+proof that all scientific calculations succeeded: inspect tool outcomes.
 
-`graspa_options` accepts the four fields above and an optional `request_contract`.
-Intervals and timeouts must
-be positive finite seconds. The collection timeout applies per logical task,
-including submission, queueing, and polling; it does not stop remote work or
-replace each simulation's `timeout_seconds`. With no explicit run directory,
-the graph creates a unique `graspa_workflows/<id>` beneath `log_dir` (or
-`CHEMGRAPH_LOG_DIR`). Relative explicit run directories resolve against
-`CHEMGRAPH_LOG_DIR`. A populated workflow directory requires `resume=True`.
-`config={"max_concurrency": 4}` on `agent.run` bounds model preparation and
-concurrent ensemble collection; it does not configure Parsl workers.
+### Result artifacts and numerical analysis
 
-Use `PromptConfig.planner`, `.executor`, and `.aggregator` to override planning,
-request preparation, and explanation respectively. Planning must return a
-`GraspaPlan` and preparation a `graspa_input_schema_ensemble`; old prompts that
-route between agents or perform model-driven polling are incompatible. The
-workflow always owns the join and canonical numerical analysis.
+The example uses an MCP result interceptor that writes returned simulation
+records to `tool_results/*.jsonl` and replaces large tool payloads with status,
+counts, and actual file paths. It does not submit jobs, poll, retry, or rank.
+Both the visible tool response and its structured artifact remain compact.
+The analyst's local tools can read these files on the client filesystem.
 
-Preparation also receives the original query, selected task index, and analysis
-conditions, so abbreviated task prose cannot lose the operator's settings.
-Planning and preparation each allow three attempts for invalid structured output
-or workload mismatches. Bounded validation feedback is saved in
-`validation-<stage>-<id>.json`; raw model responses are not recorded there.
-Provider/connection errors and cancellation propagate without validation retries.
+The analyst calls `aggregate_simulation_results` to produce `results.csv`, then
+`rank_mofs_performance` to write a selected `rankings_<id>.csv`. Numerical work
+remains deterministic inside these tools. The original request supplies the
+conditions and selection rule, including `top_percentile` or `min_cutoff`.
 
-The scaling runner supplies a `GraspaRequestContract` with `request` (one shared
-directory ensemble with an explicit output root), `sources` (resolved paths,
-including duplicates), and `analysis`. Python verifies the selected directory,
-complete source multiset, adsorbate, conditions, cycles, simulation timeout,
-output root, and ranking settings before submitting any work. Source lists stay
-in local artifacts, outside model messages and graph state. Omit the contract
-for general natural-language requests and multiple ensembles.
+Ranking uses exact temperature/pressure matches and full original source paths.
+Failed repeats exclude the corresponding structure. Failed, mock, negative,
+and nonfinite uptake is never treated as zero. Successful repeats are averaged
+before calculating adsorption minus desorption uptake, in mol/kg. Fractional
+selection uses `ceil(fraction * valid_candidates)`. Paired rankings contain
+`input_structure_file`, `uptake_ads`, `uptake_des`, and `working_capacity`;
+single-condition rankings contain `input_structure_file` and `absolute_uptake`.
 
-### Artifacts and ranking rules
+### Lifecycle and validation
 
-- `workflow.json`: query, frozen plan and requests, submission intent, accepted
-  batch IDs, progress, collection errors, and task artifact paths.
-- `plan.json`, `task_<index>.jsonl`: the plan and collected per-task records.
-- `results.jsonl`, `results.csv`: all collected outcomes, including failures and
-  original source identities; `analysis.json`: bounded summary and conditions.
-- `rankings.csv`, `top_candidates.csv`, `excluded.json`: full valid ranking,
-  selected candidates, and exclusions when ranking is requested and collection
-  is complete. `response.txt` contains the final explanation.
+The graph uses ordinary LangGraph state and checkpoints. There is no custom
+workflow journal, request contract, `graspa_options`, or example `--resume`.
+The server's existing job tracker remains available for inspecting accepted
+batches. Pending ordinary Parsl futures require the original server/allocation
+to stay alive. A new PBS job does not recover unfinished work.
 
-Ranking uses exact temperature/pressure matches (298 K does not match 298.15 K)
-and full source paths, so equal CIF basenames in different directories stay
-separate. All requested repeats at each ranking condition must succeed. Failed,
-mock, negative, or nonfinite uptake is never treated as zero. Legacy records
-with missing conditions exclude their source from ranking because they could
-be unidentified failed repeats. Successful repeats are averaged before
-computing adsorption minus desorption uptake, in mol/kg. The selected count is
-`ceil(top_fraction * valid_candidates)`; the fraction must be in `(0, 1]`.
-Paired ranking rows and CSVs contain only `input_structure_file`, `uptake_ads`,
-`uptake_des`, and `working_capacity`. Single-condition rankings contain only
-`input_structure_file` and `absolute_uptake`. JSON previews use the same fields;
-repeat counts and unused metric columns are omitted. Per-simulation records
-retain their full provenance and diagnostics.
+The example requires a fresh output directory, saves the selected workload in
+`screening.json`, and checks terminal records against the requested source and
+condition multiplicities after the graph finishes. Missing or failed results,
+or an unfinished ranking tool, produce a nonzero exit and `outcome.json`.
+This post-run check does not enforce model-generated parameters before submission
+or replace the analyst's numerical work. Use `--recursion-limit` for the graph
+and `--wait-timeout` for MCP transport reads; the launcher also bounds client
+walltime with `CG_AGENT_TIMEOUT`.
 
-The analysis MCP tools `aggregate_simulation_results` and
-`rank_mofs_performance` share these numerical rules, retain JSONL input support,
-and preserve failure records and full source paths. They are optional for the
-native graph, which performs canonical analysis locally.
-
-### Recovery limits
-
-To resume, use the original query, the same `run_directory`, and `resume=True`.
-If a request contract was supplied, it must also match the saved contract.
-Older journals without a contract can still resume without one; use a fresh run
-directory to enable a contract for an older run.
-The graph loads its frozen requests without calling the planner/preparer again,
-reuses accepted batch IDs, and validates saved records. It never automatically
-resubmits an accepted batch. Concurrent writers to one run directory are rejected.
-A timeout or cancelled client can leave remote simulations running.
-
-A lost or cancelled submission acknowledgment leaves `phase="submission_unknown"`
-(or crash-time `submitting`) in `workflow.json`. Resume stops that task and marks
-collection incomplete. Reconcile against the original server's `list_jobs()`
-and saved request before editing the journal: a confirmed accepted batch needs
-`phase="submitted"`, its `batch_id`, and positive `n_tasks`; only reset to
-`unsubmitted` after confirming no work was accepted. Back up the journal first.
-There is no automatic reconciliation or exactly-once guarantee across network
-failures. Ordinary Parsl futures require the original server/allocation to stay
-alive; restarting PBS is not recovery of unfinished work. Legacy JSONL summaries
-must remain readable on the client. Do not change the frozen scientific request
-while resuming.
-
-The [Aurora runner](README.md) uses this native graph with the 4,608-CIF
-reference workload, a four-CIF batch smoke, and an interactive 20-CIF run.
-
-## Validation status
-
-A 20-CIF native workflow completed on Aurora with Parsl and ALCF
-`openai/gpt-oss-120b` on 2026-09-23: 40 successful records at the two H2O
-conditions, 20 ranked structures, and four selected candidates. Full-scale and
-Ensemble Launcher runs remain unverified.
-
-Hermetic tests validate preparation, parsing, isolation, and failure handling
-without downloading models or requiring a GPU. Before using this integration
-for scientific results, run a small H2O calculation on your SYCL installation,
-compare the parsed uptake with stdout, and record the executable version and
-sanitized output. Real-engine validation is a collaborator handoff requirement.
+A 20-CIF Aurora run on 2026-09-23 validated the superseded deterministic graph
+with Parsl and ALCF `openai/gpt-oss-120b`. That evidence does not validate this
+restored agent flow. Run a fresh small real-engine validation before scaling;
+full-scale and Ensemble Launcher validation remain outstanding. Hermetic tests
+exercise graph routing, tool handoff, numerical analysis, and failure reporting
+without live LLMs, GPUs, or external endpoints.

@@ -1,27 +1,17 @@
 # gRASPA Aurora scaling example
 
-This runner uses `ChemGraph(workflow_type="graspa_mcp")`: the LLM plans one
-ensemble with both conditions, Python submits and collects all records, Python
-ranks working capacity, and the LLM explains the saved summary. Counts, paths,
-and up to five preview rows enter the reporting context. The scripts are
-self-contained and do not depend on local demo files.
+This runner uses the original `ChemGraph(workflow_type="graspa_mcp")`
+planner/executor/analyst graph. The planner delegates scientific tasks, executor
+agents call simulation tools, and the analyst invokes aggregation and ranking
+tools before reporting results. Parsl schedules individual simulations.
 
-See the [workflow reference](workflow.md) for request schemas, MCP behavior,
-output fields, and recovery details.
-
-The PBS shell launcher targets Aurora Linux and requires Bash 4.3+ and GNU
-coreutils (`timeout` and `tail --pid`).
-
-The selected CIFs are referenced by symlinks in the run's `inputs/` directory;
-shared-file discovery resolves these links to the original full source paths.
-The model receives a directory reference, even for a 4,608-CIF run. Source CIFs
-are never copied or modified. `screening.json` saves the original selection and
-settings, and `request.txt` saves the query used for resume.
-The runner also passes those settings and the selected source paths as a typed
-request contract. The native workflow checks the complete workload before
-submission, including both conditions, cycles, output root, and ranking settings.
-Planning/preparation get three attempts to correct invalid output; failures are
-recorded in `validation-<stage>-<id>.json` without storing raw model responses.
+See the [workflow reference](workflow.md) for schemas, tool behavior, and results.
+The PBS launcher targets Aurora Linux and requires Bash 4.3+ and GNU coreutils.
+Selected CIFs are referenced by symlinks in `inputs/`; server discovery resolves
+the original source paths. `screening.json` saves the selection/settings and
+`request.txt` saves the query. A small result interceptor writes MCP records to
+JSONL and returns counts and paths so the model need not read thousands of rows.
+Tool selection, polling, and analysis remain under the graph's agents.
 
 ## Reference workload
 
@@ -83,9 +73,9 @@ Each invocation defaults to a fresh
 Agent output appears in the terminal and `agent.log`. Ctrl-C cleans up the
 client and MCP server. The launcher uses the current allocation; it does not
 submit another PBS job or extend its walltime. The default client timeout is
-50 minutes. Inspect `analysis.json` and `timing.json` at completion; a fully
-successful run has 40 records, 20 valid structures, four selected candidates,
-and exit status zero. Finish or stop the previous MCP run before starting this
+50 minutes. Inspect `outcome.json`, `results.csv`, the selected `rankings_<id>.csv`, and
+`timing.json` at completion. A successful 20-CIF run has 40 records and selects
+four candidates when all structures succeed. Finish or stop the previous MCP run before starting this
 one, since the job tracker is shared.
 
 ## Small allocation first
@@ -109,34 +99,34 @@ Account `IQC` is inherited from the script; use `-A PROJECT` if needed.
 qsub -v CG_ENV,ALCF_ACCESS_TOKEN examples/graspa_scaling/sub.graspa.aurora
 ```
 
-A live 20-CIF run on Aurora with Parsl and `alcf:openai/gpt-oss-120b` completed
-on 2026-09-23: 40 successful records, 20 ranked structures, and four selected
-candidates. This validates the small workflow; full-scale and Ensemble Launcher
-runs remain unverified. The command above uses 512 nodes when scheduled. The
-three-hour walltime is inherited from the reference and is not a runtime guarantee.
+A live 20-CIF run on Aurora on 2026-09-23 validated the previous deterministic
+pipeline, not this restored graph. Repeat a small real-engine run before scaling.
+Full-scale and Ensemble Launcher runs remain unverified. The command above
+requests 512 nodes; its inherited three-hour walltime is not a runtime guarantee.
 
 Results go to `graspa_scaling_runs/PBS_JOBID/` under the checkout.
-`mcp.log`, `readiness.log`, and `agent.log` capture service startup and the
-workflow. `workflow.json` retains the plan, frozen requests, submission intent,
-accepted IDs, and status; `task_1.jsonl`, `results.jsonl`, and `results.csv` retain all
-collected outcomes.
-`rankings.csv` contains complete successful pairs, and
-`top_candidates.csv` contains the first `ceil(0.2 × successful pairs)` rows.
-Both contain `input_structure_file`, `uptake_ads`, `uptake_des`, and
-`working_capacity`; the `analysis.json` preview uses the same fields. Raw
-per-simulation records retain their diagnostics and artifact paths.
-Failed repeats exclude their structure from ranking. Partial, failed, and
-incomplete workflows cause a nonzero client exit. `excluded.json` records
-exclusions and `analysis.json` records conditions, counts, and paths.
-`timing.json` measures client walltime, excluding MCP startup. A forcibly killed process may not write timing.
-Each simulation has its own directory beneath `simulations/`.
+`mcp.log`, `readiness.log`, and `agent.log` capture service and agent output.
+`tool_results/*.jsonl` retain simulation outcomes, including failures.
+The analyst aggregates these into `results.csv` and writes its selection to
+`rankings_<id>.csv`; tool responses report the actual path. Paired ranking columns
+are `input_structure_file`, `uptake_ads`, `uptake_des`, and `working_capacity`.
+Each simulation retains its own diagnostics beneath `simulations/`.
+
+`response.txt` saves the final answer. After the graph finishes, `outcome.json`
+checks terminal results against the selected structures/conditions; missing or
+failed results or an unfinished ranking cause a nonzero exit. This check does
+not enforce model-generated parameters before submission. `timing.json` records
+client walltime and exit status; a forcibly killed process may not write it.
+The original graph does not produce a workflow journal or canonical `analysis.json`.
 
 Optional exported variables (also pass their names with `qsub -v`):
 `CG_CIF_DIR`, `CG_LIMIT`, `CG_RUN_DIR`, `N_CYCLES`,
 `ADS_TEMP_K`, `DES_TEMP_K`, `ADS_PRESSURE_PA`, `DES_PRESSURE_PA`,
 `CG_OMP_NUM_THREADS`, `CHEMGRAPH_PARSL_MAX_WORKERS_PER_NODE`,
 `CHEMGRAPH_GRASPA_EXECUTABLE`, `CG_MODEL`, `CG_BASE_URL`,
-`CG_SIMULATION_TIMEOUT`, `CG_WAIT_TIMEOUT`, `CG_AGENT_TIMEOUT`.
+`CG_SIMULATION_TIMEOUT`, `CG_WAIT_TIMEOUT`, `CG_AGENT_TIMEOUT`, `CG_RECURSION_LIMIT`.
+`CG_WAIT_TIMEOUT` bounds MCP transport reads; `CG_RECURSION_LIMIT` defaults to
+100 graph steps. The agent chooses when to call status/result tools.
 Changing timeouts does not extend PBS walltime.
 
 For comparisons across node counts, keep nine CIFs per node and both conditions,
@@ -145,12 +135,7 @@ it does not reproduce independent random samples at each scale.
 
 The batch launcher always starts a new server/allocation and requires a fresh
 output directory. Pending Parsl futures do not survive server shutdown.
-The client has `--resume` for reconnecting to an original, still-running MCP
-server with the same output directory and simulation settings; it loads the
-saved source list and query without rediscovery. Accepted batches are not
-resubmitted. Resume also requires the original request contract; use a fresh
-run directory for attempts created before the runner supplied a contract.
-Unknown submission acknowledgments require manual reconciliation;
-do not treat a new PBS submission as recovery of unfinished work.
-The MCP server stores its job tracker at `~/.chemgraph/graspa_jobs.json`; avoid
-concurrent independent MCP servers writing that shared tracker during validation.
+There is no example `--resume` or custom request contract. Use existing server
+job tools to inspect accepted batches; do not treat a new PBS submission as
+recovery of unfinished work. The server stores its tracker at
+`~/.chemgraph/graspa_jobs.json`; avoid independent servers writing the same tracker.
