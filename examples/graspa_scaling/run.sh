@@ -15,8 +15,15 @@ Run inside an existing Aurora PBS allocation. --interactive selects the
 and alcf:openai/gpt-oss-120b. It streams agent.log to the terminal and uses a
 fresh output directory for each invocation. Export ALCF_ACCESS_TOKEN first.
 
+Point to your shared CIF directory (files directly inside; no recursive search):
+  export CG_CIF_DIR=/path/to/your/cif_database
+  CG_LIMIT=20 bash examples/graspa_scaling/run.sh --interactive  # first 20 CIFs
+  CG_LIMIT=0 bash examples/graspa_scaling/run.sh --interactive   # all CIFs
+Set CG_ADSORBATE=H2O, CO2, or N2 (default H2O); each CIF has two conditions.
+CG_LIMIT and CG_ADSORBATE do not change temperatures, pressures, or cycles.
+
 Override defaults with CG_ENV (or CG_SETUP_FILE), CG_MODEL, CG_CIF_DIR,
-CG_LIMIT, N_CYCLES, CG_RUN_DIR, CG_STARTUP_TIMEOUT, CG_WAIT_TIMEOUT, and
+CG_ADSORBATE, CG_LIMIT, N_CYCLES, CG_RUN_DIR, CG_STARTUP_TIMEOUT, CG_WAIT_TIMEOUT, and
 CG_AGENT_TIMEOUT (overall client deadline, including MCP readiness).
 Without --interactive, the batch/reference defaults apply.
 USAGE
@@ -63,6 +70,11 @@ set -u
 
 # Shared defaults; interactive mode changes only workload/environment defaults above.
 CG_MODEL="${CG_MODEL:-alcf:openai/gpt-oss-120b}"
+CG_ADSORBATE="${CG_ADSORBATE:-H2O}"
+case "$CG_ADSORBATE" in
+    H2O|CO2|N2) ;;
+    *) abort "CG_ADSORBATE must be H2O, CO2, or N2." ;;
+esac
 CG_CIF_DIR="${CG_CIF_DIR:-/lus/flare/projects/IQC/thang/ChemGraph_parsl/weak_scaling_rerun/random_sampling/512_nodes/cif_files}"
 CG_LIMIT="${CG_LIMIT:-0}"
 N_CYCLES="${N_CYCLES:-2000000}"
@@ -108,6 +120,7 @@ export CHEMGRAPH_LOG_DIR="$CG_RUN_DIR"
 cd "$CG_RUN_DIR"
 printf 'Checkout: %s\nOutput: %s\nMCP: %s\n' "$CG_REPO" "$CG_RUN_DIR" "$GRASPA_MCP_URL"
 printf 'Input: %s\n' "$CG_CIF_DIR"
+printf 'Adsorbate: %s\n' "$CG_ADSORBATE"
 if (( CG_INTERACTIVE )); then
     printf 'Interactive Parsl: CIF limit=%s, cycles/phase=%s, model=%s, workers/node=%s\n' \
         "$CG_LIMIT" "$N_CYCLES" "$CG_MODEL" "$CHEMGRAPH_PARSL_MAX_WORKERS_PER_NODE"
@@ -152,6 +165,7 @@ EXTRA_ARGS=()
 timeout --kill-after=30s "$CG_AGENT_TIMEOUT" \
     "$CG_PYTHON" "$CG_REPO/examples/graspa_scaling/run_graspa.py" \
     --input-dir "$CG_CIF_DIR" --limit "$CG_LIMIT" --mcp-url "$GRASPA_MCP_URL" --output-dir "$CG_RUN_DIR" \
+    --adsorbate "$CG_ADSORBATE" \
     --ads-temp "${ADS_TEMP_K:-298}" --ads-pressure "${ADS_PRESSURE_PA:-960}" \
     --des-temp "${DES_TEMP_K:-298}" --des-pressure "${DES_PRESSURE_PA:-320}" \
     --n-cycles "$N_CYCLES" --startup-timeout "$CG_STARTUP_TIMEOUT" --wait-timeout "$CG_WAIT_TIMEOUT" \

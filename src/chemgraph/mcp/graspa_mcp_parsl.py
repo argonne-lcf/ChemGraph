@@ -26,7 +26,7 @@ warnings.warn(
 _backend = None
 mcp = FastMCP(
     name="ChemGraph Graspa Tools",
-    instructions="""run_graspa_ensemble runs H2O gRASPA-SYCL and returns a JSONL
+    instructions="""run_graspa_ensemble runs single-component H2O, CO2, or N2 gRASPA-SYCL and returns a JSONL
     summary path. Temperature is in K, pressure in Pa, uptake in mol/kg. One
     structure and one condition run a single simulation. Report failures and
     use actual returned artifact paths. Migrate to graspa_mcp_hpc for job tools.""",
@@ -83,7 +83,7 @@ CGFastMCP._fix_module_for_pickle(_write_summary)
 
 @mcp.tool(name="run_graspa_ensemble")
 async def run_graspa_ensemble(params: graspa_input_schema_ensemble):
-    """Run H2O ensembles and return the path to an isolated JSONL summary."""
+    """Run a single-adsorbate ensemble and return an isolated JSONL summary path."""
     jobs = await _expand_graspa_ensemble(params, backend=_get_backend())
     pending = [(_job_metadata(job), run_graspa_parsl_app(job)) for job in jobs]
     results = await gather_futures(pending)

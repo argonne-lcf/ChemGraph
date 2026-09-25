@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run native ChemGraph H2O screening through the maintained gRASPA MCP server."""
+"""Screen a CIF database with H2O, CO2, or N2 through the gRASPA MCP server."""
 
 import argparse
 import asyncio
@@ -33,6 +33,7 @@ def prepare(args):
     """Validate the selected workload without invoking an agent or writing files."""
     root = Path(args.output_dir).expanduser().resolve()
     settings = {
+        "adsorbate": args.adsorbate,
         "conditions": [{"temperature": args.ads_temp, "pressure": args.ads_pressure},
                        {"temperature": args.des_temp, "pressure": args.des_pressure}],
         "n_cycles_per_phase": args.n_cycles, "simulation_timeout": args.simulation_timeout,
@@ -71,8 +72,8 @@ def prepare_query(root, sources, manifest):
     for index, source in enumerate(sources):
         (inputs / f"{index:06d}.cif").symlink_to(source)
     query = (
-        f"Screen all CIFs in the shared input directory {json.dumps(str(inputs))} for water harvesting. "
-        "Create exactly one ensemble task with H2O and both conditions. "
+        f"Screen all CIFs in the shared input directory {json.dumps(str(inputs))} for {manifest['adsorbate']} adsorption. "
+        f"Create exactly one ensemble task with adsorbate={manifest['adsorbate']} and both conditions. "
         f"Use these conditions in order: adsorption, desorption: {json.dumps(manifest['conditions'])}. "
         f"Use {manifest['n_cycles_per_phase']} cycles EACH for initialization and production. "
         f"Set timeout_seconds to {json.dumps(manifest['simulation_timeout'])}. "
@@ -138,9 +139,9 @@ def check_outcome(exports, sources, manifest):
                           for item in exports.values()):
         return {"status": "incomplete", "message": "Not all submitted work has terminal results"}
     records = [row for item in exports.values() for row in read_records(item["records_path"])]
-    expected = Counter((source, c["temperature"], c["pressure"])
+    expected = Counter((source, manifest["adsorbate"], c["temperature"], c["pressure"])
                        for source in sources for c in manifest["conditions"])
-    actual = Counter((row["input_structure_file"], row["temperature_in_K"], row["pressure_in_Pa"])
+    actual = Counter((row["input_structure_file"], row.get("adsorbate"), row["temperature_in_K"], row["pressure_in_Pa"])
                      for row in records)
     failed = sum(row["status"] != "success" for row in records)
     status = "incomplete" if actual != expected else "failed" if failed else "completed"
@@ -221,6 +222,7 @@ def parse_args(argv=None):
     source.add_argument("--input-dir")
     source.add_argument("--cifs", nargs="+")
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--adsorbate", choices=("H2O", "CO2", "N2"), default="H2O")
     parser.add_argument("--mcp-url", default=os.environ.get("GRASPA_MCP_URL", "http://127.0.0.1:9001/mcp/"))
     parser.add_argument("--ads-temp", type=finite_positive, default=298.0)
     parser.add_argument("--des-temp", type=finite_positive, default=298.0)

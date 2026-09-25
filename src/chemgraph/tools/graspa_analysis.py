@@ -99,7 +99,7 @@ def write_csv(path: Path, rows: list[dict], columns: list[str]) -> None:
 
 
 RECORD_COLUMNS = [
-    "input_structure_file", "job_id", "status", "temperature_in_K", "pressure_in_Pa",
+    "input_structure_file", "job_id", "status", "adsorbate", "temperature_in_K", "pressure_in_Pa",
     "uptake_in_mol_kg", "is_mock", "run_dir", "stdout_path", "stderr_path",
     "results_path", "cif_path", "error_type", "message",
 ]
@@ -114,9 +114,12 @@ def ranking_columns(analysis: GraspaAnalysis) -> list[str]:
 
 def rank_records(records: list[dict], analysis: GraspaAnalysis) -> tuple[list[dict], list[dict]]:
     """Rank exact conditions; every requested repeat at those conditions must succeed."""
+    records = [normalize_record(row) for row in records]
+    adsorbates = {row.get("adsorbate") for row in records if row.get("adsorbate")}
+    if len(adsorbates) > 1:
+        raise ValueError("Analyze one adsorbate at a time; separate H2O, CO2, and N2 result files")
     grouped = defaultdict(lambda: defaultdict(list))
-    for raw in records:
-        row = normalize_record(raw)
+    for row in records:
         grouped[row["input_structure_file"]][
             (row["temperature_in_K"], row["pressure_in_Pa"])
         ].append(row)

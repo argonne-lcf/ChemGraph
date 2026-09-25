@@ -2,9 +2,21 @@
 
 Companion reference for the [Aurora scaling example](README.md).
 
-ChemGraph supports the SYCL gRASPA engine with its bundled H2O model. CUDA,
-CO2, and N2 simulations are not supported by this integration. The force-field
-parameters and cycle definitions are unchanged by the runtime cleanup.
+ChemGraph supports single-component H2O, CO2, and N2 simulations with the SYCL
+gRASPA engine. The template includes `H2O.def`, `CO2.def`, and `N2.def` with the
+shared pseudo-atom and force-field definitions. CUDA and mixture simulations
+are not supported by this integration.
+
+N2 uses the supplied three-site definition: `N_n2` has mass 14.0067 and charge
+-0.482, and the massless `N_com` site has charge +0.964. Their Lennard-Jones
+entries are `(36.0, 3.31)` and `(0.0, 0.0)`, respectively. Existing H2O and CO2
+parameters are unchanged.
+
+Set `adsorbate="H2O"`, `"CO2"`, or `"N2"` in the single-run or ensemble schema.
+The scaling example exposes the same choice as `--adsorbate` in Python or
+`CG_ADSORBATE` in the launcher, defaulting to H2O. Its 298 K and 960/320 Pa
+defaults do not change with the selected gas; supply conditions appropriate to
+your study. `CG_CIF_DIR` selects your database and `CG_LIMIT=0` selects all CIFs.
 
 Install ChemGraph, then configure the executable **on each execution worker**:
 
@@ -232,6 +244,8 @@ records to `tool_results/*.jsonl` and replaces large tool payloads with status,
 counts, and actual file paths. It does not submit jobs, poll, retry, or rank.
 Both the visible tool response and its structured artifact remain compact.
 The analyst's local tools can read these files on the client filesystem.
+Aggregated CSVs preserve the `adsorbate` field. Ranking rejects explicitly mixed
+adsorbates; keep different gases in separate result files and analyses.
 
 The analyst calls `aggregate_simulation_results` to produce `results.csv`, then
 `rank_mofs_performance` to write a selected `rankings_<id>.csv`. Numerical work
@@ -255,8 +269,8 @@ batches. Pending ordinary Parsl futures require the original server/allocation
 to stay alive. A new PBS job does not recover unfinished work.
 
 The example requires a fresh output directory, saves the selected workload in
-`screening.json`, and checks terminal records against the requested source and
-condition multiplicities after the graph finishes. Missing or failed results,
+`screening.json`, and checks terminal records against the requested source, gas,
+and condition multiplicities after the graph finishes. Missing or failed results,
 or an unfinished ranking tool, produce a nonzero exit and `outcome.json`.
 This post-run check does not enforce model-generated parameters before submission
 or replace the analyst's numerical work. Use `--recursion-limit` for the graph

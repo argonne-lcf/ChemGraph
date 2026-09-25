@@ -1,4 +1,4 @@
-"""Validated inputs for the supported H2O gRASPA-SYCL workflow."""
+"""Validated inputs for single-component H2O, CO2, and N2 gRASPA-SYCL runs."""
 
 from pathlib import Path
 from typing import Literal
@@ -43,7 +43,9 @@ class _GraspaOptions(BaseModel):
         gt=0,
         description="Monte Carlo cycles per initialization/production phase.",
     )
-    adsorbate: Literal["H2O"] = Field(description="Supported adsorbate: H2O.")
+    adsorbate: Literal["H2O", "CO2", "N2"] = Field(
+        description="Single adsorbate for this run: H2O, CO2, or N2. Mixtures are not supported."
+    )
 
     @field_validator("output_result_file")
     @classmethod

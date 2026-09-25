@@ -1,4 +1,4 @@
-"""Backend-agnostic, lazily configured H2O gRASPA-SYCL MCP server."""
+"""Backend-agnostic, lazily configured single-component gRASPA-SYCL MCP server."""
 
 import asyncio
 import math
@@ -13,7 +13,8 @@ _JOBS_FILE = Path("~/.chemgraph/graspa_jobs.json").expanduser()
 mcp = CGFastMCP(
     name="ChemGraph Graspa Tools",
     instructions="""
-        run_graspa_ensemble runs H2O adsorption with gRASPA-SYCL. One structure
+        run_graspa_ensemble runs H2O, CO2, or N2 adsorption with gRASPA-SYCL.
+        Select one adsorbate per ensemble; mixtures are not supported. One structure
         and one condition also run a single simulation. Temperature is in K,
         pressure in Pa, uptake in mol/kg, and wall_time in seconds.
         input_structures requires a shared filesystem. For remote backends,
@@ -212,7 +213,7 @@ async def _expand_graspa_ensemble(
 
 @mcp.schema_fanout_tool(
     name="run_graspa_ensemble", worker=_graspa_worker, metadata=_job_metadata,
-    description="Run H2O gRASPA-SYCL for every CIF/condition pair using local shared files or a pre-staged remote directory.",
+    description="Run single-component H2O, CO2, or N2 gRASPA-SYCL for every CIF/condition pair using shared files or a pre-staged remote directory.",
 )
 async def run_graspa_ensemble(params: graspa_input_schema_ensemble) -> list[dict]:
     return await _expand_graspa_ensemble(params)

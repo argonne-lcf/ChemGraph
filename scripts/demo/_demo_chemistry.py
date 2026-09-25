@@ -786,7 +786,7 @@ def add_workload_args(parser) -> None:
     parser.add_argument(
         "--adsorbate",
         default="H2O",
-        help="gRASPA adsorbate for --workload graspa (only 'H2O' supported).",
+        help="gRASPA adsorbate for --workload graspa (H2O, CO2, or N2; one gas per run).",
     )
     parser.add_argument(
         "--graspa-cifs",
