@@ -293,7 +293,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../mcp_servers/" class="md-tabs__link">
+        <a href="../codex_subscription/" class="md-tabs__link">
           
   
   
@@ -323,28 +323,6 @@
 
       </a>
     </li>
-  
-
-      
-        
-  
-  
-  
-  
-    
-    
-      <li class="md-tabs__item">
-        <a href="../codex_subscription/" class="md-tabs__link">
-          
-  
-  
-    
-  
-  Experimental
-
-        </a>
-      </li>
-    
   
 
       
@@ -697,10 +675,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#experimental-codex-route" class="md-nav__link">
+  <a href="#codex-subscription-route" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Experimental Codex route
+        Codex subscription route
       
     </span>
   </a>
@@ -1131,6 +1109,8 @@
       
         
       
+        
+      
     
     
     
@@ -1175,6 +1155,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../codex_subscription/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Codex subscription
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -1361,6 +1369,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1384,7 +1402,7 @@
   <span class="md-ellipsis">
     
   
-    Experimental
+    Project
   
 
     
@@ -1397,107 +1415,6 @@
         
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Experimental
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../codex_subscription/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Codex subscription
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
-    
-    
-    
-      
-      
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
-        
-          
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Project
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1775,10 +1692,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#experimental-codex-route" class="md-nav__link">
+  <a href="#codex-subscription-route" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Experimental Codex route
+        Codex subscription route
       
     </span>
   </a>
@@ -1866,7 +1783,7 @@ to see the identifiers registered by your installed version.</p>
 <tr>
 <td>Codex</td>
 <td><code>codex:&lt;model-id&gt;</code></td>
-<td>Experimental subscription setup</td>
+<td>ChatGPT subscription setup</td>
 </tr>
 </tbody>
 </table>
@@ -1918,9 +1835,10 @@ Choose the CLI model with <code>--model</code>; Streamlit reads its model defaul
 configuration file. Environment variables remain the recommended place for tokens.
 See <a href="../configuration_with_toml/">Configuration</a> for supported sections and
 interface-specific behavior.</p>
-<h2 id="experimental-codex-route">Experimental Codex route<a class="headerlink" href="#experimental-codex-route" title="Permanent link">&para;</a></h2>
-<p>The Codex subscription integration has separate dependencies and authentication
-and is not an OpenAI API-key replacement for every workflow. See
+<h2 id="codex-subscription-route">Codex subscription route<a class="headerlink" href="#codex-subscription-route" title="Permanent link">&para;</a></h2>
+<p>The Codex subscription integration is available across all registered workflows
+through the shared model loader. It has separate dependencies and ChatGPT login
+requirements; workflow-specific tools and dependencies still apply. See
 <a href="../codex_subscription/">Codex subscription</a> before using a <code>codex:</code> model.</p>
 
 
