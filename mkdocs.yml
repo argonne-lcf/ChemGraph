@@ -63,14 +63,13 @@ nav:
       - Configuration: configuration_with_toml.md
       - Examples: example_usage.md
   - Integrations and scale:
+      - Codex subscription: codex_subscription.md
       - MCP servers: mcp_servers.md
       - Docker: docker_support.md
       - Kubernetes: kubernetes.md
       - Local models: running_local_models.md
       - HPC and Academy: hpc_and_academy.md
   - Evaluation: evaluation.md
-  - Experimental:
-      - Codex subscription: codex_subscription.md
   - Project:
       - Project structure: project_structure.md
       - Contributing: contributing.md

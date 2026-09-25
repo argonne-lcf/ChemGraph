@@ -59,8 +59,9 @@ Argo or ALCF-hosted model.
 
 The single-agent CLI/Python path, core ASE tools, EMT, MACE, and the general MCP
 server are the normal starting points. Optional integrations require their
-documented extras or external programs. Site-specific HPC servers, Codex
-subscription authentication, gRASPA workflows, docking, XANES, and some
+documented extras or external programs. Codex subscription support requires its
+optional SDK and a ChatGPT login; see [Codex subscription](codex_subscription.md).
+Site-specific HPC servers, gRASPA workflows, docking, XANES, and some
 distributed backends are advanced or experimental; validate them in your own
 environment before production use.
 

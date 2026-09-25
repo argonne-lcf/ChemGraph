@@ -42,5 +42,5 @@ SPEC = EndpointSpec(
     credential=CODEX_CREDENTIAL,
     accepted_prefix="codex:",
     display_name="Codex / ChatGPT",
-    model_type="Experimental",
+    model_type="Subscription",
 )

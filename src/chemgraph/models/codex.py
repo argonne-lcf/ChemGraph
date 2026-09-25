@@ -1,4 +1,4 @@
-"""Experimental Codex SDK model adapter.
+"""Codex SDK model adapter.
 
 This module adapts the official ``openai-codex`` Python SDK to LangChain's
 chat-model interface.  Codex is used only as the model backend; ChemGraph's
@@ -115,7 +115,7 @@ def _require_chatgpt_account(account_response: Any) -> None:
     if account_type == "apiKey":
         raise CodexAuthenticationError(
             "The active Codex login uses an API key, which ChemGraph's "
-            "experimental codex: provider refuses. Run `codex logout`, then "
+            "codex: provider refuses. Run `codex logout`, then "
             "`codex login` and choose ChatGPT subscription authentication."
         )
     raise CodexAuthenticationError(
@@ -373,6 +373,9 @@ class CodexChatModel(BaseChatModel):
         tool_names = {function["name"] for function in functions}
         normalized_choice = _normalize_tool_choice(tool_choice, tool_names)
         parallel = bool(kwargs.pop("parallel_tool_calls", True))
+        # LangChain's inherited with_structured_output supplies tracing metadata,
+        # not an SDK tool option; the bound schema already defines the output.
+        kwargs.pop("ls_structured_output_format", None)
         if kwargs:
             unsupported = ", ".join(sorted(kwargs))
             raise ValueError(f"Unsupported Codex tool options: {unsupported}.")
@@ -516,7 +519,7 @@ def load_codex_model(
     *,
     validate_authentication: bool = True,
 ) -> CodexChatModel:
-    """Load an experimental Codex subscription-backed chat model."""
+    """Load a Codex subscription-backed chat model."""
     model = CodexChatModel(model_id=_strip_codex_prefix(model_name))
     if validate_authentication:
         model.validate_authentication()

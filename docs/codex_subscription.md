@@ -1,6 +1,6 @@
-# Experimental Codex subscription support
+# Codex subscription support
 
-ChemGraph can experimentally use the Codex Python SDK with a ChatGPT-backed
+ChemGraph can use the Codex Python SDK with a ChatGPT-backed
 login already established by Codex CLI or an IDE integration. This route does
 not use `OPENAI_API_KEY` and is distinct from OpenAI Platform API billing.
 
@@ -36,13 +36,24 @@ for current account behavior.
 
 ## Run
 
-Prefix a model available to the signed-in Codex account with `codex:`:
+Prefix a model available to the signed-in Codex account with `codex:`. The
+adapter is available across all registered ChemGraph workflows; each workflow's
+own tools, dependencies, and execution requirements still apply:
 
 ```bash
 chemgraph run \
   --model "codex:<codex-model-id>" \
   --workflow single_agent \
   --query "What is the SMILES string for aspirin?"
+```
+
+For planner/executor delegation, select `multi_agent`:
+
+```bash
+chemgraph run \
+  --model "codex:<codex-model-id>" \
+  --workflow multi_agent \
+  --query "Find the SMILES strings for aspirin and caffeine."
 ```
 
 The long-lived supervisor is interactive:
@@ -112,7 +123,11 @@ across model calls so the model can reason from the actual operations performed.
 
 ## Limitations
 
-- Only `single_agent`, `main_agent`, and `deep_agent` are supported.
+- Image inputs are not supported by the Codex adapter. The `ocsr` workflow
+  requires an installed specialist image model (for example, DECIMER); select
+  that specialist in `image_to_smiles` rather than `model="llm"`. If no
+  specialist is installed, the workflow's default LLM image fallback cannot
+  read the image through Codex.
 - `main_agent` must be interactive and can restore its supervisor checkpoint;
   individual Codex calls still start fresh read-only threads.
 - The integration pins `openai-codex==0.144.4`; check the installed ChemGraph
@@ -122,6 +137,5 @@ across model calls so the model can reason from the actual operations performed.
 - ChemGraph does not initiate login. Authenticate before constructing a
   `codex:` model.
 
-Because this integration is experimental, validate model availability and
-account behavior against the current official documentation and your installed
-Codex CLI.
+Model availability and account behavior depend on your ChatGPT account and
+installed Codex CLI; consult the official documentation linked above.
