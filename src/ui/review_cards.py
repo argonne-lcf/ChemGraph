@@ -150,7 +150,7 @@ def review_summary(payload: Any) -> str:
     return f"Review {count} Deep Agent {noun}: " + ", ".join(names)
 
 
-def render_action_card(action: dict, index: int, total: int, key: str) -> None:
+def render_action_card(action: dict, index: int, total: int) -> None:
     """Render one action request as a bordered card.
 
     Parameters
@@ -161,8 +161,6 @@ def render_action_card(action: dict, index: int, total: int, key: str) -> None:
         One-based position among the pending actions.
     total : int
         Total number of pending actions.
-    key : str
-        Unique widget-key prefix for the card's expander.
     """
     info = action_preview(action)
     with st.container(border=True):

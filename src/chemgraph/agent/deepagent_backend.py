@@ -54,6 +54,46 @@ def host_shell_environment() -> dict[str, str]:
     }
 
 
+def update_shell_environment(backend: Any, **values: Optional[str]) -> bool:
+    """Change allowlisted variables seen by *backend*'s later shell commands.
+
+    ``LocalShellBackend`` snapshots its environment when it is built.  Front
+    ends that move ``CHEMGRAPH_LOG_DIR`` between turns (the Streamlit UI
+    gives every query its own artifact directory) call this so commands
+    run by the agent write to the current turn instead of an earlier one.
+
+    Parameters
+    ----------
+    backend : Any
+        Backend returned by :func:`create_host_shell_backend`.
+    **values : str or None
+        Allowlisted variable names; ``None`` removes the variable.
+
+    Returns
+    -------
+    bool
+        ``False`` when *backend* has no mutable shell environment (e.g. not
+        a host-shell backend), ``True`` otherwise.
+
+    Raises
+    ------
+    ValueError
+        For a name outside :data:`DEEPAGENT_ENV_ALLOWLIST`.
+    """
+    for name in values:
+        if name not in DEEPAGENT_ENV_ALLOWLIST:
+            raise ValueError(f"{name} is not an allowlisted shell variable.")
+    env = getattr(backend, "_env", None)
+    if not isinstance(env, dict):
+        return False
+    for name, value in values.items():
+        if value is None:
+            env.pop(name, None)
+        else:
+            env[name] = str(value)
+    return True
+
+
 def create_host_shell_backend(workspace: Optional[str]) -> Any:
     """Create the development-only host-shell backend for *workspace*.
 
@@ -84,4 +124,5 @@ __all__ = [
     "create_host_shell_backend",
     "host_shell_environment",
     "resolve_workspace",
+    "update_shell_environment",
 ]

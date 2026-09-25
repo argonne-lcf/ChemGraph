@@ -142,6 +142,64 @@ def _ensure_chat_log_dir() -> str:
     return chat_log_dir
 
 
+def _set_agent_log_dir(agent: Any, log_dir: Optional[str]) -> None:
+    """Point ``CHEMGRAPH_LOG_DIR`` at *log_dir* for tools and the agent's shell.
+
+    In-process tools read ``os.environ``; a Deep Agent's host shell keeps
+    the environment it was built with, so it is updated explicitly.
+
+    Parameters
+    ----------
+    agent : Any
+        Active agent (may be ``None``).
+    log_dir : str, optional
+        Directory for this run's artifacts.
+    """
+    if not log_dir:
+        return
+    os.environ["CHEMGRAPH_LOG_DIR"] = log_dir
+    backend = getattr(agent, "deepagent_backend", None)
+    if backend is not None:
+        from chemgraph.agent.deepagent_backend import update_shell_environment
+
+        update_shell_environment(backend, CHEMGRAPH_LOG_DIR=log_dir)
+
+
+def _append_attachment_note(resume_value: Any, note: str) -> Any:
+    """Add the attachment note to every text the agent will read on resume.
+
+    Plain answers get the note appended; Deep Agent review answers carry it
+    in each rejection ``message`` (the revision instructions); several
+    pending interrupts (a dict keyed by interrupt id) are handled per value.
+
+    Parameters
+    ----------
+    resume_value : Any
+        Value passed to ``Command(resume=...)``.
+    note : str
+        Text from :func:`_attachment_note`.
+
+    Returns
+    -------
+    Any
+        Resume value with the note attached where a message exists.
+    """
+    if not note:
+        return resume_value
+    if isinstance(resume_value, str):
+        return resume_value + note
+    if isinstance(resume_value, dict) and isinstance(resume_value.get("decisions"), list):
+        decisions = []
+        for decision in resume_value["decisions"]:
+            if isinstance(decision, dict) and decision.get("type") == "reject":
+                decision = {**decision, "message": str(decision.get("message") or "") + note}
+            decisions.append(decision)
+        return {**resume_value, "decisions": decisions}
+    if isinstance(resume_value, dict):
+        return {key: _append_attachment_note(value, note) for key, value in resume_value.items()}
+    return resume_value
+
+
 def _activate_turn_dir(chat_log_dir: Optional[str], turn_index: int) -> Optional[str]:
     """Create and activate a per-query subdirectory for run artifacts.
 
@@ -2251,7 +2309,7 @@ def _render_review_cards(records: list[dict]) -> None:
     nonce = st.session_state.get("review_nonce", 0)
     for position, (record_index, action_index, payload, action) in enumerate(rows, start=1):
         key = f"review_{nonce}_{record_index}_{action_index}"
-        render_action_card(action, position, total, key)
+        render_action_card(action, position, total)
         allowed = allowed_decisions(payload, str(action.get("name", "unknown")))
         if not allowed:
             st.error(
@@ -2710,6 +2768,7 @@ def _handle_query_submission(
     turn_dir = _activate_turn_dir(
         agent.log_dir, len(st.session_state.conversation_history) + 1
     )
+    _set_agent_log_dir(agent, turn_dir)
     try:
         agent._ensure_session(trimmed_query)
     except Exception:
@@ -2903,8 +2962,7 @@ def _resume_pending_interrupts(
         return
     # Resume inside the same turn directory the interrupted query used.
     resume_dir = st.session_state.get("pending_interrupt_turn_dir") or agent.log_dir
-    if resume_dir:
-        os.environ["CHEMGRAPH_LOG_DIR"] = resume_dir
+    _set_agent_log_dir(agent, resume_dir)
 
     MAX_INTERRUPTS = 10
 
@@ -2916,8 +2974,8 @@ def _resume_pending_interrupts(
         st.session_state.pending_interrupt_attachments = (
             st.session_state.get("pending_interrupt_attachments") or []
         ) + reply_names
-    if reply_paths and isinstance(resume_value, str):
-        resume_value = resume_value + _attachment_note(reply_paths)
+    if reply_paths:
+        resume_value = _append_attachment_note(resume_value, _attachment_note(reply_paths))
 
     # Record this exchange
     st.session_state.interrupt_exchanges.append(

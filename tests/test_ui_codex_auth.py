@@ -166,6 +166,9 @@ def _install_login_sdk(monkeypatch, outcome=None, fail_start=None):
         def __exit__(self, *_a):
             return None
 
+        def close(self):
+            state.closed = True
+
         def login_chatgpt_device_code(self):
             if fail_start:
                 raise RuntimeError(fail_start)
@@ -348,3 +351,99 @@ def test_available_models_is_cached_and_survives_sdk_failure(monkeypatch, sdk_an
 
     monkeypatch.setattr(codex_model, "list_models", _boom)
     assert codex_auth.available_models() == []
+
+
+def _install_slow_login_sdk(monkeypatch, *, issue_delay_event, wait_forever=True):
+    state = SimpleNamespace(closed=False, handle=None, waiting=threading.Event())
+
+    class Handle:
+        verification_url = "https://auth.openai.com/codex/device"
+        user_code = "AAAAB-BB6TU"
+
+        def __init__(self, codex):
+            self.codex = codex
+            self.cancelled = False
+
+        def wait(self):
+            state.waiting.set()
+            # Like the SDK: blocks until a notification or the session closes.
+            while not self.codex.closed.is_set():
+                self.codex.closed.wait(0.05)
+            raise RuntimeError("transport closed")
+
+        def cancel(self):
+            self.cancelled = True
+
+    class FakeCodex:
+        def __init__(self, config=None):
+            self.closed = threading.Event()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            self.close()
+
+        def close(self):
+            state.closed = True
+            self.closed.set()
+
+        def login_chatgpt_device_code(self):
+            # Code issuance is slow; closing the session aborts the request.
+            while not issue_delay_event.is_set():
+                if self.closed.wait(0.05):
+                    raise RuntimeError("transport closed")
+            state.handle = Handle(self)
+            return state.handle
+
+    class FakeConfig:
+        def __init__(self, **kwargs):
+            pass
+
+    monkeypatch.setattr(
+        codex_model, "_load_codex_sdk", lambda: (FakeCodex, FakeConfig, object, object)
+    )
+    monkeypatch.setattr(codex_auth, "sdk_available", lambda: True)
+    return state
+
+
+def test_start_timeout_cancels_and_releases_the_session(monkeypatch):
+    issued = threading.Event()
+    state = _install_slow_login_sdk(monkeypatch, issue_delay_event=issued)
+    monkeypatch.setattr(codex_auth, "LOGIN_START_TIMEOUT", 0.2)
+    with pytest.raises(RuntimeError, match="did not issue a sign-in code"):
+        codex_auth.start_device_login()
+    # The pending code request was aborted by closing the session: the
+    # thread never went on to wait for a login nobody will complete.
+    deadline = time.time() + 5
+    while not state.closed and time.time() < deadline:
+        time.sleep(0.02)
+    assert state.closed
+    assert not state.waiting.is_set()
+
+
+def test_code_arriving_after_cancel_is_cancelled_not_awaited(monkeypatch):
+    issued = threading.Event()
+    state = _install_slow_login_sdk(monkeypatch, issue_delay_event=issued)
+    login = codex_auth.DeviceLogin()
+    login.start(timeout=0.1)
+    with login._lock:
+        login.cancelled = True
+        login._codex = None  # cancellation before the session was published
+    issued.set()
+    assert login.wait(timeout=5)
+    assert state.handle is not None and state.handle.cancelled
+    assert not state.waiting.is_set()
+    assert login.cancelled and not login.succeeded and login.code is None
+
+
+def test_cancel_while_waiting_ends_the_thread(monkeypatch):
+    issued = threading.Event()
+    issued.set()
+    state = _install_slow_login_sdk(monkeypatch, issue_delay_event=issued)
+    login = codex_auth.start_device_login()
+    assert state.waiting.wait(5)
+    login.cancel()
+    assert login.wait(timeout=5)
+    assert state.handle.cancelled and state.closed
+    assert login.cancelled and not login.succeeded and login.output == ""

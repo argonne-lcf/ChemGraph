@@ -203,6 +203,32 @@ window.__cg_opt_debug = {
 """
 
 
+def _sampled_indices(total: int, max_frames: int) -> list[int]:
+    """Return evenly spaced frame indices, always keeping the first and last.
+
+    Parameters
+    ----------
+    total : int
+        Number of frames in the trajectory.
+    max_frames : int
+        Target maximum (``0`` or ``None`` keeps every frame).
+
+    Returns
+    -------
+    list[int]
+        Sorted frame indices.
+    """
+    if total <= 0:
+        return []
+    if not max_frames or total <= max_frames:
+        return list(range(total))
+    stride = -(-total // max_frames)  # ceil division
+    indices = list(range(0, total, stride))
+    if indices[-1] != total - 1:
+        indices.append(total - 1)
+    return indices
+
+
 def read_optimization_steps(
     path: str, max_frames: int = DEFAULT_MAX_FRAMES
 ) -> Optional[tuple[list[dict], str]]:
@@ -228,21 +254,16 @@ def read_optimization_steps(
     try:
         from ase.io.trajectory import Trajectory
 
+        # Pick the frame indices first and read only those frames, so the
+        # frame limit also bounds memory and load time for long runs.
         records: list[tuple[int, object]] = []
         with Trajectory(path) as traj:
-            for index, atoms in enumerate(traj):
-                records.append((index, atoms))
+            for index in _sampled_indices(len(traj), max_frames):
+                records.append((index, traj[index]))
     except Exception:
         return None
     if not records:
         return None
-
-    if max_frames and len(records) > max_frames:
-        stride = -(-len(records) // max_frames)  # ceil division
-        kept = records[::stride]
-        if kept[-1][0] != records[-1][0]:
-            kept.append(records[-1])
-        records = kept
 
     steps: list[dict] = []
     xyz_blocks: list[str] = []

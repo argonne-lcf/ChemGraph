@@ -215,20 +215,24 @@ class DeviceLogin:
     The thread owns the SDK session for the whole attempt, because the
     login handle is bound to it: it starts the login, publishes the
     verification URL and one-time code, then blocks on the SDK's
-    completion notification.
+    completion notification.  :meth:`cancel` works at every stage: before
+    the session exists, while the code is being requested, and while
+    waiting for the user.  It cancels the login and closes the session,
+    which wakes the blocked SDK call, so no runtime or thread is left
+    behind.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._issued = threading.Event()
         self._done = threading.Event()
+        self._codex: Any = None
         self._handle: Any = None
         self.url: Optional[str] = None
         self.code: Optional[str] = None
         self.error: Optional[str] = None
         self.success: Optional[bool] = None
         self.cancelled = False
-        self.started_at = time.time()
         self._thread: Optional[threading.Thread] = None
 
     # -- background thread -------------------------------------------------
@@ -237,11 +241,23 @@ class DeviceLogin:
 
         try:
             with codex_session() as codex:
+                with self._lock:
+                    if self.cancelled:
+                        return
+                    self._codex = codex
                 handle = codex.login_chatgpt_device_code()
                 with self._lock:
                     self._handle = handle
-                    self.url = str(handle.verification_url)
-                    self.code = str(handle.user_code)
+                    cancelled = self.cancelled
+                    if not cancelled:
+                        self.url = str(handle.verification_url)
+                        self.code = str(handle.user_code)
+                if cancelled:
+                    # Cancelled while the code was being issued (e.g. the
+                    # start timeout elapsed): do not wait for a login
+                    # nobody will complete.
+                    _quiet(handle.cancel)
+                    return
                 self._issued.set()
                 result = _model_dump(handle.wait())
             success = bool(result.get("success")) if isinstance(result, dict) else False
@@ -250,20 +266,25 @@ class DeviceLogin:
                 self.success = success and not self.cancelled
                 if not success:
                     self.error = str(error or "Codex login did not complete.")
-        except Exception as exc:  # SDK missing / app-server failures
+        except Exception as exc:  # SDK missing / app-server failures / closed
             with self._lock:
                 self.success = False
-                self.error = str(exc) or type(exc).__name__
+                if not self.cancelled:
+                    self.error = str(exc) or type(exc).__name__
         finally:
+            with self._lock:
+                if self.success is None:
+                    self.success = False
+                self._codex = None
             invalidate_status_cache()
             self._issued.set()
             self._done.set()
 
-    def start(self, timeout: float = LOGIN_START_TIMEOUT) -> "DeviceLogin":
+    def start(self, timeout: Optional[float] = None) -> "DeviceLogin":
         """Start the attempt and wait until a code is issued (or it fails)."""
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        self._issued.wait(timeout)
+        self._issued.wait(LOGIN_START_TIMEOUT if timeout is None else timeout)
         return self
 
     # -- state -------------------------------------------------------------
@@ -285,15 +306,27 @@ class DeviceLogin:
         return self._done.wait(timeout)
 
     def cancel(self) -> None:
-        """Cancel the attempt if it is still waiting for the code."""
+        """Cancel the attempt and release its SDK session."""
         with self._lock:
             self.cancelled = True
-            handle = self._handle
-        if handle is not None and not self.finished:
-            try:
-                handle.cancel()
-            except Exception:
-                pass
+            handle, codex = self._handle, self._codex
+        if self.finished:
+            return
+        if handle is not None:
+            _quiet(handle.cancel)
+        close = getattr(codex, "close", None)
+        if close is not None:
+            # Closing the session terminates the runtime; the SDK then fails
+            # any blocked request or login wait, so the thread exits.
+            _quiet(close)
+
+
+def _quiet(fn) -> None:
+    """Call *fn*, ignoring failures (best-effort cleanup)."""
+    try:
+        fn()
+    except Exception:
+        pass
 
 
 def start_device_login() -> DeviceLogin:
@@ -311,8 +344,7 @@ def start_device_login() -> DeviceLogin:
         )
     login = DeviceLogin().start()
     if login.code is None or login.url is None:
-        if not login.finished:
-            login.cancel()
+        login.cancel()
         raise RuntimeError(
             "Codex did not issue a sign-in code"
             + (f": {login.error}" if login.error else ".")

@@ -117,3 +117,16 @@ def test_shared_backend_helper_matches_cli_defaults(tmp_path, monkeypatch):
     assert resolve_workspace("") == tmp_path.resolve()
     backend = create_host_shell_backend(None)
     assert str(backend.cwd) == str(tmp_path.resolve())
+
+
+def test_shell_environment_follows_the_current_turn_directory(tmp_path, monkeypatch):
+    from chemgraph.agent.deepagent_backend import update_shell_environment
+
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path / "chat"))
+    backend = create_host_shell_backend(str(tmp_path))
+    turn = tmp_path / "chat" / "turn_002_abcd"
+    assert update_shell_environment(backend, CHEMGRAPH_LOG_DIR=str(turn)) is True
+    assert backend.execute("echo $CHEMGRAPH_LOG_DIR").output.strip() == str(turn)
+    with pytest.raises(ValueError, match="not an allowlisted"):
+        update_shell_environment(backend, OPENAI_API_KEY="sk-x")
+    assert update_shell_environment(object(), CHEMGRAPH_LOG_DIR="x") is False

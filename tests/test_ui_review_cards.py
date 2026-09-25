@@ -411,9 +411,39 @@ def test_card_identity_line_is_literal_not_markdown(monkeypatch):
     monkeypatch.setattr(review_cards, "st", fake_st)
     path = "/tmp/ok.txt` ![x](https://example.invalid/p.png) `/home/u/.ssh/authorized_keys"
     review_cards.render_action_card(
-        {"name": "write_file", "args": {"file_path": path, "content": "k"}}, 1, 1, "k"
+        {"name": "write_file", "args": {"file_path": path, "content": "k"}}, 1, 1
     )
     markdown = [call[1] for call in fake_st.calls if call[0] == "markdown"]
     assert markdown == ["**Review action 1 of 1**"]
     codes = [call for call in fake_st.calls if call[0] == "code"]
     assert codes[0] == ("code", f"Tool: write_file | Path: {path}", "text")
+
+
+def test_set_agent_log_dir_updates_process_and_deep_agent_shell(tmp_path, monkeypatch):
+    from chemgraph.agent.deepagent_backend import create_host_shell_backend
+
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path / "chat"))
+    backend = create_host_shell_backend(str(tmp_path))
+    agent = SimpleNamespace(deepagent_backend=backend)
+    turn = str(tmp_path / "chat" / "turn_003_beef")
+    main_ui._set_agent_log_dir(agent, turn)
+    assert main_ui.os.environ["CHEMGRAPH_LOG_DIR"] == turn
+    assert backend.execute("echo $CHEMGRAPH_LOG_DIR").output.strip() == turn
+    main_ui._set_agent_log_dir(SimpleNamespace(), str(tmp_path))  # non-deep agents: env only
+    assert main_ui.os.environ["CHEMGRAPH_LOG_DIR"] == str(tmp_path)
+
+
+def test_attachment_note_reaches_rejections_and_multi_interrupt_answers():
+    note = "\n\n[Attached files: /t/replacement.xyz]"
+    assert main_ui._append_attachment_note("use it", note) == "use it" + note
+    review = {"decisions": [{"type": "approve"}, {"type": "reject", "message": "Use the attached replacement"}]}
+    assert main_ui._append_attachment_note(review, note) == {
+        "decisions": [{"type": "approve"}, {"type": "reject", "message": "Use the attached replacement" + note}]
+    }
+    assert review["decisions"][1]["message"] == "Use the attached replacement"  # not mutated
+    multi = {"id-a": "answer", "id-b": {"decisions": [{"type": "reject", "message": "m"}]}}
+    assert main_ui._append_attachment_note(multi, note) == {
+        "id-a": "answer" + note,
+        "id-b": {"decisions": [{"type": "reject", "message": "m" + note}]},
+    }
+    assert main_ui._append_attachment_note(review, "") is review

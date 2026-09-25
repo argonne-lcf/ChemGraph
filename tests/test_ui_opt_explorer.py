@@ -98,3 +98,35 @@ def test_build_html_clamps_selected_index():
     assert data["selected_index"] == 0
     assert data["interval_ms"] == 100
     assert data["autoplay"] is True
+
+
+def test_sampled_indices_keep_first_and_last():
+    assert opt_explorer._sampled_indices(0, 10) == []
+    assert opt_explorer._sampled_indices(5, 10) == [0, 1, 2, 3, 4]
+    assert opt_explorer._sampled_indices(10, 3) == [0, 4, 8, 9]
+    assert opt_explorer._sampled_indices(7, 0) == list(range(7))
+
+
+def test_only_sampled_frames_are_loaded(tmp_path, monkeypatch):
+    from ase import Atoms
+    from ase.calculators.singlepoint import SinglePointCalculator
+    from ase.io.trajectory import Trajectory, TrajectoryReader
+
+    path = tmp_path / "long.traj"
+    with Trajectory(str(path), "w") as traj:
+        for i in range(50):
+            atoms = Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.7 + 0.001 * i]])
+            atoms.calc = SinglePointCalculator(atoms, energy=-float(i))
+            traj.write(atoms)
+
+    loaded = []
+    original = TrajectoryReader.__getitem__
+
+    def counting(self, index):
+        loaded.append(index)
+        return original(self, index)
+
+    monkeypatch.setattr(TrajectoryReader, "__getitem__", counting)
+    steps, _frames = opt_explorer.read_optimization_steps(str(path), max_frames=5)
+    assert [s["step"] for s in steps] == opt_explorer._sampled_indices(50, 5)
+    assert sorted(loaded) == [s["step"] for s in steps]
