@@ -27,7 +27,7 @@ __all__ = [
 
 @tool
 def run_graspa(graspa_input: graspa_input_schema):
-    """Run a gRASPA simulation using the core engine and return the uptakes.
+    """Run single-component H2O, CO2, or N2 adsorption with gRASPA-SYCL.
 
     This tool acts as a wrapper for the agentic workflow.
 

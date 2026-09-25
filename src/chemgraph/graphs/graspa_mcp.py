@@ -4,12 +4,14 @@ from functools import partial
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Send
 
 from chemgraph.utils.logging_config import setup_logger
 from chemgraph.state.graspa_state import (
     ExecutorState,
+    ExecutorOutput,
     PlannerState,
     PlannerResponse,
 )
@@ -60,9 +62,9 @@ def planner_agent(
 
     structured_llm = llm.with_structured_output(PlannerResponse)
     response_obj = structured_llm.invoke(messages)
-    print(f"PLANNER: {response_obj.model_dump_json()}")
+    logger.debug("Planner response: %s", response_obj.model_dump_json())
     return {
-        "messages": [response_obj.thought_process],
+        "messages": [AIMessage(content=response_obj.thought_process)],
         "next_step": response_obj.next_step,
         "tasks": response_obj.tasks if response_obj.tasks else [],
     }
@@ -90,7 +92,9 @@ def unified_planner_router(state: PlannerState) -> Union[str, list[Send]]:
                 "executor_subgraph",
                 {
                     "executor_id": f"worker_{getattr(t, 'task_index', i + 1)}",
-                    "messages": [getattr(t, 'prompt')],
+                    "messages": list(state["messages"]) + [
+                        HumanMessage(content=f"Your assigned task: {getattr(t, 'prompt')}")
+                    ],
                 },
             )
             for i, t in enumerate(tasks)
@@ -166,7 +170,7 @@ def route_executor(state: ExecutorState):
     return "done"
 
 
-def format_executor_output(state: ExecutorState) -> PlannerState:
+def format_executor_output(state: ExecutorState) -> ExecutorOutput:
     """Convert local executor state into a global planner update.
 
     Parameters
@@ -206,7 +210,7 @@ def construct_executor_subgraph(llm: ChatOpenAI, tools: list, system_prompt: str
     CompiledStateGraph
         Compiled executor subgraph.
     """
-    workflow = StateGraph(ExecutorState)
+    workflow = StateGraph(ExecutorState, output_schema=ExecutorOutput)
     workflow.add_node(
         "executor_agent",
         partial(executor_model_node, llm=llm, system_prompt=system_prompt, tools=tools),
@@ -287,7 +291,7 @@ def route_analyst(state: PlannerState):
     if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
         return "analyst_tools"
 
-    # If the Analyst is done -> Go back to Planner (who will then trigger FINISH)
+    # The parent graph maps this completion route to END.
     return "Planner"
 
 
@@ -322,6 +326,8 @@ def construct_graspa_mcp_graph(
     CompiledStateGraph
         Compiled gRASPA MCP graph.
     """
+    executor_tools = executor_tools or []
+    analysis_tools = analysis_tools or []
     if checkpointer is _DEFAULT_CHECKPOINTER:
         checkpointer = MemorySaver()
 

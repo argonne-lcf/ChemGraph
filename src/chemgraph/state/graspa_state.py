@@ -1,3 +1,5 @@
+from operator import add
+
 from typing import TypedDict, Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -30,7 +32,12 @@ class ExecutorState(TypedDict):
     next_worker_instruction: str
 
 
-class PlannerState(TypedDict):
+class ExecutorOutput(TypedDict):
+    executor_results: Annotated[list[str], add]
+    executor_logs: Annotated[dict[str, list], merge_dicts]
+
+
+class PlannerState(ExecutorOutput):
     messages: Annotated[list, add_messages]
     next_step: Literal[
         "batch_orchestrator",
@@ -39,8 +46,6 @@ class PlannerState(TypedDict):
         "FINISH",
     ]
     tasks: list[dict[str, Any]]
-    executor_results: Annotated[list, add_messages]
-    executor_logs: Annotated[dict[str, list], merge_dicts]
 
 
 class ExecutorTask(BaseModel):
@@ -77,6 +82,7 @@ class PlannerResponse(BaseModel):
         "batch_orchestrator",
         "executor_subgraph",
         "insight_analyst",
+        "FINISH",
     ] = Field(description="The next node to activate in the workflow.")
     tasks: list[ExecutorTask] = Field(
         description="List of task to assign for executor",

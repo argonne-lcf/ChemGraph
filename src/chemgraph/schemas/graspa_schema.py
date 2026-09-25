@@ -1,6 +1,5 @@
-"""Validated inputs for the supported H2O gRASPA-SYCL workflow."""
+"""Validated inputs for single-component H2O, CO2, and N2 gRASPA-SYCL runs."""
 
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -28,12 +27,25 @@ class _GraspaOptions(BaseModel):
         min_length=1,
         description="Stdout filename inside the unique simulation directory.",
     )
+    output_directory: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Worker-side root for unique run directories; defaults to graspa_runs under CHEMGRAPH_LOG_DIR or cwd.",
+    )
+    timeout_seconds: float | None = Field(
+        default=None,
+        gt=0,
+        allow_inf_nan=False,
+        description="Optional simulation time limit in seconds; no limit by default.",
+    )
     n_cycles: int = Field(
         default=10000,
         gt=0,
         description="Monte Carlo cycles per initialization/production phase.",
     )
-    adsorbate: Literal["H2O"] = Field(description="Supported adsorbate: H2O.")
+    adsorbate: Literal["H2O", "CO2", "N2"] = Field(
+        description="Single adsorbate for this run: H2O, CO2, or N2. Mixtures are not supported."
+    )
 
     @field_validator("output_result_file")
     @classmethod
@@ -58,23 +70,6 @@ class _GraspaOptions(BaseModel):
             )
         return value
 
-
-class graspa_input_schema(_GraspaOptions, SimulationCondition):
-    input_structure_file: str = Field(
-        min_length=1, description="Path to the input CIF file."
-    )
-    output_directory: str | None = Field(
-        default=None,
-        min_length=1,
-        description="Worker-side root for unique run directories; defaults to graspa_runs under CHEMGRAPH_LOG_DIR or cwd.",
-    )
-    timeout_seconds: float | None = Field(
-        default=None,
-        gt=0,
-        allow_inf_nan=False,
-        description="Optional simulation time limit in seconds; no limit by default.",
-    )
-
     @model_validator(mode="after")
     def unambiguous_output_root(self):
         if self.output_directory is not None and Path(
@@ -84,6 +79,12 @@ class graspa_input_schema(_GraspaOptions, SimulationCondition):
                 "Use output_directory with a bare output_result_file filename"
             )
         return self
+
+
+class graspa_input_schema(_GraspaOptions, SimulationCondition):
+    input_structure_file: str = Field(
+        min_length=1, description="Path to the input CIF file."
+    )
 
 
 class graspa_input_schema_ensemble(_GraspaOptions):
@@ -101,20 +102,12 @@ class graspa_input_schema_ensemble(_GraspaOptions):
         min_length=1,
         description="Temperature/pressure conditions for every structure.",
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def reject_deferred_controls(cls, values):
-        if isinstance(values, Mapping):
-            unsupported = {
-                "output_directory", "timeout_seconds", "discovery_timeout_seconds"
-            }.intersection(values)
-            if unsupported:
-                raise ValueError(
-                    f"Unsupported ensemble controls: {', '.join(sorted(unsupported))}. "
-                    "Omit these fields until ensemble support is implemented."
-                )
-        return values
+    discovery_timeout_seconds: float | None = Field(
+        default=30.0,
+        gt=0,
+        allow_inf_nan=False,
+        description="Remote directory discovery timeout, including submission and queue time; null disables it.",
+    )
 
     @model_validator(mode="after")
     def one_input_source(self):

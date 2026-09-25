@@ -1,4 +1,4 @@
-"""Prepare, execute, and parse isolated H2O gRASPA-SYCL simulations."""
+"""Prepare, execute, and parse single-component gRASPA-SYCL simulations."""
 
 from __future__ import annotations
 
@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 TEMPLATE_FILES = (
     "simulation.input",
     "H2O.def",
+    "CO2.def",
+    "N2.def",
     "force_field.def",
     "force_field_mixing_rules.def",
     "pseudo_atoms.def",
@@ -108,7 +110,7 @@ def _read_graspa_sycl_output(
 
 
 def mock_graspa(params: graspa_input_schema) -> dict:
-    """Return clearly marked deterministic H2O test data, without running gRASPA."""
+    """Return clearly marked deterministic test data, without running gRASPA."""
     return {
         "status": "success",
         "is_mock": True,

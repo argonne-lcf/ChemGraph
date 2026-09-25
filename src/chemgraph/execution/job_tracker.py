@@ -248,8 +248,34 @@ class JobTracker:
         # on the ComputeFutures.  Typically takes ~1-2 s; we cap at 3 s
         # so the MCP tool response isn't delayed excessively.
         self._wait_for_globus_task_ids(tracked, timeout=3.0)
+        # Submission failures have no remote task ID to recover after a
+        # restart. Persist terminal futures now, without requiring a poll.
+        with self._lock:
+            for task in tracked:
+                if task.result is None and task.future.done():
+                    self._cache_future_result(task, post_fn)
         self._save()
         return batch_id
+
+    @staticmethod
+    def _cache_future_result(task: TrackedTask, post_fn: Optional[Callable]) -> None:
+        """Cache a terminal live future using the batch's result contract."""
+        try:
+            raw = task.future.result(timeout=0)
+            if post_fn is not None:
+                task.result = post_fn(task.meta, raw)
+            elif isinstance(raw, dict):
+                task.result = {**task.meta, **raw}
+                task.result.setdefault("status", "success")
+            else:
+                task.result = {**task.meta, "result": raw, "status": "success"}
+        except Exception as exc:
+            task.result = {
+                **task.meta,
+                "status": "failure",
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+            }
 
     def _wait_for_globus_task_ids(
         self, tasks: list[TrackedTask], timeout: float = 3.0
@@ -339,27 +365,7 @@ class JobTracker:
                 if t.future is not None and t.future.done():
                     task_done = True
                     if t.result is None:
-                        try:
-                            raw = t.future.result(timeout=0)
-                            if batch.post_fn is not None:
-                                t.result = batch.post_fn(t.meta, raw)
-                            elif isinstance(raw, dict):
-                                merged = {**t.meta, **raw}
-                                merged.setdefault("status", "success")
-                                t.result = merged
-                            else:
-                                t.result = {
-                                    **t.meta,
-                                    "result": raw,
-                                    "status": "success",
-                                }
-                        except Exception as e:
-                            t.result = {
-                                **t.meta,
-                                "status": "failure",
-                                "error_type": type(e).__name__,
-                                "message": str(e),
-                            }
+                        self._cache_future_result(t, batch.post_fn)
                         dirty = True
 
                 # --- loaded-from-disk path (no future, use Globus client) ---

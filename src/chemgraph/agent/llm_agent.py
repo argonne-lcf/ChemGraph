@@ -673,10 +673,18 @@ class ChemGraph:
                 system_prompt=self.system_prompt,
             )
         elif self.workflow_type == "graspa_mcp":
+            graspa_prompts = {
+                name: value for name, value, default in (
+                    ("planner_prompt", prompts.planner, default_planner_prompt),
+                    ("executor_prompt", prompts.executor, default_executor_prompt),
+                    ("analyst_prompt", prompts.aggregator, default_aggregator_prompt),
+                ) if value != default
+            }
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm=llm,
                 executor_tools=self.tools,
                 analysis_tools=self.data_tools,
+                **graspa_prompts,
             )
         elif self.workflow_type == "rag_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](

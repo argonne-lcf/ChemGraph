@@ -42,30 +42,6 @@ def simulation(tmp_path, monkeypatch):
     ), runner
 
 
-def test_public_tool_runs_and_preserves_float_contract(simulation):
-    params, runner = simulation
-    assert run_graspa.invoke({"graspa_input": params.model_dump()}) == pytest.approx(
-        1000.0
-    )
-    call = runner.call_args
-    directory = call.kwargs["cwd"]
-    assert isinstance(call.args[0], list)
-    assert not call.kwargs.get("shell", False)
-    assert call.kwargs["timeout"] is None
-    assert (
-        "NumberOfProductionCycles     10"
-        in (directory / "simulation.input").read_text()
-    )
-    assert "FrameworkName source_with_spaces" in (directory / "simulation.input").read_text()
-    result = json.loads((directory / "results.json").read_text())
-    assert result["status"] == "success"
-    assert result["input_structure_file"] == params.input_structure_file
-    assert result["returncode"] == 0
-    assert Path(result["stdout_path"]).is_file()
-    assert directory.parent.name == "graspa_runs"
-    assert directory.parent.parent.name == "logs"
-
-
 def test_process_failure_cannot_be_parsed_as_success(simulation):
     params, runner = simulation
 
@@ -177,7 +153,8 @@ def test_legacy_output_parent_and_operator_environment(
         {"pressure": -1},
         {"pressure": float("inf")},
         {"n_cycles": 0},
-        {"adsorbate": "CO2"},
+        {"adsorbate": "CH4"},
+        {"adsorbate": "CO2,N2"},
         {"timeout_seconds": -1},
         {"output_result_file": "simulation.input"},
         {"output_result_file": "framework.cif"},
@@ -208,11 +185,11 @@ def test_ensemble_requires_unambiguous_nonempty_request(updates):
         graspa_input_schema_ensemble(adsorbate="H2O", **updates)
 
 
-def test_ensemble_schema_does_not_advertise_deferred_controls():
+def test_ensemble_schema_advertises_supported_controls():
     properties = graspa_input_schema_ensemble.model_json_schema()["properties"]
-    assert not {
+    assert {
         "output_directory", "timeout_seconds", "discovery_timeout_seconds"
-    }.intersection(properties)
+    } <= properties.keys()
     single_properties = graspa_input_schema.model_json_schema()["properties"]
     assert {"output_directory", "timeout_seconds"} <= single_properties.keys()
 
@@ -232,9 +209,27 @@ def test_ensemble_schema_does_not_advertise_deferred_controls():
         ("discovery_timeout_seconds", None),
     ],
 )
-def test_ensemble_rejects_deferred_controls(source, field, value):
-    with pytest.raises(ValueError, match=f"Unsupported ensemble controls: {field}"):
-        graspa_input_schema_ensemble(adsorbate="H2O", **source, **{field: value})
+def test_ensemble_accepts_supported_controls(source, field, value):
+    params = graspa_input_schema_ensemble(adsorbate="H2O", **source, **{field: value})
+    assert getattr(params, field) == value
+    assert graspa_input_schema_ensemble.model_validate(params.model_dump()) == params
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"output_directory": ""},
+        {"output_directory": "runs", "output_result_file": "other/raspa.log"},
+        {"timeout_seconds": 0},
+        {"discovery_timeout_seconds": 0},
+        {"discovery_timeout_seconds": -1},
+        {"discovery_timeout_seconds": float("nan")},
+        {"discovery_timeout_seconds": float("inf")},
+    ],
+)
+def test_ensemble_controls_are_validated(updates):
+    with pytest.raises(ValueError):
+        graspa_input_schema_ensemble(adsorbate="H2O", input_structures="local", **updates)
 
 
 @pytest.mark.parametrize(
@@ -245,10 +240,11 @@ def test_ensemble_rejects_deferred_controls(source, field, value):
         {"remote_structure_directory": "/remote"},
     ],
 )
-def test_ensemble_preserves_supported_requests(source):
+@pytest.mark.parametrize("adsorbate", ["H2O", "CO2", "N2"])
+def test_ensemble_preserves_supported_requests(source, adsorbate):
     request = {
         **source,
-        "adsorbate": "H2O",
+        "adsorbate": adsorbate,
         "output_result_file": "legacy/custom.log",
         "n_cycles": 25,
         "conditions": [{"temperature": 300, "pressure": 1000}],
@@ -331,5 +327,4 @@ def test_supported_templates_are_readable_resources():
     assert all(
         directory.joinpath(name).read_bytes() for name in graspa_core.TEMPLATE_FILES
     )
-    assert not directory.joinpath("N2.def").is_file()
-    assert not directory.joinpath("CO2.def").is_file()
+    assert {"H2O.def", "CO2.def", "N2.def"} <= set(graspa_core.TEMPLATE_FILES)

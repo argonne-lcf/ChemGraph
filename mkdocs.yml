@@ -56,7 +56,6 @@ nav:
       - Workflows: workflows.md
       - Tool and agent registries: registries.md
       - Calculators: calculators.md
-      - gRASPA-SYCL: graspa.md
       - Python API: python_api.md
       - Deep Agent Skills: skills.md
       - PBS Jobs with Skills: pbs_jobs_with_skills.md

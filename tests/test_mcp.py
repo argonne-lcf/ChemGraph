@@ -83,6 +83,46 @@ def test_schema_fanout_tool_advertises_batch_result_signature(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("awaitable", [False, True])
+@pytest.mark.parametrize("with_metadata", [False, True])
+async def test_schema_fanout_registered_expanders_and_partial_submission(awaitable, with_metadata):
+    local_mcp = CGFastMCP(name="fanout compatibility")
+    local_mcp._backend = _ImmediateBackend()
+
+    def expand(params: dict) -> list[dict]:
+        return [{"value": value} for value in params["values"]]
+
+    async def expand_async(params: dict) -> list[dict]:
+        return expand(params)
+
+    def metadata(item):
+        return {"task_id": f"item-{item['value']}", "value": item["value"]}
+
+    def hook(task):
+        if task.kwargs["item"]["value"] == 2:
+            raise RuntimeError("cannot prepare second task")
+        return task
+
+    local_mcp.set_pre_submit_hook(hook)
+    local_mcp.schema_fanout_tool(
+        name="fanout", worker=_fanout_worker,
+        metadata=metadata if with_metadata else None,
+    )(expand_async if awaitable else expand)
+
+    async with Client(local_mcp) as client:
+        result = (await client.call_tool("fanout", {"params": {"values": [1, 2, 3]}})).data
+    assert result["status"] == "completed"
+    assert [row["status"] for row in result["results"]] == ["success", "failure", "success"]
+    assert [row["index"] for row in result["results"]] == [0, 1, 2]
+    assert len(local_mcp._backend.submitted) == 2
+    if with_metadata:
+        assert [row["task_id"] for row in result["results"]] == ["item-1", "item-2", "item-3"]
+        assert local_mcp._backend.submitted[0].task_id == "item-1"
+    else:
+        assert "task_id" not in result["results"][0]
+
+
+@pytest.mark.asyncio
 async def test_cg_fastmcp_preserves_sdk_schema_and_backend_contract():
     """CGFastMCP stays on the SDK server while FastMCP Client drives it."""
     local_mcp = CGFastMCP(name="test")
@@ -577,7 +617,7 @@ async def test_aggregate_and_rank(tmp_path):
         text = res_rank.content[0].text
         assert "Analysis Complete" in text
         assert "mof_1.cif" in text
-        assert "mof_2.cif" in text  # Should find both due to tolerance
+        assert "mof_2.cif" not in text  # Only the exact requested condition is ranked
 
 
 # ---------------------------------------------------------------------------

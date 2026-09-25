@@ -36,6 +36,7 @@ import csv
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -188,18 +189,16 @@ def build_graspa_job(
 ) -> dict:
     """Build the job dict consumed by ``_graspa_worker`` for one CIF.
 
-    gRASPA is HPC-only (the SYCL binary path is baked into
-    ``chemgraph.tools.graspa_core``) and has no inline transport -- the
-    worker reads ``input_structure_file`` from a shared/remote filesystem.
+    gRASPA requires a worker-configured SYCL executable and has no inline
+    transport. The worker reads ``input_structure_file`` from its filesystem.
     """
     cif_path = Path(cif_path)
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
     return {
+        "_job_id": uuid.uuid4().hex,
         "_structure_name": cif_path.stem,
         "input_structure_file": str(cif_path),
-        "output_result_file": str(
-            (Path(output_dir) / f"{cif_path.stem}_raspa.log").resolve()
-        ),
+        "output_directory": str(output_dir),
+        "output_result_file": "raspa.log",
         "adsorbate": adsorbate,
         "temperature": temperature,
         "pressure": pressure,
@@ -277,8 +276,8 @@ def _make_worker_with_full_output():
     The wrapper handles both the ``thermo`` (MACE) and ``ase`` workloads --
     it branches on ``job["_workload"]`` and picks the matching worker and
     output-file key (MACE uses ``output_result_file``; ASE uses
-    ``output_results_file``). gRASPA never takes this path (it is HPC-only
-    with no inline transport).
+    ``output_results_file``). gRASPA returns parsed records directly and has
+    no inline structure transport.
 
     For inline transports (Globus Compute) the worker writes its results to a
     path on the *remote* worker that the caller cannot read. Running the
@@ -472,7 +471,7 @@ def submit_and_collect(
     ``workload="thermo"`` (default) runs the original 5-molecule MACE screen.
     ``workload="ase"`` runs the same molecules through the general ASE server
     with a selectable ``calculator``. ``workload="graspa"`` runs GCMC over the
-    CIF paths in ``items`` (HPC-only). ``molecule_names`` is retained for
+    CIF paths in ``items`` (worker-readable). ``molecule_names`` is retained for
     backward compatibility and used as ``items`` for the thermo/ase workloads.
 
     Returns a list of per-item property dicts in submission order.
@@ -488,13 +487,14 @@ def submit_and_collect(
     if inline and not spec["inline_ok"]:
         raise ValueError(
             f"Workload {workload!r} does not support inline transport "
-            f"(it is shared-filesystem / HPC only)."
+            f"(stage files on the worker filesystem first)."
         )
 
     if items is None:
         items = molecule_names or MOLECULE_NAMES
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if workload != "graspa":
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     jobs = _build_jobs(
         workload,
@@ -518,7 +518,7 @@ def submit_and_collect(
     labels = [_item_label(workload, it) for it in items]
     tasks = [
         TaskSpec(
-            task_id=f"demo-{workload}-{label}",
+            task_id=job.get("_job_id", f"demo-{workload}-{label}"),
             task_type="python",
             callable=worker,
             kwargs={"job": job},
@@ -684,25 +684,33 @@ def agent_prompt_ase(device: str = "cpu", calculator: str = "mace_mp") -> str:
 
 
 def agent_prompt_graspa(
-    cif_paths: list[str],
+    cif_paths: list[str] | None = None,
     *,
+    remote_directory: str | None = None,
+    output_directory: str = "graspa_runs",
     adsorbate: str = "H2O",
     temperature: float = 298.15,
     pressure: float = 101325.0,
 ) -> str:
     """Prompt for the gRASPA (``run_graspa_ensemble``) agent demos.
 
-    gRASPA is HPC-only; ``cif_paths`` should point at CIFs reachable on the
-    remote (shared or pre-staged) filesystem.
+    Lists require a shared filesystem; remote mode discovers an entire
+    pre-staged directory. Output roots resolve on workers.
     """
-    listing = "\n".join(f"  - {p}" for p in cif_paths)
+    if bool(cif_paths) == bool(remote_directory):
+        raise ValueError("Provide CIF paths or a remote directory, exclusively")
+    source = (
+        f"remote_structure_directory={json.dumps(remote_directory)} (all CIFs in this directory)"
+        if remote_directory else f"input_structures={json.dumps(cif_paths)}"
+    )
     return (
-        f"Using the gRASPA tool, run GCMC adsorption for adsorbate="
+        f"Using run_graspa_ensemble, run GCMC adsorption for adsorbate="
         f"'{adsorbate}' at temperature={temperature} K and pressure="
-        f"{pressure} Pa on the following CIF structures:\n"
-        f"{listing}\n"
+        f"{pressure} Pa with {source}. "
+        f"Set output_directory={json.dumps(output_directory)}. "
+        f"If submitted, poll check_job_status and retrieve get_job_results. "
         f"After the runs complete, report a markdown table with columns: "
-        f"structure, uptake (mol/kg). Report tool errors exactly as they occur."
+        f"structure, uptake (mol/kg), returned artifact paths. Report tool errors exactly as they occur."
     )
 
 
@@ -719,9 +727,8 @@ def prompt_for(workload: str, *, device: str = "cpu", calculator: str = "mace_mp
 
 # ── Shared CLI helpers for the demo_*_direct.py / demo_*_agent.py wrappers ──
 
-# gRASPA needs the SYCL binary baked into chemgraph.tools.graspa_core, so it
-# only runs on HPC-capable backends.
-GRASPA_HPC_BACKENDS = frozenset({"parsl", "ensemble_launcher", "globus_compute"})
+# Any backend can run gRASPA with the executable/runtime installed on workers.
+GRASPA_BACKENDS = frozenset({"local", "parsl", "ensemble_launcher", "globus_compute"})
 
 # Which MCP server module + default port + single-call tool each workload uses.
 # The agent demos spawn these over stdio (the port is informational for stdio).
@@ -779,7 +786,7 @@ def add_workload_args(parser) -> None:
     parser.add_argument(
         "--adsorbate",
         default="H2O",
-        help="gRASPA adsorbate for --workload graspa (only 'H2O' supported).",
+        help="gRASPA adsorbate for --workload graspa (H2O, CO2, or N2; one gas per run).",
     )
     parser.add_argument(
         "--graspa-cifs",
@@ -790,13 +797,12 @@ def add_workload_args(parser) -> None:
 
 
 def abort_if_graspa_unsupported(workload: str, backend_name: str) -> None:
-    """Exit non-zero when gRASPA is requested on a non-HPC backend."""
-    if workload == "graspa" and backend_name not in GRASPA_HPC_BACKENDS:
+    """Exit non-zero when gRASPA is requested on an unsupported backend."""
+    if workload == "graspa" and backend_name not in GRASPA_BACKENDS:
         print(
-            "ERROR: gRASPA requires the HPC SYCL binary (see "
-            "chemgraph.tools.graspa_core) and cannot run on the "
+            "ERROR: gRASPA cannot run on the "
             f"{backend_name!r} backend. Use one of: "
-            f"{sorted(GRASPA_HPC_BACKENDS)} on HPC."
+            f"{sorted(GRASPA_BACKENDS)} with a worker-configured SYCL executable."
         )
         sys.exit(2)
 

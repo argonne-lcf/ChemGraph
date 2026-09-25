@@ -43,7 +43,9 @@ module load frameworks
 source /path/to/venv/bin/activate
 
 export COMPUTE_SYSTEM=aurora  # or polaris
+export CHEMGRAPH_EXECUTION_BACKEND=parsl
 export CHEMGRAPH_LOG_DIR="$PWD/chemgraph_mcp_logs"
+export CHEMGRAPH_GRASPA_EXECUTABLE=/path/to/graspa-sycl/bin/sycl.out
 export http_proxy="proxy.alcf.anl.gov:3128"
 export https_proxy="proxy.alcf.anl.gov:3128"
 export NO_PROXY=127.0.0.1,localhost,::1
@@ -52,7 +54,7 @@ export NO_PROXY=127.0.0.1,localhost,::1
 Start one of the Parsl-backed MCP servers. For gRASPA:
 
 ```bash
-python -m chemgraph.mcp.graspa_mcp_parsl \
+python -m chemgraph.mcp.graspa_mcp_hpc \
   --transport streamable_http \
   --host 0.0.0.0 \
   --port 9001
@@ -116,6 +118,12 @@ python run_mcp_parsl.py
 ```
 
 The example client connects to `http://127.0.0.1:9001/mcp/`.
+It requests H2O adsorption for the shared `structures/` CIF directory with
+`output_directory="water-screening"`. Edit that input directory for your
+deployment. Simulation output roots resolve on workers; use returned artifact
+paths, not a guessed log filename. Uptake is in mol/kg and `raspa.log` is plain
+stdout. See the [example workflow reference](../../examples/graspa_scaling/workflow.md) for remote discovery,
+timeouts, polling, and cancellation.
 
 ## Troubleshooting
 
