@@ -210,6 +210,21 @@ agent prompts. Planning uses `PlannerResponse` with `next_step`,
 `last_message` returns the final agent message. A completed graph is not by itself
 proof that all scientific calculations succeeded: inspect tool outcomes.
 
+### Live progress
+
+The scaling example attaches an example-local callback through `agent.run()`.
+It prints timestamped model starts, executor replies, tool starts/results, and
+errors into `agent.log`, with worker labels for concurrent executors. These
+events are visible before executor subgraphs finish. Existing planner/analyst
+response printing is preserved without replaying those replies in the callback.
+Model replies are printed after each call completes, not token by token.
+
+Tool output is bounded to summaries of settings, status/counts, and artifact
+paths; bulk simulation records remain in `tool_results/*.jsonl`. Completed
+executor history also remains in `executor_logs` in saved state snapshots.
+The callback only observes execution: it adds no submissions, model calls, or
+polling, and logging failures do not stop the workflow.
+
 ### Result artifacts and numerical analysis
 
 The example uses an MCP result interceptor that writes returned simulation
@@ -245,8 +260,13 @@ condition multiplicities after the graph finishes. Missing or failed results,
 or an unfinished ranking tool, produce a nonzero exit and `outcome.json`.
 This post-run check does not enforce model-generated parameters before submission
 or replace the analyst's numerical work. Use `--recursion-limit` for the graph
-and `--wait-timeout` for MCP transport reads; the launcher also bounds client
-walltime with `CG_AGENT_TIMEOUT`.
+and `--wait-timeout` for MCP transport reads. `--startup-timeout` (default 300
+seconds, forwarded from `CG_STARTUP_TIMEOUT`) bounds the initial MCP handshake
+and required-tool check. Readiness progress goes to `agent.log`; connection
+failures are retried only before the session is ready. Missing tools fail
+immediately, and workflow failures are never retried by the readiness helper.
+The launcher bounds total client walltime, including readiness, with
+`CG_AGENT_TIMEOUT`.
 
 A 20-CIF Aurora run on 2026-09-23 validated the superseded deterministic graph
 with Parsl and ALCF `openai/gpt-oss-120b`. That evidence does not validate this

@@ -56,24 +56,27 @@ Inside an existing Aurora PBS interactive allocation, with a valid
 
 ```bash
 cd /lus/flare/projects/ChemGraph/thang/ChemGraph/.worktrees/pr244-validation
-CG_MODEL=alcf:openai/gpt-oss-120b bash examples/graspa_scaling/run.sh --interactive
+bash examples/graspa_scaling/run.sh --interactive
 ```
 
 This uses Parsl, the first 20 sorted CIFs from the `coremof_database/databases`
 dataset and 10,000 cycles per phase: 40 simulations at the same 298 K and
-960/320 Pa conditions. The command explicitly selects the validated
-`alcf:openai/gpt-oss-120b` model; without `CG_MODEL`, interactive mode defaults
-to `alcf:nemotron-3-ultra`. It uses `CG_ENV`, the active venv,
+960/320 Pa conditions. Both modes default to `alcf:openai/gpt-oss-120b`;
+set `CG_MODEL` to select another model. It uses `CG_ENV`, the active venv,
 or the existing `/lus/flare/projects/ChemGraph/thang/ChemGraph/venv`.
 Environment overrides and `CG_SETUP_FILE` are supported as in batch mode.
 Unset old workload/output overrides if you want these defaults.
 
 Each invocation defaults to a fresh
 `graspa_scaling_runs/interactive-<job>-<time>-<pid>/` directory, printed at startup.
-Agent output appears in the terminal and `agent.log`. Ctrl-C cleans up the
+Agent output appears in the terminal and `agent.log`, including live executor
+replies, tool starts, batch status/counts, artifact paths, and errors. Entries
+include UTC timestamps and worker labels; large payloads are summarized.
+Replies appear when each model call finishes, rather than token by token.
+Ctrl-C cleans up the
 client and MCP server. The launcher uses the current allocation; it does not
 submit another PBS job or extend its walltime. The default client timeout is
-50 minutes. Inspect `outcome.json`, `results.csv`, the selected `rankings_<id>.csv`, and
+50 minutes including MCP readiness. Inspect `outcome.json`, `results.csv`, the selected `rankings_<id>.csv`, and
 `timing.json` at completion. A successful 20-CIF run has 40 records and selects
 four candidates when all structures succeed. Finish or stop the previous MCP run before starting this
 one, since the job tracker is shared.
@@ -105,7 +108,14 @@ Full-scale and Ensemble Launcher runs remain unverified. The command above
 requests 512 nodes; its inherited three-hour walltime is not a runtime guarantee.
 
 Results go to `graspa_scaling_runs/PBS_JOBID/` under the checkout.
-`mcp.log`, `readiness.log`, and `agent.log` capture service and agent output.
+`mcp.log` captures service output. `agent.log` captures MCP readiness, the
+planner/analyst output, and executor progress while subgraphs are still running.
+The Python client waits up to `CG_STARTUP_TIMEOUT` (default 300 seconds) for an
+MCP handshake and the required tools. Connection failures are retried during
+startup only; workflow failures do not trigger reconnection or resubmission.
+There is no separate `readiness.log`.
+Saved `state_thread_*.json` snapshots contain completed executor histories in
+`executor_logs`; live progress does not wait for these snapshots.
 `tool_results/*.jsonl` retain simulation outcomes, including failures.
 The analyst aggregates these into `results.csv` and writes its selection to
 `rankings_<id>.csv`; tool responses report the actual path. Paired ranking columns
@@ -124,7 +134,10 @@ Optional exported variables (also pass their names with `qsub -v`):
 `ADS_TEMP_K`, `DES_TEMP_K`, `ADS_PRESSURE_PA`, `DES_PRESSURE_PA`,
 `CG_OMP_NUM_THREADS`, `CHEMGRAPH_PARSL_MAX_WORKERS_PER_NODE`,
 `CHEMGRAPH_GRASPA_EXECUTABLE`, `CG_MODEL`, `CG_BASE_URL`,
-`CG_SIMULATION_TIMEOUT`, `CG_WAIT_TIMEOUT`, `CG_AGENT_TIMEOUT`, `CG_RECURSION_LIMIT`.
+`CG_SIMULATION_TIMEOUT`, `CG_STARTUP_TIMEOUT`, `CG_WAIT_TIMEOUT`, `CG_AGENT_TIMEOUT`, `CG_RECURSION_LIMIT`.
+`CG_STARTUP_TIMEOUT` maps to Python's `--startup-timeout` and bounds the readiness
+phase. `CG_AGENT_TIMEOUT` bounds the entire client process, including imports,
+readiness, execution, and analysis (10,200 seconds in batch mode).
 `CG_WAIT_TIMEOUT` bounds MCP transport reads; `CG_RECURSION_LIMIT` defaults to
 100 graph steps. The agent chooses when to call status/result tools.
 Changing timeouts does not extend PBS walltime.

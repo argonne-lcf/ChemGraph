@@ -4,6 +4,7 @@
 import argparse
 import asyncio
 from collections import Counter
+from contextlib import asynccontextmanager
 import json
 import math
 import os
@@ -147,7 +148,38 @@ def check_outcome(exports, sources, manifest):
             "records_paths": [item["records_path"] for item in exports.values()]}
 
 
+@asynccontextmanager
+async def ready_session(client, timeout):
+    """Retry startup only; keep the ready session open for the entire run."""
+    deadline = asyncio.get_running_loop().time() + timeout
+    required = {"run_graspa_ensemble", "check_job_status", "get_job_results"}
+    print(f"Waiting for MCP (startup timeout: {timeout:g}s)", flush=True)
+    while True:
+        connected = False
+        try:
+            async with asyncio.timeout_at(deadline) as startup:
+                async with client.session("graspa") as session:
+                    names = {tool.name for tool in (await session.list_tools()).tools}
+                    connected = True
+                    startup.reschedule(None)
+                    missing = required - names
+                    if missing:
+                        raise ValueError(f"Use graspa_mcp_hpc; missing tools: {sorted(missing)}")
+                    print("MCP ready", flush=True)
+                    yield session
+                    return
+        except Exception as exc:
+            if connected:
+                raise
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError(f"MCP did not become ready within {timeout:g}s") from exc
+            print(f"Waiting for MCP: {type(exc).__name__}", flush=True)
+            await asyncio.sleep(min(1, remaining))
+
+
 async def run(args, root, sources, manifest):
+    from progress import ProgressLogger
     from chemgraph.agent.llm_agent import ChemGraph
     from langchain_mcp_adapters.client import MultiServerMCPClient
     from langchain_mcp_adapters.tools import load_mcp_tools
@@ -155,25 +187,21 @@ async def run(args, root, sources, manifest):
     from chemgraph.mcp.data_analysis_mcp import aggregate_simulation_results, rank_mofs_performance
     from chemgraph.tools.graspa_analysis import write_json
 
-    query = prepare_query(root, sources, manifest)
     exports = {}
     client = MultiServerMCPClient({"graspa": {
         "transport": "streamable_http", "url": args.mcp_url,
         "timeout": 30.0, "sse_read_timeout": args.wait_timeout,
     }})
-    async with client.session("graspa") as session:
+    async with ready_session(client, args.startup_timeout) as session:
         tools = await load_mcp_tools(session, tool_interceptors=[result_interceptor(root, exports)])
-        required = {"run_graspa_ensemble", "check_job_status", "get_job_results"}
-        missing = required - {tool.name for tool in tools}
-        if missing:
-            raise ValueError(f"Use graspa_mcp_hpc; missing tools: {sorted(missing)}")
+        query = prepare_query(root, sources, manifest)
         agent = ChemGraph(
             model_name=args.model, base_url=args.base_url, workflow_type="graspa_mcp", tools=tools,
             data_tools=[StructuredTool.from_function(function) for function in
                         (aggregate_simulation_results, rank_mofs_performance)],
             return_option="state", enable_memory=False, log_dir=str(root), recursion_limit=args.recursion_limit,
         )
-        state = await agent.run(query)
+        state = await agent.run(query, config={"callbacks": [ProgressLogger()]})
         response = state["messages"][-1]
         (root / "response.txt").write_text(str(response.get("content", "")) + "\n")
         outcome = check_outcome(exports, sources, manifest)
@@ -201,6 +229,8 @@ def parse_args(argv=None):
     parser.add_argument("--n-cycles", type=int, default=2_000_000)
     parser.add_argument("--limit", type=int, default=int(os.environ.get("CG_LIMIT", "0")), help="First N sorted CIFs; 0 uses all")
     parser.add_argument("--simulation-timeout", type=finite_positive)
+    parser.add_argument("--startup-timeout", type=finite_positive, default=300,
+                        help="Seconds to wait for the MCP handshake and required tools")
     parser.add_argument("--wait-timeout", type=finite_positive, default=9900)
     parser.add_argument("--recursion-limit", type=int, default=100)
     parser.add_argument("--model", default="alcf:openai/gpt-oss-120b")
