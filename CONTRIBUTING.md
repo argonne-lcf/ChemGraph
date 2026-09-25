@@ -123,6 +123,8 @@ For a bundled skill change:
 - Run `chemgraph skills lint src/chemgraph/skills --core` and the normal test
   gates. Include a runnable example and expected result shape; existing tested
   examples in `references/` count. Update their hermetic tests when behavior changes.
+- Run `python scripts/update_skill_catalog.py` after changing bundled metadata;
+  the test suite checks catalog freshness.
 - Review instructions and helper scripts for changes to tool use and approvals.
   Text linting does not detect prompt injection or enforce permissions.
 
