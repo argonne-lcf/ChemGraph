@@ -21,14 +21,12 @@ from ui.provider_widgets import apply_api_key, clear_api_key, render_alcf_login
 # ---------------------------------------------------------------------------
 
 WORKFLOW_ALIASES: Dict[str, str] = {
-    "python_repl": "python_relp",
     "graspa_agent": "graspa",
 }
 
 WORKFLOW_OPTIONS: list[str] = [
     "single_agent",
     "multi_agent",
-    "python_relp",
     "graspa",
     "molecular_docking",
     "single_agent_iri",

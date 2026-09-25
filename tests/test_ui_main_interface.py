@@ -432,7 +432,7 @@ def test_active_session_metadata_prefers_ui_overrides(monkeypatch):
         "general": {"model": "gpt-4o-mini", "workflow": "single_agent"}
     }
     fake_st.session_state.active_model = "custom-model"
-    fake_st.session_state.active_workflow = "python_repl"
+    fake_st.session_state.active_workflow = "graspa_agent"
     fake_st.session_state.pending_interrupt_model = None
     fake_st.session_state.pending_interrupt_workflow = None
     monkeypatch.setattr(main_ui, "st", fake_st)
@@ -440,7 +440,12 @@ def test_active_session_metadata_prefers_ui_overrides(monkeypatch):
     model, workflow = main_ui._active_session_metadata()
 
     assert model == "custom-model"
-    assert workflow == "python_relp"
+    assert workflow == "graspa"
+    from ui._pages.configuration import WORKFLOW_ALIASES, WORKFLOW_OPTIONS
+
+    for removed in ("python_relp", "python_repl"):
+        assert removed not in WORKFLOW_OPTIONS
+        assert removed not in WORKFLOW_ALIASES
 
 
 def test_active_session_metadata_prefers_pending_interrupt(monkeypatch):

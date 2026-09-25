@@ -258,8 +258,8 @@ require approval before execution, including when no workspace is configured.
 `query_knowledge_base` searches documents already loaded into the RAG store and
 does not require approval by default. These additional checks apply to registry tools;
 existing attached tools retain their policy. Custom tools need appropriate
-`interrupt_on` entries when constructing the graph. `python_repl` requires the same
-execution review as `execute`. Discovery and loading do not require approval.
+`interrupt_on` entries when constructing the graph. Workspace shell execution
+uses `execute` and requires approval. Discovery and loading do not require approval.
 Explicit approval overrides retain their existing meaning.
 
 On-demand loading reduces repeated schema input for larger catalogs, but adds a

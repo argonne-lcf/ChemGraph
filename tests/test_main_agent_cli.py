@@ -72,6 +72,12 @@ def test_main_agent_is_a_cli_workflow():
     assert "main_agent" in cli_main._WORKFLOW_CHOICES
     assert "deep_agent" in commands.ALL_WORKFLOW_TYPES
     assert commands.resolve_workflow("deepagent") == "deep_agent"
+    for removed in ("python_relp", "python_repl"):
+        assert removed not in commands.ALL_WORKFLOW_TYPES
+        assert removed not in cli_main._WORKFLOW_CHOICES
+        assert removed not in commands.WORKFLOW_ALIASES
+        with pytest.raises(SystemExit):
+            cli_main.create_argument_parser().parse_args(["run", "--workflow", removed])
 
 
 def test_interactive_event_renders_only_tagged_subagent_tool_calls():

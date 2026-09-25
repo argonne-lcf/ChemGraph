@@ -38,23 +38,6 @@ def outputs(state):
     return [m for m in state["messages"] if m.type == "tool"]
 
 
-@pytest.mark.parametrize("decision", ["approve", "reject"])
-def test_loaded_python_repl_requires_execution_approval(tmp_path, decision):
-    target = tmp_path / "executed.txt"
-    model = CatalogModel(responses=[
-        call("load_tools", names=["python_repl"]),
-        call("python_repl", tool_input=f"from pathlib import Path; Path({str(target)!r}).write_text('once')"),
-        AIMessage(content="Done"),
-    ])
-    graph = construct_deep_agent_graph(model, tool_registry=ToolRegistry(), discover_skills=False)
-    config = {"configurable": {"thread_id": "python-approval"}}
-    state = graph.invoke({"messages": [HumanMessage(content="Write a file with Python.")]}, config)
-    assert state["__interrupt__"] and not target.exists()
-    state = graph.invoke(Command(resume={"decisions": [{"type": decision}]}), config)
-    assert "__interrupt__" not in state
-    assert target.exists() == (decision == "approve")
-
-
 @pytest.fixture
 def catalog(monkeypatch):
     executed = []

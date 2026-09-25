@@ -264,7 +264,6 @@ stdio client configuration and the experimental HPC servers.
 | `main_agent` | Long-lived supervisor with delegated chemistry work | Interactive mode; use `MainAgentSession` in Python |
 | `deep_agent` | Workspace tasks and attached chemistry tools (`deepagent` is an alias) | Interactive approvals by default; broad local shell access |
 | `multi_agent` | Planner/executor decomposition and parallel subtasks | More model calls and orchestration overhead |
-| `python_relp` | LLM-directed Python and arithmetic (`python_repl` is an alias) | Executes Python in the ChemGraph process; use only with trusted prompts |
 | `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra plus Vina from conda-forge |
 | `rag_agent` | Query PDF/text documents alongside chemistry tools | `rag` extra; embedding model or OpenAI embeddings |
 | `single_agent_xanes` | XANES data retrieval, simulation, and plotting | `xanes` extra, `MP_API_KEY`, and/or `FDMNES_EXE` |
