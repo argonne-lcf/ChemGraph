@@ -126,7 +126,14 @@ def test_shell_environment_follows_the_current_turn_directory(tmp_path, monkeypa
     backend = create_host_shell_backend(str(tmp_path))
     turn = tmp_path / "chat" / "turn_002_abcd"
     assert update_shell_environment(backend, CHEMGRAPH_LOG_DIR=str(turn)) is True
-    assert backend.execute("echo $CHEMGRAPH_LOG_DIR").output.strip() == str(turn)
+    assert backend.execute(_echo_env_command("CHEMGRAPH_LOG_DIR")).output.strip() == str(turn)
     with pytest.raises(ValueError, match="not an allowlisted"):
         update_shell_environment(backend, OPENAI_API_KEY="sk-x")
     assert update_shell_environment(object(), CHEMGRAPH_LOG_DIR="x") is False
+
+
+def _echo_env_command(name):
+    """Print environment variable *name* in the platform's host shell."""
+    import os
+
+    return f"echo %{name}%" if os.name == "nt" else f"echo ${name}"

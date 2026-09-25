@@ -428,7 +428,7 @@ def test_set_agent_log_dir_updates_process_and_deep_agent_shell(tmp_path, monkey
     turn = str(tmp_path / "chat" / "turn_003_beef")
     main_ui._set_agent_log_dir(agent, turn)
     assert main_ui.os.environ["CHEMGRAPH_LOG_DIR"] == turn
-    assert backend.execute("echo $CHEMGRAPH_LOG_DIR").output.strip() == turn
+    assert backend.execute(_echo_env_command("CHEMGRAPH_LOG_DIR")).output.strip() == turn
     main_ui._set_agent_log_dir(SimpleNamespace(), str(tmp_path))  # non-deep agents: env only
     assert main_ui.os.environ["CHEMGRAPH_LOG_DIR"] == str(tmp_path)
 
@@ -447,3 +447,10 @@ def test_attachment_note_reaches_rejections_and_multi_interrupt_answers():
         "id-b": {"decisions": [{"type": "reject", "message": "m" + note}]},
     }
     assert main_ui._append_attachment_note(review, "") is review
+
+
+def _echo_env_command(name):
+    """Print environment variable *name* in the platform's host shell."""
+    import os
+
+    return f"echo %{name}%" if os.name == "nt" else f"echo ${name}"
