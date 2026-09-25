@@ -3,7 +3,7 @@ truncated
 # general rule tailcorrections
 no
 # number of defined interactions
-110
+112
 # type interaction
 Ac    lennard-jones    16.60    3.10
 Ag    lennard-jones    18.11    2.80
@@ -109,6 +109,8 @@ Zn    lennard-jones    62.40    2.46
 Zr    lennard-jones    34.72    2.783
 C_co2    lennard-jones    27.0    2.80
 O_co2    lennard-jones    79.0    3.05
+N_n2    lennard-jones    36.0    3.31
+N_com    lennard-jones    0.0    0.0
 H_h2     lennard-jones    0.0   0.0
 H_com    lennard-jones    36.7  2.958
 Ow    lennard-jones    78.0    3.154
