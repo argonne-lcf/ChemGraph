@@ -117,129 +117,57 @@ def test_is_linear_molecule(water_atomsdata, co2_atomsdata):
     assert islinear_co2
 
 
-@pytest.fixture
-def base_ase_input():
-    """Base fixture for ASE input with common parameters"""
-    return {
-        "input_structure_file": str(TEST_DIR / "water.xyz"),
-        "output_results_file": str(TEST_DIR / "water_output.json"),
-        "optimizer": "bfgs",
-        "calculator": {
-            "calculator_type": "mace_mp",
-        },
-    }
+@pytest.mark.parametrize("driver", ["energy", "opt", "vib", "thermo"])
+def test_run_ase_drivers(monkeypatch, tmp_path, driver):
+    """Exercise driver results and artifacts without downloading a model."""
+    from ase import Atoms
+    from ase.io import write
 
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", str(tmp_path))
+    structure = tmp_path / "hydrogen.xyz"
+    write(structure, Atoms("H2", positions=[[0, 0, 0], [0, 0, 0.75]]))
+    output = tmp_path / "result.json"
+    params = ASEInputSchema(
+        input_structure_file=str(structure),
+        output_results_file=str(output),
+        driver=driver,
+        calculator={"calculator_type": "emt"},
+        optimizer="bfgs",
+        fmax=0.01,
+        steps=50,
+        temperature=298,
+    )
 
-@pytest.fixture
-def energy_ase_schema(base_ase_input):
-    """Fixture for energy calculation ASE Schema"""
-    input_dict = base_ase_input.copy()
-    input_dict["driver"] = "energy"
-    return ASEInputSchema(**input_dict)
+    result = run_ase.invoke({"params": params})
 
+    assert result["status"] == "success", result
+    assert result["driver"] == driver
+    assert isinstance(result["potential_energy"], float)
+    assert result["energy_unit"] == "eV"
+    assert Path(result["results_file"]) == output
+    data = json.loads(output.read_text())
+    assert data["success"] is True
+    assert data["simulation_input"]["driver"] == driver
+    assert data["potential_energy"] == result["potential_energy"]
+    assert data["single_point_energy"] == result["potential_energy"]
 
-@pytest.fixture
-def opt_ase_schema(base_ase_input):
-    """Fixture for geometry optimization ASE Schema"""
-    input_dict = base_ase_input.copy()
-    input_dict["driver"] = "opt"
-    return ASEInputSchema(**input_dict)
-
-
-@pytest.fixture
-def vib_ase_schema(base_ase_input):
-    """Fixture for vibrational analysis ASE Schema"""
-    input_dict = base_ase_input.copy()
-    input_dict["driver"] = "vib"
-    return ASEInputSchema(**input_dict)
-
-
-@pytest.fixture
-def thermo_ase_schema(base_ase_input):
-    """Fixture for thermochemistry ASE Schema"""
-    input_dict = base_ase_input.copy()
-    input_dict["driver"] = "thermo"
-    input_dict["temperature"] = 298
-    return ASEInputSchema(**input_dict)
-
-
-def test_run_ase_energy(energy_ase_schema):
-    """Test ASE energy calculation."""
-    result = run_ase.invoke({"params": energy_ase_schema})
-    print(result)
-    assert isinstance(result, dict)
-    assert result['status']
-    assert result['single_point_energy'] is not None
-    assert result['unit'] == "eV"
-
-
-def test_run_ase_opt(opt_ase_schema):
-    """Test ASE geometry optimization."""
-    result = run_ase.invoke({"params": opt_ase_schema})
-    assert isinstance(result, dict)
-    assert result['status']
-    assert result['single_point_energy'] is not None
-    assert result['unit'] == "eV"
-
-    # Path to expected output file
-    output_file = Path(__file__).parent / "water_output.json"
-
-    # Check file exists
-    assert output_file.exists()
-
-    # Optionally validate JSON content
-    with open(output_file) as f:
-        data = json.load(f)
-
-    assert data["simulation_input"]["driver"] == "opt"
-
-
-def test_run_ase_vib(vib_ase_schema):
-    """Test ASE vibrational analysis."""
-    result = run_ase.invoke({"params": vib_ase_schema})
-    assert isinstance(result, dict)
-    assert result['status']
-
-    # Path to expected output file
-    output_file = Path(__file__).parent / "water_output.json"
-
-    # Check file exists
-    assert output_file.exists()
-
-    # Optionally validate JSON content
-    with open(output_file) as f:
-        data = json.load(f)
-
-    assert data["simulation_input"]["driver"] == "vib"
-    assert len(data["vibrational_frequencies"]["energies"]) > 0
-
-
-def test_run_ase_thermo(thermo_ase_schema):
-    """Test ASE thermochemistry calculation."""
-    result = run_ase.invoke({"params": thermo_ase_schema})
-    print(result)
-
-    assert isinstance(result, dict)
-    # Path to expected output file
-    output_file = Path(__file__).parent / "water_output.json"
-
-    # Check file exists
-    assert output_file.exists()
-
-    # Optionally validate JSON content
-    with open(output_file) as f:
-        data = json.load(f)
-
-    assert data["simulation_input"]["driver"] == "thermo"
-
-    # Check that vibrational frequencies are present
-    assert len(data["vibrational_frequencies"]["energies"]) > 0
-
-    # Check for required thermochemistry keys
-    assert "enthalpy" in data['thermochemistry']
-    assert "entropy" in data['thermochemistry']
-    assert "gibbs_free_energy" in data['thermochemistry']
-    assert "unit" in data['thermochemistry']
+    if driver in {"energy", "opt"}:
+        assert result["single_point_energy"] == result["potential_energy"]
+        assert result["unit"] == "eV"
+    if driver != "energy":
+        assert data["converged"] is True
+    if driver == "opt":
+        assert Path(result["trajectory_file"]).is_file()
+    if driver in {"vib", "thermo"}:
+        vibrations = data["vibrational_frequencies"]
+        assert len(vibrations["energies"]) == 1
+        assert len(vibrations["frequencies"]) == 1
+        assert list(tmp_path.glob("hydrogen_vib.*.traj"))
+        assert (tmp_path / "frequencies_hydrogen.csv").is_file()
+    if driver == "thermo":
+        thermo = data["thermochemistry"]
+        assert {"enthalpy", "entropy", "gibbs_free_energy", "unit"} <= thermo.keys()
+        assert result["result"]["thermochemistry"] == thermo
 
 
 def test_run_ase_opt_writes_trajectory_next_to_output(tmp_path):

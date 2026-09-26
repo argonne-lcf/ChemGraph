@@ -1,10 +1,6 @@
-import io
 import math
 import numexpr
-import traceback
-from contextlib import redirect_stderr, redirect_stdout
 
-from langchain_core.tools import Tool
 from langchain_core.tools import tool
 from langgraph.types import interrupt
 
@@ -93,44 +89,3 @@ def ask_human(question: str) -> str:
     if isinstance(response, dict):
         return response.get("answer", response.get("response", str(response)))
     return str(response)
-
-
-class PythonREPL:
-    """Small persistent Python REPL used by the python_repl tool."""
-
-    def __init__(self):
-        """Initialize an empty persistent global namespace."""
-        self.globals = {}
-
-    def run(self, command: str) -> str:
-        """Execute Python code in the persistent REPL namespace.
-
-        Parameters
-        ----------
-        command : str
-            Python code to execute.
-
-        Returns
-        -------
-        str
-            Captured stdout/stderr and traceback text, if any.
-        """
-        cleaned_command = command.strip()
-        if not cleaned_command:
-            return ""
-
-        output = io.StringIO()
-        try:
-            with redirect_stdout(output), redirect_stderr(output):
-                exec(cleaned_command, self.globals, self.globals)
-        except Exception:
-            return output.getvalue() + traceback.format_exc()
-        return output.getvalue()
-
-
-python_repl = PythonREPL()
-repl_tool = Tool(
-    name="python_repl",
-    description="A Python shell. Use this to execute python commands. Input should be a valid python command. If you want to see the output of a value, you should print it out with `print(...)`.",
-    func=python_repl.run,
-)

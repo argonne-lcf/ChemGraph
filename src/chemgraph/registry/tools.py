@@ -180,13 +180,6 @@ BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
         interactive=True,
     ),
     ToolSpec(
-        "python_repl",
-        "Execute Python code in a persistent in-process REPL.",
-        "chemgraph.tools.generic_tools:repl_tool",
-        frozenset({"generic", "python"}),
-        executes_code=True,
-    ),
-    ToolSpec(
         "run_docking",
         "Dock a small molecule with AutoDock Vina.",
         "chemgraph.tools.docking_tools:run_docking",

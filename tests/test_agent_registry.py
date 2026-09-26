@@ -18,7 +18,6 @@ EXPECTED_WORKERS = (
     "single_agent",
     "deep_agent",
     "multi_agent",
-    "python_relp",
     "graspa",
     "mock_agent",
     "graspa_mcp",
@@ -51,16 +50,18 @@ def test_builtin_registry_contains_worker_graphs_not_main_agent():
     assert set(registry.names()) == set(ALL_WORKFLOW_TYPES) - {"main_agent"}
     with pytest.raises(UnknownRegistryEntryError, match="Unknown worker agent"):
         registry.get_spec("main_agent")
+    for removed in ("python_relp", "python_repl"):
+        with pytest.raises(UnknownRegistryEntryError, match="Unknown worker agent"):
+            registry.build(removed, llm=object())
 
 
 def test_existing_workflow_aliases_resolve_to_canonical_workers():
     registry = AgentRegistry()
 
-    assert registry.resolve_name("python_repl") == "python_relp"
     assert registry.resolve_name("deepagent") == "deep_agent"
     assert registry.resolve_name("graspa_agent") == "graspa"
     assert registry.resolve_name("iri") == "single_agent_iri"
-    assert registry.get_spec("python_repl").name == "python_relp"
+    assert registry.get_spec("deepagent").name == "deep_agent"
 
 
 def test_registration_rejects_duplicate_names_and_aliases():
@@ -264,9 +265,9 @@ def test_batch_rejects_an_independent_checkpointer_before_loading(monkeypatch):
 
     with pytest.raises(ValueError, match="inherit the parent checkpointer"):
         registry.as_subagents(
-            ["single_agent", "python_relp"],
+            ["single_agent", "deep_agent"],
             llm=object(),
-            options={"python_relp": {"checkpointer": MemorySaver()}},
+            options={"deep_agent": {"checkpointer": MemorySaver()}},
             require_available=False,
         )
     assert calls == []
@@ -275,7 +276,7 @@ def test_batch_rejects_an_independent_checkpointer_before_loading(monkeypatch):
 def test_alias_and_canonical_name_cannot_be_requested_together():
     with pytest.raises(DuplicateRegistryEntryError, match="more than once"):
         AgentRegistry().as_subagents(
-            ["python_relp", "python_repl"],
+            ["deep_agent", "deepagent"],
             llm=object(),
             require_available=False,
         )

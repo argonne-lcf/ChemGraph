@@ -59,7 +59,6 @@ Each file defines a LangGraph `StateGraph`. The workflows are:
 |---|---|---|
 | `single_agent` | `single_agent.py` | Default. One LLM with chemistry tools |
 | `multi_agent` | `multi_agent.py` | Planner/Executor/Aggregator pipeline |
-| `python_relp` | `python_relp_agent.py` | Interactive Python REPL |
 | `graspa` | `graspa_agent.py` | Gas adsorption in MOFs |
 | `mock_agent` | `mock_agent.py` | Testing workflow |
 | `graspa_mcp` | `graspa_mcp.py` | gRASPA via MCP + Parsl |
@@ -71,7 +70,7 @@ LangChain `@tool`-decorated functions. Key files:
 
 - `ase_tools.py` -- `run_ase` (energy/opt/vib/thermo), `save_atomsdata_to_file`, `file_to_atomsdata`
 - `cheminformatics_tools.py` -- `molecule_name_to_smiles`, `smiles_to_coordinate_file`, `smiles_to_atomsdata`
-- `generic_tools.py` -- `calculator` (safe math eval), Python REPL
+- `generic_tools.py` -- `calculator` (safe math eval), `ask_human`
 - `report_tools.py` -- `generate_html` (interactive HTML reports with NGL 3D viewer)
 - `graspa_tools.py` -- gRASPA simulation tools
 - `architector_tools.py` -- Metal complex tools

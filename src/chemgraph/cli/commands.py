@@ -77,7 +77,6 @@ ALL_WORKFLOW_TYPES = [
     "main_agent",
     "deep_agent",
     "multi_agent",
-    "python_relp",
     "graspa",
     "mock_agent",
     "graspa_mcp",
@@ -90,7 +89,6 @@ ALL_WORKFLOW_TYPES = [
 # Common aliases so users can type the "obvious" name.
 WORKFLOW_ALIASES: Dict[str, str] = {
     "deepagent": "deep_agent",
-    "python_repl": "python_relp",
     "graspa_agent": "graspa",
     "iri": "single_agent_iri",
 }

@@ -66,7 +66,6 @@ exposes these workflow choices:
 
 - `single_agent`
 - `multi_agent`
-- `python_relp`
 - `graspa`
 - `molecular_docking`
 - `mock_agent`

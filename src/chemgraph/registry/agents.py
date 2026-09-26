@@ -67,14 +67,6 @@ BUILTIN_AGENT_SPECS: tuple[AgentSpec, ...] = (
         tags=frozenset({"planning", "chemistry"}),
     ),
     AgentSpec(
-        "python_relp",
-        "Python REPL worker for calculations and programmatic analysis.",
-        "chemgraph.graphs.python_relp_agent:construct_relp_graph",
-        aliases=("python_repl",),
-        default_tool_names=("python_repl", "calculator"),
-        tags=frozenset({"python", "analysis"}),
-    ),
-    AgentSpec(
         "graspa",
         "Specialist worker for gRASPA adsorption calculations.",
         "chemgraph.graphs.graspa_agent:construct_graspa_graph",

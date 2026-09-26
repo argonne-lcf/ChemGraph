@@ -9,7 +9,6 @@ Python. `single_agent` is the recommended first choice.
 | `main_agent` | Durable supervisor with checkpointed subagents | Interactive CLI or `MainAgentSession` only |
 | `deep_agent` | Workspace tasks and attached chemistry tools | CLI and Python; alias `deepagent`; broad local shell access |
 | `multi_agent` | Routes tasks among specialized agents | More model calls and orchestration overhead |
-| `python_relp` | Chemistry agent with Python REPL capability | Executes Python in the current process; alias `python_repl` |
 | `graspa` | H2O, CO2, or N2 adsorption | Single-component runs; configured SYCL executable; alias `graspa_agent` |
 | `mock_agent` | Deterministic development/testing route | Not intended for scientific work |
 | `graspa_mcp` | gRASPA through MCP | Site and MCP setup required |
@@ -110,15 +109,23 @@ runtime. `deep_agent` is intentionally not included in the chemistry-focused
 crosses distinct chemistry capabilities, but consumes more model tokens and may
 take more graph steps than `single_agent`.
 
-## Python REPL
+## Migrating from Python REPL
 
-`python_relp` (spelling retained for compatibility) allows generated Python to
-run inside the ChemGraph process.
+The `python_relp` workflow, its `python_repl` alias, and the `python_repl` tool
+have been removed. Use `deep_agent` for Python scripts and workspace tasks:
 
-!!! danger "Arbitrary code execution"
-    Use this workflow only with trusted prompts and data in an isolated
-    environment. Generated code can read, modify, or delete files accessible to
-    the process and may invoke installed programs.
+```bash
+chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
+```
+
+For the Python API, select `workflow_type="deep_agent"` and supply a
+`deepagents.backends.LocalShellBackend` through `deepagent_backend` when shell
+execution is needed. The default state backend has no shell. Execution and file
+changes retain DeepAgent's approval policy.
+
+Update old workflow names in configurations and start a new DeepAgent session;
+legacy REPL sessions are not automatically converted. `single_agent` remains the
+default workflow.
 
 ## Specialized workflows
 

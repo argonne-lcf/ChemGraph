@@ -53,8 +53,7 @@ from chemgraph.cli.formatting import (
 # ---------------------------------------------------------------------------
 
 # Workflow choices exposed to the user.  We include common aliases
-# (e.g. ``python_repl``) so that users don't have to know the
-# internal ``python_relp`` name.
+# (e.g. ``deepagent``) alongside canonical workflow names.
 _WORKFLOW_CHOICES = sorted(set(ALL_WORKFLOW_TYPES) | set(WORKFLOW_ALIASES.keys()))
 
 
@@ -557,7 +556,7 @@ def _handle_run(args: argparse.Namespace) -> None:
     )
     argo_user = get_argo_user_from_flat_config(config) if config else None
 
-    # Resolve workflow alias (e.g. python_repl -> python_relp)
+    # Resolve workflow alias (e.g. deepagent -> deep_agent)
     args.workflow = resolve_workflow(args.workflow or "single_agent")
     enable_deepagent = bool(getattr(args, "deepagent", False))
     deepagent_workspace = getattr(args, "deepagent_workspace", None)

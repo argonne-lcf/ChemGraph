@@ -672,7 +672,6 @@ def test_shared_loader_routes_codex_prefix(monkeypatch):
         ("main_agent", "construct_main_agent_graph"),
         ("deep_agent", "construct_deep_agent_graph"),
         ("multi_agent", "construct_multi_agent_graph"),
-        ("python_relp", "construct_relp_graph"),
         ("graspa", "construct_graspa_graph"),
         ("mock_agent", "construct_mock_agent_graph"),
         ("graspa_mcp", "construct_graspa_mcp_graph"),

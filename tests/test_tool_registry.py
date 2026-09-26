@@ -25,7 +25,6 @@ EXPECTED_TOOLS = (
     "smiles_to_coordinate_file",
     "calculator",
     "ask_human",
-    "python_repl",
     "run_docking",
     "run_graspa",
     "load_document",
@@ -49,6 +48,8 @@ def test_builtin_registry_contains_only_llm_tools():
     assert registry.names() == EXPECTED_TOOLS
     assert "main_agent" not in registry.names()
     assert all("mcp" not in spec.tags for spec in registry.specs())
+    with pytest.raises(UnknownRegistryEntryError):
+        registry.get("python_repl")
 
 
 def test_every_builtin_resolves_to_matching_base_tool():
