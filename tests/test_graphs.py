@@ -51,6 +51,7 @@ class _FakeWorkflow:
     [
         ("single_agent", "construct_single_agent_graph", {}),
         ("main_agent", "construct_main_agent_graph", {}),
+        ("deep_agent", "construct_deep_agent_graph", {}),
         ("multi_agent", "construct_multi_agent_graph", {}),
         ("graspa", "construct_graspa_graph", {}),
         ("mock_agent", "construct_mock_agent_graph", {}),
