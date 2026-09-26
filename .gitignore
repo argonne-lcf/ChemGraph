@@ -85,3 +85,6 @@ optimized_*.xyz
 *_structure.xyz
 ui_artifacts.json
 *_opt.traj
+
+# Local Streamlit config written next to the UI package (the app reads <repo>/config.toml)
+src/ui/config.toml

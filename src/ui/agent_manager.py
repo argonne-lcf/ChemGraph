@@ -1,8 +1,88 @@
 """Agent lifecycle management for the ChemGraph Streamlit UI."""
 
-from typing import Optional
+from typing import Optional, Sequence
 
 import streamlit as st
+
+
+def build_deepagent_options(
+    workflow_type: str,
+    workspace: Optional[str],
+    skill_dirs: Optional[Sequence[str]],
+    discover_skills: bool,
+    tool_names: Optional[Sequence[str]],
+) -> dict:
+    """Translate UI Deep Agent settings into ``ChemGraph`` keyword arguments.
+
+    Mirrors the CLI (host-shell backend rooted at the workspace; an
+    explicit ``tools`` list restricts the on-demand registry catalog, an
+    empty list disables discovery) under the web UI's server-side policy
+    (:mod:`ui.deepagent_policy`): the workflow must be enabled by the
+    operator, and the workspace and every extra skill directory must
+    resolve inside the operator's allowed roots.  This is the enforcement
+    point: it also covers values typed into the raw TOML editor.
+
+    Parameters
+    ----------
+    workflow_type : str
+        Selected workflow; options are only produced for ``deep_agent``.
+    workspace : str, optional
+        Workspace directory (empty selects the first allowed root, i.e.
+        the launch directory by default).
+    skill_dirs : sequence of str, optional
+        Extra host skill directories.
+    discover_skills : bool
+        Whether personal/project skills are discovered.
+    tool_names : sequence of str, optional
+        Registry tool names to expose; ``None`` keeps the full catalog.
+
+    Returns
+    -------
+    dict
+        Keyword arguments for :class:`chemgraph.agent.llm_agent.ChemGraph`.
+
+    Raises
+    ------
+    ValueError
+        When the Deep Agent is disabled on this server, a directory is
+        missing or outside the allowed roots, or a tool name is unknown.
+    """
+    if workflow_type != "deep_agent":
+        return {}
+    from chemgraph.agent.deepagent_backend import create_host_shell_backend
+    from chemgraph.graphs.deep_agent import normalize_skill_sources
+
+    from ui import deepagent_policy
+
+    if not deepagent_policy.deep_agent_enabled():
+        raise ValueError(deepagent_policy.DISABLED_MESSAGE)
+    roots = deepagent_policy.allowed_roots()
+    root_dir = deepagent_policy.confine_directory(
+        workspace or roots[0], roots=roots, label="Deep Agent workspace"
+    )
+    options: dict = {
+        "deepagent_backend": create_host_shell_backend(root_dir),
+        "deepagent_discover_skills": bool(discover_skills),
+    }
+    anchored = tuple(
+        deepagent_policy.confine_directory(
+            source, roots=roots, label="Skill directory"
+        )
+        for source in normalize_skill_sources(skill_dirs)
+    )
+    if anchored:
+        options["deepagent_skill_dirs"] = anchored
+    if tool_names is not None:
+        from chemgraph.registry.tools import RegistryError, ToolRegistry
+
+        catalog = ToolRegistry()
+        try:
+            options["deepagent_tool_registry"] = ToolRegistry(
+                catalog.get_spec(name) for name in dict.fromkeys(tool_names)
+            )
+        except RegistryError as exc:
+            raise ValueError(f"Invalid Deep Agent tools: {exc}") from exc
+    return options
 
 
 def initialize_agent(
@@ -16,6 +96,10 @@ def initialize_agent(
     base_url: Optional[str],
     argo_user: Optional[str],
     log_dir: Optional[str] = None,
+    deepagent_workspace: Optional[str] = None,
+    deepagent_skill_dirs: Optional[Sequence[str]] = None,
+    deepagent_discover_skills: bool = True,
+    deepagent_tool_names: Optional[Sequence[str]] = None,
 ):
     """Create a :class:`ChemGraph` agent instance.
 
@@ -47,6 +131,14 @@ def initialize_agent(
         Argo username for Argo-hosted models.
     log_dir : str, optional
         Directory for ChemGraph run logs.
+    deepagent_workspace : str, optional
+        Deep Agent workspace directory (``deep_agent`` workflow only).
+    deepagent_skill_dirs : sequence of str, optional
+        Extra Deep Agent skill directories.
+    deepagent_discover_skills : bool, optional
+        Whether the Deep Agent discovers personal/project skills.
+    deepagent_tool_names : sequence of str, optional
+        Restrict the Deep Agent's on-demand tool catalog to these names.
 
     Returns
     -------
@@ -56,6 +148,13 @@ def initialize_agent(
     try:
         from chemgraph.agent.llm_agent import ChemGraph
 
+        deepagent_options = build_deepagent_options(
+            workflow_type,
+            deepagent_workspace,
+            deepagent_skill_dirs,
+            deepagent_discover_skills,
+            deepagent_tool_names,
+        )
         return ChemGraph(
             model_name=model_name,
             workflow_type=workflow_type,
@@ -67,6 +166,7 @@ def initialize_agent(
             recursion_limit=recursion_limit,
             human_supervised=human_supervised,
             log_dir=log_dir,
+            **deepagent_options,
         )
     except Exception as exc:
         st.error(f"Failed to initialize agent: {exc}")

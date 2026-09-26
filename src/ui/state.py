@@ -33,7 +33,8 @@ def init_session_state() -> None:
         "current_session_id": None,  # active session ID (str or None)
         "session_created": False,  # True once the DB row has been created
         # Human-in-the-loop interrupt state
-        "pending_human_question": None,  # str: question from HumanInputRequired
+        "pending_human_question": None,  # str: question/summary shown for the pause
+        "pending_interrupts": None,  # list[dict]: {"id", "payload"} per pending interrupt
         "pending_interrupt_config": None,  # dict: LangGraph config for resume
         "pending_interrupt_query": None,  # str: original user query
         "pending_interrupt_thread_id": None,  # int: thread_id for interrupted run
@@ -44,7 +45,8 @@ def init_session_state() -> None:
         "pending_interrupt_turn_dir": None,  # str: per-query artifact dir of the run
         "pending_interrupt_artifact_snapshot": None,  # dict: log-dir snapshot at query start
         "pending_interrupt_attachments": None,  # list[str]: attachment names of the run
-        "interrupt_count": 0,  # int: safety counter for sequential interrupts
+        "interrupt_count": 0,  # int: safety counter for sequential questions
+        "review_nonce": 0,  # int: bumps per pending action-review set (widget keys)
         "interrupt_exchanges": [],  # list of {"question": str, "answer": str}
     }
     for key, value in defaults.items():

@@ -13,7 +13,8 @@ import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 import logging
-from typing import Any, Callable, Mapping, Sequence
+from contextlib import contextmanager
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.callbacks.manager import CallbackManager
@@ -122,6 +123,99 @@ def _require_chatgpt_account(account_response: Any) -> None:
         f"The active Codex login type is {account_type!r}, not ChatGPT. Run "
         "`codex login` and sign in with ChatGPT."
     )
+
+
+@contextmanager
+def codex_session() -> Iterator[Any]:
+    """Open an SDK session bound to the reusable Codex login.
+
+    The session mirrors what a model call does: an ephemeral working
+    directory and cleared API-key variables, so only the stored ChatGPT
+    login is consulted.  The SDK runs its pinned, bundled Codex runtime; a
+    ``codex`` executable on ``PATH`` is not required.  Raises
+    ``ImportError`` when the SDK is missing.
+    """
+    Codex, CodexConfig, _Sandbox, _ApprovalMode = _load_codex_sdk()
+    with tempfile.TemporaryDirectory(prefix="chemgraph-codex-") as temp_dir:
+        config = CodexConfig(
+            cwd=temp_dir,
+            env={"OPENAI_API_KEY": "", "CODEX_API_KEY": ""},
+            client_name="chemgraph",
+            client_title="ChemGraph",
+        )
+        with Codex(config=config) as codex:
+            yield codex
+
+
+def inspect_account() -> Any:
+    """Return the SDK's active account response for the reusable Codex login.
+
+    Raises ``ImportError`` when the SDK is missing; SDK/transport failures
+    propagate unchanged.
+    """
+    with codex_session() as codex:
+        return codex.account()
+
+
+def logout_account() -> None:
+    """Sign the reusable Codex login out (``Codex.logout``)."""
+    with codex_session() as codex:
+        codex.logout()
+
+
+def list_models(*, include_hidden: bool = False) -> list[dict[str, Any]]:
+    """Return the models the signed-in Codex account can use.
+
+    Each entry is ``{"model": <id to use after "codex:">, "display_name",
+    "description", "is_default", "hidden"}`` in the order Codex reports
+    them.  Raises ``ImportError`` when the SDK is missing; SDK/transport
+    failures propagate unchanged.
+    """
+    with codex_session() as codex:
+        response = codex.models(include_hidden=include_hidden)
+    data = _model_dump(response)
+    entries = data.get("data", []) if isinstance(data, Mapping) else []
+    models: list[dict[str, Any]] = []
+    for item in entries:
+        item = _model_dump(item)
+        if not isinstance(item, Mapping):
+            continue
+        model_id = item.get("model") or item.get("id")
+        if not isinstance(model_id, str) or not model_id:
+            continue
+        models.append(
+            {
+                "model": model_id,
+                "display_name": str(
+                    item.get("displayName") or item.get("display_name") or model_id
+                ),
+                "description": str(item.get("description") or ""),
+                "is_default": bool(item.get("isDefault", item.get("is_default", False))),
+                "hidden": bool(item.get("hidden", False)),
+            }
+        )
+    return models
+
+
+def account_summary(account_response: Any) -> dict[str, Any]:
+    """Reduce an SDK account response to ``{"type", "identity"}``.
+
+    ``type`` is the login kind (``"chatgpt"``, ``"apiKey"``, ``None`` when
+    logged out); ``identity`` is a display/identity string (email or
+    account id) when the SDK exposes one.  Never raises.
+    """
+    data = _model_dump(account_response)
+    account = _model_dump(data.get("account")) if isinstance(data, Mapping) else None
+    if not isinstance(account, Mapping):
+        return {"type": None, "identity": None}
+    identity = None
+    for key in ("email", "accountId", "account_id", "id", "planType", "plan_type"):
+        value = account.get(key)
+        if isinstance(value, str) and value:
+            identity = value
+            break
+    kind = account.get("type")
+    return {"type": kind if isinstance(kind, str) else None, "identity": identity}
 
 
 def _message_content(message: BaseMessage) -> str:
@@ -389,16 +483,7 @@ class CodexChatModel(BaseChatModel):
 
     def validate_authentication(self) -> None:
         """Validate that the reusable Codex login is ChatGPT-managed."""
-        Codex, CodexConfig, _Sandbox, _ApprovalMode = _load_codex_sdk()
-        with tempfile.TemporaryDirectory(prefix="chemgraph-codex-") as temp_dir:
-            config = CodexConfig(
-                cwd=temp_dir,
-                env={"OPENAI_API_KEY": "", "CODEX_API_KEY": ""},
-                client_name="chemgraph",
-                client_title="ChemGraph",
-            )
-            with Codex(config=config) as codex:
-                _require_chatgpt_account(codex.account())
+        _require_chatgpt_account(inspect_account())
 
     def _generate(
         self,

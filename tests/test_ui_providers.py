@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from ui import alcf_auth, providers
+from ui import alcf_auth, codex_auth, providers
 
 
 @pytest.fixture()
@@ -29,6 +29,14 @@ def clean_env(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         alcf_auth, "HELPER_TOKENS_PATH", str(tmp_path / "helper_tokens.json")
+    )
+    # Never spawn the Codex app-server from tests; default to "logged out".
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_LOGGED_OUT, "No Codex login is available."
+        ),
     )
     return tmp_path
 
@@ -302,3 +310,59 @@ def test_alcf_logout_clears_cache_and_env(clean_env, monkeypatch):
 
     assert "ALCF_ACCESS_TOKEN" not in os.environ
     assert alcf_auth.read_token_record() == (None, None)
+
+
+def test_codex_provider_maps_prefix_and_reports_login_state(clean_env, monkeypatch):
+    info = providers.provider_for_model("codex:gpt-5")
+    assert info is not None and info.id == providers.CODEX
+    status = providers.provider_status(info, _config())
+    assert status.ready is False
+    assert "No Codex login" in status.detail
+    # A codex: model does not satisfy first-run gating while logged out.
+    config = _config()
+    config["general"] = {"model": "codex:gpt-5"}
+    assert providers.selected_provider_ready(config) is False
+
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in as chemist@example.com.", "chemist@example.com"
+        ),
+    )
+    assert providers.provider_status(info, _config()).ready is True
+    assert providers.selected_provider_ready(config) is True
+    assert providers.any_provider_ready(config) is True
+
+
+def test_codex_api_key_login_is_not_ready(clean_env, monkeypatch):
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_API_KEY, "The active Codex login uses an API key."
+        ),
+    )
+    info = providers.get_provider(providers.CODEX)
+    status = providers.provider_status(info, _config())
+    assert status.ready is False
+    assert "API key" in status.detail
+
+
+def test_codex_provider_models_come_from_account_catalog(clean_env, monkeypatch):
+    info = providers.get_provider(providers.CODEX)
+    assert providers.provider_models(info) == ()
+    assert providers.default_model_for(info) == info.default_model
+
+    catalog = [
+        {"name": "codex:gpt-5.1", "model": "gpt-5.1", "display_name": "GPT-5.1",
+         "description": "", "is_default": False},
+        {"name": "codex:gpt-5.1-codex", "model": "gpt-5.1-codex", "display_name": "GPT-5.1 Codex",
+         "description": "", "is_default": True},
+    ]
+    monkeypatch.setattr(codex_auth, "available_models", lambda use_cache=True: catalog)
+    assert providers.provider_models(info) == ("codex:gpt-5.1", "codex:gpt-5.1-codex")
+    assert providers.default_model_for(info) == "codex:gpt-5.1-codex"
+    # Curated providers are unaffected.
+    openai = providers.get_provider(providers.OPENAI)
+    assert providers.provider_models(openai) == tuple(openai.models)

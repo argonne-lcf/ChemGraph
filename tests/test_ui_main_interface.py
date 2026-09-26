@@ -890,3 +890,284 @@ def test_first_run_setup_reports_failed_config_save(monkeypatch):
     assert "CHEMGRAPH_CONFIG" in fake_st.session_state.setup_save_error
     assert fake_st.session_state._setup_skipped is True
     fake_st.rerun.assert_called_once()
+
+
+class _FakeStreamlitOptimization(_FakeStreamlitRich):
+    """Rich fake with the layout widgets used by the optimization section."""
+
+    def columns(self, spec, **kwargs):
+        count = spec if isinstance(spec, int) else len(spec)
+        self.calls.append(("columns", count))
+        return [nullcontext() for _ in range(count)]
+
+    def select_slider(self, label, options, value=None, format_func=None, key=None):
+        self.calls.append(("select_slider", label, key))
+        return value
+
+    def caption(self, text):
+        self.calls.append(("caption", text))
+
+    def plotly_chart(self, fig, **kwargs):
+        self.calls.append(("plotly_chart", kwargs.get("key")))
+
+    def info(self, text):
+        self.calls.append(("info", text))
+
+    def warning(self, text, icon=None):
+        self.calls.append(("warning", text))
+
+
+def _write_optimization_trajectory(path):
+    from ase import Atoms
+    from ase.calculators.emt import EMT
+    from ase.optimize import BFGS
+
+    atoms = Atoms("Cu2", positions=[[0, 0, 0], [0, 0, 2.9]])
+    atoms.calc = EMT()
+    BFGS(atoms, logfile=None, trajectory=str(path)).run(fmax=0.05, steps=20)
+
+
+def test_optimization_section_renders_linked_step_explorer(monkeypatch, tmp_path):
+    from ui import opt_explorer
+
+    traj = tmp_path / "cu2_opt.traj"
+    _write_optimization_trajectory(traj)
+    fake_st = _FakeStreamlitOptimization()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(opt_explorer, "st", fake_st)
+    # Bypass st.cache_data outside a Streamlit runtime.
+    monkeypatch.setattr(
+        main_ui,
+        "_cached_optimization_steps",
+        lambda path, mtime: opt_explorer.read_optimization_steps(path),
+    )
+
+    main_ui._render_optimization_section(
+        3,
+        {"log_dir": str(tmp_path)},
+        {"trajectories": ["cu2_opt.traj"]},
+    )
+
+    html_calls = [call for call in fake_st.calls if call[0] == "html"]
+    assert len(html_calls) == 1
+    html = html_calls[0][1]
+    # Every optimization step is embedded as its own frame and the
+    # Play/Pause control is present.
+    steps, _frames = opt_explorer.read_optimization_steps(str(traj))
+    assert html.count('"step": ') == len(steps)
+    assert 'id="playbtn"' in html
+    assert ("select_slider", "Playback speed", "opt_speed_3") in fake_st.calls
+    # The legacy separate chart is not drawn when the explorer renders.
+    assert not any(call[0] == "plotly_chart" for call in fake_st.calls)
+
+
+def test_optimization_section_falls_back_when_frames_unavailable(monkeypatch, tmp_path):
+    traj = tmp_path / "cu2_opt.traj"
+    _write_optimization_trajectory(traj)
+    fake_st = _FakeStreamlitOptimization()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_cached_optimization_steps", lambda path, mtime: None)
+    monkeypatch.setattr(main_ui, "PY3DMOL_AVAILABLE", False)
+
+    main_ui._render_optimization_section(
+        1,
+        {"log_dir": str(tmp_path)},
+        {"trajectories": ["cu2_opt.traj"]},
+    )
+
+    assert ("plotly_chart", "convergence_1") in fake_st.calls
+    assert not any(call[0] == "html" for call in fake_st.calls)
+
+
+def test_credential_fingerprint_tracks_codex_login_state(monkeypatch):
+    from ui import codex_auth, providers
+
+    info = providers.get_provider(providers.CODEX)
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_LOGGED_OUT, "No Codex login is available."
+        ),
+    )
+    assert main_ui._provider_credential_fingerprint(info, None) is None
+
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in.", "chemist@example.com"
+        ),
+    )
+    signed_in = main_ui._provider_credential_fingerprint(info, None)
+    assert signed_in is not None and "chemist" not in signed_in
+
+    monkeypatch.setattr(
+        codex_auth,
+        "account_status",
+        lambda use_cache=True: codex_auth.CodexStatus(
+            codex_auth.STATE_CHATGPT, "Signed in.", "other@example.com"
+        ),
+    )
+    assert main_ui._provider_credential_fingerprint(info, None) != signed_in
+
+
+def _deep_agent_config(tmp_path, **general):
+    base = {
+        "model": "gpt-4o-mini",
+        "workflow": "deep_agent",
+        "recursion_limit": 200,
+        "deepagent_workspace": str(tmp_path),
+        "deepagent_skills": [],
+        "deepagent_discover_skills": True,
+    }
+    base.update(general)
+    return {"general": base, "api": {"openai": {}}}
+
+
+def test_deep_agent_initialization_waits_for_acknowledgment(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHEMGRAPH_UI_DEEPAGENT", "1")
+    fake_st = _FakeStreamlitOptimization()
+    fake_st.session_state.agent = None
+    fake_st.session_state.last_config = None
+    fake_st.session_state.current_chat_log_dir = str(tmp_path)
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    calls = []
+    monkeypatch.setattr(main_ui, "initialize_agent", lambda *a, **k: calls.append(k) or _FakeAgent())
+    # The acknowledgment widget lives on the configuration page; stub it.
+    monkeypatch.setattr(main_ui, "render_deepagent_acknowledgment", lambda key: False)
+
+    def _run():
+        main_ui._auto_initialize_agent(
+            _deep_agent_config(tmp_path, tools=["run_ase"]),
+            "gpt-4o-mini", "deep_agent", False, "state", False, False, None,
+        )
+
+    _run()
+    assert calls == []
+    assert fake_st.session_state.agent is None
+    assert any(call[0] == "warning" for call in fake_st.calls)
+
+    fake_st.session_state[main_ui.DEEPAGENT_ACK_KEY] = True
+    _run()
+    assert len(calls) == 1
+    assert calls[0]["deepagent_workspace"] == str(tmp_path)
+    assert calls[0]["deepagent_skill_dirs"] is None
+    assert calls[0]["deepagent_discover_skills"] is True
+    assert calls[0]["deepagent_tool_names"] == ["run_ase"]
+    assert fake_st.session_state.agent is not None
+    # Deep Agent settings are part of the cache key: changing the workspace
+    # rebuilds the agent, an unchanged config reuses it.
+    _run()
+    assert len(calls) == 1
+    other = tmp_path / "other"
+    other.mkdir()
+    main_ui._auto_initialize_agent(
+        _deep_agent_config(other),
+        "gpt-4o-mini", "deep_agent", False, "state", False, False, None,
+    )
+    assert len(calls) == 2
+
+
+def test_non_deep_agent_workflows_pass_no_deep_agent_kwargs(monkeypatch, tmp_path):
+    fake_st = _fresh_streamlit(tmp_path)
+    calls = []
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(main_ui, "initialize_agent", lambda *a, **k: calls.append(k) or _FakeAgent())
+    main_ui._auto_initialize_agent(
+        {"general": {"recursion_limit": 20}, "api": {"openai": {}}},
+        "gpt-4o-mini", "single_agent", False, "state", False, False, None,
+    )
+    assert calls == [{"log_dir": str(tmp_path)}]
+
+
+def test_unacknowledged_deep_agent_drops_the_cached_agent(monkeypatch, tmp_path):
+    monkeypatch.setenv("CHEMGRAPH_UI_DEEPAGENT", "1")
+    fake_st = _FakeStreamlitOptimization()
+    fake_st.session_state.agent = None
+    fake_st.session_state.last_config = None
+    fake_st.session_state.current_chat_log_dir = str(tmp_path)
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        main_ui, "initialize_agent",
+        lambda model, workflow, *a, **k: SimpleNamespace(
+            workflow_type=workflow, uuid="a", session_store=None,
+            checkpointer=None, workflow=SimpleNamespace(checkpointer=None),
+        ),
+    )
+    monkeypatch.setattr(main_ui, "render_deepagent_acknowledgment", lambda key: False)
+    config = _deep_agent_config(tmp_path)
+
+    def _init(workflow):
+        main_ui._auto_initialize_agent(
+            config, "gpt-4o-mini", workflow, False, "state", False, False, None
+        )
+
+    # Switching from a working single_agent to deep_agent without the
+    # acknowledgment must not leave the single_agent answering queries.
+    _init("single_agent")
+    assert fake_st.session_state.agent.workflow_type == "single_agent"
+    _init("deep_agent")
+    assert fake_st.session_state.agent is None
+    assert fake_st.session_state.last_config is None
+
+    # Withdrawing the acknowledgment drops the shell-enabled agent.
+    fake_st.session_state[main_ui.DEEPAGENT_ACK_KEY] = True
+    _init("deep_agent")
+    assert fake_st.session_state.agent.workflow_type == "deep_agent"
+    fake_st.session_state[main_ui.DEEPAGENT_ACK_KEY] = False
+    _init("deep_agent")
+    assert fake_st.session_state.agent is None
+
+
+def test_optimization_section_reads_trajectory_once(monkeypatch, tmp_path):
+    from ui import opt_explorer, plots as ui_plots
+
+    traj = tmp_path / "cu2_opt.traj"
+    _write_optimization_trajectory(traj)
+    fake_st = _FakeStreamlitOptimization()
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(opt_explorer, "st", fake_st)
+    steps, frames = opt_explorer.read_optimization_steps(str(traj), max_frames=3)
+    monkeypatch.setattr(main_ui, "_cached_optimization_steps", lambda p, m: (steps, frames))
+
+    def _legacy(*_a, **_k):
+        raise AssertionError("legacy reader must not run when the explorer loads")
+
+    monkeypatch.setattr(ui_plots, "read_optimization_trajectory", _legacy)
+    main_ui._render_optimization_section(
+        2, {"log_dir": str(tmp_path)}, {"trajectories": ["cu2_opt.traj"]}
+    )
+    # The label counts every optimizer step, not just the downsampled frames.
+    total = steps[-1]["step"] + 1
+    assert ("expander", f"\U0001f4c9 Optimization ({total} steps)", False) in fake_st.calls
+    assert len(steps) < total
+
+
+def test_deep_agent_disabled_on_server_is_refused_even_if_acknowledged(monkeypatch, tmp_path):
+    from ui import deepagent_policy
+
+    monkeypatch.delenv(deepagent_policy.ENABLE_ENV, raising=False)
+    fake_st = _FakeStreamlitOptimization()
+    fake_st.session_state.agent = SimpleNamespace(workflow_type="single_agent")
+    fake_st.session_state.last_config = {"workflow": "single_agent"}
+    fake_st.session_state[main_ui.DEEPAGENT_ACK_KEY] = True
+    fake_st.session_state.current_chat_log_dir = str(tmp_path)
+    monkeypatch.setattr(main_ui, "st", fake_st)
+    monkeypatch.setattr(main_ui, "_ensure_chat_log_dir", lambda: str(tmp_path))
+    built = []
+    monkeypatch.setattr(main_ui, "initialize_agent", lambda *a, **k: built.append(a))
+
+    main_ui._auto_initialize_agent(
+        _deep_agent_config(tmp_path), "gpt-4o-mini", "deep_agent",
+        False, "state", False, False, None,
+    )
+    assert built == []
+    assert fake_st.session_state.agent is None
+    assert any(
+        call[0] == "error" and "disabled on this server" in str(call[1])
+        for call in fake_st.calls
+    )

@@ -8,13 +8,16 @@ import streamlit as st
 import toml
 
 from ui import config as ui_config
+from ui import deepagent_policy
 from ui import providers
 from ui.config import (
     get_default_config, load_config, merge_config_defaults,
     resolve_default_calculator, save_config,
 )
 from ui.endpoint import check_local_model_endpoint
-from ui.provider_widgets import apply_api_key, clear_api_key, render_alcf_login
+from ui.provider_widgets import (
+    apply_api_key, clear_api_key, render_alcf_login, render_codex_login,
+)
 
 # ---------------------------------------------------------------------------
 # Constants shared with the main app
@@ -28,12 +31,40 @@ WORKFLOW_ALIASES: Dict[str, str] = {
 WORKFLOW_OPTIONS: list[str] = [
     "single_agent",
     "multi_agent",
+    "deep_agent",
     "python_relp",
     "graspa",
     "molecular_docking",
     "single_agent_iri",
     "mock_agent",
 ]
+
+#: Session-state flag recording that the user acknowledged the Deep Agent's
+#: host-shell access in this browser session (the CLI asks the same
+#: question once per process).
+DEEPAGENT_ACK_KEY = "deepagent_host_shell_acknowledged"
+
+
+def available_workflow_options(current: str = "") -> list[str]:
+    """Return the workflows this server offers.
+
+    ``deep_agent`` is listed only when the operator enabled it (see
+    :mod:`ui.deepagent_policy`), or when it is already the configured
+    workflow so the selector does not silently change it on save.
+
+    Parameters
+    ----------
+    current : str, optional
+        Currently configured workflow.
+
+    Returns
+    -------
+    list[str]
+        Workflow names for the selector.
+    """
+    if deepagent_policy.deep_agent_enabled() or current == "deep_agent":
+        return list(WORKFLOW_OPTIONS)
+    return [name for name in WORKFLOW_OPTIONS if name != "deep_agent"]
 
 
 def normalize_workflow_name(value: str) -> str:
@@ -124,11 +155,12 @@ def render() -> None:
     draft = st.session_state._config_draft
 
     # ----- Tabs -----
-    tab_providers, tab_general, tab_chem, tab_toml = st.tabs(
+    tab_providers, tab_general, tab_chem, tab_deep, tab_toml = st.tabs(
         [
             "\U0001f50c Providers",
             "\U0001f527 General",
             "\U0001f9ea Chemistry",
+            "\U0001f916 Deep Agent",
             "\U0001f4dd Raw TOML",
         ]
     )
@@ -141,6 +173,9 @@ def render() -> None:
 
     with tab_chem:
         _render_chemistry_settings(draft)
+
+    with tab_deep:
+        _render_deepagent_settings(draft)
 
     with tab_toml:
         _render_raw_toml(draft)
@@ -237,6 +272,8 @@ def _render_providers(draft: dict) -> None:
                 _render_api_key_card(draft, info, status)
             elif info.auth_kind == "globus":
                 _render_alcf_card(draft, info, status)
+            elif info.auth_kind == "codex":
+                _render_codex_card(draft, info, status)
             elif info.auth_kind == "endpoint":
                 _render_vllm_card(draft, info, status)
             else:
@@ -314,6 +351,22 @@ def _render_alcf_card(draft: dict, info, status) -> None:
     _render_endpoint_settings(draft, "alcf", key_prefix="alcf")
 
 
+def _render_codex_card(draft: dict, info, status) -> None:
+    """Render the Codex subscription card with the in-UI device-code login."""
+    st.caption(
+        "The login is stored by Codex on the machine hosting this UI "
+        "(the same login `chemgraph run --model codex:<id>` uses). API-key "
+        "logins are refused; sign in with ChatGPT."
+    )
+    if render_codex_login(key_prefix="config"):
+        st.rerun()
+    if status.ready and not providers.provider_models(info):
+        st.caption(
+            "Codex did not return a model catalog for this account; type a "
+            "model id below (for example `codex:gpt-5.1-codex`)."
+        )
+
+
 def _render_local_card(draft: dict, info, status) -> None:
     """Render the local/Ollama card with a live reachability probe."""
     _render_endpoint_settings(draft, "local", key_prefix="local")
@@ -375,13 +428,64 @@ def _render_endpoint_settings(draft: dict, section: str, key_prefix: str) -> Non
         )
 
 
+_CUSTOM_MODEL_OPTION = "__custom__"
+
+
+def _codex_model_label(name: str) -> str:
+    """Selectbox label for a Codex catalog entry: display name, id and default mark."""
+    if name == _CUSTOM_MODEL_OPTION:
+        return "Other model id…"
+    from ui import codex_auth
+
+    for item in codex_auth.available_models():
+        if item["name"] == name:
+            label = item["display_name"]
+            if item["model"] != item["display_name"]:
+                label += f" ({item['model']})"
+            if item["is_default"]:
+                label += " — default"
+            return label
+    return name
+
+
 def _render_model_picker(draft: dict, info, status, active_model: str) -> None:
     """Render the per-provider model selector and activation button."""
     st.markdown("---")
     col_model, col_use = st.columns([3, 1], vertical_alignment="bottom")
     with col_model:
-        if info.models:
-            options = list(info.models)
+        options = list(providers.provider_models(info))
+        if options and info.auth_kind == "codex":
+            # Account catalog fetched live; keep an escape hatch for ids
+            # Codex does not list (hidden/preview models).
+            options.append(_CUSTOM_MODEL_OPTION)
+            default_name = providers.default_model_for(info)
+            index = (
+                options.index(active_model)
+                if active_model in options
+                else options.index(default_name) if default_name in options else 0
+            )
+            choice = st.selectbox(
+                "Model",
+                options,
+                index=index,
+                format_func=lambda name: _codex_model_label(name),
+                key=_wkey(f"provider_model_{info.id}"),
+            )
+            if choice == _CUSTOM_MODEL_OPTION:
+                selected = st.text_input(
+                    "Model id",
+                    value=(
+                        active_model
+                        if active_model.startswith("codex:")
+                        and active_model not in options
+                        else "codex:"
+                    ),
+                    key=_wkey(f"provider_model_custom_{info.id}"),
+                    help="Any model available to the signed-in account, as codex:<model-id>.",
+                ).strip()
+            else:
+                selected = choice
+        elif options:
             index = (
                 options.index(active_model) if active_model in options else 0
             )
@@ -470,16 +574,22 @@ def _render_general_settings(config: dict) -> None:
         config["general"]["workflow"] = normalize_workflow_name(
             config["general"]["workflow"]
         )
+        workflow_options = available_workflow_options(config["general"]["workflow"])
         config["general"]["workflow"] = st.selectbox(
             "Workflow",
-            WORKFLOW_OPTIONS,
+            workflow_options,
             index=(
-                WORKFLOW_OPTIONS.index(config["general"]["workflow"])
-                if config["general"]["workflow"] in WORKFLOW_OPTIONS
+                workflow_options.index(config["general"]["workflow"])
+                if config["general"]["workflow"] in workflow_options
                 else 0
             ),
             key=_wkey("config_workflow"),
         )
+        if (
+            config["general"]["workflow"] == "deep_agent"
+            and not deepagent_policy.deep_agent_enabled()
+        ):
+            st.warning(deepagent_policy.DISABLED_MESSAGE)
 
         config["general"]["output"] = st.selectbox(
             "Output Format",
@@ -617,6 +727,163 @@ def _render_chemistry_settings(config: dict) -> None:
             ),
             key=_wkey("config_calc_fallback"),
         )
+
+
+def _registry_tool_names() -> list[str]:
+    """Return the names in the built-in Deep Agent tool catalog."""
+    try:
+        from chemgraph.registry.tools import ToolRegistry
+
+        return list(ToolRegistry().names())
+    except Exception:
+        return []
+
+
+def render_deepagent_acknowledgment(key: str) -> bool:
+    """Render the host-shell acknowledgment checkbox and return its state.
+
+    Parameters
+    ----------
+    key : str
+        Unique widget key (the checkbox appears on two pages).
+
+    Returns
+    -------
+    bool
+        Whether the user has acknowledged host-shell access this session.
+    """
+    acknowledged = st.checkbox(
+        "I understand the Deep Agent can run shell commands on this host and "
+        "modify files under the workspace; every command and file change "
+        "will ask for my approval in the chat.",
+        value=bool(st.session_state.get(DEEPAGENT_ACK_KEY, False)),
+        key=key,
+    )
+    st.session_state[DEEPAGENT_ACK_KEY] = bool(acknowledged)
+    return bool(acknowledged)
+
+
+def _render_deepagent_settings(config: dict) -> None:
+    """Render Deep Agent workspace, skills and tool-catalog settings.
+
+    The keys match what ``chemgraph run --config`` reads, so a config.toml
+    saved here also drives the CLI.
+
+    Parameters
+    ----------
+    config : dict
+        Mutable draft configuration dictionary.
+    """
+    general = config["general"]
+    st.subheader("Deep Agent")
+    if not deepagent_policy.deep_agent_enabled():
+        # Nothing path-related is rendered (or probed) unless the operator
+        # enabled the workflow for this server.
+        st.info(deepagent_policy.DISABLED_MESSAGE, icon="\U0001f512")
+        return
+    roots = deepagent_policy.allowed_roots()
+    st.markdown(
+        "The experimental **deep_agent** workflow gives the model a shell and "
+        "file tools rooted at a workspace directory, plus on-demand chemistry "
+        "tools and skills. Select `deep_agent` as the workflow on the General "
+        "tab to use these settings."
+    )
+    st.warning(
+        "The shell is **not** confined to the workspace directory. Shell "
+        "commands and file mutations pause for your approval in the chat "
+        "(Approve / Reject buttons); approvals cannot be disabled in the UI.",
+        icon="\u26a0\ufe0f",
+    )
+    render_deepagent_acknowledgment(key="config_deepagent_ack")
+
+    col_ws, col_skills = st.columns(2)
+    with col_ws:
+        st.write("**Workspace**")
+        workspace = st.text_input(
+            "Workspace directory",
+            value=str(general.get("deepagent_workspace") or ""),
+            key=_wkey("config_deepagent_workspace"),
+            help=(
+                "Directory the agent's file tools are rooted at. Leave empty "
+                "to use the first allowed root (the directory the UI was "
+                "launched from, unless the operator configured roots). Paths "
+                "must stay inside the allowed roots."
+            ),
+        ).strip()
+        general["deepagent_workspace"] = workspace
+        st.caption("Allowed roots: " + ", ".join(f"`{root}`" for root in roots))
+        if workspace:
+            try:
+                resolved = deepagent_policy.confine_directory(
+                    workspace, roots=roots, label="Workspace"
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.caption(f"Resolved: `{resolved}`")
+        general["deepagent_discover_skills"] = st.checkbox(
+            "Discover personal and project skills",
+            value=bool(general.get("deepagent_discover_skills", True)),
+            key=_wkey("config_deepagent_discover"),
+            help=(
+                "Also load skills from the personal skills directory and "
+                "the workspace's project skills; bundled skills are always "
+                "available."
+            ),
+        )
+
+    with col_skills:
+        st.write("**Extra skill directories**")
+        current_dirs = general.get("deepagent_skills") or []
+        if isinstance(current_dirs, str):
+            current_dirs = [current_dirs]
+        skills_text = st.text_area(
+            "One directory per line",
+            value="\n".join(str(item) for item in current_dirs),
+            key=_wkey("config_deepagent_skills"),
+            height=120,
+            help=(
+                "Host directories containing skills (each skill is a "
+                "subdirectory with a SKILL.md). Mounted in addition to the "
+                "bundled skills; equivalent to repeated --deepagent-skill."
+            ),
+        )
+        general["deepagent_skills"] = [
+            line.strip() for line in skills_text.splitlines() if line.strip()
+        ]
+        for item in general["deepagent_skills"]:
+            try:
+                deepagent_policy.confine_directory(
+                    item, roots=roots, label="Skill directory"
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+
+    st.write("**On-demand tool catalog**")
+    catalog = _registry_tool_names()
+    restrict = st.checkbox(
+        "Restrict the catalog to selected tools",
+        value="tools" in general,
+        key=_wkey("config_deepagent_restrict_tools"),
+        help=(
+            "By default the agent can discover every built-in registry tool. "
+            "Restricting to a subset mirrors --tool; selecting none disables "
+            "discovery. This edits the shared `tools` key, which the CLI also "
+            "uses for interactive main_agent tool opt-in; unticking removes it."
+        ),
+    )
+    if restrict:
+        selected_default = [
+            name for name in (general.get("tools") or []) if name in catalog
+        ]
+        general["tools"] = st.multiselect(
+            "Tools",
+            catalog,
+            default=selected_default,
+            key=_wkey("config_deepagent_tools"),
+        )
+    else:
+        general.pop("tools", None)
 
 
 def _render_raw_toml(config: dict) -> None:
