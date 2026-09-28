@@ -97,7 +97,10 @@ def test_iri_contracts_filters_history_and_cancel(monkeypatch):
     )
     assert calls[-1].method == "POST"
     assert calls[-1].url.params["offset"] == "20"
+    assert calls[-1].url.params["include_spec"] == "false"
     assert json.loads(calls[-1].content) == {"owner": "user"}
+    client.jobs("compute", include_spec=True)
+    assert calls[-1].url.params["include_spec"] == "true"
     assert client.cancel("compute", "123.host") == {"ok": True}
     client.status("compute", "123.host", historical=True)
     assert calls[-1].url.params["historical"] == "true"

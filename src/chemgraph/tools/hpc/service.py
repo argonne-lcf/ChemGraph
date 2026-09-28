@@ -333,6 +333,7 @@ class HPCService:
                 records = self.iri.jobs(
                     target.compute_resource,
                     historical=historical,
+                    include_spec=True,
                     limit=100,
                     offset=offset,
                     filters={
