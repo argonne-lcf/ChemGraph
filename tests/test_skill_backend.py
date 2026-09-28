@@ -19,8 +19,9 @@ def test_bundled_file_protocol(asynchronous):
     assert {entry["path"] for entry in call("ls", "/").entries} == {
         "/chemgraph/",
         "/pbs-hpc/",
+        "/hpc-batch/",
     }
-    assert len(call("glob", "**/SKILL.md").matches) == 2
+    assert len(call("glob", "**/SKILL.md").matches) == 3
     assert len(call("glob", "SKILL.md", "/chemgraph/").matches) == 1
     assert "Use ChemGraph" in call("read", "/chemgraph/SKILL.md").file_data["content"]
     assert call("grep", "PBS", "/pbs-hpc/", max_count=1).matches
@@ -43,7 +44,7 @@ def test_bundled_file_protocol(asynchronous):
 @pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
 def test_bundled_download_preserves_line_endings(monkeypatch, tmp_path, newline):
     contents = {}
-    for name in ("chemgraph", "pbs-hpc"):
+    for name in ("chemgraph", "pbs-hpc", "hpc-batch"):
         content = (
             f"---\nname: {name}\ndescription: Test skill\n---\n# Instructions\n"
         ).replace("\n", newline).encode("utf-8")

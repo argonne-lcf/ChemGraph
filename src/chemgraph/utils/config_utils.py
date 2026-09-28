@@ -66,6 +66,9 @@ def flatten_config(config: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 flattened[section] = config[section]
 
+    if "hpc" in config:
+        flattened["hpc"] = config["hpc"]
+
     return flattened
 
 
