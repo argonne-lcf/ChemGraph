@@ -67,6 +67,8 @@ def create_hpc_tools(config, *, service=None):
         Staging freezes inputs and assigns remote_directory. Never edits scripts or
         input JSON: use relative compute paths. Changed inputs require a fresh run.
         Retrieval overwrite must be explicitly requested. Returns a transfer ID.
+        Only retry a confirmed rejected transfer after correcting its cause.
+        Unknown attempts must be reconciled, never bypassed with overwrite.
         """
         if direction == "stage":
             if not target:

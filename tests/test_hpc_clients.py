@@ -140,6 +140,7 @@ def test_custom_client_never_falls_back_to_legacy_shared_cache(monkeypatch, tmp_
 def test_explicit_mapping_and_legacy_layout(monkeypatch, tmp_path):
     manager = GlobusTransferManager("source", "dest", "/remote")
     manager._transfer_client = Mock()
+    manager._transfer_client.get_submission_id.return_value = {"value": "submission"}
     manager._transfer_client.submit_transfer.return_value = {"task_id": "transfer"}
     paths = [str(tmp_path / "a/in.xyz"), str(tmp_path / "b/in.xyz")]
     result = manager.transfer_files(paths, remote_subdir="run")
