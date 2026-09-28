@@ -17,7 +17,9 @@ from the calculation's requirements.
 - Retain the site's proxy settings when network access is needed, including
   internal-host exclusions from the
   [environment guide](https://docs.alcf.anl.gov/polaris/getting-started/#proxy).
-  Stage model downloads before starting the calculation.
+  Reuse compute-visible cached model weights or allow the calculator's automatic
+  download when network access is available. Stage uncached weights ahead of
+  execution when compute nodes cannot download them.
 - Use allocated compute nodes for calculator initialization, GPU checks and
   substantial computation. Keep intensive I/O on project storage. Copy required
   outputs from node-local scratch to shared storage before the job ends.
