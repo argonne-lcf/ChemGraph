@@ -19,7 +19,7 @@ an HPC tool is attached. Skills do not override existing action approvals.
 
 - Read the selected site's guide: [Polaris](references/polaris.md),
   [Aurora](references/aurora.md) or [Crux](references/crux.md). Open known paths
-  directly; batch independent reads. Follow advanced links only for relevant
+  directly; batch independent reads. Follow site-documentation links for relevant
   launch or troubleshooting needs, or when explicitly requested.
 - Adapt [the PBS template](assets/job.pbs.template) for the application.
   Obtain the command, working directory, required files/environment, expected
