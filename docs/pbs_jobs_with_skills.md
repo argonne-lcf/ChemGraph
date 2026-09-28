@@ -1,8 +1,8 @@
 # PBS jobs with Deep Agent skills
 
 Run Deep Agent on a PBS submission host. It reads the bundled `chemgraph` and
-`pbs-hpc` skills, writes Python and PBS scripts, submits with `qsub`, and inspects
-the saved job ID and results. Calculations use the existing ASE Python engine;
+`pbs-hpc` skills, copies the ASE runner and allocation helper, writes PBS scripts, submits with `qsub`,
+and inspects the saved job ID and results. Calculations use the existing ASE Python engine;
 an MCP server and Parsl are not required.
 
 ## Prepare and submit
@@ -26,10 +26,10 @@ chemgraph run --interactive --workflow deep_agent \
 ```
 
 > Read the chemgraph and pbs-hpc skills, the local structure preparation guide,
-> and the ASE batch example. Load the preparation tools, generate water from
+> and the ASE calculations reference. Load the preparation tools, generate water from
 > SMILES O into this workspace, and verify its structure. Use the returned
-> absolute path in input.json. Write calculate.py and job.pbs. Optimize the water
-> and calculate frequencies in one vib job using MACE-Polar, local model
+> absolute path in input.json. Copy calculate.py and pbs-launch.sh and write job.pbs.
+> Optimize the water and calculate frequencies in one vib job using MACE-Polar, local model
 > /absolute/path/to/polar-1-m.model, CUDA, float64, charge 0, multiplicity 1,
 > BFGS, fmax 0.01 eV/Å, and 200 steps. Use Polaris project YOUR_PROJECT,
 > queue debug, one node, walltime 00:30:00, and filesystems home:eagle.
@@ -44,34 +44,18 @@ load only when requested. Optional `--tool` flags restrict the catalog. The skil
 names which tools to load. The agent can replace its selection for result inspection
 with `load_tools(["extract_output_json"])`. See [tool loading](skills.md#on-demand-local-tools).
 
-The agent reads the complete CPU example at
-`/chemgraph-skills/chemgraph/references/ase-batch.md`, including input, Python,
-PBS and validation commands. Its linked MACE-Polar reference supplies the
-calculator settings for the example above. Other applications can use
-`/chemgraph-skills/pbs-hpc/assets/job.pbs.template`. These are virtual file-tool
-paths; shell commands use the real workspace path. Existing file-write and
-execution approvals still apply. Inspect the generated files before submission.
-
-## Prepare files with fewer reference reads
-
-For an H₂ CPU smoke test, supply the coordinates and request the EMT example's
-four files with your project, environment and workspace paths. Say "prepare only"
-to stop after syntax, schema and coordinate validation. No calculation, model
-download or submission is needed for that validation.
-
-The routine route reads `chemgraph/SKILL.md`, `pbs-hpc/SKILL.md`, the ASE batch
-example and the short Polaris guide. It uses the documented Python API without
-loading `run_ase` or printing its implementation. Submission/recovery instructions,
-advanced Polaris operations and CLI setup are loaded only for those tasks.
-Explicit requests to read additional references still take precedence.
-
-An offline `o200k_base` estimate reduced this route from 6,587 to 2,890 tokens
-(56.1%) of raw reference text. The baseline includes both skills, the original
-Polaris guide, ASE example, PBS template and Python/CLI reference; the updated
-route uses the four resources above. This measures reference text once, not
-provider-reported usage or end-to-end savings. A live comparison should also
-check task completion, model calls, total/cached tokens and latency; the intended
-prepare-only sequence is about five or six decisions, not a hard call limit.
+The agent reads `/chemgraph-skills/chemgraph/references/ase-calculations.md` for input
+construction and result interpretation, and copies the shared runner from
+`/chemgraph-skills/chemgraph/assets/calculate.py`. Its linked MACE-Polar reference
+supplies the calculator settings for the example above. Scheduler settings use
+`/chemgraph-skills/pbs-hpc/assets/job.pbs.template` and the selected site's guide.
+The template invokes `/chemgraph-skills/pbs-hpc/assets/pbs-launch.sh`, copied into
+the run directory, with `bash` to check the allocation before launching the
+application. Fill its application command with the selected Python and
+`calculate.py`, without a leading `exec`. The ASE runner sets its own chemistry
+log directory; the helper records the PBS job ID and compute hostname on stderr.
+These are virtual file-tool paths; shell commands use the real workspace path.
+Existing file-write and execution approvals still apply.
 
 ## Inspect later
 
@@ -85,11 +69,9 @@ An accepted PBS job runs independently of the agent session. Preserve
 `submission.started`, `job.id`, and `qsub.stderr`, including on uncertain or failed
 submissions. Scheduler completion alone does not establish scientific success.
 
-The documented example is tested with real local water generation, EMT, and fake
-PBS commands, including rejected or failed preparation. Real agent-driven
-Polaris execution remains to be validated; record the transcript, generated
-scripts, PBS job ID, compute hostname, and artifacts during that smoke test.
+Real agent-driven Polaris execution remains to be validated; record the transcript,
+generated scripts, PBS job ID, compute hostname, and artifacts during that smoke test.
 
 For submission from a laptop through IRI and Globus Transfer, use the bundled
-`hpc-batch` skill. It shares the ASE engine and site guidance,
+`iri-hpc` skill. It shares the ASE engine and site guidance,
 but uses native HPC tools and its own per-run evidence instead of local qsub.

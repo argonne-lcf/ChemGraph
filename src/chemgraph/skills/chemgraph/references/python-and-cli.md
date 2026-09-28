@@ -13,10 +13,9 @@ chemgraph run --interactive --workflow main_agent --workspace . --subagent singl
 chemgraph run --interactive --workflow main_agent --workspace . --subagent deep_agent
 ```
 
-For direct PBS calculations, write a workspace script following
-[the ASE batch example](ase-batch.md) and use the `pbs-hpc` skill to submit it.
-Run the Deep Agent on the submission host with a shared workspace; no `--mcp-url`
-or ChemGraph execution-backend configuration is needed for this route.
+For calculations through Python, prepare inputs and the runner following
+[ASE calculations](ase-calculations.md). Run locally when requested, or hand
+the command, files, and environment requirements to the chosen execution workflow.
 
 Attach an externally managed MCP server with `--mcp-url URL`. Starting a server
 and attaching to one are separate actions. Do not assume that an HTTP MCP server

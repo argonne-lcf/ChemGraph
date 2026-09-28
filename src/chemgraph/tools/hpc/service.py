@@ -209,7 +209,7 @@ class HPCService:
             "name": manifest["identity"][:15],
             "stdout_path": remote + "/" + request.stdout,
             "stderr_path": remote + "/" + request.stderr,
-            "environment": {"CHEMGRAPH_LOG_DIR": remote},
+            "environment": {},
             "resources": {"node_count": resources.node_count},
             "attributes": {
                 "duration": resources.duration,
@@ -234,10 +234,19 @@ class HPCService:
             evidence_path = root / "submission.json"
             evidence = read_json(evidence_path) if evidence_path.exists() else None
             if evidence:
-                if evidence["intent"] != intent:
+                # Older runs injected this one application-specific variable.
+                # Accept only the exact former specification, not arbitrary drift.
+                legacy_spec = {
+                    **spec,
+                    "environment": {"CHEMGRAPH_LOG_DIR": manifest["remote_directory"]},
+                }
+                legacy_intent = {**intent, "jobspec": legacy_spec}
+                if evidence["intent"] not in (intent, legacy_intent):
                     raise ValueError(
                         "Run specification changed; use a fresh run directory."
                     )
+                intent = evidence["intent"]
+                spec = intent["jobspec"]
                 # Check input identity even for an accepted repeated request.
                 self._check_inputs(root, manifest)
                 if evidence["state"] != "prepared":
@@ -269,7 +278,8 @@ class HPCService:
                     "Input transfer must complete successfully before submission."
                 )
             prepared = self.iri.prepare_submission(target.compute_resource, spec)
-            evidence = {"state": "prepared", "intent": intent, "created_at": now()}
+            if evidence is None:
+                evidence = {"state": "prepared", "intent": intent, "created_at": now()}
             write_json(evidence_path, evidence)
             mark_started(root)
             try:

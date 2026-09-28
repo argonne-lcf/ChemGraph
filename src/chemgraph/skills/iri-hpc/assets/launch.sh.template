@@ -1,0 +1,8 @@
+#!/bin/bash
+# IRI supplies the working directory and scheduler resources via JobSpec.
+# Stage pbs-launch.sh alongside this script for the supported IRI/PBS route.
+# Replace placeholders with environment setup and a quoted command plus arguments.
+set -eo pipefail
+{{ENVIRONMENT_SETUP}}
+set -u
+exec bash ./pbs-launch.sh {{APPLICATION_LAUNCH_COMMAND}} "$@"

@@ -21,9 +21,17 @@ an HPC tool is attached. Skills do not override existing action approvals.
   [Aurora](references/aurora.md) or [Crux](references/crux.md). Open known paths
   directly; batch independent reads. Follow advanced links only for relevant
   launch or troubleshooting needs, or when explicitly requested.
-- For ASE, use [the complete batch example](../chemgraph/references/ase-batch.md).
-  For other applications, adapt [the PBS template](assets/job.pbs.template).
-  Keep directives before executable commands and use quoted host paths.
+- Adapt [the PBS template](assets/job.pbs.template) for the application.
+  Obtain the command, working directory, required files/environment, expected
+  outputs, and exit-code meanings from the application skill. For ASE, use
+  [ASE calculations](../chemgraph/references/ase-calculations.md).
+  Copy [pbs-launch.sh](assets/pbs-launch.sh) into the run directory before staging.
+  Both launch templates use `bash ./pbs-launch.sh COMMAND ARGUMENTS...` to check
+  the job and allocated hostname before launching; do not bypass this helper.
+  It reports allocation provenance to stderr and preserves application exit codes.
+  Supply `APPLICATION_LAUNCH_COMMAND` as an executable plus shell-quoted arguments,
+  without a leading `exec`; put pipelines or other shell logic in a separate
+  staged script invoked with `bash`. Keep directives before executable commands.
 - Verify compute-visible input/environment paths; stage inputs when filesystems
   differ. Validate with `bash -n` and application-specific input/syntax checks,
   without running the calculation on a login node. Resolve placeholders before
@@ -40,7 +48,7 @@ uncertain outcome before retrying. Scheduler completion is not scientific succes
 inspect application results. Cancel only the requested job.
 
 When the user selects IRI and configured `hpc_*` tools are available, read
-`hpc-batch` instead. Use its staging/evidence workflow and typed scheduler
+`iri-hpc` instead. Use its staging/evidence workflow and typed scheduler
 resources; do not apply the direct-qsub sequence to that run.
 
 ChemGraph Parsl configurations use existing allocations, not automatic PBS

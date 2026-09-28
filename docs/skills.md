@@ -1,7 +1,7 @@
 # Main-agent and Deep Agent skills
 
 ChemGraph ships three Agent Skills: **chemgraph** for its Python, CLI, and chemistry
-MCP workflows, **hpc-batch** for remote IRI/Globus batch execution, and
+MCP workflows, **iri-hpc** for remote IRI/Globus batch execution, and
 **pbs-hpc** for PBS job preparation, monitoring, and facility
 guidance. They are available directly to `main_agent`, standalone Deep Agents,
 registry-created Deep Agent workers, and the legacy main-agent workspace worker.
@@ -24,6 +24,11 @@ This agent can read and apply skills directly; no DeepAgent worker is needed.
 Its default registry can be replaced using `tool_registry=...` or disabled using
 `tool_registry=ToolRegistry([])`. Each configured worker retains its own tool
 catalog and private skill-selection state.
+
+Chemistry guidance supplies the application command, files,
+environment requirements, outputs, and result interpretation. The selected
+execution skill handles staging, allocation checks, submission, and monitoring.
+Local and attached-MCP workflows do not require a separate execution skill.
 
 ## Where skills live
 
@@ -75,7 +80,7 @@ chemgraph run --interactive -w deep_agent --deepagent-workspace . \
 ```
 
 In `[general]` TOML, use `deepagent_discover_skills = false` to disable automatic
-local discovery. `deepagent_skills` remains an ordered list of additional paths.
+local discovery. `deepagent_skills` is an ordered list of additional paths.
 CLI skill paths replace that TOML list, while the discovery CLI flag overrides
 the TOML boolean. An empty explicit list leaves bundled/discovered skills enabled.
 
@@ -102,11 +107,6 @@ Pass the collection directory containing `<skill-name>/SKILL.md`; this does not
 recursively search a repository or install its environments and tools. For
 AtomisticSkills, the Widom insertion skill is `chem-sorption-widom`.
 
-**CLI migration:** `/workspace/...` is now a literal host path when passed to
-`--deepagent-skill`. Replace older virtual-path examples with the actual host
-path or a path relative to your invocation directory. Agent file tools still
-use `/workspace/...` for project files.
-
 ## Python and other filesystems
 
 ```python
@@ -126,7 +126,7 @@ For direct main-agent capabilities, `ChemGraph` and `construct_main_agent_graph`
 use `discover_skills`, `skill_dirs`, and `skills`. The `deepagent_*` options
 configure standalone DeepAgent or the explicitly enabled legacy workspace worker.
 `skill_dirs` explicitly mounts host collections with any backend, even when
-automatic discovery is disabled. `skills` retains its backend-relative meaning
+automatic discovery is disabled. `skills` uses backend-relative paths
 and has precedence over host collections. `user_skills_dir` on the
 constructor (`deepagent_user_skills_dir` on the higher-level APIs) fixes or
 overrides the personal directory for a supported local workspace; saved sessions
@@ -176,8 +176,9 @@ scripts; a command in an external skill may assume its own repository root, so
 resolve script paths against that collection rather than the workspace. With a
 remote executor, transfer required files to its filesystem first.
 
-The initial bundles contain text instructions and a PBS template. To execute a
-future helper stored in the catalog, first copy it into the executor's filesystem.
+The bundles contain text instructions, templates and a shared ASE runner at
+`/chemgraph-skills/chemgraph/assets/calculate.py`. To execute a helper stored in
+the catalog, first copy it into the executor's filesystem.
 For example, read the PBS template at
 `/chemgraph-skills/pbs-hpc/assets/job.pbs.template`, fill its placeholders, and
 write it to `/workspace/job.pbs`. With the CLI's local backend, execute commands
@@ -226,8 +227,8 @@ interactive tools when `human_supervised=True`. Explicit catalogs and attached
 tools count as deliberate opt-in, independently of that flag.
 Pass `deepagent_tool_registry=preparation` to replace it, or
 `deepagent_tool_registry=ToolRegistry([])` to disable it. Explicit `None` selects
-the default. The lower-level shared constructor remains opt-in so existing
-delegated workers do not gain tools; supply a catalog explicitly:
+the default. To enable tool discovery through the lower-level shared constructor,
+supply a catalog explicitly:
 
 ```python
 from chemgraph.registry import ToolRegistry
@@ -239,7 +240,7 @@ preparation = ToolRegistry(catalog.get_spec(name) for name in (
 graph = construct_deep_agent_graph(model, backend=backend, tool_registry=preparation)
 ```
 
-Existing `tools=` objects, including MCP tools, remain attached as before. Their
+Tools supplied through `tools=`, including MCP tools, are attached directly. Their
 names are excluded from the automatic catalog. Names in an explicitly supplied
 catalog must not collide with attached tools or discovery tools. Custom tools can
 be registered using the existing `ToolSpec`/`BaseTool` interfaces. Registering a
@@ -296,9 +297,8 @@ does not restart an interrupted file mutation or bypass its pending approval.
 Independently compiled external subagents retain their own configuration; use
 the shared ChemGraph constructor for a Deep Agent worker that needs this catalog.
 
-Durable main-agent metadata retains the discovery setting and resolved personal
-root alongside existing workspace/source settings. Legacy session records default
-to local discovery disabled. Bundled skills remain available. Adding/editing
+Durable main-agent metadata stores the discovery setting and resolved personal
+root alongside workspace/source settings. Adding/editing
 skills is reflected on the next new turn, not midway through a pending approval.
 
 The resolved personal root is part of the topology fingerprint. Moving a session
