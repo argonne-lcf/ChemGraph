@@ -113,6 +113,13 @@ record never triggers automatic resubmission. `hpc_job_status` reconciles a save
 operation or unambiguous matching active/historical job. Incomplete or ambiguous
 searches stay unknown. Keep all evidence, even after errors.
 
+IRI credentials and the submission payload are prepared before recording a
+submission attempt. An `authentication_required` response from `hpc_submit_job`
+means no scheduler request was sent: authenticate with `alcf_auth`, then retry
+the same run directory. Credentials stay in memory and are never saved in run
+evidence. Existing runs marked `submission_unknown` still require reconciliation;
+authentication does not clear their submission markers.
+
 Restart ChemGraph and ask it to inspect the same run directory. The saved target
 snapshot is authoritative, even if current target configuration changed. Do not
 move run directories; their local collection mappings are anchored to the original

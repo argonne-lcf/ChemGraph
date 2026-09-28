@@ -6,7 +6,7 @@ from typing import Literal
 from langchain_core.tools import tool
 
 from chemgraph.execution.globus_transfer import TransferAuthenticationRequired
-from chemgraph.tools.alcf_iri_core import IRIRequestError
+from chemgraph.tools.alcf_iri_core import IRIAuthenticationRequired, IRIRequestError
 from chemgraph.tools.hpc.models import BatchRequest
 from chemgraph.tools.hpc.service import HPCService
 
@@ -16,6 +16,8 @@ def _errors(function):
     def call(*args, **kwargs):
         try:
             return function(*args, **kwargs)
+        except IRIAuthenticationRequired as exc:
+            return {"error": "authentication_required", "message": str(exc)}
         except TransferAuthenticationRequired:
             return {
                 "error": "authentication_required",

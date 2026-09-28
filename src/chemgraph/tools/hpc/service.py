@@ -268,11 +268,12 @@ class HPCService:
                 raise ValueError(
                     "Input transfer must complete successfully before submission."
                 )
+            prepared = self.iri.prepare_submission(target.compute_resource, spec)
             evidence = {"state": "prepared", "intent": intent, "created_at": now()}
             write_json(evidence_path, evidence)
             mark_started(root)
             try:
-                response = self.iri.submit(target.compute_resource, spec)
+                response = self.iri.submit_prepared(prepared)
                 if isinstance(response, dict) and response.get("id"):
                     evidence.update(state="accepted", job_id=str(response["id"]))
                 else:

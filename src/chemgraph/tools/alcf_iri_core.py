@@ -1054,6 +1054,16 @@ class IRIRequestError(RuntimeError):
         super().__init__(message)
 
 
+class IRIAuthenticationRequired(RuntimeError):
+    """Local authentication preparation failed before scheduler submission."""
+
+    def __init__(self):
+        super().__init__(
+            "Authenticate with alcf_auth, then retry submission using the same run directory. "
+            "No scheduler request was sent."
+        )
+
+
 class IRIClient:
     """Bounded transport for reviewed batch operations.
 
@@ -1070,9 +1080,6 @@ class IRIClient:
 
     def request(self, method, path, *, params=None, body=None, read=False,
                 max_bytes=1048576, allow_truncation=False):
-        import json
-        import base64
-
         refreshed = False
         for attempt in range(3 if read else 1):
             try:
@@ -1087,41 +1094,71 @@ class IRIClient:
                         if status in (429, 502, 503, 504) and read and attempt < 2:
                             self.sleep(0.25 * 2 ** attempt)
                             continue
-                        if status >= 400:
-                            raise IRIRequestError(status)
-                        content = bytearray()
-                        for chunk in response.iter_bytes(chunk_size=8192):
-                            content.extend(chunk[:max_bytes + 1 - len(content)])
-                            if len(content) > max_bytes:
-                                break
-                        truncated = len(content) > max_bytes
-                        if truncated and not allow_truncation:
-                            raise ValueError("IRI response exceeds the limit; narrow the query.")
-                        raw = bytes(content[:max_bytes])
-                        if not raw:
-                            return {"ok": True}
-                        if not truncated:
-                            try:
-                                return json.loads(raw)
-                            except (ValueError, UnicodeDecodeError):
-                                pass
-                        try:
-                            text = raw.decode("utf-8")
-                            return {"text": text, "truncated": truncated}
-                        except UnicodeDecodeError:
-                            return {"base64": base64.b64encode(raw).decode(),
-                                    "truncated": truncated}
+                        return self._read_response(response, max_bytes=max_bytes,
+                                                   allow_truncation=allow_truncation)
             except httpx.TransportError:
                 if not read or attempt == 2:
                     raise RuntimeError("IRI transport failed; request outcome may be unknown.") from None
                 self.sleep(0.25 * 2 ** attempt)
         raise IRIRequestError(401)
 
+    @staticmethod
+    def _read_response(response, *, max_bytes=1048576, allow_truncation=False):
+        import json
+        import base64
+
+        if response.status_code >= 400:
+            raise IRIRequestError(response.status_code)
+        content = bytearray()
+        for chunk in response.iter_bytes(chunk_size=8192):
+            content.extend(chunk[:max_bytes + 1 - len(content)])
+            if len(content) > max_bytes:
+                break
+        truncated = len(content) > max_bytes
+        if truncated and not allow_truncation:
+            raise ValueError("IRI response exceeds the limit; narrow the query.")
+        raw = bytes(content[:max_bytes])
+        if not raw:
+            return {"ok": True}
+        if not truncated:
+            try:
+                return json.loads(raw)
+            except (ValueError, UnicodeDecodeError):
+                pass
+        try:
+            text = raw.decode("utf-8")
+            return {"text": text, "truncated": truncated}
+        except UnicodeDecodeError:
+            return {"base64": base64.b64encode(raw).decode(), "truncated": truncated}
+
     def resolve_resource(self, resource):
         return _resource_id(resource)
 
+    def prepare_submission(self, resource, spec):
+        """Resolve credentials and serialize the request without contacting compute.
+
+        The returned request contains credentials and must stay in memory.
+        """
+        try:
+            headers = httpx.Headers(self.headers())
+        except Exception:
+            raise IRIAuthenticationRequired() from None
+        return httpx.Request("POST", BASE_URL + f"/compute/job/{resource}",
+                             headers=headers, json=spec)
+
+    def submit_prepared(self, request):
+        """Send a prepared submission once, without acquiring credentials again."""
+        from contextlib import closing
+
+        try:
+            with httpx.Client(timeout=TIMEOUT_S, transport=self.transport) as client:
+                with closing(client.send(request, stream=True)) as response:
+                    return self._read_response(response)
+        except httpx.TransportError:
+            raise RuntimeError("IRI transport failed; request outcome may be unknown.") from None
+
     def submit(self, resource, spec):
-        return self.request("POST", f"/compute/job/{resource}", body=spec)
+        return self.submit_prepared(self.prepare_submission(resource, spec))
 
     def cancel(self, resource, job_id):
         from urllib.parse import quote

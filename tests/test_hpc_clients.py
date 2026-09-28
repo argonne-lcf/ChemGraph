@@ -129,6 +129,35 @@ def test_iri_reads_retry_but_submission_does_not():
     assert len(calls) == 4
 
 
+def test_prepared_submission_freezes_payload_and_credentials():
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json={"id": "job"})
+
+    headers = Mock(side_effect=[{"Authorization": "Bearer prepared-token"}])
+    client = IRIClient(transport=httpx.MockTransport(respond), headers=headers)
+    spec = {"arguments": ["original"]}
+    request = client.prepare_submission("compute", spec)
+    assert not calls
+    spec["arguments"].append("changed")
+    assert client.submit_prepared(request) == {"id": "job"}
+    assert calls[0].url.path == "/api/v1/compute/job/compute"
+    assert calls[0].headers["Authorization"] == "Bearer prepared-token"
+    assert json.loads(calls[0].content) == {"arguments": ["original"]}
+    headers.assert_called_once()
+
+
+def test_prepared_submission_response_remains_bounded():
+    client = IRIClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=b"a" * 1048577)),
+        headers=lambda: {},
+    )
+    with pytest.raises(ValueError, match="limit"):
+        client.submit("compute", {})
+
+
 @pytest.mark.parametrize("content", [b"a" * 500, b"\xff" * 500])
 def test_iri_response_is_bounded(content):
     client = IRIClient(
