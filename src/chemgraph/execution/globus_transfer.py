@@ -75,6 +75,14 @@ class TransferResult:
     label: str = ""
 
 
+@dataclass(frozen=True, repr=False)
+class _PreparedTransfer:
+    """In-memory submission only; never store this object in run evidence."""
+
+    client: Any = field(repr=False)
+    payload: Any = field(repr=False)
+
+
 class GlobusTransferManager:
     """Manage file transfers between local and remote Globus collections.
 
@@ -201,21 +209,45 @@ class GlobusTransferManager:
         The caller validates roots and overwrite policy. Mapping keys always
         identify sources; reverse swaps collection IDs, not mapping direction.
         """
+        return self.submit_prepared(
+            self.prepare_mapping(file_mapping, reverse=reverse, label=label)
+        )
+
+    def prepare_mapping(
+        self, file_mapping: dict[str, str], *, reverse: bool = False,
+        label: str = "ChemGraph HPC staging",
+    ) -> _PreparedTransfer:
+        """Validate, authenticate and build a payload without submitting it."""
         import globus_sdk
 
+        file_mapping = dict(file_mapping)
         if not file_mapping or len(set(file_mapping.values())) != len(file_mapping):
             raise ValueError("A nonempty mapping with unique destinations is required.")
         source, destination = self.source_endpoint_id, self.destination_endpoint_id
         if reverse:
             source, destination = destination, source
         tc = self._get_transfer_client()
+        try:
+            # Refresh now, before the caller records a submission attempt.
+            tc.authorizer.get_authorization_header()
+        except Exception:
+            self._transfer_client = None
+            raise TransferAuthenticationRequired(
+                "Globus Transfer credential refresh failed. Run "
+                + _login_command(self._client_id)
+            ) from None
         data = globus_sdk.TransferData(
-            tc, source, destination, label=label, sync_level="checksum",
+            source_endpoint=source, destination_endpoint=destination,
+            label=label, sync_level="checksum",
             verify_checksum=True,
         )
         for source_path, destination_path in file_mapping.items():
             data.add_item(source_path, destination_path)
-        return str(tc.submit_transfer(data)["task_id"])
+        return _PreparedTransfer(tc, data)
+
+    def submit_prepared(self, prepared: _PreparedTransfer) -> str:
+        """Invoke SDK submission once; uncertain outcomes must not be retried."""
+        return str(prepared.client.submit_transfer(prepared.payload)["task_id"])
 
     def transfer_files(
         self,
@@ -252,9 +284,8 @@ class GlobusTransferManager:
         transfer_label = label or f"ChemGraph file staging ({remote_subdir})"
 
         tdata = globus_sdk.TransferData(
-            tc,
-            self.source_endpoint_id,
-            self.destination_endpoint_id,
+            source_endpoint=self.source_endpoint_id,
+            destination_endpoint=self.destination_endpoint_id,
             label=transfer_label,
             sync_level="checksum",
         )
@@ -389,12 +420,11 @@ def authenticate(collections=(), *, client_id=None) -> None:
 
     client_id = client_id or _DEFAULT_CLIENT_ID
     client = globus_sdk.NativeAppAuthClient(client_id)
-    from globus_sdk.scopes import Scope, TransferScopes
-    scope = TransferScopes.all
-    for collection in collections:
-        scope = scope.with_dependency(Scope(
-            f"https://auth.globus.org/scopes/{collection}/data_access"
-        ))
+    from globus_sdk.scopes import Scope
+    scope = Scope(TRANSFER_SCOPE, dependencies=tuple(
+        Scope(f"https://auth.globus.org/scopes/{collection}/data_access")
+        for collection in collections
+    ))
     client.oauth2_start_flow(requested_scopes=str(scope), refresh_tokens=True)
     print(client.oauth2_get_authorize_url())
     response = client.oauth2_exchange_code_for_tokens(input("Authorization code: ").strip())

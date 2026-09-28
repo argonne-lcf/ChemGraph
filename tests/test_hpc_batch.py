@@ -5,9 +5,11 @@ from pathlib import Path
 import shutil
 from unittest.mock import Mock
 
+import globus_sdk
 import httpx
 import pytest
 
+from chemgraph.execution import globus_transfer as transfer_module
 from chemgraph.tools.alcf_iri_core import IRIClient, IRIRequestError
 from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget
 from chemgraph.tools.hpc.service import HPCService
@@ -20,7 +22,11 @@ class Transfer:
         self.state = "SUCCEEDED"
         self.calls = []
 
-    def transfer_mapping(self, mapping, **kwargs):
+    def prepare_mapping(self, mapping, **kwargs):
+        return dict(mapping), kwargs
+
+    def submit_prepared(self, prepared):
+        mapping, kwargs = prepared
         self.calls.append((mapping, kwargs))
         for source, destination in mapping.items():
             path = Path(destination)
@@ -112,6 +118,156 @@ def batch(tmp_path, monkeypatch):
 def stage(batch):
     service, root, *_ = batch
     return service.stage(str(root), "polaris", ["launch.sh", "inputs/water.xyz"])
+
+
+@pytest.fixture
+def sdk_transfer(batch, monkeypatch, tmp_path):
+    service, *_ = batch
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache = transfer_module._token_file(transfer_module._DEFAULT_CLIENT_ID)
+    tokens = {"access_token": "private-access", "refresh_token": "private-refresh",
+              "expires_at_seconds": 9999999999}
+    transfer_module.GlobusTransferManager._save_tokens(cache, tokens)
+    auth = Mock()
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    submit = Mock(return_value={"task_id": "sdk-transfer"})
+    monkeypatch.setattr(globus_sdk.TransferClient, "submit_transfer", submit)
+    service.transfer_factory = service._transfer_manager
+    return cache, tokens, auth, submit
+
+
+@pytest.mark.parametrize("direction", ["stage", "retrieve"])
+@pytest.mark.parametrize("failure", ["missing", "refresh", "payload", "payload_oserror"])
+def test_transfer_preparation_can_retry_same_directory(
+    batch, sdk_transfer, monkeypatch, direction, failure,
+):
+    service, root, *_ = batch
+    cache, tokens, auth, submit = sdk_transfer
+    if direction == "retrieve":
+        stage(batch)
+        submit.reset_mock()
+        # An already cached client's refresh can fail in a long-running service.
+        for manager in service._managers.values():
+            if failure == "missing":
+                manager._transfer_client = None
+            elif failure == "refresh":
+                manager._transfer_client.authorizer.expires_at = 1
+    if failure == "missing":
+        cache.unlink()
+    elif failure == "refresh":
+        transfer_module.GlobusTransferManager._save_tokens(cache, {**tokens, "expires_at_seconds": 1})
+        auth.oauth2_refresh_token.side_effect = RuntimeError("private-refresh")
+    payload_class = globus_sdk.TransferData
+    if failure.startswith("payload"):
+        error = OSError if failure == "payload_oserror" else TypeError
+        monkeypatch.setattr(globus_sdk, "TransferData", Mock(side_effect=error("private-access")))
+    tool = create_hpc_registry({}, names=["hpc_transfer_files"], service=service).get("hpc_transfer_files")
+    args = {"run_dir": str(root), "direction": direction, "target": "polaris",
+            "files": ["launch.sh"] if direction == "stage" else ["outputs/result.json"]}
+    result = tool.invoke(args)
+    assert result["phase"] == "prepare" and result["retry_safe"] is True
+    assert "private-" not in str(result)
+    if failure in ("missing", "refresh"):
+        assert result["error"] == "authentication_required"
+        assert "python -m chemgraph.execution.globus_transfer" in result["message"]
+    else:
+        assert result["type"] == error.__name__
+    submit.assert_not_called()
+    assert not (root / "retrieved").exists()
+    assert not (root / ".hpc-retrievals.json").exists()
+    if direction == "stage":
+        assert not (root / "run.json").exists()
+        assert not (root / ".hpc-inputs").exists()
+    if failure == "refresh":
+        assert all(manager._transfer_client is None for manager in service._managers.values())
+        assert auth.oauth2_refresh_token.call_count == 1
+    # Simulate terminal login replacing the token cache, without replacing the service.
+    transfer_module.GlobusTransferManager._save_tokens(cache, tokens)
+    monkeypatch.setattr(globus_sdk, "TransferData", payload_class)
+
+    def submitted(payload):
+        assert isinstance(payload, payload_class)
+        if direction == "stage":
+            assert read_json(root / "run.json")["staging"] == "unknown"
+            assert (root / ".hpc-inputs/launch.sh").read_bytes() == (root / "launch.sh").read_bytes()
+        else:
+            assert read_json(root / ".hpc-retrievals.json")[-1]["transfer_id"] is None
+            assert (root / "retrieved/outputs").is_dir()
+            assert payload["source_endpoint"] == "eagle"
+            assert payload["destination_endpoint"] == "local"
+        return {"task_id": "sdk-transfer"}
+
+    submit.side_effect = submitted
+    assert tool.invoke(args)["transfer_id"] == "sdk-transfer"
+    submit.assert_called_once()
+    if failure == "refresh":
+        assert auth.oauth2_refresh_token.call_count == 1
+    evidence = (root / "run.json").read_text()
+    if direction == "retrieve":
+        evidence += (root / ".hpc-retrievals.json").read_text()
+    assert "private-" not in evidence
+
+
+@pytest.mark.parametrize("direction", ["stage", "retrieve"])
+@pytest.mark.parametrize("failure", ["timeout", "interrupt", "save_id"])
+def test_uncertain_transfer_preserves_evidence(batch, sdk_transfer, monkeypatch, direction, failure):
+    import chemgraph.tools.hpc.service as module
+
+    service, root, *_ = batch
+    *_, submit = sdk_transfer
+    if direction == "retrieve":
+        stage(batch)
+        submit.reset_mock()
+    evidence = root / ("run.json" if direction == "stage" else ".hpc-retrievals.json")
+    if failure == "save_id":
+        original = module.write_json
+
+        def fail_save(path, value):
+            record = value if direction == "stage" else value[-1]
+            if path == evidence and record.get("transfer_id"):
+                raise OSError("private-access")
+            original(path, value)
+
+        monkeypatch.setattr(module, "write_json", fail_save)
+    else:
+        submit.side_effect = SystemExit("interrupted") if failure == "interrupt" else TimeoutError("private-access")
+    tool = create_hpc_registry({}, names=["hpc_transfer_files"], service=service).get("hpc_transfer_files")
+    args = {"run_dir": str(root), "direction": direction, "target": "polaris", "files": ["launch.sh"]}
+    if failure == "interrupt":
+        with pytest.raises(SystemExit):
+            tool.invoke(args)
+    else:
+        result = tool.invoke(args)
+        assert result["phase"] == "submit" and result["retry_safe"] is False
+        assert result["error"] == "operation_failed"
+        assert "private-" not in str(result)
+    saved = evidence.read_bytes()
+    record = read_json(evidence)
+    assert (record if direction == "stage" else record[-1])["transfer_id"] is None
+    assert tool.invoke(args)["error"] == "invalid_run"
+    submit.assert_called_once()
+    assert evidence.read_bytes() == saved
+    if direction == "stage":
+        assert service.transfer_status(str(root))["state"] == "transfer_unknown"
+        assert evidence.read_bytes() == saved
+
+
+def test_existing_unknown_transfer_status_is_actionable_and_read_only(batch):
+    service, root, transfer, *_ = batch
+    manifest = stage(batch)
+    manifest.update(transfer_id=None, staging="unknown")
+    write_json(root / "run.json", manifest)
+    saved = (root / "run.json").read_bytes()
+    tool = create_hpc_registry({}, names=["hpc_transfer_status"], service=service).get("hpc_transfer_status")
+    result = tool.invoke({"run_dir": str(root)})
+    assert result["state"] == "transfer_unknown" and result["transfer_id"] is None
+    assert result["retry_safe"] is False and "do not restage" in result["message"]
+    for transfer_id in ("unrecorded", ""):
+        assert tool.invoke({"run_dir": str(root), "transfer_id": transfer_id})["error"] == "invalid_run"
+    with pytest.raises(ValueError, match="already attempted"):
+        stage(batch)
+    assert (root / "run.json").read_bytes() == saved
+    assert len(transfer.calls) == 1
 
 
 def test_stage_preserves_structure_and_freezes_identity(batch):

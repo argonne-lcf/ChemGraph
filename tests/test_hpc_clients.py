@@ -138,18 +138,6 @@ def test_custom_client_never_falls_back_to_legacy_shared_cache(monkeypatch, tmp_
 
 
 def test_explicit_mapping_and_legacy_layout(monkeypatch, tmp_path):
-    data = []
-
-    class Data:
-        def __init__(self, client, source, destination, **kwargs):
-            self.items = []
-            self.endpoints = source, destination
-            data.append(self)
-
-        def add_item(self, source, destination):
-            self.items.append((source, destination))
-
-    monkeypatch.setattr(globus_sdk, "TransferData", Data)
     manager = GlobusTransferManager("source", "dest", "/remote")
     manager._transfer_client = Mock()
     manager._transfer_client.submit_transfer.return_value = {"task_id": "transfer"}
@@ -159,10 +147,27 @@ def test_explicit_mapping_and_legacy_layout(monkeypatch, tmp_path):
         "/remote/run/in.xyz",
         "/remote/run/in_1.xyz",
     ]
-    manager.transfer_mapping({"/collection/a/in.xyz": "/remote/run/a/in.xyz"})
-    assert data[-1].items == [("/collection/a/in.xyz", "/remote/run/a/in.xyz")]
+    client = manager._transfer_client
+    payload = client.submit_transfer.call_args.args[0]
+    assert isinstance(payload, globus_sdk.TransferData)
+    assert [item["destination_path"] for item in payload["DATA"]] == list(result.file_mapping.values())
+    mapping = {"/collection/a/in.xyz": "/remote/run/a/in.xyz"}
+    prepared = manager.prepare_mapping(mapping)
+    assert client.submit_transfer.call_count == 1
+    mapping.clear()
+    assert manager.submit_prepared(prepared) == "transfer"
+    payload = client.submit_transfer.call_args.args[0]
+    assert isinstance(payload, globus_sdk.TransferData)
+    assert [(item["source_path"], item["destination_path"]) for item in payload["DATA"]] == [
+        ("/collection/a/in.xyz", "/remote/run/a/in.xyz")
+    ]
+    assert payload["verify_checksum"] is True
+    assert payload["sync_level"] == 3
+    assert payload["label"] == "ChemGraph HPC staging"
     manager.transfer_mapping({"/remote/out": "/collection/out"}, reverse=True)
-    assert data[-1].endpoints == ("dest", "source")
+    payload = client.submit_transfer.call_args.args[0]
+    assert (payload["source_endpoint"], payload["destination_endpoint"]) == ("dest", "source")
+    assert "client" not in repr(prepared) and "payload" not in repr(prepared)
 
 
 def test_iri_contracts_filters_history_and_cancel(monkeypatch):
