@@ -1,6 +1,6 @@
 ---
 name: chemgraph
-description: Use ChemGraph Python and CLI workflows, agent-written batch scripts, and attached chemistry MCP tools. Use for molecular simulations, ASE calculations, staging structures, tracking calculations, and reporting computed results.
+description: Run ChemGraph calculations, prepare ASE batch scripts, stage structures, and inspect chemistry results through local Python or attached MCP tools.
 license: Apache-2.0
 metadata:
   authors: Thang Pham
@@ -9,41 +9,44 @@ metadata:
 
 # Use ChemGraph
 
-1. Identify the requested calculation, input structures, calculator/model,
-   execution system, and output location. Inspect attached tool schemas before
-   selecting arguments. Ask for missing scientific choices rather than inventing
-   them; do not replace the requested calculator with another one silently.
-2. Use native chemistry tools for supported local operations. When discovery is
-   available, search/load the needed tools before considering scripts or reading
-   their implementation source. Scripts can reuse ChemGraph's Python APIs when
-   a capability is unavailable or a separate batch script is needed.
-   When inputs need construction, read
-   [local structure preparation](references/structure-preparation.md), including
-   on-demand tool loading when available. For direct PBS jobs, read [the ASE batch example](references/ase-batch.md)
-   and the `pbs-hpc` skill; no chemistry MCP server or Parsl is required.
-   Preserve an explicitly requested execution method. Report missing dependencies.
-   This skill does not grant tools or override approvals.
-3. For Python or CLI setup, read [interface guidance](references/python-and-cli.md).
-   For calculations through attached tools, read
-   [MCP workflow guidance](references/mcp-workflows.md).
-4. Establish where every file lives: the agent's virtual filesystem, its shell,
-   the MCP server, or the compute worker. A path readable with `read_file` need
-   not exist on another host. Use existing staging tools when files must move.
-5. Submit the requested calculation once. Save returned job or batch identifiers.
-   When a calculation is pending, poll the available status tools or return the
-   identifier and pending state; do not resubmit merely because it is unfinished.
-6. Report actual tool results, including failures, units, calculator/model, and
-   output paths. For ASE, prefer `potential_energy`; `single_point_energy` is a
-   legacy compatibility field. Distinguish optimization convergence from job
-   completion. Never invent numerical results or label pending work successful.
+Preserve the requested calculator, scientific parameters, and execution method.
+Ask for missing scientific choices; report missing dependencies. Skills do not
+grant tools or override approvals.
 
-For scheduler scripts or allocations, also read the `pbs-hpc` skill from the
-available skill catalog. Facility-specific values belong in user configuration.
+## Choose the workflow
+
+- **Prepare batch files:** read [the ASE example](references/ase-batch.md) and
+  `pbs-hpc`. Use the documented Python API directly; do not load `run_ase` merely
+  to obtain its schema or inspect its implementation. For user-selected IRI
+  submission, follow `hpc-batch` instead. Preparation alone does not submit a job.
+- **Run locally:** use native tools. Load known names directly with `load_tools`,
+  grouping tools needed for the next operations in one request; use `search_tools`
+  for unfamiliar capabilities. `run_ase` executes ASE; `extract_output_json`
+  inspects results. Read the loaded schemas before supplying arguments.
+  For structure generation, read [local preparation](references/structure-preparation.md):
+  `smiles_to_coordinate_file` generates coordinates and `file_to_atomsdata`
+  validates them. User-supplied explicit coordinates can be written as XYZ and
+  validated without SMILES generation. Keep validation before calculation.
+- **Use attached MCP tools:** read [MCP workflows](references/mcp-workflows.md)
+  and the attached schemas; local paths may not be visible to the server.
+- **Configure Python or CLI:** read [interface guidance](references/python-and-cli.md)
+  only when setup is part of the task.
+
+Open skills at their catalog paths and follow direct reference links; directory
+listing is unnecessary when paths are known. Batch independent reads and load
+only task-relevant references, including any the user explicitly requests.
+Use targeted schema/source inspection only for a concrete gap or validation
+error; avoid printing whole implementations to rediscover documented behavior.
+
+Submit requested calculations once and retain job IDs; poll pending jobs without
+resubmitting. Report actual failures, units, calculator/model and artifact paths.
+Prefer `potential_energy` over legacy `single_point_energy`; distinguish
+convergence from job completion. Keep full structures and logs in files and read
+only the portions needed to validate or diagnose results.
 
 ## Resource paths
 
-Resolve these relative references against this SKILL.md's directory using file
-tools. `/chemgraph-skills/` is a virtual, read-only resource route. To use a
-template or future helper with `execute`, first write/copy it into the execution
-backend's workspace and use that environment's actual path. State/store files
-are not automatically visible to a shell or an MCP server.
+Resolve references against this skill's directory. `/chemgraph-skills/` is a
+virtual, read-only route; copy needed assets into the execution workspace before
+using them in shell commands. Establish host/virtual path mappings and stage
+files when agent, shell, MCP server or compute worker filesystems differ.
