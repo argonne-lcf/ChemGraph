@@ -234,6 +234,7 @@ def initialize_agent(
     deepagent_user_skills_dir: str | None = None,
     deepagent_skill_dirs: Sequence[str] | None = None,
     deepagent_tool_registry: Any | None = None,
+    hpc_config: Any | None = None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -278,6 +279,9 @@ def initialize_agent(
     deepagent_tool_registry : ToolRegistry, optional
         Local catalog available on demand in the standalone Deep Agent.
         None selects built-ins; an empty registry disables discovery.
+    hpc_config : HPCConfig or dict, optional
+        Bind remote HPC tools for standalone Deep Agent; mutually exclusive with
+        deepagent_tool_registry. Credentials are loaded by authentication providers.
     deepagent_skills : sequence of str, optional
         Ordered backend-relative Agent Skills directories.
     deepagent_auto_approve : bool, optional
@@ -298,6 +302,11 @@ def initialize_agent(
                 "The experimental Deep Agent is available only with main_agent."
             )
         uses_deepagent = enable_deepagent or workflow_type == "deep_agent"
+        if hpc_config is not None:
+            if deepagent_tool_registry is not None:
+                raise ValueError("Pass hpc_config or a configured tool registry, not both.")
+            from chemgraph.tools.hpc.tools import create_hpc_registry
+            deepagent_tool_registry = create_hpc_registry(hpc_config, human_supervised=human_supervised)
         if deepagent_workspace is not None and not uses_deepagent:
             raise ValueError(
                 "deepagent_workspace requires enable_deepagent=True or the "

@@ -64,7 +64,7 @@ class BundledSkillsBackend(BackendProtocol):
             ):
                 raise ValueError(f"Invalid bundled skill: {skill_path}")
             skill_names.add(directory.name)
-        missing = {"chemgraph", "pbs-hpc"} - skill_names
+        missing = {"chemgraph", "pbs-hpc", "hpc-batch"} - skill_names
         if missing:
             raise ValueError(f"Missing bundled skills: {', '.join(sorted(missing))}")
 

@@ -1,0 +1,606 @@
+"""Hermetic scheduler/transfer lifecycle and native-tool integration."""
+
+from concurrent.futures import ThreadPoolExecutor
+import json
+import os
+from pathlib import Path
+import shutil
+import socket
+import subprocess
+import sys
+from unittest.mock import Mock
+
+import pytest
+
+from chemgraph.tools.alcf_iri_core import IRIRequestError
+from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget
+from chemgraph.tools.hpc.service import HPCService
+from chemgraph.tools.hpc.store import read_json, write_json
+from chemgraph.tools.hpc.tools import create_hpc_registry
+
+
+class Transfer:
+    def __init__(self):
+        self.state = "SUCCEEDED"
+        self.calls = []
+
+    def transfer_mapping(self, mapping, **kwargs):
+        self.calls.append((mapping, kwargs))
+        for source, destination in mapping.items():
+            path = Path(destination)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+        return f"transfer-{len(self.calls)}"
+
+    def check_transfer_status(self, task_id):
+        return {"task_id": task_id, "status": self.state}
+
+
+class Scheduler:
+    def __init__(self):
+        self.submissions = []
+        self.records = []
+        self.failure = None
+        self.cancelled = []
+        self.finished = False
+
+    def resolve_resource(self, name):
+        return name + "-uuid"
+
+    def submit(self, resource, spec):
+        self.submissions.append((resource, spec))
+        self.records.append(
+            {"id": "123.polaris", "job_spec": spec, "status": {"state": "queued"}}
+        )
+        if self.failure:
+            raise self.failure
+        return self.records[-1]
+
+    def jobs(self, resource, **kwargs):
+        return self.records if kwargs.get("offset", 0) == 0 else []
+
+    def status(self, resource, job_id, historical=False):
+        if self.finished and not historical:
+            raise IRIRequestError(404)
+        return {
+            "id": job_id,
+            "status": {"state": "completed" if self.finished else "queued"},
+        }
+
+    def cancel(self, resource, job_id):
+        self.cancelled.append((resource, job_id))
+
+
+@pytest.fixture
+def batch(tmp_path, monkeypatch):
+    monkeypatch.delenv("CHEMGRAPH_LOG_DIR", raising=False)
+    local = tmp_path / "local"
+    remote = tmp_path / "compute"
+    root = local / "run"
+    root.mkdir(parents=True)
+    (root / "launch.sh").write_text("#!/bin/bash\ntrue\n")
+    (root / "inputs").mkdir()
+    (root / "inputs/water.xyz").write_text("3\nwater\nO 0 0 0\nH 0 0 1\nH 1 0 0\n")
+    config = HPCConfig(
+        targets={
+            "polaris": HPCTarget(
+                compute_resource="polaris",
+                storage_resource="eagle",
+                local_collection="local",
+                remote_collection="eagle",
+                local_root=str(local),
+                local_collection_root=str(local),
+                remote_root=str(remote),
+                remote_collection_root=str(remote),
+                project="project",
+                queue="debug",
+            )
+        }
+    )
+    transfer, iri = Transfer(), Scheduler()
+    service = HPCService(config, iri=iri, transfer_factory=lambda target: transfer)
+    request = BatchRequest(target="polaris", launch_script="launch.sh")
+    return service, root, transfer, iri, request
+
+
+def stage(batch):
+    service, root, *_ = batch
+    return service.stage(str(root), "polaris", ["launch.sh", "inputs/water.xyz"])
+
+
+def test_stage_preserves_structure_and_freezes_identity(batch):
+    service, root, transfer, iri, request = batch
+    manifest = stage(batch)
+    remote = Path(manifest["remote_directory"])
+    assert (remote / "inputs/water.xyz").read_bytes() == (
+        root / "inputs/water.xyz"
+    ).read_bytes()
+    assert not (remote / "water.xyz").exists()
+    assert manifest["target_snapshot"]["compute_resource"] == "polaris-uuid"
+    assert service.submit(str(root), request)["state"] == "accepted"
+    assert service.submit(str(root), request)["job_id"] == "123.polaris"
+    assert len(iri.submissions) == 1
+    assert len(transfer.calls) == 1
+    with pytest.raises(ValueError, match="fresh"):
+        stage(batch)
+    with pytest.raises(ValueError, match="changed"):
+        service.submit(
+            str(root), request.model_copy(update={"arguments": ["different"]})
+        )
+
+
+@pytest.mark.parametrize("state", ["ACTIVE", "FAILED", "INACTIVE"])
+def test_incomplete_transfer_never_submits(batch, state):
+    service, root, transfer, iri, request = batch
+    stage(batch)
+    transfer.state = state
+    with pytest.raises(ValueError, match="complete"):
+        service.submit(str(root), request)
+    assert not iri.submissions
+    assert not (root / "submission.started").exists()
+
+
+@pytest.mark.parametrize("after_submit", [False, True])
+def test_changed_inputs_require_fresh_run(batch, after_submit):
+    service, root, _, iri, request = batch
+    stage(batch)
+    if after_submit:
+        service.submit(str(root), request)
+    (root / "inputs/water.xyz").write_text("changed")
+    with pytest.raises(ValueError, match="changed"):
+        service.submit(str(root), request)
+    assert len(iri.submissions) == int(after_submit)
+
+
+def test_concurrent_submission_and_new_session_monitoring(batch):
+    service, root, transfer, iri, request = batch
+    stage(batch)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: service.submit(str(root), request), range(2)))
+    assert len(iri.submissions) == 1
+    assert all(item["job_id"] == "123.polaris" for item in results)
+    # No current configuration: saved target and collection identity are sufficient.
+    restarted = HPCService({}, iri=iri, transfer_factory=lambda target: transfer)
+    iri.finished = True
+    assert restarted.status(str(root))["scheduler"]["state"] == "completed"
+    assert restarted.status(str(root))["scientific_success"] is None
+    restarted.cancel(str(root), "123.polaris")
+    assert iri.cancelled == [("polaris-uuid", "123.polaris")]
+    with pytest.raises(ValueError):
+        restarted.cancel(str(root), "123")
+
+
+@pytest.mark.parametrize(
+    "failure", [RuntimeError("token must not be saved"), SystemExit("crash")]
+)
+def test_lost_response_and_crash_reconcile_without_resubmit(batch, failure):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = failure
+    if isinstance(failure, SystemExit):
+        with pytest.raises(SystemExit):
+            service.submit(str(root), request)
+    else:
+        assert service.submit(str(root), request)["state"] == "submission_unknown"
+    assert service.submit(str(root), request)["state"] == "submission_unknown"
+    assert "token must not be saved" not in (root / "submission.json").read_text()
+    assert service.status(str(root))["job_id"] == "123.polaris"
+    assert len(iri.submissions) == 1
+
+
+@pytest.mark.parametrize("records", ["missing", "ambiguous", "wrong_directory"])
+def test_missing_or_ambiguous_history_stays_unknown(batch, records):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = RuntimeError("lost")
+    service.submit(str(root), request)
+    if records == "missing":
+        iri.records = []
+    elif records == "ambiguous":
+        iri.records.append({**iri.records[0], "id": "456.polaris"})
+    else:
+        iri.records[0]["job_spec"]["directory"] = "/another/run"
+    assert service.status(str(root))["state"] == "submission_unknown"
+    assert len(iri.submissions) == 1
+
+
+def test_rejection_and_pre_marker_crash(batch, monkeypatch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    import chemgraph.tools.hpc.service as module
+
+    original = module.mark_started
+    monkeypatch.setattr(module, "mark_started", Mock(side_effect=SystemExit))
+    with pytest.raises(SystemExit):
+        service.submit(str(root), request)
+    assert not iri.submissions
+    monkeypatch.setattr(module, "mark_started", original)
+    iri.failure = IRIRequestError(422)
+    assert service.submit(str(root), request)["state"] == "rejected"
+    assert service.submit(str(root), request)["state"] == "rejected"
+    assert len(iri.submissions) == 1
+
+
+def test_retrieval_mapping_and_overwrite(batch):
+    service, root, _, _, _ = batch
+    manifest = stage(batch)
+    output = Path(manifest["remote_directory"]) / "result.json"
+    output.write_text('{"success":true}')
+    record = service.retrieve(str(root), ["result.json"])
+    assert (root / "retrieved/result.json").read_text() == output.read_text()
+    assert (
+        service.transfer_status(str(root), record["transfer_id"])["status"]
+        == "SUCCEEDED"
+    )
+    with pytest.raises(ValueError, match="exists"):
+        service.retrieve(str(root), ["result.json"])
+    service.retrieve(str(root), ["result.json"], overwrite=True)
+
+
+@pytest.mark.parametrize(
+    "name", ["../outside", "/absolute", "run.json", ".hpc-inputs/script"]
+)
+def test_invalid_paths_do_not_start_transfer(batch, name):
+    service, root, transfer, *_ = batch
+    with pytest.raises(ValueError):
+        service.stage(str(root), "polaris", [name])
+    assert not transfer.calls
+
+
+def test_symlinks_and_manifest_version(batch):
+    service, root, transfer, *_ = batch
+    (root / "link").symlink_to(root / "launch.sh")
+    with pytest.raises(ValueError, match="Symlink"):
+        service.stage(str(root), "polaris", ["link"])
+    assert not transfer.calls
+    stage(batch)
+    manifest = read_json(root / "run.json")
+    manifest["version"] = 999
+    write_json(root / "run.json", manifest)
+    with pytest.raises(ValueError, match="version"):
+        service.status(str(root))
+
+
+def test_two_catalogs_and_empty_restriction(batch):
+    service, *_ = batch
+    one = create_hpc_registry(service.config, names=["hpc_list_targets"])
+    two = create_hpc_registry({"targets": {}}, names=["hpc_list_targets"])
+    assert "polaris" in one.get("hpc_list_targets").invoke({})["targets"]
+    assert two.get("hpc_list_targets").invoke({})["targets"] == {}
+    assert create_hpc_registry(service.config, names=[]).names() == ()
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+@pytest.mark.parametrize(
+    "action", ["hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job"]
+)
+def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.types import Command
+    from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+    from tests.test_registry_middleware import CatalogModel, call
+
+    service, root, transfer, iri, request = batch
+    if action != "hpc_transfer_files":
+        stage(batch)
+    if action == "hpc_cancel_job":
+        service.submit(str(root), request)
+    args = {
+        "hpc_transfer_files": {
+            "run_dir": str(root),
+            "target": "polaris",
+            "direction": "stage",
+            "files": ["launch.sh"],
+        },
+        "hpc_submit_job": {"run_dir": str(root), "request": request.model_dump()},
+        "hpc_cancel_job": {"run_dir": str(root), "job_id": "123.polaris"},
+    }[action]
+    registry = create_hpc_registry(service.config, names=[action], service=service)
+    graph = construct_deep_agent_graph(
+        CatalogModel(
+            responses=[
+                call("load_tools", names=[action]),
+                call(action, **args),
+                AIMessage(content="done"),
+            ]
+        ),
+        tool_registry=registry,
+        discover_skills=False,
+    )
+    config = {"configurable": {"thread_id": "test"}}
+    before = (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    state = graph.invoke(
+        {"messages": [HumanMessage(content="Run the HPC action")]}, config
+    )
+    assert state["__interrupt__"]
+    assert before == (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    graph.invoke(Command(resume={"decisions": [{"type": decision}]}), config)
+    after = (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    assert (after == before) == (decision == "reject")
+    if action == "hpc_submit_job" and decision == "reject":
+        assert not (root / "submission.started").exists()
+
+
+@pytest.mark.parametrize("outcome", ["success", "nonconverged", "missing", "login"])
+def test_packaged_ase_runner_uses_compute_relative_paths(batch, outcome):
+    service, root, _, _, _ = batch
+    assets = (
+        Path(__file__).resolve().parents[1] / "src/chemgraph/skills/hpc-batch/assets"
+    )
+    shutil.copyfile(assets / "calculate.py", root / "calculate.py")
+    (root / "input.json").write_text(
+        json.dumps(
+            {
+                "input_structure_file": "absent.xyz"
+                if outcome == "missing"
+                else "inputs/water.xyz",
+                "output_results_file": "result.json",
+                "driver": "opt",
+                "steps": 0 if outcome == "nonconverged" else 100,
+                "calculator": {"calculator_type": "emt"},
+            }
+        )
+    )
+    manifest = service.stage(
+        str(root),
+        "polaris",
+        ["launch.sh", "calculate.py", "input.json", "inputs/water.xyz"],
+    )
+    remote = Path(manifest["remote_directory"])
+    (remote / "nodes").write_text(socket.gethostname())
+    env = {
+        **os.environ,
+        "PBS_JOBID": "123.polaris",
+        "PBS_NODEFILE": str(remote / "nodes"),
+        "PYTHONPATH": str(assets.parents[3]),
+        "PYTHONNOUSERSITE": "1",
+    }
+    if outcome == "login":
+        env.pop("PBS_JOBID")
+    result = subprocess.run(
+        [sys.executable, "calculate.py"],
+        cwd=remote,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    expected = {"success": 0, "nonconverged": 2, "missing": 1, "login": 1}[outcome]
+    assert result.returncode == expected, result.stdout + result.stderr
+    assert not (root / "result.json").exists()
+    if outcome in ("success", "nonconverged"):
+        service.retrieve(str(root), ["result.json"])
+        output = json.loads((root / "retrieved/result.json").read_text())
+        assert output["success"]
+        assert output["converged"] == (outcome == "success")
+        assert isinstance(output["potential_energy"], float)
+
+
+def test_scripted_agent_prepares_stages_submits_and_new_agent_monitors(batch):
+    from deepagents.backends import LocalShellBackend
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.types import Command
+    from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+    from tests.test_registry_middleware import CatalogModel, call
+
+    service, root, _, iri, request = batch
+    fresh = root.parent / "scripted"
+    fresh.mkdir()
+    names = ["hpc_transfer_files", "hpc_transfer_status", "hpc_submit_job"]
+    registry = create_hpc_registry(service.config, names=names, service=service)
+    model = CatalogModel(
+        responses=[
+            call(
+                "write_file",
+                file_path="/workspace/launch.sh",
+                content="#!/bin/bash\ntrue\n",
+            ),
+            call("load_tools", names=names),
+            call(
+                "hpc_transfer_files",
+                run_dir=str(fresh),
+                files=["launch.sh"],
+                direction="stage",
+                target="polaris",
+            ),
+            call("hpc_transfer_status", run_dir=str(fresh)),
+            call("hpc_submit_job", run_dir=str(fresh), request=request.model_dump()),
+            AIMessage(content="Submitted"),
+        ]
+    )
+    graph = construct_deep_agent_graph(
+        model,
+        tool_registry=registry,
+        backend=LocalShellBackend(root_dir=str(fresh), virtual_mode=True),
+        discover_skills=False,
+    )
+    config = {"configurable": {"thread_id": "prepare"}}
+    state = graph.invoke(
+        {"messages": [HumanMessage(content="Prepare and submit")]}, config
+    )
+    reviews = 0
+    while state.get("__interrupt__"):
+        reviews += 1
+        assert reviews <= 3
+        state = graph.invoke(
+            Command(resume={"decisions": [{"type": "approve"}]}), config
+        )
+    assert reviews == 3 and len(iri.submissions) == 1
+    restarted = HPCService({}, iri=iri)
+    graph = construct_deep_agent_graph(
+        CatalogModel(
+            responses=[
+                call("load_tools", names=["hpc_job_status"]),
+                call("hpc_job_status", run_dir=str(fresh)),
+                AIMessage(content="Still queued"),
+            ]
+        ),
+        tool_registry=create_hpc_registry(
+            {}, names=["hpc_job_status"], service=restarted
+        ),
+        discover_skills=False,
+    )
+    graph.invoke(
+        {"messages": [HumanMessage(content="Inspect the saved job")]},
+        {"configurable": {"thread_id": "new-session"}},
+    )
+    assert len(iri.submissions) == 1
+    assert read_json(fresh / "job-status.json")["job_id"] == "123.polaris"
+
+
+def test_explicit_config_and_cli_restrictions(batch, tmp_path, monkeypatch):
+    import importlib
+    import toml
+
+    cli = importlib.import_module("chemgraph.cli.main")
+    service, root, *_ = batch
+    config = tmp_path / "selected.toml"
+    config.write_text(
+        toml.dumps(
+            {
+                "general": {"workflow": "deep_agent"},
+                "hpc": service.config.model_dump(exclude_none=True),
+            }
+        )
+    )
+    received = {}
+    monkeypatch.setattr(
+        cli, "interactive_mode", lambda **kwargs: received.update(kwargs)
+    )
+    args = cli.create_argument_parser().parse_args(
+        [
+            "run",
+            "--interactive",
+            "--config",
+            str(config),
+            "--tool",
+            "hpc_list_targets",
+        ]
+    )
+    cli._handle_run(args)
+    registry = received["deepagent_tool_registry"]
+    assert registry.names() == ("hpc_list_targets",)
+    assert registry.get("hpc_list_targets").invoke({})["targets"]["polaris"][
+        "local_root"
+    ] == str(root.parent)
+
+
+def test_collection_paths_are_not_compute_or_host_paths(tmp_path):
+    target = HPCTarget(
+        compute_resource="polaris",
+        storage_resource="eagle",
+        local_collection="local",
+        remote_collection="eagle",
+        local_root=str(tmp_path),
+        local_collection_root="/source",
+        remote_collection_root="/project",
+        remote_root="/eagle/project",
+        project="project",
+        queue="debug",
+    )
+    assert target.local_path(tmp_path / "run/input.xyz") == "/source/run/input.xyz"
+    assert (
+        target.collection_path("/eagle/project/run/input.xyz")
+        == "/project/run/input.xyz"
+    )
+    with pytest.raises(ValueError):
+        target.collection_path("/other-project/file")
+
+
+def test_concurrent_staging_has_one_transfer(batch):
+    _, _, transfer, _, _ = batch
+
+    def attempt(_):
+        try:
+            stage(batch)
+            return "staged"
+        except ValueError:
+            return "rejected"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(attempt, range(2))) == ["rejected", "staged"]
+    assert len(transfer.calls) == 1
+
+
+def test_saved_submission_operation_is_polled_without_resubmission(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.submit = Mock(return_value={"task_id": "operation"})
+    iri.task = Mock(
+        side_effect=[
+            {"id": "operation", "status": "active", "result": None},
+            {"id": "operation", "status": "completed", "result": {"id": "123.polaris"}},
+        ]
+    )
+    assert service.submit(str(root), request)["state"] == "submission_unknown"
+    assert service.status(str(root))["state"] == "submission_unknown"
+    assert service.status(str(root))["job_id"] == "123.polaris"
+    iri.submit.assert_called_once()
+
+
+def test_search_limit_and_unknown_shapes_cannot_resolve_acceptance(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = RuntimeError("lost")
+    service.submit(str(root), request)
+    iri.jobs = Mock(return_value=[iri.records[0]] * 100)
+    assert service.status(str(root))["state"] == "submission_unknown"
+    assert iri.jobs.call_count == 10
+    iri.jobs = Mock(return_value={"unexpected": iri.records})
+    assert service.status(str(root))["state"] == "submission_unknown"
+
+
+def test_source_changed_during_snapshot_never_transfers(batch, monkeypatch):
+    service, root, transfer, *_ = batch
+    original = shutil.copyfile
+
+    def changing_copy(source, destination):
+        result = original(source, destination)
+        Path(source).write_text("modified while copying")
+        return result
+
+    monkeypatch.setattr(shutil, "copyfile", changing_copy)
+    with pytest.raises(ValueError, match="changed"):
+        stage(batch)
+    assert not transfer.calls
+
+
+def test_custom_review_policy_is_preserved(batch):
+    from langchain_core.messages import AIMessage, HumanMessage
+    from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+    from tests.test_registry_middleware import CatalogModel, call
+
+    service, root, _, iri, request = batch
+    stage(batch)
+    graph = construct_deep_agent_graph(
+        CatalogModel(
+            responses=[
+                call("load_tools", names=["hpc_submit_job"]),
+                call("hpc_submit_job", run_dir=str(root), request=request.model_dump()),
+                AIMessage(content="done"),
+            ]
+        ),
+        tool_registry=create_hpc_registry(
+            {}, names=["hpc_submit_job"], service=service
+        ),
+        interrupt_on={"hpc_submit_job": False},
+        discover_skills=False,
+    )
+    result = graph.invoke(
+        {"messages": [HumanMessage(content="Submit")]},
+        {"configurable": {"thread_id": "trusted"}},
+    )
+    assert "__interrupt__" not in result and len(iri.submissions) == 1
+
+
+def test_monitoring_cannot_retarget_a_prepared_run(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    service.submit(str(root), request)
+    manifest = read_json(root / "run.json")
+    manifest["target_snapshot"]["compute_resource"] = "different-machine"
+    write_json(root / "run.json", manifest)
+    with pytest.raises(ValueError, match="manifest changed"):
+        service.status(str(root))
+    with pytest.raises(ValueError, match="manifest changed"):
+        service.cancel(str(root), "123.polaris")
+    assert not iri.cancelled

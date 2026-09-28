@@ -1,7 +1,8 @@
 # Deep Agent skills
 
-ChemGraph ships two Agent Skills: **chemgraph** for its Python, CLI, and chemistry
-MCP workflows, and **pbs-hpc** for PBS job preparation, monitoring, and facility
+ChemGraph ships three Agent Skills: **chemgraph** for its Python, CLI, and chemistry
+MCP workflows, **hpc-batch** for remote IRI/Globus batch execution, and
+**pbs-hpc** for PBS job preparation, monitoring, and facility
 guidance. They are available to standalone Deep Agents, registry-created Deep
 Agent workers, and the optional `main_agent` workspace worker.
 
