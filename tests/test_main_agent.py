@@ -215,7 +215,10 @@ async def test_main_agent_delegates_and_keeps_normal_turns_on_one_thread():
         "Calculate something",
         "Explain that result",
     ]
-    assert {tool.name for tool in llm.bound_tools} == {"read_file", "task"}
+    assert {tool.name for tool in llm.bound_tools} == {
+        "read_file", "task", "ls", "glob", "grep", "write_file", "edit_file",
+        "delete", "write_todos", "search_tools", "load_tools",
+    }
 
 
 @pytest.mark.asyncio
@@ -783,9 +786,8 @@ def test_main_tools_are_extensible_and_middleware_names_are_reserved():
         config={"configurable": {"thread_id": "custom-main-tool"}},
     )
     assert {tool.name for tool in llm.bound_tools} == {
-        "lookup_value",
-        "read_file",
-        "task",
+        "lookup_value", "read_file", "task", "ls", "glob", "grep",
+        "write_file", "edit_file", "delete", "write_todos", "search_tools", "load_tools",
     }
 
     @tool("read_file")

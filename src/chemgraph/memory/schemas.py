@@ -58,7 +58,19 @@ class MainAgentGraphConfig(BaseModel):
     subagent_names: tuple[str, ...] = ("chemgraph",)
     tool_signatures: tuple[str, ...] = ()
     package_version: str = ""
+    # Keep 1 as the missing-field default for legacy records; new graphs write 2.
     graph_schema_version: int = 1
+    workspace: Optional[str] = None
+    skills: tuple[str, ...] = ()
+    skill_dirs: tuple[str, ...] = ()
+    discover_skills: bool = True
+    user_skills_dir: Optional[str] = None
+    registry_tool_names: tuple[str, ...] = ()
+    configured_subagent_names: Optional[tuple[str, ...]] = None
+    main_agent_prompt: Optional[str] = None
+    cli_restorable: bool = False
+    configuration_id: Optional[str] = None
+    requires_configuration_id: bool = False
     topology_fingerprint: str = ""
 
 

@@ -10,6 +10,10 @@ from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware import FilesystemMiddleware, SubAgentMiddleware
 from deepagents.middleware.subagents import CompiledSubAgent
 from langchain.agents import create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware, TodoListMiddleware
+from deepagents.middleware._state import private_state_field_names
+from deepagents.middleware.patch_tool_calls import PatchToolCallsMiddleware
+from deepagents.middleware.summarization import create_summarization_middleware
 from langchain_core.messages import AIMessage, ToolMessage, convert_to_messages
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
@@ -23,32 +27,28 @@ from chemgraph.graphs.deep_agent import (
 )
 from chemgraph.graphs.single_agent import construct_single_agent_graph
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
+from chemgraph.registry.tools import ToolRegistry
+from chemgraph.graphs.workspace import (
+    _DEFAULT_INTERRUPT_POLICY, default_tool_registry, prepare_workspace_runtime,
+)
 
 
 DEFAULT_MAIN_AGENT_PROMPT = """\
-You are the long-lived ChemGraph supervisor. You manage the conversation,
-decompose user requests, delegate specialist work, and synthesize the returned
-results into a clear response.
+You are the long-lived ChemGraph main agent. Complete requests using skills,
+workspace tools, local chemistry tools, and configured specialists. Read the
+relevant available skill before a specialized workflow. Use direct tools for
+focused operations and task for substantial specialist work. Delegation is
+optional; give workers self-contained inputs and constraints, use their exact
+registered names, and review their results. Do not run workspace mutations in
+parallel. Ask for missing inputs and never invent scientific results.
 
-Rules:
-1. Delegate computational chemistry tasks and any work requiring specialist
-   tools through `task`; do not invent scientific results.
-2. Give each subagent a self-contained task containing the relevant inputs and
-   constraints. You may call multiple subagents when tasks are independent.
-3. Review subagent results and give the user a complete response. If required
-   input is missing, ask a clear question in your response.
-4. Use supervisor-level tools directly when their descriptions match the task.
-5. When available, use `chemgraph` for molecular construction, simulation,
-   calculator use, and other computational chemistry work. Use `deepagent` for
-   repository exploration, coding, testing, file analysis, and other long
-   workspace tasks when that specialist is available. Registry-composed workers
-   use the name `deep_agent`; use the exact registered name in `task` calls.
-6. Do not launch parallel workspace-mutating tasks. Parallel delegation is
-   appropriate only for independent read-only work.
-7. If deepagent or deep_agent is available, do not generate the code or file edits yourself;
-   delegate those tasks to deepagent.
-8. Use `read_file` to inspect checkpoint-backed files returned by subagents
-   when their contents are needed. This tool cannot access host files.
+Inspect tool schemas and preserve the user's calculator and execution method.
+Follow existing action approvals. Treat /workspace as the project root when
+mounted; follow the shell/virtual path mappings. Packaged skills under
+/chemgraph-skills/ are readable resources, not shell paths. Local registry tools
+execute on this host independently of the workspace backend; use absolute host
+paths for their artifacts. Establish remote input visibility before submission.
+Return a self-contained account of results, artifact paths, and unresolved work.
 """
 
 
@@ -181,7 +181,10 @@ def _validate_main_tools(main_tools: Sequence[BaseTool]) -> None:
     names = [getattr(item, "name", "") for item in main_tools]
     if any(not name for name in names):
         raise ValueError("Every supervisor tool must have a non-empty name.")
-    reserved = {"read_file", "task"}
+    reserved = {
+        "ls", "read_file", "write_file", "edit_file", "delete", "glob", "grep",
+        "execute", "task", "write_todos", "search_tools", "load_tools",
+    }
     if conflicts := sorted(reserved.intersection(names)):
         formatted = ", ".join(repr(name) for name in conflicts)
         raise ValueError(
@@ -196,6 +199,15 @@ def construct_main_agent_graph(
     *,
     subagents: Sequence[CompiledSubAgent] | None = None,
     main_tools: list[BaseTool] | None = None,
+    backend: BackendProtocol | None = None,
+    tool_registry: ToolRegistry | None = None,
+    skills: Sequence[str] | None = None,
+    skill_dirs: Sequence[str] | None = None,
+    discover_skills: bool = True,
+    user_skills_dir: str | None = None,
+    interrupt_on: dict[str, Any] | None | object = _DEFAULT_INTERRUPT_POLICY,
+    recursion_limit: int = 200,
+    human_supervised: bool = False,
     subagent_tools: list[BaseTool] | None = None,
     subagent_system_prompt: str | None = None,
     subagent_formatter_prompt: str | None = None,
@@ -217,7 +229,18 @@ def construct_main_agent_graph(
     checkpointer: Any | None = None,
     subagent_recorder: SubagentRunRecorder | None = None,
 ):
-    """Construct a checkpointed supervisor with Deep Agents delegation."""
+    """Construct an independent main agent with direct tools and optional delegation.
+
+    No backend means checkpoint-backed files and no shell. Workspace and skill
+    capabilities share DeepAgent's setup, while the graph is built here with
+    ``create_agent``. ``tool_registry=None`` selects non-interactive built-ins;
+    an empty registry disables discovery. ``interrupt_on=None`` disables direct
+    action review for callers explicitly managing their own approval boundary.
+    Compiled workers retain their own tools and review policies. Use
+    ``MainAgentSession`` to drive and restore durable threads.
+    """
+    if recursion_limit <= 0:
+        raise ValueError("recursion_limit must be positive.")
     if deepagent_recursion_limit <= 0:
         raise ValueError("deepagent_recursion_limit must be positive.")
     if deepagent_backend is not None and not enable_deepagent:
@@ -291,23 +314,45 @@ def construct_main_agent_graph(
     validated_subagents = _validate_subagents(registered_subagents, subagent_recorder)
     supervisor_tools = list(main_tools or [])
     _validate_main_tools(supervisor_tools)
-    state_backend = StateBackend()
-    filesystem_middleware = FilesystemMiddleware(
-        backend=state_backend,
-        tools=["read_file"],
+    if tool_registry is None:
+        tool_registry = default_tool_registry(
+            supervisor_tools, human_supervised=human_supervised,
+        )
+    effective_backend, _, workspace_middleware, policy = prepare_workspace_runtime(
+        backend=backend, tools=supervisor_tools, tool_registry=tool_registry,
+        skills=skills, skill_dirs=skill_dirs, discover_skills=discover_skills,
+        user_skills_dir=user_skills_dir, interrupt_on=interrupt_on,
     )
-    subagent_middleware = SubAgentMiddleware(
-        backend=state_backend,
+    middleware = [
+        TodoListMiddleware(),
+        *workspace_middleware,
+        FilesystemMiddleware(backend=effective_backend),
+        create_summarization_middleware(llm, effective_backend),
+        PatchToolCallsMiddleware(),
+    ]
+    middleware.append(SubAgentMiddleware(
+        backend=effective_backend,
         subagents=validated_subagents,
-    )
-    return create_agent(
+        private_state_keys=private_state_field_names(
+            *(item.state_schema for item in middleware if item.state_schema)
+        ),
+        task_description=(
+            "Delegate a self-contained task to a configured specialist. "
+            "Use direct tools for focused work. Do not run workspace mutations "
+            "in parallel. Available agents:\n{available_agents}"
+        ),
+    ))
+    if policy:
+        middleware.append(HumanInTheLoopMiddleware(interrupt_on=policy))
+    graph = create_agent(
         model=llm,
         tools=supervisor_tools,
         system_prompt=system_prompt,
-        middleware=[filesystem_middleware, subagent_middleware],
+        middleware=middleware,
         checkpointer=checkpointer if checkpointer is not None else InMemorySaver(),
         name="main_agent",
     )
+    return graph.with_config({"recursion_limit": recursion_limit})
 
 
 __all__ = [

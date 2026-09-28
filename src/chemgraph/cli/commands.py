@@ -33,6 +33,9 @@ from chemgraph.agent.interrupts import (
 )
 from chemgraph.skills.runtime import resolve_skill_dirs
 from chemgraph.graphs.deep_agent import normalize_skill_sources
+from chemgraph.graphs.workspace import create_cli_workspace_backend
+from chemgraph.memory.graph_config import GRAPH_SCHEMA_VERSION, validate_configuration_id
+from chemgraph.registry.tools import RegistryError
 from chemgraph.agent.usage import UsageCollector, combine_usage
 from chemgraph.memory.store import SessionStore
 from chemgraph.memory.durable import delete_durable_session
@@ -154,31 +157,21 @@ def check_api_keys(
 
 _INIT_TIMEOUT_SECONDS = 30
 
-_DEEPAGENT_ENV_ALLOWLIST = (
-    "PATH",
-    "PYTHONPATH",
-    "VIRTUAL_ENV",
-    "CONDA_PREFIX",
-    "TMPDIR",
-    "CHEMGRAPH_LOG_DIR",
-)
-
-
 def _create_experimental_deepagent_backend(
     workspace: str | None,
     *,
     require_confirmation: bool = True,
 ):
     """Create the explicitly approved development-only host-shell backend."""
-    from deepagents.backends import LocalShellBackend
-
-    root = Path(workspace or Path.cwd()).expanduser().resolve()
+    if workspace is not None and (not isinstance(workspace, str) or not workspace.strip()):
+        raise ValueError("Workspace must be a non-empty host directory path.")
+    root = Path(workspace if workspace is not None else Path.cwd()).expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Deep Agent workspace is not a directory: {root}")
 
     console.print(
         Panel(
-            "The experimental Deep Agent can read and modify files under "
+            "The workspace agent can read and modify files under "
             f"{root} and can run arbitrary shell commands on this host. The "
             "shell is not confined to that directory. "
             + (
@@ -196,17 +189,7 @@ def _create_experimental_deepagent_backend(
     ):
         raise RuntimeError("Experimental Deep Agent access was not approved.")
 
-    environment = {
-        name: os.environ[name]
-        for name in _DEEPAGENT_ENV_ALLOWLIST
-        if name in os.environ
-    }
-    return LocalShellBackend(
-        root_dir=root,
-        virtual_mode=True,
-        env=environment,
-        inherit_env=False,
-    )
+    return create_cli_workspace_backend(root)
 
 
 def initialize_agent(
@@ -234,6 +217,15 @@ def initialize_agent(
     deepagent_user_skills_dir: str | None = None,
     deepagent_skill_dirs: Sequence[str] | None = None,
     deepagent_tool_registry: Any | None = None,
+    workspace: str | None = None,
+    skills: Sequence[str] | None = None,
+    skill_dirs: Sequence[str] | None = None,
+    discover_skills: bool = True,
+    user_skills_dir: str | None = None,
+    tool_registry: Any | None = None,
+    subagent_names: Sequence[str] | None = None,
+    main_agent_prompt: str | None = None,
+    configuration_id: str | None = None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -324,11 +316,44 @@ def initialize_agent(
                 "deepagent_auto_approve requires an explicit deepagent_workspace."
             )
 
+        if workspace is not None and workflow_type != "main_agent":
+            raise ValueError("workspace requires the main_agent workflow.")
+        validate_configuration_id(configuration_id)
+        if workspace is not None and (not isinstance(workspace, str) or not workspace.strip()):
+            raise ValueError("Workspace must be a non-empty host directory path.")
+        if subagent_names is not None:
+            from chemgraph.registry.agents import AgentRegistry
+            if not isinstance(subagent_names, Sequence) or isinstance(subagent_names, (str, bytes)) or not subagent_names:
+                raise ValueError("subagents must be a non-empty list of worker names.")
+            registry = AgentRegistry()
+            if not all(isinstance(name, str) and name.strip() for name in subagent_names):
+                raise ValueError("subagents must contain non-empty strings.")
+            subagent_names = tuple(registry.resolve_name(name) for name in subagent_names)
+            if len(set(subagent_names)) != len(subagent_names):
+                raise ValueError("Duplicate subagent names or aliases.")
+            if enable_deepagent and "deep_agent" in subagent_names:
+                raise ValueError("deep_agent is already selected; omit --deepagent.")
+            for name in subagent_names:
+                status = registry.availability(name)
+                if not status.available:
+                    raise ValueError(f"Worker {name!r} is unavailable: {status.issues}")
+        skills = normalize_skill_sources(skills)
+        skill_dirs = resolve_skill_dirs(skill_dirs)
+        if not isinstance(discover_skills, bool):
+            raise TypeError("discover_skills must be a boolean.")
         deepagent_skills = normalize_skill_sources(deepagent_skills)
         deepagent_skill_dirs = resolve_skill_dirs(deepagent_skill_dirs)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, RegistryError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         return None
+
+    backend = None
+    if workspace is not None:
+        try:
+            backend = _create_experimental_deepagent_backend(workspace)
+        except (RuntimeError, ValueError, OSError) as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            return None
 
     deepagent_backend = None
     if uses_deepagent:
@@ -337,7 +362,7 @@ def initialize_agent(
                 deepagent_workspace,
                 require_confirmation=not deepagent_auto_approve,
             )
-        except (RuntimeError, ValueError) as exc:
+        except (RuntimeError, ValueError, OSError) as exc:
             console.print(f"[red]{escape(str(exc))}[/red]")
             return None
 
@@ -384,11 +409,20 @@ def initialize_agent(
             Any
                 Initialized ``ChemGraph`` instance.
             """
-            from chemgraph.agent.llm_agent import ChemGraph
+            from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
 
             return ChemGraph(
                 model_name=model_name,
                 workflow_type=workflow_type,
+                backend=backend,
+                tool_registry=tool_registry,
+                skills=skills or None,
+                skill_dirs=skill_dirs or None,
+                discover_skills=discover_skills,
+                user_skills_dir=user_skills_dir,
+                subagent_names=subagent_names,
+                prompts=PromptConfig(main_agent=main_agent_prompt),
+                configuration_id=configuration_id,
                 base_url=base_url,
                 argo_user=argo_user,
                 generate_report=generate_report,
@@ -418,8 +452,9 @@ def initialize_agent(
                 agent = future.result(timeout=_INIT_TIMEOUT_SECONDS)
 
             progress.update(task, description="[green]Agent initialized successfully!")
-            if workflow_type == "deep_agent":
-                registry = getattr(agent, "deepagent_tool_registry", None)
+            if workflow_type in {"deep_agent", "main_agent"}:
+                registry = getattr(agent, "tool_registry" if workflow_type == "main_agent"
+                                   else "deepagent_tool_registry", None)
                 count = len(registry.names()) if registry is not None else 0
                 console.print(
                     f"Local tools: {count} discoverable (loaded on demand)"
@@ -765,17 +800,16 @@ def create_main_agent_session(
 
 
 def _render_main_agent_event(event: str, payload: dict[str, Any]) -> None:
-    """Render one tagged subagent tool call during interactive execution."""
+    """Render direct and delegated tool activity during interactive execution."""
     if event != "tool_call_started":
         return
     subagent_name = payload.get("subagent_name")
-    if not subagent_name:
-        return
     tool_name = payload.get("tool_name") or "unknown"
     arguments = payload.get("arguments", "")
     console.print(
-        f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent_name))}[/bold cyan] "
-        f"[dim]→[/dim] [bold]{escape(str(tool_name))}[/bold]"
+        (f"[dim]Subagent[/dim] [bold cyan]{escape(str(subagent_name))}[/bold cyan] "
+         if subagent_name else "[bold cyan]main_agent[/bold cyan] ")
+        + f"[dim]→[/dim] [bold]{escape(str(tool_name))}[/bold]"
         f"({escape(str(arguments))})"
     )
 
@@ -1253,6 +1287,34 @@ def _parse_interactive_input(query: str) -> tuple[str, str] | None:
     return name, argument.strip()
 
 
+def _main_agent_options(config):
+    """Reconstruct only the persisted, CLI-supported main-agent configuration."""
+    from chemgraph.registry.tools import RegistryError, ToolRegistry
+
+    if config.graph_schema_version != GRAPH_SCHEMA_VERSION:
+        raise ValueError("This main-agent graph is incompatible. Start a new session; "
+                         "the old transcript remains readable.")
+    if not config.cli_restorable or not config.topology_fingerprint or config.requires_configuration_id:
+        raise ValueError("This session requires caller-provided Python tools, workers, "
+                         "or a backend. Reconstruct it through the Python API.")
+    catalog = ToolRegistry()
+    try:
+        registry = ToolRegistry(catalog.get_spec(name) for name in config.registry_tool_names)
+    except RegistryError as exc:
+        raise ValueError(f"Cannot reconstruct the stored tool catalog: {exc}") from exc
+    return {
+        "workspace": config.workspace,
+        "skills": config.skills,
+        "skill_dirs": config.skill_dirs,
+        "discover_skills": config.discover_skills,
+        "user_skills_dir": config.user_skills_dir,
+        "tool_registry": registry,
+        "subagent_names": config.configured_subagent_names,
+        "main_agent_prompt": config.main_agent_prompt,
+        "configuration_id": config.configuration_id,
+    }
+
+
 @_report_session_usage
 def interactive_mode(
     model: str = "gpt-4o-mini",
@@ -1276,6 +1338,15 @@ def interactive_mode(
     deepagent_user_skills_dir: str | None = None,
     deepagent_skill_dirs: Sequence[str] | None = None,
     deepagent_tool_registry: Any | None = None,
+    workspace: str | None = None,
+    skills: Sequence[str] | None = None,
+    skill_dirs: Sequence[str] | None = None,
+    discover_skills: bool = True,
+    user_skills_dir: str | None = None,
+    tool_registry: Any | None = None,
+    subagent_names: Sequence[str] | None = None,
+    main_agent_prompt: str | None = None,
+    configuration_id: str | None = None,
 ) -> None:
     """Start interactive REPL mode for ChemGraph CLI.
 
@@ -1337,6 +1408,20 @@ def interactive_mode(
         "aliases such as 'quit' and 'help' also work.[/dim]\n"
     )
 
+    if workspace is not None and (not isinstance(workspace, str) or not workspace.strip()):
+        console.print("[red]Workspace must be a non-empty host directory path.[/red]")
+        return
+    main_options = {
+        "workspace": str(Path(workspace).expanduser().absolute()) if workspace is not None else None,
+        "skills": skills,
+        "skill_dirs": skill_dirs,
+        "discover_skills": discover_skills,
+        "user_skills_dir": user_skills_dir,
+        "tool_registry": tool_registry,
+        "subagent_names": subagent_names,
+        "main_agent_prompt": main_agent_prompt,
+        "configuration_id": configuration_id,
+    }
     checkpoint_runtime: CheckpointRuntime | None = None
     checkpoint_saver = None
     restored_thread_id: str | None = None
@@ -1371,6 +1456,11 @@ def interactive_mode(
             )
             return
         stored_graph_config = stored_metadata.graph_config
+        try:
+            main_options = _main_agent_options(stored_graph_config)
+        except ValueError as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            return
         model = stored_graph_config.model_name
         workflow = "main_agent"
         recursion_limit = stored_graph_config.recursion_limit
@@ -1392,6 +1482,7 @@ def interactive_mode(
             # Freeze paths before startup prompts or later workflow commands can
             # change cwd. Strict access checks belong to Deep Agent initialization.
             deepagent_skill_dirs = _anchor_skill_dirs(deepagent_skill_dirs)
+            main_options["skill_dirs"] = _anchor_skill_dirs(main_options["skill_dirs"])
         except (TypeError, ValueError, RuntimeError, OSError) as exc:
             console.print(f"[red]{escape(str(exc))}[/red]")
             return
@@ -1460,11 +1551,16 @@ def interactive_mode(
         reasoning_effort=reasoning_effort,
         max_retries=max_retries,
         terminal_tool_names=terminal_tool_names,
+        **(main_options if workflow == "main_agent" else {}),
     )
     if not agent:
         if checkpoint_runtime is not None:
             checkpoint_runtime.close()
         return
+    if workflow == "main_agent":
+        main_options["workspace"] = str(agent.backend.cwd.resolve()) if getattr(agent, "backend", None) is not None else main_options["workspace"]
+        main_options["skill_dirs"] = getattr(agent, "skill_dirs", main_options["skill_dirs"])
+        main_options["user_skills_dir"] = getattr(agent, "user_skills_dir", main_options["user_skills_dir"])
     if workflow == "deep_agent" or (enable_deepagent and workflow == "main_agent"):
         deepagent_skill_dirs = getattr(agent, "deepagent_skill_dirs", deepagent_skill_dirs)
 
@@ -1633,6 +1729,11 @@ Example queries:
                         )
                         continue
                     target_config = target_metadata.graph_config
+                    try:
+                        target_main_options = _main_agent_options(target_config)
+                    except ValueError as exc:
+                        console.print(f"[red]{escape(str(exc))}[/red]")
+                        continue
                     candidate_db = (
                         target_metadata.checkpoint_db or DEFAULT_CHECKPOINT_DB
                     )
@@ -1666,6 +1767,7 @@ Example queries:
                             reasoning_effort=target_config.reasoning_effort,
                             max_retries=target_config.max_retries,
                             terminal_tool_names=target_config.terminal_tool_names,
+                            **target_main_options,
                         )
                         if candidate_agent is None:
                             raise RuntimeError("Could not recreate the stored agent.")
@@ -1697,6 +1799,7 @@ Example queries:
                     checkpoint_runtime = candidate_runtime
                     checkpoint_saver = candidate_saver
                     agent = candidate_agent
+                    main_options = target_main_options
                     main_session = candidate_session
                     model = target_config.model_name
                     workflow = "main_agent"
@@ -1833,6 +1936,7 @@ Example queries:
                     reasoning_effort=new_reasoning_effort,
                     max_retries=max_retries,
                     terminal_tool_names=terminal_tool_names,
+                    **(main_options if workflow == "main_agent" else {}),
                 )
                 if new_agent:
                     if reasoning_effort is not None and new_reasoning_effort is None:
@@ -1927,10 +2031,15 @@ Example queries:
                         reasoning_effort=reasoning_effort,
                         max_retries=max_retries,
                         terminal_tool_names=terminal_tool_names,
+                        **(main_options if new_workflow == "main_agent" else {}),
                     )
                     if new_agent:
                         workflow = new_workflow
                         agent = new_agent
+                        if workflow == "main_agent":
+                            main_options["workspace"] = str(agent.backend.cwd.resolve()) if getattr(agent, "backend", None) is not None else main_options["workspace"]
+                            main_options["skill_dirs"] = getattr(agent, "skill_dirs", main_options["skill_dirs"])
+                            main_options["user_skills_dir"] = getattr(agent, "user_skills_dir", main_options["user_skills_dir"])
                         if workflow == "deep_agent" or (
                             enable_deepagent and workflow == "main_agent"
                         ):

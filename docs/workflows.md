@@ -6,7 +6,7 @@ Python. `single_agent` is the recommended first choice.
 | Workflow | Purpose | Requirements and constraints |
 | --- | --- | --- |
 | `single_agent` | One general chemistry agent with local tools | Default; CLI and Python |
-| `main_agent` | Durable supervisor with checkpointed subagents | Interactive CLI or `MainAgentSession` only |
+| `main_agent` | Direct workspace/chemistry work and configured specialists | Interactive CLI or `MainAgentSession` only |
 | `deep_agent` | Workspace tasks and attached chemistry tools | CLI and Python; alias `deepagent`; broad local shell access |
 | `multi_agent` | Routes tasks among specialized agents | More model calls and orchestration overhead |
 | `python_relp` | Chemistry agent with Python REPL capability | Executes Python in the current process; alias `python_repl` |
@@ -31,15 +31,38 @@ It minimizes orchestration complexity while exposing the normal tool set.
 
 ## Main agent
 
-`main_agent` manages longer-lived tasks through specialized subagents and
-durable checkpoints. It is intentionally session-oriented:
+`main_agent` constructs its own graph and works directly with skills, workspace
+files, shell commands, and lazy local tools. It may delegate substantial work to
+configured specialists while retaining one durable conversation:
 
 ```bash
-chemgraph run --interactive --workflow main_agent
+chemgraph run --interactive --workflow main_agent --workspace . \
+  --skill ../shared-skills --subagent single_agent --subagent deep_agent
 ```
 
-In Python, construct `MainAgentSession`; `ChemGraph.run()` rejects this workflow.
-See [Python API](python_api.md).
+No worker selection keeps the `chemgraph` chemistry worker. A nonempty selection
+replaces it; aliases resolve to canonical names, and duplicates are rejected.
+`deep_agent` inherits the main workspace and skills. The legacy `--deepagent`
+worker keeps its separate `--deepagent-*` options and cannot also be selected
+through `--subagent deep_agent`.
+
+Without `--workspace`, main-agent files live in checkpoints and no shell is
+available. Bundled skills and the host tool registry remain available. Host
+registry tools are independent of the file backend; use absolute host artifact
+paths. Workspace shell commands are not sandboxed to the selected directory.
+File mutations, shell commands, and reviewed registry operations pause for
+approval. Each worker retains its own configured tools and review policy.
+
+Use `--tool NAME` to restrict the catalog and `--no-discover-skills` to disable
+automatic personal/project skill discovery. Selection survives model and
+workflow changes. Workspace and explicit skill paths are canonicalized on
+activation. Python supports these capabilities through `ChemGraph` and
+`MainAgentSession`; `ChemGraph.run()` rejects this workflow.
+
+New graph sessions use schema version 2. Old transcripts remain readable, but
+old checkpoints require a new session. New supported CLI configurations restore
+through `--resume` or `/resume`; caller-owned Python configurations must be
+reconstructed through Python. See [Python API](python_api.md).
 
 ## Deep Agent
 

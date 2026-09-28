@@ -33,6 +33,7 @@ def _metadata(checkpoint_db, fingerprint="topology"):
     return MainAgentSessionMetadata(
         graph_config=MainAgentGraphConfig(
             model_name="scripted",
+            graph_schema_version=2,
             topology_fingerprint=fingerprint,
         ),
         checkpoint_backend="AsyncSqliteSaver",

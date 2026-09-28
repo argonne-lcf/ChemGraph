@@ -110,10 +110,34 @@ definitions. See [MCP servers](mcp_servers.md).
 [general]
 workflow = "main_agent"
 checkpoint_db = "~/.chemgraph/checkpoints.db"
+# workspace = "."
+# skills = ["../shared-skills"]
+discover_skills = true
+# subagents = ["single_agent", "deep_agent"]
+# tools = ["calculator", "run_ase"]
 enable_deepagent = false
 deepagent_discover_skills = true
 # deepagent_skills = ["../external/AtomisticSkills/.agents/skills/"]
 ```
+
+Main-agent `workspace`, `skills`, `discover_skills`, `subagents`, and `tools`
+correspond to `--workspace`, repeatable `--skill`, `--[no-]discover-skills`,
+repeatable `--subagent`, and repeatable `--tool`. CLI lists replace TOML lists.
+`skills` contains host directories resolved against the invocation directory;
+Python `skills` instead contains backend-relative sources. No workspace means
+checkpoint files and no shell, while bundled skills and host registry tools
+remain available. Shell access is not confined to the workspace.
+
+Omitting `subagents` keeps `chemgraph`; a nonempty list replaces it. An empty
+worker list is invalid. `tools = []` disables discovery. Inactive main-agent
+settings are retained for interactive workflow switching and ignored for other
+headless workflows. Explicit incompatible CLI flags are rejected.
+
+Start a new session after the graph upgrade. Old transcripts remain readable.
+Both startup `--resume` and `/resume` restore saved supported configuration and
+pending approvals, overriding current main-agent settings. Caller-owned Python
+configurations require Python reconstruction and, for opaque components, their
+original non-secret `configuration_id`.
 
 `main_agent` still requires interactive CLI mode. `enable_deepagent` controls
 only its optional `deepagent` subagent. To call the graph directly, select

@@ -1,13 +1,28 @@
-# Deep Agent skills
+# Main-agent and Deep Agent skills
 
 ChemGraph ships two Agent Skills: **chemgraph** for its Python, CLI, and chemistry
 MCP workflows, and **pbs-hpc** for PBS job preparation, monitoring, and facility
-guidance. They are available to standalone Deep Agents, registry-created Deep
-Agent workers, and the optional `main_agent` workspace worker.
+guidance. They are available directly to `main_agent`, standalone Deep Agents,
+registry-created Deep Agent workers, and the legacy main-agent workspace worker.
 
 For direct submission from a login-node shell, see [PBS jobs with skills](pbs_jobs_with_skills.md).
 Deep Agent writes calculation and batch scripts using the skills and existing
 Python APIs; it does not need attached chemistry MCP tools for this route.
+
+Main-agent CLI paths use `--skill` and TOML `[general] skills`; they are host
+collections, independent of `--workspace`. Python `skill_dirs` has the same host
+semantics, while Python `skills` addresses the backend namespace. Bundled skills
+remain readable without a workspace. Personal/project discovery requires an
+identifiable local workspace and can be disabled with `--no-discover-skills`.
+
+```sh
+chemgraph run --interactive -w main_agent --workspace . --skill ../shared-skills
+```
+
+This agent can read and apply skills directly; no DeepAgent worker is needed.
+Its default registry can be replaced using `tool_registry=...` or disabled using
+`tool_registry=ToolRegistry([])`. Each configured worker retains its own tool
+catalog and private skill-selection state.
 
 ## Where skills live
 
@@ -106,8 +121,9 @@ graph = construct_deep_agent_graph(
 )
 ```
 
-The corresponding `ChemGraph` and `construct_main_agent_graph` options are
-`deepagent_discover_skills`, `deepagent_skill_dirs`, and `deepagent_skills`.
+For direct main-agent capabilities, `ChemGraph` and `construct_main_agent_graph`
+use `discover_skills`, `skill_dirs`, and `skills`. The `deepagent_*` options
+configure standalone DeepAgent or the explicitly enabled legacy workspace worker.
 `skill_dirs` explicitly mounts host collections with any backend, even when
 automatic discovery is disabled. `skills` retains its backend-relative meaning
 and has precedence over host collections. `user_skills_dir` on the
@@ -183,8 +199,8 @@ verbatim; its default `None` selects the shared prompt.
 
 ## On-demand local tools
 
-Skills describe workflows; tools implement their operations. With standalone
-`deep_agent`, the built-in local catalog is searchable by default without sending
+Skills describe workflows; tools implement their operations. With `main_agent`
+and standalone `deep_agent`, the built-in local catalog is searchable by default without sending
 every tool schema to the model:
 
 ```sh
@@ -199,7 +215,7 @@ require `--human-supervised`. Explicitly listing `ask_human` also opts in.
 `tools = []` disables discovery. This is independent of
 `--no-deepagent-discover-skills`, which controls personal/project skills only.
 The CLI displays the catalog size or disabled status at initialization.
-The option applies to standalone Deep Agent; configured names are ignored for
+The option applies to main agent and standalone DeepAgent; configured names are ignored for
 other noninteractive workflows. Interactive sessions validate and retain configured
 names even when starting in another workflow, so startup selection, model changes,
 and workflow switches preserve the restriction.

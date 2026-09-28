@@ -81,6 +81,11 @@ def store(tmp_path):
     return store
 
 
+@pytest.fixture
+def main_store(tmp_path):
+    return SessionStore(str(tmp_path / "main-sessions.db"))
+
+
 def complete(collector, key=None, message=None, **metadata):
     key = key or uuid.uuid4()
     collector.on_chat_model_start({}, [], run_id=key, metadata=metadata)
@@ -220,14 +225,15 @@ def graph(model, *, pause=False, fail=False):
 
 
 @pytest.mark.asyncio
-async def test_main_session_usage_survives_approval_and_restoration(store):
+async def test_main_session_usage_survives_approval_and_restoration(main_store):
+    store = main_store
     model = FakeMessagesListChatModel(responses=[answer()])
     workflow = graph(model, pause=True)
-    session = MainAgentSession(workflow, thread_id="session", session_store=store)
+    session = MainAgentSession(workflow, thread_id="session", configuration_id="usage-test-v1", session_store=store)
     paused = await session.run("test")
     assert paused.usage["total_tokens"] == 12
     assert paused.status == "waiting_for_user"
-    restored = MainAgentSession(workflow, thread_id="session", session_store=store)
+    restored = MainAgentSession(workflow, thread_id="session", configuration_id="usage-test-v1", session_store=store)
     await restored.restore()
     result = await restored.resume("yes")
     assert result.usage["total_tokens"] == 12
@@ -240,7 +246,8 @@ async def test_main_session_usage_survives_approval_and_restoration(store):
 
 
 @pytest.mark.asyncio
-async def test_failure_persists_usage_without_dashboard(store):
+async def test_failure_persists_usage_without_dashboard(main_store):
+    store = main_store
     model = FakeMessagesListChatModel(responses=[answer()])
     session = MainAgentSession(graph(model, fail=True), thread_id="session", session_store=store)
     with pytest.raises(RuntimeError, match="forced graph failure"):
@@ -295,7 +302,8 @@ def test_cancellation_retains_partial_adapter_counts():
 
 
 @pytest.mark.asyncio
-async def test_nested_worker_usage_is_attributed_once(store):
+async def test_nested_worker_usage_is_attributed_once(main_store):
+    store = main_store
     from chemgraph.graphs.main_agent import construct_main_agent_graph
     from tests.test_main_agent import _ScriptedChatModel
     delegate = answer(inputs=20)
@@ -308,7 +316,7 @@ async def test_nested_worker_usage_is_attributed_once(store):
         supervisor, subagents=[{"name": "worker", "description": "test", "runnable": worker}],
         checkpointer=InMemorySaver(),
     )
-    session = MainAgentSession(workflow, thread_id="session", session_store=store)
+    session = MainAgentSession(workflow, thread_id="session", configuration_id="usage-test-v1", session_store=store)
     result = await session.run("delegate this")
     assert result.usage["total_tokens"] == 66
     assert result.usage["call_count"] == 3
@@ -360,11 +368,13 @@ async def test_session_totals_include_prior_turns_with_memory_disabled(monkeypat
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("durable", [False, True])
-async def test_legacy_checkpoint_history_stays_partial_after_new_turn(store, durable):
+async def test_unaccounted_checkpoint_history_stays_partial_after_new_turn(main_store, durable):
+    store = main_store
     workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
-    await workflow.ainvoke({"messages": [("human", "legacy")]},
-                          config={"configurable": {"thread_id": "session"}})
-    session = MainAgentSession(workflow, thread_id="session", session_store=store if durable else None)
+    session = MainAgentSession(workflow, thread_id="session", configuration_id="usage-test-v1", session_store=store if durable else None)
+    if durable:
+        store.create_session("session", "fake", "main_agent", session_metadata=session.session_metadata)
+    await workflow.ainvoke({"messages": [("human", "unaccounted")]}, config=session.config)
     await session.restore()
     assert session.session_usage["history_unaccounted"] is True
     assert session.session_usage["total_tokens"] is None
@@ -377,7 +387,7 @@ async def test_legacy_checkpoint_history_stays_partial_after_new_turn(store, dur
     if durable:
         assert store.get_usage("session")["history_unaccounted"] is True
         assert store.get_usage("session", result.usage["turn_id"])["partial"] is False
-        session = MainAgentSession(workflow, thread_id="session", session_store=SessionStore(store.db_path))
+        session = MainAgentSession(workflow, thread_id="session", configuration_id="usage-test-v1", session_store=SessionStore(store.db_path))
     await session.restore()
     totals = combine_usage([session.session_usage])
     assert totals["total_tokens"] == 12
@@ -417,16 +427,17 @@ def test_first_usage_turn_preserves_existing_transcript_gap(store):
 
 
 @pytest.mark.asyncio
-async def test_legacy_coverage_survives_storage_failure(store, monkeypatch):
+async def test_unaccounted_coverage_survives_storage_failure(main_store, monkeypatch):
+    store = main_store
     workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
-    await workflow.ainvoke({"messages": [("human", "legacy")]},
-                          config={"configurable": {"thread_id": "session"}})
     def fail(*_):
         raise OSError("storage unavailable")
     for method in ("mark_usage_history_unaccounted", "create_usage_turn", "save_usage_call",
                    "update_usage_turn", "usage_history_unaccounted", "usage_records"):
         monkeypatch.setattr(store, method, fail)
-    session = MainAgentSession(workflow, thread_id="session", session_store=store)
+    session = MainAgentSession(workflow, thread_id="session", configuration_id="usage-test-v1", session_store=store)
+    store.create_session("session", "fake", "main_agent", session_metadata=session.session_metadata)
+    await workflow.ainvoke({"messages": [("human", "unaccounted")]}, config=session.config)
     await session.restore()
     assert session.session_usage["total_tokens"] is None
     await session.run("new query")

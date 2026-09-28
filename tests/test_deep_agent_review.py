@@ -392,7 +392,6 @@ async def test_finalization_scopes_idless_messages_to_thread(
 
 def test_registry_worker_delegates_using_canonical_name():
     from chemgraph.graphs.main_agent import (
-        DEFAULT_MAIN_AGENT_PROMPT,
         construct_main_agent_graph,
     )
     from chemgraph.registry import AgentRegistry
@@ -402,7 +401,6 @@ def test_registry_worker_delegates_using_canonical_name():
         llm=_ScriptedChatModel(responses=[AIMessage(content="Workspace reviewed")]),
     )
     assert worker["name"] == "deep_agent"
-    assert worker["name"] in DEFAULT_MAIN_AGENT_PROMPT
     model = _ScriptedChatModel(
         responses=[
             AIMessage(
@@ -427,6 +425,9 @@ def test_registry_worker_delegates_using_canonical_name():
         {"messages": [HumanMessage(content="Review workspace")]},
         {"configurable": {"thread_id": "registry"}},
     )
+    task_tool = next(item for item in model.bound_tools if item.name == "task")
+    assert worker["name"] in task_tool.description
+    assert "general-purpose" not in task_tool.description
     assert any(
         msg.type == "tool" and "Workspace reviewed" in str(msg.content)
         for msg in result["messages"]
