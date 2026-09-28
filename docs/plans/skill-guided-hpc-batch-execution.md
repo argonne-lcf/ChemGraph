@@ -70,8 +70,7 @@ Opt-in live acceptance: diagnostic job, ASE/EMT, production calculator, and late
 CUDA gRASPA. Retain transcript, compute hostname/environment evidence, full job ID,
 scientific results and artifacts; verify monitoring after restarting ChemGraph.
 
-See [usage and configuration](../hpc_batch.md) for interfaces, limitations and
-source references.
+Use the bundled `hpc-batch` skill for the staged submission and recovery workflow.
 
 Verification: `ruff check .` passed; full `pytest tests/ -k "not tblite"`
 passed with 1,762 passed, 21 skipped and 2 deselected. After the final manifest
