@@ -94,7 +94,8 @@ for path in ('/chemgraph/assets/calculate.py',
              '/chemgraph/references/mace-polar.md',
              '/pbs-hpc/assets/pbs-launch.sh', '/pbs-hpc/assets/job.pbs.template',
              '/iri-hpc/assets/launch.sh.template',
-             '/pbs-hpc/references/job-lifecycle.md', '/pbs-hpc/references/polaris-advanced.md'):
+             '/pbs-hpc/references/job-lifecycle.md', '/pbs-hpc/references/polaris.md',
+             '/pbs-hpc/references/crux.md'):
     resource = resources.files('chemgraph.skills').joinpath(*path.lstrip('/').split('/')).read_bytes()
     assert backend.download_files([path])[0].content == resource
     assert backend.read(path).file_data['content'] == resource.decode('utf-8')

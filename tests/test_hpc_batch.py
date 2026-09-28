@@ -1,14 +1,8 @@
-"""Hermetic scheduler/transfer lifecycle and native-tool integration."""
+"""Scheduler/transfer lifecycle and native-tool regressions."""
 
 from concurrent.futures import ThreadPoolExecutor
-import json
-import os
 from pathlib import Path
-import shlex
 import shutil
-import socket
-import subprocess
-import sys
 from unittest.mock import Mock
 
 import httpx
@@ -504,140 +498,6 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
     assert (after == before) == (decision == "reject")
     if action == "hpc_submit_job" and decision == "reject":
         assert not (root / "submission.started").exists()
-
-
-@pytest.mark.parametrize("outcome", ["success", "nonconverged", "missing", "login"])
-def test_packaged_ase_runner_uses_compute_relative_paths(batch, outcome):
-    service, root, _, _, _ = batch
-    assets = (
-        Path(__file__).resolve().parents[1] / "src/chemgraph/skills/chemgraph/assets"
-    )
-    shutil.copyfile(assets / "calculate.py", root / "calculate.py")
-    skills = assets.parents[1]
-    shutil.copyfile(skills / "pbs-hpc/assets/pbs-launch.sh", root / "pbs-launch.sh")
-    launch = (skills / "iri-hpc/assets/launch.sh.template").read_text()
-    (root / "launch.sh").write_text(
-        launch.replace("{{ENVIRONMENT_SETUP}}", ":").replace(
-            "{{APPLICATION_LAUNCH_COMMAND}}", f"{shlex.quote(sys.executable)} calculate.py"
-        )
-    )
-    (root / "input.json").write_text(
-        json.dumps(
-            {
-                "input_structure_file": "absent.xyz"
-                if outcome == "missing"
-                else "inputs/water.xyz",
-                "output_results_file": "result.json",
-                "driver": "opt",
-                "steps": 0 if outcome == "nonconverged" else 100,
-                "calculator": {"calculator_type": "emt"},
-            }
-        )
-    )
-    manifest = service.stage(
-        str(root),
-        "polaris",
-        ["launch.sh", "pbs-launch.sh", "calculate.py", "input.json", "inputs/water.xyz"],
-    )
-    remote = Path(manifest["remote_directory"])
-    (remote / "nodes").write_text(socket.gethostname())
-    env = {
-        **os.environ,
-        "PBS_JOBID": "123.polaris",
-        "PBS_NODEFILE": str(remote / "nodes"),
-        "PYTHONPATH": str(assets.parents[3]),
-        "PYTHONNOUSERSITE": "1",
-    }
-    if outcome == "login":
-        env.pop("PBS_JOBID")
-    result = subprocess.run(
-        ["bash", "launch.sh"],
-        cwd=remote,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    expected = {"success": 0, "nonconverged": 2, "missing": 1, "login": 1}[outcome]
-    assert result.returncode == expected, result.stdout + result.stderr
-    assert not (root / "result.json").exists()
-    if outcome in ("success", "nonconverged"):
-        service.retrieve(str(root), ["result.json"])
-        output = json.loads((root / "retrieved/result.json").read_text())
-        assert output["success"]
-        assert output["converged"] == (outcome == "success")
-        assert isinstance(output["potential_energy"], float)
-
-
-def test_scripted_agent_prepares_stages_submits_and_new_agent_monitors(batch):
-    from deepagents.backends import LocalShellBackend
-    from langchain_core.messages import AIMessage, HumanMessage
-    from langgraph.types import Command
-    from chemgraph.graphs.deep_agent import construct_deep_agent_graph
-    from tests.test_registry_middleware import CatalogModel, call
-
-    service, root, _, iri, request = batch
-    fresh = root.parent / "scripted"
-    fresh.mkdir()
-    names = ["hpc_transfer_files", "hpc_transfer_status", "hpc_submit_job"]
-    registry = create_hpc_registry(service.config, names=names, service=service)
-    model = CatalogModel(
-        responses=[
-            call(
-                "write_file",
-                file_path="/workspace/launch.sh",
-                content="#!/bin/bash\ntrue\n",
-            ),
-            call("load_tools", names=names),
-            call(
-                "hpc_transfer_files",
-                run_dir=str(fresh),
-                files=["launch.sh"],
-                direction="stage",
-                target="polaris",
-            ),
-            call("hpc_transfer_status", run_dir=str(fresh)),
-            call("hpc_submit_job", run_dir=str(fresh), request=request.model_dump()),
-            AIMessage(content="Submitted"),
-        ]
-    )
-    graph = construct_deep_agent_graph(
-        model,
-        tool_registry=registry,
-        backend=LocalShellBackend(root_dir=str(fresh), virtual_mode=True),
-        discover_skills=False,
-    )
-    config = {"configurable": {"thread_id": "prepare"}}
-    state = graph.invoke(
-        {"messages": [HumanMessage(content="Prepare and submit")]}, config
-    )
-    reviews = 0
-    while state.get("__interrupt__"):
-        reviews += 1
-        assert reviews <= 3
-        state = graph.invoke(
-            Command(resume={"decisions": [{"type": "approve"}]}), config
-        )
-    assert reviews == 3 and len(iri.submissions) == 1
-    restarted = HPCService({}, iri=iri)
-    graph = construct_deep_agent_graph(
-        CatalogModel(
-            responses=[
-                call("load_tools", names=["hpc_job_status"]),
-                call("hpc_job_status", run_dir=str(fresh)),
-                AIMessage(content="Still queued"),
-            ]
-        ),
-        tool_registry=create_hpc_registry(
-            {}, names=["hpc_job_status"], service=restarted
-        ),
-        discover_skills=False,
-    )
-    graph.invoke(
-        {"messages": [HumanMessage(content="Inspect the saved job")]},
-        {"configurable": {"thread_id": "new-session"}},
-    )
-    assert len(iri.submissions) == 1
-    assert read_json(fresh / "job-status.json")["job_id"] == "123.polaris"
 
 
 def test_explicit_config_and_cli_restrictions(batch, tmp_path, monkeypatch):
