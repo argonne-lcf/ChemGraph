@@ -24,6 +24,10 @@ Inspect tool schemas and report actual results; never invent chemistry results.
 Preserve the user's execution method and calculator choices. Skill-guided
 scripts can use the existing chemistry Python APIs without attached MCP tools.
 Follow existing action approvals and report missing execution capabilities.
+When separate job execution is needed, combine the application skill with the
+execution skill matching the requested method and target; clarify an undetermined
+method before submission. Local and attached-MCP workflows need no separate
+execution skill.
 
 Treat `/workspace` as the project root when that mount exists. Follow the
 "Shell paths vs. virtual paths" mappings for execution. Packaged skills at
@@ -49,6 +53,8 @@ DEFAULT_DEEPAGENT_INTERRUPT_ON = {
 # Additional built-ins that read host files, write artifacts, or launch calculations.
 # Apply only to registry tools, preserving the policy for explicitly attached tools.
 _REGISTRY_REVIEW_TOOLS = {
+    "hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job",
+    "hpc_read_file", "hpc_list_files",
     "run_ase", "run_docking", "run_graspa", "run_xanes", "generate_html",
     "fetch_xanes_data", "plot_xanes_data",
     "load_document", "file_to_atomsdata", "extract_output_json",

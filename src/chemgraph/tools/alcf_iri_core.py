@@ -1041,3 +1041,160 @@ def dispatch(category: str, action: str, params: dict[str, Any]) -> Any:
             "to see all, or action='describe' target_action=<name> for one."
         )
     return actions[action][3](**params)
+
+
+class IRIRequestError(RuntimeError):
+    """Redacted HTTP error retaining status for safe submission decisions."""
+
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+        message = f"IRI request failed (HTTP {status_code})."
+        if status_code in (401, 403):
+            message += " Authenticate with alcf_auth and verify resource access."
+        super().__init__(message)
+
+
+class IRIAuthenticationRequired(RuntimeError):
+    """Local authentication preparation failed before scheduler submission."""
+
+    def __init__(self):
+        super().__init__(
+            "Authenticate with alcf_auth, then retry submission using the same run directory. "
+            "No scheduler request was sent."
+        )
+
+
+class IRIClient:
+    """Bounded transport for reviewed batch operations.
+
+    Reuses the legacy authentication provider and resource resolver. Legacy
+    dispatch write gates remain unchanged. Public Python callers authorize
+    mutations themselves; agent adapters must install their normal reviews.
+    """
+
+    def __init__(self, *, transport=None, headers=None, sleep=None):
+        import time
+        self.transport = transport
+        self.headers = headers or _headers
+        self.sleep = sleep or time.sleep
+
+    def request(self, method, path, *, params=None, body=None, read=False,
+                max_bytes=1048576, allow_truncation=False):
+        refreshed = False
+        for attempt in range(3 if read else 1):
+            try:
+                with httpx.Client(timeout=TIMEOUT_S, transport=self.transport) as client:
+                    with client.stream(method, BASE_URL + path, headers=self.headers(),
+                                       params=params, json=body) as response:
+                        status = response.status_code
+                        if status == 401 and read and not refreshed:
+                            refreshed = True
+                            if _try_refresh_token():
+                                continue
+                        if status in (429, 502, 503, 504) and read and attempt < 2:
+                            self.sleep(0.25 * 2 ** attempt)
+                            continue
+                        return self._read_response(response, max_bytes=max_bytes,
+                                                   allow_truncation=allow_truncation)
+            except httpx.TransportError:
+                if not read or attempt == 2:
+                    raise RuntimeError("IRI transport failed; request outcome may be unknown.") from None
+                self.sleep(0.25 * 2 ** attempt)
+        raise IRIRequestError(401)
+
+    @staticmethod
+    def _read_response(response, *, max_bytes=1048576, allow_truncation=False):
+        import json
+        import base64
+
+        if response.status_code >= 400:
+            raise IRIRequestError(response.status_code)
+        content = bytearray()
+        for chunk in response.iter_bytes(chunk_size=8192):
+            content.extend(chunk[:max_bytes + 1 - len(content)])
+            if len(content) > max_bytes:
+                break
+        truncated = len(content) > max_bytes
+        if truncated and not allow_truncation:
+            raise ValueError("IRI response exceeds the limit; narrow the query.")
+        raw = bytes(content[:max_bytes])
+        if not raw:
+            return {"ok": True}
+        if not truncated:
+            try:
+                return json.loads(raw)
+            except (ValueError, UnicodeDecodeError):
+                pass
+        try:
+            text = raw.decode("utf-8")
+            return {"text": text, "truncated": truncated}
+        except UnicodeDecodeError:
+            return {"base64": base64.b64encode(raw).decode(), "truncated": truncated}
+
+    def resolve_resource(self, resource):
+        return _resource_id(resource)
+
+    def prepare_submission(self, resource, spec):
+        """Resolve credentials and serialize the request without contacting compute.
+
+        The returned request contains credentials and must stay in memory.
+        """
+        try:
+            headers = httpx.Headers(self.headers())
+        except Exception:
+            raise IRIAuthenticationRequired() from None
+        return httpx.Request("POST", BASE_URL + f"/compute/job/{resource}",
+                             headers=headers, json=spec)
+
+    def submit_prepared(self, request):
+        """Send a prepared submission once, without acquiring credentials again."""
+        from contextlib import closing
+
+        try:
+            with httpx.Client(timeout=TIMEOUT_S, transport=self.transport) as client:
+                with closing(client.send(request, stream=True)) as response:
+                    return self._read_response(response)
+        except httpx.TransportError:
+            raise RuntimeError("IRI transport failed; request outcome may be unknown.") from None
+
+    def submit(self, resource, spec):
+        return self.submit_prepared(self.prepare_submission(resource, spec))
+
+    def cancel(self, resource, job_id):
+        from urllib.parse import quote
+        return self.request("DELETE", f"/compute/cancel/{resource}/{quote(job_id, safe='')}")
+
+    def status(self, resource, job_id, *, historical=False):
+        from urllib.parse import quote
+        return self.request("GET", f"/compute/status/{resource}/{quote(job_id, safe='')}",
+                            params={"historical": historical}, read=True)
+
+    def jobs(self, resource, *, historical=False, limit=100, offset=0, filters=None,
+             include_spec=False):
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("Use limit 1..100 and a nonnegative offset.")
+        allowed = {"states", "owner", "jobIds", "queue", "accountingId"}
+        if set(filters or {}) - allowed:
+            raise ValueError("Unsupported job filter.")
+        return self.request("POST", f"/compute/status/{resource}", read=True,
+                            params={"historical": historical, "limit": limit, "offset": offset,
+                                    "include_spec": include_spec},
+                            body=filters or {})
+
+    def task(self, operation_id):
+        from urllib.parse import quote
+        return self.request("GET", f"/task/{quote(operation_id, safe='')}", read=True)
+
+    def inspect(self, resource, path, *, operation="view", offset=0, size=16384,
+                operation_id=None):
+        from urllib.parse import quote
+        if not 1 <= size <= 65536 or offset < 0 or operation not in ("view", "ls"):
+            raise ValueError("Invalid inspection bounds or operation.")
+        if operation_id:
+            route, params = f"/task/{quote(operation_id, safe='')}", None
+        else:
+            route, params = f"/filesystem/{operation}/{resource}", {"path": path}
+            if operation == "view":
+                params.update(size=size, offset=offset)
+        return self.request("GET", route, params=params, read=True,
+                            max_bytes=131072, allow_truncation=True)

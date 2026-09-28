@@ -647,18 +647,21 @@ def _handle_run(args: argparse.Namespace) -> None:
     if cli_tools is not None and args.workflow != "deep_agent":
         console.print("[red]--tool requires -w deep_agent.[/red]")
         sys.exit(2)
-    if (interactive or args.workflow == "deep_agent") and local_names is not None:
+    if (interactive or args.workflow == "deep_agent") and (local_names is not None or "hpc" in config):
         from chemgraph.registry.tools import RegistryError, ToolRegistry
 
         try:
-            if not isinstance(local_names, list) or not all(
+            if local_names is not None and (not isinstance(local_names, list) or not all(
                 isinstance(name, str) and name.strip() for name in local_names
-            ):
+            )):
                 raise ValueError("tools must be a list of non-empty registry names")
-            catalog = ToolRegistry()
-            deepagent_tool_registry = ToolRegistry(
-                catalog.get_spec(name) for name in dict.fromkeys(local_names)
-            )
+            if "hpc" in config:
+                from chemgraph.tools.hpc.tools import create_hpc_registry
+                deepagent_tool_registry = create_hpc_registry(
+                    config["hpc"], names=local_names, human_supervised=bool(args.human_supervised),
+                )
+            else:
+                deepagent_tool_registry = ToolRegistry().select(local_names)
         except (RegistryError, ValueError) as exc:
             console.print(f"[red]Invalid local tools: {escape(str(exc))}[/red]")
             sys.exit(2)

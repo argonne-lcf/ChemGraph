@@ -1,0 +1,47 @@
+# Polaris login-node test of the IRI/Globus batch workflow.
+# Replace every YOUR_* placeholder before use. Paths are literal absolute paths;
+# shell variables such as $USER are not expanded. Keep tokens outside this file.
+
+[general]
+workflow = "deep_agent"
+model = "argo:gpt-4o" # Change to your configured model.
+recursion_limit = 200
+deepagent_discover_skills = true
+deepagent_workspace = "/eagle/YOUR_PROJECT/YOUR_USER/chemgraph-tests/source"
+
+[hpc.targets.polaris]
+compute_resource = "polaris"
+storage_resource = "eagle"
+project = "YOUR_PROJECT"
+queue = "debug"
+
+# Globus collection exposing the source directory.
+local_collection = "YOUR_SOURCE_COLLECTION_UUID"
+
+# Globus collection exposing the destination directory.
+# These UUIDs can match if one collection exposes both directories.
+remote_collection = "YOUR_DESTINATION_COLLECTION_UUID"
+
+# Source directory as seen by ChemGraph on the login node.
+local_root = "/eagle/YOUR_PROJECT/YOUR_USER/chemgraph-tests/source"
+
+# The SAME source directory as seen through its Globus collection.
+# Verify this path in Globus; collection paths may omit /eagle.
+local_collection_root = "/YOUR_PROJECT/YOUR_USER/chemgraph-tests/source"
+
+# Destination parent directory as seen by Polaris compute nodes.
+# Each staged run gets a generated cg<UUID> subdirectory here.
+remote_root = "/eagle/YOUR_PROJECT/YOUR_USER/chemgraph-tests/remote"
+
+# The SAME destination parent as seen through its Globus collection.
+remote_collection_root = "/YOUR_PROJECT/YOUR_USER/chemgraph-tests/remote"
+
+# Existing compute environment. These guide launch-script generation;
+# ChemGraph does not automatically install or activate this environment.
+setup_script = "/eagle/YOUR_PROJECT/YOUR_USER/envs/chemgraph/setup.sh"
+python_executable = "/eagle/YOUR_PROJECT/YOUR_USER/envs/chemgraph/bin/python"
+
+[hpc.targets.polaris.resources]
+node_count = 1
+duration = 300 # Walltime in seconds: five minutes.
+filesystems = "home:eagle"

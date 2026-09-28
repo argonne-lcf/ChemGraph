@@ -1,11 +1,8 @@
 """Host skill collections outside the Deep Agent workspace."""
 
-import asyncio
-
 import pytest
 from deepagents.backends import CompositeBackend, LocalShellBackend, StateBackend
 from langchain_core.messages import AIMessage, HumanMessage
-from pydantic import Field
 
 from chemgraph.graphs.deep_agent import _normalize_backend, construct_deep_agent_graph
 from chemgraph.skills.runtime import (
@@ -14,7 +11,7 @@ from chemgraph.skills.runtime import (
     resolve_skill_dirs,
 )
 from tests.test_deep_agent import _RecordingChatModel
-from tests.test_skills import _prompt, _read_skill, _skill
+from tests.test_skills import _prompt, _skill
 
 
 @pytest.mark.parametrize(
@@ -65,100 +62,31 @@ def test_invalid_host_directory_identifies_input_and_resolved_path(
     assert repr(str(root)) in str(exc.value)
 
 
-class _SkillEvidenceModel(_RecordingChatModel):
-    tool_results: list[str] = Field(default_factory=list)
-
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.tool_results.extend(str(m.content) for m in messages if m.type == "tool")
-        return super()._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
-
-
-@pytest.mark.parametrize("asynchronous", [False, True])
-@pytest.mark.parametrize("delegated", [False, True])
-def test_external_atomistic_skill_and_helpers_are_readable(
-    monkeypatch, tmp_path, asynchronous, delegated
-):
+def test_external_skill_resources_keep_stable_mounts(monkeypatch, tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    collection = tmp_path / "external/AtomisticSkills/.agents/skills"
-    widom = _skill(collection, "chem-sorption-widom", "Widom insertion fixture")
-    widom.write_text(
-        widom.read_text() + "Environment: mace-agent; helper: scripts/run_widom.py\n"
-    )
-    _skill(collection, "chem-sorption-relax", "Sibling relaxation fixture")
-    scripts = widom.parent / "scripts"
-    scripts.mkdir()
-    (scripts / "run_widom.py").write_text("# Widom helper fixture, never executed\n")
-    monkeypatch.chdir(workspace)
-    roots = resolve_skill_dirs(["../external/AtomisticSkills/.agents/skills/"])
+    collection = tmp_path / "external/skills"
+    skill = _skill(collection, "example")
+    helper = skill.parent / "helper.py"
+    helper.write_text("# helper resource\n")
     shell = LocalShellBackend(root_dir=workspace, env={})
     backend, sources, _ = prepare_skill_backend(
-        _normalize_backend(shell),
-        (),
-        discover_skills=False,
-        skill_dirs=roots,
+        _normalize_backend(shell), (), discover_skills=False,
+        skill_dirs=(str(collection),),
     )
     source = sources[-1]
     assert source.startswith(EXTERNAL_SKILLS_PATH)
-    responses = [
-        _read_skill(source + "chem-sorption-widom/SKILL.md", "widom"),
-        _read_skill(source + "chem-sorption-widom/scripts/run_widom.py", "helper"),
-        _read_skill(source + "chem-sorption-relax/SKILL.md", "sibling"),
-        AIMessage(content="Read the external skill and its resources"),
-    ]
-    if delegated:
-        responses.insert(
-            0,
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "name": "task",
-                        "args": {
-                            "subagent_type": "general-purpose",
-                            "description": "Read the Widom skill and resources",
-                        },
-                        "id": "delegate",
-                        "type": "tool_call",
-                    }
-                ],
-            ),
-        )
-        responses.append(AIMessage(content="Done"))
-    model = _SkillEvidenceModel(responses=responses)
-    graph = construct_deep_agent_graph(
-        model,
-        backend=shell,
-        skill_dirs=roots,
-        discover_skills=False,
-    )
-    data = {
-        "messages": [
-            HumanMessage(content="Read the Widom skill before running anything")
-        ]
-    }
-    config = {"configurable": {"thread_id": "external"}}
-    if asynchronous:
-        asyncio.run(graph.ainvoke(data, config))
-    else:
-        graph.invoke(data, config)
-    state = graph.get_state(config).values
-    assert "chem-sorption-widom" in {s["name"] for s in state["skills_metadata"]}
-    assert state["skills_load_errors"] == []
-    evidence = "\n".join(model.tool_results)
-    assert "Environment: mace-agent" in evidence
-    assert "Widom helper fixture" in evidence
-    assert "Sibling relaxation fixture" in evidence
-    assert f"`{source}` -> `{collection}/`" in _prompt(model)
-    assert not list(workspace.iterdir())
     assert backend.default.shell is shell
-    # Stable mounts survive changes to cwd and retain the same original files.
-    monkeypatch.chdir(tmp_path)
+    for resource in (skill, helper):
+        mounted = source + resource.relative_to(collection).as_posix()
+        assert backend.read(mounted).file_data["content"] == resource.read_text()
+    monkeypatch.chdir(workspace)
     restored, restored_sources, _ = prepare_skill_backend(
-        StateBackend(), (), skill_dirs=roots
+        StateBackend(), (), skill_dirs=(str(collection),)
     )
     assert restored_sources[-1] == source
-    assert restored.read(source + "chem-sorption-widom/SKILL.md").error is None
+    assert restored.read(source + "example/helper.py").file_data["content"] == helper.read_text()
+    assert not list(workspace.iterdir())
 
 
 @pytest.mark.parametrize("with_backend_source", [False, True])

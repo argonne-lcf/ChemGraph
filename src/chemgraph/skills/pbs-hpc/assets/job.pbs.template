@@ -8,7 +8,8 @@
 #PBS -j oe
 
 # Replace all placeholders and validate site-specific directives before use.
-set -euo pipefail
+set -eo pipefail
 cd "${PBS_O_WORKDIR:?PBS submission directory is required}"
 {{ENVIRONMENT_SETUP}}
-{{APPLICATION_LAUNCH_COMMAND}}
+set -u
+exec bash ./pbs-launch.sh {{APPLICATION_LAUNCH_COMMAND}} "$@"
