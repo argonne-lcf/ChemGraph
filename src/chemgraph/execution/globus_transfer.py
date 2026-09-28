@@ -31,6 +31,10 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+
+class TransferAuthenticationRequired(RuntimeError):
+    """Authentication must be completed outside an agent tool invocation."""
+
 # Globus Transfer API scope
 TRANSFER_SCOPE = "urn:globus:auth:scope:transfer.api.globus.org:all"
 
@@ -102,11 +106,6 @@ class GlobusTransferManager:
             ) from exc
 
         client = globus_sdk.NativeAppAuthClient(self._client_id)
-        client.oauth2_start_flow(
-            requested_scopes=TRANSFER_SCOPE,
-            refresh_tokens=True,
-        )
-
         # Try loading cached tokens first
         token_file = (
             Path.home() / ".globus" / "chemgraph_transfer_tokens.json"
@@ -114,40 +113,25 @@ class GlobusTransferManager:
         tokens = self._load_tokens(token_file)
 
         if tokens is None:
-            # Interactive login required
-            authorize_url = client.oauth2_get_authorize_url()
-            logger.info(
-                "Globus Transfer authentication required.\n"
-                "Go to this URL and login:\n  %s",
-                authorize_url,
+            raise TransferAuthenticationRequired(
+                "Authenticate Globus Transfer before running tools: "
+                "python -m chemgraph.execution.globus_transfer"
             )
-            print(
-                "\nGlobus Transfer authentication required.\n"
-                f"Go to this URL and login:\n  {authorize_url}\n"
-            )
-            auth_code = input("Enter the authorization code: ").strip()
-            token_response = client.oauth2_exchange_code_for_tokens(auth_code)
-            tokens = token_response.by_resource_server["transfer.api.globus.org"]
-            self._save_tokens(token_file, tokens)
-        else:
-            # Refresh if expired
-            if tokens.get("expires_at_seconds", 0) < time.time():
-                try:
-                    token_response = client.oauth2_refresh_tokens(
-                        globus_sdk.RefreshTokenAuthorizer(
-                            tokens["refresh_token"], client
-                        )
-                    )
-                    tokens = token_response.by_resource_server[
-                        "transfer.api.globus.org"
-                    ]
-                    self._save_tokens(token_file, tokens)
-                except Exception:
-                    logger.warning(
-                        "Token refresh failed, falling back to existing token."
-                    )
+        if not tokens.get("refresh_token"):
+            raise TransferAuthenticationRequired("Globus Transfer needs a new refresh-token login.")
 
-        authorizer = globus_sdk.AccessTokenAuthorizer(tokens["access_token"])
+        def on_refresh(response):
+            fresh = dict(response.by_resource_server["transfer.api.globus.org"])
+            fresh.setdefault("refresh_token", tokens["refresh_token"])
+            self._save_tokens(token_file, fresh)
+            tokens.update(fresh)
+
+        authorizer = globus_sdk.RefreshTokenAuthorizer(
+            tokens["refresh_token"], client,
+            access_token=tokens.get("access_token"),
+            expires_at=tokens.get("expires_at_seconds", 0),
+            on_refresh=on_refresh,
+        )
         self._transfer_client = globus_sdk.TransferClient(authorizer=authorizer)
         return self._transfer_client
 
@@ -166,13 +150,47 @@ class GlobusTransferManager:
     @staticmethod
     def _save_tokens(path: Path, tokens: dict) -> None:
         import json
+        import os
+        import tempfile
 
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(dict(tokens), f, indent=2)
-        path.chmod(0o600)
+        fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".transfer-tokens-")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(dict(tokens), f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     # ── transfers ───────────────────────────────────────────────────────
+
+    def transfer_mapping(
+        self, file_mapping: dict[str, str], *, reverse: bool = False,
+        label: str = "ChemGraph HPC staging",
+    ) -> str:
+        """Transfer explicit collection paths without flattening or renaming.
+
+        The caller validates roots and overwrite policy. Mapping keys always
+        identify sources; reverse swaps collection IDs, not mapping direction.
+        """
+        import globus_sdk
+
+        if not file_mapping or len(set(file_mapping.values())) != len(file_mapping):
+            raise ValueError("A nonempty mapping with unique destinations is required.")
+        source, destination = self.source_endpoint_id, self.destination_endpoint_id
+        if reverse:
+            source, destination = destination, source
+        tc = self._get_transfer_client()
+        data = globus_sdk.TransferData(
+            tc, source, destination, label=label, sync_level="checksum",
+            verify_checksum=True,
+        )
+        for source_path, destination_path in file_mapping.items():
+            data.add_item(source_path, destination_path)
+        return str(tc.submit_transfer(data)["task_id"])
 
     def transfer_files(
         self,
@@ -338,3 +356,31 @@ class GlobusTransferManager:
         if remote_subdir:
             return f"{self.destination_base_path}/{remote_subdir}/{filename}"
         return f"{self.destination_base_path}/{filename}"
+
+
+def authenticate(collections=()) -> None:
+    """Explicit terminal login, never called by tools."""
+    import globus_sdk
+
+    client = globus_sdk.NativeAppAuthClient(_DEFAULT_CLIENT_ID)
+    from globus_sdk.scopes import Scope, TransferScopes
+    scope = TransferScopes.all
+    for collection in collections:
+        scope = scope.with_dependency(Scope(
+            f"https://auth.globus.org/scopes/{collection}/data_access"
+        ))
+    client.oauth2_start_flow(requested_scopes=str(scope), refresh_tokens=True)
+    print(client.oauth2_get_authorize_url())
+    response = client.oauth2_exchange_code_for_tokens(input("Authorization code: ").strip())
+    GlobusTransferManager._save_tokens(
+        Path.home() / ".globus" / "chemgraph_transfer_tokens.json",
+        response.by_resource_server["transfer.api.globus.org"],
+    )
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Authenticate ChemGraph Globus Transfer")
+    parser.add_argument("--collection", action="append", default=[],
+                        help="Managed collection needing data_access consent (repeatable)")
+    authenticate(parser.parse_args().collection)
