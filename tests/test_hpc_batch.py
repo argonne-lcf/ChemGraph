@@ -130,6 +130,9 @@ def sdk_transfer(batch, monkeypatch, tmp_path):
     transfer_module.GlobusTransferManager._save_tokens(cache, tokens)
     auth = Mock()
     monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    monkeypatch.setattr(globus_sdk.TransferClient, "get_submission_id", Mock(
+        return_value={"value": "11111111-1111-1111-1111-111111111111"},
+    ))
     submit = Mock(return_value={"task_id": "sdk-transfer"})
     monkeypatch.setattr(globus_sdk.TransferClient, "submit_transfer", submit)
     service.transfer_factory = service._transfer_manager

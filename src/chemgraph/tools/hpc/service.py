@@ -6,7 +6,7 @@ import shutil
 import uuid
 
 from chemgraph.execution.globus_transfer import (
-    GlobusTransferManager, TransferAuthenticationRequired,
+    GlobusTransferManager, TransferAuthenticationRequired, transfer_error_details,
 )
 from chemgraph.tools.alcf_iri_core import IRIAuthenticationRequired, IRIClient, IRIRequestError
 from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget, relative_path
@@ -34,6 +34,12 @@ class TransferOperationError(RuntimeError):
     """Safe tool metadata for the transfer preparation/submission boundary."""
 
     def __init__(self, exc, phase):
+        diagnostics = transfer_error_details(exc)
+        self.rejected = (diagnostics.get("http_status"), diagnostics.get("code")) in {
+            (403, "ConsentRequired"), (403, "PermissionDenied"),
+            (403, "EndpointPermissionDenied"), (400, "BadRequest"),
+            (400, "ClientError.BadRequest"),
+        }
         authentication = phase == "prepare" and isinstance(
             exc, (TransferAuthenticationRequired, IRIAuthenticationRequired)
         )
@@ -45,12 +51,23 @@ class TransferOperationError(RuntimeError):
         )
         if authentication:
             message = f"{exc} Run the login command in a terminal. {message}"
+        elif self.rejected:
+            reason = {
+                "ConsentRequired": "Authenticate in a terminal with the required collection data_access scopes.",
+                "PermissionDenied": "Verify the authenticated identity has access to both collections.",
+                "EndpointPermissionDenied": "Verify the collection permits access to the configured paths.",
+            }.get(diagnostics["code"], "Correct the transfer request configuration.")
+            message = (
+                f"Globus rejected the request. {reason} "
+                "Retry explicitly in the same run directory after correcting the problem; preserve all attempts."
+            )
         self.details = {
             "error": "authentication_required" if authentication else "operation_failed",
             "type": type(exc).__name__,
             "phase": phase,
-            "retry_safe": phase == "prepare",
+            "retry_safe": phase == "prepare" or self.rejected,
             "message": message,
+            **diagnostics,
         }
         super().__init__(message)
 
@@ -123,13 +140,30 @@ class HPCService:
         target = self.config.targets[target_name]
         with locked_run(run_dir) as root:
             root.relative_to(Path(target.local_root).resolve())
-            if (root / "run.json").exists() or (root / "submission.started").exists():
+            if (root / "submission.started").exists():
                 raise ValueError(
-                    "Staging was already attempted. Use a fresh run directory."
+                    "Staging was already attempted; inspect its status, do not retry in a fresh directory."
                 )
             names = [relative_path(name) for name in files]
             if not names or len(set(names)) != len(names):
                 raise ValueError("Select a nonempty set of unique input files.")
+            if (root / "run.json").exists():
+                manifest, saved_target = self._load(root)
+                if manifest.get("staging") != "rejected" or (root / "submission.json").exists():
+                    raise ValueError("Staging was already attempted; inspect its status, do not retry in a fresh directory.")
+                if target_name != manifest["target"] or set(names) != set(manifest["files"]):
+                    raise ValueError("Retry must use the same target and input files.")
+                with _transfer_phase("prepare"):
+                    resolved = target.model_copy(update={
+                        "compute_resource": self.iri.resolve_resource(target.compute_resource),
+                        "storage_resource": self.iri.resolve_resource(target.storage_resource),
+                    })
+                    if resolved != saved_target:
+                        raise ValueError("Retry must preserve the saved target configuration.")
+                    self._check_inputs(root, manifest)
+                    manager = self.manager(saved_target)
+                    prepared = manager.prepare_mapping(manifest["mapping"], label=manifest["identity"])
+                return self._submit_stage(root, manifest, manager, prepared)
             sources = {name: _input_path(root, name) for name in names}
             snapshot = root / ".hpc-inputs"
             if snapshot.exists():
@@ -174,17 +208,51 @@ class HPCService:
                 "transfer_id": None,
                 "staging": "unknown",
             }
-            write_json(root / "run.json", manifest)
+            return self._submit_stage(root, manifest, manager, prepared)
+
+    @staticmethod
+    def _submit_transfer(manager, prepared, record, save):
+        record.update(
+            submission_id=getattr(prepared, "submission_id", None),
+            transfer_id=None, state="unknown", created_at=now(),
+        )
+        with _transfer_phase("prepare"):
+            save()
+        try:
+            transfer_id = manager.submit_prepared(prepared)
+        except Exception as exc:
+            error = TransferOperationError(exc, "submit")
+            record["error"] = error.details
+            if error.rejected:
+                record["state"] = "rejected"
+            # A failure saving the rejection must leave the attempt unknown.
             with _transfer_phase("submit"):
-                transfer_id = manager.submit_prepared(prepared)
-                manifest.update(transfer_id=transfer_id, staging="submitted")
-                write_json(root / "run.json", manifest)
-            return manifest
+                save()
+            raise error from None
+        with _transfer_phase("submit"):
+            record.update(transfer_id=transfer_id, state="submitted")
+            save()
+
+    def _submit_stage(self, root, manifest, manager, prepared):
+        record = {}
+        manifest.setdefault("transfer_attempts", []).append(record)
+
+        def save():
+            manifest.update(transfer_id=record["transfer_id"], staging=record["state"])
+            write_json(root / "run.json", manifest)
+
+        self._submit_transfer(manager, prepared, record, save)
+        return manifest
 
     def transfer_status(self, run_dir, transfer_id=None):
         with locked_run(run_dir) as root:
             manifest, target = self._load(root)
             if transfer_id is None and not manifest["transfer_id"]:
+                if manifest.get("staging") == "rejected":
+                    return {
+                        **manifest["transfer_attempts"][-1]["error"],
+                        "state": "transfer_rejected", "transfer_id": None,
+                    }
                 return {
                     "state": "transfer_unknown",
                     "transfer_id": None,
@@ -226,12 +294,17 @@ class HPCService:
                 ] = target.local_path(path)
             history_path = root / ".hpc-retrievals.json"
             history = read_json(history_path) if history_path.exists() else []
-            # Reserve destinations even while a transfer is asynchronous or unknown.
-            if not overwrite and any(
-                set(mapping.values()) & set(item["mapping"].values())
-                for item in history
-            ):
-                raise ValueError("A retrieval already targets these paths.")
+            for item in history:
+                if not set(mapping.values()) & set(item["mapping"].values()):
+                    continue
+                if item.get("state") == "rejected":
+                    continue
+                if not item.get("transfer_id"):
+                    raise ValueError("A retrieval targeting these paths has an unknown outcome; do not retry.")
+                if not overwrite:
+                    raise ValueError("A retrieval already targets these paths.")
+                if self.manager(target).check_transfer_status(item["transfer_id"])["status"] not in {"SUCCEEDED", "FAILED"}:
+                    raise ValueError("A retrieval targeting these paths is still active; wait before overwriting.")
             with _transfer_phase("prepare"):
                 manager = self.manager(target)
                 prepared = manager.prepare_mapping(
@@ -239,12 +312,11 @@ class HPCService:
                 )
             for name in names:
                 (destination / name).parent.mkdir(parents=True, exist_ok=True)
-            record = {"mapping": mapping, "transfer_id": None, "created_at": now()}
+            record = {"mapping": mapping}
             history.append(record)
-            write_json(history_path, history)
-            with _transfer_phase("submit"):
-                record["transfer_id"] = manager.submit_prepared(prepared)
-                write_json(history_path, history)
+            self._submit_transfer(
+                manager, prepared, record, lambda: write_json(history_path, history),
+            )
             return record
 
     @staticmethod

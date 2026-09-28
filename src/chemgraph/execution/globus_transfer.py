@@ -35,6 +35,32 @@ logger = logging.getLogger(__name__)
 class TransferAuthenticationRequired(RuntimeError):
     """Authentication must be completed outside an agent tool invocation."""
 
+
+def transfer_error_details(exc: Exception) -> dict:
+    """Expose SDK diagnostics without response bodies, headers, or credentials."""
+    import re
+    import globus_sdk
+
+    if not isinstance(exc, globus_sdk.TransferAPIError):
+        return {}
+    details = {"http_status": exc.http_status}
+    for key, value in (("code", exc.code), ("request_id", exc.request_id)):
+        if isinstance(value, str) and re.fullmatch(r"[\w.-]{1,128}", value):
+            details[key] = value
+    consent = exc.info.consent_required
+    if consent:
+        scope_pattern = (
+            r"urn:globus:auth:scope:transfer\.api\.globus\.org:all"
+            r"(?:\[(?:\*?https://auth\.globus\.org/scopes/"
+            r"[0-9a-fA-F-]{36}/data_access\s*)+\])?"
+        )
+        details["required_scopes"] = [
+            scope for scope in consent.required_scopes
+            if isinstance(scope, str) and len(scope) <= 4096
+            and re.fullmatch(scope_pattern, scope)
+        ][:16]
+    return details
+
 # Globus Transfer API scope
 TRANSFER_SCOPE = "urn:globus:auth:scope:transfer.api.globus.org:all"
 
@@ -81,6 +107,7 @@ class _PreparedTransfer:
 
     client: Any = field(repr=False)
     payload: Any = field(repr=False)
+    submission_id: str
 
 
 class GlobusTransferManager:
@@ -243,11 +270,32 @@ class GlobusTransferManager:
         )
         for source_path, destination_path in file_mapping.items():
             data.add_item(source_path, destination_path)
-        return _PreparedTransfer(tc, data)
+        # The SDK otherwise fetches this inside submit_transfer, after callers
+        # have recorded an uncertain attempt even though no POST has occurred.
+        try:
+            submission_id = tc.get_submission_id()["value"]
+        except globus_sdk.TransferAPIError as exc:
+            if exc.http_status in (401, 403):
+                self._transfer_client = None
+            raise
+        if not isinstance(submission_id, str) or not submission_id:
+            raise ValueError("Globus did not return a submission ID.")
+        data["submission_id"] = submission_id
+        return _PreparedTransfer(tc, data, submission_id)
 
     def submit_prepared(self, prepared: _PreparedTransfer) -> str:
         """Invoke SDK submission once; uncertain outcomes must not be retried."""
-        return str(prepared.client.submit_transfer(prepared.payload)["task_id"])
+        import globus_sdk
+
+        try:
+            task_id = prepared.client.submit_transfer(prepared.payload)["task_id"]
+        except globus_sdk.TransferAPIError as exc:
+            if exc.http_status in (401, 403):
+                self._transfer_client = None
+            raise
+        if not isinstance(task_id, str) or not task_id:
+            raise ValueError("Globus did not return a task ID.")
+        return task_id
 
     def transfer_files(
         self,
