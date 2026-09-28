@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 from chemgraph.execution.globus_transfer import TransferAuthenticationRequired
 from chemgraph.tools.alcf_iri_core import IRIAuthenticationRequired, IRIRequestError
 from chemgraph.tools.hpc.models import BatchRequest
-from chemgraph.tools.hpc.service import HPCService
+from chemgraph.tools.hpc.service import HPCService, TransferOperationError
 
 
 def _errors(function):
@@ -16,12 +16,14 @@ def _errors(function):
     def call(*args, **kwargs):
         try:
             return function(*args, **kwargs)
+        except TransferOperationError as exc:
+            return exc.details
         except IRIAuthenticationRequired as exc:
             return {"error": "authentication_required", "message": str(exc)}
         except TransferAuthenticationRequired as exc:
             return {
                 "error": "authentication_required",
-                "message": f"{exc} Run the login command in a terminal; if staging started, retry with a fresh run directory.",
+                "message": f"{exc} Run the login command in a terminal; preserve all recorded transfer attempts.",
             }
         except IRIRequestError as exc:
             return {

@@ -1,11 +1,14 @@
 """One immutable input set and one scheduler submission per run directory."""
 
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 import shutil
 import uuid
 
-from chemgraph.execution.globus_transfer import GlobusTransferManager
-from chemgraph.tools.alcf_iri_core import IRIClient, IRIRequestError
+from chemgraph.execution.globus_transfer import (
+    GlobusTransferManager, TransferAuthenticationRequired,
+)
+from chemgraph.tools.alcf_iri_core import IRIAuthenticationRequired, IRIClient, IRIRequestError
 from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget, relative_path
 from chemgraph.tools.hpc.store import (
     checksum,
@@ -25,6 +28,39 @@ _RESERVED = {
     "job-status.json",
     "retrieved",
 }
+
+
+class TransferOperationError(RuntimeError):
+    """Safe tool metadata for the transfer preparation/submission boundary."""
+
+    def __init__(self, exc, phase):
+        authentication = phase == "prepare" and isinstance(
+            exc, (TransferAuthenticationRequired, IRIAuthenticationRequired)
+        )
+        message = (
+            "Transfer preparation failed; correct the problem and retry in the same run directory."
+            if phase == "prepare" else
+            "Transfer submission outcome is unknown. Inspect saved evidence and Globus task history; "
+            "do not retry the transfer or delete recorded attempts."
+        )
+        if authentication:
+            message = f"{exc} Run the login command in a terminal. {message}"
+        self.details = {
+            "error": "authentication_required" if authentication else "operation_failed",
+            "type": type(exc).__name__,
+            "phase": phase,
+            "retry_safe": phase == "prepare",
+            "message": message,
+        }
+        super().__init__(message)
+
+
+@contextmanager
+def _transfer_phase(phase):
+    try:
+        yield
+    except Exception as exc:
+        raise TransferOperationError(exc, phase) from None
 
 
 def _input_path(root, name):
@@ -96,6 +132,24 @@ class HPCService:
                 raise ValueError("Select a nonempty set of unique input files.")
             sources = {name: _input_path(root, name) for name in names}
             snapshot = root / ".hpc-inputs"
+            if snapshot.exists():
+                raise ValueError("A partial snapshot exists; use a fresh run directory.")
+            identity = "cg" + uuid.uuid4().hex
+            remote = str(PurePosixPath(target.remote_root) / identity)
+            with _transfer_phase("prepare"):
+                # Freeze resources and prepare planned snapshot paths before writing evidence.
+                target = target.model_copy(
+                    update={
+                        "compute_resource": self.iri.resolve_resource(target.compute_resource),
+                        "storage_resource": self.iri.resolve_resource(target.storage_resource),
+                    }
+                )
+                mapping = {
+                    target.local_path(snapshot / name): target.collection_path(remote + "/" + name)
+                    for name in names
+                }
+                manager = self.manager(target)
+                prepared = manager.prepare_mapping(mapping, label=identity)
             snapshot.mkdir()  # A partial snapshot also requires a fresh run.
             identities = {}
             for name, source in sources.items():
@@ -107,25 +161,6 @@ class HPCService:
                     raise ValueError("Inputs changed during staging; use a fresh run.")
                 destination.chmod(0o400)
                 identities[name] = before
-            identity = "cg" + uuid.uuid4().hex
-            remote = str(PurePosixPath(target.remote_root) / identity)
-            # Resolve and freeze resources before any remote mutation.
-            target = target.model_copy(
-                update={
-                    "compute_resource": self.iri.resolve_resource(
-                        target.compute_resource
-                    ),
-                    "storage_resource": self.iri.resolve_resource(
-                        target.storage_resource
-                    ),
-                }
-            )
-            mapping = {
-                target.local_path(snapshot / name): target.collection_path(
-                    remote + "/" + name
-                )
-                for name in names
-            }
             manifest = {
                 "version": 1,
                 "identity": identity,
@@ -140,15 +175,24 @@ class HPCService:
                 "staging": "unknown",
             }
             write_json(root / "run.json", manifest)
-            transfer_id = self.manager(target).transfer_mapping(mapping, label=identity)
-            manifest.update(transfer_id=transfer_id, staging="submitted")
-            write_json(root / "run.json", manifest)
+            with _transfer_phase("submit"):
+                transfer_id = manager.submit_prepared(prepared)
+                manifest.update(transfer_id=transfer_id, staging="submitted")
+                write_json(root / "run.json", manifest)
             return manifest
 
     def transfer_status(self, run_dir, transfer_id=None):
         with locked_run(run_dir) as root:
             manifest, target = self._load(root)
-            transfer_id = transfer_id or manifest["transfer_id"]
+            if transfer_id is None and not manifest["transfer_id"]:
+                return {
+                    "state": "transfer_unknown",
+                    "transfer_id": None,
+                    "retry_safe": False,
+                    "message": "A staging attempt is recorded without a task ID. Inspect Globus task history; "
+                    "do not restage this run, retry in a new directory, or delete recorded attempts.",
+                }
+            transfer_id = manifest["transfer_id"] if transfer_id is None else transfer_id
             known = {manifest["transfer_id"]}
             history = root / ".hpc-retrievals.json"
             if history.exists():
@@ -177,7 +221,6 @@ class HPCService:
                     raise ValueError(
                         "Retrieval destination exists; explicitly request overwrite."
                     )
-                path.parent.mkdir(parents=True, exist_ok=True)
                 mapping[
                     target.collection_path(manifest["remote_directory"] + "/" + name)
                 ] = target.local_path(path)
@@ -189,13 +232,19 @@ class HPCService:
                 for item in history
             ):
                 raise ValueError("A retrieval already targets these paths.")
+            with _transfer_phase("prepare"):
+                manager = self.manager(target)
+                prepared = manager.prepare_mapping(
+                    mapping, reverse=True, label=manifest["identity"] + " results"
+                )
+            for name in names:
+                (destination / name).parent.mkdir(parents=True, exist_ok=True)
             record = {"mapping": mapping, "transfer_id": None, "created_at": now()}
             history.append(record)
             write_json(history_path, history)
-            record["transfer_id"] = self.manager(target).transfer_mapping(
-                mapping, reverse=True, label=manifest["identity"] + " results"
-            )
-            write_json(history_path, history)
+            with _transfer_phase("submit"):
+                record["transfer_id"] = manager.submit_prepared(prepared)
+                write_json(history_path, history)
             return record
 
     @staticmethod
