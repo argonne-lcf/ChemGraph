@@ -18,10 +18,10 @@ def _errors(function):
             return function(*args, **kwargs)
         except IRIAuthenticationRequired as exc:
             return {"error": "authentication_required", "message": str(exc)}
-        except TransferAuthenticationRequired:
+        except TransferAuthenticationRequired as exc:
             return {
                 "error": "authentication_required",
-                "message": "Run python -m chemgraph.execution.globus_transfer in a terminal, then retry with a fresh run if staging started.",
+                "message": f"{exc} Run the login command in a terminal; if staging started, retry with a fresh run directory.",
             }
         except IRIRequestError as exc:
             return {
