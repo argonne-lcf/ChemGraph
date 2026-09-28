@@ -3,6 +3,7 @@
 import hashlib
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,16 @@ import tarfile
 import zipfile
 
 import pytest
+
+
+def test_bundled_skill_reference_links():
+    root = Path(__file__).resolve().parents[1] / "src/chemgraph/skills"
+    for document in root.rglob("*.md"):
+        for link in re.findall(r"\]\(([^)]+)\)", document.read_text()):
+            if "://" in link or link.startswith("#"):
+                continue
+            target = document.parent / link.split("#", 1)[0]
+            assert target.is_file(), f"Broken reference in {document}: {link}"
 
 
 @pytest.fixture(scope="module")
@@ -87,6 +98,13 @@ assert chemgraph.__file__.startswith(sys.argv[1]), chemgraph.__file__
 from chemgraph.skills.backend import BundledSkillsBackend
 backend = BundledSkillsBackend()
 assert backend.read('/pbs-hpc/SKILL.md').error is None
+assert backend.read('/hpc-batch/SKILL.md').error is None
+assert b'run_ase_core' in backend.download_files(['/hpc-batch/assets/calculate.py'])[0].content
+for path in ('/chemgraph/references/mace-polar-batch.md',
+             '/pbs-hpc/references/job-lifecycle.md', '/pbs-hpc/references/polaris-advanced.md'):
+    resource = resources.files('chemgraph.skills').joinpath(*path.lstrip('/').split('/')).read_bytes()
+    assert backend.download_files([path])[0].content == resource
+    assert backend.read(path).file_data['content'] == resource.decode('utf-8')
 assert b'PBS' in backend.download_files(['/pbs-hpc/assets/job.pbs.template'])[0].content
 assert backend.write('/pbs-hpc/SKILL.md', 'overwrite').error
 aurora_path = '/pbs-hpc/references/aurora.md'

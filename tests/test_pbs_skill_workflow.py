@@ -28,27 +28,52 @@ def example(path, language):
 def job(tmp_path):
     script = example("chemgraph/references/ase-batch.md", "python")
     (tmp_path / "calculate.py").write_text(script)
-    (tmp_path / "hydrogen.xyz").write_text("2\nEMT test\nH 0 0 0\nH 0 0 1\n")
-    payload = {
-        "input_structure_file": str(tmp_path / "hydrogen.xyz"),
-        "output_results_file": str(tmp_path / "result.json"),
-        "driver": "opt", "calculator": {"calculator_type": "emt"},
-    }
+    (tmp_path / "hydrogen.xyz").write_text(example("chemgraph/references/ase-batch.md", "xyz"))
+    payload = json.loads(example("chemgraph/references/ase-batch.md", "json"))
     environment = tmp_path / "compute environment's.sh"
-    environment.write_text('export CHEMGRAPH_LOG_DIR="$PWD"\n')
-    batch = (SKILLS / "pbs-hpc/assets/job.pbs.template").read_text()
-    for key, value in {
-        "JOB_NAME": "test", "PROJECT": "test", "QUEUE": "debug", "NODES": "1",
-        "SYSTEM": "polaris", "WALLTIME": "00:30:00", "FILESYSTEMS": "home:eagle",
-        "ENVIRONMENT_SETUP": f"source {shlex.quote(str(environment))}",
-        "APPLICATION_LAUNCH_COMMAND": f"exec {shlex.quote(sys.executable)} calculate.py",
+    environment.write_text('export ACTIVATION_TEST_VALUE="${CHEMGRAPH_UNSET_ACTIVATION_TEST}"\n')
+    batch = example("chemgraph/references/ase-batch.md", "bash")
+    for placeholder, value in {
+        "YOUR_PROJECT": "test",
+        "/absolute/path/to/environment.sh": shlex.quote(str(environment)),
+        "/absolute/path/to/environment/bin/python": shlex.quote(sys.executable),
+        "/absolute/shared/run": str(tmp_path),
     }.items():
-        batch = batch.replace("{{" + key + "}}", value)
+        batch = batch.replace(placeholder, value)
     (tmp_path / "job.pbs").write_text(batch)
     (tmp_path / "nodes").write_text(socket.gethostname() + "\n")
     env = {**os.environ, "PBS_JOBID": "123.test", "PBS_NODEFILE": str(tmp_path / "nodes"),
            "PBS_O_WORKDIR": str(tmp_path)}
     return payload, env
+
+
+@pytest.mark.parametrize("valid_structure", [True, False])
+def test_documented_prepare_only_validation(job, scheduler, tmp_path, valid_structure):
+    payload, _ = job
+    assert payload == {
+        "input_structure_file": "hydrogen.xyz", "output_results_file": "result.json",
+        "driver": "opt", "optimizer": "bfgs", "fmax": 0.05, "steps": 100,
+        "calculator": {"calculator_type": "emt"},
+    }
+    (tmp_path / "input.json").write_text(json.dumps(payload))
+    if not valid_structure:
+        (tmp_path / "hydrogen.xyz").write_text("2\nWrong bond length\nH 0 0 0\nH 0 0 2\n")
+    command = example("chemgraph/references/ase-batch.md", "sh").replace(
+        "python -", f"{shlex.quote(sys.executable)} -",
+    )
+    environment = {**os.environ, **scheduler, "CHEMGRAPH_LOG_DIR": str(tmp_path)}
+    environment.pop("PBS_JOBID", None)
+    environment.pop("PBS_NODEFILE", None)
+    result = subprocess.run(
+        ["bash", "-c", command], cwd=tmp_path, env=environment, capture_output=True, text=True,
+    )
+    assert (result.returncode == 0) == valid_structure, result.stdout + result.stderr
+    for filename in ("calls", "job.id", "submission.started", "result.json", "hydrogen_opt.traj"):
+        assert not (tmp_path / filename).exists()
+    batch = (tmp_path / "job.pbs").read_text()
+    for directive in ("-q debug", "-l select=1:system=polaris", "-l walltime=00:05:00",
+                      "-l filesystems=home:eagle", f"-o {tmp_path}/job.stdout", f"-e {tmp_path}/job.stderr"):
+        assert f"#PBS {directive}\n" in batch
 
 
 @pytest.mark.parametrize("outcome", ["opt", "vib", "nonconverged", "missing", "login", "wrong_host"])
@@ -74,6 +99,10 @@ def test_documented_calculation_and_batch(job, tmp_path, outcome):
     if outcome in {"missing", "login", "wrong_host"}:
         assert not output.exists()
     else:
+        provenance = json.loads(result.stdout.splitlines()[0])
+        assert provenance == {
+            "compute_hostname": socket.gethostname(), "python": sys.executable, "pbs_job_id": "123.test",
+        }
         data = json.loads(output.read_text())
         assert data["success"] and data["converged"] == (outcome != "nonconverged")
         assert isinstance(data["potential_energy"], float)
@@ -102,7 +131,7 @@ def test_documented_submission_preserves_evidence(scheduler, tmp_path, outcome):
             "#!/bin/bash\necho called >> calls\n" +
             ("echo connection-lost >&2\nexit 1\n" if outcome == "uncertain" else "exit 0\n")
         )
-    command = example("pbs-hpc/SKILL.md", "bash")
+    command = example("pbs-hpc/references/job-lifecycle.md", "bash")
     first = subprocess.run(["bash", "-c", command], cwd=tmp_path, env=scheduler, capture_output=True)
     assert (first.returncode == 0) == (outcome == "accepted")
     assert (tmp_path / "submission.started").exists()
@@ -132,6 +161,7 @@ def test_agent_writes_submits_and_new_session_monitors(job, scheduler, tmp_path,
 
     responses = [call("read_file", file_path=f"/chemgraph-skills/{p}") for p in (
         "chemgraph/SKILL.md", "pbs-hpc/SKILL.md", "chemgraph/references/ase-batch.md",
+        "pbs-hpc/references/job-lifecycle.md",
     )]
     # Scripted model writes the example files through the real file tools.
     files = {name: (tmp_path / name).read_text() for name in ("calculate.py", "job.pbs")}
@@ -139,7 +169,7 @@ def test_agent_writes_submits_and_new_session_monitors(job, scheduler, tmp_path,
     for name, content in files.items():
         (tmp_path / name).unlink(missing_ok=True)
         responses.append(call("write_file", file_path=f"/workspace/{name}", content=content))
-    responses += [call("execute", command=shell(example("pbs-hpc/SKILL.md", "bash"))),
+    responses += [call("execute", command=shell(example("pbs-hpc/references/job-lifecycle.md", "bash"))),
                   AIMessage(content="Submission reviewed.")]
     agent = graph(responses)
     config = {"configurable": {"thread_id": "submit"}}
@@ -216,7 +246,7 @@ def test_local_water_preparation_to_batch_result(job, scheduler, tmp_path, prepa
     if preparation not in {"reject", "reject_read"}:
         responses += [
             call("write_file", file_path="/workspace/input.json", content=""),
-            call("execute", command=shell(example("pbs-hpc/SKILL.md", "bash"))),
+            call("execute", command=shell(example("pbs-hpc/references/job-lifecycle.md", "bash"))),
         ]
     responses.append(AIMessage(content="Done."))
     agent = construct_deep_agent_graph(

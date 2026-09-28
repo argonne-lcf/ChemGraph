@@ -44,11 +44,34 @@ load only when requested. Optional `--tool` flags restrict the catalog. The skil
 names which tools to load. The agent can replace its selection for result inspection
 with `load_tools(["extract_output_json"])`. See [tool loading](skills.md#on-demand-local-tools).
 
-The agent reads the Python example at
-`/chemgraph-skills/chemgraph/references/ase-batch.md` and adapts the existing
+The agent reads the complete CPU example at
+`/chemgraph-skills/chemgraph/references/ase-batch.md`, including input, Python,
+PBS and validation commands. Its linked MACE-Polar reference supplies the
+calculator settings for the example above. Other applications can use
 `/chemgraph-skills/pbs-hpc/assets/job.pbs.template`. These are virtual file-tool
 paths; shell commands use the real workspace path. Existing file-write and
 execution approvals still apply. Inspect the generated files before submission.
+
+## Prepare files with fewer reference reads
+
+For an H₂ CPU smoke test, supply the coordinates and request the EMT example's
+four files with your project, environment and workspace paths. Say "prepare only"
+to stop after syntax, schema and coordinate validation. No calculation, model
+download or submission is needed for that validation.
+
+The routine route reads `chemgraph/SKILL.md`, `pbs-hpc/SKILL.md`, the ASE batch
+example and the short Polaris guide. It uses the documented Python API without
+loading `run_ase` or printing its implementation. Submission/recovery instructions,
+advanced Polaris operations and CLI setup are loaded only for those tasks.
+Explicit requests to read additional references still take precedence.
+
+An offline `o200k_base` estimate reduced this route from 6,587 to 2,890 tokens
+(56.1%) of raw reference text. The baseline includes both skills, the original
+Polaris guide, ASE example, PBS template and Python/CLI reference; the updated
+route uses the four resources above. This measures reference text once, not
+provider-reported usage or end-to-end savings. A live comparison should also
+check task completion, model calls, total/cached tokens and latency; the intended
+prepare-only sequence is about five or six decisions, not a hard call limit.
 
 ## Inspect later
 
@@ -66,3 +89,7 @@ The documented example is tested with real local water generation, EMT, and fake
 PBS commands, including rejected or failed preparation. Real agent-driven
 Polaris execution remains to be validated; record the transcript, generated
 scripts, PBS job ID, compute hostname, and artifacts during that smoke test.
+
+For submission from a laptop through IRI and Globus Transfer, see
+[Remote HPC batch jobs](hpc_batch.md). It shares the ASE engine and site guidance,
+but uses native HPC tools and its own per-run evidence instead of local qsub.
