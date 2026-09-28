@@ -90,6 +90,6 @@ PBS commands, including rejected or failed preparation. Real agent-driven
 Polaris execution remains to be validated; record the transcript, generated
 scripts, PBS job ID, compute hostname, and artifacts during that smoke test.
 
-For submission from a laptop through IRI and Globus Transfer, see
-[Remote HPC batch jobs](hpc_batch.md). It shares the ASE engine and site guidance,
+For submission from a laptop through IRI and Globus Transfer, use the bundled
+`hpc-batch` skill. It shares the ASE engine and site guidance,
 but uses native HPC tools and its own per-run evidence instead of local qsub.
