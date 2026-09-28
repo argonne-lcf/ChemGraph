@@ -10,9 +10,10 @@ import subprocess
 import sys
 from unittest.mock import Mock
 
+import httpx
 import pytest
 
-from chemgraph.tools.alcf_iri_core import IRIRequestError
+from chemgraph.tools.alcf_iri_core import IRIClient, IRIRequestError
 from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget
 from chemgraph.tools.hpc.service import HPCService
 from chemgraph.tools.hpc.store import read_json, write_json
@@ -57,7 +58,11 @@ class Scheduler:
         return self.records[-1]
 
     def jobs(self, resource, **kwargs):
-        return self.records if kwargs.get("offset", 0) == 0 else []
+        if kwargs.get("offset", 0) or (self.finished and not kwargs.get("historical")):
+            return []
+        if kwargs.get("include_spec"):
+            return self.records
+        return [{k: v for k, v in record.items() if k != "job_spec"} for record in self.records]
 
     def status(self, resource, job_id, historical=False):
         if self.finished and not historical:
@@ -173,7 +178,8 @@ def test_concurrent_submission_and_new_session_monitoring(batch):
 @pytest.mark.parametrize(
     "failure", [RuntimeError("token must not be saved"), SystemExit("crash")]
 )
-def test_lost_response_and_crash_reconcile_without_resubmit(batch, failure):
+@pytest.mark.parametrize("finished", [False, True])
+def test_lost_response_and_crash_reconcile_without_resubmit(batch, failure, finished):
     service, root, _, iri, request = batch
     stage(batch)
     iri.failure = failure
@@ -184,11 +190,12 @@ def test_lost_response_and_crash_reconcile_without_resubmit(batch, failure):
         assert service.submit(str(root), request)["state"] == "submission_unknown"
     assert service.submit(str(root), request)["state"] == "submission_unknown"
     assert "token must not be saved" not in (root / "submission.json").read_text()
+    iri.finished = finished
     assert service.status(str(root))["job_id"] == "123.polaris"
     assert len(iri.submissions) == 1
 
 
-@pytest.mark.parametrize("records", ["missing", "ambiguous", "wrong_directory"])
+@pytest.mark.parametrize("records", ["missing", "ambiguous", "wrong_directory", "missing_spec"])
 def test_missing_or_ambiguous_history_stays_unknown(batch, records):
     service, root, _, iri, request = batch
     stage(batch)
@@ -198,9 +205,39 @@ def test_missing_or_ambiguous_history_stays_unknown(batch, records):
         iri.records = []
     elif records == "ambiguous":
         iri.records.append({**iri.records[0], "id": "456.polaris"})
+    elif records == "missing_spec":
+        iri.records[0].pop("job_spec")
     else:
         iri.records[0]["job_spec"]["directory"] = "/another/run"
     assert service.status(str(root))["state"] == "submission_unknown"
+    assert len(iri.submissions) == 1
+
+
+@pytest.mark.parametrize("historical", [False, True])
+def test_reconciliation_requests_specs_from_iri(batch, historical):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = RuntimeError("lost response")
+    service.submit(str(root), request)
+    calls = []
+
+    def respond(http_request):
+        calls.append(http_request)
+        if http_request.method == "POST":
+            records = iri.records
+            if historical and http_request.url.params["historical"] != "true":
+                records = []
+            if http_request.url.params.get("include_spec") != "true":
+                records = [{k: v for k, v in row.items() if k != "job_spec"} for row in records]
+            return httpx.Response(200, json=records)
+        return httpx.Response(200, json=iri.records[0])
+
+    service.iri = IRIClient(transport=httpx.MockTransport(respond), headers=lambda: {})
+    assert service.status(str(root))["job_id"] == "123.polaris"
+    searches = [call for call in calls if call.method == "POST"]
+    assert len(searches) == 2
+    assert all(call.url.params["include_spec"] == "true" for call in searches)
+    assert all("/compute/status/" in call.url.path for call in calls)
     assert len(iri.submissions) == 1
 
 

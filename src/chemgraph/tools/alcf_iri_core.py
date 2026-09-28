@@ -1132,14 +1132,16 @@ class IRIClient:
         return self.request("GET", f"/compute/status/{resource}/{quote(job_id, safe='')}",
                             params={"historical": historical}, read=True)
 
-    def jobs(self, resource, *, historical=False, limit=100, offset=0, filters=None):
+    def jobs(self, resource, *, historical=False, limit=100, offset=0, filters=None,
+             include_spec=False):
         if not 1 <= limit <= 100 or offset < 0:
             raise ValueError("Use limit 1..100 and a nonnegative offset.")
         allowed = {"states", "owner", "jobIds", "queue", "accountingId"}
         if set(filters or {}) - allowed:
             raise ValueError("Unsupported job filter.")
         return self.request("POST", f"/compute/status/{resource}", read=True,
-                            params={"historical": historical, "limit": limit, "offset": offset},
+                            params={"historical": historical, "limit": limit, "offset": offset,
+                                    "include_spec": include_spec},
                             body=filters or {})
 
     def task(self, operation_id):
