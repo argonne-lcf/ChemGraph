@@ -1118,6 +1118,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Authenticate">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#from-the-streamlit-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From the Streamlit interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1623,6 +1640,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Authenticate">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#from-the-streamlit-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From the Streamlit interface
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1701,6 +1735,17 @@ that it is on <code>PATH</code>:</p>
 instead of silently moving this route to usage-based Platform billing. Review
 the <a href="https://developers.openai.com/codex/auth/">official authentication guide</a>
 for current account behavior.</p>
+<h3 id="from-the-streamlit-interface">From the Streamlit interface<a class="headerlink" href="#from-the-streamlit-interface" title="Permanent link">&para;</a></h3>
+<p>The Streamlit app reuses the same stored login. Its <strong>Codex (ChatGPT)</strong>
+provider card (first-run setup and <em>Configuration → Providers</em>) shows the
+login state and offers <em>Sign in with ChatGPT</em>, which starts a device-code
+login through the pinned Codex SDK on the machine hosting the UI and displays
+the verification URL and one-time code in the page, plus <em>Log out</em>. The SDK
+runs its bundled Codex runtime, so the UI does not need <code>codex</code> on <code>PATH</code>;
+running <code>codex login</code> in a terminal remains an alternative. The model picker then lists the
+models reported by Codex for the signed-in account (<code>codex:&lt;model-id&gt;</code>), with
+the account default preselected and a free-text entry for unlisted ids; the
+agent is rebuilt automatically when the login changes.</p>
 <h2 id="run">Run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
 <p>Prefix a model available to the signed-in Codex account with <code>codex:</code>. The
 adapter is available across all registered ChemGraph workflows; each workflow's
