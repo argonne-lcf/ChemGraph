@@ -43,6 +43,25 @@ TRANSFER_SCOPE = "urn:globus:auth:scope:transfer.api.globus.org:all"
 _DEFAULT_CLIENT_ID = "61338d24-54d5-408f-a10d-66c06b59f6d2"
 
 
+def _token_file(client_id: str) -> Path:
+    import hashlib
+
+    name = "chemgraph_transfer_tokens.json"
+    if client_id != _DEFAULT_CLIENT_ID:
+        identity = hashlib.sha256(client_id.encode()).hexdigest()
+        name = f"chemgraph_transfer_tokens.{identity}.json"
+    return Path.home() / ".globus" / name
+
+
+def _login_command(client_id: str) -> str:
+    import shlex
+
+    command = "python -m chemgraph.execution.globus_transfer"
+    if client_id != _DEFAULT_CLIENT_ID:
+        command += f" --client-id {shlex.quote(client_id)}"
+    return command
+
+
 @dataclass
 class TransferResult:
     """Metadata returned after submitting a Globus Transfer task."""
@@ -106,23 +125,28 @@ class GlobusTransferManager:
             ) from exc
 
         client = globus_sdk.NativeAppAuthClient(self._client_id)
-        # Try loading cached tokens first
-        token_file = (
-            Path.home() / ".globus" / "chemgraph_transfer_tokens.json"
-        )
+        token_file = _token_file(self._client_id)
         tokens = self._load_tokens(token_file)
+        login = _login_command(self._client_id)
 
         if tokens is None:
             raise TransferAuthenticationRequired(
-                "Authenticate Globus Transfer before running tools: "
-                "python -m chemgraph.execution.globus_transfer"
+                f"Authenticate Globus Transfer before running tools: {login}"
+            )
+        # Untagged legacy tokens are supported only at the default-client path.
+        if tokens.get("client_id", _DEFAULT_CLIENT_ID) != self._client_id:
+            raise TransferAuthenticationRequired(
+                f"Globus Transfer tokens do not match the configured client. Run {login}"
             )
         if not tokens.get("refresh_token"):
-            raise TransferAuthenticationRequired("Globus Transfer needs a new refresh-token login.")
+            raise TransferAuthenticationRequired(
+                f"Globus Transfer needs a new refresh-token login. Run {login}"
+            )
 
         def on_refresh(response):
             fresh = dict(response.by_resource_server["transfer.api.globus.org"])
             fresh.setdefault("refresh_token", tokens["refresh_token"])
+            fresh["client_id"] = self._client_id
             self._save_tokens(token_file, fresh)
             tokens.update(fresh)
 
@@ -143,7 +167,8 @@ class GlobusTransferManager:
 
         try:
             with open(path) as f:
-                return json.load(f)
+                tokens = json.load(f)
+                return tokens if isinstance(tokens, dict) else None
         except (json.JSONDecodeError, KeyError):
             return None
 
@@ -358,11 +383,12 @@ class GlobusTransferManager:
         return f"{self.destination_base_path}/{filename}"
 
 
-def authenticate(collections=()) -> None:
+def authenticate(collections=(), *, client_id=None) -> None:
     """Explicit terminal login, never called by tools."""
     import globus_sdk
 
-    client = globus_sdk.NativeAppAuthClient(_DEFAULT_CLIENT_ID)
+    client_id = client_id or _DEFAULT_CLIENT_ID
+    client = globus_sdk.NativeAppAuthClient(client_id)
     from globus_sdk.scopes import Scope, TransferScopes
     scope = TransferScopes.all
     for collection in collections:
@@ -373,14 +399,21 @@ def authenticate(collections=()) -> None:
     print(client.oauth2_get_authorize_url())
     response = client.oauth2_exchange_code_for_tokens(input("Authorization code: ").strip())
     GlobusTransferManager._save_tokens(
-        Path.home() / ".globus" / "chemgraph_transfer_tokens.json",
-        response.by_resource_server["transfer.api.globus.org"],
+        _token_file(client_id),
+        {**response.by_resource_server["transfer.api.globus.org"], "client_id": client_id},
     )
 
 
-if __name__ == "__main__":
+def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description="Authenticate ChemGraph Globus Transfer")
     parser.add_argument("--collection", action="append", default=[],
                         help="Managed collection needing data_access consent (repeatable)")
-    authenticate(parser.parse_args().collection)
+    parser.add_argument("--client-id", default=None,
+                        help="OAuth client ID used by the configured transfer manager")
+    args = parser.parse_args(argv)
+    authenticate(args.collection, client_id=args.client_id)
+
+
+if __name__ == "__main__":
+    main()
