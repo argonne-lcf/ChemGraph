@@ -77,7 +77,8 @@ def test_default_state_backend_reads_bundled_skill_without_seeding(asynchronous)
     )
     assert "pbs-hpc" in _prompt(model)
     assert any(
-        m.type == "tool" and "Use ChemGraph" in str(m.content)
+        m.type == "tool" and m.tool_call_id == "read-skill"
+        and m.status == "success" and m.content
         for m in state["messages"]
     )
     assert not any(
@@ -542,7 +543,7 @@ def test_optional_download_failure_handling(tmp_path, asynchronous, error_type):
 
     if error_type in (OSError, ValueError, RuntimeError):
         update = load()
-        assert {s["name"] for s in update["skills_metadata"]} == {"chemgraph", "pbs-hpc", "hpc-batch"}
+        assert {s["name"] for s in update["skills_metadata"]} == {"chemgraph", "pbs-hpc", "iri-hpc"}
         assert len(update["skills_load_errors"]) == 1
         assert "Cannot load skills from '/.agents/skills/': Download failed" in update["skills_load_errors"]
     else:
@@ -715,6 +716,6 @@ def test_optional_permission_error_does_not_hide_bundled_catalog(caplog):
     assert {skill["name"] for skill in update["skills_metadata"]} == {
         "chemgraph",
         "pbs-hpc",
-        "hpc-batch",
+        "iri-hpc",
     }
     assert "Cannot inspect optional skills" in caplog.text

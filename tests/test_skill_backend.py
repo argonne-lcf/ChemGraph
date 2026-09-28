@@ -19,16 +19,19 @@ def test_bundled_file_protocol(asynchronous):
     assert {entry["path"] for entry in call("ls", "/").entries} == {
         "/chemgraph/",
         "/pbs-hpc/",
-        "/hpc-batch/",
+        "/iri-hpc/",
     }
     assert len(call("glob", "**/SKILL.md").matches) == 3
     assert len(call("glob", "SKILL.md", "/chemgraph/").matches) == 1
-    assert "Use ChemGraph" in call("read", "/chemgraph/SKILL.md").file_data["content"]
-    assert call("grep", "PBS", "/pbs-hpc/", max_count=1).matches
+    read = call("read", "/chemgraph/SKILL.md")
+    assert read.error is None
+    pattern = read.file_data["content"].splitlines()[0]
+    assert call("grep", pattern, "/chemgraph/", max_count=1).matches
     downloaded = call(
         "download_files", ["/chemgraph/SKILL.md", "/absent", "/../secret"]
     )
-    assert downloaded[0].content.splitlines()[:2] == [b"---", b"name: chemgraph"]
+    assert downloaded[0].error is None
+    assert read.file_data["content"] == downloaded[0].content.decode("utf-8")
     assert downloaded[1].error == "file_not_found"
     assert downloaded[2].error == "invalid_path"
     assert call("read", "/../secret").error
@@ -44,7 +47,7 @@ def test_bundled_file_protocol(asynchronous):
 @pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["lf", "crlf"])
 def test_bundled_download_preserves_line_endings(monkeypatch, tmp_path, newline):
     contents = {}
-    for name in ("chemgraph", "pbs-hpc", "hpc-batch"):
+    for name in ("chemgraph", "pbs-hpc", "iri-hpc"):
         content = (
             f"---\nname: {name}\ndescription: Test skill\n---\n# Instructions\n"
         ).replace("\n", newline).encode("utf-8")

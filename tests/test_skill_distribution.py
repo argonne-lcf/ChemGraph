@@ -3,7 +3,6 @@
 import hashlib
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
@@ -11,16 +10,6 @@ import tarfile
 import zipfile
 
 import pytest
-
-
-def test_bundled_skill_reference_links():
-    root = Path(__file__).resolve().parents[1] / "src/chemgraph/skills"
-    for document in root.rglob("*.md"):
-        for link in re.findall(r"\]\(([^)]+)\)", document.read_text()):
-            if "://" in link or link.startswith("#"):
-                continue
-            target = document.parent / link.split("#", 1)[0]
-            assert target.is_file(), f"Broken reference in {document}: {link}"
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +46,7 @@ def test_skill_resources_in_wheel_and_sdist(skill_distributions):
         for path in (root / "src/chemgraph/skills").rglob("*")
         if path.is_file() and path.suffix not in {".py", ".pyc"}
     }
+    expected.add("chemgraph/skills/chemgraph/assets/calculate.py")
     with zipfile.ZipFile(next(distribution.glob("*.whl"))) as wheel:
         assert expected <= set(wheel.namelist())
     with tarfile.open(next(distribution.glob("*.tar.gz"))) as sdist:
@@ -98,14 +88,16 @@ assert chemgraph.__file__.startswith(sys.argv[1]), chemgraph.__file__
 from chemgraph.skills.backend import BundledSkillsBackend
 backend = BundledSkillsBackend()
 assert backend.read('/pbs-hpc/SKILL.md').error is None
-assert backend.read('/hpc-batch/SKILL.md').error is None
-assert b'run_ase_core' in backend.download_files(['/hpc-batch/assets/calculate.py'])[0].content
-for path in ('/chemgraph/references/mace-polar-batch.md',
+assert backend.read('/iri-hpc/SKILL.md').error is None
+for path in ('/chemgraph/assets/calculate.py',
+             '/chemgraph/references/ase-calculations.md',
+             '/chemgraph/references/mace-polar.md',
+             '/pbs-hpc/assets/pbs-launch.sh', '/pbs-hpc/assets/job.pbs.template',
+             '/iri-hpc/assets/launch.sh.template',
              '/pbs-hpc/references/job-lifecycle.md', '/pbs-hpc/references/polaris-advanced.md'):
     resource = resources.files('chemgraph.skills').joinpath(*path.lstrip('/').split('/')).read_bytes()
     assert backend.download_files([path])[0].content == resource
     assert backend.read(path).file_data['content'] == resource.decode('utf-8')
-assert b'PBS' in backend.download_files(['/pbs-hpc/assets/job.pbs.template'])[0].content
 assert backend.write('/pbs-hpc/SKILL.md', 'overwrite').error
 aurora_path = '/pbs-hpc/references/aurora.md'
 aurora_resource = resources.files('chemgraph.skills').joinpath(

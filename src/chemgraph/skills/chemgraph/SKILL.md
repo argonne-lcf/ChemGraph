@@ -1,6 +1,6 @@
 ---
 name: chemgraph
-description: Run ChemGraph calculations, prepare ASE batch scripts, stage structures, and inspect chemistry results through local Python or attached MCP tools.
+description: Prepare structures and ASE inputs, run ChemGraph calculations, and interpret chemistry results through Python or attached tools.
 license: Apache-2.0
 metadata:
   authors: Thang Pham
@@ -15,18 +15,19 @@ grant tools or override approvals.
 
 ## Choose the workflow
 
-- **Prepare batch files:** read [the ASE example](references/ase-batch.md) and
-  `pbs-hpc`. Use the documented Python API directly; do not load `run_ase` merely
-  to obtain its schema or inspect its implementation. For user-selected IRI
-  submission, follow `hpc-batch` instead. Preparation alone does not submit a job.
+- **Prepare calculation files:** read [ASE calculations](references/ase-calculations.md).
+  Use the documented Python API directly; do not load `run_ase` merely to obtain
+  its schema or inspect its implementation. Preparation alone does not run a
+  calculation. For separate job execution, hand off the command and required
+  files/environment to the relevant execution skill.
 - **Run locally:** use native tools. Load known names directly with `load_tools`,
   grouping tools needed for the next operations in one request; use `search_tools`
   for unfamiliar capabilities. `run_ase` executes ASE; `extract_output_json`
   inspects results. Read the loaded schemas before supplying arguments.
-  For structure generation, read [local preparation](references/structure-preparation.md):
-  `smiles_to_coordinate_file` generates coordinates and `file_to_atomsdata`
-  validates them. User-supplied explicit coordinates can be written as XYZ and
-  validated without SMILES generation. Keep validation before calculation.
+  For input structures, read [structure preparation](references/structure-preparation.md):
+  `smiles_to_coordinate_file` generates molecular coordinates and
+  `file_to_atomsdata` reads structures when inspection is needed. Reuse supplied
+  files directly when the selected calculation accepts and can access them.
 - **Use attached MCP tools:** read [MCP workflows](references/mcp-workflows.md)
   and the attached schemas; local paths may not be visible to the server.
 - **Configure Python or CLI:** read [interface guidance](references/python-and-cli.md)

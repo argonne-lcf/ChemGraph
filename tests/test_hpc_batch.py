@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import socket
 import subprocess
@@ -131,6 +132,7 @@ def test_stage_preserves_structure_and_freezes_identity(batch):
     assert service.submit(str(root), request)["state"] == "accepted"
     assert service.submit(str(root), request)["job_id"] == "123.polaris"
     assert len(iri.submissions) == 1
+    assert iri.submissions[0][1]["environment"] == {}
     assert len(transfer.calls) == 1
     with pytest.raises(ValueError, match="fresh"):
         stage(batch)
@@ -138,6 +140,82 @@ def test_stage_preserves_structure_and_freezes_identity(batch):
         service.submit(
             str(root), request.model_copy(update={"arguments": ["different"]})
         )
+
+
+@pytest.mark.parametrize("state", ["accepted", "rejected", "submission_unknown", "prepared"])
+def test_legacy_submission_replay_preserves_evidence(batch, state):
+    service, root, transfer, iri, request = batch
+    manifest = stage(batch)
+    # Build evidence through the original JobSpec, then restart with current code.
+    original = service._jobspec
+    service._jobspec = lambda *args: {
+        **original(*args),
+        "environment": {"CHEMGRAPH_LOG_DIR": manifest["remote_directory"]},
+    }
+    service.submit(str(root), request)
+    path = root / "submission.json"
+    evidence = read_json(path)
+    evidence["state"] = state
+    if state != "accepted":
+        evidence.pop("job_id")
+    write_json(path, evidence)
+    before = path.read_bytes()
+    restarted = HPCService({}, iri=iri, transfer_factory=lambda target: transfer)
+    result = restarted.submit(str(root), request)
+    assert result["state"] == ("submission_unknown" if state == "prepared" else state)
+    assert path.read_bytes() == before
+    assert len(iri.submissions) == 1
+    status = restarted.status(str(root))
+    if state == "rejected":
+        assert status["state"] == "rejected"
+    else:
+        assert status["job_id"] == "123.polaris"
+
+
+def test_legacy_pre_marker_recovery_uses_original_spec(batch, monkeypatch):
+    service, root, transfer, iri, request = batch
+    manifest = stage(batch)
+    import chemgraph.tools.hpc.service as module
+
+    original_spec = service._jobspec
+    service._jobspec = lambda *args: {
+        **original_spec(*args),
+        "environment": {"CHEMGRAPH_LOG_DIR": manifest["remote_directory"]},
+    }
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "mark_started", Mock(side_effect=SystemExit))
+        with pytest.raises(SystemExit):
+            service.submit(str(root), request)
+    before = read_json(root / "submission.json")
+    restarted = HPCService({}, iri=iri, transfer_factory=lambda target: transfer)
+    assert restarted.submit(str(root), request)["state"] == "accepted"
+    after = read_json(root / "submission.json")
+    assert after["intent"] == before["intent"]
+    assert after["created_at"] == before["created_at"]
+    assert iri.submissions == [("polaris-uuid", before["intent"]["jobspec"])]
+
+
+@pytest.mark.parametrize("change", ["environment", "extra_variable", "arguments", "request"])
+def test_legacy_compatibility_rejects_other_spec_changes(batch, change):
+    service, root, _, iri, request = batch
+    manifest = stage(batch)
+    service.submit(str(root), request)
+    path = root / "submission.json"
+    evidence = read_json(path)
+    spec = evidence["intent"]["jobspec"]
+    spec["environment"] = {"CHEMGRAPH_LOG_DIR": manifest["remote_directory"]}
+    if change == "environment":
+        spec["environment"]["CHEMGRAPH_LOG_DIR"] = "/different"
+    elif change == "extra_variable":
+        spec["environment"]["OTHER"] = "value"
+    elif change == "arguments":
+        spec["arguments"].append("different")
+    else:
+        request = request.model_copy(update={"queue": "different"})
+    write_json(path, evidence)
+    with pytest.raises(ValueError, match="specification changed"):
+        service.submit(str(root), request)
+    assert len(iri.submissions) == 1
 
 
 @pytest.mark.parametrize("state", ["ACTIVE", "FAILED", "INACTIVE"])
@@ -432,9 +510,17 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
 def test_packaged_ase_runner_uses_compute_relative_paths(batch, outcome):
     service, root, _, _, _ = batch
     assets = (
-        Path(__file__).resolve().parents[1] / "src/chemgraph/skills/hpc-batch/assets"
+        Path(__file__).resolve().parents[1] / "src/chemgraph/skills/chemgraph/assets"
     )
     shutil.copyfile(assets / "calculate.py", root / "calculate.py")
+    skills = assets.parents[1]
+    shutil.copyfile(skills / "pbs-hpc/assets/pbs-launch.sh", root / "pbs-launch.sh")
+    launch = (skills / "iri-hpc/assets/launch.sh.template").read_text()
+    (root / "launch.sh").write_text(
+        launch.replace("{{ENVIRONMENT_SETUP}}", ":").replace(
+            "{{APPLICATION_LAUNCH_COMMAND}}", f"{shlex.quote(sys.executable)} calculate.py"
+        )
+    )
     (root / "input.json").write_text(
         json.dumps(
             {
@@ -451,7 +537,7 @@ def test_packaged_ase_runner_uses_compute_relative_paths(batch, outcome):
     manifest = service.stage(
         str(root),
         "polaris",
-        ["launch.sh", "calculate.py", "input.json", "inputs/water.xyz"],
+        ["launch.sh", "pbs-launch.sh", "calculate.py", "input.json", "inputs/water.xyz"],
     )
     remote = Path(manifest["remote_directory"])
     (remote / "nodes").write_text(socket.gethostname())
@@ -465,7 +551,7 @@ def test_packaged_ase_runner_uses_compute_relative_paths(batch, outcome):
     if outcome == "login":
         env.pop("PBS_JOBID")
     result = subprocess.run(
-        [sys.executable, "calculate.py"],
+        ["bash", "launch.sh"],
         cwd=remote,
         env=env,
         capture_output=True,

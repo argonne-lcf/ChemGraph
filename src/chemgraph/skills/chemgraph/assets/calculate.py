@@ -1,4 +1,4 @@
-"""Run an existing ASE input.json inside a PBS compute allocation."""
+"""Run an existing ASE input.json from the calculation directory."""
 
 import json
 import os
@@ -8,19 +8,12 @@ import sys
 
 
 def main():
-    nodefile = os.environ.get("PBS_NODEFILE")
-    if not os.environ.get("PBS_JOBID") or not nodefile:
-        raise RuntimeError("Submit this calculation through PBS.")
-    nodes = {node.split(".")[0] for node in Path(nodefile).read_text().split()}
-    if socket.gethostname().split(".")[0] not in nodes:
-        raise RuntimeError("This host is not in the PBS allocation.")
     os.environ["CHEMGRAPH_LOG_DIR"] = str(Path.cwd())
     print(
         json.dumps(
             {
                 "compute_hostname": socket.gethostname(),
                 "python": sys.executable,
-                "pbs_job_id": os.environ["PBS_JOBID"],
                 "cwd": str(Path.cwd()),
             }
         )

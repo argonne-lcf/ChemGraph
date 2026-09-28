@@ -1,7 +1,7 @@
 # Submit, monitor and recover direct PBS jobs
 
 Use only for authorized direct-qsub work on the submission host. For an IRI run,
-follow `hpc-batch` instead. Complete input staging, inspect files and resolve all
+follow `iri-hpc` instead. Complete input staging, inspect files and resolve all
 placeholders before submission. Existing tool approvals still apply.
 
 Run this submission sequence from the fresh host run directory after completing

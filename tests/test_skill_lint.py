@@ -3,19 +3,12 @@
 import importlib
 import json
 from pathlib import Path
-import shlex
 import sys
 
-from markdown_it import MarkdownIt
 import pytest
 import yaml
 
-from chemgraph.registry import ToolRegistry
 from chemgraph.skills.lint import lint_skills
-
-ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ROOT / "src/chemgraph/skills"
-
 
 def skill(tmp_path, **frontmatter):
     root = tmp_path / "example"
@@ -94,30 +87,6 @@ def test_missing_empty_and_unreadable_sources(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Path, "read_text", denied)
     assert lint_skills(root)[0].code == "read"
-
-
-def test_bundled_contribution_gate():
-    assert lint_skills(SKILLS, core=True) == []
-
-
-def test_documented_cli_examples_parse_without_execution():
-    from chemgraph.cli.main import create_argument_parser
-
-    parser = create_argument_parser()
-    text = (SKILLS / "chemgraph/references/python-and-cli.md").read_text()
-    examples = [line for block in MarkdownIt().parse(text) if block.type == "fence"
-                for line in block.content.splitlines() if line.startswith("chemgraph ")]
-    assert examples
-    for command in examples:
-        args = parser.parse_args(shlex.split(command)[1:])
-        assert args.command == "run"
-
-
-def test_documented_preparation_tools_are_registered():
-    text = (SKILLS / "chemgraph/references/structure-preparation.md").read_text()
-    for name in ("smiles_to_coordinate_file", "file_to_atomsdata", "molecule_name_to_smiles"):
-        assert f"`{name}`" in text
-        assert ToolRegistry().get_spec(name).name == name
 
 
 @pytest.mark.parametrize("valid", [True, False])

@@ -1,14 +1,14 @@
 ---
-name: hpc-batch
+name: iri-hpc
 description: Stage files with Globus Transfer and submit, monitor, and retrieve remote PBS jobs through configured IRI HPC tools, including from a laptop without SSH or qsub.
 license: Apache-2.0
 compatibility: Requires a POSIX agent host, configured IRI and Globus resources, and an existing compute environment.
 metadata:
-  authors: ChemGraph contributors
+  authors: Thang Pham
   maintainers: tdpham2
 ---
 
-# Remote HPC batch jobs
+# Remote jobs through IRI
 
 Use this workflow when the user selects IRI remote batch execution. Read the
 `pbs-hpc` site reference for environment requirements, but use `hpc_*` native
@@ -19,15 +19,21 @@ submission host when the user selects it. Never mix submission methods for a run
    configuration, not guessed projects, collections, paths, or environments.
 2. Create a fresh absolute host run directory beneath the target's local_root.
    Native tools run on the agent host; `/workspace` may be a virtual file-tool
-   path. Prepare all inputs and a launch script there. Preserve scientific
-   settings and selected compute methods. Use relative paths inside input.json
+   path. Obtain the application command, working directory, required files and
+   software environment, launch requirements, expected outputs, and exit-code
+   meanings from the application skill. Prepare its inputs with run-relative
    or known compute-visible paths, never laptop absolute paths.
-3. Read the ASE example in [the chemistry reference](../chemgraph/references/ase-batch.md).
-   For remote ASE use [calculate.py](assets/calculate.py) and
-   [launch.sh.template](assets/launch.sh.template). Replace placeholders,
-   supply relative structure/output/model paths, and validate script syntax
-   without running a calculation on the login node. Explicitly select resources
-   in the submission request: #PBS comments are not scheduler directives here.
+3. Adapt [launch.sh.template](assets/launch.sh.template). Current IRI targets use
+   PBS: copy [pbs-launch.sh](../pbs-hpc/assets/pbs-launch.sh) alongside the launch
+   script and include it in staging. It validates the allocation before executing
+   the application; invoke it with `bash` because staging does not preserve
+   executable permissions. Fill `ENVIRONMENT_SETUP` with the required setup and
+   `APPLICATION_LAUNCH_COMMAND` with an executable plus shell-quoted arguments,
+   without a leading `exec`. Put compound shell commands in a separate staged
+   script invoked with `bash`. Request `arguments` are forwarded unchanged.
+   Validate script syntax without running the application on a login node.
+   Explicitly select resources in the submission request: #PBS comments are not
+   scheduler directives here.
 4. If needed, run a small separate diagnostic job first. Record compute hostname,
    Python/binary locations, modules, requested libraries and device visibility.
    Reuse verified environment setup; do not automatically install software.
@@ -48,9 +54,10 @@ submission host when the user selects it. Never mix submission methods for a run
    failures; use Globus retrieval if IRI filesystem inspection is unavailable.
    Use hpc_transfer_files direction=retrieve for selected artifacts, then poll
    the returned transfer_id. Retrieved files go under run_dir/retrieved.
-9. Inspect scientific result fields, stderr and exit status. PBS completion alone
-   is not scientific success. ASE exits 0 for convergence, 2 for nonconvergence,
-   and 1 for failure; early failures may leave no result JSON. Report uncertainty.
+9. Return scheduler evidence, exit status, stdout/stderr, and artifact locations
+   to the application workflow for interpretation. Scheduler completion alone
+   does not establish application success; early failures may leave only stderr.
+   Report uncertainty and missing outputs.
 
 Loading tools replaces the active selection; load all tools needed in the next
 step together. Keep this workflow in this agent. Cancel only a user-requested
@@ -61,4 +68,3 @@ Existing MCP batch IDs and Globus Compute task IDs are not PBS job IDs.
 Credentials belong in authentication caches, not scripts, arguments or manifests.
 No daemon is needed: accepted jobs survive agent exit. Cross-controller and
 external remote-file modifications are outside the local evidence guarantee.
-CUDA gRASPA integration is not included; do not substitute the SYCL/H2O runner.
