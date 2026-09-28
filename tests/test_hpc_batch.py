@@ -48,6 +48,12 @@ class Scheduler:
     def resolve_resource(self, name):
         return name + "-uuid"
 
+    def prepare_submission(self, resource, spec):
+        return resource, spec
+
+    def submit_prepared(self, request):
+        return self.submit(*request)
+
     def submit(self, resource, spec):
         self.submissions.append((resource, spec))
         self.records.append(
@@ -256,6 +262,70 @@ def test_rejection_and_pre_marker_crash(batch, monkeypatch):
     assert service.submit(str(root), request)["state"] == "rejected"
     assert service.submit(str(root), request)["state"] == "rejected"
     assert len(iri.submissions) == 1
+
+
+def test_authentication_failure_can_retry_same_run_without_resubmission(batch):
+    service, root, _, _, request = batch
+    stage(batch)
+    calls = []
+
+    def respond(http_request):
+        assert (root / "submission.started").exists()
+        assert read_json(root / "submission.json")["state"] == "prepared"
+        assert http_request.headers["Authorization"] == "Bearer test-credential"
+        calls.append(http_request)
+        return httpx.Response(200, json={"id": "123.polaris"})
+
+    headers = Mock(side_effect=RuntimeError("secret provider error"))
+    service.iri = IRIClient(transport=httpx.MockTransport(respond), headers=headers)
+    tool = create_hpc_registry({}, names=["hpc_submit_job"], service=service).get("hpc_submit_job")
+    args = {"run_dir": str(root), "request": request.model_dump()}
+    result = tool.invoke(args)
+    assert result["error"] == "authentication_required"
+    assert "same run directory" in result["message"]
+    assert "secret" not in str(result)
+    assert not calls
+    assert not (root / "submission.started").exists()
+    assert not (root / "submission.json").exists()
+    assert service.status(str(root))["state"] == "not_submitted"
+
+    headers.side_effect = [{"Authorization": "Bearer test-credential"}]
+    assert tool.invoke(args)["state"] == "accepted"
+    # The single prepared credential is sufficient; neither sending nor an
+    # accepted repeat should call the provider again.
+    assert tool.invoke(args)["job_id"] == "123.polaris"
+    assert len(calls) == 1
+    assert headers.call_count == 2
+    assert "test-credential" not in (root / "submission.json").read_text()
+
+
+def test_invalid_submission_payload_does_not_mark_attempt(batch, monkeypatch):
+    service, root, _, _, request = batch
+    stage(batch)
+    service.iri = IRIClient(headers=lambda: {})
+    original = service._jobspec
+    monkeypatch.setattr(service, "_jobspec", lambda *args: {**original(*args), "bad": object()})
+    with pytest.raises(TypeError):
+        service.submit(str(root), request)
+    assert not (root / "submission.started").exists()
+    assert not (root / "submission.json").exists()
+
+
+def test_prepared_submission_transport_failure_remains_unknown(batch):
+    service, root, _, _, request = batch
+    stage(batch)
+    calls = []
+
+    def fail(http_request):
+        calls.append(http_request)
+        raise httpx.ReadTimeout("secret transport error")
+
+    service.iri = IRIClient(transport=httpx.MockTransport(fail), headers=lambda: {})
+    assert service.submit(str(root), request)["state"] == "submission_unknown"
+    assert service.submit(str(root), request)["state"] == "submission_unknown"
+    assert len(calls) == 1
+    assert (root / "submission.started").exists()
+    assert "secret" not in (root / "submission.json").read_text()
 
 
 def test_retrieval_mapping_and_overwrite(batch):
