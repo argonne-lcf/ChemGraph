@@ -16,6 +16,12 @@ import pandas as pd
 import streamlit as st
 from ase.io import read as ase_read
 
+from chemgraph.agent.interrupts import (
+    collect_pending_interrupts,
+    interrupt_question,
+    is_tool_review,
+    normalize_interrupts,
+)
 from chemgraph.agent.llm_agent import HumanInputRequired
 from chemgraph.memory.store import SessionStore
 from chemgraph.memory.durable import delete_durable_session
@@ -32,9 +38,12 @@ from chemgraph.utils.config_utils import (
 
 from ui import alcf_auth
 from ui import artifacts as artifact_utils
+from ui import codex_auth
+from ui import deepagent_policy
 from ui import providers
 from ui.agent_manager import initialize_agent, transfer_conversation_state
-from ui.provider_widgets import apply_api_key, render_alcf_login
+from ui.provider_widgets import apply_api_key, render_alcf_login, render_codex_login
+from ui.review_cards import allowed_decisions, render_action_card, review_summary
 from ui.branding import LOGO_IMAGES, first_existing_asset
 from ui import config as ui_config
 from ui.config import load_config, resolve_default_calculator, save_config
@@ -71,7 +80,11 @@ from ui.visualization import (
 )
 
 # Re-use the constants from the configuration page
-from ui._pages.configuration import normalize_workflow_name
+from ui._pages.configuration import (
+    DEEPAGENT_ACK_KEY,
+    normalize_workflow_name,
+    render_deepagent_acknowledgment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +140,64 @@ def _ensure_chat_log_dir() -> str:
     os.makedirs(chat_log_dir, exist_ok=True)
     os.environ["CHEMGRAPH_LOG_DIR"] = chat_log_dir
     return chat_log_dir
+
+
+def _set_agent_log_dir(agent: Any, log_dir: Optional[str]) -> None:
+    """Point ``CHEMGRAPH_LOG_DIR`` at *log_dir* for tools and the agent's shell.
+
+    In-process tools read ``os.environ``; a Deep Agent's host shell keeps
+    the environment it was built with, so it is updated explicitly.
+
+    Parameters
+    ----------
+    agent : Any
+        Active agent (may be ``None``).
+    log_dir : str, optional
+        Directory for this run's artifacts.
+    """
+    if not log_dir:
+        return
+    os.environ["CHEMGRAPH_LOG_DIR"] = log_dir
+    backend = getattr(agent, "deepagent_backend", None)
+    if backend is not None:
+        from chemgraph.agent.deepagent_backend import update_shell_environment
+
+        update_shell_environment(backend, CHEMGRAPH_LOG_DIR=log_dir)
+
+
+def _append_attachment_note(resume_value: Any, note: str) -> Any:
+    """Add the attachment note to every text the agent will read on resume.
+
+    Plain answers get the note appended; Deep Agent review answers carry it
+    in each rejection ``message`` (the revision instructions); several
+    pending interrupts (a dict keyed by interrupt id) are handled per value.
+
+    Parameters
+    ----------
+    resume_value : Any
+        Value passed to ``Command(resume=...)``.
+    note : str
+        Text from :func:`_attachment_note`.
+
+    Returns
+    -------
+    Any
+        Resume value with the note attached where a message exists.
+    """
+    if not note:
+        return resume_value
+    if isinstance(resume_value, str):
+        return resume_value + note
+    if isinstance(resume_value, dict) and isinstance(resume_value.get("decisions"), list):
+        decisions = []
+        for decision in resume_value["decisions"]:
+            if isinstance(decision, dict) and decision.get("type") == "reject":
+                decision = {**decision, "message": str(decision.get("message") or "") + note}
+            decisions.append(decision)
+        return {**resume_value, "decisions": decisions}
+    if isinstance(resume_value, dict):
+        return {key: _append_attachment_note(value, note) for key, value in resume_value.items()}
+    return resume_value
 
 
 def _activate_turn_dir(chat_log_dir: Optional[str], turn_index: int) -> Optional[str]:
@@ -244,6 +315,17 @@ def render() -> None:
         st.info(ui_notice)
 
     endpoint_status = check_local_model_endpoint(selected_base_url)
+
+    if codex_auth.is_codex_model(selected_model) and selected_workflow not in (
+        "single_agent",
+        "main_agent",
+        "deep_agent",
+    ):
+        st.warning(
+            f"Codex models support only the single_agent, main_agent and "
+            f"deep_agent workflows; **{selected_workflow}** will fail to "
+            "initialize. Change the workflow on the ⚙️ Configuration page."
+        )
 
     # Warn when the selected model's provider is not usable yet.
     provider_info = providers.provider_for_model(selected_model)
@@ -375,11 +457,12 @@ def _render_first_run_setup(config: dict) -> bool:
         icon="\U0001f44b",
     )
 
-    tab_argo, tab_key, tab_alcf, tab_local = st.tabs(
+    tab_argo, tab_key, tab_alcf, tab_codex, tab_local = st.tabs(
         [
             "\U0001f3db Argo (Argonne)",
             "\U0001f511 Your own API key",
             "\U0001f310 ALCF (Globus)",
+            "\U0001f4ac Codex (ChatGPT)",
             "\U0001f4bb Local (Ollama)",
         ]
     )
@@ -432,6 +515,41 @@ def _render_first_run_setup(config: dict) -> bool:
         if render_alcf_login(key_prefix="setup"):
             _finish_first_run_setup(config, info)
 
+    with tab_codex:
+        info = providers.get_provider(providers.CODEX)
+        st.caption(info.help_text)
+        codex_ready = providers.provider_status(info, config).ready
+        if render_codex_login(key_prefix="setup"):
+            _finish_first_run_setup(config, info)
+        elif codex_ready:
+            catalog = codex_auth.available_models()
+            if catalog:
+                names = [item["name"] for item in catalog]
+                default_name = codex_auth.default_model_name(catalog)
+                chosen = st.selectbox(
+                    "Model",
+                    names,
+                    index=names.index(default_name) if default_name in names else 0,
+                    format_func=lambda name: next(
+                        (
+                            item["display_name"] + (" — default" if item["is_default"] else "")
+                            for item in catalog
+                            if item["name"] == name
+                        ),
+                        name,
+                    ),
+                    key="setup_codex_model",
+                )
+            else:
+                chosen = st.text_input(
+                    "Model id", value=info.default_model, key="setup_codex_model",
+                    help="Codex returned no catalog; enter codex:<model-id>.",
+                ).strip()
+            if st.button(
+                "Use Codex", key="setup_codex_go", type="primary", disabled=not chosen
+            ):
+                _finish_first_run_setup(config, info, chosen)
+
     with tab_local:
         info = providers.get_provider(providers.OLLAMA)
         st.caption(info.help_text)
@@ -458,7 +576,7 @@ def _render_first_run_setup(config: dict) -> bool:
     return True
 
 
-def _finish_first_run_setup(config: dict, info) -> None:
+def _finish_first_run_setup(config: dict, info, model_name: Optional[str] = None) -> None:
     """Persist the chosen provider/model and enter the chat.
 
     Parameters
@@ -467,8 +585,12 @@ def _finish_first_run_setup(config: dict, info) -> None:
         Live nested UI configuration.
     info : providers.ProviderInfo
         The chosen provider.
+    model_name : str, optional
+        Explicit model choice; defaults to the provider's default model
+        (for Codex, the signed-in account's default).
     """
-    config["general"]["model"] = info.default_model
+    model_name = model_name or providers.default_model_for(info)
+    config["general"]["model"] = model_name
     providers.align_base_url_for_provider(config, info.id)
     st.session_state.config = config
     saved = save_config(config)
@@ -476,11 +598,11 @@ def _finish_first_run_setup(config: dict, info) -> None:
     # that setup finished to avoid re-gating the chat.
     st.session_state._setup_skipped = True
     if saved:
-        st.toast(f"Ready — using {info.default_model}", icon="\U0001f680")
+        st.toast(f"Ready — using {model_name}", icon="\U0001f680")
     else:
         # The session keeps the choice, but it will not survive a restart.
         st.session_state.setup_save_error = (
-            f"Using {info.default_model} for this session, but the configuration "
+            f"Using {model_name} for this session, but the configuration "
             f"could not be saved ({ui_config.last_save_error}). Set "
             f"${ui_config.CONFIG_PATH_ENV} to a writable file to persist settings."
         )
@@ -807,6 +929,11 @@ def _render_agent_status(
         st.sidebar.success("\u2705 Agents Ready")
         st.sidebar.info(f"\U0001f9e0 Model: {selected_model}")
         st.sidebar.info(f"\u2699\ufe0f Workflow: {selected_workflow}")
+        workspace = getattr(
+            getattr(st.session_state.agent, "deepagent_backend", None), "cwd", None
+        )
+        if selected_workflow == "deep_agent" and workspace:
+            st.sidebar.caption(f"Deep Agent workspace: `{workspace}`")
         st.sidebar.info(f"\U0001f517 Thread ID: {thread_id}")
         st.sidebar.info(
             f"\U0001f4ac Messages: {len(st.session_state.conversation_history)}"
@@ -864,6 +991,12 @@ def _provider_credential_fingerprint(provider_info, alcf_token: Optional[str]) -
         return None
     if provider_info.auth_kind == "globus":
         credential = alcf_token
+    elif provider_info.auth_kind == "codex":
+        # No secret is readable: Codex stores the login.  Key the
+        # agent on the login state/identity so a sign-in or sign-out
+        # rebuilds the model client instead of reusing a stale one.
+        status = codex_auth.account_status()
+        credential = f"{status.state}:{status.identity or ''}" if status.ready else None
     elif provider_info.env_var:
         credential = os.environ.get(provider_info.env_var)
     else:
@@ -871,6 +1004,74 @@ def _provider_credential_fingerprint(provider_info, alcf_token: Optional[str]) -
     if not credential:
         return None
     return hashlib.sha256(credential.encode("utf-8")).hexdigest()
+
+
+def _deepagent_settings(config: dict, selected_workflow: str) -> Optional[tuple]:
+    """Return the hashable Deep Agent settings for the agent cache key.
+
+    Parameters
+    ----------
+    config : dict
+        Nested UI configuration.
+    selected_workflow : str
+        Selected workflow name.
+
+    Returns
+    -------
+    tuple or None
+        ``(workspace, skill_dirs, discover_skills, tool_names)`` for the
+        ``deep_agent`` workflow, ``None`` otherwise.
+    """
+    if selected_workflow != "deep_agent":
+        return None
+    general = config.get("general", {})
+    skills = general.get("deepagent_skills") or []
+    if isinstance(skills, str):
+        skills = [skills]
+    tools = general.get("tools")
+    return (
+        str(general.get("deepagent_workspace") or ""),
+        tuple(str(item) for item in skills),
+        bool(general.get("deepagent_discover_skills", True)),
+        tuple(str(item) for item in tools) if isinstance(tools, list) else None,
+    )
+
+
+def _deepagent_init_kwargs(settings: Optional[tuple]) -> dict:
+    """Expand :func:`_deepagent_settings` into ``initialize_agent`` kwargs."""
+    if settings is None:
+        return {}
+    workspace, skill_dirs, discover, tools = settings
+    return {
+        "deepagent_workspace": workspace or None,
+        "deepagent_skill_dirs": list(skill_dirs) or None,
+        "deepagent_discover_skills": discover,
+        "deepagent_tool_names": list(tools) if tools is not None else None,
+    }
+
+
+def _deepagent_access_acknowledged() -> bool:
+    """Gate Deep Agent initialization on the host-shell acknowledgment.
+
+    Renders the acknowledgment checkbox in the chat when it is missing and
+    reruns once it is ticked.
+
+    Returns
+    -------
+    bool
+        Whether the Deep Agent may be initialized in this session.
+    """
+    if st.session_state.get(DEEPAGENT_ACK_KEY):
+        return True
+    st.warning(
+        "The **deep_agent** workflow can run shell commands on this host and "
+        "modify files under its workspace. Every command and file change will "
+        "pause for your approval in this chat.",
+        icon="\u26a0\ufe0f",
+    )
+    if render_deepagent_acknowledgment(key="chat_deepagent_ack"):
+        st.rerun()
+    return False
 
 
 def _auto_initialize_agent(
@@ -914,6 +1115,23 @@ def _auto_initialize_agent(
     # applied or cleared key rebuilds the agent instead of reusing the old one.
     credential_fingerprint = _provider_credential_fingerprint(provider_info, alcf_token)
 
+    deepagent_settings = _deepagent_settings(config, selected_workflow)
+    if selected_workflow == "deep_agent" and not deepagent_policy.deep_agent_enabled():
+        # Server-side opt-in: a browser user cannot enable a host shell.
+        st.error(deepagent_policy.DISABLED_MESSAGE)
+        st.session_state.agent = None
+        st.session_state.last_config = None
+        return
+    if selected_workflow == "deep_agent" and not _deepagent_access_acknowledged():
+        # Same gate as the CLI's confirmation prompt: no host-shell backend
+        # is built until the user acknowledges what the Deep Agent can do.
+        # Drop any cached agent as well, so queries are neither sent to the
+        # previously selected workflow nor to a Deep Agent whose
+        # acknowledgment was withdrawn.
+        st.session_state.agent = None
+        st.session_state.last_config = None
+        return
+
     current_config = (
         selected_model,
         selected_workflow,
@@ -925,6 +1143,7 @@ def _auto_initialize_agent(
         selected_base_url,
         get_argo_user_from_nested_config(config),
         st.session_state.get("current_chat_log_dir"),
+        deepagent_settings,
         credential_fingerprint,
     )
 
@@ -953,6 +1172,7 @@ def _auto_initialize_agent(
                 selected_base_url,
                 get_argo_user_from_nested_config(config),
                 log_dir=chat_log_dir,
+                **_deepagent_init_kwargs(deepagent_settings),
             )
             if agent is not None:
                 if credential_only_change:
@@ -969,6 +1189,7 @@ def _auto_initialize_agent(
                     selected_base_url,
                     get_argo_user_from_nested_config(config),
                     chat_log_dir,
+                    deepagent_settings,
                     credential_fingerprint,
                 )
             elif credential_only_change:
@@ -1810,6 +2031,82 @@ def _render_interactive_ir_spectrum(
     return True
 
 
+@st.cache_data(show_spinner=False)
+def _cached_optimization_steps(traj_path: str, mtime: float):
+    """Load per-step energies/forces and geometries of an optimization (cached).
+
+    Parameters
+    ----------
+    traj_path : str
+        Path to the optimizer's ``.traj`` file.
+    mtime : float
+        File modification time; part of the cache key so rewritten files
+        re-load.
+
+    Returns
+    -------
+    tuple[list[dict], str] or None
+        ``(steps, frames_xyz)`` as returned by
+        :func:`ui.opt_explorer.read_optimization_steps`.
+    """
+    from ui.opt_explorer import read_optimization_steps
+
+    return read_optimization_steps(traj_path)
+
+
+def _load_optimization_explorer(traj_path: str):
+    """Load explorer data for *traj_path*, or ``None`` when unavailable.
+
+    Parameters
+    ----------
+    traj_path : str
+        Resolved optimizer trajectory path.
+
+    Returns
+    -------
+    tuple[list[dict], str] or None
+        ``(steps, frames_xyz)`` with at least two steps.
+    """
+    try:
+        loaded = _cached_optimization_steps(traj_path, os.path.getmtime(traj_path))
+    except OSError:
+        return None
+    if loaded is None or len(loaded[0]) < 2:
+        return None
+    return loaded
+
+
+def _render_optimization_explorer(idx: int, steps: list, frames_xyz: str) -> None:
+    """Render the linked convergence plot + per-step 3D viewer.
+
+    Parameters
+    ----------
+    idx : int
+        One-based exchange index.
+    steps : list[dict]
+        Per-frame records from :func:`_load_optimization_explorer`.
+    frames_xyz : str
+        Multi-model XYZ text aligned with *steps*.
+    """
+    from ui.opt_explorer import render_opt_explorer
+
+    col_speed, col_note = st.columns([1, 3], vertical_alignment="bottom")
+    with col_speed:
+        interval_ms = st.select_slider(
+            "Playback speed",
+            options=[600, 400, 250, 150, 80],
+            value=250,
+            format_func=lambda ms: f"{1000 / ms:.0f} fps",
+            key=f"opt_speed_{idx}",
+        )
+    with col_note:
+        st.caption(
+            "Hover or click a step to see its geometry; use Play/Pause or the "
+            "slider to animate the optimization path."
+        )
+    render_opt_explorer(steps, frames_xyz, interval_ms=int(interval_ms))
+
+
 def _render_optimization_section(
     idx: int, entry: dict, artifact_kinds: dict
 ) -> None:
@@ -1833,6 +2130,21 @@ def _render_optimization_section(
     traj_path = _resolve_artifact_path(traj_rel, entry.get("log_dir"))
     if not os.path.exists(traj_path):
         return
+
+    # Linked explorer: every step in the plot maps to its geometry, with
+    # Play/Pause and a step slider.  The separate chart + auto-looping
+    # viewer is only a fallback when the frames cannot be embedded.
+    explorer_steps = _load_optimization_explorer(traj_path)
+    if explorer_steps is not None:
+        steps, frames_xyz = explorer_steps
+        # The last step is always kept when downsampling.
+        total_steps = steps[-1]["step"] + 1
+        with st.expander(
+            f"\U0001f4c9 Optimization ({total_steps} steps)", expanded=False
+        ):
+            _render_optimization_explorer(idx, steps, frames_xyz)
+        return
+
     data = ui_plots.read_optimization_trajectory(traj_path)
     if data is None:
         return
@@ -1948,10 +2260,21 @@ def _render_pending_interrupt() -> None:
         with st.chat_message("user"):
             _render_markdown_with_math(exch["answer"])
 
-    # Show the current pending question
+    records = st.session_state.get("pending_interrupts") or []
+
+    # Show the current pending question / action reviews
     with st.chat_message("assistant"):
-        st.info("The agent needs your input to continue.", icon="\u2753")
-        _render_markdown_with_math(question)
+        if _pending_is_review(records):
+            _render_review_cards(records)
+        else:
+            st.info("The agent needs your input to continue.", icon="\u2753")
+            _render_markdown_with_math(question)
+            if any(is_tool_review(r.get("payload")) for r in records):
+                st.caption(
+                    "This pause also includes Deep Agent actions; a typed reply "
+                    "answers the question and returns it as revision "
+                    "instructions for those actions."
+                )
 
     # Cancel button
     if st.button("Cancel", key="cancel_interrupt"):
@@ -1959,9 +2282,123 @@ def _render_pending_interrupt() -> None:
         st.rerun()
 
 
+def _render_review_cards(records: list[dict]) -> None:
+    """Render Deep Agent action reviews with Approve/Reject controls.
+
+    One pending action gets direct Approve/Reject buttons.  Several get a
+    per-action choice plus Submit, Approve all and Reject all.  Typing in
+    the chat input instead rejects the action(s) with the text as
+    revision instructions, mirroring the CLI.
+
+    Parameters
+    ----------
+    records : list[dict]
+        Pending interrupt records, all of which are tool reviews.
+    """
+    rows = _review_actions(records)
+    total = len(rows)
+    st.info(
+        "The Deep Agent wants to run the following "
+        f"{'action' if total == 1 else str(total) + ' actions'}. Review and "
+        "decide, or type instructions below to skip and revise.",
+        icon="\U0001f6e1\ufe0f",
+    )
+    decisions: dict[tuple[int, int], dict] = {}
+    # Widget keys include the interrupt ids/count so a later review renders
+    # fresh controls instead of inheriting the previous choices.
+    nonce = st.session_state.get("review_nonce", 0)
+    for position, (record_index, action_index, payload, action) in enumerate(rows, start=1):
+        key = f"review_{nonce}_{record_index}_{action_index}"
+        render_action_card(action, position, total)
+        allowed = allowed_decisions(payload, str(action.get("name", "unknown")))
+        if not allowed:
+            st.error(
+                f"Action {action.get('name', 'unknown')!r} does not allow "
+                "approve/reject; cancel and revise the request."
+            )
+            return
+        if total == 1:
+            col_ok, col_no = st.columns(2)
+            with col_ok:
+                if "approve" in allowed and st.button(
+                    "\u2705 Approve", key=f"{key}_approve", type="primary",
+                    use_container_width=True,
+                ):
+                    _submit_review_decisions(
+                        records, {(record_index, action_index): {"type": "approve"}},
+                        "Approved",
+                    )
+            with col_no:
+                if "reject" in allowed and st.button(
+                    "\u274c Reject", key=f"{key}_reject", use_container_width=True,
+                ):
+                    _submit_review_decisions(
+                        records, {(record_index, action_index): {"type": "reject"}},
+                        "Rejected",
+                    )
+            return
+        options = [d for d in ("approve", "reject") if d in allowed]
+        choice = st.radio(
+            "Decision",
+            options,
+            index=0,
+            horizontal=True,
+            format_func=str.capitalize,
+            key=f"{key}_choice",
+        )
+        decisions[(record_index, action_index)] = {"type": choice}
+
+    col_submit, col_all_ok, col_all_no = st.columns(3)
+    with col_submit:
+        if st.button(
+            "Submit decisions", key=f"review_{nonce}_submit", type="primary",
+            use_container_width=True,
+        ):
+            approved = sum(1 for d in decisions.values() if d["type"] == "approve")
+            _submit_review_decisions(
+                records, decisions,
+                f"Approved {approved} of {total}, rejected {total - approved}",
+            )
+    with col_all_ok:
+        if st.button(
+            "\u2705 Approve all", key=f"review_{nonce}_approve_all",
+            use_container_width=True,
+        ):
+            _submit_review_decisions(
+                records,
+                {k: {"type": "approve"} for k in decisions},
+                f"Approved all {total} actions",
+            )
+    with col_all_no:
+        if st.button(
+            "\u274c Reject all", key=f"review_{nonce}_reject_all",
+            use_container_width=True,
+        ):
+            _submit_review_decisions(
+                records,
+                {k: {"type": "reject"} for k in decisions},
+                f"Rejected all {total} actions",
+            )
+
+
+def _submit_review_decisions(
+    records: list[dict], decisions: dict[tuple[int, int], dict], display_text: str
+) -> None:
+    """Resume the paused workflow with the chosen action decisions."""
+    try:
+        answers = _decision_answers(records, decisions)
+        resume_value = _build_resume_value(records, answers)
+    except ValueError as exc:
+        st.error(str(exc))
+        return
+    thread_id = st.session_state.get("pending_interrupt_thread_id")
+    _resume_pending_interrupts(resume_value, display_text, thread_id, None)
+
+
 def _clear_interrupt_state() -> None:
     """Clear all interrupt-related session state."""
     st.session_state.pending_human_question = None
+    st.session_state.pending_interrupts = None
     st.session_state.pending_interrupt_config = None
     st.session_state.pending_interrupt_query = None
     st.session_state.pending_interrupt_thread_id = None
@@ -2008,7 +2445,7 @@ def _stream_workflow(stream_input, config, agent, msg_queue):
     Events pushed:
         ("tool_call", [tool_names])   — agent is calling tool(s)
         ("tool_result", tool_name)    — a tool finished
-        ("interrupt", question_str)
+        ("interrupt", [{"id", "payload"}, ...])  — pending interrupts
         ("done", last_state)
         ("error", exception)
 
@@ -2029,20 +2466,16 @@ def _stream_workflow(stream_input, config, agent, msg_queue):
         """Stream the workflow and enqueue UI events."""
         prev_msgs: list = []
         last_st = None
-        interrupt_val = None
+        streamed: list = []
+        bare_interrupt = False
 
         try:
             async for s in agent.workflow.astream(
                 stream_input, stream_mode="values", config=config
             ):
                 if "__interrupt__" in s:
-                    int_data = s["__interrupt__"]
-                    if isinstance(int_data, (list, tuple)) and int_data:
-                        interrupt_val = int_data[0].value
-                    elif hasattr(int_data, "value"):
-                        interrupt_val = int_data.value
-                    else:
-                        interrupt_val = {"question": "The workflow needs your input."}
+                    streamed.extend(normalize_interrupts(s["__interrupt__"]))
+                    bare_interrupt = True
 
                 if "messages" in s and s["messages"] != prev_msgs:
                     new_message = s["messages"][-1]
@@ -2052,43 +2485,158 @@ def _stream_workflow(stream_input, config, agent, msg_queue):
                     prev_msgs = s["messages"]
                 last_st = s
         except GraphInterrupt as gi:
-            interrupts = gi.args[0] if gi.args else []
-            if interrupts:
-                interrupt_val = interrupts[0].value
-            else:
-                interrupt_val = {"question": "The workflow needs your input."}
+            streamed.extend(normalize_interrupts(gi.args[0] if gi.args else []))
+            bare_interrupt = True
 
-        # Check checkpoint for pending interrupts
-        if interrupt_val is None:
-            try:
-                snapshot = agent.workflow.get_state(config)
-                if snapshot and snapshot.tasks:
-                    for t in snapshot.tasks:
-                        t_interrupts = getattr(t, "interrupts", None)
-                        if t_interrupts:
-                            interrupt_val = t_interrupts[0].value
-                            break
-            except Exception:
-                pass
+        # Prefer the checkpoint's pending interrupts (they carry stable ids
+        # and cover pauses that were not streamed), like the CLI does.
+        snapshot = None
+        try:
+            snapshot = agent.workflow.get_state(config)
+        except Exception:
+            snapshot = None
+        pending = collect_pending_interrupts(
+            streamed, snapshot, fallback=bare_interrupt
+        )
 
-        if interrupt_val is not None:
-            if isinstance(interrupt_val, dict):
-                q = interrupt_val.get(
-                    "question",
-                    interrupt_val.get("message", str(interrupt_val)),
-                )
-            else:
-                q = str(interrupt_val)
-            msg_queue.put(("interrupt", q))
+        if pending:
+            msg_queue.put(("interrupt", _pending_to_records(pending)))
         else:
             msg_queue.put(("done", last_st))
 
     try:
         asyncio.run(_run())
     except HumanInputRequired as hir:
-        msg_queue.put(("interrupt", hir.question))
+        payload = getattr(hir, "payload", None)
+        if payload is None:
+            payload = {"question": hir.question}
+        msg_queue.put(("interrupt", [{"id": "", "payload": payload}]))
     except Exception as exc:
         msg_queue.put(("error", exc))
+
+
+def _pending_to_records(pending) -> list[dict]:
+    """Convert ``PendingInterrupt`` objects to plain session-state records."""
+    return [{"id": item.id, "payload": item.payload} for item in pending]
+
+
+def _pending_summary(records: list[dict]) -> str:
+    """Return the text shown for a set of pending interrupts."""
+    parts = []
+    for record in records:
+        payload = record.get("payload")
+        if is_tool_review(payload):
+            parts.append(review_summary(payload))
+        else:
+            parts.append(interrupt_question(payload))
+    return "\n\n".join(parts) if parts else "The workflow needs your input."
+
+
+def _pending_is_review(records: Optional[list[dict]]) -> bool:
+    """Return whether every pending interrupt is a Deep Agent action review."""
+    return bool(records) and all(
+        is_tool_review(record.get("payload")) for record in records
+    )
+
+
+def _review_actions(records: list[dict]) -> list[tuple[int, int, dict, dict]]:
+    """Flatten pending reviews into ``(record_index, action_index, payload, action)``.
+
+    Identical actions may repeat, so positions are tracked explicitly.
+    """
+    rows = []
+    for record_index, record in enumerate(records):
+        payload = record.get("payload")
+        if not is_tool_review(payload):
+            continue
+        for action_index, action in enumerate(payload["action_requests"]):
+            if isinstance(action, dict):
+                rows.append((record_index, action_index, payload, action))
+    return rows
+
+
+def _build_resume_value(records: list[dict], answers: list) -> Any:
+    """Combine per-interrupt answers into the LangGraph resume value.
+
+    A single pending interrupt resumes with its answer directly; several
+    resume with a mapping keyed by interrupt id, which therefore must be
+    present on every record.
+
+    Raises
+    ------
+    ValueError
+        When several interrupts are pending but not all expose ids.
+    """
+    if len(records) == 1:
+        return answers[0]
+    if any(not record.get("id") for record in records):
+        raise ValueError(
+            "Multiple pending interrupts do not expose stable IDs and cannot "
+            "be resumed safely."
+        )
+    return {
+        record["id"]: answer
+        for record, answer in zip(records, answers, strict=True)
+    }
+
+
+def _text_answers(records: list[dict], text: str) -> list:
+    """Answer every pending interrupt with typed text.
+
+    Plain questions receive the text; action reviews treat it as revision
+    instructions and reject each action with that message (the CLI's
+    "type instructions to skip this action and revise it").
+    """
+    answers = []
+    for record in records:
+        payload = record.get("payload")
+        if is_tool_review(payload):
+            decisions = []
+            for action in payload["action_requests"]:
+                name = str(action.get("name", "unknown")) if isinstance(action, dict) else "unknown"
+                allowed = allowed_decisions(payload, name)
+                if "reject" not in allowed:
+                    # Like the CLI: typed instructions are a rejection, and a
+                    # response the policy does not allow is refused rather
+                    # than converted into some other (e.g. approving) decision.
+                    raise ValueError(
+                        f"Deep Agent action {name!r} cannot be rejected; typed "
+                        "instructions are not allowed for it. Use the buttons "
+                        "on the review card."
+                    )
+                decisions.append({"type": "reject", "message": text})
+            answers.append({"decisions": decisions})
+        else:
+            answers.append(text)
+    return answers
+
+
+def _decision_answers(records: list[dict], decisions: dict[tuple[int, int], dict]) -> list:
+    """Assemble per-interrupt ``{"decisions": [...]}`` from card choices.
+
+    Parameters
+    ----------
+    records : list[dict]
+        Pending interrupt records (all reviews).
+    decisions : dict
+        ``(record_index, action_index) -> decision`` chosen in the UI.
+    """
+    answers = []
+    for record_index, record in enumerate(records):
+        payload = record["payload"]
+        chosen = []
+        for action_index, action in enumerate(payload["action_requests"]):
+            decision = decisions.get((record_index, action_index))
+            if decision is None:
+                raise ValueError("Every action needs a decision.")
+            name = str(action.get("name", "unknown")) if isinstance(action, dict) else "unknown"
+            if decision["type"] not in allowed_decisions(payload, name):
+                raise ValueError(
+                    f"Decision {decision['type']!r} is not allowed for {name!r}."
+                )
+            chosen.append(decision)
+        answers.append({"decisions": chosen})
+    return answers
 
 
 def _poll_and_display(msg_queue, status_container, placeholder, thread):
@@ -2220,6 +2768,7 @@ def _handle_query_submission(
     turn_dir = _activate_turn_dir(
         agent.log_dir, len(st.session_state.conversation_history) + 1
     )
+    _set_agent_log_dir(agent, turn_dir)
     try:
         agent._ensure_session(trimmed_query)
     except Exception:
@@ -2317,7 +2866,9 @@ def _handle_query_submission(
         elif event_type == "interrupt":
             status.update(label="Waiting for input", state="complete", expanded=False)
             cfg_for_resume = dict(cfg)
-            st.session_state.pending_human_question = event_data
+            st.session_state.pending_interrupts = list(event_data)
+            st.session_state.pending_human_question = _pending_summary(event_data)
+            st.session_state.review_nonce = st.session_state.get("review_nonce", 0) + 1
             st.session_state.pending_interrupt_config = cfg_for_resume
             st.session_state.pending_interrupt_query = trimmed_query
             st.session_state.pending_interrupt_thread_id = thread_id
@@ -2332,7 +2883,10 @@ def _handle_query_submission(
             st.session_state.pending_interrupt_log_dir = agent.log_dir
             st.session_state.pending_interrupt_turn_dir = turn_dir
             st.session_state.pending_interrupt_attachments = attachment_names
-            st.session_state.interrupt_count = 1
+            # Only free-form questions count against the follow-up limit.
+            st.session_state.interrupt_count = sum(
+                1 for r in event_data if not is_tool_review(r.get("payload"))
+            )
             st.session_state.interrupt_exchanges = []
             st.rerun()
 
@@ -2345,12 +2899,50 @@ def _handle_query_submission(
 def _handle_human_response(
     answer: str, thread_id: int, attachments: Optional[list] = None
 ) -> None:
-    """Resume the agent workflow with the human's answer.
+    """Resume the agent workflow with the human's typed reply.
+
+    A plain question receives the text.  Pending Deep Agent action reviews
+    treat the text as revision instructions and reject the action(s) with
+    it, as the CLI does when instructions are typed at a review prompt.
 
     Parameters
     ----------
     answer : str
-        Human response to the pending interrupt question.
+        Human response typed into the chat input.
+    thread_id : int
+        Current LangGraph thread ID.
+    attachments : list, optional
+        Uploaded files from the chat input.
+    """
+    records = st.session_state.get("pending_interrupts") or [
+        {"id": "", "payload": {"question": st.session_state.pending_human_question}}
+    ]
+    try:
+        answers = _text_answers(records, answer)
+        resume_value = _build_resume_value(records, answers)
+    except ValueError as exc:
+        # Keep the pause: the user can still decide with the review buttons
+        # (or cancel explicitly).
+        st.error(str(exc))
+        return
+    _resume_pending_interrupts(resume_value, answer, thread_id, attachments)
+
+
+def _resume_pending_interrupts(
+    resume_value: Any,
+    display_text: str,
+    thread_id: int,
+    attachments: Optional[list] = None,
+) -> None:
+    """Resume the paused workflow and stream the continuation.
+
+    Parameters
+    ----------
+    resume_value : Any
+        Value handed to ``Command(resume=...)`` (text, decisions, or a
+        mapping keyed by interrupt id).
+    display_text : str
+        What to show as the user's reply in the transcript.
     thread_id : int
         Current LangGraph thread ID.
     attachments : list, optional
@@ -2370,8 +2962,7 @@ def _handle_human_response(
         return
     # Resume inside the same turn directory the interrupted query used.
     resume_dir = st.session_state.get("pending_interrupt_turn_dir") or agent.log_dir
-    if resume_dir:
-        os.environ["CHEMGRAPH_LOG_DIR"] = resume_dir
+    _set_agent_log_dir(agent, resume_dir)
 
     MAX_INTERRUPTS = 10
 
@@ -2383,21 +2974,23 @@ def _handle_human_response(
         st.session_state.pending_interrupt_attachments = (
             st.session_state.get("pending_interrupt_attachments") or []
         ) + reply_names
+    if reply_paths:
+        resume_value = _append_attachment_note(resume_value, _attachment_note(reply_paths))
 
     # Record this exchange
     st.session_state.interrupt_exchanges.append(
-        {"question": current_question, "answer": answer}
+        {"question": current_question, "answer": display_text}
     )
 
     # Show the user's reply immediately
     with st.chat_message("user"):
-        st.markdown(answer)
+        st.markdown(display_text)
         _render_attachment_chips(reply_names)
 
     # Stream resumed agent response
     with st.chat_message("assistant"):
         msg_q: queue.Queue = queue.Queue()
-        resume_cmd = Command(resume=answer + _attachment_note(reply_paths))
+        resume_cmd = Command(resume=resume_value)
 
         stream_thread = threading.Thread(
             target=_stream_workflow,
@@ -2466,15 +3059,22 @@ def _handle_human_response(
 
         elif event_type == "interrupt":
             status.update(label="Waiting for input", state="complete", expanded=False)
-            new_count = interrupt_count + 1
+            records = list(event_data)
+            # Action reviews are routine for the Deep Agent; only free-form
+            # questions count against the follow-up limit (as in the CLI).
+            questions = sum(1 for r in records if not is_tool_review(r.get("payload")))
+            new_count = interrupt_count + max(questions, 0)
             if new_count > MAX_INTERRUPTS:
                 st.error(
                     "Agent exceeded maximum number of follow-up questions. Aborting."
                 )
                 _clear_interrupt_state()
                 return
-            st.session_state.pending_human_question = event_data
+            st.session_state.pending_interrupts = records
+            st.session_state.pending_human_question = _pending_summary(records)
             st.session_state.interrupt_count = new_count
+            # Fresh decision widgets for the new set of actions.
+            st.session_state.review_nonce = st.session_state.get("review_nonce", 0) + 1
             st.rerun()
 
         else:  # error
