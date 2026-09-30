@@ -189,10 +189,10 @@ def _create_experimental_deepagent_backend(
         )
     )
     if require_confirmation and not Confirm.ask(
-        "Enable this development-only capability?",
+        "Enable host file and shell access?",
         default=False,
     ):
-        raise RuntimeError("Experimental Deep Agent access was not approved.")
+        raise RuntimeError("Host file and shell access was not approved.")
 
     return create_cli_workspace_backend(root)
 
@@ -861,7 +861,7 @@ def _prompt_for_interrupt(payload: Any) -> Any:
     decisions = []
     for index, action in enumerate(payload["action_requests"], start=1):
         if not isinstance(action, dict):
-            raise ValueError("Invalid Deep Agent approval request.")
+            raise ValueError("Invalid tool approval request.")
         name = str(action.get("name", "unknown"))
         config = review_configs.get(name, {})
         allowed = [
@@ -871,7 +871,7 @@ def _prompt_for_interrupt(payload: Any) -> Any:
         ]
         if not allowed:
             raise ValueError(
-                f"Deep Agent action {name!r} does not allow approve/reject."
+                f"Tool action {name!r} does not allow approve/reject."
             )
         panel, truncated = build_action_review(action, index, len(payload["action_requests"]))
         console.print(panel)
@@ -1327,6 +1327,27 @@ def _main_agent_options(config):
     }
 
 
+def _print_main_agent_restore_configuration(thread_id, config):
+    """Show the saved settings before requesting access to their workspace."""
+    console.print(f"[blue]Using saved main-agent configuration for session {escape(thread_id)}.[/blue]")
+    console.print("[dim]Saved graph settings take precedence over current CLI flags and TOML settings.[/dim]")
+    workers = config.configured_subagent_names or ("chemgraph",)
+    if config.enable_deepagent:
+        workers = (*workers, "deepagent")
+    table = Table.grid(padding=(0, 2))
+    table.add_column(no_wrap=True)
+    table.add_column(overflow="fold")
+    for label, value in (
+        ("Workspace", config.workspace or "checkpoint files (no direct shell)"),
+        ("Skills", ", ".join((*config.skills, *config.skill_dirs)) or "bundled skills"),
+        ("Skill discovery", "enabled" if config.discover_skills else "disabled"),
+        ("Workers", ", ".join(workers)),
+        ("Tool catalog", ", ".join(config.registry_tool_names) or "disabled"),
+    ):
+        table.add_row(label, escape(value))
+    console.print(table)
+
+
 @_report_session_usage
 def interactive_mode(
     model: str = "gpt-4o-mini",
@@ -1473,6 +1494,7 @@ def interactive_mode(
         except ValueError as exc:
             console.print(f"[red]{escape(str(exc))}[/red]")
             return
+        _print_main_agent_restore_configuration(restored_thread_id, stored_graph_config)
         model = stored_graph_config.model_name
         workflow = "main_agent"
         recursion_limit = stored_graph_config.recursion_limit
@@ -1666,7 +1688,7 @@ main_agent keeps one durable checkpointed thread. `/resume <id>` restores
 completed, interrupted, or retryable threads. Nested chemistry workers may
 pause to request input.
 
-Deep Agent action reviews: Enter or y approves; n rejects. Type instructions
+Tool action reviews: Enter or y approves; n rejects. Type instructions
 instead to skip the displayed action and ask the agent to revise it. Each
 action in a batch is reviewed separately.
 
@@ -1746,6 +1768,7 @@ Example queries:
                     except ValueError as exc:
                         console.print(f"[red]{escape(str(exc))}[/red]")
                         continue
+                    _print_main_agent_restore_configuration(target_id, target_config)
                     candidate_db = (
                         target_metadata.checkpoint_db or DEFAULT_CHECKPOINT_DB
                     )

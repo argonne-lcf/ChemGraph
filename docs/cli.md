@@ -128,6 +128,11 @@ Start a new session after the capabilities upgrade. Old transcripts remain
 readable; old checkpoints cannot resume through the new graph. New supported
 CLI configurations restore through startup `--resume ID` or `/resume ID`, including
 pending approvals. Custom Python configurations require Python reconstruction.
+Both resume entry points display the saved workspace, skills, workers, and tool
+catalog before host-access confirmation. Saved graph settings take precedence
+over current CLI flags and TOML settings; changing them requires a new session.
+If a subsequent upgrade removes the Python REPL, sessions created before that
+removal also require a new session. Their transcripts remain readable.
 
 The development workspace Deep Agent can execute broad filesystem and shell
 actions. Call it directly with action reviews:

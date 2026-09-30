@@ -723,9 +723,14 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         ),
     )
 
-    with console.capture():
+    with console.capture() as output:
         commands.interactive_mode(workflow="main_agent", generate_report=False)
 
+    rendered = " ".join(output.get().split())
+    assert "Using saved main-agent configuration for session target-thread." in rendered
+    assert "Saved graph settings take precedence over current CLI flags and TOML settings." in rendered
+    assert "calculator" in rendered and "single_agent" in rendered
+    assert "/workspace/new-skills/" in rendered
     resume_args, resume_kwargs = initialization_calls[1]
     rebuild_args, rebuild_kwargs = initialization_calls[2]
     assert resume_args[:6] == (
@@ -1540,16 +1545,26 @@ def test_invalid_main_workspace_fails_before_backend_creation(monkeypatch, works
 
 
 @pytest.mark.parametrize("startup", [False, True])
-def test_cli_reconstructs_pending_workspace_action_from_sqlite(monkeypatch, tmp_path, startup):
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_cli_reconstructs_pending_workspace_action_from_sqlite(monkeypatch, tmp_path, startup, decision):
     from chemgraph.agent.llm_agent import ChemGraph
     from chemgraph.agent.main_session import MainAgentSession
     from chemgraph.cli.checkpoint_runtime import CheckpointRuntime
-    from chemgraph.graphs.workspace import create_cli_workspace_backend
+    from chemgraph.graphs.workspace import _CLIWorkspaceBackend, create_cli_workspace_backend
     from chemgraph.models.endpoints import PreparedModel
     from chemgraph.registry.tools import ToolRegistry
     from langchain_core.messages import AIMessage
     from tests.test_main_agent import _ScriptedChatModel
 
+    saved_workspace, supplied_workspace = tmp_path / "saved", tmp_path / "supplied"
+    saved_workspace.mkdir()
+    supplied_workspace.mkdir()
+    executions = []
+    write = _CLIWorkspaceBackend.write
+    def record_write(self, *args, **kwargs):
+        executions.append(str(self.cwd))
+        return write(self, *args, **kwargs)
+    monkeypatch.setattr(_CLIWorkspaceBackend, "write", record_write)
     responses = [AIMessage(content="", tool_calls=[{
         "name": "write_file", "args": {"file_path": "/workspace/review.txt", "content": "approved"},
         "id": "write-1", "type": "tool_call",
@@ -1565,7 +1580,7 @@ def test_cli_reconstructs_pending_workspace_action_from_sqlite(monkeypatch, tmp_
     runtime = CheckpointRuntime()
     try:
         agent = ChemGraph(workflow_type="main_agent", model_name="test", enable_memory=False,
-                          backend=create_cli_workspace_backend(tmp_path), discover_skills=False,
+                          backend=create_cli_workspace_backend(saved_workspace), discover_skills=False,
                           tool_registry=ToolRegistry([]), log_dir=str(tmp_path / "logs"),
                           checkpointer=runtime.open_sqlite(database))
         metadata = agent.main_agent_metadata.model_copy(deep=True)
@@ -1575,15 +1590,29 @@ def test_cli_reconstructs_pending_workspace_action_from_sqlite(monkeypatch, tmp_
         assert runtime.run(lambda: session.run("write the file")).status == "waiting_for_user"
     finally:
         runtime.close()
-    responses[:] = [AIMessage(content="Rejected; no file written.")]
-    replies = iter(["reject", "/quit"] if startup else
-                   ["test", "main_agent", "/resume pending-cli", "reject", "/quit"])
+    responses[:] = [AIMessage(content=f"Decision: {decision}.")]
+    replies = iter([decision, "/quit"] if startup else
+                   ["test", "main_agent", "/resume pending-cli", decision, "/quit"])
     monkeypatch.setattr(commands.Prompt, "ask", lambda *args, **kwargs: next(replies))
     with console.capture() as output:
         commands.interactive_mode(model="test", workflow="main_agent", checkpoint_db=database,
+                                  workspace=str(supplied_workspace), skill_dirs=[str(supplied_workspace)],
+                                  subagent_names=["single_agent"],
+                                  tool_registry=ToolRegistry([ToolRegistry().get_spec("calculator")]),
                                   resume_session="pending-cli" if startup else None)
-    assert "Rejected; no file written." in output.get()
-    assert not (tmp_path / "review.txt").exists()
+    rendered = " ".join(output.get().split())
+    assert f"Decision: {decision}." in rendered
+    assert "Using saved main-agent configuration for session pending-cli." in rendered
+    assert "Saved graph settings take precedence over current CLI flags and TOML settings." in rendered
+    compact = "".join(rendered.split())
+    assert str(saved_workspace) in compact
+    assert rendered.index("Using saved main-agent") < rendered.rindex("Experimental host-shell access")
+    assert executions == ([str(saved_workspace)] if decision == "approve" else [])
+    assert not (supplied_workspace / "review.txt").exists()
+    if decision == "approve":
+        assert (saved_workspace / "review.txt").read_text() == "approved"
+    else:
+        assert not (saved_workspace / "review.txt").exists()
     assert SessionStore().get_session("pending-cli").status == "completed"
 
 

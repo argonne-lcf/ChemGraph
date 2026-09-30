@@ -135,9 +135,11 @@ headless workflows. Explicit incompatible CLI flags are rejected.
 
 Start a new session after the graph upgrade. Old transcripts remain readable.
 Both startup `--resume` and `/resume` restore saved supported configuration and
-pending approvals, overriding current main-agent settings. Caller-owned Python
-configurations require Python reconstruction and, for opaque components, their
-original non-secret `configuration_id`.
+pending approvals, overriding current main-agent settings.
+The CLI displays the saved settings before asking for host-workspace access;
+current CLI flags and TOML graph settings do not modify a resumed session.
+Caller-owned Python configurations require Python reconstruction and, for
+opaque components, their original non-secret `configuration_id`.
 
 `main_agent` still requires interactive CLI mode. `enable_deepagent` controls
 only its optional `deepagent` subagent. To call the graph directly, select
