@@ -165,6 +165,10 @@ def get_default_config() -> Dict[str, Any]:
             "recursion_limit": 200,
             "human_supervised": False,
             "verbose": False,
+            # Deep Agent (same keys the CLI reads from config.toml)
+            "deepagent_workspace": "",
+            "deepagent_skills": [],
+            "deepagent_discover_skills": True,
         },
         "api": {
             "openai": {

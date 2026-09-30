@@ -26,6 +26,28 @@ def isolate_cli_logging():
 
 
 @pytest.fixture(autouse=True)
+def _no_live_codex_sdk_in_ui_tests(request, monkeypatch):
+    """UI tests must never reach a real Codex runtime or account.
+
+    With ``openai-codex`` installed, anything that is not explicitly faked
+    (login status, model catalog, logout, device login) would otherwise
+    launch the bundled runtime and read the developer's own account.  Tests
+    that exercise the SDK path install their fake ``_load_codex_sdk`` with
+    ``monkeypatch``, which overrides this guard.
+    """
+    if not request.node.path.name.startswith("test_ui_"):
+        yield
+        return
+    from chemgraph.models import codex as codex_model
+
+    def _blocked():
+        raise ImportError("The Codex SDK is disabled in UI tests; fake it explicitly.")
+
+    monkeypatch.setattr(codex_model, "_load_codex_sdk", _blocked)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def setup_test_env():
     """Setup any test environment variables or configurations needed"""
     # Filter numpy deprecation warnings
