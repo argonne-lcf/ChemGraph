@@ -2,12 +2,13 @@
 
 from collections.abc import Sequence
 from copy import deepcopy
-import os
-from pathlib import Path
 
 from deepagents.backends import CompositeBackend, LocalShellBackend, StateBackend
 from deepagents.backends.protocol import BackendProtocol
 
+from chemgraph.agent.deepagent_backend import (
+    DEEPAGENT_ENV_ALLOWLIST, host_shell_environment, resolve_workspace,
+)
 from chemgraph.registry.middleware import RegistryToolsMiddleware
 from chemgraph.registry.tools import ToolRegistry
 from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
@@ -34,34 +35,28 @@ _REGISTRY_REVIEW_TOOLS = {
 
 _DEFAULT_INTERRUPT_POLICY = object()
 _WORKSPACE_MOUNT = "/workspace/"
-CLI_ENV_ALLOWLIST = (
-    "PATH", "PYTHONPATH", "VIRTUAL_ENV", "CONDA_PREFIX", "TMPDIR", "CHEMGRAPH_LOG_DIR",
-)
 
 
 class _CLIWorkspaceBackend(LocalShellBackend):
     """Host backend with an explicit, reproducible CLI construction policy."""
 
     def __init__(self, root):
-        environment = {name: os.environ[name] for name in CLI_ENV_ALLOWLIST if name in os.environ}
+        environment = host_shell_environment()
         super().__init__(root_dir=root, virtual_mode=True, env=environment, inherit_env=False)
         self._cli_environment = dict(environment)
         self._cli_descriptor = {
             "type": "cli-local-shell-v1", "workspace": str(self.cwd.resolve()),
             "virtual_mode": True, "timeout": self._default_timeout,
             "max_output_bytes": self._max_output_bytes,
-            "environment_policy": list(CLI_ENV_ALLOWLIST),
+            "environment_policy": list(DEEPAGENT_ENV_ALLOWLIST),
         }
 
 
 def create_cli_workspace_backend(workspace):
     """Construct the CLI policy after the caller has handled host-access approval."""
-    if not isinstance(workspace, (str, os.PathLike)) or not str(workspace).strip():
+    if workspace is None:
         raise ValueError("Workspace must be a non-empty host directory path.")
-    root = Path(workspace).expanduser().resolve(strict=True)
-    if not root.is_dir():
-        raise ValueError(f"Workspace is not a directory: {root}")
-    return _CLIWorkspaceBackend(root)
+    return _CLIWorkspaceBackend(resolve_workspace(workspace))
 
 
 def cli_backend_descriptor(backend):

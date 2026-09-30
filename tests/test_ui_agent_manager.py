@@ -114,9 +114,32 @@ def test_policy_defaults(monkeypatch, tmp_path):
 def test_shared_backend_helper_matches_cli_defaults(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert resolve_workspace(None) == tmp_path.resolve()
-    assert resolve_workspace("") == tmp_path.resolve()
     backend = create_host_shell_backend(None)
     assert str(backend.cwd) == str(tmp_path.resolve())
+
+
+@pytest.mark.parametrize("workspace", ["", "  ", 123, False])
+def test_shared_backend_helpers_reject_invalid_explicit_paths(workspace):
+    from chemgraph.graphs.workspace import create_cli_workspace_backend
+
+    for factory in (resolve_workspace, create_host_shell_backend, create_cli_workspace_backend):
+        with pytest.raises(ValueError, match="non-empty host directory"):
+            factory(workspace)
+
+
+def test_shared_backend_helpers_resolve_only_existing_directories(tmp_path):
+    from chemgraph.graphs.workspace import create_cli_workspace_backend
+
+    file = tmp_path / "file"
+    file.write_text("content")
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path, target_is_directory=True)
+    assert resolve_workspace(link) == tmp_path.resolve()
+    for factory in (resolve_workspace, create_host_shell_backend, create_cli_workspace_backend):
+        assert factory(link) is not None
+        for invalid in (tmp_path / "missing", file, file / "child"):
+            with pytest.raises(ValueError, match="Workspace is not a directory"):
+                factory(invalid)
 
 
 def test_shell_environment_follows_the_current_turn_directory(tmp_path, monkeypatch):
