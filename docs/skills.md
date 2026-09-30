@@ -258,7 +258,9 @@ require approval before execution, including when no workspace is configured.
 `query_knowledge_base` searches documents already loaded into the RAG store and
 does not require approval by default. These additional checks apply to registry tools;
 existing attached tools retain their policy. Custom tools need appropriate
-`interrupt_on` entries when constructing the graph. Workspace shell execution
+`interrupt_on` entries when constructing the graph. `ToolSpec.executes_code` is
+informational metadata and does not automatically enable approval interrupts.
+Workspace shell execution
 uses `execute` and requires approval. Discovery and loading do not require approval.
 Explicit approval overrides retain their existing meaning.
 

@@ -63,6 +63,7 @@ from chemgraph.graphs.deep_agent import (
 )
 from chemgraph.agent.turn import serialize_state
 from chemgraph.skills.runtime import resolve_skill_dirs, resolve_user_skills_dir
+from chemgraph.utils.workflow_utils import get_removed_workflow_message
 
 
 from chemgraph.graphs.multi_agent import construct_multi_agent_graph
@@ -273,6 +274,9 @@ class ChemGraph:
         deepagent_skill_dirs: Sequence[str] | None = None,
         deepagent_tool_registry: Any | None = None,
     ):
+        migration_message = get_removed_workflow_message(workflow_type)
+        if migration_message:
+            raise ValueError(migration_message)
         if deepagent_tool_registry is not None and workflow_type != "deep_agent":
             raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
         if enable_deepagent and workflow_type != "main_agent":

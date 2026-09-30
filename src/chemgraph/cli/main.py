@@ -24,6 +24,7 @@ from chemgraph.utils.config_utils import (
     get_argo_user_from_flat_config,
     get_base_url_for_model_from_flat_config,
 )
+from chemgraph.utils.workflow_utils import get_removed_workflow_message
 
 from chemgraph.cli.commands import (
     ALL_WORKFLOW_TYPES,
@@ -57,6 +58,14 @@ from chemgraph.cli.formatting import (
 _WORKFLOW_CHOICES = sorted(set(ALL_WORKFLOW_TYPES) | set(WORKFLOW_ALIASES.keys()))
 
 
+def _workflow_argument(name: str) -> str:
+    """Reject removed workflows with migration guidance during parsing."""
+    migration_message = get_removed_workflow_message(name)
+    if migration_message:
+        raise argparse.ArgumentTypeError(migration_message)
+    return name
+
+
 def _add_run_args(parser: argparse.ArgumentParser) -> None:
     """Add query/run-specific arguments to *parser*.
 
@@ -84,7 +93,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-w",
         "--workflow",
-        type=str,
+        type=_workflow_argument,
         choices=_WORKFLOW_CHOICES,
         default=None,
         help="Workflow type (default: single_agent)",
@@ -550,6 +559,12 @@ def _handle_run(args: argparse.Namespace) -> None:
         if getattr(args, "deepagent", None) is None and "enable_deepagent" in config:
             args.deepagent = bool(config["enable_deepagent"])
 
+    args.workflow = resolve_workflow(args.workflow or "single_agent")
+    migration_message = get_removed_workflow_message(args.workflow)
+    if migration_message:
+        console.print(f"[red]{escape(migration_message)}[/red]")
+        sys.exit(2)
+
     if args.recursion_limit is None:
         args.recursion_limit = 200
 
@@ -575,8 +590,6 @@ def _handle_run(args: argparse.Namespace) -> None:
     )
     argo_user = get_argo_user_from_flat_config(config) if config else None
 
-    # Resolve workflow alias (e.g. deepagent -> deep_agent)
-    args.workflow = resolve_workflow(args.workflow or "single_agent")
     enable_deepagent = bool(getattr(args, "deepagent", False))
     deepagent_workspace = getattr(args, "deepagent_workspace", None)
     deepagent_skills = getattr(args, "deepagent_skills", None)

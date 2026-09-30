@@ -80,6 +80,61 @@ def test_main_agent_is_a_cli_workflow():
             cli_main.create_argument_parser().parse_args(["run", "--workflow", removed])
 
 
+@pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
+@pytest.mark.parametrize("prefix", [[], ["run"]], ids=["legacy", "subcommand"])
+def test_removed_workflow_argument_has_migration_hint(capsys, workflow, prefix):
+    with pytest.raises(SystemExit) as exc_info:
+        cli_main.create_argument_parser().parse_args([*prefix, "--workflow", workflow])
+
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert workflow in error
+    assert "has been removed" in error
+    assert "deep_agent" in error
+    assert "migrating-from-python-repl" in error
+
+
+@pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
+def test_removed_workflow_initialization_precedes_credential_check(monkeypatch, workflow):
+    monkeypatch.setattr(
+        commands,
+        "check_api_keys",
+        lambda *_args, **_kwargs: pytest.fail("removed workflow checked credentials"),
+    )
+    with console.capture() as capture:
+        agent = commands.initialize_agent(
+            model_name="gpt-4o-mini",
+            workflow_type=workflow,
+            structured_output=False,
+            return_option="last_message",
+            generate_report=False,
+            recursion_limit=20,
+        )
+
+    assert agent is None
+    assert "has been removed" in capture.get()
+    assert "deep_agent" in capture.get()
+
+
+@pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
+def test_interactive_removed_workflow_keeps_current_agent(monkeypatch, workflow):
+    answers = iter(["gpt-4o-mini", "single_agent", f"/workflow {workflow}", "quit"])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *_args, **_kwargs: next(answers))
+    initialized = []
+
+    def initialize(model, selected_workflow, *_args, **_kwargs):
+        initialized.append((model, selected_workflow))
+        return SimpleNamespace(session_id="initial")
+
+    monkeypatch.setattr(commands, "initialize_agent", initialize)
+    with console.capture() as capture:
+        commands.interactive_mode(workflow="single_agent", generate_report=False)
+
+    assert initialized == [("gpt-4o-mini", "single_agent")]
+    assert "has been removed" in capture.get()
+    assert "deep_agent" in capture.get()
+
+
 def test_interactive_event_renders_only_tagged_subagent_tool_calls():
     with console.capture() as capture:
         commands._render_main_agent_event(
@@ -1290,6 +1345,24 @@ def _run_args(**overrides):
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+@pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
+def test_removed_workflow_in_toml_has_migration_hint(monkeypatch, tmp_path, workflow):
+    path = tmp_path / "legacy.toml"
+    path.write_text(toml.dumps({"general": {"workflow": workflow}}))
+    monkeypatch.setattr(
+        cli_main,
+        "initialize_agent",
+        lambda *_args, **_kwargs: pytest.fail("removed config reached agent initialization"),
+    )
+    with console.capture() as capture, pytest.raises(SystemExit) as exc_info:
+        cli_main._handle_run(_run_args(config=str(path), workflow=None))
+
+    assert exc_info.value.code == 2
+    assert workflow in capture.get()
+    assert "has been removed" in capture.get()
+    assert "deep_agent" in capture.get()
 
 
 def test_main_agent_requires_interactive_cli_mode():

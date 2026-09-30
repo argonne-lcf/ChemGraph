@@ -102,13 +102,21 @@ def test_graph_constructor_is_called(
 
 @pytest.mark.parametrize("workflow_type", ["python_relp", "python_repl"])
 def test_removed_repl_workflows_are_rejected(monkeypatch, tmp_path, workflow_type):
-    monkeypatch.setattr(llm_agent, "load_chat_model_prepared", _fake_prepared)
-    with pytest.raises(ValueError, match="Unsupported workflow type"):
+    monkeypatch.setattr(
+        llm_agent,
+        "load_chat_model_prepared",
+        lambda **_kwargs: pytest.fail("removed workflow reached model initialization"),
+    )
+    with pytest.raises(ValueError, match="has been removed") as exc_info:
         ChemGraph(
             workflow_type=workflow_type,
             enable_memory=False,
             log_dir=str(tmp_path / "logs"),
         )
+    assert workflow_type in str(exc_info.value)
+    assert "deep_agent" in str(exc_info.value)
+    assert "workflows/#migrating-from-python-repl" in str(exc_info.value)
+    assert not (tmp_path / "logs").exists()
 
 
 @pytest.mark.asyncio

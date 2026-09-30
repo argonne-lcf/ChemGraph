@@ -52,6 +52,7 @@ from chemgraph.models.endpoints import (
 from chemgraph.models.endpoints.registry import select_endpoint
 from chemgraph.models.supported_models import MODELS_WITH_REASONING_EFFORT
 from chemgraph.utils.async_utils import run_async_callable
+from chemgraph.utils.workflow_utils import get_removed_workflow_message
 
 from chemgraph.cli.formatting import (
     console,
@@ -277,6 +278,9 @@ def initialize_agent(
     # Resolve workflow alias before initializing.
     workflow_type = resolve_workflow(workflow_type)
     try:
+        migration_message = get_removed_workflow_message(workflow_type)
+        if migration_message:
+            raise ValueError(migration_message)
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "The experimental Deep Agent is available only with main_agent."
@@ -1845,6 +1849,10 @@ Example queries:
                     console.print("[red]Usage: /workflow <type>[/red]")
                     continue
                 new_workflow = resolve_workflow(argument)
+                migration_message = get_removed_workflow_message(new_workflow)
+                if migration_message:
+                    console.print(f"[red]{escape(migration_message)}[/red]")
+                    continue
                 if new_workflow in ALL_WORKFLOW_TYPES:
                     if new_workflow == "main_agent" and checkpoint_runtime is None:
                         candidate_runtime = None

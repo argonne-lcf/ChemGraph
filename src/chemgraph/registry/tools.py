@@ -108,6 +108,7 @@ class ToolSpec:
     tags: frozenset[str] = field(default_factory=frozenset)
     requirements: tuple[RuntimeRequirement, ...] = ()
     interactive: bool = False
+    # Informational metadata; custom tools need explicit interrupt_on policies.
     executes_code: bool = False
 
 
