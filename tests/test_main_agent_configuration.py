@@ -1,5 +1,7 @@
 """Main-agent Python options and reconstruction metadata."""
 
+from dataclasses import replace
+
 import pytest
 from deepagents.backends import LocalShellBackend
 from langchain_core.tools import tool
@@ -110,6 +112,78 @@ def test_topology_changes_with_registry_prompt_workers_and_sources(api):
                                    {"discover_skills": False}, {"skills": ["/other/"]},
                                    {"subagent_names": ["single_agent"]})]
     assert len(set(fingerprints)) == len(fingerprints)
+
+
+def test_builtin_description_edits_preserve_identity(api, monkeypatch):
+    from chemgraph.registry import tools as catalog
+
+    create, _ = api
+    before = create().main_agent_metadata.graph_config
+    specs = catalog.BUILTIN_TOOL_SPECS
+    monkeypatch.setattr(catalog, "BUILTIN_TOOL_SPECS", (
+        replace(specs[0], description="Reworded built-in description."), *specs[1:],
+    ))
+    after = create().main_agent_metadata.graph_config
+    assert after.topology_fingerprint == before.topology_fingerprint
+    assert after.cli_restorable
+
+
+@pytest.mark.parametrize("change", ["catalog_version", "import_path", "policy_version", "effective_policy"])
+def test_builtin_behavior_and_review_changes_invalidate_identity(api, monkeypatch, change):
+    from chemgraph.graphs import workspace
+    from chemgraph.registry import tools as catalog
+
+    create, _ = api
+    before = create().main_agent_metadata.graph_config.topology_fingerprint
+    if change == "catalog_version":
+        monkeypatch.setattr(catalog, "BUILTIN_TOOL_CATALOG_VERSION", catalog.BUILTIN_TOOL_CATALOG_VERSION + 1)
+    elif change == "import_path":
+        specs = catalog.BUILTIN_TOOL_SPECS
+        monkeypatch.setattr(catalog, "BUILTIN_TOOL_SPECS", (
+            replace(specs[0], import_path="chemgraph.tools.generic_tools:calculator"), *specs[1:],
+        ))
+    elif change == "policy_version":
+        monkeypatch.setattr(workspace, "WORKSPACE_REVIEW_POLICY_VERSION", workspace.WORKSPACE_REVIEW_POLICY_VERSION + 1)
+    else:
+        monkeypatch.setattr(workspace, "_REGISTRY_REVIEW_TOOLS", workspace._REGISTRY_REVIEW_TOOLS | {"calculator"})
+    assert create().main_agent_metadata.graph_config.topology_fingerprint != before
+
+
+def test_graph_uses_the_fingerprinted_effective_policy(api, monkeypatch):
+    from chemgraph.memory.graph_config import fingerprint
+
+    create, captured = api
+    payloads = []
+    def record(payload):
+        payloads.append(payload)
+        return fingerprint(payload)
+    monkeypatch.setattr("chemgraph.agent.llm_agent.fingerprint", record)
+    create()
+    policy = captured["interrupt_on"]
+    assert payloads[0]["review_policy"]["interrupt_on"] == policy
+    assert policy["run_ase"] == policy["execute"] == {"allowed_decisions": ["approve", "reject"]}
+
+
+def test_custom_catalog_prose_and_tool_schemas_keep_full_identities(api):
+    create, _ = api
+    spec = ToolRegistry().get_spec("calculator")
+    first = create(tool_registry=ToolRegistry([replace(spec, description="custom one")]),
+                   configuration_id="custom-v1").main_agent_metadata.graph_config
+    second = create(tool_registry=ToolRegistry([replace(spec, description="custom two")]),
+                    configuration_id="custom-v1").main_agent_metadata.graph_config
+    assert first.topology_fingerprint != second.topology_fingerprint
+    assert first.requires_configuration_id and not first.cli_restorable
+
+    @tool("custom")
+    def integer_tool(value: int) -> str:
+        """Custom tool."""
+        return str(value)
+    @tool("custom")
+    def string_tool(value: str) -> str:
+        """Custom tool."""
+        return value
+    assert (create(tools=[integer_tool], configuration_id="custom-v1").main_agent_metadata.graph_config.topology_fingerprint
+            != create(tools=[string_tool], configuration_id="custom-v1").main_agent_metadata.graph_config.topology_fingerprint)
 
 
 def test_legacy_metadata_is_identified_and_not_restored_by_cli():

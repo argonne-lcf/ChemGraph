@@ -22,7 +22,9 @@ from chemgraph.agent.interrupts import (
 from chemgraph.agent.turn import serialize_state
 from chemgraph.graphs.main_agent import latest_assistant_text, _preserve_terminal_tool_output
 from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
-from chemgraph.memory.graph_config import GRAPH_SCHEMA_VERSION, fingerprint, validate_configuration_id
+from chemgraph.memory.graph_config import (
+    GRAPH_SCHEMA_VERSION, NEW_SESSION_GUIDANCE, fingerprint, validate_configuration_id,
+)
 from chemgraph.memory.serialization import serialize_messages
 from chemgraph.memory.store import SessionStore
 
@@ -256,7 +258,7 @@ class MainAgentSession:
         """Check both stores before any existing thread can execute or be resumed."""
         active = self.session_metadata.graph_config
         if active.graph_schema_version != GRAPH_SCHEMA_VERSION:
-            raise IncompatibleCheckpointError("Start a new session with the current graph schema.")
+            raise IncompatibleCheckpointError(f"The active graph schema is incompatible. {NEW_SESSION_GUIDANCE}")
         snapshot = await self.workflow.aget_state(self.config)
         checkpoint = (snapshot.metadata or {}) if getattr(snapshot, "created_at", None) else None
         same_owner = checkpoint is not None and checkpoint.get("chemgraph_owner") == self._owner_id
@@ -264,8 +266,7 @@ class MainAgentSession:
         def validate(schema, topology):
             if schema != GRAPH_SCHEMA_VERSION:
                 raise IncompatibleCheckpointError(
-                    "The stored graph schema is incompatible. Start a new session; "
-                    "the old transcript remains readable."
+                    f"The stored graph schema is incompatible. {NEW_SESSION_GUIDANCE}"
                 )
             if not same_owner and active.requires_configuration_id and not active.configuration_id:
                 raise IncompatibleCheckpointError(
@@ -274,9 +275,14 @@ class MainAgentSession:
             if not topology or not active.topology_fingerprint:
                 if same_owner and not topology and not active.topology_fingerprint:
                     return
-                raise IncompatibleCheckpointError("The stored or active graph has no topology identity.")
+                raise IncompatibleCheckpointError(
+                    f"The stored or active graph has no topology identity. {NEW_SESSION_GUIDANCE}"
+                )
             if topology != active.topology_fingerprint:
-                raise IncompatibleCheckpointError("The active graph topology does not match the stored session.")
+                raise IncompatibleCheckpointError(
+                    "The active graph topology does not match the stored session. "
+                    + NEW_SESSION_GUIDANCE
+                )
 
         if checkpoint is not None:
             validate(checkpoint.get("chemgraph_schema"), checkpoint.get("chemgraph_topology"))

@@ -38,7 +38,7 @@ from chemgraph.agent.interrupts import (
 from chemgraph.skills.runtime import resolve_skill_dirs
 from chemgraph.graphs.deep_agent import normalize_skill_sources
 from chemgraph.graphs.workspace import create_cli_workspace_backend
-from chemgraph.memory.graph_config import GRAPH_SCHEMA_VERSION, validate_configuration_id
+from chemgraph.memory.graph_config import GRAPH_SCHEMA_VERSION, NEW_SESSION_GUIDANCE, validate_configuration_id
 from chemgraph.registry.tools import RegistryError
 from chemgraph.agent.usage import UsageCollector, combine_usage
 from chemgraph.memory.store import SessionStore
@@ -935,6 +935,8 @@ def _run_main_agent_operation(
     checkpoint_runtime: CheckpointRuntime | None = None,
 ) -> Any:
     """Run one session operation and resolve nested-graph interrupts."""
+    from chemgraph.agent.main_session import IncompatibleCheckpointError
+
     try:
         with Progress(
             SpinnerColumn(),
@@ -948,6 +950,9 @@ def _run_main_agent_operation(
                 if checkpoint_runtime is not None
                 else run_async_callable(operation)
             )
+    except IncompatibleCheckpointError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return None
     except Exception as exc:
         console.print(f"[red]Error processing main-agent session: {exc}[/red]")
         _main_agent_failure_hint(session)
@@ -981,6 +986,9 @@ def _run_main_agent_operation(
                 if checkpoint_runtime is not None
                 else run_async_callable(lambda: session.resume(answers))
             )
+        except IncompatibleCheckpointError as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            return None
         except Exception as exc:
             console.print(f"[red]Error resuming main-agent session: {exc}[/red]")
             _main_agent_failure_hint(session)
@@ -1297,8 +1305,7 @@ def _main_agent_options(config):
     from chemgraph.registry.tools import RegistryError, ToolRegistry
 
     if config.graph_schema_version != GRAPH_SCHEMA_VERSION:
-        raise ValueError("This main-agent graph is incompatible. Start a new session; "
-                         "the old transcript remains readable.")
+        raise ValueError(f"This main-agent graph is incompatible. {NEW_SESSION_GUIDANCE}")
     if not config.cli_restorable or not config.topology_fingerprint or config.requires_configuration_id:
         raise ValueError("This session requires caller-provided Python tools, workers, "
                          "or a backend. Reconstruct it through the Python API.")
@@ -1306,7 +1313,7 @@ def _main_agent_options(config):
     try:
         registry = ToolRegistry(catalog.get_spec(name) for name in config.registry_tool_names)
     except RegistryError as exc:
-        raise ValueError(f"Cannot reconstruct the stored tool catalog: {exc}") from exc
+        raise ValueError(f"Cannot reconstruct the stored tool catalog: {exc}. {NEW_SESSION_GUIDANCE}") from exc
     return {
         "workspace": config.workspace,
         "skills": config.skills,

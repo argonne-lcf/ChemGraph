@@ -25,7 +25,7 @@ from chemgraph.memory.schemas import (
 )
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 from chemgraph.memory.graph_config import (
-    GRAPH_SCHEMA_VERSION, describe_backend, describe_worker_options,
+    GRAPH_SCHEMA_VERSION, describe_backend, describe_tool_registry, describe_worker_options,
     fingerprint, validate_configuration_id,
 )
 from chemgraph.models.loader import load_chat_model_prepared
@@ -63,7 +63,7 @@ from chemgraph.graphs.deep_agent import (
     construct_deep_agent_graph,
     normalize_skill_sources,
 )
-from chemgraph.graphs.workspace import default_tool_registry
+from chemgraph.graphs.workspace import default_tool_registry, resolve_workspace_interrupt_policy
 from chemgraph.agent.turn import serialize_state
 from chemgraph.skills.runtime import resolve_skill_dirs, resolve_user_skills_dir
 
@@ -604,15 +604,15 @@ class ChemGraph:
         main_config = {}
         if workflow_type == "main_agent":
             from langchain_core.utils.function_calling import convert_to_openai_tool
-            from chemgraph.registry.tools import ToolRegistry
+            from chemgraph.graphs.workspace import WORKSPACE_REVIEW_POLICY_VERSION
             from chemgraph.skills.runtime import local_skill_workspace
 
             local_workspace = local_skill_workspace(self.backend)
-            builtins = {spec.name: spec for spec in ToolRegistry().specs()}
             backend_config, backend_cli, backend_opaque = describe_backend(self.backend)
             worker_backend, _, worker_opaque = describe_backend(self.deepagent_backend)
             worker_options, options_opaque = describe_worker_options(self.subagent_options)
-            custom_catalog = any(builtins.get(spec.name) != spec for spec in self.tool_registry.specs())
+            registry_specs, custom_catalog = describe_tool_registry(self.tool_registry)
+            main_review_policy = resolve_workspace_interrupt_policy(self.tool_registry)
             main_config = {
                 "graph_schema_version": GRAPH_SCHEMA_VERSION,
                 "workspace": str(local_workspace[0]) if local_workspace else None,
@@ -641,12 +641,7 @@ class ChemGraph:
                 ),
             }
             topology_payload.update(main_config)
-            topology_payload["registry_specs"] = [
-                (spec.name, spec.import_path, spec.description, sorted(spec.tags),
-                 [(req.kind, req.value, req.hint, req.env_var) for req in spec.requirements],
-                 spec.interactive, spec.executes_code)
-                for spec in self.tool_registry.specs()
-            ]
+            topology_payload["registry_specs"] = registry_specs
             topology_payload["custom_tool_schemas"] = [
                 (convert_to_openai_tool(item), getattr(item, "return_direct", False))
                 for item in [*(self.tools or []), *[
@@ -657,10 +652,9 @@ class ChemGraph:
             topology_payload["subagent_options"] = worker_options
             topology_payload["main_backend"] = backend_config
             topology_payload["legacy_worker_backend"] = worker_backend if self.enable_deepagent else None
-            from chemgraph.graphs.workspace import DEFAULT_WORKSPACE_INTERRUPT_ON, _REGISTRY_REVIEW_TOOLS
             topology_payload["review_policy"] = {
-                "default": DEFAULT_WORKSPACE_INTERRUPT_ON,
-                "registry": sorted(_REGISTRY_REVIEW_TOOLS.intersection(self.tool_registry.names())),
+                "version": WORKSPACE_REVIEW_POLICY_VERSION,
+                "interrupt_on": main_review_policy,
             }
         topology_fingerprint = fingerprint(topology_payload)
         self.main_agent_metadata = MainAgentSessionMetadata(
@@ -754,6 +748,7 @@ class ChemGraph:
                 skill_dirs=self.skill_dirs,
                 discover_skills=self.discover_skills,
                 user_skills_dir=self.user_skills_dir,
+                interrupt_on=main_review_policy,
                 system_prompt=self.main_agent_prompt,
                 recursion_limit=self.recursion_limit,
                 human_supervised=self.human_supervised,

@@ -320,6 +320,29 @@ def test_main_agent_query_failure_suggests_retry():
     assert "`/retry` command" in capture.get()
 
 
+@pytest.mark.parametrize("during_resume", [False, True])
+def test_incompatible_main_agent_graph_reports_recovery_without_retry(monkeypatch, during_resume):
+    from chemgraph.agent.main_session import IncompatibleCheckpointError
+    from chemgraph.memory.graph_config import NEW_SESSION_GUIDANCE
+
+    error = IncompatibleCheckpointError(f"Incompatible topology. {NEW_SESSION_GUIDANCE}")
+    results = [_turn_result(PendingInterrupt("approval", {"action_requests": []}))] if during_resume else []
+    session = _FakeMainSession([*results, error])
+    monkeypatch.setattr(commands, "_prompt_for_interrupt", lambda _payload: {"decisions": []})
+    with console.capture() as output:
+        assert commands.run_main_agent_query(session, "calculate") is None
+    rendered = " ".join(output.get().split())
+    assert NEW_SESSION_GUIDANCE in rendered
+    assert "/retry" not in rendered
+
+
+def test_missing_stored_catalog_entry_reports_new_session_guidance():
+    config = MainAgentGraphConfig(graph_schema_version=2, model_name="test", cli_restorable=True,
+                                  topology_fingerprint="old", registry_tool_names=("removed-tool",))
+    with pytest.raises(ValueError, match="Start a new session; the old transcript remains readable"):
+        commands._main_agent_options(config)
+
+
 def test_retry_main_agent_session_resumes_failed_operation():
     session = _FakeMainSession(
         [_turn_result()],

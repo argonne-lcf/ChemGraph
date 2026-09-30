@@ -14,6 +14,10 @@ from chemgraph.registry.tools import ToolRegistry
 from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
 
 
+# Bump when approval semantics change, including removal of reviewed tools.
+WORKSPACE_REVIEW_POLICY_VERSION = 1
+
+
 DEFAULT_WORKSPACE_INTERRUPT_ON = {
     "execute": {"allowed_decisions": ["approve", "reject"]},
     "python_repl": {"allowed_decisions": ["approve", "reject"]},
@@ -144,17 +148,26 @@ def default_tool_registry(tools=(), *, human_supervised=False) -> ToolRegistry:
     )
 
 
+def resolve_workspace_interrupt_policy(tool_registry=None, interrupt_on=_DEFAULT_INTERRUPT_POLICY):
+    """Freeze the effective approval policy for graph construction and identity."""
+    if interrupt_on is not _DEFAULT_INTERRUPT_POLICY:
+        return deepcopy(interrupt_on)
+    policy = deepcopy(DEFAULT_WORKSPACE_INTERRUPT_ON)
+    if tool_registry is not None:
+        policy.update({
+            name: {"allowed_decisions": ["approve", "reject"]}
+            for name in _REGISTRY_REVIEW_TOOLS.intersection(tool_registry.names())
+        })
+    return policy
+
+
 def prepare_workspace_runtime(
     *, backend=None, tools=(), tool_registry=None, skills=None,
     discover_skills=True, user_skills_dir=None, skill_dirs=None,
     interrupt_on=_DEFAULT_INTERRUPT_POLICY,
 ):
     """Return the backend, skill sources, middleware, and approval policy."""
-    effective_interrupt_on = (
-        deepcopy(DEFAULT_WORKSPACE_INTERRUPT_ON)
-        if interrupt_on is _DEFAULT_INTERRUPT_POLICY
-        else interrupt_on
-    )
+    effective_interrupt_on = resolve_workspace_interrupt_policy(tool_registry, interrupt_on)
     effective_backend = _normalize_backend(
         backend if backend is not None else StateBackend()
     )
@@ -167,11 +180,6 @@ def prepare_workspace_runtime(
         backend=effective_backend, sources=sources, optional=optional,
     )]
     if tool_registry is not None and tool_registry.names():
-        if interrupt_on is _DEFAULT_INTERRUPT_POLICY:
-            effective_interrupt_on.update({
-                tool_name: {"allowed_decisions": ["approve", "reject"]}
-                for tool_name in _REGISTRY_REVIEW_TOOLS.intersection(tool_registry.names())
-            })
         loader = RegistryToolsMiddleware(tool_registry, attached_tools=tools or ())
         attached_names = {
             entry.get("function", entry).get("name", entry.get("type"))

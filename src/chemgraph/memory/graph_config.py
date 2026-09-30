@@ -9,6 +9,7 @@ from chemgraph.graphs.workspace import cli_backend_descriptor
 
 
 GRAPH_SCHEMA_VERSION = 2
+NEW_SESSION_GUIDANCE = "Start a new session; the old transcript remains readable."
 
 
 def validate_configuration_id(value):
@@ -39,6 +40,26 @@ def describe_backend(backend):
         )
     # Environment values and opaque internals are deliberately caller-owned.
     return descriptor, False, True
+
+
+def describe_tool_registry(registry):
+    """Version built-ins without hashing prose; preserve full custom specifications."""
+    from chemgraph.registry.tools import BUILTIN_TOOL_CATALOG_VERSION, ToolRegistry
+
+    builtins = {spec.name: spec for spec in ToolRegistry().specs()}
+    described = []
+    custom = False
+    for spec in registry.specs():
+        if builtins.get(spec.name) == spec:
+            described.append((spec.name, spec.import_path, BUILTIN_TOOL_CATALOG_VERSION))
+        else:
+            custom = True
+            described.append((
+                spec.name, spec.import_path, spec.description, sorted(spec.tags),
+                [(req.kind, req.value, req.hint, req.env_var) for req in spec.requirements],
+                spec.interactive, spec.executes_code,
+            ))
+    return described, custom
 
 
 def describe_worker_options(options):

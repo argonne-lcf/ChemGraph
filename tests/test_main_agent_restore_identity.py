@@ -1,5 +1,7 @@
 """Reject incompatible checkpoints before invoking models or reviewed tools."""
 
+from dataclasses import replace
+
 import pytest
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware
@@ -155,3 +157,62 @@ async def test_tampered_checkpoint_is_rejected_before_resume():
                                   "metadata": {"chemgraph_topology": "other"}}, {})
     with pytest.raises(IncompatibleCheckpointError):
         await session.resume("yes")
+
+
+@pytest.mark.parametrize("change", ["none", "description", "catalog_version", "policy_version", "policy"])
+def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, change):
+    from chemgraph.agent.llm_agent import ChemGraph
+    from chemgraph.graphs import workspace
+    from chemgraph.models.endpoints import PreparedModel
+    from chemgraph.registry import tools as catalog
+
+    action = AIMessage(content="", tool_calls=[{
+        "name": "write_file", "args": {"file_path": "/workspace/review.txt", "content": "approved"},
+        "id": "write-1", "type": "tool_call",
+    }])
+    store = SessionStore(str(tmp_path / "sessions.db"))
+    database = str(tmp_path / "checkpoints.db")
+    for restarting in (False, True):
+        if restarting:
+            transcript = store.get_session("compatibility").model_dump()
+            if change == "description":
+                specs = catalog.BUILTIN_TOOL_SPECS
+                monkeypatch.setattr(catalog, "BUILTIN_TOOL_SPECS", (
+                    replace(specs[0], description="Reworded."), *specs[1:],
+                ))
+            elif change == "catalog_version":
+                monkeypatch.setattr(catalog, "BUILTIN_TOOL_CATALOG_VERSION", catalog.BUILTIN_TOOL_CATALOG_VERSION + 1)
+            elif change == "policy_version":
+                monkeypatch.setattr(workspace, "WORKSPACE_REVIEW_POLICY_VERSION", workspace.WORKSPACE_REVIEW_POLICY_VERSION + 1)
+            elif change == "policy":
+                monkeypatch.delitem(workspace.DEFAULT_WORKSPACE_INTERRUPT_ON, "python_repl")
+        model = _ScriptedChatModel(responses=[AIMessage(content="done")] if restarting else [action])
+        monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", lambda **kwargs: (
+            model, PreparedModel(endpoint_name="test", protocol="openai_compatible", client_kwargs={}),
+        ))
+        runtime = CheckpointRuntime()
+        try:
+            agent = ChemGraph(workflow_type="main_agent", enable_memory=False, log_dir=str(tmp_path),
+                              backend=workspace.create_cli_workspace_backend(tmp_path), discover_skills=False,
+                              checkpointer=runtime.open_sqlite(database))
+            session = MainAgentSession(agent.workflow, thread_id="compatibility", session_store=store,
+                                       session_metadata=agent.main_agent_metadata)
+            if not restarting:
+                assert runtime.run(lambda: session.run("write the file")).status == "waiting_for_user"
+            elif change in {"none", "description"}:
+                assert runtime.run(session.restore).status == "waiting_for_user"
+                assert model.response_index == 0
+                assert runtime.run(lambda: session.resume({"decisions": [{"type": "approve"}]})).status == "completed"
+                assert (tmp_path / "review.txt").read_text() == "approved"
+            else:
+                before = runtime.run(lambda: agent.workflow.aget_state(session.config))
+                with pytest.raises(IncompatibleCheckpointError, match="Start a new session; the old transcript remains readable"):
+                    runtime.run(session.restore)
+                after = runtime.run(lambda: agent.workflow.aget_state(session.config))
+                assert after.values == before.values and after.metadata == before.metadata
+                assert store.get_session("compatibility").model_dump() == transcript
+                assert model.response_index == 0
+            if change not in {"none", "description"} or not restarting:
+                assert not (tmp_path / "review.txt").exists()
+        finally:
+            runtime.close()

@@ -164,6 +164,14 @@ backends with arbitrary environment settings remain caller-owned. Unpersisted
 worker prompts and options also require Python reconstruction. Old graph
 checkpoints cannot resume after this upgrade; their transcripts remain readable.
 
+Built-in tool description edits remain compatible with stored sessions. Changes
+to selected tools, approval policies, or built-in behavior can require a new
+session; restoration rejects incompatible graphs before executing an action.
+Maintainers must bump `BUILTIN_TOOL_CATALOG_VERSION` for built-in schema,
+behavior, or safety changes and `WORKSPACE_REVIEW_POLICY_VERSION` for approval
+semantics changes. Custom tool specifications and schemas retain full identity
+checks and their caller-owned configuration requirements.
+
 The optional `on_event(event_name, payload)` callback reports direct activity
 and tagged worker activity; worker events include `subagent_name`. Skills and
 active registry selections remain private to each agent, while checkpoint-backed
