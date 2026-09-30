@@ -68,6 +68,8 @@ jobs:
     
     - name: Run tests with MACE
       shell: bash -l {0}
+      env:
+        CHEMGRAPH_TEST_MACE: "1"
       run: |
         python -m pytest tests/ -v -k "not tblite"
     
