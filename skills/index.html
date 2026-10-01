@@ -1957,8 +1957,10 @@ require approval before execution, including when no workspace is configured.
 <code>query_knowledge_base</code> searches documents already loaded into the RAG store and
 does not require approval by default. These additional checks apply to registry tools;
 existing attached tools retain their policy. Custom tools need appropriate
-<code>interrupt_on</code> entries when constructing the graph. <code>python_repl</code> requires the same
-execution review as <code>execute</code>. Discovery and loading do not require approval.
+<code>interrupt_on</code> entries when constructing the graph. <code>ToolSpec.executes_code</code> is
+informational metadata and does not automatically enable approval interrupts.
+Workspace shell execution
+uses <code>execute</code> and requires approval. Discovery and loading do not require approval.
 Explicit approval overrides retain their existing meaning.</p>
 <p>On-demand loading reduces repeated schema input for larger catalogs, but adds a
 round trip. A few always-attached tools can be cheaper for a short task. Keep

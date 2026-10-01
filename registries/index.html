@@ -1661,16 +1661,16 @@ same canonical workflow names used by the command-line interface, except for
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">worker</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="s2">"single_agent"</span><span class="p">,</span> <span class="n">llm</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
 </code></pre></div>
-<p>The registered workers are <code>single_agent</code>, <code>deep_agent</code>, <code>multi_agent</code>, <code>python_relp</code>,
+<p>The registered workers are <code>single_agent</code>, <code>deep_agent</code>, <code>multi_agent</code>,
 <code>graspa</code>, <code>mock_agent</code>, <code>graspa_mcp</code>, <code>rag_agent</code>, <code>single_agent_xanes</code>,
 <code>molecular_docking</code>, and <code>single_agent_iri</code>. Existing <code>deepagent</code>,
-<code>python_repl</code>, <code>graspa_agent</code>, and <code>iri</code> spellings are supported as aliases.</p>
+<code>graspa_agent</code>, and <code>iri</code> spellings are supported as aliases.</p>
 <p>Standalone workers keep their existing default in-memory checkpointer. When a
 worker is handed to an orchestration graph, use <code>as_subagent()</code> or
 <code>as_subagents()</code>. These adapters compile the worker with <code>checkpointer=None</code> so
 it inherits checkpointing from the parent graph:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">workers</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">as_subagents</span><span class="p">(</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="p">[</span><span class="s2">"single_agent"</span><span class="p">,</span> <span class="s2">"python_relp"</span><span class="p">],</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="p">[</span><span class="s2">"single_agent"</span><span class="p">,</span> <span class="s2">"deep_agent"</span><span class="p">],</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">llm</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>

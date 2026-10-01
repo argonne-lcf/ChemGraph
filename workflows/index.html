@@ -818,10 +818,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#python-repl" class="md-nav__link">
+  <a href="#migrating-from-python-repl" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Python REPL
+        Migrating from Python REPL
       
     </span>
   </a>
@@ -1670,10 +1670,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#python-repl" class="md-nav__link">
+  <a href="#migrating-from-python-repl" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Python REPL
+        Migrating from Python REPL
       
     </span>
   </a>
@@ -1753,11 +1753,6 @@ Python. <code>single_agent</code> is the recommended first choice.</p>
 <td><code>multi_agent</code></td>
 <td>Routes tasks among specialized agents</td>
 <td>More model calls and orchestration overhead</td>
-</tr>
-<tr>
-<td><code>python_relp</code></td>
-<td>Chemistry agent with Python REPL capability</td>
-<td>Executes Python in the current process; alias <code>python_repl</code></td>
 </tr>
 <tr>
 <td><code>graspa</code></td>
@@ -1864,15 +1859,18 @@ runtime. <code>deep_agent</code> is intentionally not included in the chemistry-
 <p><code>multi_agent</code> delegates among specialized graphs. It is useful when a request
 crosses distinct chemistry capabilities, but consumes more model tokens and may
 take more graph steps than <code>single_agent</code>.</p>
-<h2 id="python-repl">Python REPL<a class="headerlink" href="#python-repl" title="Permanent link">&para;</a></h2>
-<p><code>python_relp</code> (spelling retained for compatibility) allows generated Python to
-run inside the ChemGraph process.</p>
-<div class="admonition danger">
-<p class="admonition-title">Arbitrary code execution</p>
-<p>Use this workflow only with trusted prompts and data in an isolated
-environment. Generated code can read, modify, or delete files accessible to
-the process and may invoke installed programs.</p>
-</div>
+<h2 id="migrating-from-python-repl">Migrating from Python REPL<a class="headerlink" href="#migrating-from-python-repl" title="Permanent link">&para;</a></h2>
+<p>The <code>python_relp</code> workflow, its <code>python_repl</code> alias, and the <code>python_repl</code> tool
+have been removed. Use <code>deep_agent</code> for Python scripts and workspace tasks:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.
+</code></pre></div>
+<p>For the Python API, select <code>workflow_type="deep_agent"</code> and supply a
+<code>deepagents.backends.LocalShellBackend</code> through <code>deepagent_backend</code> when shell
+execution is needed. The default state backend has no shell. Execution and file
+changes retain DeepAgent's approval policy.</p>
+<p>Update old workflow names in configurations and start a new DeepAgent session;
+legacy REPL sessions are not automatically converted. <code>single_agent</code> remains the
+default workflow.</p>
 <h2 id="specialized-workflows">Specialized workflows<a class="headerlink" href="#specialized-workflows" title="Permanent link">&para;</a></h2>
 <p>RAG accepts supported text/PDF sources and may use provider embeddings or a
 local fallback. XANES, docking, gRASPA, and MCP workflows need the corresponding
