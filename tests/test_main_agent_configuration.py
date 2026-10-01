@@ -128,6 +128,23 @@ def test_builtin_description_edits_preserve_identity(api, monkeypatch):
     assert after.cli_restorable
 
 
+def test_removed_repl_is_absent_from_shared_policy_and_catalog():
+    from chemgraph.graphs.deep_agent import DEFAULT_DEEPAGENT_INTERRUPT_ON
+    from chemgraph.graphs.workspace import DEFAULT_WORKSPACE_INTERRUPT_ON
+
+    assert DEFAULT_DEEPAGENT_INTERRUPT_ON is DEFAULT_WORKSPACE_INTERRUPT_ON
+    assert "python_repl" not in DEFAULT_WORKSPACE_INTERRUPT_ON
+    assert "python_repl" not in ToolRegistry().names()
+
+
+@pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
+def test_removed_workflow_migration_precedes_workspace_validation(monkeypatch, workflow):
+    monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared",
+                        lambda **kwargs: pytest.fail("must reject before loading the model"))
+    with pytest.raises(ValueError, match="has been removed"):
+        ChemGraph(workflow_type=workflow, backend=object())
+
+
 @pytest.mark.parametrize("change", ["catalog_version", "import_path", "policy_version", "effective_policy"])
 def test_builtin_behavior_and_review_changes_invalidate_identity(api, monkeypatch, change):
     from chemgraph.graphs import workspace

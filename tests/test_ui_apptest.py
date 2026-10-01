@@ -269,6 +269,55 @@ def test_configuration_save_preserves_automatic_selection(configuration_app, tmp
     assert "default" not in toml.load(tmp_path / "config.toml")["chemistry"]["calculators"]
 
 
+@pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
+@pytest.mark.parametrize("source", ["saved", "raw"])
+def test_configuration_preserves_removed_workflow_until_replaced(
+    configuration_app, tmp_path, monkeypatch, workflow, source
+):
+    import copy
+    import toml
+    from ui.config import get_default_config
+
+    monkeypatch.delenv("CHEMGRAPH_UI_DEEPAGENT", raising=False)
+    path = tmp_path / "config.toml"
+    config = get_default_config()
+    if source == "saved":
+        config["general"]["workflow"] = workflow
+    path.write_text(toml.dumps(config))
+    original_text = path.read_text()
+
+    at = configuration_app.run()
+    if source == "raw":
+        next(t for t in at.text_area if t.label == "TOML Content").set_value(
+            toml.dumps({"general": {"workflow": workflow}})
+        )
+        at.button(key="update_from_toml").click().run()
+    original_live = copy.deepcopy(at.session_state["config"])
+
+    for _ in range(2):
+        at.run()
+        assert not at.exception
+        selector = next(s for s in at.selectbox if s.label == "Workflow")
+        assert selector.value == workflow
+        assert f"{workflow} (removed)" in selector.options
+        assert "deep_agent" not in selector.options
+        assert any("has been removed" in warning.value for warning in at.warning)
+        assert at.session_state["_config_draft"]["general"]["workflow"] == workflow
+
+    next(b for b in at.button if "Save Configuration" in b.label).click().run()
+    assert not at.exception
+    assert any("has been removed" in error.value for error in at.error)
+    assert at.session_state["config"] == original_live
+    assert path.read_text() == original_text
+
+    next(s for s in at.selectbox if s.label == "Workflow").select("single_agent").run()
+    assert not any("has been removed" in warning.value for warning in at.warning)
+    next(b for b in at.button if "Save Configuration" in b.label).click().run()
+    assert not at.exception
+    assert at.session_state["config"]["general"]["workflow"] == "single_agent"
+    assert toml.load(path)["general"]["workflow"] == "single_agent"
+
+
 def test_configuration_recursion_limit_defaults_and_persists(configuration_app, tmp_path):
     import toml
 

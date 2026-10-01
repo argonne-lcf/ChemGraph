@@ -185,7 +185,8 @@ def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, cha
             elif change == "policy_version":
                 monkeypatch.setattr(workspace, "WORKSPACE_REVIEW_POLICY_VERSION", workspace.WORKSPACE_REVIEW_POLICY_VERSION + 1)
             elif change == "policy":
-                monkeypatch.delitem(workspace.DEFAULT_WORKSPACE_INTERRUPT_ON, "python_repl")
+                monkeypatch.setitem(workspace.DEFAULT_WORKSPACE_INTERRUPT_ON, "write_file",
+                                    {"allowed_decisions": ["reject"]})
         model = _ScriptedChatModel(responses=[AIMessage(content="done")] if restarting else [action])
         monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", lambda **kwargs: (
             model, PreparedModel(endpoint_name="test", protocol="openai_compatible", client_kwargs={}),

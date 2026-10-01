@@ -108,11 +108,12 @@ class ToolSpec:
     tags: frozenset[str] = field(default_factory=frozenset)
     requirements: tuple[RuntimeRequirement, ...] = ()
     interactive: bool = False
+    # Informational metadata; custom tools need explicit interrupt_on policies.
     executes_code: bool = False
 
 
 # Bump for built-in schema, behavior, or safety changes; wording edits are compatible.
-BUILTIN_TOOL_CATALOG_VERSION = 1
+BUILTIN_TOOL_CATALOG_VERSION = 2
 
 
 BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
@@ -182,13 +183,6 @@ BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
         "chemgraph.tools.generic_tools:ask_human",
         frozenset({"generic", "interactive"}),
         interactive=True,
-    ),
-    ToolSpec(
-        "python_repl",
-        "Execute Python code in a persistent in-process REPL.",
-        "chemgraph.tools.generic_tools:repl_tool",
-        frozenset({"generic", "python"}),
-        executes_code=True,
     ),
     ToolSpec(
         "run_docking",

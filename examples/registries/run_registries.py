@@ -75,7 +75,7 @@ def show_agent_registry(registry: AgentRegistry) -> None:
             print(f"    - {issue}")
 
     print("\nAlias resolution:")
-    print("  python_repl ->", registry.resolve_name("python_repl"))
+    print("  deepagent ->", registry.resolve_name("deepagent"))
     print("  graspa_agent ->", registry.resolve_name("graspa_agent"))
     print("  iri ->", registry.resolve_name("iri"))
     print("  main_agent is intentionally not registered")

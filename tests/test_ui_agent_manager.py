@@ -22,6 +22,38 @@ def test_non_deep_agent_workflows_get_no_options(tmp_path):
     assert build_deepagent_options("single_agent", str(tmp_path), ["x"], False, ["run_ase"]) == {}
 
 
+@pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
+def test_removed_workflow_reports_migration_before_model_setup(monkeypatch, workflow):
+    from chemgraph.agent import llm_agent
+    from ui import agent_manager
+
+    monkeypatch.setattr(
+        llm_agent,
+        "load_chat_model_prepared",
+        lambda **_kwargs: pytest.fail("removed workflow reached model initialization"),
+    )
+    errors = []
+    monkeypatch.setattr(agent_manager.st, "error", errors.append)
+
+    agent = agent_manager.initialize_agent(
+        model_name="gpt-4o-mini",
+        workflow_type=workflow,
+        structured_output=False,
+        return_option="last_message",
+        generate_report=False,
+        human_supervised=False,
+        recursion_limit=20,
+        base_url=None,
+        argo_user=None,
+    )
+
+    assert agent is None
+    assert len(errors) == 1
+    assert workflow in errors[0]
+    assert "has been removed" in errors[0]
+    assert "deep_agent" in errors[0]
+
+
 def test_deep_agent_backend_is_rooted_at_workspace(tmp_path, monkeypatch):
     from deepagents.backends import LocalShellBackend
 

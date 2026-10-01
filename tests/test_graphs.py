@@ -51,8 +51,8 @@ class _FakeWorkflow:
     [
         ("single_agent", "construct_single_agent_graph", {}),
         ("main_agent", "construct_main_agent_graph", {}),
+        ("deep_agent", "construct_deep_agent_graph", {}),
         ("multi_agent", "construct_multi_agent_graph", {}),
-        ("python_relp", "construct_relp_graph", {}),
         ("graspa", "construct_graspa_graph", {}),
         ("mock_agent", "construct_mock_agent_graph", {}),
         (
@@ -98,6 +98,25 @@ def test_graph_constructor_is_called(
     args = called.get("args", ())
     constructor_kwargs = called.get("kwargs", {})
     assert (args and args[0] == "FAKE_LLM") or constructor_kwargs.get("llm") == "FAKE_LLM"
+
+
+@pytest.mark.parametrize("workflow_type", ["python_relp", "python_repl"])
+def test_removed_repl_workflows_are_rejected(monkeypatch, tmp_path, workflow_type):
+    monkeypatch.setattr(
+        llm_agent,
+        "load_chat_model_prepared",
+        lambda **_kwargs: pytest.fail("removed workflow reached model initialization"),
+    )
+    with pytest.raises(ValueError, match="has been removed") as exc_info:
+        ChemGraph(
+            workflow_type=workflow_type,
+            enable_memory=False,
+            log_dir=str(tmp_path / "logs"),
+        )
+    assert workflow_type in str(exc_info.value)
+    assert "deep_agent" in str(exc_info.value)
+    assert "workflows/#migrating-from-python-repl" in str(exc_info.value)
+    assert not (tmp_path / "logs").exists()
 
 
 @pytest.mark.asyncio
