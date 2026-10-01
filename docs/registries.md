@@ -65,10 +65,10 @@ print(registry.names())
 worker = registry.build("single_agent", llm=model)
 ```
 
-The registered workers are `single_agent`, `deep_agent`, `multi_agent`, `python_relp`,
+The registered workers are `single_agent`, `deep_agent`, `multi_agent`,
 `graspa`, `mock_agent`, `graspa_mcp`, `rag_agent`, `single_agent_xanes`,
 `molecular_docking`, and `single_agent_iri`. Existing `deepagent`,
-`python_repl`, `graspa_agent`, and `iri` spellings are supported as aliases.
+`graspa_agent`, and `iri` spellings are supported as aliases.
 
 Standalone workers keep their existing default in-memory checkpointer. When a
 worker is handed to an orchestration graph, use `as_subagent()` or
@@ -77,7 +77,7 @@ it inherits checkpointing from the parent graph:
 
 ```python
 workers = registry.as_subagents(
-    ["single_agent", "python_relp"],
+    ["single_agent", "deep_agent"],
     llm=model,
 )
 

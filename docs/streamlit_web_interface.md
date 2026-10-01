@@ -81,7 +81,6 @@ exposes these workflow choices:
 - `single_agent`
 - `multi_agent`
 - `deep_agent` (experimental; see below)
-- `python_relp`
 - `graspa`
 - `molecular_docking`
 - `mock_agent`

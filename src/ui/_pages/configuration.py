@@ -7,6 +7,7 @@ from typing import Any, Dict
 import streamlit as st
 import toml
 
+from chemgraph.utils.workflow_utils import get_removed_workflow_message
 from ui import config as ui_config
 from ui import deepagent_policy
 from ui import providers
@@ -24,7 +25,6 @@ from ui.provider_widgets import (
 # ---------------------------------------------------------------------------
 
 WORKFLOW_ALIASES: Dict[str, str] = {
-    "python_repl": "python_relp",
     "graspa_agent": "graspa",
 }
 
@@ -32,7 +32,6 @@ WORKFLOW_OPTIONS: list[str] = [
     "single_agent",
     "multi_agent",
     "deep_agent",
-    "python_relp",
     "graspa",
     "molecular_docking",
     "single_agent_iri",
@@ -575,6 +574,8 @@ def _render_general_settings(config: dict) -> None:
             config["general"]["workflow"]
         )
         workflow_options = available_workflow_options(config["general"]["workflow"])
+        if get_removed_workflow_message(config["general"]["workflow"]):
+            workflow_options.append(config["general"]["workflow"])
         config["general"]["workflow"] = st.selectbox(
             "Workflow",
             workflow_options,
@@ -583,8 +584,14 @@ def _render_general_settings(config: dict) -> None:
                 if config["general"]["workflow"] in workflow_options
                 else 0
             ),
+            format_func=lambda name: (
+                f"{name} (removed)" if get_removed_workflow_message(name) else name
+            ),
             key=_wkey("config_workflow"),
         )
+        migration_message = get_removed_workflow_message(config["general"]["workflow"])
+        if migration_message:
+            st.warning(migration_message)
         if (
             config["general"]["workflow"] == "deep_agent"
             and not deepagent_policy.deep_agent_enabled()
@@ -942,12 +949,16 @@ def _render_action_buttons(config: dict) -> None:
 
     with col1:
         if st.button("\U0001f4be Save Configuration", type="primary"):
-            # Apply the draft to the live session config, then persist to disk.
-            st.session_state.config = copy.deepcopy(config)
-            if save_config(st.session_state.config):
-                st.success(f"✅ Configuration saved to {ui_config.config_path()}")
+            migration_message = get_removed_workflow_message(config["general"]["workflow"])
+            if migration_message:
+                st.error(migration_message)
             else:
-                st.error(_save_failure_message())
+                # Apply the draft to the live session config, then persist to disk.
+                st.session_state.config = copy.deepcopy(config)
+                if save_config(st.session_state.config):
+                    st.success(f"✅ Configuration saved to {ui_config.config_path()}")
+                else:
+                    st.error(_save_failure_message())
 
     with col2:
         if st.button("\U0001f504 Reload Configuration"):

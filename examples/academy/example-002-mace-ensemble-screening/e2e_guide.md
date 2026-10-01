@@ -268,7 +268,7 @@ top level since the run only has one agent. Use a fresh `--trace-dir` per run
 so multiple runs don't pile into one `events.jsonl`.
 
 `--trace-dir` is currently only effective for the `single_agent` workflow.
-Other workflows (`multi_agent`, `python_relp`, `graspa`, `rag_agent`,
+Other workflows (`multi_agent`, `deep_agent`, `graspa`, `rag_agent`,
 `single_agent_xanes`, ...) run normally but don't yet emit dashboard events,
 and the CLI prints a yellow warning for those.
 

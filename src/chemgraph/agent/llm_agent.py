@@ -63,9 +63,9 @@ from chemgraph.graphs.deep_agent import (
 )
 from chemgraph.agent.turn import serialize_state
 from chemgraph.skills.runtime import resolve_skill_dirs, resolve_user_skills_dir
+from chemgraph.utils.workflow_utils import get_removed_workflow_message
 
 
-from chemgraph.graphs.python_relp_agent import construct_relp_graph
 from chemgraph.graphs.multi_agent import construct_multi_agent_graph
 from chemgraph.graphs.graspa_agent import construct_graspa_graph
 from chemgraph.graphs.mock_agent import construct_mock_agent_graph
@@ -154,7 +154,6 @@ class ChemGraph:
         - "main_agent" (drive with ``MainAgentSession``, not ``run``)
         - "deep_agent"
         - "multi_agent"
-        - "python_relp"
         - "graspa_agent"
         by default "single_agent"
     base_url : str, optional
@@ -275,6 +274,9 @@ class ChemGraph:
         deepagent_skill_dirs: Sequence[str] | None = None,
         deepagent_tool_registry: Any | None = None,
     ):
+        migration_message = get_removed_workflow_message(workflow_type)
+        if migration_message:
+            raise ValueError(migration_message)
         if deepagent_tool_registry is not None and workflow_type != "deep_agent":
             raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
         if enable_deepagent and workflow_type != "main_agent":
@@ -557,7 +559,6 @@ class ChemGraph:
             "main_agent": {"constructor": construct_main_agent_graph},
             "deep_agent": {"constructor": construct_deep_agent_graph},
             "multi_agent": {"constructor": construct_multi_agent_graph},
-            "python_relp": {"constructor": construct_relp_graph},
             "graspa": {"constructor": construct_graspa_graph},
             "mock_agent": {"constructor": construct_mock_agent_graph},
             "graspa_mcp": {"constructor": construct_graspa_mcp_graph},
@@ -644,11 +645,6 @@ class ChemGraph:
                 formatter_prompt=self.formatter_multi_prompt,
                 max_retries=self.max_retries,
                 human_supervised=self.human_supervised,
-            )
-        elif self.workflow_type == "python_relp":
-            self.workflow = self.workflow_map[workflow_type]["constructor"](
-                llm,
-                self.system_prompt,
             )
         elif self.workflow_type == "graspa":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
@@ -841,7 +837,6 @@ class ChemGraph:
                 "single_agent",
                 "single_agent_xanes",
                 "graspa",
-                "python_relp",
                 "rag_agent",
             }:
                 output_data.update(

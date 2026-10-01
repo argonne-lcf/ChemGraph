@@ -38,7 +38,6 @@ Return a self-contained report of results, paths, job IDs, and unresolved work.
 
 DEFAULT_DEEPAGENT_INTERRUPT_ON = {
     "execute": {"allowed_decisions": ["approve", "reject"]},
-    "python_repl": {"allowed_decisions": ["approve", "reject"]},
     "write_file": {"allowed_decisions": ["approve", "reject"]},
     "edit_file": {"allowed_decisions": ["approve", "reject"]},
     "delete": {"allowed_decisions": ["approve", "reject"]},
