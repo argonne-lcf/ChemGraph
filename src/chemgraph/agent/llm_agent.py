@@ -2,7 +2,6 @@ import datetime
 import inspect
 import os
 from dataclasses import dataclass
-from pathlib import Path
 import time
 from typing import Any, Callable, Collection, List, Optional, Sequence
 import uuid
@@ -17,7 +16,6 @@ from chemgraph.agent.interrupts import (
     normalize_interrupts,
 )
 from chemgraph.memory.store import SessionStore
-from chemgraph import __version__
 from chemgraph.memory.schemas import (
     MainAgentGraphConfig,
     MainAgentSessionMetadata,
@@ -25,9 +23,12 @@ from chemgraph.memory.schemas import (
 )
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 from chemgraph.memory.graph_config import (
-    GRAPH_SCHEMA_VERSION, describe_backend, describe_tool_registry, describe_worker_options,
-    fingerprint, validate_configuration_id, describe_agent_registry,
+    validate_configuration_id,
 )
+from chemgraph.agent.configuration import MainAgentRuntimeConfig
+from chemgraph.models.endpoints.identity import describe_model_endpoint
+from chemgraph.utils.artifacts import canonical_artifact_directory
+from chemgraph.graphs.workspace import bind_artifact_directory
 from chemgraph.models.loader import load_chat_model_prepared
 from chemgraph.models.supported_models import (
     MODELS_WITH_REASONING_EFFORT,
@@ -63,7 +64,7 @@ from chemgraph.graphs.deep_agent import (
     construct_deep_agent_graph,
     normalize_skill_sources,
 )
-from chemgraph.graphs.workspace import default_tool_registry, resolve_workspace_interrupt_policy
+from chemgraph.graphs.workspace import default_tool_registry
 from chemgraph.agent.turn import serialize_state
 from chemgraph.skills.runtime import resolve_skill_dirs, resolve_user_skills_dir
 from chemgraph.utils.workflow_utils import get_removed_workflow_message
@@ -308,6 +309,7 @@ class ChemGraph:
         subagent_names: Sequence[str] | None = None,
         subagent_options: dict[str, dict[str, Any]] | None = None,
         configuration_id: str | None = None,
+        _model_endpoint=None,
     ):
         migration_message = get_removed_workflow_message(workflow_type)
         if migration_message:
@@ -440,7 +442,16 @@ class ChemGraph:
             )
             os.makedirs(self.log_dir, exist_ok=True)
             # Set env var for tools to pick up
-            os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
+            if workflow_type != "main_agent":
+                os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
+
+        if workflow_type == "main_agent":
+            self.log_dir = canonical_artifact_directory(self.log_dir)
+            self.backend = bind_artifact_directory(self.backend, self.log_dir)
+            deepagent_backend = bind_artifact_directory(deepagent_backend, self.log_dir)
+            for options in self.subagent_options.values():
+                if "backend" in options:
+                    options["backend"] = bind_artifact_directory(options["backend"], self.log_dir)
 
         # Initialize session memory store
         if session_store is not None:
@@ -467,6 +478,7 @@ class ChemGraph:
                 api_key=api_key,
                 argo_user=argo_user,
                 reasoning_effort=reasoning_effort,
+                **({"endpoint": _model_endpoint} if _model_endpoint is not None else {}),
             )
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
@@ -576,129 +588,22 @@ class ChemGraph:
         else:
             self.support_structured_output = support_structured_output
 
-        tool_signatures = tuple(
-            sorted(
-                f"{getattr(tool, 'name', type(tool).__name__)}:"
-                f"{getattr(getattr(tool, 'args_schema', None), '__name__', '')}"
-                for tool in self.tools or []
-            )
-        )
-        workspace = getattr(self.deepagent_backend, "cwd", None)
-        topology_payload = {
-            "model_name": self.model_name,
-            "reasoning_effort": self.reasoning_effort,
-            "recursion_limit": self.recursion_limit,
-            "structured_output": self.structured_output,
-            "generate_report": self.generate_report,
-            "max_retries": self.max_retries,
-            "human_supervised": self.human_supervised,
-            "terminal_tool_names": self.terminal_tool_names,
-            "enable_deepagent": self.enable_deepagent,
-            "deepagent_workspace": str(workspace) if workspace is not None else None,
-            "tool_signatures": tool_signatures,
-            "system_prompt": self.system_prompt,
-            "formatter_prompt": self.formatter_prompt,
-            "report_prompt": self.report_prompt,
-        }
-        if (
-            self.enable_deepagent
-            and self.deepagent_prompt != DEFAULT_DEEPAGENT_PROMPT
-        ):
-            topology_payload["deepagent_prompt"] = self.deepagent_prompt
-        if self.enable_deepagent and self.deepagent_skills:
-            topology_payload["deepagent_skills"] = self.deepagent_skills
-        if self.enable_deepagent and self.deepagent_skill_dirs:
-            topology_payload["deepagent_skill_dirs"] = self.deepagent_skill_dirs
-        if self.enable_deepagent and self.deepagent_discover_skills:
-            topology_payload["deepagent_discover_skills"] = True
-            topology_payload["deepagent_user_skills_dir"] = self.deepagent_user_skills_dir
-        main_config = {}
+        self.runtime_config = None
         if workflow_type == "main_agent":
-            from langchain_core.utils.function_calling import convert_to_openai_tool
-            from chemgraph.graphs.workspace import WORKSPACE_REVIEW_POLICY_VERSION
-            from chemgraph.skills.runtime import local_skill_workspace
-
-            local_workspace = local_skill_workspace(self.backend)
-            backend_config, backend_cli, backend_opaque = describe_backend(self.backend)
-            worker_backend, _, worker_opaque = describe_backend(self.deepagent_backend)
-            worker_options, options_opaque = describe_worker_options(self.subagent_options)
-            registry_specs, custom_catalog = describe_tool_registry(self.tool_registry)
-            agent_specs, custom_agents = describe_agent_registry(self.agent_registry)
-            main_review_policy = resolve_workspace_interrupt_policy(self.tool_registry)
-            main_config = {
-                "graph_schema_version": GRAPH_SCHEMA_VERSION,
-                "workspace": str(local_workspace[0]) if local_workspace else None,
-                "skills": self.skills,
-                "skill_dirs": self.skill_dirs,
-                "discover_skills": self.discover_skills,
-                "user_skills_dir": self.user_skills_dir,
-                "registry_tool_names": self.tool_registry.names(),
-                "configured_subagent_names": self.agent_registry.names(),
-                "main_agent_prompt": self.main_agent_prompt,
-                "configuration_id": self.configuration_id,
-                "requires_configuration_id": (
-                    backend_opaque or (self.enable_deepagent and worker_opaque)
-                    or options_opaque or custom_catalog or custom_agents or bool(self.tools)
-                ),
-                "cli_restorable": (
-                    backend_cli and (not self.enable_deepagent
-                                     or worker_backend["type"] == "cli-local-shell-v1")
-                    and not self.subagent_options
-                    and not custom_catalog and not custom_agents
-                    and not self.tools
-                    and prompts.system == single_agent_prompt
-                    and prompts.formatter == default_formatter_prompt
-                    and prompts.report == default_report_prompt
-                    and (not self.enable_deepagent or self.deepagent_prompt == DEFAULT_DEEPAGENT_PROMPT)
-                ),
-            }
-            topology_payload.update(main_config)
-            topology_payload["registry_specs"] = registry_specs
-            topology_payload["agent_specs"] = agent_specs
-            topology_payload["custom_tool_schemas"] = [
-                (convert_to_openai_tool(item), getattr(item, "return_direct", False))
-                for item in [*(self.tools or []), *[
-                    self.tool_registry.get(spec.name) for spec in self.tool_registry.specs()
-                    if spec.import_path is None
-                ]]
-            ]
-            topology_payload["subagent_options"] = worker_options
-            topology_payload["main_backend"] = backend_config
-            topology_payload["legacy_worker_backend"] = worker_backend if self.enable_deepagent else None
-            topology_payload["review_policy"] = {
-                "version": WORKSPACE_REVIEW_POLICY_VERSION,
-                "interrupt_on": main_review_policy,
-            }
-        topology_fingerprint = fingerprint(topology_payload)
+            endpoint = prepared_model.endpoint_descriptor or describe_model_endpoint(
+                prepared_model, llm, self.model_name, base_url,
+            )
+            self.runtime_config = MainAgentRuntimeConfig.from_agent(
+                self, endpoint=endpoint,
+                default_prompts=(prompts.system == single_agent_prompt
+                                 and prompts.formatter == default_formatter_prompt
+                                 and prompts.report == default_report_prompt
+                                 and (not self.enable_deepagent or self.deepagent_prompt == DEFAULT_DEEPAGENT_PROMPT)),
+            )
         self.main_agent_metadata = MainAgentSessionMetadata(
-            graph_config=MainAgentGraphConfig(
-                model_name=self.model_name,
-                recursion_limit=self.recursion_limit,
-                reasoning_effort=self.reasoning_effort,
-                structured_output=self.structured_output,
-                generate_report=self.generate_report,
-                max_retries=self.max_retries,
-                human_supervised=self.human_supervised,
-                terminal_tool_names=self.terminal_tool_names,
-                enable_deepagent=self.enable_deepagent,
-                deepagent_workspace=(
-                    str(Path(workspace).resolve()) if workspace is not None else None
-                ),
-                deepagent_skills=self.deepagent_skills,
-                deepagent_skill_dirs=self.deepagent_skill_dirs,
-                deepagent_discover_skills=self.deepagent_discover_skills,
-                deepagent_user_skills_dir=self.deepagent_user_skills_dir,
-                subagent_names=(
-                    self.agent_registry.names() if self.agent_registry is not None else ()
-                ),
-                tool_signatures=tool_signatures,
-                package_version=__version__,
-                topology_fingerprint=topology_fingerprint,
-                **main_config,
-            ),
-            checkpoint_backend=(
-                type(checkpointer).__name__ if checkpointer is not None else "memory"
-            ),
+            graph_config=(self.runtime_config.saved if self.runtime_config else
+                          MainAgentGraphConfig(model_name=self.model_name)),
+            checkpoint_backend=type(checkpointer).__name__ if checkpointer is not None else "memory",
         )
 
         self.workflow_map = {
@@ -737,35 +642,7 @@ class ChemGraph:
         elif self.workflow_type == "main_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
-                main_tools=self.tools,
-                agent_registry=self.agent_registry,
-                agent_options=self.subagent_options,
-                backend=self.backend,
-                tool_registry=self.tool_registry,
-                skills=self.skills,
-                skill_dirs=self.skill_dirs,
-                discover_skills=self.discover_skills,
-                user_skills_dir=self.user_skills_dir,
-                interrupt_on=main_review_policy,
-                system_prompt=self.main_agent_prompt,
-                recursion_limit=self.recursion_limit,
-                human_supervised=self.human_supervised,
-                subagent_system_prompt=self.system_prompt,
-                subagent_formatter_prompt=self.formatter_prompt,
-                subagent_report_prompt=self.report_prompt,
-                subagent_structured_output=self.structured_output,
-                subagent_generate_report=self.generate_report,
-                subagent_max_retries=self.max_retries,
-                subagent_human_supervised=self.human_supervised,
-                subagent_terminal_tool_names=self.terminal_tool_names,
-                enable_deepagent=self.enable_deepagent,
-                deepagent_backend=self.deepagent_backend,
-                deepagent_skills=self.deepagent_skills,
-                deepagent_skill_dirs=self.deepagent_skill_dirs,
-                deepagent_discover_skills=self.deepagent_discover_skills,
-                deepagent_user_skills_dir=self.deepagent_user_skills_dir,
-                deepagent_recursion_limit=self.recursion_limit,
-                deepagent_system_prompt=self.deepagent_prompt,
+                **self.runtime_config.graph_arguments(),
                 checkpointer=self.checkpointer,
                 subagent_recorder=(
                     SubagentRunRecorder(self.session_store)

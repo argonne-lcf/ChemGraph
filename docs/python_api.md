@@ -133,6 +133,18 @@ retain `session.thread_id`, reconstruct the same configuration, and call
 checkpointer is process-local. `MainAgentSession` inherits the graph's recursion
 limit; an explicit limit must match supplied session metadata.
 
+The saved configuration includes the canonical artifact directory selected by
+`log_dir`, `CHEMGRAPH_LOG_DIR`, or the generated default, plus a non-secret model
+endpoint descriptor. CLI restoration uses these saved values even if the current
+directory, environment, or endpoint settings changed. Credentials are resolved
+again; they are never saved in the configuration. Endpoint URLs containing user
+information, query parameters, or fragments require Python reconstruction and a
+matching `configuration_id`. Python callers must reconstruct with the original
+artifact directory and model routing as well as the original graph options.
+Schema-1 through schema-3 checkpoints require a new session; transcripts remain
+readable. Relative chemistry outputs use a session-scoped directory, while
+caller-owned shell backends retain their caller-supplied environments.
+
 `backend=None` provides checkpoint-backed file tools and no shell. Local shell
 backends mount host files at `/workspace/`; shell commands use host paths and
 are not confined to the workspace. Registry tools always execute on the host,

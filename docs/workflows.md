@@ -63,7 +63,7 @@ workflow changes. Workspace and explicit skill paths are canonicalized on
 activation. Python supports these capabilities through `ChemGraph` and
 `MainAgentSession`; `ChemGraph.run()` rejects this workflow.
 
-New graph sessions use schema version 3. Old transcripts remain readable, but
+New graph sessions use schema version 4. Old transcripts remain readable, but
 old checkpoints require a new session. New supported CLI configurations restore
 through `--resume` or `/resume`; caller-owned Python configurations must be
 reconstructed through Python. See [Python API](python_api.md).

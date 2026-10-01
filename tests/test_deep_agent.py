@@ -541,7 +541,7 @@ def test_main_agent_metadata_persists_skills_in_topology(monkeypatch, tmp_path):
     for agent in no_skill_agents:
         graph_config = agent.main_agent_metadata.graph_config
         assert graph_config.deepagent_skills == ()
-        assert graph_config.graph_schema_version == 3
+        assert graph_config.graph_schema_version == 4
         assert graph_config.topology_fingerprint != _legacy_topology_fingerprint(
             agent
         )

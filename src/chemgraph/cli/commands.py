@@ -38,7 +38,7 @@ from chemgraph.agent.interrupts import (
 from chemgraph.skills.runtime import resolve_skill_dirs
 from chemgraph.graphs.deep_agent import normalize_skill_sources
 from chemgraph.graphs.workspace import create_cli_workspace_backend
-from chemgraph.memory.graph_config import GRAPH_SCHEMA_VERSION, NEW_SESSION_GUIDANCE, validate_configuration_id
+from chemgraph.memory.graph_config import validate_configuration_id
 from chemgraph.registry.tools import RegistryError
 from chemgraph.agent.usage import UsageCollector, combine_usage
 from chemgraph.memory.store import SessionStore
@@ -230,6 +230,8 @@ def initialize_agent(
     subagent_names: Sequence[str] | None = None,
     main_agent_prompt: str | None = None,
     configuration_id: str | None = None,
+    log_dir: str | None = None,
+    model_endpoint=None,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -427,6 +429,8 @@ def initialize_agent(
                 prompts=PromptConfig(main_agent=main_agent_prompt),
                 configuration_id=configuration_id,
                 base_url=base_url,
+                log_dir=log_dir,
+                **({"_model_endpoint": model_endpoint} if model_endpoint is not None else {}),
                 argo_user=argo_user,
                 generate_report=generate_report,
                 return_option=return_option,
@@ -1299,32 +1303,30 @@ def _parse_interactive_input(query: str) -> tuple[str, str] | None:
 
 
 def _main_agent_options(config):
-    """Reconstruct only the persisted, CLI-supported main-agent configuration."""
-    from chemgraph.registry.tools import RegistryError, ToolRegistry
+    """Compatibility adapter for callers requesting only workspace settings."""
+    from chemgraph.agent.configuration import validate_cli_configuration, workspace_arguments
 
-    if config.graph_schema_version != GRAPH_SCHEMA_VERSION:
-        raise ValueError(f"This main-agent graph is incompatible. {NEW_SESSION_GUIDANCE}")
-    if not config.cli_restorable or not config.topology_fingerprint or config.requires_configuration_id:
-        raise ValueError("This session requires caller-provided Python tools, workers, "
-                         "or a backend. Reconstruct it through the Python API.")
-    catalog = ToolRegistry()
-    try:
-        registry = ToolRegistry(catalog.get_spec(name) for name in config.registry_tool_names)
-    except RegistryError as exc:
-        raise ValueError(f"Cannot reconstruct the stored tool catalog: {exc}. {NEW_SESSION_GUIDANCE}") from exc
-    return {
-        "workspace": config.workspace,
-        "skills": config.skills,
-        "skill_dirs": config.skill_dirs,
-        "discover_skills": config.discover_skills,
-        "user_skills_dir": config.user_skills_dir,
-        "tool_registry": registry,
-        "subagent_names": (tuple(name for name in config.configured_subagent_names or ()
-                                 if name != "deep_agent") if config.enable_deepagent
-                           else config.configured_subagent_names),
-        "main_agent_prompt": config.main_agent_prompt,
-        "configuration_id": config.configuration_id,
-    }
+    validate_cli_configuration(config)
+    return workspace_arguments(config)
+
+
+def _initialize_saved_main_agent(config, *, return_option, checkpointer, argo_user=None, verbose=False,
+                                 model_name=None, reasoning_effort=None):
+    from chemgraph.agent.configuration import restoration_arguments
+
+    options = restoration_arguments(config)
+    if model_name is not None:
+        options["model_name"] = model_name
+        options["reasoning_effort"] = reasoning_effort
+        if model_name != config.model_name:
+            options.pop("model_endpoint")
+            options["base_url"] = config.model_endpoint.base_url if config.model_endpoint.configured_base_url else None
+    return initialize_agent(
+        options.pop("model_name"), options.pop("workflow_type"),
+        options.pop("structured_output"), return_option,
+        options.pop("generate_report"), options.pop("recursion_limit"),
+        checkpointer=checkpointer, argo_user=argo_user, verbose=verbose, **options,
+    )
 
 
 def _print_main_agent_restore_configuration(thread_id, config):
@@ -1539,57 +1541,68 @@ def interactive_mode(
             console.print(f"[red]Could not open checkpoint database: {exc}[/red]")
             return
 
-    # Initialize agent with the full config context.
-    agent = initialize_agent(
-        model,
-        workflow,
-        structured,
-        return_option,
-        generate_report,
-        recursion_limit,
-        base_url=base_url,
-        argo_user=argo_user,
-        verbose=verbose,
-        human_supervised=human_supervised,
-        tools=tools,
-        enable_deepagent=enable_deepagent and workflow == "main_agent",
-        deepagent_workspace=(
-            deepagent_workspace
-            if workflow == "deep_agent"
-            or (enable_deepagent and workflow == "main_agent")
-            else None
-        ),
-        deepagent_discover_skills=deepagent_discover_skills,
-        deepagent_user_skills_dir=deepagent_user_skills_dir,
-        deepagent_skills=(
-            deepagent_skills
-            if workflow == "deep_agent"
-            or (enable_deepagent and workflow == "main_agent")
-            else None
-        ),
-        deepagent_skill_dirs=(
-            deepagent_skill_dirs
-            if workflow == "deep_agent"
-            or (enable_deepagent and workflow == "main_agent")
-            else None
-        ),
-        deepagent_tool_registry=(
-            deepagent_tool_registry if workflow == "deep_agent" else None
-        ),
-        deepagent_auto_approve=(
-            deepagent_auto_approve and workflow == "deep_agent"
-        ),
-        checkpointer=checkpoint_saver,
-        reasoning_effort=reasoning_effort,
-        max_retries=max_retries,
-        terminal_tool_names=terminal_tool_names,
-        **(main_options if workflow == "main_agent" else {}),
-    )
+    main_configuration = stored_graph_config
+
+    def initialize_selection(selected_model, selected_workflow, selected_reasoning):
+        if selected_workflow == "main_agent" and main_configuration is not None and main_configuration.cli_restorable:
+            return _initialize_saved_main_agent(
+                main_configuration, return_option=return_option, checkpointer=checkpoint_saver,
+                argo_user=argo_user, verbose=verbose, model_name=selected_model,
+                reasoning_effort=selected_reasoning,
+            )
+        return initialize_agent(
+            selected_model,
+            selected_workflow,
+            structured,
+            return_option,
+            generate_report,
+            recursion_limit,
+            base_url=base_url,
+            argo_user=argo_user,
+            verbose=verbose,
+            human_supervised=human_supervised,
+            tools=tools,
+            enable_deepagent=enable_deepagent and selected_workflow == "main_agent",
+            deepagent_workspace=(
+                deepagent_workspace
+                if selected_workflow == "deep_agent"
+                or (enable_deepagent and selected_workflow == "main_agent")
+                else None
+            ),
+            deepagent_discover_skills=deepagent_discover_skills,
+            deepagent_user_skills_dir=deepagent_user_skills_dir,
+            deepagent_skills=(
+                deepagent_skills
+                if selected_workflow == "deep_agent"
+                or (enable_deepagent and selected_workflow == "main_agent")
+                else None
+            ),
+            deepagent_skill_dirs=(
+                deepagent_skill_dirs
+                if selected_workflow == "deep_agent"
+                or (enable_deepagent and selected_workflow == "main_agent")
+                else None
+            ),
+            deepagent_tool_registry=(
+                deepagent_tool_registry if selected_workflow == "deep_agent" else None
+            ),
+            deepagent_auto_approve=(
+                deepagent_auto_approve and selected_workflow == "deep_agent"
+            ),
+            checkpointer=checkpoint_saver if selected_workflow == "main_agent" else None,
+            reasoning_effort=selected_reasoning,
+            max_retries=max_retries,
+            terminal_tool_names=terminal_tool_names,
+            **(main_options if selected_workflow == "main_agent" else {}),
+        )
+
+    agent = initialize_selection(model, workflow, reasoning_effort)
     if not agent:
         if checkpoint_runtime is not None:
             checkpoint_runtime.close()
         return
     if workflow == "main_agent":
+        main_configuration = getattr(getattr(agent, "runtime_config", None), "saved", main_configuration)
         main_options["workspace"] = str(agent.backend.cwd.resolve()) if getattr(agent, "backend", None) is not None else main_options["workspace"]
         main_options["skill_dirs"] = getattr(agent, "skill_dirs", main_options["skill_dirs"])
         main_options["user_skills_dir"] = getattr(agent, "user_skills_dir", main_options["user_skills_dir"])
@@ -1778,29 +1791,9 @@ Example queries:
                     candidate_runtime = checkpoint_runtime or CheckpointRuntime()
                     try:
                         candidate_saver = candidate_runtime.open_sqlite(candidate_db)
-                        candidate_agent = initialize_agent(
-                            target_config.model_name,
-                            "main_agent",
-                            target_config.structured_output,
-                            return_option,
-                            target_config.generate_report,
-                            target_config.recursion_limit,
-                            base_url=base_url,
-                            argo_user=argo_user,
-                            verbose=verbose,
-                            human_supervised=target_config.human_supervised,
-                            tools=tools,
-                            enable_deepagent=target_config.enable_deepagent,
-                            deepagent_workspace=target_config.deepagent_workspace,
-                            deepagent_skills=target_config.deepagent_skills,
-                            deepagent_skill_dirs=target_config.deepagent_skill_dirs,
-                            deepagent_discover_skills=target_config.deepagent_discover_skills,
-                            deepagent_user_skills_dir=target_config.deepagent_user_skills_dir,
-                            checkpointer=candidate_saver,
-                            reasoning_effort=target_config.reasoning_effort,
-                            max_retries=target_config.max_retries,
-                            terminal_tool_names=target_config.terminal_tool_names,
-                            **target_main_options,
+                        candidate_agent = _initialize_saved_main_agent(
+                            target_config, return_option=return_option, checkpointer=candidate_saver,
+                            argo_user=argo_user, verbose=verbose,
                         )
                         if candidate_agent is None:
                             raise RuntimeError("Could not recreate the stored agent.")
@@ -1832,6 +1825,7 @@ Example queries:
                     checkpoint_runtime = candidate_runtime
                     checkpoint_saver = candidate_saver
                     agent = candidate_agent
+                    main_configuration = target_config
                     main_options = target_main_options
                     main_session = candidate_session
                     model = target_config.model_name
@@ -1927,50 +1921,7 @@ Example queries:
                     if new_model in MODELS_WITH_REASONING_EFFORT
                     else None
                 )
-                new_agent = initialize_agent(
-                    new_model,
-                    workflow,
-                    structured,
-                    return_option,
-                    generate_report,
-                    recursion_limit,
-                    base_url=base_url,
-                    argo_user=argo_user,
-                    human_supervised=human_supervised,
-                    tools=tools,
-                    enable_deepagent=enable_deepagent and workflow == "main_agent",
-                    deepagent_workspace=(
-                        deepagent_workspace
-                        if workflow == "deep_agent"
-                        or (enable_deepagent and workflow == "main_agent")
-                        else None
-                    ),
-                    deepagent_discover_skills=deepagent_discover_skills,
-                    deepagent_user_skills_dir=deepagent_user_skills_dir,
-                    deepagent_skills=(
-                        deepagent_skills
-                        if workflow == "deep_agent"
-                        or (enable_deepagent and workflow == "main_agent")
-                        else None
-                    ),
-                    deepagent_skill_dirs=(
-                        deepagent_skill_dirs
-                        if workflow == "deep_agent"
-                        or (enable_deepagent and workflow == "main_agent")
-                        else None
-                    ),
-                    deepagent_tool_registry=(
-                        deepagent_tool_registry if workflow == "deep_agent" else None
-                    ),
-                    deepagent_auto_approve=(
-                        deepagent_auto_approve and workflow == "deep_agent"
-                    ),
-                    checkpointer=(checkpoint_saver if workflow == "main_agent" else None),
-                    reasoning_effort=new_reasoning_effort,
-                    max_retries=max_retries,
-                    terminal_tool_names=terminal_tool_names,
-                    **(main_options if workflow == "main_agent" else {}),
-                )
+                new_agent = initialize_selection(new_model, workflow, new_reasoning_effort)
                 if new_agent:
                     if reasoning_effort is not None and new_reasoning_effort is None:
                         console.print(
@@ -1980,6 +1931,8 @@ Example queries:
                     model = new_model
                     reasoning_effort = new_reasoning_effort
                     agent = new_agent
+                    if workflow == "main_agent":
+                        main_configuration = getattr(getattr(agent, "runtime_config", None), "saved", main_configuration)
                     main_session = (
                         create_main_agent_session(
                             agent,
@@ -2022,58 +1975,12 @@ Example queries:
                             continue
                         checkpoint_runtime = candidate_runtime
                         checkpoint_saver = candidate_saver
-                    new_agent = initialize_agent(
-                        model,
-                        new_workflow,
-                        structured,
-                        return_option,
-                        generate_report,
-                        recursion_limit,
-                        base_url=base_url,
-                        argo_user=argo_user,
-                        human_supervised=human_supervised,
-                        tools=tools,
-                        enable_deepagent=(
-                            enable_deepagent and new_workflow == "main_agent"
-                        ),
-                        deepagent_workspace=(
-                            deepagent_workspace
-                            if new_workflow == "deep_agent"
-                            or (enable_deepagent and new_workflow == "main_agent")
-                            else None
-                        ),
-                        deepagent_discover_skills=deepagent_discover_skills,
-                        deepagent_user_skills_dir=deepagent_user_skills_dir,
-                        deepagent_skills=(
-                            deepagent_skills
-                            if new_workflow == "deep_agent"
-                            or (enable_deepagent and new_workflow == "main_agent")
-                            else None
-                        ),
-                        deepagent_skill_dirs=(
-                            deepagent_skill_dirs
-                            if new_workflow == "deep_agent"
-                            or (enable_deepagent and new_workflow == "main_agent")
-                            else None
-                        ),
-                        deepagent_tool_registry=(
-                            deepagent_tool_registry if new_workflow == "deep_agent" else None
-                        ),
-                        deepagent_auto_approve=(
-                            deepagent_auto_approve and new_workflow == "deep_agent"
-                        ),
-                        checkpointer=(
-                            checkpoint_saver if new_workflow == "main_agent" else None
-                        ),
-                        reasoning_effort=reasoning_effort,
-                        max_retries=max_retries,
-                        terminal_tool_names=terminal_tool_names,
-                        **(main_options if new_workflow == "main_agent" else {}),
-                    )
+                    new_agent = initialize_selection(model, new_workflow, reasoning_effort)
                     if new_agent:
                         workflow = new_workflow
                         agent = new_agent
                         if workflow == "main_agent":
+                            main_configuration = getattr(getattr(agent, "runtime_config", None), "saved", main_configuration)
                             main_options["workspace"] = str(agent.backend.cwd.resolve()) if getattr(agent, "backend", None) is not None else main_options["workspace"]
                             main_options["skill_dirs"] = getattr(agent, "skill_dirs", main_options["skill_dirs"])
                             main_options["user_skills_dir"] = getattr(agent, "user_skills_dir", main_options["user_skills_dir"])

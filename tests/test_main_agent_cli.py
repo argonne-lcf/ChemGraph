@@ -180,7 +180,7 @@ def test_create_main_agent_session_installs_interactive_event_renderer(monkeypat
         FakeSession,
     )
     metadata = MainAgentSessionMetadata(
-        graph_config=MainAgentGraphConfig(graph_schema_version=3, model_name="test-model")
+        graph_config=MainAgentGraphConfig(graph_schema_version=4, model_name="test-model")
     )
     agent = SimpleNamespace(
         workflow=object(),
@@ -398,8 +398,11 @@ def test_incompatible_main_agent_graph_reports_recovery_without_retry(monkeypatc
 
 
 def test_missing_stored_catalog_entry_reports_new_session_guidance():
-    config = MainAgentGraphConfig(graph_schema_version=3, model_name="test", cli_restorable=True,
-                                  topology_fingerprint="old", registry_tool_names=("removed-tool",))
+    config = MainAgentGraphConfig(graph_schema_version=4, model_name="test", cli_restorable=True,
+                                  topology_fingerprint="old", registry_tool_names=("removed-tool",),
+                                  artifact_directory="/tmp/artifacts",
+                                  model_endpoint={"endpoint_name": "test", "protocol": "test",
+                                                  "requested_model": "test", "effective_model": "test"})
     with pytest.raises(ValueError, match="Start a new session; the old transcript remains readable"):
         commands._main_agent_options(config)
 
@@ -702,7 +705,10 @@ def test_workflow_switch_recovers_from_checkpoint_open_failure(monkeypatch):
 
 def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
     target_config = MainAgentGraphConfig(
-        graph_schema_version=3,
+        graph_schema_version=4,
+        artifact_directory=str(tmp_path / "artifacts"),
+        model_endpoint={"endpoint_name": "argo", "protocol": "openai_compatible",
+                        "requested_model": "argo:gpt-5.6-sol", "effective_model": "gpt-5.6-sol"},
         cli_restorable=True,
         model_name="argo:gpt-5.6-sol",
         structured_output=True,
@@ -840,7 +846,7 @@ def test_startup_resume_distinguishes_process_local_session(monkeypatch):
         "scripted",
         "main_agent",
         session_metadata=MainAgentSessionMetadata(
-            graph_config=MainAgentGraphConfig(graph_schema_version=3, model_name="scripted"),
+            graph_config=MainAgentGraphConfig(graph_schema_version=4, model_name="scripted"),
             checkpoint_backend="memory",
         ),
     )

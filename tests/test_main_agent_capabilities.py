@@ -127,7 +127,7 @@ def test_registry_approval_survives_restart(tmp_path):
     checkpoint_db = tmp_path / "checkpoints.db"
     store = SessionStore(str(tmp_path / "sessions.db"))
     metadata = MainAgentSessionMetadata(
-        graph_config=MainAgentGraphConfig(model_name="scripted", graph_schema_version=3,
+        graph_config=MainAgentGraphConfig(model_name="scripted", graph_schema_version=4,
                                             configuration_id="ase-stub-v1", topology_fingerprint="ase-stub-v1"),
         checkpoint_backend="AsyncSqliteSaver", checkpoint_db=str(checkpoint_db),
     )

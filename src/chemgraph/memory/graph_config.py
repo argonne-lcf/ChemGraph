@@ -8,7 +8,7 @@ from deepagents.backends import LocalShellBackend, StateBackend
 from chemgraph.graphs.workspace import cli_backend_descriptor
 
 
-GRAPH_SCHEMA_VERSION = 3
+GRAPH_SCHEMA_VERSION = 4
 NEW_SESSION_GUIDANCE = "Start a new session; the old transcript remains readable."
 
 

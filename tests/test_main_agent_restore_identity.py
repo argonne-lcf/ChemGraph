@@ -53,7 +53,7 @@ async def test_raw_graph_without_identity_only_continues_in_same_instance():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("operation", ["run", "restore"])
-@pytest.mark.parametrize("readable,schema_version", [(False, 1), (True, 1), (True, 2)])
+@pytest.mark.parametrize("readable,schema_version", [(False, 1), (True, 1), (True, 2), (True, 3)])
 async def test_legacy_checkpoints_are_rejected_without_touching_transcripts(tmp_path, readable, operation, schema_version):
     workflow = make_graph([AIMessage(content="old answer")])
     await workflow.ainvoke({"messages": [HumanMessage(content="old question")]},

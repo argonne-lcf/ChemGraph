@@ -80,7 +80,9 @@ def resolve_image_path(image_path: str) -> str:
     """
     path = os.path.expanduser(image_path)
     if not os.path.isfile(path):
-        log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+        from chemgraph.utils.artifacts import artifact_directory
+
+        log_dir = artifact_directory()
         if log_dir and not os.path.isabs(path):
             candidate = os.path.join(log_dir, path)
             if os.path.isfile(candidate):

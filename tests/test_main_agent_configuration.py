@@ -45,7 +45,7 @@ def test_python_options_are_applied_and_reconstructed(api, tmp_path):
     assert captured["skills"] == ("/workspace/skills/",)
     config = agent.main_agent_metadata.graph_config
     restored = _main_agent_options(config)
-    assert config.graph_schema_version == 3
+    assert config.graph_schema_version == 4
     assert restored["workspace"] == str(tmp_path.resolve())
     assert restored["skill_dirs"] == (str(tmp_path.resolve()),)
     assert restored["tool_registry"].names() == ("calculator",)
@@ -115,7 +115,7 @@ def test_graph_uses_the_fingerprinted_effective_policy(api, monkeypatch):
     def record(payload):
         payloads.append(payload)
         return fingerprint(payload)
-    monkeypatch.setattr("chemgraph.agent.llm_agent.fingerprint", record)
+    monkeypatch.setattr("chemgraph.agent.configuration.fingerprint", record)
     create()
     policy = captured["interrupt_on"]
     assert payloads[0]["review_policy"]["interrupt_on"] == policy

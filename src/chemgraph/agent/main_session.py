@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -25,6 +26,7 @@ from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetad
 from chemgraph.memory.graph_config import (
     GRAPH_SCHEMA_VERSION, NEW_SESSION_GUIDANCE, fingerprint, validate_configuration_id,
 )
+from chemgraph.utils.artifacts import artifact_context, artifact_directory, canonical_artifact_directory
 from chemgraph.memory.serialization import serialize_messages
 from chemgraph.memory.store import SessionStore
 
@@ -92,13 +94,16 @@ class MainAgentSession:
             if configuration_id is not None and configuration_id != session_metadata.graph_config.configuration_id:
                 raise ValueError("configuration_id must match the graph's session metadata.")
         else:
+            directory = canonical_artifact_directory(artifact_directory() or os.getcwd())
             session_metadata = MainAgentSessionMetadata(graph_config=MainAgentGraphConfig(
                 model_name="unknown", graph_schema_version=GRAPH_SCHEMA_VERSION,
+                artifact_directory=directory,
                 recursion_limit=recursion_limit,
                 configuration_id=configuration_id, requires_configuration_id=True,
                 topology_fingerprint=(fingerprint({
                     "schema": GRAPH_SCHEMA_VERSION, "configuration_id": configuration_id,
                     "recursion_limit": recursion_limit,
+                    "artifact_directory": directory,
                 }) if configuration_id else ""),
             ))
         graph_config = session_metadata.graph_config
@@ -331,7 +336,8 @@ class MainAgentSession:
         self._usage_operation += 1
         self._update_status("running")
         try:
-            result, state_values = await self._run_once(stream_input)
+            with artifact_context(self.session_metadata.graph_config.artifact_directory):
+                result, state_values = await self._run_once(stream_input)
         except Exception:
             self._usage.finish("failed")
             self._failed = True
@@ -399,6 +405,7 @@ class MainAgentSession:
                 model_name=metadata.graph_config.model_name,
                 workflow_type="main_agent",
                 title=SessionStore.generate_title(message),
+                log_dir=metadata.graph_config.artifact_directory,
                 status="new",
                 session_metadata=metadata,
             )

@@ -24,6 +24,7 @@ import numpy as np
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
 from chemgraph.schemas.calculators.mace_calc import MaceCalc
+from chemgraph.utils.artifacts import artifact_directory
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def _ensure_ase_core_file_log() -> None:
     """
     if any(isinstance(h, logging.FileHandler) for h in logger.handlers):
         return
-    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR", os.path.join(os.getcwd(), "cg_logs"))
+    log_dir = artifact_directory() or os.path.join(os.getcwd(), "cg_logs")
     os.makedirs(log_dir, exist_ok=True)
     fh = logging.FileHandler(os.path.join(log_dir, "ase_core.log"))
     fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
@@ -65,7 +66,7 @@ def _resolve_path(path: str) -> str:
     str
         Resolved path.
     """
-    log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
+    log_dir = artifact_directory()
     if log_dir and not os.path.isabs(path):
         os.makedirs(log_dir, exist_ok=True)
         return os.path.join(log_dir, path)

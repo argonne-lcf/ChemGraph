@@ -54,6 +54,22 @@ class _CLIWorkspaceBackend(LocalShellBackend):
             "environment_policy": list(DEEPAGENT_ENV_ALLOWLIST),
         }
 
+    def with_artifact_directory(self, directory):
+        """Copy a supported backend so sessions never share mutable shell state."""
+        from copy import copy
+
+        backend = copy(self)
+        backend._env = {**self._env, "CHEMGRAPH_LOG_DIR": directory}
+        backend._cli_environment = dict(backend._env)
+        return backend
+
+
+def bind_artifact_directory(backend, directory):
+    """Bind reproducible CLI backends without modifying caller-owned environments."""
+    if cli_backend_descriptor(backend) is not None:
+        return backend.with_artifact_directory(directory)
+    return backend
+
 
 def create_cli_workspace_backend(workspace):
     """Construct the CLI policy after the caller has handled host-access approval."""

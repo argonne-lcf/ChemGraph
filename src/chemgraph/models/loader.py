@@ -13,10 +13,12 @@ per-model quirks. Protocol builders own the sole client-construction sites.
 from __future__ import annotations
 
 from typing import Optional
+from dataclasses import replace
 
 from chemgraph.models.endpoints import ModelRequest, PreparedModel
 from chemgraph.models.endpoints.registry import select_endpoint
 from chemgraph.models.settings import LLMSettings
+from chemgraph.models.endpoints.identity import describe_model_endpoint, ModelEndpointDescriptor
 
 
 def _build_request(
@@ -72,6 +74,7 @@ def load_chat_model_prepared(
     reasoning_effort: Optional[str] = None,
     *,
     settings: LLMSettings | None = None,
+    endpoint: ModelEndpointDescriptor | None = None,
 ) -> tuple["object", PreparedModel]:
     """Load a chat model and return it alongside its resolved metadata.
 
@@ -80,6 +83,11 @@ def load_chat_model_prepared(
     capability without re-deriving provider facts. ``load_chat_model`` is the
     thin wrapper that returns only the client.
     """
+    if endpoint is not None:
+        if endpoint.caller_owned:
+            raise ValueError("This endpoint requires caller-provided Python reconstruction.")
+        model_name = endpoint.requested_model
+        base_url = endpoint.base_url if endpoint.configured_base_url else None
     request = _build_request(
         model_name,
         temperature,
@@ -90,8 +98,22 @@ def load_chat_model_prepared(
         settings,
     )
     spec = _select_endpoint(request)
+    if endpoint is not None and (spec.name, spec.protocol) != (endpoint.endpoint_name, endpoint.protocol):
+        raise ValueError("The saved model endpoint is incompatible with the current endpoint registry.")
     prepared = spec.prepare_request(request)
+    if endpoint is not None:
+        effective = prepared.client_kwargs.get("model", prepared.client_kwargs.get("model_name", request.model))
+        if effective != endpoint.effective_model:
+            raise ValueError("The saved model endpoint resolves to a different model.")
+        if endpoint.base_url is not None:
+            prepared = replace(prepared, client_kwargs={**prepared.client_kwargs, "base_url": endpoint.base_url})
     client = spec.protocol_build(prepared.client_kwargs)
+    descriptor = describe_model_endpoint(prepared, client, request.model, request.base_url)
+    if endpoint is not None:
+        descriptor = descriptor.model_copy(update={"configured_base_url": endpoint.configured_base_url})
+        if descriptor != endpoint:
+            raise ValueError("The constructed model does not match the saved endpoint.")
+    prepared = replace(prepared, endpoint_descriptor=descriptor)
     return client, prepared
 
 

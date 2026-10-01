@@ -79,6 +79,7 @@ class PreparedModel:
     client_kwargs: dict[str, Any]
     reasoning_effort: str | None = None
     supports_structured_output: bool = True
+    endpoint_descriptor: Any = None
 
 
 @dataclass(frozen=True)
