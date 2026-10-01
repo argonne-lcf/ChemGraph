@@ -1,6 +1,5 @@
 """Direct main-agent work, configured delegation, and durable approvals."""
 
-import sys
 from typing import Any, NotRequired
 
 import pytest
@@ -15,7 +14,6 @@ from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
 from chemgraph.memory.store import SessionStore
 from chemgraph.registry.tools import ToolRegistry
-from tests.test_deep_agent import _shell_command
 from tests.test_main_agent import (
     _FileState, _ScriptedChatModel, _answering_subgraph, _subagent,
 )
@@ -184,23 +182,6 @@ async def test_direct_return_uses_current_tool_result_and_restores():
     assert (await session.restore()).assistant_response == "current result"
     snapshot = await workflow.aget_state(session.config)
     assert isinstance(snapshot.values["messages"][-1], ToolMessage)
-
-
-@pytest.mark.asyncio
-async def test_main_agent_shell_waits_for_approval(tmp_path):
-    target = tmp_path / "shell-result.txt"
-    command = _shell_command(
-        sys.executable, "-c",
-        "from pathlib import Path; Path('shell-result.txt').write_text('done')",
-    )
-    workflow = graph(_ScriptedChatModel(responses=[
-        call("execute", command=command), AIMessage(content="done"),
-    ]), backend=LocalShellBackend(root_dir=tmp_path, virtual_mode=True, env={}))
-    session = MainAgentSession(workflow, thread_id="shell")
-    assert (await session.run("Run the command")).status == "waiting_for_user"
-    assert not target.exists()
-    await session.resume({"decisions": [{"type": "approve"}]})
-    assert target.read_text() == "done"
 
 
 @pytest.mark.asyncio

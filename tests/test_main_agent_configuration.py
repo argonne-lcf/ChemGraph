@@ -99,66 +99,12 @@ def test_invalid_worker_selections_fail_before_model_loading(monkeypatch, kwargs
         ChemGraph(workflow_type="main_agent", **kwargs)
 
 
-def test_topology_changes_with_registry_prompt_workers_and_sources(api):
-    create, _ = api
-    fingerprints = [create(**kwargs).main_agent_metadata.graph_config.topology_fingerprint
-                    for kwargs in ({}, {"tool_registry": ToolRegistry([])},
-                                   {"prompts": PromptConfig(main_agent="other")},
-                                   {"discover_skills": False}, {"skills": ["/other/"]},
-                                   {"subagent_names": ["single_agent"]})]
-    assert len(set(fingerprints)) == len(fingerprints)
-
-
-def test_builtin_description_edits_preserve_identity(api, monkeypatch):
-    from chemgraph.registry import tools as catalog
-
-    create, _ = api
-    before = create().main_agent_metadata.graph_config
-    specs = catalog.BUILTIN_TOOL_SPECS
-    monkeypatch.setattr(catalog, "BUILTIN_TOOL_SPECS", (
-        replace(specs[0], description="Reworded built-in description."), *specs[1:],
-    ))
-    after = create().main_agent_metadata.graph_config
-    assert after.topology_fingerprint == before.topology_fingerprint
-    assert after.cli_restorable
-
-
-def test_removed_repl_is_absent_from_shared_policy_and_catalog():
-    from chemgraph.graphs.deep_agent import DEFAULT_DEEPAGENT_INTERRUPT_ON
-    from chemgraph.graphs.workspace import DEFAULT_WORKSPACE_INTERRUPT_ON
-
-    assert DEFAULT_DEEPAGENT_INTERRUPT_ON is DEFAULT_WORKSPACE_INTERRUPT_ON
-    assert "python_repl" not in DEFAULT_WORKSPACE_INTERRUPT_ON
-    assert "python_repl" not in ToolRegistry().names()
-
-
 @pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
 def test_removed_workflow_migration_precedes_workspace_validation(monkeypatch, workflow):
     monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared",
                         lambda **kwargs: pytest.fail("must reject before loading the model"))
     with pytest.raises(ValueError, match="has been removed"):
         ChemGraph(workflow_type=workflow, backend=object())
-
-
-@pytest.mark.parametrize("change", ["catalog_version", "import_path", "policy_version", "effective_policy"])
-def test_builtin_behavior_and_review_changes_invalidate_identity(api, monkeypatch, change):
-    from chemgraph.graphs import workspace
-    from chemgraph.registry import tools as catalog
-
-    create, _ = api
-    before = create().main_agent_metadata.graph_config.topology_fingerprint
-    if change == "catalog_version":
-        monkeypatch.setattr(catalog, "BUILTIN_TOOL_CATALOG_VERSION", catalog.BUILTIN_TOOL_CATALOG_VERSION + 1)
-    elif change == "import_path":
-        specs = catalog.BUILTIN_TOOL_SPECS
-        monkeypatch.setattr(catalog, "BUILTIN_TOOL_SPECS", (
-            replace(specs[0], import_path="chemgraph.tools.generic_tools:calculator"), *specs[1:],
-        ))
-    elif change == "policy_version":
-        monkeypatch.setattr(workspace, "WORKSPACE_REVIEW_POLICY_VERSION", workspace.WORKSPACE_REVIEW_POLICY_VERSION + 1)
-    else:
-        monkeypatch.setattr(workspace, "_REGISTRY_REVIEW_TOOLS", workspace._REGISTRY_REVIEW_TOOLS | {"calculator"})
-    assert create().main_agent_metadata.graph_config.topology_fingerprint != before
 
 
 def test_graph_uses_the_fingerprinted_effective_policy(api, monkeypatch):

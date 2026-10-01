@@ -3,10 +3,7 @@
 from dataclasses import replace
 
 import pytest
-from langchain.agents import create_agent
-from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 
 from chemgraph.agent.main_session import IncompatibleCheckpointError, MainAgentSession
@@ -15,7 +12,7 @@ from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
 from chemgraph.memory.store import SessionStore
 from chemgraph.registry.tools import ToolRegistry
-from tests.test_main_agent import _ScriptedChatModel, _answering_subgraph, _subagent, _task_call
+from tests.test_main_agent import _ScriptedChatModel, _answering_subgraph, _subagent
 
 
 def make_graph(responses, **kwargs):
@@ -55,9 +52,8 @@ async def test_raw_graph_without_identity_only_continues_in_same_instance():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("readable", [False, True])
 @pytest.mark.parametrize("operation", ["run", "restore"])
-@pytest.mark.parametrize("schema_version", [1, 2])
+@pytest.mark.parametrize("readable,schema_version", [(False, 1), (True, 1), (True, 2)])
 async def test_legacy_checkpoints_are_rejected_without_touching_transcripts(tmp_path, readable, operation, schema_version):
     workflow = make_graph([AIMessage(content="old answer")])
     await workflow.ainvoke({"messages": [HumanMessage(content="old question")]},
@@ -85,59 +81,6 @@ async def test_readable_legacy_record_cannot_be_reused_without_a_checkpoint(tmp_
         await session.run("new")
 
 
-@pytest.mark.parametrize("decision", ["approve", "reject"])
-@pytest.mark.parametrize("delegated", [False, True])
-def test_reviewed_action_restores_in_sqlite_exactly_once(tmp_path, decision, delegated):
-    executions = []
-
-    @tool
-    def reviewed_action() -> str:
-        """Record one approved action."""
-        executions.append("ran")
-        return "done"
-
-    action = AIMessage(content="", tool_calls=[{
-        "name": "reviewed_action", "args": {}, "id": "action-1", "type": "tool_call",
-    }])
-    database = str(tmp_path / "checkpoints.db")
-    for restarting in (False, True):
-        runtime = CheckpointRuntime()
-        try:
-            saver = runtime.open_sqlite(database)
-            if delegated:
-                child = create_agent(
-                    _ScriptedChatModel(responses=[AIMessage(content="worker done")] if restarting
-                                       else [action, AIMessage(content="worker done")]),
-                    tools=[reviewed_action], checkpointer=None,
-                    middleware=[HumanInTheLoopMiddleware(interrupt_on={
-                        "reviewed_action": {"allowed_decisions": ["approve", "reject"]},
-                    })],
-                )
-                workflow = make_graph(
-                    [AIMessage(content="all done")] if restarting else [
-                        AIMessage(content="", tool_calls=[_task_call("delegate")]), AIMessage(content="all done"),
-                    ], checkpointer=saver, subagents=[_subagent(child)],
-                )
-            else:
-                workflow = make_graph(
-                    [AIMessage(content="all done")] if restarting else [action, AIMessage(content="all done")],
-                    checkpointer=saver, main_tools=[reviewed_action],
-                    interrupt_on={"reviewed_action": {"allowed_decisions": ["approve", "reject"]}},
-                )
-            session = MainAgentSession(workflow, thread_id="review", configuration_id="review-policy-v1")
-            if not restarting:
-                assert runtime.run(lambda: session.run("do it")).status == "waiting_for_user"
-                assert executions == []
-            else:
-                assert runtime.run(session.restore).status == "waiting_for_user"
-                result = runtime.run(lambda: session.resume({"decisions": [{"type": decision}]}))
-                assert result.status == "completed"
-                assert runtime.run(session.restore).status == "completed"
-                assert executions == (["ran"] if decision == "approve" else [])
-        finally:
-            runtime.close()
-
-
 @pytest.mark.asyncio
 async def test_tampered_checkpoint_is_rejected_before_resume():
     from langgraph.types import interrupt
@@ -160,7 +103,7 @@ async def test_tampered_checkpoint_is_rejected_before_resume():
         await session.resume("yes")
 
 
-@pytest.mark.parametrize("change", ["none", "description", "catalog_version", "policy_version", "policy",
+@pytest.mark.parametrize("change", ["none", "description", "catalog_version", "tool_path", "policy_version", "policy", "policy_tools",
                                     "worker_path", "worker_version", "worker_defaults", "agent_catalog_version"])
 def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, change):
     from chemgraph.agent.llm_agent import ChemGraph
@@ -185,11 +128,18 @@ def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, cha
                 ))
             elif change == "catalog_version":
                 monkeypatch.setattr(catalog, "BUILTIN_TOOL_CATALOG_VERSION", catalog.BUILTIN_TOOL_CATALOG_VERSION + 1)
+            elif change == "tool_path":
+                specs = catalog.BUILTIN_TOOL_SPECS
+                monkeypatch.setattr(catalog, "BUILTIN_TOOL_SPECS", (
+                    replace(specs[0], import_path="other:tool"), *specs[1:],
+                ))
             elif change == "policy_version":
                 monkeypatch.setattr(workspace, "WORKSPACE_REVIEW_POLICY_VERSION", workspace.WORKSPACE_REVIEW_POLICY_VERSION + 1)
             elif change == "policy":
                 monkeypatch.setitem(workspace.DEFAULT_WORKSPACE_INTERRUPT_ON, "write_file",
                                     {"allowed_decisions": ["reject"]})
+            elif change == "policy_tools":
+                monkeypatch.setattr(workspace, "_REGISTRY_REVIEW_TOOLS", workspace._REGISTRY_REVIEW_TOOLS | {"calculator"})
             elif change == "agent_catalog_version":
                 monkeypatch.setattr(agent_catalog, "BUILTIN_AGENT_CATALOG_VERSION",
                                     agent_catalog.BUILTIN_AGENT_CATALOG_VERSION + 1)

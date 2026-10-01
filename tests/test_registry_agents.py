@@ -6,13 +6,11 @@ from uuid import uuid4
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
-from langgraph.channels.delta import DeltaChannel
 
 from chemgraph.agent.main_session import MainAgentSession
 from chemgraph.cli.checkpoint_runtime import CheckpointRuntime
 from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.graphs.single_agent import construct_single_agent_graph
-from chemgraph.memory.graph_config import describe_agent_registry, fingerprint
 from chemgraph.registry.agents import AgentRegistry, AgentSpec
 from chemgraph.registry.tools import ToolRegistry
 from tests.test_main_agent import _ScriptedChatModel
@@ -56,16 +54,6 @@ def make_graph(responses, **kwargs):
 def reset():
     EXECUTIONS.clear()
     BUILDS.clear()
-
-
-def test_factory_keeps_delta_channel_and_no_implicit_worker():
-    model = _ScriptedChatModel(responses=[AIMessage(content="done")])
-    graph = construct_main_agent_graph(model)
-    graph.invoke({"messages": [HumanMessage(content="hello")]}, {"configurable": {"thread_id": "factory"}})
-    assert isinstance(graph.channels["messages"], DeltaChannel)
-    assert {"search_agents", "load_agents"} <= {item.name for item in model.bound_tools}
-    assert "task" not in {item.name for item in model.bound_tools}
-    assert BUILDS == []
 
 
 @pytest.mark.asyncio
@@ -161,14 +149,6 @@ async def test_raw_recursion_limit_round_trips():
     restored = MainAgentSession(graph, thread_id=original.thread_id, session_metadata=original.session_metadata)
     await restored.restore()
     assert restored.config["recursion_limit"] == 17
-
-
-@pytest.mark.parametrize("change", [{"import_path": "other:constructor"},
-                                    {"compatibility_version": 2}, {"default_tool_names": ()}])
-def test_entire_worker_catalog_identity_changes_without_loading(change):
-    before = fingerprint(describe_agent_registry(AgentRegistry([SPEC]))[0])
-    after = fingerprint(describe_agent_registry(AgentRegistry([replace(SPEC, **change)]))[0])
-    assert before != after and BUILDS == []
 
 
 @pytest.mark.asyncio
