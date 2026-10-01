@@ -61,6 +61,12 @@ nwchem.nwi
 nwchem.nwo
 vib*.traj
 
+# Aurora QE example run outputs (drivers/PBS/README are tracked; run dirs are not)
+examples/aurora_qe_longrun/*_run/
+examples/aurora_qe_longrun/agent_e2e_*/
+examples/aurora_qe_longrun/agent_mol_*/
+examples/aurora_qe_longrun/*.o[0-9]*
+
 # Kubernetes secrets (keep secrets.yaml.template, ignore actual secrets)
 k8s/secrets.yaml
 
