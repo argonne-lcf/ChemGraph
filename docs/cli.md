@@ -111,8 +111,9 @@ chemgraph run --interactive --workflow main_agent --workspace . \
   --skill ../shared-skills --subagent single_agent --subagent deep_agent
 ```
 
-Omit `--subagent` to keep the default `chemgraph` worker. A nonempty selection
-replaces it; DeepAgent is never added automatically. `--tool NAME` restricts
+Omit `--subagent` to expose the built-in specialist catalog with no active worker.
+A selection restricts discovery. The agent loads specialists on demand before
+delegation; loading lasts for one turn, including pending approvals and restart. `--tool NAME` restricts
 the lazy catalog, and `--no-discover-skills` disables personal/project discovery.
 The corresponding TOML keys are `workspace`, `skills`, `subagents`, `tools`, and
 `discover_skills`; CLI lists replace TOML lists.
@@ -149,7 +150,7 @@ shows the resolved workspace and explains that shell commands can access the
 host beyond that directory. Declining leaves the capability disabled. Headless
 runs still require an explicit workspace and the approval-skip flag.
 
-Or add the same graph to the supervisor as the `deepagent` subagent:
+Or add the same graph to the supervisor as the legacy `deep_agent` worker:
 
 ```bash
 chemgraph run --interactive --workflow main_agent --deepagent \

@@ -193,7 +193,7 @@ def test_registry_reviews_preserve_explicit_policies(mode, name):
     options = {}
     if mode == "attached":
         options["tools"] = [operation]
-        # An unrelated registry must not add reviews to the attached tool.
+        # The mandatory policy also applies to explicitly attached built-ins.
         registry.register(ToolRegistry().get_spec("calculator"))
     else:
         registry.register(operation)
@@ -206,10 +206,14 @@ def test_registry_reviews_preserve_explicit_policies(mode, name):
         CatalogModel(responses=[*responses, call(name), AIMessage(content="Done")]),
         tool_registry=registry, discover_skills=False, **options,
     )
+    config = {"configurable": {"thread_id": mode}}
     state = graph.invoke(
         {"messages": [HumanMessage(content="Run it.")]},
-        {"configurable": {"thread_id": mode}},
+        config,
     )
+    if mode == "attached":
+        assert "__interrupt__" in state and executed == []
+        state = graph.invoke(Command(resume={"decisions": [{"type": "approve"}]}), config)
     assert "__interrupt__" not in state and executed == [name]
 
 

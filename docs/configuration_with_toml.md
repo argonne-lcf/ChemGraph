@@ -128,8 +128,10 @@ Python `skills` instead contains backend-relative sources. No workspace means
 checkpoint files and no shell, while bundled skills and host registry tools
 remain available. Shell access is not confined to the workspace.
 
-Omitting `subagents` keeps `chemgraph`; a nonempty list replaces it. An empty
-worker list is invalid. `tools = []` disables discovery. Inactive main-agent
+Omitting `subagents` exposes the non-test built-in worker catalog with no active
+workers. A list restricts discovery; `subagents = []` disables it. The agent loads
+workers on demand for the current turn, retaining the selection during approval
+pauses and restart and clearing it at completion. `tools = []` disables discovery. Inactive main-agent
 settings are retained for interactive workflow switching and ignored for other
 headless workflows. Explicit incompatible CLI flags are rejected.
 
@@ -142,7 +144,7 @@ Caller-owned Python configurations require Python reconstruction and, for
 opaque components, their original non-secret `configuration_id`.
 
 `main_agent` still requires interactive CLI mode. `enable_deepagent` controls
-only its optional `deepagent` subagent. To call the graph directly, select
+only its legacy `deep_agent` worker. To call the graph directly, select
 `workflow = "deep_agent"`; `deepagent_workspace` applies to either entry point.
 Deep Agent is a development-only capability with broad local access, so leave
 it disabled unless you understand the security boundary.

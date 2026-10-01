@@ -30,24 +30,25 @@ def graph(model, **kwargs):
     return construct_main_agent_graph(model, **kwargs)
 
 
-def test_main_agent_owns_runtime_and_default_workers(monkeypatch):
-    def forbidden(*args, **kwargs):
-        pytest.fail("The main agent must not be built through the DeepAgent factory")
+def test_main_agent_uses_shared_factory_and_lazy_workers(monkeypatch):
+    from deepagents import create_deep_agent
+    from langgraph.channels.delta import DeltaChannel
 
-    monkeypatch.setattr("chemgraph.graphs.deep_agent.create_deep_agent", forbidden)
-    monkeypatch.setattr("chemgraph.graphs.main_agent.construct_deep_agent_graph", forbidden)
+    calls = []
+    def factory(**kwargs):
+        calls.append(kwargs)
+        return create_deep_agent(**kwargs)
+    monkeypatch.setattr("chemgraph.graphs.deep_agent.create_deep_agent", factory)
     model = _ScriptedChatModel(responses=[AIMessage(content="done")])
     workflow = construct_main_agent_graph(model)
-    workflow.invoke(
-        {"messages": [HumanMessage(content="hello")]},
-        {"configurable": {"thread_id": "own-runtime"}},
-    )
+    workflow.invoke({"messages": [HumanMessage(content="hello")]},
+                    {"configurable": {"thread_id": "own-runtime"}})
     tools = {item.name: item for item in model.bound_tools}
-    assert {"write_file", "edit_file", "read_file", "search_tools", "load_tools"} <= tools.keys()
-    assert "execute" not in tools
-    assert "chemgraph" in tools["task"].description
-    assert "deepagent" not in tools["task"].description
-    assert "general-purpose" not in tools["task"].description
+    assert {"write_file", "edit_file", "read_file", "search_tools", "load_tools",
+            "search_agents", "load_agents"} <= tools.keys()
+    assert "execute" not in tools and "task" not in tools
+    assert len(calls) == 1 and calls[0]["name"] == "main_agent"
+    assert isinstance(workflow.channels["messages"], DeltaChannel)
     state = workflow.get_state({"configurable": {"thread_id": "own-runtime"}}).values
     assert any(skill["name"] == "chemgraph" for skill in state["skills_metadata"])
 
@@ -128,7 +129,7 @@ def test_registry_approval_survives_restart(tmp_path):
     checkpoint_db = tmp_path / "checkpoints.db"
     store = SessionStore(str(tmp_path / "sessions.db"))
     metadata = MainAgentSessionMetadata(
-        graph_config=MainAgentGraphConfig(model_name="scripted", graph_schema_version=2,
+        graph_config=MainAgentGraphConfig(model_name="scripted", graph_schema_version=3,
                                             configuration_id="ase-stub-v1", topology_fingerprint="ase-stub-v1"),
         checkpoint_backend="AsyncSqliteSaver", checkpoint_db=str(checkpoint_db),
     )
@@ -207,7 +208,7 @@ async def test_summarization_keeps_readable_history_and_private_state(monkeypatc
     from deepagents.middleware.summarization import SummarizationMiddleware
 
     summaries = _ScriptedChatModel(responses=[AIMessage(content="Summary of earlier requests.")] * 10)
-    monkeypatch.setattr("chemgraph.graphs.main_agent.create_summarization_middleware",
+    monkeypatch.setattr("deepagents.graph.create_summarization_middleware",
                         lambda model, backend: SummarizationMiddleware(
                             summaries, backend=backend, trigger=("messages", 4), keep=("messages", 2),
                         ))

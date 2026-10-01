@@ -2,8 +2,10 @@
 
 Use the installed CLI's `chemgraph run --help` for available options. Workflow
 `deep_agent` is standalone; `main_agent` directly uses skills, workspace files,
-shell commands, and local tools, with optional delegation. It keeps a chemistry
-worker by default. Repeat `--subagent NAME` to replace that worker explicitly.
+shell commands, and local tools, with optional delegation. Built-in specialists
+are discoverable metadata with no active workers. Repeat `--subagent NAME` to
+restrict the catalog. Use `search_agents` and `load_agents` before `task`; loading
+lasts for the current turn, including pauses and restart.
 
 ```sh
 chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
@@ -24,7 +26,7 @@ In Python, use `ChemGraph` from `chemgraph.agent.llm_agent`, supply the intended
 `workflow_type`, and call `await agent.run(query)` for ordinary workflows. Drive
 `main_agent` using `MainAgentSession(agent.workflow, session_metadata=agent.main_agent_metadata)`
 and its `run`, `restore`, and `resume` methods. Supply `backend`, `skill_dirs`,
-`skills`, `tool_registry`, `subagent_names`, and `subagent_options` for the main
+`skills`, `tool_registry`, `agent_registry`, `subagent_names`, and `subagent_options` for the main
 agent. Caller-owned configurations need a matching non-secret `configuration_id`
 for durable reconstruction; change it when their behavior changes. For a local Deep Agent
 workspace, supply a `deepagents.backends.LocalShellBackend` as

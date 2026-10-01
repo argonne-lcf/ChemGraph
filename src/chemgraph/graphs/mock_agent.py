@@ -64,6 +64,7 @@ def construct_mock_agent_graph(
     system_prompt: str = single_agent_prompt,
     tools: list = None,
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct a geometry optimization graph.
 

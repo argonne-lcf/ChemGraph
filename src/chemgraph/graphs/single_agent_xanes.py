@@ -3,7 +3,7 @@ import os
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import ToolNode
+from chemgraph.graphs.tool_review import reviewed_tool_node
 from chemgraph.tools.cheminformatics_tools import (
     molecule_name_to_smiles,
     smiles_to_coordinate_file,
@@ -172,6 +172,7 @@ def construct_single_agent_xanes_graph(
     formatter_prompt: str = xanes_formatter_prompt,
     tools: list = None,
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct a single-agent graph for XANES/FDMNES workflows.
 
@@ -221,7 +222,7 @@ def construct_single_agent_xanes_graph(
                 fetch_xanes_data,
                 plot_xanes_data,
             ]
-        tool_node = ToolNode(tools=tools)
+        tool_node = reviewed_tool_node(tools, interrupt_on, state_schema=State)
         graph_builder = StateGraph(State)
 
         if not structured_output:

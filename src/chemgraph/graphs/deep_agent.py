@@ -35,6 +35,10 @@ filesystem. Copy any required template/helper into that filesystem before
 using it in a command. Remote MCP servers and compute workers may have yet
 another filesystem; establish input visibility before submitting work.
 
+Use direct tools for focused work. When agent discovery is available, use
+search_agents and load_agents before delegating substantial specialist work
+through task. Give workers self-contained inputs and constraints and review
+actual results. Do not run workspace mutations in parallel.
 Return a self-contained report of results, paths, job IDs, and unresolved work.
 """
 
@@ -57,6 +61,12 @@ def construct_deep_agent_graph(
     recursion_limit: int = 200,
     checkpointer: Any = _DEFAULT_CHECKPOINTER,
     name: str = "deepagent",
+    subagents: Sequence[Any] | None = None,
+    agent_registry: Any | None = None,
+    agent_options: dict[str, dict[str, Any]] | None = None,
+    initial_agents: Sequence[str] = (),
+    subagent_recorder: Any | None = None,
+    restrict_delegation: bool = False,
 ):
     """Construct a standalone or parent-checkpointed workspace Deep Agent.
 
@@ -87,8 +97,22 @@ def construct_deep_agent_graph(
         discover_skills=discover_skills, user_skills_dir=user_skills_dir,
         skill_dirs=skill_dirs, interrupt_on=interrupt_on,
     )
+    registered = list(subagents or [])
+    if agent_registry is not None or restrict_delegation:
+        from chemgraph.registry.agent_middleware import RegistryAgentsMiddleware
+        from chemgraph.registry.agents import AgentRegistry
+
+        loader = RegistryAgentsMiddleware(
+            agent_registry if agent_registry is not None else AgentRegistry([]),
+            llm=llm, options=agent_options, interrupt_on=effective_interrupt_on,
+            attached_workers=registered, initial_agents=initial_agents,
+            recorder=subagent_recorder, tool_middleware=middleware,
+        )
+        registered.extend(loader.proxies())
+        middleware.append(loader)
     workflow = create_deep_agent(
         model=llm,
+        subagents=registered,
         tools=list(tools or []),
         skills=sources,
         middleware=middleware,

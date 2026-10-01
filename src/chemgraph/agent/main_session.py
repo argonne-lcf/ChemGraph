@@ -94,6 +94,7 @@ class MainAgentSession:
         else:
             session_metadata = MainAgentSessionMetadata(graph_config=MainAgentGraphConfig(
                 model_name="unknown", graph_schema_version=GRAPH_SCHEMA_VERSION,
+                recursion_limit=recursion_limit,
                 configuration_id=configuration_id, requires_configuration_id=True,
                 topology_fingerprint=(fingerprint({
                     "schema": GRAPH_SCHEMA_VERSION, "configuration_id": configuration_id,

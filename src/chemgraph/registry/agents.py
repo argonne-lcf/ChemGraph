@@ -33,6 +33,7 @@ class AgentSpec:
     required_arguments: tuple[str, ...] = ()
     tags: frozenset[str] = field(default_factory=frozenset)
     test_only: bool = False
+    compatibility_version: int = 1
 
 
 _CORE_TOOLS = (
@@ -42,6 +43,9 @@ _CORE_TOOLS = (
     "extract_output_json",
     "calculator",
 )
+
+
+BUILTIN_AGENT_CATALOG_VERSION = 1
 
 
 BUILTIN_AGENT_SPECS: tuple[AgentSpec, ...] = (

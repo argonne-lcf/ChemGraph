@@ -330,8 +330,8 @@ def initialize_agent(
             raise ValueError("Workspace must be a non-empty host directory path.")
         if subagent_names is not None:
             from chemgraph.registry.agents import AgentRegistry
-            if not isinstance(subagent_names, Sequence) or isinstance(subagent_names, (str, bytes)) or not subagent_names:
-                raise ValueError("subagents must be a non-empty list of worker names.")
+            if not isinstance(subagent_names, Sequence) or isinstance(subagent_names, (str, bytes)):
+                raise ValueError("subagents must be a list of worker names.")
             registry = AgentRegistry()
             if not all(isinstance(name, str) and name.strip() for name in subagent_names):
                 raise ValueError("subagents must contain non-empty strings.")
@@ -340,10 +340,6 @@ def initialize_agent(
                 raise ValueError("Duplicate subagent names or aliases.")
             if enable_deepagent and "deep_agent" in subagent_names:
                 raise ValueError("deep_agent is already selected; omit --deepagent.")
-            for name in subagent_names:
-                status = registry.availability(name)
-                if not status.available:
-                    raise ValueError(f"Worker {name!r} is unavailable: {status.issues}")
         skills = normalize_skill_sources(skills)
         skill_dirs = resolve_skill_dirs(skill_dirs)
         if not isinstance(discover_skills, bool):
@@ -1323,7 +1319,9 @@ def _main_agent_options(config):
         "discover_skills": config.discover_skills,
         "user_skills_dir": config.user_skills_dir,
         "tool_registry": registry,
-        "subagent_names": config.configured_subagent_names,
+        "subagent_names": (tuple(name for name in config.configured_subagent_names or ()
+                                 if name != "deep_agent") if config.enable_deepagent
+                           else config.configured_subagent_names),
         "main_agent_prompt": config.main_agent_prompt,
         "configuration_id": config.configuration_id,
     }
@@ -1333,9 +1331,7 @@ def _print_main_agent_restore_configuration(thread_id, config):
     """Show the saved settings before requesting access to their workspace."""
     console.print(f"[blue]Using saved main-agent configuration for session {escape(thread_id)}.[/blue]")
     console.print("[dim]Saved graph settings take precedence over current CLI flags and TOML settings.[/dim]")
-    workers = config.configured_subagent_names or ("chemgraph",)
-    if config.enable_deepagent:
-        workers = (*workers, "deepagent")
+    workers = config.configured_subagent_names or ()
     table = Table.grid(padding=(0, 2))
     table.add_column(no_wrap=True)
     table.add_column(overflow="fold")
@@ -1343,7 +1339,7 @@ def _print_main_agent_restore_configuration(thread_id, config):
         ("Workspace", config.workspace or "checkpoint files (no direct shell)"),
         ("Skills", ", ".join((*config.skills, *config.skill_dirs)) or "bundled skills"),
         ("Skill discovery", "enabled" if config.discover_skills else "disabled"),
-        ("Workers", ", ".join(workers)),
+        ("Worker catalog", ", ".join(workers) or "disabled"),
         ("Tool catalog", ", ".join(config.registry_tool_names) or "disabled"),
     ):
         table.add_row(label, escape(value))

@@ -104,6 +104,8 @@ class RegistryToolsMiddleware(AgentMiddleware):
                 "execute",
                 "task",
                 "write_todos",
+                "search_agents",
+                "load_agents",
             }
         )
 

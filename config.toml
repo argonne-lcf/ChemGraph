@@ -11,7 +11,7 @@ human_supervised = false
 # workspace = "."  # Omit for checkpoint files and no shell.
 # skills = ["../shared-skills"]  # Host paths, relative to invocation directory.
 # discover_skills = true
-# subagents = ["single_agent", "deep_agent"]  # Replaces default chemgraph worker.
+# subagents = ["single_agent", "deep_agent"]  # Restricts the discoverable worker catalog; [] disables it.
 # Development-only: add a workspace Deep Agent to interactive main_agent.
 # To call it directly, set workflow = "deep_agent" instead.
 enable_deepagent = false

@@ -57,14 +57,15 @@ async def test_raw_graph_without_identity_only_continues_in_same_instance():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("readable", [False, True])
 @pytest.mark.parametrize("operation", ["run", "restore"])
-async def test_legacy_checkpoints_are_rejected_without_touching_transcripts(tmp_path, readable, operation):
+@pytest.mark.parametrize("schema_version", [1, 2])
+async def test_legacy_checkpoints_are_rejected_without_touching_transcripts(tmp_path, readable, operation, schema_version):
     workflow = make_graph([AIMessage(content="old answer")])
     await workflow.ainvoke({"messages": [HumanMessage(content="old question")]},
                            {"configurable": {"thread_id": "legacy"}})
     store = SessionStore(str(tmp_path / "sessions.db")) if readable else None
     if store:
         store.create_session("legacy", "old", "main_agent", session_metadata=MainAgentSessionMetadata(
-            graph_config=MainAgentGraphConfig(model_name="old"),
+            graph_config=MainAgentGraphConfig(model_name="old", graph_schema_version=schema_version),
         ))
     session = MainAgentSession(workflow, thread_id="legacy", session_store=store,
                                configuration_id="new")
@@ -72,7 +73,7 @@ async def test_legacy_checkpoints_are_rejected_without_touching_transcripts(tmp_
         await (session.run("new") if operation == "run" else session.restore())
     assert len((await workflow.aget_state(session.config)).values["messages"]) == 2
     if store:
-        assert store.get_session("legacy").graph_config.graph_schema_version == 1
+        assert store.get_session("legacy").graph_config.graph_schema_version == schema_version
 
 
 @pytest.mark.asyncio
@@ -159,12 +160,14 @@ async def test_tampered_checkpoint_is_rejected_before_resume():
         await session.resume("yes")
 
 
-@pytest.mark.parametrize("change", ["none", "description", "catalog_version", "policy_version", "policy"])
+@pytest.mark.parametrize("change", ["none", "description", "catalog_version", "policy_version", "policy",
+                                    "worker_path", "worker_version", "worker_defaults", "agent_catalog_version"])
 def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, change):
     from chemgraph.agent.llm_agent import ChemGraph
     from chemgraph.graphs import workspace
     from chemgraph.models.endpoints import PreparedModel
     from chemgraph.registry import tools as catalog
+    from chemgraph.registry import agents as agent_catalog
 
     action = AIMessage(content="", tool_calls=[{
         "name": "write_file", "args": {"file_path": "/workspace/review.txt", "content": "approved"},
@@ -187,6 +190,19 @@ def test_builtin_compatibility_across_sqlite_restarts(monkeypatch, tmp_path, cha
             elif change == "policy":
                 monkeypatch.setitem(workspace.DEFAULT_WORKSPACE_INTERRUPT_ON, "write_file",
                                     {"allowed_decisions": ["reject"]})
+            elif change == "agent_catalog_version":
+                monkeypatch.setattr(agent_catalog, "BUILTIN_AGENT_CATALOG_VERSION",
+                                    agent_catalog.BUILTIN_AGENT_CATALOG_VERSION + 1)
+            elif change.startswith("worker_"):
+                specs = agent_catalog.BUILTIN_AGENT_SPECS
+                options = {
+                    "worker_path": {"import_path": "other:worker"},
+                    "worker_version": {"compatibility_version": 2},
+                    "worker_defaults": {"default_tool_names": ()},
+                }[change]
+                monkeypatch.setattr(agent_catalog, "BUILTIN_AGENT_SPECS", (
+                    replace(specs[0], **options), *specs[1:],
+                ))
         model = _ScriptedChatModel(responses=[AIMessage(content="done")] if restarting else [action])
         monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", lambda **kwargs: (
             model, PreparedModel(endpoint_name="test", protocol="openai_compatible", client_kwargs={}),

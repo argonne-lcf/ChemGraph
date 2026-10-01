@@ -8,7 +8,7 @@ from deepagents.backends import LocalShellBackend, StateBackend
 from chemgraph.graphs.workspace import cli_backend_descriptor
 
 
-GRAPH_SCHEMA_VERSION = 2
+GRAPH_SCHEMA_VERSION = 3
 NEW_SESSION_GUIDANCE = "Start a new session; the old transcript remains readable."
 
 
@@ -60,6 +60,34 @@ def describe_tool_registry(registry):
                 spec.interactive, spec.executes_code,
             ))
     return described, custom
+
+
+def describe_agent_registry(registry):
+    """Version the entire discoverable catalog without importing worker graphs."""
+    from importlib.metadata import version
+    from chemgraph.registry.agents import AgentRegistry, BUILTIN_AGENT_CATALOG_VERSION
+    from chemgraph.registry.tools import BUILTIN_TOOL_CATALOG_VERSION
+
+    builtins = {spec.name: spec for spec in AgentRegistry().specs()}
+    entries = []
+    custom = False
+    for spec in registry.specs():
+        builtin = builtins.get(spec.name) == spec
+        custom |= not builtin
+        entries.append({
+            "name": spec.name, "import_path": spec.import_path,
+            "compatibility_version": spec.compatibility_version,
+            "default_tools": spec.default_tool_names,
+            "aliases": spec.aliases, "required_arguments": spec.required_arguments,
+            "requirements": [(req.kind, req.value, req.env_var) for req in spec.requirements],
+            **({} if builtin else {"description": spec.description, "tags": sorted(spec.tags)}),
+        })
+    return {
+        "runtime": ("deepagents", version("deepagents")),
+        "catalog_version": BUILTIN_AGENT_CATALOG_VERSION,
+        "tool_catalog_version": BUILTIN_TOOL_CATALOG_VERSION,
+        "workers": entries,
+    }, custom
 
 
 def describe_worker_options(options):

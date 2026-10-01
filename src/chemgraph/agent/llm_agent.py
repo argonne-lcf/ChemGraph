@@ -26,7 +26,7 @@ from chemgraph.memory.schemas import (
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 from chemgraph.memory.graph_config import (
     GRAPH_SCHEMA_VERSION, describe_backend, describe_tool_registry, describe_worker_options,
-    fingerprint, validate_configuration_id,
+    fingerprint, validate_configuration_id, describe_agent_registry,
 )
 from chemgraph.models.loader import load_chat_model_prepared
 from chemgraph.models.supported_models import (
@@ -240,8 +240,11 @@ class ChemGraph:
         Discovery defaults to True. None selects the default local catalog;
         an empty ToolRegistry disables discovery. Local tools run on the host.
     subagent_names : sequence of str, optional
-        Main-agent AgentRegistry workers. A non-empty selection replaces the
-        default chemistry worker. Aliases resolve to canonical task names.
+        Discoverable main-agent workers. None exposes non-test built-ins, a list
+        restricts the catalog, and an empty list disables it. Workers load on
+        demand for one turn. Aliases resolve to canonical task names.
+    agent_registry : AgentRegistry, optional
+        Caller-owned specialist catalog for lazy discovery and construction.
     subagent_options : dict, optional
         Per-worker constructor options keyed by selected name or alias. Registry
         workers inherit the parent checkpointer. Python objects must be supplied
@@ -301,6 +304,7 @@ class ChemGraph:
         skill_dirs: Sequence[str] | None = None,
         discover_skills: bool = True,
         user_skills_dir: str | None = None,
+        agent_registry: Any | None = None,
         subagent_names: Sequence[str] | None = None,
         subagent_options: dict[str, dict[str, Any]] | None = None,
         configuration_id: str | None = None,
@@ -311,7 +315,7 @@ class ChemGraph:
         if workflow_type != "main_agent" and (
             backend is not None or tool_registry is not None or skills is not None
             or skill_dirs is not None or not discover_skills or user_skills_dir is not None
-            or subagent_names is not None or subagent_options is not None
+            or agent_registry is not None or subagent_names is not None or subagent_options is not None
             or configuration_id is not None
         ):
             raise ValueError("Workspace and subagent options require workflow_type='main_agent'.")
@@ -327,26 +331,38 @@ class ChemGraph:
         self.user_skills_dir = resolve_user_skills_dir(backend, discover_skills, user_skills_dir)
         self.subagent_names = None
         self.subagent_options = {}
-        if subagent_names is not None:
+        self.agent_registry = None
+        if workflow_type == "main_agent":
             from chemgraph.registry.agents import AgentRegistry
 
-            if not isinstance(subagent_names, Sequence) or isinstance(subagent_names, (str, bytes)) or not subagent_names:
-                raise ValueError("subagent_names must be a non-empty sequence of names.")
-            registry = AgentRegistry()
-            if not all(isinstance(name, str) and name.strip() for name in subagent_names):
-                raise ValueError("subagent_names must contain non-empty strings.")
-            self.subagent_names = tuple(registry.resolve_name(name) for name in subagent_names)
-            if len(set(self.subagent_names)) != len(self.subagent_names):
-                raise ValueError("Duplicate subagent names or aliases.")
-            if enable_deepagent and "deep_agent" in self.subagent_names:
-                raise ValueError("deep_agent is already selected; omit enable_deepagent.")
+            if agent_registry is not None and not isinstance(agent_registry, AgentRegistry):
+                raise TypeError("agent_registry must be an AgentRegistry.")
+            registry = agent_registry if agent_registry is not None else AgentRegistry(
+                spec for spec in AgentRegistry().specs() if not spec.test_only
+            )
+            if subagent_names is not None:
+                if not isinstance(subagent_names, Sequence) or isinstance(subagent_names, (str, bytes)):
+                    raise ValueError("subagent_names must be a sequence of names.")
+                if not all(isinstance(name, str) and name.strip() for name in subagent_names):
+                    raise ValueError("subagent_names must contain non-empty strings.")
+                self.subagent_names = tuple(registry.resolve_name(name) for name in subagent_names)
+                if len(set(self.subagent_names)) != len(self.subagent_names):
+                    raise ValueError("Duplicate subagent names or aliases.")
+                if enable_deepagent and "deep_agent" in self.subagent_names:
+                    raise ValueError("deep_agent is already selected; omit enable_deepagent.")
+                registry = AgentRegistry(registry.get_spec(name) for name in self.subagent_names)
+            if enable_deepagent and "deep_agent" not in registry.names():
+                registry = AgentRegistry([*registry.specs(), AgentRegistry().get_spec("deep_agent")])
+            self.agent_registry = registry
             for name, options in (subagent_options or {}).items():
                 if not isinstance(name, str) or not isinstance(options, dict):
                     raise TypeError("Each subagent_options entry must map a name to an options dict.")
                 canonical = registry.resolve_name(name)
-                if canonical not in self.subagent_names or canonical in self.subagent_options:
+                if canonical in self.subagent_options or (enable_deepagent and canonical == "deep_agent"):
                     raise ValueError(f"Unexpected or duplicate subagent options: {name!r}.")
                 normalized = dict(options)
+                if normalized.get("checkpointer") is not None:
+                    raise ValueError("Registry workers must inherit the parent checkpointer.")
                 if canonical == "deep_agent":
                     if "skill_dirs" in normalized:
                         normalized["skill_dirs"] = resolve_skill_dirs(normalized["skill_dirs"])
@@ -360,13 +376,6 @@ class ChemGraph:
                         normalized.get("user_skills_dir", self.user_skills_dir),
                     )
                 self.subagent_options[canonical] = normalized
-            for name in self.subagent_names:
-                status = registry.availability(name, constructor_kwargs=self.subagent_options.get(name))
-                if not status.available:
-                    from chemgraph.registry.tools import RegistryUnavailableError
-                    raise RegistryUnavailableError(name, status.issues)
-        elif subagent_options:
-            raise ValueError("subagent_options requires subagent_names.")
         if deepagent_tool_registry is not None and workflow_type != "deep_agent":
             raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
         if enable_deepagent and workflow_type != "main_agent":
@@ -614,6 +623,7 @@ class ChemGraph:
             worker_backend, _, worker_opaque = describe_backend(self.deepagent_backend)
             worker_options, options_opaque = describe_worker_options(self.subagent_options)
             registry_specs, custom_catalog = describe_tool_registry(self.tool_registry)
+            agent_specs, custom_agents = describe_agent_registry(self.agent_registry)
             main_review_policy = resolve_workspace_interrupt_policy(self.tool_registry)
             main_config = {
                 "graph_schema_version": GRAPH_SCHEMA_VERSION,
@@ -623,18 +633,18 @@ class ChemGraph:
                 "discover_skills": self.discover_skills,
                 "user_skills_dir": self.user_skills_dir,
                 "registry_tool_names": self.tool_registry.names(),
-                "configured_subagent_names": self.subagent_names,
+                "configured_subagent_names": self.agent_registry.names(),
                 "main_agent_prompt": self.main_agent_prompt,
                 "configuration_id": self.configuration_id,
                 "requires_configuration_id": (
                     backend_opaque or (self.enable_deepagent and worker_opaque)
-                    or options_opaque or custom_catalog or bool(self.tools)
+                    or options_opaque or custom_catalog or custom_agents or bool(self.tools)
                 ),
                 "cli_restorable": (
                     backend_cli and (not self.enable_deepagent
                                      or worker_backend["type"] == "cli-local-shell-v1")
                     and not self.subagent_options
-                    and not custom_catalog
+                    and not custom_catalog and not custom_agents
                     and not self.tools
                     and prompts.system == single_agent_prompt
                     and prompts.formatter == default_formatter_prompt
@@ -644,6 +654,7 @@ class ChemGraph:
             }
             topology_payload.update(main_config)
             topology_payload["registry_specs"] = registry_specs
+            topology_payload["agent_specs"] = agent_specs
             topology_payload["custom_tool_schemas"] = [
                 (convert_to_openai_tool(item), getattr(item, "return_direct", False))
                 for item in [*(self.tools or []), *[
@@ -678,8 +689,7 @@ class ChemGraph:
                 deepagent_discover_skills=self.deepagent_discover_skills,
                 deepagent_user_skills_dir=self.deepagent_user_skills_dir,
                 subagent_names=(
-                    (self.subagent_names or ("chemgraph",))
-                    + (("deepagent",) if self.enable_deepagent else ())
+                    self.agent_registry.names() if self.agent_registry is not None else ()
                 ),
                 tool_signatures=tool_signatures,
                 package_version=__version__,
@@ -725,24 +735,11 @@ class ChemGraph:
                 terminal_tool_names=self.terminal_tool_names,
             )
         elif self.workflow_type == "main_agent":
-            workers = None
-            if self.subagent_names is not None:
-                from chemgraph.registry.agents import AgentRegistry
-
-                options = {name: dict(value) for name, value in self.subagent_options.items()}
-                if "deep_agent" in self.subagent_names:
-                    options["deep_agent"] = {
-                        "backend": self.backend, "skills": self.skills,
-                        "skill_dirs": self.skill_dirs, "discover_skills": self.discover_skills,
-                        "user_skills_dir": self.user_skills_dir,
-                        "recursion_limit": self.recursion_limit,
-                        **options.get("deep_agent", {}),
-                    }
-                workers = AgentRegistry().as_subagents(self.subagent_names, llm=llm, options=options)
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 main_tools=self.tools,
-                subagents=workers,
+                agent_registry=self.agent_registry,
+                agent_options=self.subagent_options,
                 backend=self.backend,
                 tool_registry=self.tool_registry,
                 skills=self.skills,

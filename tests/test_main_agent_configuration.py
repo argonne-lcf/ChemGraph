@@ -13,7 +13,7 @@ from chemgraph.graphs.workspace import create_cli_workspace_backend
 from chemgraph.memory.schemas import MainAgentGraphConfig
 from chemgraph.models.endpoints import PreparedModel
 from chemgraph.registry.tools import ToolRegistry
-from tests.test_main_agent import _ScriptedChatModel, _answering_subgraph, _subagent
+from tests.test_main_agent import _ScriptedChatModel
 
 
 @pytest.fixture
@@ -45,7 +45,7 @@ def test_python_options_are_applied_and_reconstructed(api, tmp_path):
     assert captured["skills"] == ("/workspace/skills/",)
     config = agent.main_agent_metadata.graph_config
     restored = _main_agent_options(config)
-    assert config.graph_schema_version == 2
+    assert config.graph_schema_version == 3
     assert restored["workspace"] == str(tmp_path.resolve())
     assert restored["skill_dirs"] == (str(tmp_path.resolve()),)
     assert restored["tool_registry"].names() == ("calculator",)
@@ -69,38 +69,33 @@ def test_catalog_defaults_filter_attached_and_interactive_tools(api):
     assert captured["tool_registry"].names() == ()
 
 
-def test_named_workers_inherit_workspace_and_accept_python_overrides(api, monkeypatch, tmp_path):
+def test_named_workers_stay_lazy_and_accept_python_overrides(api, monkeypatch, tmp_path):
     create, captured = api
-    selected = {}
-    def compose(self, names, **kwargs):
-        selected.update(names=names, **kwargs)
-        return [_subagent(_answering_subgraph("done"), name=name) for name in names]
-    monkeypatch.setattr("chemgraph.registry.agents.AgentRegistry.as_subagents", compose)
+    monkeypatch.setattr("chemgraph.registry.agents.AgentRegistry.as_subagents",
+                        lambda *args, **kwargs: pytest.fail("workers must remain lazy"))
     backend = LocalShellBackend(root_dir=tmp_path, virtual_mode=True, env={})
     agent = create(backend=backend, discover_skills=False,
                    subagent_names=["deepagent", "single_agent"],
                    subagent_options={"deepagent": {"system_prompt": "worker prompt"}})
-    assert selected["names"] == ("deep_agent", "single_agent")
-    assert selected["options"]["deep_agent"]["backend"] is backend
-    assert selected["options"]["deep_agent"]["discover_skills"] is False
-    assert selected["options"]["deep_agent"]["system_prompt"] == "worker prompt"
-    assert [worker["name"] for worker in captured["subagents"]] == list(selected["names"])
-    assert agent.main_agent_metadata.graph_config.subagent_names == selected["names"]
+    assert captured["agent_registry"].names() == ("deep_agent", "single_agent")
+    assert captured["agent_options"]["deep_agent"]["system_prompt"] == "worker prompt"
+    assert agent.main_agent_metadata.graph_config.subagent_names == ("deep_agent", "single_agent")
     with pytest.raises(ValueError, match="Python"):
         _main_agent_options(agent.main_agent_metadata.graph_config)
 
 
 @pytest.mark.parametrize("kwargs", [
-    {"subagent_names": []}, {"subagent_names": "deep_agent"},
+    {"subagent_names": "deep_agent"},
     {"subagent_names": ["deepagent", "deep_agent"]},
     {"subagent_names": ["deep_agent"], "enable_deepagent": True},
-    {"subagent_options": {"single_agent": {"tools": []}}},
+    {"subagent_options": {"single_agent": []}},
     {"subagent_names": ["single_agent"], "subagent_options": {"deep_agent": {}}},
 ])
 def test_invalid_worker_selections_fail_before_model_loading(monkeypatch, kwargs):
     monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared",
                         lambda **kwargs: pytest.fail("validation must precede model loading"))
-    with pytest.raises(ValueError):
+    from chemgraph.registry.tools import RegistryError
+    with pytest.raises((ValueError, TypeError, RegistryError)):
         ChemGraph(workflow_type="main_agent", **kwargs)
 
 
@@ -291,12 +286,12 @@ def test_state_only_legacy_worker_is_not_recreated_as_cli_host_shell(api):
         _main_agent_options(config)
 
 
-def test_worker_dependencies_fail_before_model_loading(monkeypatch):
-    from chemgraph.registry.tools import RegistryUnavailableError
-    monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared",
-                        lambda **kwargs: pytest.fail("must validate dependencies first"))
-    with pytest.raises(RegistryUnavailableError, match="executor_tools"):
-        ChemGraph(workflow_type="main_agent", subagent_names=["graspa_mcp"])
+def test_unavailable_workers_can_be_discovered_without_building(api):
+    create, captured = api
+    agent = create(subagent_names=["graspa_mcp"])
+    assert captured["agent_registry"].names() == ("graspa_mcp",)
+    status = agent.agent_registry.availability("graspa_mcp")
+    assert not status.available and "executor_tools" in str(status.issues)
 
 
 def test_worker_skill_directories_are_canonicalized_before_fingerprinting(api, monkeypatch, tmp_path):

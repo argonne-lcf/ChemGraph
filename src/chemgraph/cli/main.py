@@ -132,7 +132,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--discover-skills", action=argparse.BooleanOptionalAction,
                         default=None, help="Discover main_agent personal/project skills")
     parser.add_argument("--subagent", dest="subagents", action="append", default=None,
-                        metavar="NAME", help="Select main_agent registry workers (repeatable)")
+                        metavar="NAME", help="Restrict main_agent discoverable workers (repeatable)")
     parser.add_argument(
         "--deepagent",
         action=argparse.BooleanOptionalAction,

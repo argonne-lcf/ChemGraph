@@ -15,7 +15,7 @@ from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_ba
 
 
 # Bump when approval semantics change, including removal of reviewed tools.
-WORKSPACE_REVIEW_POLICY_VERSION = 2
+WORKSPACE_REVIEW_POLICY_VERSION = 3
 
 
 DEFAULT_WORKSPACE_INTERRUPT_ON = {
@@ -28,7 +28,7 @@ DEFAULT_WORKSPACE_INTERRUPT_ON = {
 }
 
 # Additional built-ins that read host files, write artifacts, or launch calculations.
-# Apply only to registry tools, preserving the policy for explicitly attached tools.
+# Apply the same mandatory policy to direct tools and registry workers.
 _REGISTRY_REVIEW_TOOLS = {
     "run_ase", "run_docking", "run_graspa", "run_xanes", "generate_html",
     "fetch_xanes_data", "plot_xanes_data",
@@ -152,11 +152,10 @@ def resolve_workspace_interrupt_policy(tool_registry=None, interrupt_on=_DEFAULT
     if interrupt_on is not _DEFAULT_INTERRUPT_POLICY:
         return deepcopy(interrupt_on)
     policy = deepcopy(DEFAULT_WORKSPACE_INTERRUPT_ON)
-    if tool_registry is not None:
-        policy.update({
-            name: {"allowed_decisions": ["approve", "reject"]}
-            for name in _REGISTRY_REVIEW_TOOLS.intersection(tool_registry.names())
-        })
+    policy.update({
+        name: {"allowed_decisions": ["approve", "reject"]}
+        for name in _REGISTRY_REVIEW_TOOLS
+    })
     return policy
 
 

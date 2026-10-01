@@ -4,7 +4,7 @@ from collections.abc import Collection
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import ToolNode
+from chemgraph.graphs.tool_review import reviewed_tool_node
 from chemgraph.tools.ase_tools import (
     run_ase,
     extract_output_json,
@@ -457,6 +457,7 @@ def construct_single_agent_graph(
     human_supervised: bool = False,
     terminal_tool_names: Collection[str] = (),
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct a geometry optimization graph.
 
@@ -514,7 +515,7 @@ def construct_single_agent_graph(
             # Ensure ask_human is available when custom tools are provided
             # and human supervision is enabled.
             tools = list(tools) + [ask_human]
-        tool_node = ToolNode(tools=tools)
+        tool_node = reviewed_tool_node(tools, interrupt_on, state_schema=State)
         graph_builder = StateGraph(State)
 
         if not structured_output:
@@ -532,7 +533,7 @@ def construct_single_agent_graph(
             graph_builder.add_edge(START, "ChemGraphAgent")
 
             if generate_report:
-                tool_node_report = ToolNode(tools=[generate_html])
+                tool_node_report = reviewed_tool_node([generate_html], interrupt_on, state_schema=State)
                 graph_builder.add_node("report_tools", tool_node_report)
 
                 graph_builder.add_node(

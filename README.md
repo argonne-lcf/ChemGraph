@@ -122,7 +122,7 @@ Useful run options include:
 | `--workspace PATH` | Enable direct main-agent host file and shell access |
 | `--skill PATH` | Add a main-agent host skill collection; repeat to layer sources |
 | `--no-discover-skills` | Disable main-agent personal/project skill discovery |
-| `--subagent NAME` | Select a main-agent specialist; repeat to replace the default worker |
+| `--subagent NAME` | Restrict discoverable main-agent specialists; repeat for a catalog |
 | `--tool NAME` | Restrict the main-agent or standalone DeepAgent local tool catalog |
 | `--deepagent-workspace PATH` | Set the workspace for `deep_agent` or the optional main-agent worker |
 | `--no-deepagent-discover-skills` | Disable personal/project skill discovery; retain bundled and explicit skills |
@@ -164,8 +164,10 @@ Bundled skills and local registry tools remain available; registry tools execute
 on the host independently of the file backend. Host shell access is not confined
 to the workspace. File mutations and shell commands use action reviews.
 
-Omitting `--subagent` keeps the `chemgraph` chemistry worker. An explicit nonempty
-list replaces it; `deep_agent` is never added implicitly. Start a new session
+Omitting `--subagent` exposes the built-in specialist catalog without activating
+workers. The agent uses `search_agents` and `load_agents` before delegation. An
+explicit list restricts discovery; loaded workers last for one turn and survive
+interrupts and restart until that turn completes. Start a new session
 after upgrading to this graph: old transcripts remain readable, but old graph
 checkpoints cannot resume. Supported new CLI sessions restore their saved
 workspace, skills, catalog, workers, and pending approvals.
@@ -175,8 +177,8 @@ semantics, interactive commands, MCP connections, tracing, and the
 development-only workspace Deep Agent.
 
 Call the workspace Deep Agent directly in an approval-driven interactive
-session, or attach the same workflow to `main_agent` as the `deepagent`
-subagent:
+session, or attach the same workflow to `main_agent` as the legacy `deep_agent`
+worker:
 
 ```bash
 chemgraph run --interactive --workflow deep_agent --deepagent-workspace .

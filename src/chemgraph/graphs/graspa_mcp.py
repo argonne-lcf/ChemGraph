@@ -1,7 +1,7 @@
 from typing import Union
 from functools import partial
 
-from langgraph.prebuilt import ToolNode
+from chemgraph.graphs.tool_review import reviewed_tool_node
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage, HumanMessage
@@ -193,7 +193,7 @@ def format_executor_output(state: ExecutorState) -> ExecutorOutput:
     }
 
 
-def construct_executor_subgraph(llm: ChatOpenAI, tools: list, system_prompt: str):
+def construct_executor_subgraph(llm: ChatOpenAI, tools: list, system_prompt: str, interrupt_on=None):
     """Build the reusable executor subgraph.
 
     Parameters
@@ -215,7 +215,7 @@ def construct_executor_subgraph(llm: ChatOpenAI, tools: list, system_prompt: str
         "executor_agent",
         partial(executor_model_node, llm=llm, system_prompt=system_prompt, tools=tools),
     )
-    workflow.add_node("tools", ToolNode(tools))
+    workflow.add_node("tools", reviewed_tool_node(tools, interrupt_on, state_schema=ExecutorState))
 
     # Format the output back to the Main State schema
     workflow.add_node("finalize", format_executor_output)
@@ -303,6 +303,7 @@ def construct_graspa_mcp_graph(
     executor_tools: list = None,
     analysis_tools: list = None,
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct the gRASPA MCP map-reduce graph.
 
@@ -336,6 +337,7 @@ def construct_graspa_mcp_graph(
         llm,
         executor_tools,
         executor_prompt,
+        interrupt_on=interrupt_on,
     )
 
     # Create the Main Manager Graph
@@ -365,7 +367,7 @@ def construct_graspa_mcp_graph(
         ),
     )
     # Tool nodes
-    graph_builder.add_node("analyst_tools", ToolNode(analysis_tools))
+    graph_builder.add_node("analyst_tools", reviewed_tool_node(analysis_tools, interrupt_on, state_schema=PlannerState))
 
     # -- Edges --
     graph_builder.set_entry_point("Planner")

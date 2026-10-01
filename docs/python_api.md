@@ -141,12 +141,18 @@ even without a workspace. `tool_registry=None` enables the default catalog;
 `human_supervised=True` or explicit inclusion. Review policies cover direct
 workspace mutations, execution, and selected registry operations.
 
-`subagent_names=None` keeps the chemistry worker. A nonempty list replaces it;
-aliases canonicalize and duplicate workers are rejected. `subagent_options`
-provides per-worker constructor overrides. Named `deep_agent` workers inherit
+`subagent_names=None` exposes the non-test built-in worker catalog with no active
+workers; a list restricts it and `[]` disables discovery. `agent_registry` supplies
+a custom `AgentRegistry`. Discovery returns metadata without constructing graphs;
+`load_agents` constructs selected workers and makes them available to `task` for
+one turn. Selection survives pauses, retries, and restart, then clears on
+completion. Aliases canonicalize and duplicate catalog names are rejected.
+`subagent_options` provides per-worker constructor overrides. Named `deep_agent` workers inherit
 the main workspace and skills, with Python overrides taking precedence. Their
-tool catalogs are separately configured. Workers inherit the parent checkpointer.
-`PromptConfig.system`, `formatter`, and `report` configure the default chemistry
+tool catalogs are separately configured. Registry workers inherit the parent
+checkpointer and mandatory parent reviews; additional worker reviews are merged
+without weakening the parent policy.
+`PromptConfig.system`, `formatter`, and `report` configure the lazy `single_agent`
 worker; `PromptConfig.main_agent` configures the parent.
 
 Durable restoration validates both checkpoint and readable-session identities.
@@ -169,8 +175,11 @@ to selected tools, approval policies, or built-in behavior can require a new
 session; restoration rejects incompatible graphs before executing an action.
 Maintainers must bump `BUILTIN_TOOL_CATALOG_VERSION` for built-in schema,
 behavior, or safety changes and `WORKSPACE_REVIEW_POLICY_VERSION` for approval
-semantics changes. Custom tool specifications and schemas retain full identity
-checks and their caller-owned configuration requirements.
+semantics changes. Worker constructor paths, defaults, requirements, and
+`AgentSpec.compatibility_version` are part of restoration identity. Bump the
+worker compatibility version or `BUILTIN_AGENT_CATALOG_VERSION` when changing
+worker behavior. Custom registry metadata and constructor options retain full
+identity checks and their caller-owned configuration requirements.
 
 The optional `on_event(event_name, payload)` callback reports direct activity
 and tagged worker activity; worker events include `subagent_name`. Skills and
