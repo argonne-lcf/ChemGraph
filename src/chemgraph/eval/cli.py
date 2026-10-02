@@ -88,6 +88,12 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
         default="eval_results",
         help="Output directory for results (default: eval_results).",
     )
+    parser.add_argument("--query-ids", nargs="+", default=None,
+                        help="Evaluate these query IDs in dataset order.")
+    parser.add_argument("--deepagent-workspace", default=None,
+                        help="Root for fresh per-query host-shell workspaces.")
+    parser.add_argument("--deepagent-auto-approve", action="store_true", default=None,
+                        help="Allow unattended Deep Agent tools and host shell execution.")
     parser.add_argument(
         "--report",
         choices=["json", "markdown", "console", "all"],
@@ -237,6 +243,9 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             overrides["judge_type"] = args.judge_type
         if args.resume:
             overrides["resume"] = True
+        for key in ("query_ids", "deepagent_workspace", "deepagent_auto_approve"):
+            if getattr(args, key) is not None:
+                overrides[key] = getattr(args, key)
 
         config = BenchmarkConfig.from_profile(
             profile_name=profile,
@@ -269,6 +278,9 @@ def build_config_from_args(args: argparse.Namespace) -> BenchmarkConfig:
             kwargs["judge_model"] = args.judge_model
         if args.dataset is not None:
             kwargs["dataset"] = args.dataset
+        for key in ("query_ids", "deepagent_workspace", "deepagent_auto_approve"):
+            if getattr(args, key) is not None:
+                kwargs[key] = getattr(args, key)
 
         config = BenchmarkConfig(**kwargs)
 
