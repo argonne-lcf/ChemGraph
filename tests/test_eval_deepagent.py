@@ -3,6 +3,9 @@
 import json
 import os
 from pathlib import Path
+import shlex
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -13,6 +16,7 @@ from langchain_core.messages import AIMessage
 from chemgraph.agent.usage import summarize_usage
 from chemgraph.eval import deepagent
 from chemgraph.eval.cli import build_config_from_args, parse_args
+from chemgraph.eval.config import BenchmarkConfig
 from chemgraph.eval.runner import ModelBenchmarkRunner
 from chemgraph.graphs.deep_agent import _normalize_backend
 from chemgraph.skills.runtime import prepare_skill_backend
@@ -68,7 +72,14 @@ async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output):
         save_atomsdata_to_file.invoke({"atomsdata": atoms, "fname": "eval-water-copy.xyz"})
         saved = backend.read(str(workspace / "eval-water-copy.xyz"))
         assert saved.error is None and "Properties=species" in saved.file_data["content"]
-        shell = backend.execute('test "$PWD" = "$CHEMGRAPH_LOG_DIR" && cat eval-water-copy.xyz')
+        command = [sys.executable, "-c", (
+            "import os; from pathlib import Path; "
+            "assert Path.cwd() == Path(os.environ['CHEMGRAPH_LOG_DIR']).resolve(); "
+            "print(Path('eval-water-copy.xyz').read_text())"
+        )]
+        shell = backend.execute(
+            subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
+        )
         assert shell.exit_code == 0 and "Properties=species" in shell.output
         return SimpleNamespace(run=execution, last_usage=execution_usage)
 
@@ -107,3 +118,72 @@ async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output):
     report = json.loads(next((tmp_path / "results").glob("benchmark_*.json")).read_text())
     assert report["results"]["fake"]["deep_agent"]["structured_judge_aggregate"] == aggregate
     assert os.environ["CHEMGRAPH_LOG_DIR"] == "original-logs"
+
+    config.resume = True
+    resumed = (await ModelBenchmarkRunner(config).run_all())["fake"]["deep_agent"]
+    assert resumed == result
+    execution.assert_awaited_once()
+    assert len(invocations) == (1 if valid_output else 2)
+
+
+@pytest.mark.parametrize("setting", [
+    "execution_url", "judge_url", "credentials",
+    "VLLM_BASE_URL", "OPENAI_BASE_URL", "OPENAI_API_BASE",
+    "ANTHROPIC_BASE_URL", "ANTHROPIC_API_URL", "GROQ_BASE_URL", "GROQ_API_BASE", "OLLAMA_HOST",
+    "GOOGLE_GEMINI_BASE_URL", "GOOGLE_VERTEX_BASE_URL", "GOOGLE_GENAI_USE_VERTEXAI",
+    "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "CHEMGRAPH_ARGO_MODEL_FORMAT",
+])
+def test_deepagent_checkpoint_endpoint_identity(tmp_path, monkeypatch, setting):
+    dataset = tmp_path / "groundtruth.json"
+    dataset.write_text(json.dumps([{"id": "water", "query": "Find the SMILES for water"}]))
+    profile = tmp_path / "config.toml"
+    execution_url = "https://execution.example/v1"
+    judge_url = "https://judge.example/v1"
+
+    def make_runner():
+        profile.write_text(
+            f'[api.openai]\nbase_url = "{execution_url}"\n'
+            f'[api.anthropic]\nbase_url = "{judge_url}"\n'
+        )
+        return ModelBenchmarkRunner(BenchmarkConfig(
+            models=["gpt-4o-mini"], workflow_types=["deep_agent"],
+            judge_model="claude-sonnet-4-20250514", judge_type="llm",
+            dataset=str(dataset), config_file=str(profile),
+            output_dir=str(tmp_path / "results"), resume=True,
+        ))
+
+    monkeypatch.setattr("chemgraph.eval.runner.load_judge_model", lambda *args, **kwargs: object())
+    if setting.isupper():
+        monkeypatch.delenv(setting, raising=False)
+    runner = make_runner()
+    query_result = {"raw": {"result": "O"}, "judge": None, "structured_judge": None}
+    runner._save_query_checkpoint("gpt-4o-mini", "deep_agent", "water", 0, query_result)
+    assert make_runner()._load_checkpoint("gpt-4o-mini", "deep_agent") == {"water": query_result}
+
+    changed_url = "https://changed.example/v1?token=dummy-endpoint-secret"
+    if setting == "execution_url":
+        execution_url = changed_url
+    elif setting == "judge_url":
+        judge_url = changed_url
+    elif setting == "credentials":
+        for name in ("OPENAI_API_KEY", "VLLM_API_KEY", "ANTHROPIC_API_KEY", "UNRELATED_SETTING"):
+            monkeypatch.setenv(name, "dummy-rotated-secret")
+    else:
+        monkeypatch.setenv(setting, {
+            "GOOGLE_GENAI_USE_VERTEXAI": "true", "GOOGLE_CLOUD_PROJECT": "changed-project",
+            "GOOGLE_CLOUD_LOCATION": "us-central1", "CHEMGRAPH_ARGO_MODEL_FORMAT": "wire",
+        }.get(setting, changed_url))
+
+    changed = make_runner()
+    if setting == "credentials":
+        assert changed._load_checkpoint("gpt-4o-mini", "deep_agent") == {"water": query_result}
+    else:
+        with pytest.raises(ValueError, match="Incompatible Deep Agent checkpoint"):
+            changed._load_checkpoint("gpt-4o-mini", "deep_agent")
+
+    # Only the digest is persisted, even when an endpoint embeds sensitive data.
+    changed._clear_checkpoint("gpt-4o-mini", "deep_agent")
+    changed._save_query_checkpoint("gpt-4o-mini", "deep_agent", "water", 0, query_result)
+    checkpoint = Path(changed._checkpoint_path("gpt-4o-mini", "deep_agent")).read_text()
+    assert "dummy-endpoint-secret" not in checkpoint
+    assert "dummy-rotated-secret" not in checkpoint

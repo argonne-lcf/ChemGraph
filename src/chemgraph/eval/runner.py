@@ -40,6 +40,15 @@ from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
 
+# Provider routing overrides consumed by ChemGraph, LangChain, or their SDKs.
+# Keep credentials out of this allowlist; values are hashed, never persisted.
+_ENDPOINT_ENV_VARS = (
+    "VLLM_BASE_URL", "OPENAI_BASE_URL", "OPENAI_API_BASE",
+    "ANTHROPIC_BASE_URL", "ANTHROPIC_API_URL", "GROQ_BASE_URL", "GROQ_API_BASE", "OLLAMA_HOST",
+    "GOOGLE_GEMINI_BASE_URL", "GOOGLE_VERTEX_BASE_URL", "GOOGLE_GENAI_USE_VERTEXAI",
+    "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "CHEMGRAPH_ARGO_MODEL_FORMAT",
+)
+
 
 class ModelBenchmarkRunner:
     """Run evaluation benchmarks across multiple LLM models and workflows.
@@ -144,7 +153,11 @@ class ModelBenchmarkRunner:
         })
         payload = {**self._provenance, "settings": settings, "model": model_name,
                    "workflow": workflow_type, "base_url": self.config.get_base_url(model_name),
-                   "argo_model_format": os.getenv("CHEMGRAPH_ARGO_MODEL_FORMAT")}
+                   "judge_base_url": (
+                       self.config.get_base_url(self.config.judge_model)
+                       if self.config.judge_type in ("llm", "both") else None
+                   ),
+                   "endpoint_env": {name: os.getenv(name) for name in _ENDPOINT_ENV_VARS}}
         return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     def _checkpoint_dir(self) -> str:
