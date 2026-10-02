@@ -129,6 +129,28 @@ class BenchmarkConfig(BaseModel):
             "Eval profiles are also loaded from [eval.profiles.*]."
         ),
     )
+    deepagent_workspace: Optional[str] = Field(
+        default=None, description="Root for fresh per-query Deep Agent workspaces.",
+    )
+    deepagent_auto_approve: bool = Field(
+        default=False, description="Allow unattended Deep Agent tools and host shell execution.",
+    )
+    query_ids: List[str] = Field(
+        default_factory=list, description="Select query IDs before applying max_queries.",
+    )
+
+    @model_validator(mode="after")
+    def validate_deepagent(self):
+        """Require an explicit workspace for host-shell evaluation."""
+        if "deep_agent" in self.workflow_types:
+            if not self.deepagent_workspace:
+                raise ValueError("deep_agent evaluation requires deepagent_workspace.")
+            self.deepagent_workspace = str(Path(self.deepagent_workspace).expanduser().resolve())
+            if self.judge_type in ("structured", "both") and not self.structured_output:
+                raise ValueError("Deep Agent structured judging requires structured_output.")
+        elif self.deepagent_auto_approve or self.deepagent_workspace:
+            raise ValueError("Deep Agent options require the deep_agent workflow.")
+        return self
 
     # Internal cache for the flattened config -- not part of the public schema.
     _flat_config: Dict[str, Any] = {}
@@ -219,6 +241,7 @@ class BenchmarkConfig(BaseModel):
         valid = {
             "single_agent",
             "multi_agent",
+            "deep_agent",
         }
         for wf in v:
             if wf not in valid:
@@ -330,6 +353,9 @@ class BenchmarkConfig(BaseModel):
             "judge_type",
             "max_queries",
             "resume",
+            "deepagent_workspace",
+            "deepagent_auto_approve",
+            "query_ids",
         ]
         for key in _direct:
             if key in prof:

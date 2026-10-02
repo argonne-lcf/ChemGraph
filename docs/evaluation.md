@@ -141,6 +141,53 @@ tool execution; they are not a token or monetary budget, so cost does not scale
 by a fixed factor. Use `--recursion-limit 50` to retain the previous budget, or
 set `recursion_limit = 50` in an evaluation profile. Limits must be at least 1.
 
+## Deep Agent evaluation
+
+The evaluator runs the existing `deep_agent` workflow with bundled skills,
+chemistry tool discovery, and a fresh host-shell workspace for each query.
+Persistent memory and personal/project skill discovery are disabled. Workspace
+directories separate artifacts; they are **not operating-system sandboxes**.
+Use `--deepagent-auto-approve` only in a trusted execution environment: it allows
+unattended tool execution, file changes, and shell commands.
+
+```bash
+chemgraph eval \
+  --config config.toml \
+  --models argo:gpt-4.1-mini \
+  --dataset /path/to/groundtruth.json \
+  --workflows deep_agent \
+  --judge-type structured \
+  --deepagent-workspace /path/to/eval-workspaces \
+  --deepagent-auto-approve \
+  --query-ids 3 5 6 7 8 9 31 \
+  --output-dir eval_results/deepagent-smoke
+```
+
+Download `output_data.json` from the
+[ground-truth dataset](https://huggingface.co/datasets/Autonomous-Scientific-Agents/groundtruth)
+at a fixed revision, and keep it outside the agent workspaces. The initial
+40-query benchmark uses revision `8fe726352eb0437e4958282ca741d064fcfe6959`.
+Omit `--query-ids` for the full dataset. IDs are selected in dataset order before
+`--max-queries` is applied. These options also work as profile keys:
+`deepagent_workspace`, `deepagent_auto_approve`, and `query_ids`.
+
+After a completed run, evaluation uses the same model and provider settings
+to format the recorded messages into `ResponseFormatter` JSON, with the existing
+formatter prompt and one retry. This formatting call has no tools or ground
+truth. It does not change the Deep Agent graph. The original answer and state
+are preserved separately from `structured_output` and `formatter_responses`.
+The deterministic judge and its tolerances are unchanged, including the
+orientation-sensitive dipole component comparison.
+
+Each raw query record includes status, errors, workspace, elapsed seconds, and
+separate execution, formatting, and combined usage. Usage includes retries;
+unreported tokens remain unknown. Initialization/execution/formatting failures
+count as incorrect. JSON and Markdown reports include execution summaries.
+Dataset and code checksums, dependency versions, and settings identify the run.
+Deep Agent resume rejects checkpoints from different datasets/configurations or
+without a matching fingerprint. Use separate output directories for smoke tests
+and full runs; `--resume` reuses completed query records, including failures.
+
 ## Reports and diagnostics
 
 Select `--report json`, `markdown`, `console`, or `all` (the default). Structured
@@ -172,7 +219,7 @@ chemgraph eval \
 
 Use `--max-queries` for a smoke test, `--recursion-limit` to bound graph
 execution, and `--tags` for run metadata. Evaluation currently accepts
-`single_agent` and `multi_agent` workflows.
+`single_agent`, `multi_agent`, and `deep_agent` workflows.
 
 ## Python API
 
