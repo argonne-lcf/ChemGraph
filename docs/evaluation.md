@@ -144,8 +144,17 @@ set `recursion_limit = 50` in an evaluation profile. Limits must be at least 1.
 ## Deep Agent evaluation
 
 The evaluator runs the existing `deep_agent` workflow with bundled skills,
-chemistry tool discovery, and a fresh host-shell workspace for each query.
-Persistent memory and personal/project skill discovery are disabled. Workspace
+chemistry tool discovery, and one output directory per model/thread. File tools,
+shell commands, chemistry tools, and logs share real host paths under
+`<output-dir>/logs/<model>/deep_agent/thread_<query-id>/` (model `/` and `:` become
+`_`; query IDs are URL-escaped). This directory is also the shell working
+directory and `CHEMGRAPH_LOG_DIR`; there is no `/workspace` alias. The agent is
+told to keep generated inputs, scripts, and results here.
+
+`--output-dir` is sufficient; `--deepagent-workspace` optionally replaces the
+`<output-dir>/logs` root. Re-running a thread uses the same directory without
+clearing existing files. Use a new output directory for a fresh benchmark.
+Persistent memory and personal/project skill discovery are disabled. These
 directories separate artifacts; they are **not operating-system sandboxes**.
 Use `--deepagent-auto-approve` only in a trusted execution environment: it allows
 unattended tool execution, file changes, and shell commands.
@@ -157,11 +166,16 @@ chemgraph eval \
   --dataset /path/to/groundtruth.json \
   --workflows deep_agent \
   --judge-type structured \
-  --deepagent-workspace /path/to/eval-workspaces \
   --deepagent-auto-approve \
   --query-ids 3 5 6 7 8 9 31 \
   --output-dir eval_results/deepagent-smoke
 ```
+
+For a proxy, add `--base-url http://127.0.0.1:20219/v1` to the same command.
+It overrides provider URLs from `config.toml` for both execution and formatting
+(and the optional LLM judge). Profiles can also set `base_url`. When splitting
+a shell command across lines, each continuation backslash must be the last
+character on its line.
 
 Download `output_data.json` from the
 [ground-truth dataset](https://huggingface.co/datasets/Autonomous-Scientific-Agents/groundtruth)

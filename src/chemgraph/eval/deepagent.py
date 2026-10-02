@@ -3,13 +3,14 @@
 import json
 import os
 from pathlib import Path
-import tempfile
 import time
+from urllib.parse import quote
 
-from chemgraph.agent.deepagent_backend import create_host_shell_backend
-from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.deepagent_backend import host_shell_environment
+from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
 from chemgraph.agent.turn import serialize_state
 from chemgraph.agent.usage import UsageCollector, combine_usage
+from chemgraph.graphs.deep_agent import DEFAULT_DEEPAGENT_PROMPT
 from chemgraph.models.loader import load_chat_model
 from chemgraph.prompt.single_agent_prompt import formatter_prompt
 from chemgraph.utils.get_workflow_from_llm import get_workflow_from_state
@@ -37,14 +38,17 @@ async def format_result(model, state, usage):
     return {**formatted.model_dump(mode="json"), "_parse_error": error}, attempts
 
 
-async def run_query(config, model_name, query, query_id, index):
-    """Run one fresh workspace; no ground truth is passed to either model invocation."""
+async def run_query(config, model_name, query, query_id):
+    """Run in one directory per model/thread without passing ground truth to the model."""
+    from deepagents.backends import LocalShellBackend
+
     started = time.monotonic()
     previous_log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-    root = Path(config.deepagent_workspace).expanduser().resolve()
-    root.mkdir(parents=True, exist_ok=True)
     safe_model = model_name.replace("/", "_").replace(":", "_")
-    workspace = tempfile.mkdtemp(prefix=f"{safe_model}-{index}-", dir=root)
+    workspace_path = (Path(config.deepagent_workspace) / safe_model / "deep_agent"
+                      / f"thread_{quote(str(query_id), safe='')}")
+    workspace_path.mkdir(parents=True, exist_ok=True)
+    workspace = str(workspace_path)
     run_config = {"configurable": {"thread_id": query_id}}
     formatting_usage = UsageCollector("eval", query_id, model=model_name)
     raw = {"query_id": query_id, "query": query, "workspace": workspace,
@@ -58,8 +62,20 @@ async def run_query(config, model_name, query, query_id, index):
             **model_options, workflow_type="deep_agent", return_option="state",
             structured_output=False, enable_memory=False, log_dir=workspace,
             recursion_limit=config.recursion_limit, deepagent_discover_skills=False,
-            deepagent_backend=create_host_shell_backend(workspace),
+            # Native chemistry tools use host paths, so file tools must use them too.
+            deepagent_backend=LocalShellBackend(
+                root_dir=workspace, virtual_mode=False,
+                env=host_shell_environment(), inherit_env=False,
+            ),
             deepagent_auto_approve=config.deepagent_auto_approve,
+            prompts=PromptConfig(deepagent=DEFAULT_DEEPAGENT_PROMPT + (
+                f"\nThe working and output directory for this evaluation thread is {workspace}.\n"
+                "File tools and chemistry tools use real host paths. Shell commands start "
+                "in this directory and CHEMGRAPH_LOG_DIR points here. Keep generated inputs, "
+                "scripts, and results here; use absolute paths under this directory in tool "
+                "arguments. There is no /workspace mount for this run. Model runtime temporary "
+                "directories are not output locations.\n"
+            )),
         )
         raw["status"] = "execution_error"
         state = await agent.run(query, run_config)
