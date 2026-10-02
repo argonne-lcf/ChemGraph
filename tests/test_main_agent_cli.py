@@ -135,7 +135,7 @@ def test_interactive_removed_workflow_keeps_current_agent(monkeypatch, workflow)
     assert "deep_agent" in capture.get()
 
 
-def test_interactive_event_renders_only_tagged_subagent_tool_calls():
+def test_interactive_event_renders_direct_and_subagent_tool_calls():
     with console.capture() as capture:
         commands._render_main_agent_event(
             "tool_call_started",
@@ -162,7 +162,8 @@ def test_interactive_event_renders_only_tagged_subagent_tool_calls():
     assert "chemgraph" in output
     assert "run_ase" in output
     assert "EMT" in output
-    assert "task" not in output
+    assert "main_agent" in output
+    assert "task" in output
     assert "large result" not in output
 
 
@@ -179,7 +180,7 @@ def test_create_main_agent_session_installs_interactive_event_renderer(monkeypat
         FakeSession,
     )
     metadata = MainAgentSessionMetadata(
-        graph_config=MainAgentGraphConfig(model_name="test-model")
+        graph_config=MainAgentGraphConfig(graph_schema_version=4, model_name="test-model")
     )
     agent = SimpleNamespace(
         workflow=object(),
@@ -260,25 +261,23 @@ def test_experimental_backend_requires_confirmation_and_filters_environment(
     monkeypatch,
     tmp_path,
 ):
-    captured = {}
-
-    class FakeBackend:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
-
-    monkeypatch.setattr("deepagents.backends.LocalShellBackend", FakeBackend)
     monkeypatch.setattr(commands.Confirm, "ask", lambda *_args, **_kwargs: True)
     monkeypatch.setenv("PATH", "/test/bin")
     monkeypatch.setenv("OPENAI_API_KEY", "must-not-leak")
 
     backend = commands._create_experimental_deepagent_backend(str(tmp_path))
 
-    assert isinstance(backend, FakeBackend)
-    assert captured["root_dir"] == tmp_path.resolve()
-    assert captured["virtual_mode"] is True
-    assert captured["inherit_env"] is False
-    assert captured["env"]["PATH"] == "/test/bin"
-    assert "OPENAI_API_KEY" not in captured["env"]
+    from chemgraph.agent.deepagent_backend import DEEPAGENT_ENV_ALLOWLIST, create_host_shell_backend
+    from chemgraph.graphs.workspace import cli_backend_descriptor
+
+    assert backend.cwd == tmp_path.resolve()
+    assert backend.virtual_mode is True
+    assert backend._env["PATH"] == "/test/bin"
+    assert "OPENAI_API_KEY" not in backend._env
+    assert cli_backend_descriptor(backend)["type"] == "cli-local-shell-v1"
+    assert backend._env == create_host_shell_backend(tmp_path)._env
+    assert cli_backend_descriptor(backend)["environment_policy"] == list(DEEPAGENT_ENV_ALLOWLIST)
+    assert commands._DEEPAGENT_ENV_ALLOWLIST is DEEPAGENT_ENV_ALLOWLIST
 
 
 def test_experimental_backend_stops_when_confirmation_is_declined(
@@ -295,11 +294,6 @@ def test_experimental_backend_can_explicitly_skip_confirmation(
     monkeypatch,
     tmp_path,
 ):
-    class FakeBackend:
-        def __init__(self, **_kwargs):
-            pass
-
-    monkeypatch.setattr("deepagents.backends.LocalShellBackend", FakeBackend)
     monkeypatch.setattr(
         commands.Confirm,
         "ask",
@@ -312,7 +306,7 @@ def test_experimental_backend_can_explicitly_skip_confirmation(
             require_confirmation=False,
         )
 
-    assert isinstance(backend, FakeBackend)
+    assert backend.cwd == tmp_path.resolve()
     rendered = " ".join(capture.get().lower().replace("│", " ").split())
     assert "approvals are disabled" in rendered
 
@@ -385,6 +379,32 @@ def test_main_agent_query_failure_suggests_retry():
     assert result is None
     assert session.failed is True
     assert "`/retry` command" in capture.get()
+
+
+@pytest.mark.parametrize("during_resume", [False, True])
+def test_incompatible_main_agent_graph_reports_recovery_without_retry(monkeypatch, during_resume):
+    from chemgraph.agent.main_session import IncompatibleCheckpointError
+    from chemgraph.memory.graph_config import NEW_SESSION_GUIDANCE
+
+    error = IncompatibleCheckpointError(f"Incompatible topology. {NEW_SESSION_GUIDANCE}")
+    results = [_turn_result(PendingInterrupt("approval", {"action_requests": []}))] if during_resume else []
+    session = _FakeMainSession([*results, error])
+    monkeypatch.setattr(commands, "_prompt_for_interrupt", lambda _payload: {"decisions": []})
+    with console.capture() as output:
+        assert commands.run_main_agent_query(session, "calculate") is None
+    rendered = " ".join(output.get().split())
+    assert NEW_SESSION_GUIDANCE in rendered
+    assert "/retry" not in rendered
+
+
+def test_missing_stored_catalog_entry_reports_new_session_guidance():
+    config = MainAgentGraphConfig(graph_schema_version=4, model_name="test", cli_restorable=True,
+                                  topology_fingerprint="old", registry_tool_names=("removed-tool",),
+                                  artifact_directory="/tmp/artifacts",
+                                  model_endpoint={"endpoint_name": "test", "protocol": "test",
+                                                  "requested_model": "test", "effective_model": "test"})
+    with pytest.raises(ValueError, match="Start a new session; the old transcript remains readable"):
+        commands._main_agent_options(config)
 
 
 def test_retry_main_agent_session_resumes_failed_operation():
@@ -685,6 +705,11 @@ def test_workflow_switch_recovers_from_checkpoint_open_failure(monkeypatch):
 
 def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
     target_config = MainAgentGraphConfig(
+        graph_schema_version=4,
+        artifact_directory=str(tmp_path / "artifacts"),
+        model_endpoint={"endpoint_name": "argo", "protocol": "openai_compatible",
+                        "requested_model": "argo:gpt-5.6-sol", "effective_model": "gpt-5.6-sol"},
+        cli_restorable=True,
         model_name="argo:gpt-5.6-sol",
         structured_output=True,
         generate_report=True,
@@ -700,6 +725,14 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         deepagent_discover_skills=True,
         deepagent_user_skills_dir=str(tmp_path / "personal-skills"),
         topology_fingerprint="target",
+        workspace=str(tmp_path),
+        skills=("/workspace/new-skills/",),
+        skill_dirs=(str(tmp_path),),
+        discover_skills=False,
+        registry_tool_names=("calculator",),
+        configured_subagent_names=("single_agent",),
+        subagent_names=("single_agent", "deep_agent"),
+        main_agent_prompt="stored main prompt",
     )
     target_db = str(tmp_path / "target-checkpoints.db")
     SessionStore().create_session(
@@ -758,9 +791,14 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         ),
     )
 
-    with console.capture():
+    with console.capture() as output:
         commands.interactive_mode(workflow="main_agent", generate_report=False)
 
+    rendered = " ".join(output.get().split())
+    assert "Using saved main-agent configuration for session target-thread." in rendered
+    assert "Saved graph settings take precedence over current CLI flags and TOML settings." in rendered
+    assert "calculator" in rendered and "single_agent" in rendered
+    assert "/workspace/new-skills/" in rendered
     resume_args, resume_kwargs = initialization_calls[1]
     rebuild_args, rebuild_kwargs = initialization_calls[2]
     assert resume_args[:6] == (
@@ -779,6 +817,14 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         True,
         77,
     )
+    assert resume_kwargs["workspace"] == str(tmp_path)
+    assert resume_kwargs["skills"] == ("/workspace/new-skills/",)
+    assert resume_kwargs["skill_dirs"] == (str(tmp_path),)
+    assert resume_kwargs["discover_skills"] is False
+    assert resume_kwargs["tool_registry"].names() == ("calculator",)
+    assert resume_kwargs["subagent_names"] == ("single_agent",)
+    assert resume_kwargs["main_agent_prompt"] == "stored main prompt"
+    assert "workspace" not in rebuild_kwargs
     assert resume_kwargs["deepagent_skills"] == (
         "/workspace/.agents/skills/",
     )
@@ -801,7 +847,7 @@ def test_startup_resume_distinguishes_process_local_session(monkeypatch):
         "scripted",
         "main_agent",
         session_metadata=MainAgentSessionMetadata(
-            graph_config=MainAgentGraphConfig(model_name="scripted"),
+            graph_config=MainAgentGraphConfig(graph_schema_version=4, model_name="scripted"),
             checkpoint_backend="memory",
         ),
     )
@@ -1485,3 +1531,198 @@ def test_deepagent_toml_and_cli_precedence(
     assert captured["deepagent_skill_dirs"] == (
         (str(tmp_path.resolve()),) if expected else None
     )
+
+
+@pytest.mark.parametrize("override", [False, True])
+def test_main_agent_cli_and_toml_options(monkeypatch, tmp_path, override):
+    config = tmp_path / "config.toml"
+    config.write_text(toml.dumps({"general": {
+        "workflow": "main_agent", "workspace": str(tmp_path),
+        "skills": [str(tmp_path)], "discover_skills": True,
+        "subagents": ["single_agent"], "tools": ["calculator"],
+    }}))
+    parser = cli_main.create_argument_parser()
+    argv = ["run", "--interactive", "--config", str(config)]
+    if override:
+        argv += ["--workspace", str(tmp_path / "other"), "--skill", str(tmp_path / "extra"),
+                 "--no-discover-skills", "--subagent", "deep_agent", "--tool", "run_ase"]
+    captured = {}
+    monkeypatch.setattr(cli_main, "interactive_mode", lambda **kwargs: captured.update(kwargs))
+    cli_main._handle_run(parser.parse_args(argv))
+    assert captured["workspace"] == str(tmp_path / "other" if override else tmp_path)
+    assert captured["skill_dirs"] == [str(tmp_path / "extra" if override else tmp_path)]
+    assert captured["discover_skills"] is (not override)
+    assert captured["subagent_names"] == (["deep_agent"] if override else ["single_agent"])
+    assert captured["tool_registry"].names() == (("run_ase",) if override else ("calculator",))
+    assert captured["deepagent_tool_registry"] is captured["tool_registry"]
+    assert captured["enable_deepagent"] is False
+
+
+def test_main_workspace_options_survive_workflow_and_model_switches(monkeypatch, tmp_path):
+    from chemgraph.registry.tools import ToolRegistry
+
+    replies = iter(["test-model", "single_agent", "/workflow main_agent",
+                    "/model other-model", "/workflow single_agent", "/workflow main_agent", "/quit"])
+    calls = []
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *args, **kwargs: next(replies))
+    monkeypatch.setattr(commands, "initialize_agent",
+                        lambda *args, **kwargs: calls.append((args, kwargs)) or SimpleNamespace())
+    monkeypatch.setattr(commands, "create_main_agent_session",
+                        lambda *args, **kwargs: SimpleNamespace(thread_id="test"))
+    registry = ToolRegistry([])
+    with console.capture():
+        commands.interactive_mode(workspace=str(tmp_path), skill_dirs=[str(tmp_path)],
+                                  discover_skills=False, tool_registry=registry,
+                                  subagent_names=["single_agent"])
+    main_calls = [kwargs for args, kwargs in calls if args[1] == "main_agent"]
+    assert len(main_calls) == 3
+    for kwargs in main_calls:
+        assert kwargs["workspace"] == str(tmp_path)
+        assert kwargs["skill_dirs"] == (str(tmp_path.resolve()),)
+        assert kwargs["discover_skills"] is False
+        assert kwargs["tool_registry"] is registry
+        assert kwargs["subagent_names"] == ["single_agent"]
+    for args, kwargs in calls:
+        if args[1] != "main_agent":
+            assert "workspace" not in kwargs
+
+
+def test_legacy_cli_resume_fails_before_backend_initialization(monkeypatch, tmp_path):
+    SessionStore().create_session("legacy", "old", "main_agent", session_metadata=MainAgentSessionMetadata(
+        graph_config=MainAgentGraphConfig(model_name="old"),
+        checkpoint_backend="AsyncSqliteSaver", checkpoint_db=str(tmp_path / "old.db"),
+    ))
+    monkeypatch.setattr(commands, "initialize_agent",
+                        lambda *args, **kwargs: pytest.fail("legacy graph must not initialize"))
+    with console.capture() as output:
+        commands.interactive_mode(resume_session="legacy")
+    assert "Start a new session" in output.get()
+    assert SessionStore().get_session("legacy") is not None
+
+
+@pytest.mark.parametrize("starting_workflow", ["main_agent", "deep_agent"])
+def test_catalog_survives_full_cli_dispatch_and_workflow_switch(monkeypatch, starting_workflow):
+    replies = iter(["test-model", "single_agent", "/workflow main_agent",
+                    "/workflow deep_agent", "/workflow main_agent", "/quit"])
+    calls = []
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *args, **kwargs: next(replies))
+    monkeypatch.setattr(commands, "initialize_agent",
+                        lambda *args, **kwargs: calls.append((args[1], kwargs)) or SimpleNamespace())
+    monkeypatch.setattr(commands, "create_main_agent_session",
+                        lambda *args, **kwargs: SimpleNamespace(thread_id="test"))
+    with console.capture():
+        cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+            "run", "--interactive", "-w", starting_workflow, "--tool", "calculator",
+        ]))
+    for workflow, options in calls:
+        if workflow in {"main_agent", "deep_agent"}:
+            registry = options["tool_registry" if workflow == "main_agent" else "deepagent_tool_registry"]
+            assert registry.names() == ("calculator",)
+
+
+@pytest.mark.parametrize("workspace", ["", 123, False])
+def test_invalid_main_workspace_fails_before_backend_creation(monkeypatch, workspace):
+    monkeypatch.setattr(commands, "_create_experimental_deepagent_backend",
+                        lambda *args, **kwargs: pytest.fail("must validate first"))
+    with console.capture() as output:
+        assert commands.initialize_agent("test", "main_agent", False, "state", False, 200,
+                                         workspace=workspace) is None
+    assert "non-empty host directory" in output.get()
+
+
+@pytest.mark.parametrize("startup", [False, True])
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_cli_reconstructs_pending_workspace_action_from_sqlite(monkeypatch, tmp_path, startup, decision):
+    from chemgraph.agent.llm_agent import ChemGraph
+    from chemgraph.agent.main_session import MainAgentSession
+    from chemgraph.cli.checkpoint_runtime import CheckpointRuntime
+    from chemgraph.graphs.workspace import _CLIWorkspaceBackend, create_cli_workspace_backend
+    from chemgraph.models.endpoints import PreparedModel
+    from chemgraph.registry.tools import ToolRegistry
+    from langchain_core.messages import AIMessage
+    from tests.test_main_agent import _ScriptedChatModel
+
+    saved_workspace, supplied_workspace = tmp_path / "saved", tmp_path / "supplied"
+    saved_workspace.mkdir()
+    supplied_workspace.mkdir()
+    executions = []
+    write = _CLIWorkspaceBackend.write
+    def record_write(self, *args, **kwargs):
+        executions.append(str(self.cwd))
+        return write(self, *args, **kwargs)
+    monkeypatch.setattr(_CLIWorkspaceBackend, "write", record_write)
+    responses = [AIMessage(content="", tool_calls=[{
+        "name": "write_file", "args": {"file_path": "/workspace/review.txt", "content": "approved"},
+        "id": "write-1", "type": "tool_call",
+    }])]
+    monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", lambda **kwargs: (
+        _ScriptedChatModel(responses=list(responses)),
+        PreparedModel(endpoint_name="test", protocol="openai_compatible", client_kwargs={}),
+    ))
+    monkeypatch.setattr(commands, "check_api_keys", lambda *args, **kwargs: (True, ""))
+    monkeypatch.setattr(commands.Confirm, "ask", lambda *args, **kwargs: True)
+    monkeypatch.setattr(commands.time, "sleep", lambda *_args: None)
+    database = str(tmp_path / "checkpoints.db")
+    runtime = CheckpointRuntime()
+    try:
+        agent = ChemGraph(workflow_type="main_agent", model_name="test", enable_memory=False,
+                          backend=create_cli_workspace_backend(saved_workspace), discover_skills=False,
+                          tool_registry=ToolRegistry([]), log_dir=str(tmp_path / "logs"),
+                          checkpointer=runtime.open_sqlite(database))
+        metadata = agent.main_agent_metadata.model_copy(deep=True)
+        metadata.checkpoint_db = database
+        session = MainAgentSession(agent.workflow, thread_id="pending-cli", session_metadata=metadata,
+                                   session_store=SessionStore())
+        assert runtime.run(lambda: session.run("write the file")).status == "waiting_for_user"
+    finally:
+        runtime.close()
+    responses[:] = [AIMessage(content=f"Decision: {decision}.")]
+    replies = iter([decision, "/quit"] if startup else
+                   ["test", "main_agent", "/resume pending-cli", decision, "/quit"])
+    monkeypatch.setattr(commands.Prompt, "ask", lambda *args, **kwargs: next(replies))
+    with console.capture() as output:
+        commands.interactive_mode(model="test", workflow="main_agent", checkpoint_db=database,
+                                  workspace=str(supplied_workspace), skill_dirs=[str(supplied_workspace)],
+                                  subagent_names=["single_agent"],
+                                  tool_registry=ToolRegistry([ToolRegistry().get_spec("calculator")]),
+                                  resume_session="pending-cli" if startup else None)
+    rendered = " ".join(output.get().split())
+    assert f"Decision: {decision}." in rendered
+    assert "Using saved main-agent configuration for session pending-cli." in rendered
+    assert "Saved graph settings take precedence over current CLI flags and TOML settings." in rendered
+    compact = "".join(rendered.split())
+    assert str(saved_workspace) in compact
+    assert rendered.index("Using saved main-agent") < rendered.rindex("Experimental host-shell access")
+    assert executions == ([str(saved_workspace)] if decision == "approve" else [])
+    assert not (supplied_workspace / "review.txt").exists()
+    if decision == "approve":
+        assert (saved_workspace / "review.txt").read_text() == "approved"
+    else:
+        assert not (saved_workspace / "review.txt").exists()
+    assert SessionStore().get_session("pending-cli").status == "completed"
+
+
+def test_main_workspace_symlink_is_frozen_after_activation(monkeypatch, tmp_path):
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    workspace = tmp_path / "workspace"
+    workspace.symlink_to(first, target_is_directory=True)
+    calls = []
+    replies = iter(["test", "main_agent", "/model changed", "/quit"])
+    def initialize(*args, **kwargs):
+        calls.append(kwargs["workspace"])
+        return SimpleNamespace(backend=SimpleNamespace(cwd=first.resolve()))
+    def ask(*args, **kwargs):
+        reply = next(replies)
+        if reply == "/model changed":
+            workspace.unlink()
+            workspace.symlink_to(second, target_is_directory=True)
+        return reply
+    monkeypatch.setattr(commands, "initialize_agent", initialize)
+    monkeypatch.setattr(commands.Prompt, "ask", ask)
+    monkeypatch.setattr(commands, "create_main_agent_session",
+                        lambda *args, **kwargs: SimpleNamespace(thread_id="test"))
+    with console.capture():
+        commands.interactive_mode(workflow="main_agent", workspace=str(workspace))
+    assert calls == [str(workspace), str(first.resolve())]

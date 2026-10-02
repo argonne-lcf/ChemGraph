@@ -186,8 +186,8 @@ def test_cwd_workspace_is_named_and_confirmation_is_required(
         lambda *args, **kwargs: confirmations.append(kwargs) or approve,
     )
     monkeypatch.setattr(
-        "deepagents.backends.LocalShellBackend",
-        lambda **kwargs: created.append(kwargs) or kwargs,
+        commands, "create_cli_workspace_backend",
+        lambda root: created.append(root) or root,
     )
     with commands.console.capture() as capture:
         if approve:
@@ -564,14 +564,12 @@ def test_invalid_local_catalog_fails_before_initialization(tmp_path, dispatch, v
     assert not dispatch
 
 
-def test_explicit_local_catalog_requires_standalone_deep_agent(dispatch):
+def test_explicit_local_catalog_supports_main_agent(dispatch):
     args = cli_main.create_argument_parser().parse_args([
         "run", "--interactive", "-w", "main_agent", "--tool", "file_to_atomsdata",
     ])
-    with pytest.raises(SystemExit) as exc:
-        cli_main._handle_run(args)
-    assert exc.value.code == 2
-    assert not dispatch
+    cli_main._handle_run(args)
+    assert dispatch["tool_registry"].names() == ("file_to_atomsdata",)
 
 
 def test_omitted_catalog_selects_python_default(dispatch):
@@ -717,3 +715,16 @@ def test_noninteractive_other_workflow_ignores_catalog(tmp_path, dispatch):
         "run", "-q", "test", "--config", str(path),
     ]))
     assert dispatch["deepagent_tool_registry"] is None
+
+
+def test_dormant_main_toml_settings_do_not_block_headless_workflow(dispatch, tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps({"general": {
+        "workflow": "single_agent", "workspace": "missing", "skills": ["missing"],
+        "subagents": ["single_agent"], "discover_skills": False,
+    }}))
+    cli_main._handle_run(cli_main.create_argument_parser().parse_args([
+        "run", "--config", str(path), "-q", "test",
+    ]))
+    assert dispatch["workflow"] == "single_agent"
+    assert "workspace" not in dispatch

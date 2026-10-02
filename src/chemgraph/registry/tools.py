@@ -112,6 +112,10 @@ class ToolSpec:
     executes_code: bool = False
 
 
+# Bump for built-in schema, behavior, or safety changes; wording edits are compatible.
+BUILTIN_TOOL_CATALOG_VERSION = 2
+
+
 BUILTIN_TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "extract_output_json",

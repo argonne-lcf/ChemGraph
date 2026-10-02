@@ -39,6 +39,7 @@ def construct_molecular_docking_graph(
     human_supervised: bool = False,
     terminal_tool_names: Collection[str] = (),
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct the molecular docking graph.
 
@@ -76,5 +77,6 @@ def construct_molecular_docking_graph(
         max_retries=max_retries,
         human_supervised=human_supervised,
         terminal_tool_names=terminal_tool_names,
+        interrupt_on=interrupt_on,
         **graph_kwargs,
     )

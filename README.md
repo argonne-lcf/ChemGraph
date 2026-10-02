@@ -119,6 +119,11 @@ Useful run options include:
 | `-s`, `--structured` | Request structured final output |
 | `-r`, `--report` | Allow generation of an HTML report |
 | `--human-supervised` | Allow supported workflows to pause for input |
+| `--workspace PATH` | Enable direct main-agent host file and shell access |
+| `--skill PATH` | Add a main-agent host skill collection; repeat to layer sources |
+| `--no-discover-skills` | Disable main-agent personal/project skill discovery |
+| `--subagent NAME` | Restrict discoverable main-agent specialists; repeat for a catalog |
+| `--tool NAME` | Restrict the main-agent or standalone DeepAgent local tool catalog |
 | `--deepagent-workspace PATH` | Set the workspace for `deep_agent` or the optional main-agent worker |
 | `--no-deepagent-discover-skills` | Disable personal/project skill discovery; retain bundled and explicit skills |
 | `--deepagent-skill PATH` | Add a host Agent Skills directory, inside or outside the workspace; repeat to layer sources |
@@ -143,21 +148,37 @@ chemgraph session show <session-id>
 chemgraph run --resume <session-id> -q "Continue with a frequency calculation."
 ```
 
-The `main_agent` workflow is a long-lived supervisor with durable checkpoints
-and must be used interactively:
+The `main_agent` workflow works directly with skills, files, shell commands, and
+on-demand chemistry tools, and can delegate to configured specialists. It has
+durable checkpoints and requires interactive CLI mode:
 
 ```bash
-chemgraph run --interactive --workflow main_agent
+chemgraph run --interactive --workflow main_agent --workspace .
+chemgraph run --interactive --workflow main_agent --workspace . \
+  --skill ../shared-skills --subagent single_agent --subagent deep_agent
 chemgraph run --interactive --workflow main_agent --resume <session-id>
 ```
+
+Without `--workspace`, file tools use checkpoint storage and no shell is exposed.
+Bundled skills and local registry tools remain available; registry tools execute
+on the host independently of the file backend. Host shell access is not confined
+to the workspace. File mutations and shell commands use action reviews.
+
+Omitting `--subagent` exposes the built-in specialist catalog without activating
+workers. The agent uses `search_agents` and `load_agents` before delegation. An
+explicit list restricts discovery; loaded workers last for one turn and survive
+interrupts and restart until that turn completes. Start a new session
+after upgrading to this graph: old transcripts remain readable, but old graph
+checkpoints cannot resume. Supported new CLI sessions restore their saved
+workspace, skills, catalog, workers, and pending approvals.
 
 See the [CLI guide](https://argonne-lcf.github.io/ChemGraph/cli/) for session
 semantics, interactive commands, MCP connections, tracing, and the
 development-only workspace Deep Agent.
 
 Call the workspace Deep Agent directly in an approval-driven interactive
-session, or attach the same workflow to `main_agent` as the `deepagent`
-subagent:
+session, or attach the same workflow to `main_agent` as the legacy `deep_agent`
+worker:
 
 ```bash
 chemgraph run --interactive --workflow deep_agent --deepagent-workspace .
@@ -173,7 +194,7 @@ ChemGraph bundles `chemgraph` and `pbs-hpc` skills and automatically discovers
 use one directory per `SKILL.md`; their catalog refreshes each new turn. See
 [skills and filesystem backends](docs/skills.md).
 
-Standalone Deep Agent also discovers the built-in local tool catalog by default,
+Main agent and standalone Deep Agent discover the built-in local tool catalog by default,
 loading tool schemas only when needed. Use repeated `--tool NAME` flags to restrict
 the catalog, or `[general] tools = []` in TOML to disable tool discovery.
 
@@ -261,7 +282,7 @@ stdio client configuration and the experimental HPC servers.
 | Workflow | Use it for | Important requirements |
 | --- | --- | --- |
 | `single_agent` | General molecule lookup, ASE calculations, and reports | Default and recommended first workflow |
-| `main_agent` | Long-lived supervisor with delegated chemistry work | Interactive mode; use `MainAgentSession` in Python |
+| `main_agent` | Durable direct workspace/chemistry work and optional delegation | Interactive mode; use `MainAgentSession` in Python |
 | `deep_agent` | Workspace tasks and attached chemistry tools (`deepagent` is an alias) | Interactive approvals by default; broad local shell access |
 | `multi_agent` | Planner/executor decomposition and parallel subtasks | More model calls and orchestration overhead |
 | `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra plus Vina from conda-forge |

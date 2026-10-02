@@ -1,10 +1,7 @@
 import datetime
-import hashlib
 import inspect
-import json
 import os
 from dataclasses import dataclass
-from pathlib import Path
 import time
 from typing import Any, Callable, Collection, List, Optional, Sequence
 import uuid
@@ -19,13 +16,19 @@ from chemgraph.agent.interrupts import (
     normalize_interrupts,
 )
 from chemgraph.memory.store import SessionStore
-from chemgraph import __version__
 from chemgraph.memory.schemas import (
     MainAgentGraphConfig,
     MainAgentSessionMetadata,
     SessionMessage,
 )
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
+from chemgraph.memory.graph_config import (
+    validate_configuration_id,
+)
+from chemgraph.agent.configuration import MainAgentRuntimeConfig
+from chemgraph.models.endpoints.identity import describe_model_endpoint
+from chemgraph.utils.artifacts import canonical_artifact_directory
+from chemgraph.graphs.workspace import bind_artifact_directory
 from chemgraph.models.loader import load_chat_model_prepared
 from chemgraph.models.supported_models import (
     MODELS_WITH_REASONING_EFFORT,
@@ -55,12 +58,13 @@ from langgraph.errors import GraphInterrupt
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from chemgraph.graphs.single_agent import construct_single_agent_graph
-from chemgraph.graphs.main_agent import construct_main_agent_graph
+from chemgraph.graphs.main_agent import DEFAULT_MAIN_AGENT_PROMPT, construct_main_agent_graph
 from chemgraph.graphs.deep_agent import (
     DEFAULT_DEEPAGENT_PROMPT,
     construct_deep_agent_graph,
     normalize_skill_sources,
 )
+from chemgraph.graphs.workspace import default_tool_registry
 from chemgraph.agent.turn import serialize_state
 from chemgraph.skills.runtime import resolve_skill_dirs, resolve_user_skills_dir
 from chemgraph.utils.workflow_utils import get_removed_workflow_message
@@ -99,6 +103,7 @@ class PromptConfig:
     override the fields relevant to the active ``workflow_type``:
 
     - ``system``/``formatter``/``report``: single_agent, main_agent, mock_agent.
+    - ``main_agent``: the main-agent prompt (None selects the default).
     - ``deepagent``: deep_agent and the optional main_agent workspace worker.
     - ``planner``/``executor``/``aggregator``/``formatter_multi``: multi_agent.
     """
@@ -111,6 +116,7 @@ class PromptConfig:
     aggregator: str = default_aggregator_prompt
     formatter_multi: str = default_formatter_multi_prompt
     deepagent: str | None = None
+    main_agent: str | None = None
 
 
 def _resolve_reasoning_effort(
@@ -228,6 +234,26 @@ class ChemGraph:
         ``deep_agent`` workflow. This permits unreviewed file mutations and
         command execution and should be used only in an isolated, explicitly
         trusted workspace, by default False.
+    backend, tool_registry, skills, skill_dirs, discover_skills, user_skills_dir : optional
+        Main-agent workspace backend, lazy tool catalog, and skill sources.
+        Without a backend, files use checkpoint storage and no shell is exposed.
+        ``skills`` paths are backend-relative; ``skill_dirs`` are host directories.
+        Discovery defaults to True. None selects the default local catalog;
+        an empty ToolRegistry disables discovery. Local tools run on the host.
+    subagent_names : sequence of str, optional
+        Discoverable main-agent workers. None exposes non-test built-ins, a list
+        restricts the catalog, and an empty list disables it. Workers load on
+        demand for one turn. Aliases resolve to canonical task names.
+    agent_registry : AgentRegistry, optional
+        Caller-owned specialist catalog for lazy discovery and construction.
+    subagent_options : dict, optional
+        Per-worker constructor options keyed by selected name or alias. Registry
+        workers inherit the parent checkpointer. Python objects must be supplied
+        again when reconstructing a saved graph through the Python API.
+    configuration_id : str, optional
+        Non-secret identity for caller-owned main-agent configuration. Required
+        to restore opaque backends, custom tools, or worker options in another
+        session instance. Change it whenever those components' behavior changes.
     on_event : callable, optional
         Callback invoked with dashboard workflow events, by default None.
 
@@ -273,10 +299,85 @@ class ChemGraph:
         deepagent_user_skills_dir: str | None = None,
         deepagent_skill_dirs: Sequence[str] | None = None,
         deepagent_tool_registry: Any | None = None,
+        backend: Any | None = None,
+        tool_registry: Any | None = None,
+        skills: Sequence[str] | None = None,
+        skill_dirs: Sequence[str] | None = None,
+        discover_skills: bool = True,
+        user_skills_dir: str | None = None,
+        agent_registry: Any | None = None,
+        subagent_names: Sequence[str] | None = None,
+        subagent_options: dict[str, dict[str, Any]] | None = None,
+        configuration_id: str | None = None,
+        _model_endpoint=None,
     ):
         migration_message = get_removed_workflow_message(workflow_type)
         if migration_message:
             raise ValueError(migration_message)
+        if workflow_type != "main_agent" and (
+            backend is not None or tool_registry is not None or skills is not None
+            or skill_dirs is not None or not discover_skills or user_skills_dir is not None
+            or agent_registry is not None or subagent_names is not None or subagent_options is not None
+            or configuration_id is not None
+        ):
+            raise ValueError("Workspace and subagent options require workflow_type='main_agent'.")
+        if not isinstance(discover_skills, bool):
+            raise TypeError("discover_skills must be a boolean.")
+        self.configuration_id = validate_configuration_id(configuration_id)
+        if subagent_options is not None and not isinstance(subagent_options, dict):
+            raise TypeError("subagent_options must be a mapping of worker names to options.")
+        self.backend = backend
+        self.skills = normalize_skill_sources(skills)
+        self.skill_dirs = resolve_skill_dirs(skill_dirs)
+        self.discover_skills = discover_skills
+        self.user_skills_dir = resolve_user_skills_dir(backend, discover_skills, user_skills_dir)
+        self.subagent_names = None
+        self.subagent_options = {}
+        self.agent_registry = None
+        if workflow_type == "main_agent":
+            from chemgraph.registry.agents import AgentRegistry
+
+            if agent_registry is not None and not isinstance(agent_registry, AgentRegistry):
+                raise TypeError("agent_registry must be an AgentRegistry.")
+            registry = agent_registry if agent_registry is not None else AgentRegistry(
+                spec for spec in AgentRegistry().specs() if not spec.test_only
+            )
+            if subagent_names is not None:
+                if not isinstance(subagent_names, Sequence) or isinstance(subagent_names, (str, bytes)):
+                    raise ValueError("subagent_names must be a sequence of names.")
+                if not all(isinstance(name, str) and name.strip() for name in subagent_names):
+                    raise ValueError("subagent_names must contain non-empty strings.")
+                self.subagent_names = tuple(registry.resolve_name(name) for name in subagent_names)
+                if len(set(self.subagent_names)) != len(self.subagent_names):
+                    raise ValueError("Duplicate subagent names or aliases.")
+                if enable_deepagent and "deep_agent" in self.subagent_names:
+                    raise ValueError("deep_agent is already selected; omit enable_deepagent.")
+                registry = AgentRegistry(registry.get_spec(name) for name in self.subagent_names)
+            if enable_deepagent and "deep_agent" not in registry.names():
+                registry = AgentRegistry([*registry.specs(), AgentRegistry().get_spec("deep_agent")])
+            self.agent_registry = registry
+            for name, options in (subagent_options or {}).items():
+                if not isinstance(name, str) or not isinstance(options, dict):
+                    raise TypeError("Each subagent_options entry must map a name to an options dict.")
+                canonical = registry.resolve_name(name)
+                if canonical in self.subagent_options or (enable_deepagent and canonical == "deep_agent"):
+                    raise ValueError(f"Unexpected or duplicate subagent options: {name!r}.")
+                normalized = dict(options)
+                if normalized.get("checkpointer") is not None:
+                    raise ValueError("Registry workers must inherit the parent checkpointer.")
+                if canonical == "deep_agent":
+                    if "skill_dirs" in normalized:
+                        normalized["skill_dirs"] = resolve_skill_dirs(normalized["skill_dirs"])
+                    if "skills" in normalized:
+                        normalized["skills"] = normalize_skill_sources(normalized["skills"])
+                    if "discover_skills" in normalized and not isinstance(normalized["discover_skills"], bool):
+                        raise TypeError("Worker discover_skills must be a boolean.")
+                    normalized["user_skills_dir"] = resolve_user_skills_dir(
+                        normalized.get("backend", self.backend),
+                        normalized.get("discover_skills", self.discover_skills),
+                        normalized.get("user_skills_dir", self.user_skills_dir),
+                    )
+                self.subagent_options[canonical] = normalized
         if deepagent_tool_registry is not None and workflow_type != "deep_agent":
             raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
         if enable_deepagent and workflow_type != "main_agent":
@@ -341,7 +442,16 @@ class ChemGraph:
             )
             os.makedirs(self.log_dir, exist_ok=True)
             # Set env var for tools to pick up
-            os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
+            if workflow_type != "main_agent":
+                os.environ["CHEMGRAPH_LOG_DIR"] = self.log_dir
+
+        if workflow_type == "main_agent":
+            self.log_dir = canonical_artifact_directory(self.log_dir)
+            self.backend = bind_artifact_directory(self.backend, self.log_dir)
+            deepagent_backend = bind_artifact_directory(deepagent_backend, self.log_dir)
+            for options in self.subagent_options.values():
+                if "backend" in options:
+                    options["backend"] = bind_artifact_directory(options["backend"], self.log_dir)
 
         # Initialize session memory store
         if session_store is not None:
@@ -368,6 +478,7 @@ class ChemGraph:
                 api_key=api_key,
                 argo_user=argo_user,
                 reasoning_effort=reasoning_effort,
+                **({"endpoint": _model_endpoint} if _model_endpoint is not None else {}),
             )
         except Exception as e:
             logger.error(f"Exception thrown when loading {model_name}: {str(e)}")
@@ -403,19 +514,13 @@ class ChemGraph:
         self.enable_deepagent = enable_deepagent
         self.deepagent_backend = deepagent_backend
         if workflow_type == "deep_agent" and deepagent_tool_registry is None:
-            from chemgraph.registry.tools import ToolRegistry
-
-            attached_names = {
-                entry.get("function", entry).get("name", entry.get("type"))
-                if isinstance(entry, dict)
-                else getattr(entry, "name", getattr(entry, "__name__", None))
-                for entry in tools or ()
-            }
-            deepagent_tool_registry = ToolRegistry(
-                spec for spec in ToolRegistry().specs()
-                if spec.name not in attached_names
-                and (human_supervised or not spec.interactive)
-            )
+            deepagent_tool_registry = default_tool_registry(tools, human_supervised=human_supervised)
+        self.tool_registry = tool_registry
+        if workflow_type == "main_agent" and tool_registry is None:
+            self.tool_registry = default_tool_registry(tools, human_supervised=human_supervised)
+        self.main_agent_prompt = (
+            prompts.main_agent if prompts.main_agent is not None else DEFAULT_MAIN_AGENT_PROMPT
+        )
         self.deepagent_tool_registry = deepagent_tool_registry
         self.deepagent_skills = normalized_deepagent_skills
         self.deepagent_skill_dirs = normalized_skill_dirs
@@ -483,75 +588,22 @@ class ChemGraph:
         else:
             self.support_structured_output = support_structured_output
 
-        tool_signatures = tuple(
-            sorted(
-                f"{getattr(tool, 'name', type(tool).__name__)}:"
-                f"{getattr(getattr(tool, 'args_schema', None), '__name__', '')}"
-                for tool in self.tools or []
+        self.runtime_config = None
+        if workflow_type == "main_agent":
+            endpoint = prepared_model.endpoint_descriptor or describe_model_endpoint(
+                prepared_model, llm, self.model_name, base_url,
             )
-        )
-        workspace = getattr(self.deepagent_backend, "cwd", None)
-        topology_payload = {
-            "model_name": self.model_name,
-            "reasoning_effort": self.reasoning_effort,
-            "recursion_limit": self.recursion_limit,
-            "structured_output": self.structured_output,
-            "generate_report": self.generate_report,
-            "max_retries": self.max_retries,
-            "human_supervised": self.human_supervised,
-            "terminal_tool_names": self.terminal_tool_names,
-            "enable_deepagent": self.enable_deepagent,
-            "workspace": str(workspace) if workspace is not None else None,
-            "tool_signatures": tool_signatures,
-            "system_prompt": self.system_prompt,
-            "formatter_prompt": self.formatter_prompt,
-            "report_prompt": self.report_prompt,
-        }
-        if (
-            self.enable_deepagent
-            and self.deepagent_prompt != DEFAULT_DEEPAGENT_PROMPT
-        ):
-            topology_payload["deepagent_prompt"] = self.deepagent_prompt
-        if self.enable_deepagent and self.deepagent_skills:
-            topology_payload["deepagent_skills"] = self.deepagent_skills
-        if self.enable_deepagent and self.deepagent_skill_dirs:
-            topology_payload["deepagent_skill_dirs"] = self.deepagent_skill_dirs
-        if self.enable_deepagent and self.deepagent_discover_skills:
-            topology_payload["deepagent_discover_skills"] = True
-            topology_payload["deepagent_user_skills_dir"] = self.deepagent_user_skills_dir
-        topology_fingerprint = hashlib.sha256(
-            json.dumps(topology_payload, sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
+            self.runtime_config = MainAgentRuntimeConfig.from_agent(
+                self, endpoint=endpoint,
+                default_prompts=(prompts.system == single_agent_prompt
+                                 and prompts.formatter == default_formatter_prompt
+                                 and prompts.report == default_report_prompt
+                                 and (not self.enable_deepagent or self.deepagent_prompt == DEFAULT_DEEPAGENT_PROMPT)),
+            )
         self.main_agent_metadata = MainAgentSessionMetadata(
-            graph_config=MainAgentGraphConfig(
-                model_name=self.model_name,
-                recursion_limit=self.recursion_limit,
-                reasoning_effort=self.reasoning_effort,
-                structured_output=self.structured_output,
-                generate_report=self.generate_report,
-                max_retries=self.max_retries,
-                human_supervised=self.human_supervised,
-                terminal_tool_names=self.terminal_tool_names,
-                enable_deepagent=self.enable_deepagent,
-                deepagent_workspace=(
-                    str(Path(workspace).resolve()) if workspace is not None else None
-                ),
-                deepagent_skills=self.deepagent_skills,
-                deepagent_skill_dirs=self.deepagent_skill_dirs,
-                deepagent_discover_skills=self.deepagent_discover_skills,
-                deepagent_user_skills_dir=self.deepagent_user_skills_dir,
-                subagent_names=(
-                    ("chemgraph", "deepagent")
-                    if self.enable_deepagent
-                    else ("chemgraph",)
-                ),
-                tool_signatures=tool_signatures,
-                package_version=__version__,
-                topology_fingerprint=topology_fingerprint,
-            ),
-            checkpoint_backend=(
-                type(checkpointer).__name__ if checkpointer is not None else "memory"
-            ),
+            graph_config=(self.runtime_config.saved if self.runtime_config else
+                          MainAgentGraphConfig(model_name=self.model_name)),
+            checkpoint_backend=type(checkpointer).__name__ if checkpointer is not None else "memory",
         )
 
         self.workflow_map = {
@@ -590,23 +642,7 @@ class ChemGraph:
         elif self.workflow_type == "main_agent":
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
-                main_tools=self.tools,
-                subagent_system_prompt=self.system_prompt,
-                subagent_formatter_prompt=self.formatter_prompt,
-                subagent_report_prompt=self.report_prompt,
-                subagent_structured_output=self.structured_output,
-                subagent_generate_report=self.generate_report,
-                subagent_max_retries=self.max_retries,
-                subagent_human_supervised=self.human_supervised,
-                subagent_terminal_tool_names=self.terminal_tool_names,
-                enable_deepagent=self.enable_deepagent,
-                deepagent_backend=self.deepagent_backend,
-                deepagent_skills=self.deepagent_skills,
-                deepagent_skill_dirs=self.deepagent_skill_dirs,
-                deepagent_discover_skills=self.deepagent_discover_skills,
-                deepagent_user_skills_dir=self.deepagent_user_skills_dir,
-                deepagent_recursion_limit=self.recursion_limit,
-                deepagent_system_prompt=self.deepagent_prompt,
+                **self.runtime_config.graph_arguments(),
                 checkpointer=self.checkpointer,
                 subagent_recorder=(
                     SubagentRunRecorder(self.session_store)

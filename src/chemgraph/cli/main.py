@@ -120,11 +120,19 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--tool", dest="local_tool_names", action="append", metavar="NAME",
         help=(
-            "Restrict deep_agent's on-demand catalog to these names; repeat to add "
+            "Restrict main_agent/deep_agent's on-demand catalog to these names; repeat to add "
             "tools (default: non-interactive built-ins; --human-supervised also "
             "enables interactive tools)"
         ),
     )
+    parser.add_argument("--workspace", default=None, metavar="PATH",
+                        help="Enable main_agent file and shell access in this workspace")
+    parser.add_argument("--skill", dest="skills", action="append", default=None,
+                        metavar="PATH", help="Add a main_agent host skill collection")
+    parser.add_argument("--discover-skills", action=argparse.BooleanOptionalAction,
+                        default=None, help="Discover main_agent personal/project skills")
+    parser.add_argument("--subagent", dest="subagents", action="append", default=None,
+                        metavar="NAME", help="Restrict main_agent discoverable workers (repeatable)")
     parser.add_argument(
         "--deepagent",
         action=argparse.BooleanOptionalAction,
@@ -521,6 +529,8 @@ def _handle_run(args: argparse.Namespace) -> None:
     args : argparse.Namespace
         Parsed CLI arguments.
     """
+    explicit_main_options = {key for key in ("workspace", "skills", "discover_skills", "subagents")
+                             if getattr(args, key, None) is not None}
     cli_deepagent = getattr(args, "deepagent", None)
     cli_deepagent_workspace = getattr(args, "deepagent_workspace", None)
     cli_deepagent_skills = getattr(args, "deepagent_skills", None)
@@ -675,8 +685,8 @@ def _handle_run(args: argparse.Namespace) -> None:
     deepagent_tool_registry = None
     cli_tools = getattr(args, "local_tool_names", None)
     local_names = cli_tools if cli_tools is not None else config.get("tools")
-    if cli_tools is not None and args.workflow != "deep_agent":
-        console.print("[red]--tool requires -w deep_agent.[/red]")
+    if cli_tools is not None and args.workflow not in {"deep_agent", "main_agent"}:
+        console.print("[red]--tool requires -w deep_agent or -w main_agent.[/red]")
         sys.exit(2)
     if (interactive or args.workflow == "deep_agent") and local_names is not None:
         from chemgraph.registry.tools import RegistryError, ToolRegistry
@@ -693,6 +703,21 @@ def _handle_run(args: argparse.Namespace) -> None:
         except (RegistryError, ValueError) as exc:
             console.print(f"[red]Invalid local tools: {escape(str(exc))}[/red]")
             sys.exit(2)
+
+    main_options = {}
+    for key in ("workspace", "skills", "discover_skills", "subagents"):
+        value = getattr(args, key, None)
+        if value is not None:
+            if args.workflow != "main_agent" and not interactive:
+                if key in explicit_main_options:
+                    console.print(f"[red]{key} requires the main_agent workflow.[/red]")
+                    sys.exit(2)
+                continue
+            main_options[{"skills": "skill_dirs", "subagents": "subagent_names"}.get(key, key)] = value
+    if interactive:
+        # Retain the selected catalog for both capability workflows, including
+        # a workflow chosen in the startup prompt or a later /workflow command.
+        main_options["tool_registry"] = deepagent_tool_registry
 
     # ---- MCP tool loading ----------------------------------------------
     mcp_tools = None
@@ -717,6 +742,7 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     if getattr(args, "interactive", False):
         interactive_mode(
+            **main_options,
             model=args.model,
             workflow=args.workflow,
             structured=args.structured,

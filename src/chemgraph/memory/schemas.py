@@ -5,7 +5,8 @@ Pydantic schemas for ChemGraph session memory.
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from chemgraph.models.endpoints.identity import ModelEndpointDescriptor
 
 
 class SessionMessage(BaseModel):
@@ -40,7 +41,11 @@ SubagentRunStatus = Literal[
 class MainAgentGraphConfig(BaseModel):
     """Non-secret configuration needed to validate a durable graph topology."""
 
+    model_config = ConfigDict(frozen=True)
+
     model_name: str
+    artifact_directory: Optional[str] = None
+    model_endpoint: Optional[ModelEndpointDescriptor] = None
     recursion_limit: int = 200
     reasoning_effort: Optional[str] = None
     structured_output: bool = False
@@ -58,7 +63,20 @@ class MainAgentGraphConfig(BaseModel):
     subagent_names: tuple[str, ...] = ("chemgraph",)
     tool_signatures: tuple[str, ...] = ()
     package_version: str = ""
+    # Keep 1 as the missing-field default for legacy records.
     graph_schema_version: int = 1
+    workspace: Optional[str] = None
+    skills: tuple[str, ...] = ()
+    skill_dirs: tuple[str, ...] = ()
+    discover_skills: bool = True
+    user_skills_dir: Optional[str] = None
+    registry_tool_names: tuple[str, ...] = ()
+    # Original restriction; subagent_names records the effective catalog.
+    configured_subagent_names: Optional[tuple[str, ...]] = None
+    main_agent_prompt: Optional[str] = None
+    cli_restorable: bool = False
+    configuration_id: Optional[str] = None
+    requires_configuration_id: bool = False
     topology_fingerprint: str = ""
 
 

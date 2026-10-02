@@ -21,7 +21,7 @@ from functools import partial
 from pydantic import BaseModel
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import set_config_context
-from langgraph.prebuilt import ToolNode
+from chemgraph.graphs.tool_review import reviewed_tool_node
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_openai import ChatOpenAI
@@ -658,6 +658,7 @@ def construct_executor_subgraph(
     llm: ChatOpenAI,
     tools: list,
     system_prompt: str,
+    interrupt_on=None,
 ):
     """Build the reusable executor subgraph (Agent -> Tools -> Agent loop).
 
@@ -686,7 +687,7 @@ def construct_executor_subgraph(
             executor_model_node, llm=llm, system_prompt=system_prompt, tools=tools
         ),
     )
-    workflow.add_node("tools", ToolNode(tools, handle_tool_errors=True))
+    workflow.add_node("tools", reviewed_tool_node(tools, interrupt_on, state_schema=ExecutorState, handle_tool_errors=True))
     workflow.add_node("finalize", format_executor_output)
 
     workflow.set_entry_point("executor_agent")
@@ -795,6 +796,7 @@ def construct_multi_agent_graph(
     max_task_retries: int = 2,
     human_supervised: bool = False,
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct the planner-executor graph using the Send() pattern.
 
@@ -852,7 +854,7 @@ def construct_multi_agent_graph(
 
     # Build the executor subgraph
     executor_subgraph = construct_executor_subgraph(
-        llm, executor_tools, executor_prompt
+        llm, executor_tools, executor_prompt, interrupt_on=interrupt_on
     )
 
     # Build the main graph

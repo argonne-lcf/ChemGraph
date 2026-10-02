@@ -6,7 +6,7 @@ Python. `single_agent` is the recommended first choice.
 | Workflow | Purpose | Requirements and constraints |
 | --- | --- | --- |
 | `single_agent` | One general chemistry agent with local tools | Default; CLI and Python |
-| `main_agent` | Durable supervisor with checkpointed subagents | Interactive CLI or `MainAgentSession` only |
+| `main_agent` | Direct workspace/chemistry work and configured specialists | Interactive CLI or `MainAgentSession` only |
 | `deep_agent` | Workspace tasks and attached chemistry tools | CLI and Python; alias `deepagent`; broad local shell access |
 | `multi_agent` | Routes tasks among specialized agents | More model calls and orchestration overhead |
 | `graspa` | H2O, CO2, or N2 adsorption | Single-component runs; configured SYCL executable; alias `graspa_agent` |
@@ -30,26 +30,55 @@ It minimizes orchestration complexity while exposing the normal tool set.
 
 ## Main agent
 
-`main_agent` manages longer-lived tasks through specialized subagents and
-durable checkpoints. It is intentionally session-oriented:
+`main_agent` uses the existing DeepAgent factory and works directly with skills,
+workspace files, shell commands, and lazy local tools. It may delegate substantial work to
+configured specialists while retaining one durable conversation:
 
 ```bash
-chemgraph run --interactive --workflow main_agent
+chemgraph run --interactive --workflow main_agent --workspace . \
+  --skill ../shared-skills --subagent single_agent --subagent deep_agent
 ```
 
-In Python, construct `MainAgentSession`; `ChemGraph.run()` rejects this workflow.
-See [Python API](python_api.md).
+By default the non-test built-in specialists are discoverable as metadata; none
+is active. `search_agents` finds workers and `load_agents` activates them before
+`task` delegation. A selection restricts the catalog; aliases resolve to canonical
+names and duplicates are rejected. Loaded workers last for one turn, including
+approval pauses, retry, and restart, and clear when it completes. An empty Python
+or TOML catalog disables discovery and delegation.
+`deep_agent` inherits the main workspace and skills. The legacy `--deepagent`
+worker keeps its separate `--deepagent-*` options and cannot also be selected
+through `--subagent deep_agent`.
+
+Without `--workspace`, main-agent files live in checkpoints and no shell is
+available. Bundled skills and the host tool registry remain available. Host
+registry tools are independent of the file backend; use absolute host artifact
+paths. Workspace shell commands are not sandboxed to the selected directory.
+File mutations, shell commands, and reviewed registry operations pause for
+approval. Registry workers retain their own configured tools and private tool/skill state.
+They inherit mandatory parent reviews and may add stricter reviews.
+
+Use `--tool NAME` to restrict the catalog and `--no-discover-skills` to disable
+automatic personal/project skill discovery. Selection survives model and
+workflow changes. Workspace and explicit skill paths are canonicalized on
+activation. Python supports these capabilities through `ChemGraph` and
+`MainAgentSession`; `ChemGraph.run()` rejects this workflow.
+
+New graph sessions use schema version 4. Old transcripts remain readable, but
+old checkpoints require a new session. New supported CLI configurations restore
+through `--resume` or `/resume`; caller-owned Python configurations must be
+reconstructed through Python. See [Python API](python_api.md).
 
 ## Deep Agent
 
 `deep_agent` is a reusable workflow with two entry points. It can
 run directly through `ChemGraph(workflow_type="deep_agent")`, or it can be
-registered under `main_agent` as the `deepagent` subagent. Both paths use
+discovered under `main_agent` as the `deep_agent` worker. The legacy
+`--deepagent` flag activates that worker with its separate options. Both paths use
 `construct_deep_agent_graph`, so the prompt, backend, tools, recursion limit,
 and approval policy have one implementation. Both entry points use
 `DEFAULT_DEEPAGENT_PROMPT` unless a custom prompt is supplied. The prompt permits
 attached chemistry tools; available tools are configured by the caller. The
-built-in main-agent workspace worker is created without chemistry tools.
+legacy main-agent workspace adapter is created without attached chemistry tools.
 
 ```bash
 # Direct, process-local interactive thread with action reviews.

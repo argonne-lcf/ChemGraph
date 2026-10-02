@@ -26,22 +26,30 @@ DEEPAGENT_ENV_ALLOWLIST: tuple[str, ...] = (
 )
 
 
-def resolve_workspace(workspace: Optional[str]) -> Path:
-    """Return the absolute Deep Agent workspace directory.
+def resolve_workspace(workspace: str | os.PathLike[str] | None) -> Path:
+    """Return the canonical host workspace directory.
 
     Parameters
     ----------
     workspace : str, optional
-        Directory path; ``None``/empty selects the current working directory.
+        Non-empty directory path; ``None`` selects the current working directory.
 
     Raises
     ------
     ValueError
-        When the path is not an existing directory.
+        When an explicit path is empty, invalid, or not an existing directory.
     """
-    root = Path(workspace or Path.cwd()).expanduser().resolve()
+    if workspace is not None and (
+        not isinstance(workspace, (str, os.PathLike)) or not str(workspace).strip()
+    ):
+        raise ValueError("Workspace must be a non-empty host directory path.")
+    root = Path(workspace if workspace is not None else Path.cwd()).expanduser()
+    try:
+        root = root.resolve(strict=True)
+    except (FileNotFoundError, NotADirectoryError) as exc:
+        raise ValueError(f"Workspace is not a directory: {root.absolute()}") from exc
     if not root.is_dir():
-        raise ValueError(f"Deep Agent workspace is not a directory: {root}")
+        raise ValueError(f"Workspace is not a directory: {root}")
     return root
 
 
@@ -94,7 +102,7 @@ def update_shell_environment(backend: Any, **values: Optional[str]) -> bool:
     return True
 
 
-def create_host_shell_backend(workspace: Optional[str]) -> Any:
+def create_host_shell_backend(workspace: str | os.PathLike[str] | None) -> Any:
     """Create the development-only host-shell backend for *workspace*.
 
     Parameters

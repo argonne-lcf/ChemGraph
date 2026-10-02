@@ -110,13 +110,41 @@ definitions. See [MCP servers](mcp_servers.md).
 [general]
 workflow = "main_agent"
 checkpoint_db = "~/.chemgraph/checkpoints.db"
+# workspace = "."
+# skills = ["../shared-skills"]
+discover_skills = true
+# subagents = ["single_agent", "deep_agent"]
+# tools = ["calculator", "run_ase"]
 enable_deepagent = false
 deepagent_discover_skills = true
 # deepagent_skills = ["../external/AtomisticSkills/.agents/skills/"]
 ```
 
+Main-agent `workspace`, `skills`, `discover_skills`, `subagents`, and `tools`
+correspond to `--workspace`, repeatable `--skill`, `--[no-]discover-skills`,
+repeatable `--subagent`, and repeatable `--tool`. CLI lists replace TOML lists.
+`skills` contains host directories resolved against the invocation directory;
+Python `skills` instead contains backend-relative sources. No workspace means
+checkpoint files and no shell, while bundled skills and host registry tools
+remain available. Shell access is not confined to the workspace.
+
+Omitting `subagents` exposes the non-test built-in worker catalog with no active
+workers. A list restricts discovery; `subagents = []` disables it. The agent loads
+workers on demand for the current turn, retaining the selection during approval
+pauses and restart and clearing it at completion. `tools = []` disables discovery. Inactive main-agent
+settings are retained for interactive workflow switching and ignored for other
+headless workflows. Explicit incompatible CLI flags are rejected.
+
+Start a new session after the graph upgrade. Old transcripts remain readable.
+Both startup `--resume` and `/resume` restore saved supported configuration and
+pending approvals, overriding current main-agent settings.
+The CLI displays the saved settings before asking for host-workspace access;
+current CLI flags and TOML graph settings do not modify a resumed session.
+Caller-owned Python configurations require Python reconstruction and, for
+opaque components, their original non-secret `configuration_id`.
+
 `main_agent` still requires interactive CLI mode. `enable_deepagent` controls
-only its optional `deepagent` subagent. To call the graph directly, select
+only its legacy `deep_agent` worker. To call the graph directly, select
 `workflow = "deep_agent"`; `deepagent_workspace` applies to either entry point.
 Deep Agent is a development-only capability with broad local access, so leave
 it disabled unless you understand the security boundary.

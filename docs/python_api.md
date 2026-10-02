@@ -98,24 +98,105 @@ credentials or sensitive user data.
 
 ## Main-agent sessions
 
-The checkpointed `main_agent` is not run through `ChemGraph.run()`. Import and
-construct `MainAgentSession` from `chemgraph.agent.main_session`, then use its
-session-oriented async methods. This API is
-intended for durable, interactive supervisor workflows; consult the class
-docstrings in the installed version for constructor and persistence options.
+The checkpointed `main_agent` performs direct workspace and chemistry work and
+optionally delegates to configured specialists. Drive it with `MainAgentSession`
+rather than `ChemGraph.run()`:
 
-`MainAgentSession` accepts an optional `on_event` callback with the signature
-`(event_name, payload)`. Tagged `tool_call_started` payloads include
-`subagent_name`, allowing callers to distinguish delegated tool activity from
-supervisor tools. The supervisor can use `read_file` for checkpoint-backed
-files returned by subagents, but this does not expose host files or session
-artifacts.
+```python
+from deepagents.backends import LocalShellBackend
+from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
+from chemgraph.agent.main_session import MainAgentSession
 
-For CLI use, the equivalent is:
-
-```bash
-chemgraph run --interactive --workflow main_agent
+agent = ChemGraph(
+    workflow_type="main_agent",
+    backend=LocalShellBackend(root_dir="/path/to/checkout", env={}),
+    skill_dirs=["/path/to/shared-skills"],  # Host directories
+    skills=["/workspace/site-skills/"],   # Backend-relative sources
+    subagent_names=["single_agent", "deep_agent"],
+    prompts=PromptConfig(main_agent="Complete requests directly or delegate as needed."),
+    configuration_id="my-workspace-v1",   # Non-secret caller-owned configuration ID
+)
+session = MainAgentSession(
+    agent.workflow,
+    session_store=agent.session_store,
+    session_metadata=agent.main_agent_metadata,
+)
+result = await session.run("Inspect the available skills and prepare a calculation.")
+if result.status == "waiting_for_user":
+    # Inspect result.interrupts before deciding. This example rejects the action.
+    result = await session.resume({"decisions": [{"type": "reject"}]})
 ```
+
+For cross-process persistence, supply a durable `checkpointer` to `ChemGraph`,
+retain `session.thread_id`, reconstruct the same configuration, and call
+`await session.restore()` before answering pending interrupts. The default
+checkpointer is process-local. `MainAgentSession` inherits the graph's recursion
+limit; an explicit limit must match supplied session metadata.
+
+The saved configuration includes the canonical artifact directory selected by
+`log_dir`, `CHEMGRAPH_LOG_DIR`, or the generated default, plus a non-secret model
+endpoint descriptor. CLI restoration uses these saved values even if the current
+directory, environment, or endpoint settings changed. Credentials are resolved
+again; they are never saved in the configuration. Endpoint URLs containing user
+information, query parameters, or fragments require Python reconstruction and a
+matching `configuration_id`. Python callers must reconstruct with the original
+artifact directory and model routing as well as the original graph options.
+Schema-1 through schema-3 checkpoints require a new session; transcripts remain
+readable. Relative chemistry outputs use a session-scoped directory, while
+caller-owned shell backends retain their caller-supplied environments.
+
+`backend=None` provides checkpoint-backed file tools and no shell. Local shell
+backends mount host files at `/workspace/`; shell commands use host paths and
+are not confined to the workspace. Registry tools always execute on the host,
+even without a workspace. `tool_registry=None` enables the default catalog;
+`ToolRegistry([])` disables it. Interactive catalog tools require
+`human_supervised=True` or explicit inclusion. Review policies cover direct
+workspace mutations, execution, and selected registry operations.
+
+`subagent_names=None` exposes the non-test built-in worker catalog with no active
+workers; a list restricts it and `[]` disables discovery. `agent_registry` supplies
+a custom `AgentRegistry`. Discovery returns metadata without constructing graphs;
+`load_agents` constructs selected workers and makes them available to `task` for
+one turn. Selection survives pauses, retries, and restart, then clears on
+completion. Aliases canonicalize and duplicate catalog names are rejected.
+`subagent_options` provides per-worker constructor overrides. Named `deep_agent` workers inherit
+the main workspace and skills, with Python overrides taking precedence. Their
+tool catalogs are separately configured. Registry workers inherit the parent
+checkpointer and mandatory parent reviews; additional worker reviews are merged
+without weakening the parent policy.
+`PromptConfig.system`, `formatter`, and `report` configure the lazy `single_agent`
+worker; `PromptConfig.main_agent` configures the parent.
+
+Durable restoration validates both checkpoint and readable-session identities.
+Custom backends, tool implementations, and opaque worker settings require a
+matching `configuration_id` when creating another session instance. Change this
+ID whenever caller-owned behavior or environment changes; do not use credentials
+as IDs. Environment values and object representations are not serialized into
+configuration metadata. Raw graphs can supply `configuration_id` directly to
+`MainAgentSession`. Without an identity they can continue only in their existing
+session instance. A custom ID enables Python restoration, not CLI reconstruction.
+
+CLI-created backend metadata records the environment allowlist policy; approved
+variables are read from the current process when recreating the backend. Python
+backends with arbitrary environment settings remain caller-owned. Unpersisted
+worker prompts and options also require Python reconstruction. Old graph
+checkpoints cannot resume after this upgrade; their transcripts remain readable.
+
+Built-in tool description edits remain compatible with stored sessions. Changes
+to selected tools, approval policies, or built-in behavior can require a new
+session; restoration rejects incompatible graphs before executing an action.
+Maintainers must bump `BUILTIN_TOOL_CATALOG_VERSION` for built-in schema,
+behavior, or safety changes and `WORKSPACE_REVIEW_POLICY_VERSION` for approval
+semantics changes. Worker constructor paths, defaults, requirements, and
+`AgentSpec.compatibility_version` are part of restoration identity. Bump the
+worker compatibility version or `BUILTIN_AGENT_CATALOG_VERSION` when changing
+worker behavior. Custom registry metadata and constructor options retain full
+identity checks and their caller-owned configuration requirements.
+
+The optional `on_event(event_name, payload)` callback reports direct activity
+and tagged worker activity; worker events include `subagent_name`. Skills and
+active registry selections remain private to each agent, while checkpoint-backed
+files may be exchanged with workers.
 
 ## Workspace Deep Agent
 

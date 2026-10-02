@@ -27,7 +27,7 @@ to call more tools or produce a final answer.
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import ToolNode
+from chemgraph.graphs.tool_review import reviewed_tool_node
 
 from chemgraph.tools.rag_tools import load_document, query_knowledge_base
 from chemgraph.tools.ase_tools import (
@@ -193,6 +193,7 @@ def construct_rag_agent_graph(
     system_prompt: str = rag_agent_prompt,
     tools: list = None,
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct a RAG agent graph with document retrieval and chemistry tools.
 
@@ -219,7 +220,7 @@ def construct_rag_agent_graph(
         if tools is None:
             tools = _default_tools()
 
-        tool_node = ToolNode(tools=tools)
+        tool_node = reviewed_tool_node(tools, interrupt_on, state_schema=State)
         graph_builder = StateGraph(State)
 
         # Nodes

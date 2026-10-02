@@ -16,7 +16,7 @@ from __future__ import annotations
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import ToolNode
+from chemgraph.graphs.tool_review import reviewed_tool_node
 
 from chemgraph.tools.alcf_iri_tools import ALCF_IRI_CATEGORY_TOOLS
 from chemgraph.tools.alcf_iri_flat_tools import ALCF_IRI_FLAT_TOOLS
@@ -82,6 +82,7 @@ def construct_iri_graph(
     formatter_prompt: str = formatter_prompt,
     tools: list | None = None,
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct the single-agent IRI graph.
 
@@ -106,7 +107,7 @@ def construct_iri_graph(
         tools = ALCF_IRI_FLAT_TOOLS
     if system_prompt is None:
         system_prompt = _default_prompt_for(tools)
-    tool_node = ToolNode(tools=tools)
+    tool_node = reviewed_tool_node(tools, interrupt_on, state_schema=State)
     graph_builder = StateGraph(State)
 
     graph_builder.add_node(

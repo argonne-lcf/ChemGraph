@@ -3,7 +3,7 @@
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import ToolNode
+from chemgraph.graphs.tool_review import reviewed_tool_node
 
 from chemgraph.tools.graspa_tools import run_graspa
 from chemgraph.schemas.agent_response import ResponseFormatter
@@ -107,6 +107,7 @@ def construct_graspa_graph(
     formatter_prompt: str = formatter_prompt,
     tools: list = None,
     checkpointer=_DEFAULT_CHECKPOINTER,
+    interrupt_on=None,
 ):
     """Construct a geometry optimization graph.
 
@@ -133,7 +134,7 @@ def construct_graspa_graph(
             checkpointer = MemorySaver()
         if tools is None:
             tools = [run_graspa]
-        tool_node = ToolNode(tools=tools)
+        tool_node = reviewed_tool_node(tools, interrupt_on, state_schema=State)
         graph_builder = StateGraph(State)
 
         if not structured_output:

@@ -188,7 +188,14 @@ def test_single_agent_initialization_injects_calculator_availability(monkeypatch
 def test_main_agent_forwards_supervisor_and_worker_configuration(monkeypatch, tmp_path):
     captured = {}
     workflow = _FakeWorkflow()
-    main_tool = _DummyTool("read_file")
+    from langchain_core.tools import tool
+
+    @tool
+    def inspect_result() -> str:
+        """Inspect a calculation result."""
+        return "result"
+
+    main_tool = inspect_result
     deepagent_backend = object()
 
     def fake_constructor(*args, **kwargs):

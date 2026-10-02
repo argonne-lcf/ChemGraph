@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -20,8 +21,12 @@ from chemgraph.agent.interrupts import (
     normalize_interrupts,
 )
 from chemgraph.agent.turn import serialize_state
-from chemgraph.graphs.main_agent import latest_assistant_text
+from chemgraph.graphs.main_agent import latest_assistant_text, _preserve_terminal_tool_output
 from chemgraph.memory.schemas import MainAgentGraphConfig, MainAgentSessionMetadata
+from chemgraph.memory.graph_config import (
+    GRAPH_SCHEMA_VERSION, NEW_SESSION_GUIDANCE, fingerprint, validate_configuration_id,
+)
+from chemgraph.utils.artifacts import artifact_context, artifact_directory, canonical_artifact_directory
 from chemgraph.memory.serialization import serialize_messages
 from chemgraph.memory.store import SessionStore
 
@@ -56,25 +61,63 @@ class MainAgentTurnResult:
 
 
 class MainAgentSession:
-    """Drive one resumable, process-lifetime main-agent thread."""
+    """Drive one checkpointed thread and validate its reconstruction identity.
+
+    Pass ChemGraph's ``main_agent_metadata`` with its compiled workflow. Raw
+    graphs use a non-secret ``configuration_id`` for reconstruction across
+    session instances; without one only the current instance may continue.
+    ``recursion_limit=None`` inherits metadata or the graph's configured limit.
+    """
 
     def __init__(
         self,
         workflow: Any,
         *,
         thread_id: str | None = None,
-        recursion_limit: int = 200,
+        recursion_limit: int | None = None,
         session_store: SessionStore | None = None,
         session_metadata: MainAgentSessionMetadata | None = None,
+        configuration_id: str | None = None,
         on_event: EventCallback | None = None,
     ):
+        if recursion_limit is None:
+            recursion_limit = (session_metadata.graph_config.recursion_limit if session_metadata
+                               else (getattr(workflow, "config", None) or {}).get("recursion_limit", 200))
+        if session_metadata is not None and recursion_limit != session_metadata.graph_config.recursion_limit:
+            raise ValueError("recursion_limit must match the graph's session metadata.")
         if recursion_limit <= 0:
             raise ValueError("recursion_limit must be positive.")
         self.workflow = workflow
+        configuration_id = validate_configuration_id(configuration_id)
+        if session_metadata is not None:
+            session_metadata = session_metadata.model_copy(deep=True)
+            if configuration_id is not None and configuration_id != session_metadata.graph_config.configuration_id:
+                raise ValueError("configuration_id must match the graph's session metadata.")
+        else:
+            directory = canonical_artifact_directory(artifact_directory() or os.getcwd())
+            session_metadata = MainAgentSessionMetadata(graph_config=MainAgentGraphConfig(
+                model_name="unknown", graph_schema_version=GRAPH_SCHEMA_VERSION,
+                artifact_directory=directory,
+                recursion_limit=recursion_limit,
+                configuration_id=configuration_id, requires_configuration_id=True,
+                topology_fingerprint=(fingerprint({
+                    "schema": GRAPH_SCHEMA_VERSION, "configuration_id": configuration_id,
+                    "recursion_limit": recursion_limit,
+                    "artifact_directory": directory,
+                }) if configuration_id else ""),
+            ))
+        graph_config = session_metadata.graph_config
+        self._owner_id = str(uuid.uuid4())
+        self._restored = False
         self._thread_id = thread_id or str(uuid.uuid4())
         self.config = {
             "configurable": {"thread_id": self._thread_id},
             "recursion_limit": recursion_limit,
+            "metadata": {
+                "chemgraph_schema": graph_config.graph_schema_version,
+                "chemgraph_topology": graph_config.topology_fingerprint,
+                "chemgraph_owner": self._owner_id,
+            },
         }
         if on_event is not None:
             self.config["callbacks"] = [
@@ -151,6 +194,13 @@ class MainAgentSession:
             )
         if not isinstance(message, str) or not message.strip():
             raise ValueError("The user message must be a non-empty string.")
+        snapshot = await self._validate_checkpoint()
+        if snapshot and getattr(snapshot, "created_at", None):
+            if not self._restored and (snapshot.metadata or {}).get("chemgraph_owner") != self._owner_id:
+                raise RuntimeError("Restore the existing session before starting a new turn.")
+            status = self._result_from_snapshot(snapshot).status
+            if status != "completed":
+                raise RuntimeError("Restore the existing session before resuming or retrying it.")
         self._ensure_registered(message)
         self._start_usage()
         return await self._run({"messages": [HumanMessage(content=message)]})
@@ -166,50 +216,25 @@ class MainAgentSession:
             )
         if not self._pending:
             raise RuntimeError("The main-agent session is not waiting for input.")
+        await self._validate_checkpoint()
         return await self._run(Command(resume=self._resume_value(response)))
 
     async def retry(self) -> MainAgentTurnResult:
         """Resume the failed checkpoint without duplicating user input."""
         if not self._failed:
             raise RuntimeError("The main-agent session has no failed operation to retry.")
+        await self._validate_checkpoint()
         return await self._run(None)
 
     async def restore(self) -> MainAgentTurnResult:
         """Restore pending, failed, or idle state without adding a message."""
-        if self.session_store is not None:
-            stored = self.session_store.get_session_metadata(self.thread_id)
-            if stored is None:
-                raise MainAgentRestoreError(
-                    f"Session {self.thread_id!r} does not exist in the session store."
-                )
-            _, metadata = stored
-            if metadata is not None and self.session_metadata is not None:
-                stored_config = metadata.graph_config
-                active_config = self.session_metadata.graph_config
-                if (
-                    stored_config.graph_schema_version
-                    != active_config.graph_schema_version
-                ):
-                    raise IncompatibleCheckpointError(
-                        "The stored graph schema is incompatible with this "
-                        "ChemGraph version."
-                    )
-                if (
-                    stored_config.topology_fingerprint
-                    and active_config.topology_fingerprint
-                    and stored_config.topology_fingerprint
-                    != active_config.topology_fingerprint
-                ):
-                    raise IncompatibleCheckpointError(
-                        "The active graph topology does not match the stored session."
-                    )
-
-        snapshot = await self.workflow.aget_state(self.config)
+        snapshot = await self._validate_checkpoint()
         if not snapshot or not snapshot.created_at:
             raise MissingCheckpointError(
                 f"No checkpoint exists for main-agent thread {self.thread_id!r}."
             )
         result = self._result_from_snapshot(snapshot)
+        self._restored = True
         self._pending = result.interrupts
         self._failed = result.status == "failed"
         self._registered = True
@@ -234,6 +259,53 @@ class MainAgentSession:
                 logger.warning("Could not persist historical usage coverage.", exc_info=True)
         self._synchronize(snapshot.values, result.status)
         return replace(result, usage=self.last_usage)
+
+    async def _validate_checkpoint(self):
+        """Check both stores before any existing thread can execute or be resumed."""
+        active = self.session_metadata.graph_config
+        if active.graph_schema_version != GRAPH_SCHEMA_VERSION:
+            raise IncompatibleCheckpointError(f"The active graph schema is incompatible. {NEW_SESSION_GUIDANCE}")
+        snapshot = await self.workflow.aget_state(self.config)
+        checkpoint = (snapshot.metadata or {}) if getattr(snapshot, "created_at", None) else None
+        same_owner = checkpoint is not None and checkpoint.get("chemgraph_owner") == self._owner_id
+
+        def validate(schema, topology):
+            if schema != GRAPH_SCHEMA_VERSION:
+                raise IncompatibleCheckpointError(
+                    f"The stored graph schema is incompatible. {NEW_SESSION_GUIDANCE}"
+                )
+            if not same_owner and active.requires_configuration_id and not active.configuration_id:
+                raise IncompatibleCheckpointError(
+                    "Restoring caller-owned configuration requires the original configuration_id."
+                )
+            if not topology or not active.topology_fingerprint:
+                if same_owner and not topology and not active.topology_fingerprint:
+                    return
+                raise IncompatibleCheckpointError(
+                    f"The stored or active graph has no topology identity. {NEW_SESSION_GUIDANCE}"
+                )
+            if topology != active.topology_fingerprint:
+                raise IncompatibleCheckpointError(
+                    "The active graph topology does not match the stored session. "
+                    + NEW_SESSION_GUIDANCE
+                )
+
+        if checkpoint is not None:
+            validate(checkpoint.get("chemgraph_schema"), checkpoint.get("chemgraph_topology"))
+        if self.session_store is not None:
+            try:
+                stored = self.session_store.get_session_metadata(self.thread_id)
+            except Exception:
+                # Readable storage is supplementary; checkpoints remain authoritative.
+                logger.warning("Could not inspect readable session metadata.", exc_info=True)
+            else:
+                if stored is not None:
+                    metadata = stored[1]
+                    validate(
+                        metadata.graph_config.graph_schema_version if metadata else None,
+                        metadata.graph_config.topology_fingerprint if metadata else None,
+                    )
+        return snapshot
 
     def _resume_value(self, response: str | Mapping[str, Any]) -> Any:
         if isinstance(response, str):
@@ -264,7 +336,8 @@ class MainAgentSession:
         self._usage_operation += 1
         self._update_status("running")
         try:
-            result, state_values = await self._run_once(stream_input)
+            with artifact_context(self.session_metadata.graph_config.artifact_directory):
+                result, state_values = await self._run_once(stream_input)
         except Exception:
             self._usage.finish("failed")
             self._failed = True
@@ -314,7 +387,8 @@ class MainAgentSession:
             thread_id=self.thread_id,
             status="waiting_for_user" if pending else "completed",
             assistant_response=latest_assistant_text(
-                list(state_values.get("messages", []) or [])
+                list((_preserve_terminal_tool_output(state_values) if not pending
+                      else state_values).get("messages", []) or [])
             ),
             interrupts=pending,
             state=serialize_state(state_values),
@@ -324,15 +398,14 @@ class MainAgentSession:
     def _ensure_registered(self, message: str) -> None:
         if self.session_store is None or self._registered:
             return
-        metadata = self.session_metadata or MainAgentSessionMetadata(
-            graph_config=MainAgentGraphConfig(model_name="unknown")
-        )
+        metadata = self.session_metadata
         try:
             self.session_store.create_session(
                 session_id=self.thread_id,
                 model_name=metadata.graph_config.model_name,
                 workflow_type="main_agent",
                 title=SessionStore.generate_title(message),
+                log_dir=metadata.graph_config.artifact_directory,
                 status="new",
                 session_metadata=metadata,
             )
@@ -402,7 +475,10 @@ class MainAgentSession:
         return MainAgentTurnResult(
             thread_id=self.thread_id,
             status=status,
-            assistant_response=latest_assistant_text(list(values.get("messages", []) or [])),
+            assistant_response=latest_assistant_text(list(
+                (_preserve_terminal_tool_output(values) if status == "completed"
+                 else values).get("messages", []) or []
+            )),
             interrupts=pending,
             state=serialize_state(values),
         )

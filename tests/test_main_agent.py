@@ -215,7 +215,10 @@ async def test_main_agent_delegates_and_keeps_normal_turns_on_one_thread():
         "Calculate something",
         "Explain that result",
     ]
-    assert {tool.name for tool in llm.bound_tools} == {"read_file", "task"}
+    assert {tool.name for tool in llm.bound_tools} == {
+        "read_file", "task", "ls", "glob", "grep", "write_file", "edit_file",
+        "delete", "search_tools", "load_tools", "search_agents", "load_agents",
+    }
 
 
 @pytest.mark.asyncio
@@ -479,10 +482,10 @@ async def test_unknown_subagent_is_reported_to_main_model():
         for message in graph.get_state(session.config).values["messages"]
         if isinstance(message, ToolMessage)
     ]
-    assert any("does not exist" in text for text in tool_messages)
+    assert any("Load configured worker" in text for text in tool_messages)
 
 
-def test_default_worker_forwards_options_and_inherits_parent_checkpoint(monkeypatch):
+def test_lazy_chemistry_worker_forwards_options_and_inherits_parent_checkpoint(monkeypatch):
     captured = {}
 
     def fake_single_agent(*_args, **kwargs):
@@ -490,11 +493,21 @@ def test_default_worker_forwards_options_and_inherits_parent_checkpoint(monkeypa
         return _answering_subgraph("done")
 
     monkeypatch.setattr(
-        "chemgraph.graphs.main_agent.construct_single_agent_graph",
+        "chemgraph.graphs.single_agent.construct_single_agent_graph",
         fake_single_agent,
     )
     graph = construct_main_agent_graph(
-        _ScriptedChatModel(responses=[]),
+        _ScriptedChatModel(responses=[
+            AIMessage(content="", tool_calls=[{
+                "name": "load_agents", "args": {"names": ["single_agent"]}, "id": "load",
+            }]),
+            AIMessage(content="", tool_calls=[{
+                **_task_call("delegate"), "args": {
+                    "subagent_type": "single_agent", "description": "calculate",
+                },
+            }]),
+            AIMessage(content="done"),
+        ]),
         subagent_system_prompt="worker prompt",
         subagent_formatter_prompt="formatter prompt",
         subagent_report_prompt="report prompt",
@@ -505,8 +518,11 @@ def test_default_worker_forwards_options_and_inherits_parent_checkpoint(monkeypa
         subagent_terminal_tool_names=("save_result",),
     )
 
+    assert captured == {}
+    graph.invoke({"messages": [HumanMessage(content="Delegate calculation")]},
+                 {"configurable": {"thread_id": "lazy-chemistry"}})
+    assert captured.pop("interrupt_on")["run_ase"] == {"allowed_decisions": ["approve", "reject"]}
     assert captured == {
-        "tools": None,
         "structured_output": True,
         "generate_report": True,
         "max_retries": 3,
@@ -566,14 +582,16 @@ def test_deepagent_is_opt_in_and_receives_backend_configuration(
         **prompt_kwargs,
     )
 
-    assert captured["kwargs"]["backend"] is backend
-    assert captured["kwargs"]["tools"] == []
-    assert captured["kwargs"]["system_prompt"] == expected_prompt
-    assert captured["kwargs"]["skills"] == ["/workspace/skills/"]
-    assert captured["kwargs"]["skill_dirs"] == [str(tmp_path)]
-    assert captured["kwargs"]["checkpointer"] is None
-    assert captured["kwargs"]["recursion_limit"] == 17
-    assert captured["kwargs"]["name"] == "deepagent"
+    assert captured["kwargs"]["backend"] is None
+    assert captured["kwargs"]["name"] == "main_agent"
+    assert captured["kwargs"]["initial_agents"] == ("deep_agent",)
+    worker = captured["kwargs"]["agent_options"]["deep_agent"]
+    assert worker["backend"] is backend
+    assert worker["tools"] == []
+    assert worker["system_prompt"] == expected_prompt
+    assert worker["skills"] == ["/workspace/skills/"]
+    assert worker["skill_dirs"] == [str(tmp_path)]
+    assert worker["recursion_limit"] == 17
 
 
 @pytest.mark.parametrize(
@@ -736,7 +754,6 @@ async def test_deepagent_can_delegate_to_its_general_purpose_subagent():
 @pytest.mark.parametrize(
     ("specs", "error", "match"),
     [
-        ([], ValueError, "At least one"),
         (
             [_subagent(_answering_subgraph("done"), name=" worker ")],
             ValueError,
@@ -783,9 +800,8 @@ def test_main_tools_are_extensible_and_middleware_names_are_reserved():
         config={"configurable": {"thread_id": "custom-main-tool"}},
     )
     assert {tool.name for tool in llm.bound_tools} == {
-        "lookup_value",
-        "read_file",
-        "task",
+        "lookup_value", "read_file", "task", "ls", "glob", "grep",
+        "write_file", "edit_file", "delete", "search_tools", "load_tools", "search_agents", "load_agents",
     }
 
     @tool("read_file")

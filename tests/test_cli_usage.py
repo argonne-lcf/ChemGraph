@@ -183,9 +183,11 @@ def test_resume_failure_preserves_checkpoint_and_usage(monkeypatch, tmp_path, te
 def test_exit_totals_include_restored_history_and_session_switch(monkeypatch, tmp_path, terminal):
     workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
     store = SessionStore(str(tmp_path / "history.db"))
-    first = MainAgentSession(workflow, thread_id="history", session_store=store)
+    first = MainAgentSession(workflow, thread_id="history", session_store=store,
+                             configuration_id="usage-v1")
     commands.run_async_callable(lambda: first.run("previous process"))
-    restored = MainAgentSession(workflow, thread_id="history", session_store=store)
+    restored = MainAgentSession(workflow, thread_id="history", session_store=store,
+                             configuration_id="usage-v1")
     other = _agent(monkeypatch, tmp_path, enable_memory=False,
                    workflow=graph(FakeMessagesListChatModel(responses=[answer()])))
     @commands._report_session_usage
@@ -203,10 +205,12 @@ def test_exit_totals_include_restored_history_and_session_switch(monkeypatch, tm
 def test_exit_totals_are_partial_when_restored_usage_cannot_be_read(monkeypatch, tmp_path, terminal):
     store = SessionStore(str(tmp_path / "history.db"))
     workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
-    session = MainAgentSession(workflow, thread_id="history", session_store=store)
+    session = MainAgentSession(workflow, thread_id="history", session_store=store,
+                             configuration_id="usage-v1")
     commands.run_main_agent_query(session, "first")
     commands.run_main_agent_query(session, "second")
-    restored = MainAgentSession(workflow, thread_id="history", session_store=store)
+    restored = MainAgentSession(workflow, thread_id="history", session_store=store,
+                             configuration_id="usage-v1")
 
     def fail(*_):
         raise OSError("usage unavailable")
@@ -226,7 +230,8 @@ def test_rejected_main_operation_does_not_change_prior_usage(tmp_path, terminal,
     store = SessionStore(str(tmp_path / "history.db"))
     workflow = graph(FakeMessagesListChatModel(responses=[answer()]),
                      fail=prior_status == "failed", pause=prior_status == "waiting_for_user")
-    session = MainAgentSession(workflow, thread_id="history", session_store=store)
+    session = MainAgentSession(workflow, thread_id="history", session_store=store,
+                             configuration_id="usage-v1")
     try:
         commands.run_async_callable(lambda: session.run("first"))
     except RuntimeError:
@@ -244,9 +249,11 @@ def test_rejected_main_operation_does_not_change_prior_usage(tmp_path, terminal,
 def test_rejected_retry_after_idle_restore_preserves_completed_turn(tmp_path, terminal):
     store = SessionStore(str(tmp_path / "history.db"))
     workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
-    session = MainAgentSession(workflow, thread_id="history", session_store=store)
+    session = MainAgentSession(workflow, thread_id="history", session_store=store,
+                             configuration_id="usage-v1")
     commands.run_main_agent_query(session, "first")
-    restored = MainAgentSession(workflow, thread_id="history", session_store=store)
+    restored = MainAgentSession(workflow, thread_id="history", session_store=store,
+                             configuration_id="usage-v1")
     before = store.latest_usage_turn("history", "history")
     commands.restore_main_agent_session(restored)
     assert commands.retry_main_agent_session(restored) is None
@@ -317,14 +324,15 @@ def test_cli_retry_counts_reexecuted_calls_in_same_turn(tmp_path, terminal):
 
 
 @pytest.mark.parametrize("new_query", [False, True])
-def test_legacy_restore_is_included_in_interactive_exit_usage(tmp_path, terminal, new_query):
+def test_unaccounted_history_is_included_in_interactive_exit_usage(tmp_path, terminal, new_query):
     store = SessionStore(str(tmp_path / "legacy.db"))
-    store.create_session("legacy", "fake", "main_agent")
     workflow = graph(FakeMessagesListChatModel(responses=[answer()]))
+    session = MainAgentSession(workflow, thread_id="legacy", session_store=store,
+                               configuration_id="usage-v1")
+    store.create_session("legacy", "fake", "main_agent", session_metadata=session.session_metadata)
     commands.run_async_callable(lambda: workflow.ainvoke(
-        {"messages": [("human", "legacy query")]}, config={"configurable": {"thread_id": "legacy"}},
+        {"messages": [("human", "unaccounted query")]}, config=session.config,
     ))
-    session = MainAgentSession(workflow, thread_id="legacy", session_store=store)
     @commands._report_session_usage
     def repl():
         commands.restore_main_agent_session(session)

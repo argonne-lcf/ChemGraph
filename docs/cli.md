@@ -103,20 +103,38 @@ chemgraph run --interactive
 Use `/help` inside the shell to see the commands available in your release.
 Interactive sessions preserve conversation context and can be resumed later.
 
-The `main_agent` workflow is a durable, supervisor-style agent and is only
-available interactively:
+The `main_agent` workflow is a durable agent with direct skills, file/shell,
+and local chemistry tools plus optional delegation. It requires interactive mode:
 
 ```bash
-chemgraph run --interactive --workflow main_agent
+chemgraph run --interactive --workflow main_agent --workspace . \
+  --skill ../shared-skills --subagent single_agent --subagent deep_agent
 ```
 
-While a delegated subagent is working, the CLI prints each subagent tool call
-and its arguments as it starts. Supervisor-only delegation and file-read calls
-and tool results are not printed.
+Omit `--subagent` to expose the built-in specialist catalog with no active worker.
+A selection restricts discovery. The agent loads specialists on demand before
+delegation; loading lasts for one turn, including pending approvals and restart. `--tool NAME` restricts
+the lazy catalog, and `--no-discover-skills` disables personal/project discovery.
+The corresponding TOML keys are `workspace`, `skills`, `subagents`, `tools`, and
+`discover_skills`; CLI lists replace TOML lists.
 
-The supervisor's `read_file` tool reads only files stored in the durable graph
-state by a subagent. It does not grant access to the host filesystem or to
-files written under `CHEMGRAPH_LOG_DIR`.
+Direct main-agent and attributed worker tool calls are printed as they start.
+Without `--workspace`, file tools read and write checkpoint-backed files and no
+shell is exposed. With a workspace, `/workspace/` maps to that host directory.
+Registry tools run on the host independently of this backend; use absolute host
+paths for registry artifacts. The shell is not confined to the workspace.
+File mutations, shell commands, and reviewed registry operations pause for review.
+
+Start a new session after the capabilities upgrade. Old transcripts remain
+readable; old checkpoints cannot resume through the new graph. New supported
+CLI configurations restore through startup `--resume ID` or `/resume ID`, including
+pending approvals. Custom Python configurations require Python reconstruction.
+Both resume entry points display the saved workspace, skills, workers, and tool
+catalog before host-access confirmation. Saved graph settings take precedence
+over current CLI flags and TOML settings; changing them requires a new session.
+The Python REPL removal also changes the catalog and approval policy: sessions
+created before these combined upgrades require a new session. Their transcripts
+remain readable.
 
 The development workspace Deep Agent can execute broad filesystem and shell
 actions. Call it directly with action reviews:
@@ -132,7 +150,7 @@ shows the resolved workspace and explains that shell commands can access the
 host beyond that directory. Declining leaves the capability disabled. Headless
 runs still require an explicit workspace and the approval-skip flag.
 
-Or add the same graph to the supervisor as the `deepagent` subagent:
+Or add the same graph to the supervisor as the legacy `deep_agent` worker:
 
 ```bash
 chemgraph run --interactive --workflow main_agent --deepagent \
