@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#deep-agent-skills" class="md-skip">
+        <a href="#main-agent-and-deep-agent-skills" class="md-skip">
           Skip to content
         </a>
       
@@ -1678,24 +1678,35 @@
   
 
 
-<h1 id="deep-agent-skills">Deep Agent skills<a class="headerlink" href="#deep-agent-skills" title="Permanent link">&para;</a></h1>
+<h1 id="main-agent-and-deep-agent-skills">Main-agent and Deep Agent skills<a class="headerlink" href="#main-agent-and-deep-agent-skills" title="Permanent link">&para;</a></h1>
 <p>ChemGraph ships two Agent Skills: <strong>chemgraph</strong> for its Python, CLI, and chemistry
 MCP workflows, and <strong>pbs-hpc</strong> for PBS job preparation, monitoring, and facility
-guidance. They are available to standalone Deep Agents, registry-created Deep
-Agent workers, and the optional <code>main_agent</code> workspace worker.</p>
+guidance. They are available directly to <code>main_agent</code>, standalone Deep Agents,
+registry-created Deep Agent workers, and the legacy main-agent workspace worker.</p>
 <p>For direct submission from a login-node shell, see <a href="../pbs_jobs_with_skills/">PBS jobs with skills</a>.
 Deep Agent writes calculation and batch scripts using the skills and existing
 Python APIs; it does not need attached chemistry MCP tools for this route.</p>
+<p>Main-agent CLI paths use <code>--skill</code> and TOML <code>[general] skills</code>; they are host
+collections, independent of <code>--workspace</code>. Python <code>skill_dirs</code> has the same host
+semantics, while Python <code>skills</code> addresses the backend namespace. Bundled skills
+remain readable without a workspace. Personal/project discovery requires an
+identifiable local workspace and can be disabled with <code>--no-discover-skills</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>main_agent<span class="w"> </span>--workspace<span class="w"> </span>.<span class="w"> </span>--skill<span class="w"> </span>../shared-skills
+</code></pre></div>
+<p>This agent can read and apply skills directly; no DeepAgent worker is needed.
+Its default registry can be replaced using <code>tool_registry=...</code> or disabled using
+<code>tool_registry=ToolRegistry([])</code>. Each configured worker retains its own tool
+catalog and private skill-selection state.</p>
 <h2 id="where-skills-live">Where skills live<a class="headerlink" href="#where-skills-live" title="Permanent link">&para;</a></h2>
 <p>Maintained skills live in <code>src/chemgraph/skills/</code> and ship in the Python wheel
 and source distribution. Each skill is an immediate child directory containing
 <code>SKILL.md</code>, with YAML <code>name</code> and <code>description</code> fields:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>skills/
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>└── example-workflow/
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    ├── SKILL.md
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    ├── references/          # optional documentation
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    ├── assets/              # optional templates/data
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    └── scripts/             # optional executable helpers
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>skills/
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>└── example-workflow/
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    ├── SKILL.md
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    ├── references/          # optional documentation
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    ├── assets/              # optional templates/data
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    └── scripts/             # optional executable helpers
 </code></pre></div>
 <p>Use the <a href="https://agentskills.io/specification">Agent Skills format</a>. Keep skill
 directories flat at the source root; place longer supporting material under the
@@ -1743,16 +1754,16 @@ ones with the same skill name:</p>
 <p>The personal and project directories are optional and are not created on startup.
 Shared <code>~/.agents/skills/</code> collections can be configured explicitly. Do not keep
 another maintained copy of the bundled skills in project directories.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Bundled, personal, and project skills are available automatically.</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Add a site collection, overriding earlier sources with matching names.</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../shared-skills/
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Load only bundled and explicitly configured skills.</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span>--no-deepagent-discover-skills
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Bundled, personal, and project skills are available automatically.</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Add a site collection, overriding earlier sources with matching names.</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../shared-skills/
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># Load only bundled and explicitly configured skills.</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span>--no-deepagent-discover-skills
 </code></pre></div>
 <p>In <code>[general]</code> TOML, use <code>deepagent_discover_skills = false</code> to disable automatic
 local discovery. <code>deepagent_skills</code> remains an ordered list of additional paths.
@@ -1770,9 +1781,9 @@ interactive workflows retain saved directories without checking their access.
 Switching into Deep Agent validates them; if validation fails, the current
 workflow stays active. Restore the directory and retry the switch. Relative
 paths keep their invocation-directory meaning throughout the session.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../external/AtomisticSkills/.agents/skills/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--model<span class="w"> </span>argo:gpt-5.6-luna
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>--deepagent-skill<span class="w"> </span>../external/AtomisticSkills/.agents/skills/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--model<span class="w"> </span>argo:gpt-5.6-luna
 </code></pre></div>
 <p>Pass the collection directory containing <code>&lt;skill-name&gt;/SKILL.md</code>; this does not
 recursively search a repository or install its environments and tools. For
@@ -1782,19 +1793,20 @@ AtomisticSkills, the Widom insertion skill is <code>chem-sorption-widom</code>.<
 path or a path relative to your invocation directory. Agent file tools still
 use <code>/workspace/...</code> for project files.</p>
 <h2 id="python-and-other-filesystems">Python and other filesystems<a class="headerlink" href="#python-and-other-filesystems" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">deepagents.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalShellBackend</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.graphs.deep_agent</span><span class="w"> </span><span class="kn">import</span> <span class="n">construct_deep_agent_graph</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">construct_deep_agent_graph</span><span class="p">(</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">model</span><span class="p">,</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="n">backend</span><span class="o">=</span><span class="n">LocalShellBackend</span><span class="p">(</span><span class="n">root_dir</span><span class="o">=</span><span class="s2">"/path/to/project"</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="p">{}),</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">discover_skills</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">skill_dirs</span><span class="o">=</span><span class="p">[</span><span class="s2">"../external/AtomisticSkills/.agents/skills/"</span><span class="p">],</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">skills</span><span class="o">=</span><span class="p">[</span><span class="s2">"/workspace/site-skills/"</span><span class="p">],</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">deepagents.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalShellBackend</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.graphs.deep_agent</span><span class="w"> </span><span class="kn">import</span> <span class="n">construct_deep_agent_graph</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">construct_deep_agent_graph</span><span class="p">(</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">model</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">backend</span><span class="o">=</span><span class="n">LocalShellBackend</span><span class="p">(</span><span class="n">root_dir</span><span class="o">=</span><span class="s2">"/path/to/project"</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="p">{}),</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">discover_skills</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="n">skill_dirs</span><span class="o">=</span><span class="p">[</span><span class="s2">"../external/AtomisticSkills/.agents/skills/"</span><span class="p">],</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="n">skills</span><span class="o">=</span><span class="p">[</span><span class="s2">"/workspace/site-skills/"</span><span class="p">],</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="p">)</span>
 </code></pre></div>
-<p>The corresponding <code>ChemGraph</code> and <code>construct_main_agent_graph</code> options are
-<code>deepagent_discover_skills</code>, <code>deepagent_skill_dirs</code>, and <code>deepagent_skills</code>.
+<p>For direct main-agent capabilities, <code>ChemGraph</code> and <code>construct_main_agent_graph</code>
+use <code>discover_skills</code>, <code>skill_dirs</code>, and <code>skills</code>. The <code>deepagent_*</code> options
+configure standalone DeepAgent or the explicitly enabled legacy workspace worker.
 <code>skill_dirs</code> explicitly mounts host collections with any backend, even when
 automatic discovery is disabled. <code>skills</code> retains its backend-relative meaning
 and has precedence over host collections. <code>user_skills_dir</code> on the
@@ -1892,10 +1904,10 @@ are configured separately; the built-in main-agent workspace worker has no
 chemistry tools attached. A custom <code>PromptConfig.deepagent</code> is preserved
 verbatim; its default <code>None</code> selects the shared prompt.</p>
 <h2 id="on-demand-local-tools">On-demand local tools<a class="headerlink" href="#on-demand-local-tools" title="Permanent link">&para;</a></h2>
-<p>Skills describe workflows; tools implement their operations. With standalone
-<code>deep_agent</code>, the built-in local catalog is searchable by default without sending
+<p>Skills describe workflows; tools implement their operations. With <code>main_agent</code>
+and standalone <code>deep_agent</code>, the built-in local catalog is searchable by default without sending
 every tool schema to the model:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>-w<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.
 </code></pre></div>
 <p>To restrict discovery, use repeated <code>--tool NAME</code> flags or <code>[general]</code> TOML
 <code>tools = ["smiles_to_coordinate_file", "file_to_atomsdata"]</code>. CLI names replace
@@ -1905,7 +1917,7 @@ require <code>--human-supervised</code>. Explicitly listing <code>ask_human</cod
 <code>tools = []</code> disables discovery. This is independent of
 <code>--no-deepagent-discover-skills</code>, which controls personal/project skills only.
 The CLI displays the catalog size or disabled status at initialization.
-The option applies to standalone Deep Agent; configured names are ignored for
+The option applies to main agent and standalone DeepAgent; configured names are ignored for
 other noninteractive workflows. Interactive sessions validate and retain configured
 names even when starting in another workflow, so startup selection, model changes,
 and workflow switches preserve the restriction.</p>
@@ -1916,13 +1928,13 @@ Pass <code>deepagent_tool_registry=preparation</code> to replace it, or
 <code>deepagent_tool_registry=ToolRegistry([])</code> to disable it. Explicit <code>None</code> selects
 the default. The lower-level shared constructor remains opt-in so existing
 delegated workers do not gain tools; supply a catalog explicitly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolRegistry</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">catalog</span> <span class="o">=</span> <span class="n">ToolRegistry</span><span class="p">()</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">preparation</span> <span class="o">=</span> <span class="n">ToolRegistry</span><span class="p">(</span><span class="n">catalog</span><span class="o">.</span><span class="n">get_spec</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="s2">"smiles_to_coordinate_file"</span><span class="p">,</span> <span class="s2">"file_to_atomsdata"</span><span class="p">,</span> <span class="s2">"extract_output_json"</span><span class="p">,</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">))</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">construct_deep_agent_graph</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">tool_registry</span><span class="o">=</span><span class="n">preparation</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">ToolRegistry</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">catalog</span> <span class="o">=</span> <span class="n">ToolRegistry</span><span class="p">()</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">preparation</span> <span class="o">=</span> <span class="n">ToolRegistry</span><span class="p">(</span><span class="n">catalog</span><span class="o">.</span><span class="n">get_spec</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="s2">"smiles_to_coordinate_file"</span><span class="p">,</span> <span class="s2">"file_to_atomsdata"</span><span class="p">,</span> <span class="s2">"extract_output_json"</span><span class="p">,</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">))</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">graph</span> <span class="o">=</span> <span class="n">construct_deep_agent_graph</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">backend</span><span class="o">=</span><span class="n">backend</span><span class="p">,</span> <span class="n">tool_registry</span><span class="o">=</span><span class="n">preparation</span><span class="p">)</span>
 </code></pre></div>
 <p>Existing <code>tools=</code> objects, including MCP tools, remain attached as before. Their
 names are excluded from the automatic catalog. Names in an explicitly supplied

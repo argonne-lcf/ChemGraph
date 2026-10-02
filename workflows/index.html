@@ -1741,7 +1741,7 @@ Python. <code>single_agent</code> is the recommended first choice.</p>
 </tr>
 <tr>
 <td><code>main_agent</code></td>
-<td>Durable supervisor with checkpointed subagents</td>
+<td>Direct workspace/chemistry work and configured specialists</td>
 <td>Interactive CLI or <code>MainAgentSession</code> only</td>
 </tr>
 <tr>
@@ -1794,21 +1794,47 @@ and reports:</p>
 </code></pre></div>
 <p>It minimizes orchestration complexity while exposing the normal tool set.</p>
 <h2 id="main-agent">Main agent<a class="headerlink" href="#main-agent" title="Permanent link">&para;</a></h2>
-<p><code>main_agent</code> manages longer-lived tasks through specialized subagents and
-durable checkpoints. It is intentionally session-oriented:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent
+<p><code>main_agent</code> uses the existing DeepAgent factory and works directly with skills,
+workspace files, shell commands, and lazy local tools. It may delegate substantial work to
+configured specialists while retaining one durable conversation:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent<span class="w"> </span>--workspace<span class="w"> </span>.<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--skill<span class="w"> </span>../shared-skills<span class="w"> </span>--subagent<span class="w"> </span>single_agent<span class="w"> </span>--subagent<span class="w"> </span>deep_agent
 </code></pre></div>
-<p>In Python, construct <code>MainAgentSession</code>; <code>ChemGraph.run()</code> rejects this workflow.
-See <a href="../python_api/">Python API</a>.</p>
+<p>By default the non-test built-in specialists are discoverable as metadata; none
+is active. <code>search_agents</code> finds workers and <code>load_agents</code> activates them before
+<code>task</code> delegation. A selection restricts the catalog; aliases resolve to canonical
+names and duplicates are rejected. Loaded workers last for one turn, including
+approval pauses, retry, and restart, and clear when it completes. An empty Python
+or TOML catalog disables discovery and delegation.
+<code>deep_agent</code> inherits the main workspace and skills. The legacy <code>--deepagent</code>
+worker keeps its separate <code>--deepagent-*</code> options and cannot also be selected
+through <code>--subagent deep_agent</code>.</p>
+<p>Without <code>--workspace</code>, main-agent files live in checkpoints and no shell is
+available. Bundled skills and the host tool registry remain available. Host
+registry tools are independent of the file backend; use absolute host artifact
+paths. Workspace shell commands are not sandboxed to the selected directory.
+File mutations, shell commands, and reviewed registry operations pause for
+approval. Registry workers retain their own configured tools and private tool/skill state.
+They inherit mandatory parent reviews and may add stricter reviews.</p>
+<p>Use <code>--tool NAME</code> to restrict the catalog and <code>--no-discover-skills</code> to disable
+automatic personal/project skill discovery. Selection survives model and
+workflow changes. Workspace and explicit skill paths are canonicalized on
+activation. Python supports these capabilities through <code>ChemGraph</code> and
+<code>MainAgentSession</code>; <code>ChemGraph.run()</code> rejects this workflow.</p>
+<p>New graph sessions use schema version 4. Old transcripts remain readable, but
+old checkpoints require a new session. New supported CLI configurations restore
+through <code>--resume</code> or <code>/resume</code>; caller-owned Python configurations must be
+reconstructed through Python. See <a href="../python_api/">Python API</a>.</p>
 <h2 id="deep-agent">Deep Agent<a class="headerlink" href="#deep-agent" title="Permanent link">&para;</a></h2>
 <p><code>deep_agent</code> is a reusable workflow with two entry points. It can
 run directly through <code>ChemGraph(workflow_type="deep_agent")</code>, or it can be
-registered under <code>main_agent</code> as the <code>deepagent</code> subagent. Both paths use
+discovered under <code>main_agent</code> as the <code>deep_agent</code> worker. The legacy
+<code>--deepagent</code> flag activates that worker with its separate options. Both paths use
 <code>construct_deep_agent_graph</code>, so the prompt, backend, tools, recursion limit,
 and approval policy have one implementation. Both entry points use
 <code>DEFAULT_DEEPAGENT_PROMPT</code> unless a custom prompt is supplied. The prompt permits
 attached chemistry tools; available tools are configured by the caller. The
-built-in main-agent workspace worker is created without chemistry tools.</p>
+legacy main-agent workspace adapter is created without attached chemistry tools.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Direct, process-local interactive thread with action reviews.</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>deep_agent<span class="w"> </span>--deepagent-workspace<span class="w"> </span>.
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>

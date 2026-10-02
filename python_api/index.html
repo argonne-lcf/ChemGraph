@@ -1864,20 +1864,95 @@ application must inspect tool calls, messages, or structured output.</p>
 <p>Choose thread IDs that are unique in your application and do not contain
 credentials or sensitive user data.</p>
 <h2 id="main-agent-sessions">Main-agent sessions<a class="headerlink" href="#main-agent-sessions" title="Permanent link">&para;</a></h2>
-<p>The checkpointed <code>main_agent</code> is not run through <code>ChemGraph.run()</code>. Import and
-construct <code>MainAgentSession</code> from <code>chemgraph.agent.main_session</code>, then use its
-session-oriented async methods. This API is
-intended for durable, interactive supervisor workflows; consult the class
-docstrings in the installed version for constructor and persistence options.</p>
-<p><code>MainAgentSession</code> accepts an optional <code>on_event</code> callback with the signature
-<code>(event_name, payload)</code>. Tagged <code>tool_call_started</code> payloads include
-<code>subagent_name</code>, allowing callers to distinguish delegated tool activity from
-supervisor tools. The supervisor can use <code>read_file</code> for checkpoint-backed
-files returned by subagents, but this does not expose host files or session
-artifacts.</p>
-<p>For CLI use, the equivalent is:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--interactive<span class="w"> </span>--workflow<span class="w"> </span>main_agent
+<p>The checkpointed <code>main_agent</code> performs direct workspace and chemistry work and
+optionally delegates to configured specialists. Drive it with <code>MainAgentSession</code>
+rather than <code>ChemGraph.run()</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">deepagents.backends</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalShellBackend</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.agent.llm_agent</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChemGraph</span><span class="p">,</span> <span class="n">PromptConfig</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.agent.main_session</span><span class="w"> </span><span class="kn">import</span> <span class="n">MainAgentSession</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">agent</span> <span class="o">=</span> <span class="n">ChemGraph</span><span class="p">(</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">workflow_type</span><span class="o">=</span><span class="s2">"main_agent"</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="n">backend</span><span class="o">=</span><span class="n">LocalShellBackend</span><span class="p">(</span><span class="n">root_dir</span><span class="o">=</span><span class="s2">"/path/to/checkout"</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="p">{}),</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="n">skill_dirs</span><span class="o">=</span><span class="p">[</span><span class="s2">"/path/to/shared-skills"</span><span class="p">],</span>  <span class="c1"># Host directories</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    <span class="n">skills</span><span class="o">=</span><span class="p">[</span><span class="s2">"/workspace/site-skills/"</span><span class="p">],</span>   <span class="c1"># Backend-relative sources</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="n">subagent_names</span><span class="o">=</span><span class="p">[</span><span class="s2">"single_agent"</span><span class="p">,</span> <span class="s2">"deep_agent"</span><span class="p">],</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    <span class="n">prompts</span><span class="o">=</span><span class="n">PromptConfig</span><span class="p">(</span><span class="n">main_agent</span><span class="o">=</span><span class="s2">"Complete requests directly or delegate as needed."</span><span class="p">),</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="n">configuration_id</span><span class="o">=</span><span class="s2">"my-workspace-v1"</span><span class="p">,</span>   <span class="c1"># Non-secret caller-owned configuration ID</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="p">)</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="n">session</span> <span class="o">=</span> <span class="n">MainAgentSession</span><span class="p">(</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="n">agent</span><span class="o">.</span><span class="n">workflow</span><span class="p">,</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    <span class="n">session_store</span><span class="o">=</span><span class="n">agent</span><span class="o">.</span><span class="n">session_store</span><span class="p">,</span>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>    <span class="n">session_metadata</span><span class="o">=</span><span class="n">agent</span><span class="o">.</span><span class="n">main_agent_metadata</span><span class="p">,</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="p">)</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">"Inspect the available skills and prepare a calculation."</span><span class="p">)</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="s2">"waiting_for_user"</span><span class="p">:</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>    <span class="c1"># Inspect result.interrupts before deciding. This example rejects the action.</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>    <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">resume</span><span class="p">({</span><span class="s2">"decisions"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"reject"</span><span class="p">}]})</span>
 </code></pre></div>
+<p>For cross-process persistence, supply a durable <code>checkpointer</code> to <code>ChemGraph</code>,
+retain <code>session.thread_id</code>, reconstruct the same configuration, and call
+<code>await session.restore()</code> before answering pending interrupts. The default
+checkpointer is process-local. <code>MainAgentSession</code> inherits the graph's recursion
+limit; an explicit limit must match supplied session metadata.</p>
+<p>The saved configuration includes the canonical artifact directory selected by
+<code>log_dir</code>, <code>CHEMGRAPH_LOG_DIR</code>, or the generated default, plus a non-secret model
+endpoint descriptor. CLI restoration uses these saved values even if the current
+directory, environment, or endpoint settings changed. Credentials are resolved
+again; they are never saved in the configuration. Endpoint URLs containing user
+information, query parameters, or fragments require Python reconstruction and a
+matching <code>configuration_id</code>. Python callers must reconstruct with the original
+artifact directory and model routing as well as the original graph options.
+Schema-1 through schema-3 checkpoints require a new session; transcripts remain
+readable. Relative chemistry outputs use a session-scoped directory, while
+caller-owned shell backends retain their caller-supplied environments.</p>
+<p><code>backend=None</code> provides checkpoint-backed file tools and no shell. Local shell
+backends mount host files at <code>/workspace/</code>; shell commands use host paths and
+are not confined to the workspace. Registry tools always execute on the host,
+even without a workspace. <code>tool_registry=None</code> enables the default catalog;
+<code>ToolRegistry([])</code> disables it. Interactive catalog tools require
+<code>human_supervised=True</code> or explicit inclusion. Review policies cover direct
+workspace mutations, execution, and selected registry operations.</p>
+<p><code>subagent_names=None</code> exposes the non-test built-in worker catalog with no active
+workers; a list restricts it and <code>[]</code> disables discovery. <code>agent_registry</code> supplies
+a custom <code>AgentRegistry</code>. Discovery returns metadata without constructing graphs;
+<code>load_agents</code> constructs selected workers and makes them available to <code>task</code> for
+one turn. Selection survives pauses, retries, and restart, then clears on
+completion. Aliases canonicalize and duplicate catalog names are rejected.
+<code>subagent_options</code> provides per-worker constructor overrides. Named <code>deep_agent</code> workers inherit
+the main workspace and skills, with Python overrides taking precedence. Their
+tool catalogs are separately configured. Registry workers inherit the parent
+checkpointer and mandatory parent reviews; additional worker reviews are merged
+without weakening the parent policy.
+<code>PromptConfig.system</code>, <code>formatter</code>, and <code>report</code> configure the lazy <code>single_agent</code>
+worker; <code>PromptConfig.main_agent</code> configures the parent.</p>
+<p>Durable restoration validates both checkpoint and readable-session identities.
+Custom backends, tool implementations, and opaque worker settings require a
+matching <code>configuration_id</code> when creating another session instance. Change this
+ID whenever caller-owned behavior or environment changes; do not use credentials
+as IDs. Environment values and object representations are not serialized into
+configuration metadata. Raw graphs can supply <code>configuration_id</code> directly to
+<code>MainAgentSession</code>. Without an identity they can continue only in their existing
+session instance. A custom ID enables Python restoration, not CLI reconstruction.</p>
+<p>CLI-created backend metadata records the environment allowlist policy; approved
+variables are read from the current process when recreating the backend. Python
+backends with arbitrary environment settings remain caller-owned. Unpersisted
+worker prompts and options also require Python reconstruction. Old graph
+checkpoints cannot resume after this upgrade; their transcripts remain readable.</p>
+<p>Built-in tool description edits remain compatible with stored sessions. Changes
+to selected tools, approval policies, or built-in behavior can require a new
+session; restoration rejects incompatible graphs before executing an action.
+Maintainers must bump <code>BUILTIN_TOOL_CATALOG_VERSION</code> for built-in schema,
+behavior, or safety changes and <code>WORKSPACE_REVIEW_POLICY_VERSION</code> for approval
+semantics changes. Worker constructor paths, defaults, requirements, and
+<code>AgentSpec.compatibility_version</code> are part of restoration identity. Bump the
+worker compatibility version or <code>BUILTIN_AGENT_CATALOG_VERSION</code> when changing
+worker behavior. Custom registry metadata and constructor options retain full
+identity checks and their caller-owned configuration requirements.</p>
+<p>The optional <code>on_event(event_name, payload)</code> callback reports direct activity
+and tagged worker activity; worker events include <code>subagent_name</code>. Skills and
+active registry selections remain private to each agent, while checkpoint-backed
+files may be exchanged with workers.</p>
 <h2 id="workspace-deep-agent">Workspace Deep Agent<a class="headerlink" href="#workspace-deep-agent" title="Permanent link">&para;</a></h2>
 <p>The workspace workflow is separately callable through <code>ChemGraph.run()</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
