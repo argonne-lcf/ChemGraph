@@ -467,7 +467,7 @@ class ModelBenchmarkRunner:
         try:
             if workflow_type == "deep_agent":
                 llm_workflow = await deepagent.run_query(
-                    self.config, model_name, item.query, item.id, idx,
+                    self.config, model_name, item.query, item.id,
                 )
             else:
                 config = {"configurable": {"thread_id": str(idx)}}

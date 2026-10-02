@@ -129,8 +129,11 @@ class BenchmarkConfig(BaseModel):
             "Eval profiles are also loaded from [eval.profiles.*]."
         ),
     )
+    base_url: Optional[str] = Field(
+        default=None, description="Override provider URLs for evaluated models and the optional judge.",
+    )
     deepagent_workspace: Optional[str] = Field(
-        default=None, description="Root for fresh per-query Deep Agent workspaces.",
+        default=None, description="Root for Deep Agent model/thread directories (default: output_dir/logs).",
     )
     deepagent_auto_approve: bool = Field(
         default=False, description="Allow unattended Deep Agent tools and host shell execution.",
@@ -141,11 +144,10 @@ class BenchmarkConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_deepagent(self):
-        """Require an explicit workspace for host-shell evaluation."""
+        """Resolve the shared output root and validate Deep Agent options."""
         if "deep_agent" in self.workflow_types:
-            if not self.deepagent_workspace:
-                raise ValueError("deep_agent evaluation requires deepagent_workspace.")
-            self.deepagent_workspace = str(Path(self.deepagent_workspace).expanduser().resolve())
+            root = self.deepagent_workspace or Path(self.output_dir) / "logs"
+            self.deepagent_workspace = str(Path(root).expanduser().resolve())
             if self.judge_type in ("structured", "both") and not self.structured_output:
                 raise ValueError("Deep Agent structured judging requires structured_output.")
         elif self.deepagent_auto_approve or self.deepagent_workspace:
@@ -270,6 +272,8 @@ class BenchmarkConfig(BaseModel):
         str or None
             Configured base URL, or ``None`` when no override is available.
         """
+        if self.base_url is not None:
+            return self.base_url
         if not self._flat_config:
             return None
         return get_base_url_for_model_from_flat_config(model_name, self._flat_config)
@@ -346,6 +350,7 @@ class BenchmarkConfig(BaseModel):
         # Direct mappings (profile key == config field)
         _direct = [
             "dataset",
+            "base_url",
             "workflow_types",
             "recursion_limit",
             "structured_output",
