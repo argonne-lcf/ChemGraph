@@ -227,6 +227,7 @@ def initialize_agent(
     discover_skills: bool = True,
     user_skills_dir: str | None = None,
     tool_registry: Any | None = None,
+    agent_registry: Any | None = None,
     subagent_names: Sequence[str] | None = None,
     main_agent_prompt: str | None = None,
     configuration_id: str | None = None,
@@ -334,7 +335,7 @@ def initialize_agent(
             from chemgraph.registry.agents import AgentRegistry
             if not isinstance(subagent_names, Sequence) or isinstance(subagent_names, (str, bytes)):
                 raise ValueError("subagents must be a list of worker names.")
-            registry = AgentRegistry()
+            registry = agent_registry if agent_registry is not None else AgentRegistry()
             if not all(isinstance(name, str) and name.strip() for name in subagent_names):
                 raise ValueError("subagents must contain non-empty strings.")
             subagent_names = tuple(registry.resolve_name(name) for name in subagent_names)
@@ -421,6 +422,7 @@ def initialize_agent(
                 workflow_type=workflow_type,
                 backend=backend,
                 tool_registry=tool_registry,
+                agent_registry=agent_registry,
                 skills=skills or None,
                 skill_dirs=skill_dirs or None,
                 discover_skills=discover_skills,
@@ -1333,7 +1335,7 @@ def _print_main_agent_restore_configuration(thread_id, config):
     """Show the saved settings before requesting access to their workspace."""
     console.print(f"[blue]Using saved main-agent configuration for session {escape(thread_id)}.[/blue]")
     console.print("[dim]Saved graph settings take precedence over current CLI flags and TOML settings.[/dim]")
-    workers = config.configured_subagent_names or ()
+    workers = config.subagent_names
     table = Table.grid(padding=(0, 2))
     table.add_column(no_wrap=True)
     table.add_column(overflow="fold")

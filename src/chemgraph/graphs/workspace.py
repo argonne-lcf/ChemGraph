@@ -15,7 +15,7 @@ from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_ba
 
 
 # Bump when approval semantics change, including removal of reviewed tools.
-WORKSPACE_REVIEW_POLICY_VERSION = 3
+WORKSPACE_REVIEW_POLICY_VERSION = 4
 
 
 DEFAULT_WORKSPACE_INTERRUPT_ON = {

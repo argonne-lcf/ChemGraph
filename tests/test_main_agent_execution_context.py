@@ -1,6 +1,7 @@
 """Restart and isolation regressions for the execution context behind approvals."""
 
 import asyncio
+import sys
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -17,6 +18,7 @@ from chemgraph.models.endpoints import PreparedModel
 from chemgraph.models.endpoints.identity import describe_model_endpoint
 from chemgraph.registry.tools import ToolRegistry
 from chemgraph.utils.artifacts import artifact_context, artifact_directory
+from tests.test_deep_agent import _shell_command
 from tests.test_main_agent import _ScriptedChatModel
 
 
@@ -124,6 +126,32 @@ def test_canonical_context_and_endpoint_identity(monkeypatch, tmp_path, model_lo
             commands._main_agent_options(opaque)
 
 
+def test_default_legacy_worker_catalog_restores_pending_approval(tmp_path, model_loader):
+    responses, _ = model_loader
+    responses[:] = [call("write_file", file_path="/review.txt", content="pending")]
+    database = str(tmp_path / "checkpoints.db")
+    with CheckpointRuntime() as runtime:
+        agent = ChemGraph(workflow_type="main_agent", log_dir=str(tmp_path),
+                          discover_skills=False, enable_deepagent=True,
+                          deepagent_backend=create_cli_workspace_backend(tmp_path),
+                          deepagent_discover_skills=False,
+                          checkpointer=runtime.open_sqlite(database))
+        session = commands.create_main_agent_session(agent, thread_id="legacy", checkpoint_db=database)
+        assert runtime.run(lambda: session.run("write")).status == "waiting_for_user"
+        config = agent.runtime_config.saved
+
+    responses[:] = [AIMessage(content="done")]
+    with CheckpointRuntime() as runtime:
+        agent = commands._initialize_saved_main_agent(
+            config, return_option="state", checkpointer=runtime.open_sqlite(database),
+        )
+        assert agent is not None
+        session = commands.create_main_agent_session(agent, thread_id="legacy", checkpoint_db=database)
+        assert runtime.run(session.restore).status == "waiting_for_user"
+        result = runtime.run(lambda: session.resume({"decisions": [{"type": "reject"}]}))
+        assert result.status == "completed"
+
+
 @pytest.mark.asyncio
 async def test_interleaved_tools_inherit_context_without_environment_mutation(monkeypatch, tmp_path):
     from chemgraph.tools.ase_tools import save_atomsdata_to_file
@@ -147,8 +175,12 @@ def test_shell_backend_is_bound_per_session(monkeypatch, tmp_path, model_loader)
     agents = [ChemGraph(workflow_type="main_agent", enable_memory=False, backend=backend,
                         discover_skills=False, log_dir=str(tmp_path / name)) for name in ("one", "two")]
     assert backend._env["CHEMGRAPH_LOG_DIR"] == str(tmp_path / "ambient")
+    command = _shell_command(
+        sys.executable, "-c", "import os,sys; sys.stdout.write(os.environ['CHEMGRAPH_LOG_DIR'])",
+    )
     for agent in agents:
-        result = agent.backend.execute('printf "%s" "$CHEMGRAPH_LOG_DIR"')
+        result = agent.backend.execute(command)
+        assert result.exit_code == 0, result.output
         assert result.output == agent.log_dir
         assert agent.runtime_config.saved.cli_restorable
 
@@ -182,6 +214,19 @@ def test_actual_client_route_is_described():
     prepared = PreparedModel(endpoint_name="openai_direct", protocol="openai_compatible", client_kwargs={"model": "test"})
     client = SimpleNamespace(root_client=SimpleNamespace(base_url="https://EXAMPLE.test:443/v1/"))
     assert describe_model_endpoint(prepared, client, "test").base_url == "https://example.test/v1"
+
+
+def test_groq_restoration_keeps_saved_endpoint(monkeypatch):
+    from chemgraph.models.loader import load_chat_model_prepared
+
+    model = "groq:llama-3.3-70b-versatile"
+    monkeypatch.setenv("GROQ_BASE_URL", "https://saved.example/v1")
+    _, prepared = load_chat_model_prepared(model, api_key="test-key")
+    endpoint = prepared.endpoint_descriptor
+    assert endpoint.base_url == "https://saved.example/v1"
+    monkeypatch.setenv("GROQ_BASE_URL", "https://changed.example/v1")
+    _, restored = load_chat_model_prepared(model, api_key="test-key", endpoint=endpoint)
+    assert restored.endpoint_descriptor == endpoint
 
 
 @pytest.mark.asyncio

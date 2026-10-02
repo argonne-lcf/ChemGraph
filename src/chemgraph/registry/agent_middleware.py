@@ -100,7 +100,9 @@ class RegistryAgentsMiddleware(AgentMiddleware):
                 if worker_policy is not None and not isinstance(worker_policy, dict):
                     raise TypeError("Worker interrupt_on must be a policy mapping or None.")
                 settings["interrupt_on"] = {
-                    **(worker_policy or {}), **(self.interrupt_on or {}),
+                    **(worker_policy or {}),
+                    **{tool: policy for tool, policy in (self.interrupt_on or {}).items()
+                       if policy is not False},
                 } or None
                 self._workers[name] = self.registry.as_subagent(name, llm=self.llm, **settings)["runnable"]
             return self._workers[name]

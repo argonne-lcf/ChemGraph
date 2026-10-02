@@ -71,6 +71,7 @@ class MainAgentGraphConfig(BaseModel):
     discover_skills: bool = True
     user_skills_dir: Optional[str] = None
     registry_tool_names: tuple[str, ...] = ()
+    # Original restriction; subagent_names records the effective catalog.
     configured_subagent_names: Optional[tuple[str, ...]] = None
     main_agent_prompt: Optional[str] = None
     cli_restorable: bool = False

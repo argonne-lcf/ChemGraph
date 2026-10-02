@@ -14,6 +14,7 @@ from chemgraph.memory.graph_config import (
     describe_backend, describe_tool_registry, describe_worker_options, fingerprint,
 )
 from chemgraph.memory.schemas import MainAgentGraphConfig
+from chemgraph.registry.agents import AgentRegistry
 from chemgraph.registry.tools import RegistryError, ToolRegistry
 from chemgraph.skills.runtime import local_skill_workspace
 
@@ -79,7 +80,7 @@ class MainAgentRuntimeConfig:
             workspace=str(workspace[0]) if workspace else None,
             deepagent_workspace=legacy.get("workspace"),
             registry_tool_names=agent.tool_registry.names(),
-            configured_subagent_names=agent.agent_registry.names(),
+            configured_subagent_names=agent.subagent_names,
             subagent_names=agent.agent_registry.names(),
             main_agent_prompt=agent.main_agent_prompt,
             requires_configuration_id=(backend_opaque or (agent.enable_deepagent and legacy_opaque)
@@ -146,14 +147,16 @@ def workspace_arguments(config):
     catalog = ToolRegistry()
     try:
         registry = ToolRegistry(catalog.get_spec(name) for name in config.registry_tool_names)
+        workers = AgentRegistry()
+        agent_registry = AgentRegistry(workers.get_spec(name) for name in config.subagent_names)
     except RegistryError as exc:
-        raise ValueError(f"Cannot reconstruct the stored tool catalog: {exc}. {NEW_SESSION_GUIDANCE}") from exc
+        raise ValueError(f"Cannot reconstruct the stored catalog: {exc}. {NEW_SESSION_GUIDANCE}") from exc
     return {
         "workspace": config.workspace,
         **{name: getattr(config, name) for name in _WORKSPACE_SETTINGS},
         "tool_registry": registry,
-        "subagent_names": (tuple(name for name in config.configured_subagent_names or () if name != "deep_agent")
-                           if config.enable_deepagent else config.configured_subagent_names),
+        "agent_registry": agent_registry,
+        "subagent_names": config.configured_subagent_names,
         "main_agent_prompt": config.main_agent_prompt, "configuration_id": config.configuration_id,
     }
 

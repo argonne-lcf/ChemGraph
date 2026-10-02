@@ -731,6 +731,7 @@ def test_resume_replaces_all_active_graph_settings(monkeypatch, tmp_path):
         discover_skills=False,
         registry_tool_names=("calculator",),
         configured_subagent_names=("single_agent",),
+        subagent_names=("single_agent", "deep_agent"),
         main_agent_prompt="stored main prompt",
     )
     target_db = str(tmp_path / "target-checkpoints.db")

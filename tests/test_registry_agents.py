@@ -141,6 +141,20 @@ async def test_failed_load_preserves_previous_selection_and_worker_policy_cannot
 
 
 @pytest.mark.asyncio
+async def test_worker_review_survives_disabled_parent_review():
+    graph = make_graph([call("load_agents", names=["worker"]),
+                        call("task", subagent_type="worker", description="calculate"), call("run_ase"),
+                        AIMessage(content="worker done"), AIMessage(content="done")],
+                       interrupt_on={"run_ase": False},
+                       agent_options={"worker": {"interrupt_on": {"run_ase": True}}})
+    session = MainAgentSession(graph)
+    assert (await session.run("Calculate")).status == "waiting_for_user"
+    assert EXECUTIONS == []
+    assert (await session.resume({"decisions": [{"type": "reject"}]})).status == "completed"
+    assert EXECUTIONS == []
+
+
+@pytest.mark.asyncio
 async def test_raw_recursion_limit_round_trips():
     graph = make_graph([AIMessage(content="done")], recursion_limit=17)
     original = MainAgentSession(graph, configuration_id="raw-v1", thread_id="recursion")

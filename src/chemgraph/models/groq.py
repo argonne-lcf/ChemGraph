@@ -34,7 +34,8 @@ def load_groq_model(
     prompt : str, optional
         Custom prompt to use when requesting the API key from the user.
     base_url : str, optional
-        Custom base URL for the GROQ API (currently unused but included for consistency).
+        Custom base URL for the GROQ API. When omitted, use the SDK's
+        environment/default URL.
     Returns
     -------
     ChatGroq
@@ -73,6 +74,7 @@ def load_groq_model(
             temperature=temperature,
             api_key=api_key,
             max_tokens=6000,
+            **({"base_url": base_url} if base_url is not None else {}),
         )
         # No guarantee that api_key is valid, authentication happens only during invocation
         logger.info(f"Requested model: {model_name}")
@@ -85,7 +87,7 @@ def load_groq_model(
             api_key = getpass("Please enter a valid GROQ API key: ")
             os.environ["GROQ_API_KEY"] = api_key
             # Retry with new API key
-            return load_groq_model(model_name, temperature, api_key, prompt)
+            return load_groq_model(model_name, temperature, api_key, prompt, base_url=base_url)
         else:
             logger.error(f"Error loading GROQ model: {str(e)}")
             raise
