@@ -6,13 +6,18 @@ LLM-as-judge approach.
 """
 
 import datetime
+import hashlib
+from importlib.metadata import PackageNotFoundError, version
 import inspect
 import json
 import os
+from pathlib import Path
 import traceback
 from typing import Any, Dict, List
 
 from chemgraph.agent.llm_agent import ChemGraph
+from chemgraph.agent.usage import combine_usage
+from chemgraph.eval import deepagent
 from chemgraph.eval.config import BenchmarkConfig
 from chemgraph.eval.datasets import GroundTruthItem, load_dataset
 from chemgraph.eval.llm_judge import (
@@ -34,6 +39,15 @@ from chemgraph.utils.get_workflow_from_llm import get_workflow_from_state
 from chemgraph.utils.logging_config import setup_logger
 
 logger = setup_logger(__name__)
+
+# Provider routing overrides consumed by ChemGraph, LangChain, or their SDKs.
+# Keep credentials out of this allowlist; values are hashed, never persisted.
+_ENDPOINT_ENV_VARS = (
+    "VLLM_BASE_URL", "OPENAI_BASE_URL", "OPENAI_API_BASE",
+    "ANTHROPIC_BASE_URL", "ANTHROPIC_API_URL", "GROQ_BASE_URL", "GROQ_API_BASE", "OLLAMA_HOST",
+    "GOOGLE_GEMINI_BASE_URL", "GOOGLE_VERTEX_BASE_URL", "GOOGLE_GENAI_USE_VERTEXAI",
+    "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "CHEMGRAPH_ARGO_MODEL_FORMAT",
+)
 
 
 class ModelBenchmarkRunner:
@@ -70,6 +84,11 @@ class ModelBenchmarkRunner:
         """
         self.config = config
         full_dataset: List[GroundTruthItem] = load_dataset(config.dataset)
+        if config.query_ids:
+            missing = set(config.query_ids) - {item.id for item in full_dataset}
+            if missing:
+                raise ValueError(f"Unknown query IDs: {sorted(missing)}")
+            full_dataset = [item for item in full_dataset if item.id in config.query_ids]
         # Apply max_queries limit if configured (0 = no limit).
         if config.max_queries > 0:
             self.dataset = full_dataset[: config.max_queries]
@@ -81,6 +100,24 @@ class ModelBenchmarkRunner:
             self.dataset = full_dataset
         self.results: Dict[str, Dict[str, dict]] = {}
         self._run_metadata: dict = {}
+        self._provenance = {"dataset_sha256": hashlib.sha256(Path(config.dataset).read_bytes()).hexdigest()}
+        if "deep_agent" in config.workflow_types:
+            package = Path(__file__).resolve().parents[1]
+            source = hashlib.sha256()
+            for path in sorted(package.rglob("*")):
+                if path.is_file() and path.suffix in {".py", ".md", ".template"}:
+                    source.update(str(path.relative_to(package)).encode())
+                    source.update(path.read_bytes())
+            self._provenance.update(
+                code_sha256=source.hexdigest(),
+                versions={name: version(name) for name in
+                          ("chemgraph", "deepagents", "langchain-core", "ase", "rdkit", "mace-torch")},
+                deepagent_discover_skills=False,
+            )
+            try:
+                self._provenance["versions"]["tblite"] = version("tblite")
+            except PackageNotFoundError:
+                self._provenance["versions"]["tblite"] = None
 
         # Load judge model only when LLM judge is requested.
         self._judge_llm = None
@@ -108,6 +145,20 @@ class ModelBenchmarkRunner:
     # ------------------------------------------------------------------
     # Checkpointing
     # ------------------------------------------------------------------
+
+    def _fingerprint(self, model_name: str, workflow_type: str) -> str:
+        """Bind checkpoints to the dataset, evaluator, and effective run settings."""
+        settings = self.config.model_dump(exclude={
+            "models", "workflow_types", "dataset", "config_file", "output_dir", "resume", "tags",
+        })
+        payload = {**self._provenance, "settings": settings, "model": model_name,
+                   "workflow": workflow_type, "base_url": self.config.get_base_url(model_name),
+                   "judge_base_url": (
+                       self.config.get_base_url(self.config.judge_model)
+                       if self.config.judge_type in ("llm", "both") else None
+                   ),
+                   "endpoint_env": {name: os.getenv(name) for name in _ENDPOINT_ENV_VARS}}
+        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
     def _checkpoint_dir(self) -> str:
         """Return the checkpoint directory path, creating it if needed."""
@@ -167,6 +218,7 @@ class ModelBenchmarkRunner:
         record = {
             "query_id": query_id,
             "query_idx": query_idx,
+            "fingerprint": self._fingerprint(model_name, workflow_type),
             **query_result,
         }
         path = self._checkpoint_path(model_name, workflow_type)
@@ -202,6 +254,8 @@ class ModelBenchmarkRunner:
                     continue
                 try:
                     record = json.loads(line)
+                    if workflow_type == "deep_agent" and record.get("fingerprint") != self._fingerprint(model_name, workflow_type):
+                        raise ValueError(f"Incompatible Deep Agent checkpoint: {path}. Use a new output directory.")
                     qid = record.get("query_id")
                     if qid is not None:
                         completed[str(qid)] = {
@@ -301,7 +355,8 @@ class ModelBenchmarkRunner:
                 k: v for k, v in desired_kwargs.items() if k in valid_params
             }
 
-            cg = ChemGraph(**filtered_kwargs)
+            # Deep Agent needs fresh state and a shell workspace for each query.
+            cg = None if workflow_type == "deep_agent" else ChemGraph(**filtered_kwargs)
         except Exception as e:
             logger.error(f"Failed to initialise ChemGraph for {model_name}: {e}")
             return self._make_error_result(
@@ -367,6 +422,13 @@ class ModelBenchmarkRunner:
             result["structured_judge_aggregate"] = struct_agg
             result["structured_judge_details"] = per_query_structured_results
 
+        if workflow_type == "deep_agent":
+            result["execution_summary"] = {
+                "elapsed_seconds": sum(raw.get("elapsed_seconds", 0) for raw in raw_tool_calls),
+                "n_errors": sum(raw.get("status") != "completed" for raw in raw_tool_calls),
+                "usage": combine_usage([raw["usage"]["total"] for raw in raw_tool_calls if "usage" in raw]),
+            }
+
         # Log summary.
         parts = [f"Completed eval {model_name}/{workflow_type}:"]
         if "judge_aggregate" in result:
@@ -416,9 +478,14 @@ class ModelBenchmarkRunner:
             Query result containing raw output and judge results.
         """
         try:
-            config = {"configurable": {"thread_id": str(idx)}}
-            state = await cg.run(item.query, config)
-            llm_workflow = get_workflow_from_state(state)
+            if workflow_type == "deep_agent":
+                llm_workflow = await deepagent.run_query(
+                    self.config, model_name, item.query, item.id,
+                )
+            else:
+                config = {"configurable": {"thread_id": str(idx)}}
+                state = await cg.run(item.query, config)
+                llm_workflow = get_workflow_from_state(state)
             model_tool_calls = llm_workflow.get("tool_calls", [])
             model_result = llm_workflow.get("result", "")
         except Exception as e:
@@ -432,14 +499,17 @@ class ModelBenchmarkRunner:
 
         # --- LLM judge ---
         if self.config.judge_type in ("llm", "both") and self._judge_llm is not None:
-            judge_result = await judge_single_query(
-                judge_llm=self._judge_llm,
-                query=item.query,
-                expected_result=item.expected_result,
-                model_result=model_result,
-                expected_tool_calls=item.expected_tool_calls,
-                model_tool_calls=model_tool_calls,
-            )
+            if llm_workflow.get("error"):
+                judge_result = {"score": 0, "rationale": llm_workflow["error"], "parse_error": None}
+            else:
+                judge_result = await judge_single_query(
+                    judge_llm=self._judge_llm,
+                    query=item.query,
+                    expected_result=item.expected_result,
+                    model_result=model_result,
+                    expected_tool_calls=item.expected_tool_calls,
+                    model_tool_calls=model_tool_calls,
+                )
             judge_result["query_id"] = item.id
             judge_result["query"] = item.query
             judge_result["category"] = item.category
@@ -450,7 +520,7 @@ class ModelBenchmarkRunner:
             if item.expected_structured_output is not None:
                 struct_result = judge_structured_output(
                     expected=item.expected_structured_output,
-                    actual=model_result,
+                    actual=llm_workflow.get("structured_output", model_result),
                 )
                 struct_result["query_id"] = item.id
                 struct_result["query"] = item.query
@@ -479,6 +549,7 @@ class ModelBenchmarkRunner:
         """
         timestamp = datetime.datetime.now().isoformat()
         self._run_metadata = {
+            **self._provenance,
             "timestamp": timestamp,
             "dataset": self.config.dataset,
             "n_queries": len(self.dataset),
@@ -489,7 +560,12 @@ class ModelBenchmarkRunner:
             "structured_output": self.config.structured_output,
             "resume": self.config.resume,
             "tags": self.config.tags,
+            "recursion_limit": self.config.recursion_limit,
+            "query_ids": [item.id for item in self.dataset],
         }
+        if "deep_agent" in self.config.workflow_types:
+            self._run_metadata["deepagent_auto_approve"] = self.config.deepagent_auto_approve
+            self._run_metadata["deepagent_workspace"] = self.config.deepagent_workspace
 
         self.results = {}
 
@@ -610,8 +686,7 @@ class ModelBenchmarkRunner:
     # Helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _make_error_result(error_msg: str, n_queries: int) -> dict:
+    def _make_error_result(self, error_msg: str, n_queries: int) -> dict:
         """Build an error placeholder result for a failed model init.
 
         Parameters
@@ -626,14 +701,13 @@ class ModelBenchmarkRunner:
         dict
             Placeholder aggregate result.
         """
-        return {
-            "judge_aggregate": {
-                "n_queries": n_queries,
-                "n_correct": 0,
-                "accuracy": 0.0,
-                "n_parse_errors": 0,
-                "error": error_msg,
-            },
-            "judge_details": [],
-            "raw_tool_calls": [],
+        aggregate = {
+            "n_queries": n_queries, "n_correct": 0, "accuracy": 0.0,
+            "n_parse_errors": 0, "error": error_msg,
         }
+        result = {"raw_tool_calls": []}
+        if self.config.judge_type in ("llm", "both"):
+            result.update(judge_aggregate=dict(aggregate), judge_details=[])
+        if self.config.judge_type in ("structured", "both"):
+            result.update(structured_judge_aggregate=dict(aggregate), structured_judge_details=[])
+        return result
