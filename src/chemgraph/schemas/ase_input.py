@@ -201,6 +201,8 @@ def _coerce_calculator_payload(data: Any) -> Any:
     if not isinstance(data, dict):
         return data
 
+    # Preserve caller-owned dictionaries shared with tool-call message history.
+    data = data.copy()
     calc = data.get("calculator")
     if calc is None:
         calc = default_calculator()

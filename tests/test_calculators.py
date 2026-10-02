@@ -1,4 +1,6 @@
 import importlib.util
+import json
+from copy import deepcopy
 import pytest
 import numpy as np
 from pydantic import ValidationError
@@ -84,6 +86,34 @@ def test_default_calculator_is_in_detected_available_calculators():
         assert isinstance(params.calculator, MaceCalc)
         assert params.calculator.calculator_type == expected_type
         assert params.calculator.get_model_name_for_output() == expected_model
+
+
+@pytest.mark.parametrize(
+    "schema_name, structure_input",
+    [
+        ("ASEInputSchema", {"input_structure_file": "hydrogen.xyz"}),
+        ("ase_input_schema_ensemble", {"input_structure_directory": "structures"}),
+    ],
+)
+@pytest.mark.parametrize(
+    "calculator_input",
+    [{"calculator": {"calculator_type": "emt"}}, {}, {"calculator": None}],
+    ids=["explicit", "omitted", "null"],
+)
+def test_ase_validation_preserves_tool_arguments(
+    monkeypatch, schema_name, structure_input, calculator_input
+):
+    from chemgraph.schemas import ase_input
+
+    monkeypatch.setattr(ase_input, "default_calculator", EMTCalc)
+    arguments = {"params": {**structure_input, **deepcopy(calculator_input)}}
+    original = deepcopy(arguments)
+
+    params = getattr(ase_input, schema_name).model_validate(arguments["params"])
+
+    assert isinstance(params.calculator, EMTCalc)
+    assert arguments == original
+    json.dumps(arguments)
 
 
 def test_invalid_calculator_type_error_lists_accepted_values():
