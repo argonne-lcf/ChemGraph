@@ -74,6 +74,89 @@ Start from the [general examples](https://github.com/argonne-lcf/ChemGraph/tree/
 [Parsl example](https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/mcp_parsl_example),
 or [XANES examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/xanes_mcp).
 
+## MLIP server
+
+The MLIP server exposes `run_mlip` and `run_mlip_batch` through the configured
+execution backend:
+
+```bash
+python -m chemgraph.mcp.run_mlip_mcp
+```
+
+Its request schema has one calculation envelope. The model identifies the
+scientific potential, while `calculator.backend` chooses the adapter that
+evaluates it. For example, ASE and NVIDIA ALCHEMI use the same MACE model
+shape:
+
+```json
+{
+  "params": {
+    "input_structure_file": "/data/water.xyz",
+    "output_results_file": "/data/water-result.json",
+    "driver": "energy",
+    "model": {
+      "family": "mace",
+      "checkpoint": "medium"
+    },
+    "calculator": {
+      "backend": "ase",
+      "device": "cpu"
+    }
+  }
+}
+```
+
+To route that scientific request through ALCHEMI, only the calculator object
+changes:
+
+```json
+{
+  "calculator": {
+    "backend": "nvalchemi",
+    "device": "cuda",
+    "dtype": "float32",
+    "compile_model": false,
+    "enable_cueq": false
+  }
+}
+```
+
+Rootstock is also selected as a calculator rather than represented as a model
+family:
+
+```json
+{
+  "model": {"family": "uma", "checkpoint": "organization/model"},
+  "calculator": {
+    "backend": "rootstock",
+    "cluster": "local",
+    "device": "cuda"
+  }
+}
+```
+
+The server-wide `[execution]` configuration independently controls where the
+whole tool call runs. It is not repeated inside the MLIP request:
+
+```toml
+[execution]
+backend = "parsl" # local, parsl, ensemble_launcher, or globus_compute
+system = "polaris"
+```
+
+`run_mlip_batch` submits the whole ordered batch as one execution task. The
+calculator/model is therefore loaded once and reused; `batch_size` and
+`max_atoms` control internal ALCHEMI chunks, not execution-backend fan-out.
+CUDA ASE and ALCHEMI requests add a one-GPU advisory resource hint. Backends
+may ignore advisory hints.
+
+With a non-shared filesystem such as a remote Globus Compute endpoint, the
+server does not copy or inline MLIP input files. Pre-stage structures, local
+checkpoints, and Rootstock weights (the transfer tools are exposed when Globus
+Transfer is configured), pass their remote paths, and use an absolute remote
+output path. Remote submissions return a `batch_id`; use `check_job_status` and
+`get_job_results` to retrieve the result.
+
 ## Artifacts and security
 
 Set `CHEMGRAPH_LOG_DIR` before starting a server to choose its log/artifact
