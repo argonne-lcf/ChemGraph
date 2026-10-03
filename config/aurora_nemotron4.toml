@@ -1,0 +1,21 @@
+# ChemGraph config: Aurora Nemotron-4-340B inference (full-XPU, max context, llama.cpp).
+# Node runs llama-server (i1-Q4_K_M, 6-tile full-XPU, -c 32768); AURORA_BASE_URL points at it.
+#
+# Usage:
+#   scripts/aurora/serve_llamacpp_maxctx.sh nemotron-4-340b     # start the server
+#   source scripts/aurora/chemgraph_aurora_env.sh ENDPOINT.txt  # or set AURORA_BASE_URL manually
+#   chemgraph run --config config/aurora_nemotron4.toml -q "..."
+
+[general]
+model = "aurora:nemotron-4-340b"
+workflow = "single_agent"
+output = "last_message"
+recursion_limit = 20
+
+[api.aurora]
+base_url = "http://127.0.0.1:8000/v1"
+timeout = 120
+
+[logging]
+level = "WARNING"
+console = true
