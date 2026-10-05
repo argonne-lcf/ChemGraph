@@ -67,11 +67,12 @@ jobs:
         python -m pip check
     
     - name: Run tests with MACE
+      timeout-minutes: 20
       shell: bash -l {0}
       env:
         CHEMGRAPH_TEST_MACE: "1"
       run: |
-        python -m pytest tests/ -v -k "not tblite"
+        python -m pytest tests/ -v -k "not tblite" -o faulthandler_timeout=120
     
     - name: Final cleanup
       if: always()
