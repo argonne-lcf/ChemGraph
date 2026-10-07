@@ -156,8 +156,13 @@ told to keep generated inputs, scripts, and results here.
 clearing existing files. Use a new output directory for a fresh benchmark.
 Persistent memory and personal/project skill discovery are disabled. These
 directories separate artifacts; they are **not operating-system sandboxes**.
-Use `--deepagent-auto-approve` only in a trusted execution environment: it allows
-unattended tool execution, file changes, and shell commands.
+Deep Agent evaluation requires `--deepagent-auto-approve`, or
+`deepagent_auto_approve = true` in the evaluation profile
+(`deepagent_auto_approve=True` in Python). Evaluation has no interactive approval
+handler, so missing approval is rejected before any models are initialized,
+including when Deep Agent is selected alongside other workflows. Use this option
+only in a trusted execution environment: it allows unattended tool execution,
+file changes, and shell commands.
 
 ```bash
 chemgraph eval \
@@ -195,12 +200,23 @@ orientation-sensitive dipole component comparison.
 
 Each raw query record includes status, errors, workspace, elapsed seconds, and
 separate execution, formatting, and combined usage. Usage includes retries;
-unreported tokens remain unknown. Initialization/execution/formatting failures
-count as incorrect. JSON and Markdown reports include execution summaries.
+unreported tokens remain unknown. Initialization and execution failures count as
+incorrect. Formatting failures, including invalid JSON and formatter model
+errors, count as incorrect for the structured judge. The LLM judge still scores
+the completed original answer and tool calls independently. Formatting failures
+retain their error status and diagnostics in raw records and remain included in
+the error counts in JSON and Markdown execution summaries.
+
 Dataset and code checksums, dependency versions, and settings identify the run.
-Deep Agent resume rejects checkpoints from different datasets/configurations or
-without a matching fingerprint. Use separate output directories for smoke tests
-and full runs; `--resume` reuses completed query records, including failures.
+Deep Agent resume requires a matching fingerprint, including the dataset,
+`query_ids`, `max_queries`, judge and execution settings, recorded dependency
+versions, and hashed package source (`.py`, `.md`, and `.template` files).
+Changing query-selection options invalidates checkpoints even if they select the
+same queries; raising `--max-queries` to extend a smoke test also requires a new
+output directory. Package source changes, including evaluator fixes, invalidate
+old checkpoints. There is no checkpoint migration. Use separate output
+directories for smoke tests and full runs; `--resume` reuses completed query
+records, including failures, when the fingerprint matches.
 
 ## Reports and diagnostics
 

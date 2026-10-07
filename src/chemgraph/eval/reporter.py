@@ -165,16 +165,31 @@ def generate_markdown_report(
 
             lines.append("")
 
-        summaries = [(model, data[workflow]["execution_summary"])
-                     for model, data in results.items()
-                     if "execution_summary" in data.get(workflow, {})]
+        summaries = [
+            (model, data[workflow]["execution_summary"])
+            for model, data in results.items()
+            if "execution_summary" in data.get(workflow, {})
+        ]
         if summaries:
-            lines += ["### Execution", "", "| Model | Errors | Seconds | Model calls | Reported tokens | Partial usage |",
-                      "|---|---:|---:|---:|---:|---|"]
+            lines.append("### Execution")
+            lines.append("")
+            header = "| Model | Errors | Seconds | Model calls | Reported tokens | Partial usage |"
+            sep = "|---|---:|---:|---:|---:|---|"
+            lines.append(header)
+            lines.append(sep)
+
             for model, summary in summaries:
                 usage = summary["usage"]
-                lines.append(f"| {model} | {summary['n_errors']} | {summary['elapsed_seconds']:.1f} "
-                             f"| {usage['call_count']} | {usage['total_tokens']} | {usage['partial']} |")
+                row = (
+                    f"| {model} "
+                    f"| {summary['n_errors']} "
+                    f"| {summary['elapsed_seconds']:.1f} "
+                    f"| {usage['call_count']} "
+                    f"| {usage['total_tokens']} "
+                    f"| {usage['partial']} |"
+                )
+                lines.append(row)
+
             lines.append("")
 
     return "\n".join(lines)

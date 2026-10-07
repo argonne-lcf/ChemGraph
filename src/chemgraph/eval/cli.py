@@ -88,14 +88,28 @@ def add_eval_args(parser: argparse.ArgumentParser) -> None:
         default="eval_results",
         help="Output directory for results (default: eval_results).",
     )
-    parser.add_argument("--query-ids", nargs="+", default=None,
-                        help="Evaluate these query IDs in dataset order.")
-    parser.add_argument("--base-url", default=None,
-                        help="Override provider URLs for all models and the optional judge.")
-    parser.add_argument("--deepagent-workspace", default=None,
-                        help="Override model/thread directory root (default: OUTPUT_DIR/logs).")
-    parser.add_argument("--deepagent-auto-approve", action="store_true", default=None,
-                        help="Allow unattended Deep Agent tools and host shell execution.")
+    parser.add_argument(
+        "--query-ids",
+        nargs="+",
+        default=None,
+        help="Evaluate these query IDs in dataset order.",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Override provider URLs for all models and the optional judge.",
+    )
+    parser.add_argument(
+        "--deepagent-workspace",
+        default=None,
+        help="Override model/thread directory root (default: OUTPUT_DIR/logs).",
+    )
+    parser.add_argument(
+        "--deepagent-auto-approve",
+        action="store_true",
+        default=None,
+        help="Required for Deep Agent evaluation; allow unattended tools and host shell execution.",
+    )
     parser.add_argument(
         "--report",
         choices=["json", "markdown", "console", "all"],

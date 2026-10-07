@@ -499,7 +499,8 @@ class ModelBenchmarkRunner:
 
         # --- LLM judge ---
         if self.config.judge_type in ("llm", "both") and self._judge_llm is not None:
-            if llm_workflow.get("error"):
+            # Formatting failures leave a completed answer for the LLM judge.
+            if llm_workflow.get("error") and llm_workflow.get("status") != "formatting_error":
                 judge_result = {"score": 0, "rationale": llm_workflow["error"], "parse_error": None}
             else:
                 judge_result = await judge_single_query(
