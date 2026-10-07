@@ -7,7 +7,7 @@ import shlex
 import subprocess
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
@@ -15,7 +15,7 @@ from langchain_core.messages import AIMessage
 
 from chemgraph.agent.usage import summarize_usage
 from chemgraph.eval import deepagent
-from chemgraph.eval.cli import build_config_from_args, parse_args
+from chemgraph.eval.cli import build_config_from_args, parse_args, run_eval
 from chemgraph.eval.config import BenchmarkConfig
 from chemgraph.eval.runner import ModelBenchmarkRunner
 from chemgraph.graphs.deep_agent import _normalize_backend
@@ -25,7 +25,8 @@ from chemgraph.tools.ase_tools import file_to_atomsdata, save_atomsdata_to_file
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("valid_output", [True, False], ids=["scored-answer", "formatting-failure"])
-async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output):
+@pytest.mark.parametrize("judge_type", ["structured", "llm", "both"])
+async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output, judge_type):
     expected = {"smiles": ["O"]}
     dataset = tmp_path / "groundtruth.json"
     dataset.write_text(json.dumps([{
@@ -39,7 +40,7 @@ async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output):
     config = build_config_from_args(parse_args([
         "--config", str(profile), "--base-url", proxy,
         "--models", "fake", "--dataset", str(dataset), "--workflows", "deep_agent",
-        "--judge-type", "structured", "--query-ids", "water",
+        "--judge-type", judge_type, "--judge-model", "fake-judge", "--query-ids", "water",
         "--deepagent-auto-approve",
         "--output-dir", str(tmp_path / "results"),
     ]))
@@ -102,21 +103,36 @@ async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output):
 
     monkeypatch.setattr(deepagent, "ChemGraph", make_agent)
     monkeypatch.setattr(deepagent, "load_chat_model", make_formatter)
+    judge = AsyncMock(return_value={"score": 1, "rationale": "Correct answer", "parse_error": None})
+    monkeypatch.setattr("chemgraph.eval.runner.load_judge_model", lambda *args, **kwargs: object())
+    monkeypatch.setattr("chemgraph.eval.runner.judge_single_query", judge)
     monkeypatch.setenv("CHEMGRAPH_LOG_DIR", "original-logs")
     runner = ModelBenchmarkRunner(config)
     result = (await runner.run_all())["fake"]["deep_agent"]
     runner.report("all")
 
-    aggregate = result["structured_judge_aggregate"]
     raw = result["raw_tool_calls"][0]
     assert raw["status"] == ("completed" if valid_output else "formatting_error"), raw.get("error")
-    assert aggregate["n_queries"] == 1
-    assert aggregate["n_correct"] == int(valid_output)
+    if judge_type in ("structured", "both"):
+        aggregate = result["structured_judge_aggregate"]
+        assert aggregate["n_queries"] == 1
+        assert aggregate["n_correct"] == int(valid_output)
+    if judge_type in ("llm", "both"):
+        assert result["judge_aggregate"]["n_queries"] == 1
+        assert result["judge_aggregate"]["n_correct"] == 1
+        judge.assert_awaited_once()
+        assert judge.await_args.kwargs["model_result"] == "Water has SMILES O."
+        assert judge.await_args.kwargs["model_tool_calls"] == raw["tool_calls"]
+    else:
+        judge.assert_not_awaited()
+    assert result["execution_summary"]["n_errors"] == int(not valid_output)
+    if not valid_output:
+        assert raw["error"] == raw["structured_output"]["_parse_error"]
     assert raw["state"] == state and raw["result"] == "Water has SMILES O."
     assert len(invocations) == (1 if valid_output else 2)
     assert raw["usage"]["total"]["total_tokens"] == 12 + 25 * len(invocations)
     report = json.loads(next((tmp_path / "results").glob("benchmark_*.json")).read_text())
-    assert report["results"]["fake"]["deep_agent"]["structured_judge_aggregate"] == aggregate
+    assert report["results"]["fake"]["deep_agent"] == result
     assert os.environ["CHEMGRAPH_LOG_DIR"] == "original-logs"
 
     config.resume = True
@@ -124,6 +140,152 @@ async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output):
     assert resumed == result
     execution.assert_awaited_once()
     assert len(invocations) == (1 if valid_output else 2)
+    assert judge.await_count == int(judge_type in ("llm", "both"))
+
+
+@pytest.fixture
+def evaluation_dataset(tmp_path):
+    dataset = tmp_path / "groundtruth.json"
+    dataset.write_text(json.dumps([{
+        "id": "water", "query": "Find the SMILES for water",
+        "answer": {"structured_output": {"smiles": ["O"]}, "result": "Water has SMILES O."},
+    }]))
+    return dataset
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("judge_type", ["llm", "both"])
+@pytest.mark.parametrize("failure", [
+    "initialization", "execution", "formatter_initialization", "formatter_invocation",
+])
+async def test_deepagent_failure_scoring(tmp_path, monkeypatch, evaluation_dataset, judge_type, failure):
+    config = BenchmarkConfig(
+        models=["fake"], workflow_types=["deep_agent"], dataset=str(evaluation_dataset),
+        judge_type=judge_type, judge_model="fake-judge", deepagent_auto_approve=True,
+        output_dir=str(tmp_path / "results"),
+    )
+    state = {"messages": [{"type": "ai", "content": "Water has SMILES O."}]}
+    execution_usage = summarize_usage([{
+        "counts": {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}, "complete": True,
+    }])
+    agent = SimpleNamespace(
+        run=AsyncMock(return_value=state), aget_state=AsyncMock(return_value=state),
+        last_usage=execution_usage,
+    )
+    make_agent = Mock(return_value=agent)
+    formatter = SimpleNamespace(ainvoke=AsyncMock(side_effect=RuntimeError(failure)))
+    make_formatter = Mock(return_value=formatter)
+    if failure == "initialization":
+        make_agent.side_effect = RuntimeError(failure)
+    elif failure == "execution":
+        agent.run.side_effect = RuntimeError(failure)
+    elif failure == "formatter_initialization":
+        make_formatter.side_effect = RuntimeError(failure)
+    judge = AsyncMock(return_value={"score": 1, "rationale": "Correct answer", "parse_error": None})
+    monkeypatch.setattr(deepagent, "ChemGraph", make_agent)
+    monkeypatch.setattr(deepagent, "load_chat_model", make_formatter)
+    monkeypatch.setattr("chemgraph.eval.runner.load_judge_model", lambda *args, **kwargs: object())
+    monkeypatch.setattr("chemgraph.eval.runner.judge_single_query", judge)
+    previous_log_dir = "original-logs" if judge_type == "both" else None
+    if previous_log_dir is None:
+        monkeypatch.delenv("CHEMGRAPH_LOG_DIR", raising=False)
+    else:
+        monkeypatch.setenv("CHEMGRAPH_LOG_DIR", previous_log_dir)
+
+    result = (await ModelBenchmarkRunner(config).run_all())["fake"]["deep_agent"]
+    raw = result["raw_tool_calls"][0]
+    executed = failure.startswith("formatter_")
+    assert raw["status"] == ("formatting_error" if executed else f"{failure}_error")
+    assert raw["error"] == f"RuntimeError: {failure}"
+    assert raw["structured_output"]["_parse_error"] == raw["error"]
+    assert result["judge_aggregate"]["n_queries"] == 1
+    assert result["judge_aggregate"]["n_correct"] == int(executed)
+    if executed:
+        judge.assert_awaited_once()
+        assert judge.await_args.kwargs["model_result"] == "Water has SMILES O."
+    else:
+        judge.assert_not_awaited()
+    if judge_type == "both":
+        assert result["structured_judge_aggregate"]["n_queries"] == 1
+        assert result["structured_judge_aggregate"]["n_correct"] == 0
+    if failure != "initialization":
+        assert raw["state"] == state and raw["result"] == "Water has SMILES O."
+        assert raw["usage"]["execution"] == execution_usage
+    assert raw["usage"]["total"]["total_tokens"] == (0 if failure == "initialization" else 12)
+    assert result["execution_summary"]["n_errors"] == 1
+    assert formatter.ainvoke.await_count == int(failure == "formatter_invocation")
+    assert os.environ.get("CHEMGRAPH_LOG_DIR") == previous_log_dir
+
+
+@pytest.mark.parametrize("workflows", [["deep_agent"], ["single_agent", "deep_agent"]])
+@pytest.mark.parametrize("approve", [False, True])
+def test_deepagent_config_requires_approval(evaluation_dataset, workflows, approve):
+    options = dict(
+        models=["fake"], workflow_types=workflows, dataset=str(evaluation_dataset),
+        judge_type="structured", deepagent_auto_approve=approve,
+    )
+    if approve:
+        assert BenchmarkConfig(**options).deepagent_auto_approve is True
+    else:
+        with pytest.raises(ValueError, match="requires --deepagent-auto-approve"):
+            BenchmarkConfig(**options)
+
+
+@pytest.mark.parametrize("source", ["cli", "profile"])
+@pytest.mark.parametrize("approve", [False, True])
+def test_deepagent_cli_approval_before_runner(tmp_path, monkeypatch, evaluation_dataset, source, approve):
+    argv = ["--models", "fake", "--dataset", str(evaluation_dataset), "--judge-type", "structured"]
+    if source == "profile":
+        profile = tmp_path / "config.toml"
+        profile.write_text(
+            '[eval]\ndefault_profile = "test"\n[eval.profiles.test]\n'
+            'workflow_types = ["single_agent", "deep_agent"]\n'
+            f'deepagent_auto_approve = {str(approve).lower()}\n'
+        )
+        argv += ["--config", str(profile)]
+    else:
+        argv += ["--workflows", "single_agent", "deep_agent"]
+        if approve:
+            argv.append("--deepagent-auto-approve")
+    args = parse_args(argv)
+    runner = Mock()
+    monkeypatch.setattr("chemgraph.eval.cli.ModelBenchmarkRunner", runner)
+    if approve:
+        config = build_config_from_args(args)
+        assert config.deepagent_auto_approve is True
+        assert config.workflow_types == ["single_agent", "deep_agent"]
+    else:
+        with pytest.raises(ValueError, match="requires --deepagent-auto-approve") as exc:
+            run_eval(args)
+        assert "deepagent_auto_approve = true" in str(exc.value)
+        assert "no interactive approval handler" in str(exc.value)
+    runner.assert_not_called()
+
+
+@pytest.mark.parametrize("setting", ["max_queries", "query_ids", "code_sha256"])
+def test_deepagent_checkpoint_requires_same_selection_and_code(tmp_path, evaluation_dataset, setting):
+    options = dict(
+        models=["fake"], workflow_types=["deep_agent"], dataset=str(evaluation_dataset),
+        judge_type="structured", deepagent_auto_approve=True, max_queries=1,
+        output_dir=str(tmp_path / "results"), resume=True,
+    )
+    runner = ModelBenchmarkRunner(BenchmarkConfig(**options))
+    query_result = {"raw": {"result": "O"}, "judge": None, "structured_judge": None}
+    runner._save_query_checkpoint("fake", "deep_agent", "water", 0, query_result)
+    unchanged = ModelBenchmarkRunner(BenchmarkConfig(**options))
+    assert unchanged._load_checkpoint("fake", "deep_agent") == {"water": query_result}
+
+    if setting == "max_queries":
+        options["max_queries"] = 2
+    elif setting == "query_ids":
+        options["query_ids"] = ["water"]
+    changed = ModelBenchmarkRunner(BenchmarkConfig(**options))
+    if setting == "code_sha256":
+        changed._provenance["code_sha256"] = "changed-code-checksum"
+    # Selection options must match even if the effective query list is identical.
+    assert changed.dataset == runner.dataset
+    with pytest.raises(ValueError, match="Incompatible Deep Agent checkpoint"):
+        changed._load_checkpoint("fake", "deep_agent")
 
 
 @pytest.mark.parametrize("setting", [
@@ -148,6 +310,7 @@ def test_deepagent_checkpoint_endpoint_identity(tmp_path, monkeypatch, setting):
         return ModelBenchmarkRunner(BenchmarkConfig(
             models=["gpt-4o-mini"], workflow_types=["deep_agent"],
             judge_model="claude-sonnet-4-20250514", judge_type="llm",
+            deepagent_auto_approve=True,
             dataset=str(dataset), config_file=str(profile),
             output_dir=str(tmp_path / "results"), resume=True,
         ))

@@ -55,6 +55,7 @@ async def run_query(config, model_name, query, query_id):
            "tool_calls": [], "result": "", "status": "initialization_error"}
     agent = None
     try:
+        # This process-wide override requires sequential evaluation queries.
         os.environ["CHEMGRAPH_LOG_DIR"] = workspace
         model_options = {"model_name": model_name, "base_url": config.get_base_url(model_name),
                          "argo_user": config.get_argo_user()}

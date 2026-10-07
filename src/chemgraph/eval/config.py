@@ -146,6 +146,13 @@ class BenchmarkConfig(BaseModel):
     def validate_deepagent(self):
         """Resolve the shared output root and validate Deep Agent options."""
         if "deep_agent" in self.workflow_types:
+            if not self.deepagent_auto_approve:
+                raise ValueError(
+                    "Deep Agent evaluation requires --deepagent-auto-approve "
+                    "or deepagent_auto_approve = true in the evaluation profile "
+                    "(deepagent_auto_approve=True in Python). Evaluation has no "
+                    "interactive approval handler."
+                )
             root = self.deepagent_workspace or Path(self.output_dir) / "logs"
             self.deepagent_workspace = str(Path(root).expanduser().resolve())
             if self.judge_type in ("structured", "both") and not self.structured_output:
