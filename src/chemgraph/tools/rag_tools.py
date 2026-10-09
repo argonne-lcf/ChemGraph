@@ -23,6 +23,19 @@ logger = logging.getLogger(__name__)
 _vector_stores: dict = {}
 
 
+def _stores():
+    from chemgraph.execution.scoped import current_execution
+
+    context = current_execution()
+    return context.state.setdefault("rag_vector_stores", {}) if context else _vector_stores
+
+
+def _document_path(path):
+    from chemgraph.execution.scoped import scoped_path
+
+    return scoped_path(path) or os.path.abspath(path)
+
+
 # ---------------------------------------------------------------------------
 # Pydantic schemas for tool inputs
 # ---------------------------------------------------------------------------
@@ -207,7 +220,7 @@ def load_document(
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     from langchain_community.vectorstores import FAISS
 
-    resolved_path = os.path.abspath(file_path)
+    resolved_path = _document_path(file_path)
     if not os.path.isfile(resolved_path):
         return {"ok": False, "error": f"File not found: {resolved_path}"}
 
@@ -256,9 +269,9 @@ def load_document(
     vector_store = FAISS.from_documents(chunks, embeddings)
 
     # Register in module-level store
-    _vector_stores[resolved_path] = vector_store
+    _stores()[resolved_path] = vector_store
     # Also track the most-recently loaded path for convenience
-    _vector_stores["__latest__"] = resolved_path
+    _stores()["__latest__"] = resolved_path
 
     logger.info(
         "Loaded '%s' (%s) into FAISS vector store (%d chunks, chunk_size=%d, overlap=%d).",
@@ -306,12 +319,12 @@ def query_knowledge_base(
     """
     # Resolve which vector store to query
     if file_path is not None:
-        resolved_path = os.path.abspath(file_path)
+        resolved_path = _document_path(file_path)
     else:
-        resolved_path = _vector_stores.get("__latest__")
+        resolved_path = _stores().get("__latest__")
 
-    if resolved_path is None or resolved_path not in _vector_stores:
-        available = [k for k in _vector_stores if k != "__latest__"]
+    if resolved_path is None or resolved_path not in _stores():
+        available = [k for k in _stores() if k != "__latest__"]
         return {
             "ok": False,
             "error": (
@@ -321,7 +334,7 @@ def query_knowledge_base(
             ),
         }
 
-    vector_store = _vector_stores[resolved_path]
+    vector_store = _stores()[resolved_path]
     docs = vector_store.similarity_search(query, k=top_k)
 
     results = [
@@ -345,9 +358,9 @@ def get_loaded_documents() -> list[str]:
 
     This is a plain helper (not a tool) for programmatic access.
     """
-    return [k for k in _vector_stores if k != "__latest__"]
+    return [k for k in _stores() if k != "__latest__"]
 
 
 def clear_vector_stores() -> None:
     """Remove all loaded vector stores. Useful for testing and cleanup."""
-    _vector_stores.clear()
+    _stores().clear()

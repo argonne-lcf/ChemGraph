@@ -170,9 +170,9 @@ def _fpocket_box(receptor_pdbqt: str, pad: float):
     tmp = tempfile.mkdtemp(prefix="fpocket_")
     pdb = os.path.join(tmp, "rec.pdb")
     subprocess.run(
-        f"obabel {receptor_pdbqt} -O {pdb}", shell=True, capture_output=True, check=False
+        ["obabel", receptor_pdbqt, "-O", pdb], capture_output=True, check=False
     )
-    subprocess.run(f"fpocket -f {pdb}", shell=True, capture_output=True, check=False)
+    subprocess.run(["fpocket", "-f", pdb], capture_output=True, check=False)
     vert = sorted(glob.glob(os.path.join(tmp, "rec_out", "pockets", "pocket*_vert.pqr")))
     if not vert:
         return None

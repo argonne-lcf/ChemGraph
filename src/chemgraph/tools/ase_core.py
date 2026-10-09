@@ -39,11 +39,17 @@ def _ensure_ase_core_file_log() -> None:
     a second call is a no-op, which avoids accumulating one open file
     handle per invocation. Honors ``CHEMGRAPH_LOG_DIR`` when set.
     """
-    if any(isinstance(h, logging.FileHandler) for h in logger.handlers):
+    from chemgraph.execution.scoped import current_execution, standalone_log_record
+
+    handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+    for handler in handlers:
+        handler.addFilter(standalone_log_record)
+    if handlers or current_execution() is not None:
         return
     log_dir = artifact_directory() or os.path.join(os.getcwd(), "cg_logs")
     os.makedirs(log_dir, exist_ok=True)
     fh = logging.FileHandler(os.path.join(log_dir, "ase_core.log"))
+    fh.addFilter(standalone_log_record)
     fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
     logger.addHandler(fh)
     logger.setLevel(logging.DEBUG)
@@ -66,6 +72,11 @@ def _resolve_path(path: str) -> str:
     str
         Resolved path.
     """
+    from chemgraph.execution.scoped import scoped_path
+
+    scoped = scoped_path(path)
+    if scoped is not None:
+        return scoped
     log_dir = artifact_directory()
     if log_dir and not os.path.isabs(path):
         os.makedirs(log_dir, exist_ok=True)
@@ -135,6 +146,11 @@ def _resolve_existing_path(path: str) -> str:
         The raw path if it exists, else the log-dir-resolved path if that
         exists, else the raw path unchanged.
     """
+    from chemgraph.execution.scoped import scoped_path
+
+    scoped = scoped_path(path)
+    if scoped is not None:
+        return scoped
     if os.path.isfile(path):
         return path
     resolved = _resolve_path(path)
@@ -706,6 +722,9 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
         os.makedirs(output_parent, exist_ok=True)
 
     logger.info("Loading calculator: %s", calculator)
+    from chemgraph.execution.scoped import scoped_calculator
+
+    calculator = scoped_calculator(calculator)
     calc, system_info, calc_model = load_calculator(calculator)
 
     if calc is None:

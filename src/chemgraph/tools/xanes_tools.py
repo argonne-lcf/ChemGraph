@@ -112,7 +112,9 @@ def plot_xanes_data(runs_dir: str) -> str:
         Path to the directory containing ``run_*`` subdirectories
         with FDMNES outputs.
     """
-    runs_path = Path(runs_dir)
+    from chemgraph.tools.ase_core import _resolve_existing_path
+
+    runs_path = Path(_resolve_existing_path(runs_dir))
     if not runs_path.is_dir():
         raise ValueError(f"'{runs_dir}' is not a valid directory.")
 
