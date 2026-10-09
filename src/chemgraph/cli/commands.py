@@ -305,6 +305,8 @@ def initialize_agent(
             )
         uses_deepagent = enable_deepagent or workflow_type == "deep_agent"
         if hpc_config is not None:
+            if workflow_type != "deep_agent":
+                raise ValueError("hpc_config requires the standalone deep_agent workflow.")
             if deepagent_tool_registry is not None:
                 raise ValueError("Pass hpc_config or a configured tool registry, not both.")
             from chemgraph.tools.hpc.tools import create_hpc_registry

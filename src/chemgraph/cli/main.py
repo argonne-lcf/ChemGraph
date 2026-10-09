@@ -685,6 +685,9 @@ def _handle_run(args: argparse.Namespace) -> None:
     deepagent_tool_registry = None
     cli_tools = getattr(args, "local_tool_names", None)
     local_names = cli_tools if cli_tools is not None else config.get("tools")
+    if "hpc" in config and args.workflow != "deep_agent":
+        console.print("[red]HPC configuration requires the standalone deep_agent workflow; use -w deep_agent.[/red]")
+        sys.exit(2)
     if cli_tools is not None and args.workflow not in {"deep_agent", "main_agent"}:
         console.print("[red]--tool requires -w deep_agent or -w main_agent.[/red]")
         sys.exit(2)
@@ -718,9 +721,9 @@ def _handle_run(args: argparse.Namespace) -> None:
                 continue
             main_options[{"skills": "skill_dirs", "subagents": "subagent_names"}.get(key, key)] = value
     if interactive:
-        # Retain the selected catalog for both capability workflows, including
-        # a workflow chosen in the startup prompt or a later /workflow command.
-        main_options["tool_registry"] = deepagent_tool_registry
+        # Ordinary catalogs serve both workflows. Configured HPC tools belong
+        # to standalone DeepAgent and must not enter durable main-agent sessions.
+        main_options["tool_registry"] = None if "hpc" in config else deepagent_tool_registry
 
     # ---- MCP tool loading ----------------------------------------------
     mcp_tools = None

@@ -30,6 +30,12 @@ environment requirements, outputs, and result interpretation. The selected
 execution skill handles staging, allocation checks, submission, and monitoring.
 Local and attached-MCP workflows do not require a separate execution skill.
 
+Configured IRI/Globus tools currently require standalone `deep_agent`. Use
+`-w deep_agent` with an `[hpc]` configuration, or pass `hpc_config` to
+`initialize_agent` for that workflow. In the interactive CLI, these tools stay
+with DeepAgent when switching workflows; durable main-agent reconstruction of
+HPC target configuration is not supported.
+
 ## Where skills live
 
 Maintained skills live in `src/chemgraph/skills/` and ship in the Python wheel
