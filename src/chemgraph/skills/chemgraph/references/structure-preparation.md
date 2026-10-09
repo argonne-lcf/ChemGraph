@@ -1,45 +1,50 @@
-# Prepare structures with local tools
+# Prepare an input structure
 
-Use existing ChemGraph tools for supported preparation operations before writing
-calculation inputs. For water, use SMILES `O`; no name lookup is needed. For other
-names, `molecule_name_to_smiles` uses PubChem and requires network access. Preserve
-stereochemistry when it matters.
+Use or prepare a coordinate file for the requested calculation. Start from the
+supplied structure or molecular identity; preserve the user's geometry and
+scientific choices.
 
-Standalone Deep Agent exposes the built-in tool catalog by default. If
-`load_tools` is available, request the names needed for the current step, for
-example `load_tools(["smiles_to_coordinate_file", "file_to_atomsdata"])`. This
-replaces the active selection; use the returned native schemas on the next step.
-Use `search_tools` for unfamiliar capabilities. Loading does not execute tools or
-grant permissions, and the selection clears when the turn completes. A missing
-tool may have been excluded by a configured filter; searching cannot enable it.
-Call the loaded native tools instead of invoking their implementation through
-`execute` or inspecting source to rediscover their arguments.
+## Choose the input route
 
-For the PBS water workflow:
+- **Existing file:** pass the supplied path directly when the selected calculation
+  accepts its format and can access it. Use `file_to_atomsdata` only when the task
+  requires inspection, conversion, missing information from the contents, or
+  diagnosis of a read error. Preserve the supplied file unless a change is requested.
+- **Explicit coordinates:** confirm their units and save them without generating
+  a replacement geometry. XYZ is suitable for an isolated molecule; periodic
+  inputs also need their cell and periodicity preserved.
+- **SMILES:** use `smiles_to_coordinate_file` with the supplied SMILES and an
+  absolute host `output_file` path. Check `ok`, `path` and `natoms`, then use
+  the returned file. This generates a molecular
+  starting geometry with explicit hydrogens and RDKit/UFF preparation; it does
+  not establish convergence under the requested ASE calculator.
+- **Molecule name:** use `molecule_name_to_smiles` when identity needs lookup.
+  It uses PubChem and requires network access. For a specified stereoisomer,
+  set `include_stereochemistry=True`; the default omits stereochemistry.
 
-1. Choose a fresh shared run directory visible on login and compute nodes.
-2. Call `smiles_to_coordinate_file` with `smiles="O"` and `output_file` set to
-   the absolute host path of `water.xyz` in that directory. This is lightweight
-   RDKit coordinate generation, not the requested ASE calculation.
-3. Inspect the tool's `ok`, `path`, and `natoms` fields. Read the returned path
-   with `file_to_atomsdata` and verify three atoms: one O and two H, with finite
-   coordinates. Stop preparation on an error or rejected write; do not submit
-   an input that has not been generated and checked.
-4. Put the returned absolute `path` in `ASEInputSchema.input_structure_file`.
-   Follow [the ASE batch example](ase-batch.md) and the `pbs-hpc` skill to write
-   the calculation and submit it. Keep the requested calculator on compute nodes.
-
-Local registry tools execute in the agent process, on the agent host. Their
-filesystem is independent of a virtual file backend, remote shell, or MCP server.
-`/workspace/...` is a file-tool mount, not a host path to pass to a local chemistry
-tool. Relative writes use `CHEMGRAPH_LOG_DIR`; carry the returned absolute path
-forward instead of guessing where a relative filename landed. For separate
-hosts, stage the generated artifact and use the verified compute-visible path.
-
-If native tools are not configured, a skill-guided local script may call
+For script-based preparation when native tools are unavailable, reuse
 `chemgraph.tools.cheminformatics_core.smiles_to_coordinate_file_core` with the
-same SMILES and absolute output path. Reuse that implementation rather than
-writing coordinates or recreating chemistry logic. Report missing dependencies.
+SMILES and absolute output path. Report missing dependencies.
 
-Keep full structures, trajectories, and logs in files. Return concise status,
-atom counts, relevant results, and artifact paths; load more data only when needed.
+## Coordinate sources
+
+- Reuse user-provided structure files directly. Preserve their coordinates
+  unless the user requests a transformation.
+- When the user supplies explicit coordinates, write those values faithfully.
+  Do not fill in missing atoms or positions by guessing.
+- When coordinates need generation, use ChemGraph's structure-generation tools.
+  Use the file returned by a successful tool call; do not manually compose
+  coordinates from a molecule's name, formula, or SMILES.
+- Pass the resulting file path to downstream calculations. Avoid retyping
+  coordinates into scripts or reconstructing files from conversation text.
+- If the input is incomplete or generation fails, report the missing information
+  or failure. Do not fabricate a replacement structure.
+
+## Hand off the artifact
+
+Report the artifact path, any checks performed and unresolved choices; include
+composition when already known or requested. For batch input construction,
+continue with [ASE calculations](ase-calculations.md).
+
+Carry the requested charge and multiplicity into the calculation settings;
+XYZ coordinates alone do not record them.
