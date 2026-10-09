@@ -337,3 +337,51 @@ os.environ["CHEMGRAPH_LOG_DIR"] = "/absolute/path/to/runs"
 ChemGraph is evolving and does not currently re-export `ChemGraph` from the
 package root. Prefer the documented module import, pin a version for deployed
 applications, and check release notes before upgrading.
+
+
+## Embedding a caller-scoped tool runtime
+
+`chemgraph.execution.scoped` supplies `ExecutionContext`, `execution_context`,
+and `result_artifacts`. Bind a context around each asynchronous session run or
+resume. Its owner/thread/task identifiers must come from authenticated application
+state. Retain the context’s state and lock for the conversation, changing only the
+current task ID between serialized turns. Give each conversation a distinct
+workspace; document-search state is conversation-local and reloads after restart.
+
+The default registry middleware passes native calls to
+`controller.execute_tool(context, call, invoke)`. The controller must durably
+accept the exact tool name, arguments and call ID before awaiting `invoke()`.
+Persist its JSON-compatible return value unchanged and return it on a completed
+call’s replay. An uncertain call must require reconciliation, never an automatic
+retry. Hook failures propagate; dashboard callbacks are unsuitable for this job.
+Clarification interrupts bypass computational journaling. Registry availability
+checks and native approval policies remain in force.
+
+Tool-controlled paths resolve inside the conversation workspace, without a cwd
+fallback. Traversal and symlink escapes are rejected. Calculator command/profile
+overrides and model URLs are unavailable in scoped execution; optional
+`model_roots` identify operator-controlled installed model directories. There is
+no host shell tool in a scoped catalog. This is an application boundary, not an
+OS sandbox for untrusted scientific engines or arbitrary custom tool code.
+
+The runtime serializes native calls in a conversation, captures created/modified
+ordinary output files (excluding hidden files and `.log` files), and stores
+immutable snapshots before another call can overwrite them. Descriptors live in
+checkpointed tool messages. Call `result_artifacts(turn.state, task_id)` on a
+completed or restored turn to retrieve paths, media types, hashes, source paths
+and tool-call IDs. Serve those files through the embedding application’s ownership
+checks; do not expose the workspace directly. Scientific results and metadata
+remain native ChemGraph output, without completion implying convergence.
+
+`chemgraph.execution.submissions.submission_tool(controller)` creates the native
+`submit_hpc` tool only when a submission controller is available. That controller
+implements `prepare_submission(call_id, calculation)` and
+`execute_submission(operation_id)` using operator-configured templates and durable
+approval records. `MCPJobClient` owns the ChemGraph MCP submission/status/results/
+cancellation protocol. An uncertain receipt pauses for reconciliation. Applications
+must track remote work beyond completion of the graph turn.
+
+Scientific conformer comparison is available through
+`chemgraph.utils.science.compare_conformers`. It accepts any nonempty collection,
+requires consistent composition/settings and finite eV energies, and excludes
+nonconverged structures from relative-energy rankings.

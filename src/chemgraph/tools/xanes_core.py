@@ -196,6 +196,13 @@ def extract_conv(fdmnes_output_dir: Path | str) -> dict:
 
 def _get_data_dir() -> Path:
     """Return the working data directory for XANES workflows."""
+    from chemgraph.execution.scoped import scoped_path
+
+    scoped = scoped_path("xanes_data")
+    if scoped is not None:
+        data_dir = Path(scoped)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir
     cwd = Path.cwd()
     if "PBS_O_WORKDIR" in os.environ:
         cwd = Path(os.environ["PBS_O_WORKDIR"])
@@ -250,7 +257,9 @@ def run_xanes_core(params: xanes_input_schema) -> dict:
 
     # Determine output directory
     if params.output_dir is not None:
-        run_dir = Path(params.output_dir).resolve()
+        from chemgraph.tools.ase_core import _resolve_path
+
+        run_dir = Path(_resolve_path(params.output_dir)).resolve()
     else:
         run_dir = input_path.parent / f"fdmnes_{input_path.stem}"
     run_dir.mkdir(parents=True, exist_ok=True)
