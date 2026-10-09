@@ -10,7 +10,7 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import SystemMessage, ToolMessage
 from langgraph.types import Command
 
-from chemgraph.registry.tools import RegistryError, ToolRegistry
+from chemgraph.registry.tools import RegistryError, ToolRegistry, ToolSpec
 
 
 class RegistryToolState(AgentState):
@@ -176,14 +176,28 @@ class RegistryToolsMiddleware(AgentMiddleware):
         return request.override(tool=self._resolve([name])[0])
 
     def wrap_tool_call(self, request, handler):
+        from chemgraph.execution.scoped import current_execution
+
+        if current_execution() is not None:
+            raise RuntimeError("Scoped tool execution requires the async graph API")
         selected = self._tool_request(request)
         return selected if isinstance(selected, ToolMessage) else handler(selected)
 
     async def awrap_tool_call(self, request, handler):
+        from chemgraph.execution.scoped import current_execution, execute_scoped_tool
+
+        if current_execution() is not None and request.tool_call["name"] == "execute":
+            raise PermissionError("Host shell execution is unavailable in scoped catalogs")
+
         selected = self._tool_request(request)
-        return (
-            selected if isinstance(selected, ToolMessage) else await handler(selected)
-        )
+        if isinstance(selected, ToolMessage):
+            return selected
+        spec = self.specs.get(request.tool_call["name"])
+        if spec is None and request.tool_call["name"] in {"write_file", "edit_file", "delete"}:
+            spec = ToolSpec(request.tool_call["name"], "Checkpoint workspace mutation", None)
+        if spec is None:
+            return await handler(selected)
+        return await execute_scoped_tool(spec, selected, handler)
 
     def _batch_returns_direct(self, state):
         """Classify only a completed, current batch involving registry tools."""
