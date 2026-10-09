@@ -150,7 +150,7 @@ chemgraph run --resume <session-id> -q "Continue with a frequency calculation."
 
 The `main_agent` workflow works directly with skills, files, shell commands, and
 on-demand chemistry tools, and can delegate to configured specialists. It has
-durable checkpoints and requires interactive CLI mode:
+durable checkpoints and reviews tool actions by default:
 
 ```bash
 chemgraph run --interactive --workflow main_agent --workspace .
@@ -158,6 +158,18 @@ chemgraph run --interactive --workflow main_agent --workspace . \
   --skill ../shared-skills --subagent single_agent --subagent deep_agent
 chemgraph run --interactive --workflow main_agent --resume <session-id>
 ```
+
+To bypass default tool approvals, add `--dangerously-skip-approvals`. It supports
+interactive sessions and headless runs:
+
+```bash
+chemgraph run -w main_agent --workspace . --dangerously-skip-approvals \
+  -q "Run the repository tests and summarize failures."
+```
+
+Repeat the flag when resuming a bypass session. Headless runs save pending
+questions and exit with code 3; answer them by resuming interactively. Approval
+bypass does not provide execution isolation or override stricter worker policies.
 
 Without `--workspace`, file tools use checkpoint storage and no shell is exposed.
 Bundled skills and local registry tools remain available; registry tools execute
@@ -198,9 +210,9 @@ Main agent and standalone Deep Agent discover the built-in local tool catalog by
 loading tool schemas only when needed. Use repeated `--tool NAME` flags to restrict
 the catalog, or `[general] tools = []` in TOML to disable tool discovery.
 
-Headless workspace mutation is disabled unless the command includes an
-explicit workspace and `--deepagent-dangerously-skip-approvals`. Use that mode
-only in a disposable, isolated checkout.
+Headless `deep_agent` additionally requires an explicit `--deepagent-workspace`.
+Its legacy `--deepagent-dangerously-skip-approvals` flag remains supported for
+headless standalone runs. Use bypass in an externally isolated environment.
 
 ### Use the Python API
 
@@ -282,7 +294,7 @@ stdio client configuration and the experimental HPC servers.
 | Workflow | Use it for | Important requirements |
 | --- | --- | --- |
 | `single_agent` | General molecule lookup, ASE calculations, and reports | Default and recommended first workflow |
-| `main_agent` | Durable direct workspace/chemistry work and optional delegation | Interactive mode; use `MainAgentSession` in Python |
+| `main_agent` | Durable direct workspace/chemistry work and optional delegation | Interactive, or headless with explicit approval bypass; use `MainAgentSession` in Python |
 | `deep_agent` | Workspace tasks and attached chemistry tools (`deepagent` is an alias) | Interactive approvals by default; broad local shell access |
 | `multi_agent` | Planner/executor decomposition and parallel subtasks | More model calls and orchestration overhead |
 | `molecular_docking` | Ligand/receptor docking with AutoDock Vina | `docking` extra plus Vina from conda-forge |
@@ -398,7 +410,7 @@ chemgraph run -vv -q "What is the SMILES string for water?"
 - Calculator warnings at startup mean an optional engine was not detected;
   install it only if the requested workflow needs it.
 - A first MACE or local-embedding run may pause while model weights download.
-- `main_agent` requires `--interactive`.
+- Headless `main_agent` requires `--dangerously-skip-approvals`.
 - Headless `deep_agent` requires an explicit workspace and the unsafe
   skip-approvals flag.
 - The Streamlit source command must be run from a repository checkout.

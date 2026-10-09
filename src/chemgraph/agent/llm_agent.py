@@ -26,6 +26,7 @@ from chemgraph.memory.graph_config import (
     validate_configuration_id,
 )
 from chemgraph.agent.configuration import MainAgentRuntimeConfig
+from chemgraph.agent.approvals import ApprovalMode, normalize_approval_mode
 from chemgraph.models.endpoints.identity import describe_model_endpoint
 from chemgraph.utils.artifacts import canonical_artifact_directory
 from chemgraph.graphs.workspace import bind_artifact_directory
@@ -230,10 +231,13 @@ class ChemGraph:
         Ordered backend-relative directories containing Agent Skills. Later
         sources override earlier sources with the same skill name.
     deepagent_auto_approve : bool, optional
-        Disable Deep Agent tool-review interrupts for a standalone
-        ``deep_agent`` workflow. This permits unreviewed file mutations and
-        command execution and should be used only in an isolated, explicitly
-        trusted workspace, by default False.
+        Compatibility alias for ``approval_mode="bypass"`` on standalone
+        ``deep_agent`` only. Conflicts with an explicit ``approval_mode="review"``.
+    approval_mode : {"review", "bypass"}, optional
+        Default tool-review policy for ``main_agent`` and ``deep_agent``.
+        Omission selects ``review``. ``bypass`` disables default reviews;
+        stricter worker policies and human questions remain active. This does
+        not isolate shell or registry-tool execution from the host.
     backend, tool_registry, skills, skill_dirs, discover_skills, user_skills_dir : optional
         Main-agent workspace backend, lazy tool catalog, and skill sources.
         Without a backend, files use checkpoint storage and no shell is exposed.
@@ -309,6 +313,7 @@ class ChemGraph:
         subagent_names: Sequence[str] | None = None,
         subagent_options: dict[str, dict[str, Any]] | None = None,
         configuration_id: str | None = None,
+        approval_mode: ApprovalMode | None = None,
         _model_endpoint=None,
     ):
         migration_message = get_removed_workflow_message(workflow_type)
@@ -405,11 +410,9 @@ class ChemGraph:
                 "deepagent_skill_dirs requires enable_deepagent=True or "
                 "workflow_type='deep_agent'."
             )
-        if deepagent_auto_approve and workflow_type != "deep_agent":
-            raise ValueError(
-                "deepagent_auto_approve is supported only for the deep_agent "
-                "workflow."
-            )
+        self.approval_mode = normalize_approval_mode(
+            workflow_type, approval_mode, deepagent_auto_approve=deepagent_auto_approve,
+        )
         if checkpointer is not None and workflow_type not in {
             "main_agent",
             "deep_agent",
@@ -656,7 +659,7 @@ class ChemGraph:
                 deepagent_options["tool_registry"] = self.deepagent_tool_registry
             if self.checkpointer is not None:
                 deepagent_options["checkpointer"] = self.checkpointer
-            if self.deepagent_auto_approve:
+            if self.approval_mode == "bypass":
                 deepagent_options["interrupt_on"] = None
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,

@@ -7,6 +7,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 from chemgraph.models.endpoints.identity import ModelEndpointDescriptor
+from chemgraph.agent.approvals import ApprovalMode
 
 
 class SessionMessage(BaseModel):
@@ -52,6 +53,7 @@ class MainAgentGraphConfig(BaseModel):
     generate_report: bool = False
     max_retries: int = 1
     human_supervised: bool = False
+    approval_mode: ApprovalMode = "review"
     terminal_tool_names: tuple[str, ...] = ()
     enable_deepagent: bool = False
     deepagent_workspace: Optional[str] = None
