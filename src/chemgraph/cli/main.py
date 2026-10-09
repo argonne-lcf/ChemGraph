@@ -47,6 +47,7 @@ from chemgraph.cli.formatting import (
     format_response,
     list_models,
 )
+from chemgraph.cli.headless import run_headless_main_agent
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +140,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             "Experimentally add a workspace Deep Agent to main_agent "
-            "(interactive mode only)"
+            "(headless use requires --dangerously-skip-approvals)"
         ),
     )
     parser.add_argument(
@@ -168,6 +169,10 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Discover personal and project skills for local Deep Agent workspaces (default: enabled)",
+    )
+    parser.add_argument(
+        "--dangerously-skip-approvals", action="store_true",
+        help="Bypass default tool approvals for main_agent or deep_agent (does not isolate host access)",
     )
     parser.add_argument(
         "--deepagent-dangerously-skip-approvals",
@@ -612,7 +617,12 @@ def _handle_run(args: argparse.Namespace) -> None:
     deepagent_auto_approve = bool(
         getattr(args, "deepagent_dangerously_skip_approvals", False)
     )
+    bypass = bool(getattr(args, "dangerously_skip_approvals", False)) or deepagent_auto_approve
+    approval_mode = "bypass" if bypass else "review"
     interactive = bool(getattr(args, "interactive", False))
+    if bypass and args.workflow not in {"main_agent", "deep_agent"}:
+        console.print("[red]Approval bypass requires -w main_agent or -w deep_agent.[/red]")
+        sys.exit(2)
     if cli_deepagent is True and args.workflow != "main_agent":
         console.print(
             "[red]--deepagent adds a worker only to the main_agent workflow. "
@@ -646,7 +656,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         except (TypeError, ValueError, RuntimeError, OSError) as exc:
             console.print(f"[red]Invalid Deep Agent skills: {escape(str(exc))}[/red]")
             sys.exit(2)
-    if enable_deepagent and args.workflow == "main_agent" and not interactive:
+    if enable_deepagent and args.workflow == "main_agent" and not interactive and not bypass:
         console.print(
             "[red]The experimental Deep Agent requires interactive mode.[/red]"
         )
@@ -660,10 +670,10 @@ def _handle_run(args: argparse.Namespace) -> None:
         )
         sys.exit(2)
     if args.workflow == "deep_agent" and not getattr(args, "interactive", False):
-        if not deepagent_auto_approve:
+        if not bypass:
             console.print(
                 "[red]Headless deep_agent runs require "
-                "--deepagent-dangerously-skip-approvals.[/red]"
+                "--dangerously-skip-approvals (or --deepagent-dangerously-skip-approvals).[/red]"
             )
             sys.exit(2)
         if not deepagent_workspace:
@@ -674,10 +684,9 @@ def _handle_run(args: argparse.Namespace) -> None:
             sys.exit(2)
 
     if args.workflow == "main_agent":
-        if not getattr(args, "interactive", False):
+        if not interactive and not bypass:
             console.print(
-                "[red]main_agent requires interactive mode. Use "
-                "`chemgraph --interactive -w main_agent`.[/red]"
+                "[red]main_agent requires interactive mode or --dangerously-skip-approvals.[/red]"
             )
             sys.exit(2)
 
@@ -688,7 +697,7 @@ def _handle_run(args: argparse.Namespace) -> None:
     if cli_tools is not None and args.workflow not in {"deep_agent", "main_agent"}:
         console.print("[red]--tool requires -w deep_agent or -w main_agent.[/red]")
         sys.exit(2)
-    if (interactive or args.workflow == "deep_agent") and local_names is not None:
+    if (interactive or args.workflow in {"deep_agent", "main_agent"}) and local_names is not None:
         from chemgraph.registry.tools import RegistryError, ToolRegistry
 
         try:
@@ -714,7 +723,7 @@ def _handle_run(args: argparse.Namespace) -> None:
                     sys.exit(2)
                 continue
             main_options[{"skills": "skill_dirs", "subagents": "subagent_names"}.get(key, key)] = value
-    if interactive:
+    if interactive or args.workflow == "main_agent":
         # Retain the selected catalog for both capability workflows, including
         # a workflow chosen in the startup prompt or a later /workflow command.
         main_options["tool_registry"] = deepagent_tool_registry
@@ -728,7 +737,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         or config.get("mcp_server_name", "ChemGraph General Tools")
     )
 
-    if mcp_url or mcp_command:
+    if (mcp_url or mcp_command) and not (args.workflow == "main_agent" and args.resume):
         from chemgraph.cli.mcp_utils import load_mcp_tools_from_config
 
         mcp_tools = load_mcp_tools_from_config(
@@ -741,7 +750,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             sys.exit(1)
 
     if getattr(args, "interactive", False):
-        interactive_mode(
+        code = interactive_mode(
             **main_options,
             model=args.model,
             workflow=args.workflow,
@@ -767,7 +776,27 @@ def _handle_run(args: argparse.Namespace) -> None:
                 if args.workflow == "main_agent"
                 else None
             ),
+            approval_mode=approval_mode,
         )
+        if code:
+            sys.exit(code)
+        return
+
+    if args.workflow == "main_agent":
+        code = run_headless_main_agent(
+            **main_options, query=args.query, resume_session=args.resume,
+            checkpoint_db=getattr(args, "checkpoint_db", None) or config.get("checkpoint_db"),
+            output_file=args.output_file, model_name=args.model,
+            structured_output=args.structured, return_option=args.output,
+            generate_report=args.report, recursion_limit=args.recursion_limit,
+            base_url=base_url, argo_user=argo_user, verbose=args.verbose > 0,
+            human_supervised=args.human_supervised, tools=mcp_tools,
+            enable_deepagent=enable_deepagent, deepagent_workspace=deepagent_workspace,
+            deepagent_skill_dirs=deepagent_skill_dirs,
+            deepagent_discover_skills=deepagent_discover_skills, approval_mode=approval_mode,
+        )
+        if code:
+            sys.exit(code)
         return
 
     if match_endpoint(args.model) is None:
@@ -832,6 +861,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         deepagent_skill_dirs=deepagent_skill_dirs,
         deepagent_discover_skills=deepagent_discover_skills,
         deepagent_auto_approve=deepagent_auto_approve,
+        approval_mode=approval_mode,
     )
 
     if not agent:

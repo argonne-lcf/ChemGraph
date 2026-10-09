@@ -133,6 +133,13 @@ retain `session.thread_id`, reconstruct the same configuration, and call
 checkpointer is process-local. `MainAgentSession` inherits the graph's recursion
 limit; an explicit limit must match supplied session metadata.
 
+Set `approval_mode="bypass"` on `ChemGraph` to disable default tool reviews for
+`main_agent` or `deep_agent`; omission selects `"review"`. Stricter worker policies
+and genuine human questions remain active. The mode is saved with the graph's
+effective policy and must match on reconstruction. It does not grant shell access
+without a backend or isolate local tools from the host. The low-level graph
+constructors retain their existing `interrupt_on` argument.
+
 The saved configuration includes the canonical artifact directory selected by
 `log_dir`, `CHEMGRAPH_LOG_DIR`, or the generated default, plus a non-secret model
 endpoint descriptor. CLI restoration uses these saved values even if the current
@@ -268,8 +275,10 @@ request for compatibility. A configured handler may use the legacy
 `handler(question)` signature or `handler(question, payload)` when it needs the
 raw structured request; both synchronous and asynchronous handlers are
 supported. Setting
-`deepagent_auto_approve=True` removes this boundary and should be limited to an
-externally isolated, explicitly trusted workspace.
+`approval_mode="bypass"` disables default reviews and should be limited to an
+externally isolated, explicitly trusted workspace. The compatibility option
+`deepagent_auto_approve=True` has the same effect for standalone `deep_agent`
+only and conflicts with an explicit `approval_mode="review"`.
 
 Handlers can reject an action with feedback using the existing decision format:
 

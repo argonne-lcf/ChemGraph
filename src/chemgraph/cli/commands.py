@@ -29,6 +29,7 @@ from chemgraph.agent.deepagent_backend import (
     DEEPAGENT_ENV_ALLOWLIST,
     resolve_workspace,
 )
+from chemgraph.agent.approvals import ApprovalMode, normalize_approval_mode
 from chemgraph.agent.interrupts import (
     collect_pending_interrupts,
     is_tool_review as _is_tool_review,
@@ -181,7 +182,7 @@ def _create_experimental_deepagent_backend(
             + (
                 "Every shell command and file mutation will require approval."
                 if require_confirmation
-                else "Tool approvals are disabled for this run."
+                else "Default tool approvals are disabled for this run."
             ),
             title="[bold red]Experimental host-shell access[/bold red]",
             style="red",
@@ -233,6 +234,8 @@ def initialize_agent(
     configuration_id: str | None = None,
     log_dir: str | None = None,
     model_endpoint=None,
+    approval_mode: ApprovalMode | None = None,
+    _raise_configuration_errors: bool = False,
 ) -> Any:
     """Initialize a ChemGraph agent with progress indication.
 
@@ -295,6 +298,9 @@ def initialize_agent(
         migration_message = get_removed_workflow_message(workflow_type)
         if migration_message:
             raise ValueError(migration_message)
+        approval_mode = normalize_approval_mode(
+            workflow_type, approval_mode, deepagent_auto_approve=deepagent_auto_approve,
+        )
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "The experimental Deep Agent is available only with main_agent."
@@ -350,14 +356,20 @@ def initialize_agent(
         deepagent_skills = normalize_skill_sources(deepagent_skills)
         deepagent_skill_dirs = resolve_skill_dirs(deepagent_skill_dirs)
     except (TypeError, ValueError, RegistryError) as exc:
+        if _raise_configuration_errors:
+            raise
         console.print(f"[red]{escape(str(exc))}[/red]")
         return None
 
     backend = None
     if workspace is not None:
         try:
-            backend = _create_experimental_deepagent_backend(workspace)
+            backend = _create_experimental_deepagent_backend(
+                workspace, **({"require_confirmation": False} if approval_mode == "bypass" else {}),
+            )
         except (RuntimeError, ValueError, OSError) as exc:
+            if _raise_configuration_errors:
+                raise ValueError(str(exc)) from exc
             console.print(f"[red]{escape(str(exc))}[/red]")
             return None
 
@@ -366,9 +378,11 @@ def initialize_agent(
         try:
             deepagent_backend = _create_experimental_deepagent_backend(
                 deepagent_workspace,
-                require_confirmation=not deepagent_auto_approve,
+                require_confirmation=approval_mode != "bypass",
             )
         except (RuntimeError, ValueError, OSError) as exc:
+            if _raise_configuration_errors:
+                raise ValueError(str(exc)) from exc
             console.print(f"[red]{escape(str(exc))}[/red]")
             return None
 
@@ -449,6 +463,7 @@ def initialize_agent(
                 deepagent_discover_skills=deepagent_discover_skills,
                 deepagent_user_skills_dir=deepagent_user_skills_dir,
                 deepagent_auto_approve=deepagent_auto_approve,
+                approval_mode=approval_mode,
                 checkpointer=checkpointer,
                 reasoning_effort=reasoning_effort,
                 max_retries=max_retries,
@@ -482,6 +497,8 @@ def initialize_agent(
             )
             return None
         except Exception as e:
+            if _raise_configuration_errors and isinstance(e, (TypeError, ValueError, RegistryError)):
+                raise
             progress.update(task, description="[red]Agent initialization failed!")
             console.print(f"[red]Error initializing agent: {escape(str(e))}[/red]")
 
@@ -937,6 +954,7 @@ def _run_main_agent_operation(
     *,
     progress_description: str,
     checkpoint_runtime: CheckpointRuntime | None = None,
+    interactive: bool = True,
 ) -> Any:
     """Run one session operation and resolve nested-graph interrupts."""
     from chemgraph.agent.main_session import IncompatibleCheckpointError
@@ -955,6 +973,8 @@ def _run_main_agent_operation(
                 else run_async_callable(operation)
             )
     except IncompatibleCheckpointError as exc:
+        if not interactive:
+            raise
         console.print(f"[red]{escape(str(exc))}[/red]")
         return None
     except Exception as exc:
@@ -963,7 +983,7 @@ def _run_main_agent_operation(
         return None
 
     interrupt_count = 0
-    while result.status == "waiting_for_user" and result.interrupts:
+    while interactive and result.status == "waiting_for_user" and result.interrupts:
         interrupt_count += sum(
             not _is_tool_review(pending.payload) for pending in result.interrupts
         )
@@ -1006,6 +1026,8 @@ def run_main_agent_query(
     query: str,
     verbose: bool = False,
     checkpoint_runtime: CheckpointRuntime | None = None,
+    *,
+    interactive: bool = True,
 ) -> Any:
     """Run one main-agent turn and resolve nested clarifications."""
     if verbose:
@@ -1016,6 +1038,7 @@ def run_main_agent_query(
         lambda: session.run(query),
         progress_description="Processing main-agent turn...",
         checkpoint_runtime=checkpoint_runtime,
+        interactive=interactive,
     )
 
 
@@ -1039,6 +1062,7 @@ def restore_main_agent_session(
     session: Any,
     *,
     checkpoint_runtime: CheckpointRuntime | None = None,
+    interactive: bool = True,
 ) -> Any:
     """Restore one durable thread and immediately resolve pending interrupts."""
     return _run_main_agent_operation(
@@ -1046,6 +1070,7 @@ def restore_main_agent_session(
         session.restore,
         progress_description="Restoring main-agent thread...",
         checkpoint_runtime=checkpoint_runtime,
+        interactive=interactive,
     )
 
 
@@ -1312,10 +1337,22 @@ def _main_agent_options(config):
     return workspace_arguments(config)
 
 
+def validate_main_agent_approval(config, approval_mode):
+    """Require launch authorization to match the saved graph before rebuilding it."""
+    if config.approval_mode != approval_mode:
+        raise ValueError(
+            "The saved session's approval mode does not match this launch. "
+            "Bypass sessions require --dangerously-skip-approvals on every launch; "
+            "reviewed sessions must be resumed without it. Start a new session to change modes."
+        )
+
+
 def _initialize_saved_main_agent(config, *, return_option, checkpointer, argo_user=None, verbose=False,
-                                 model_name=None, reasoning_effort=None):
+                                 model_name=None, reasoning_effort=None, approval_mode="review",
+                                 _raise_configuration_errors=False):
     from chemgraph.agent.configuration import restoration_arguments
 
+    validate_main_agent_approval(config, approval_mode)
     options = restoration_arguments(config)
     if model_name is not None:
         options["model_name"] = model_name
@@ -1327,7 +1364,8 @@ def _initialize_saved_main_agent(config, *, return_option, checkpointer, argo_us
         options.pop("model_name"), options.pop("workflow_type"),
         options.pop("structured_output"), return_option,
         options.pop("generate_report"), options.pop("recursion_limit"),
-        checkpointer=checkpointer, argo_user=argo_user, verbose=verbose, **options,
+        checkpointer=checkpointer, argo_user=argo_user, verbose=verbose,
+        _raise_configuration_errors=_raise_configuration_errors, **options,
     )
 
 
@@ -1341,6 +1379,7 @@ def _print_main_agent_restore_configuration(thread_id, config):
     table.add_column(overflow="fold")
     for label, value in (
         ("Workspace", config.workspace or "checkpoint files (no direct shell)"),
+        ("Approval mode", config.approval_mode),
         ("Skills", ", ".join((*config.skills, *config.skill_dirs)) or "bundled skills"),
         ("Skill discovery", "enabled" if config.discover_skills else "disabled"),
         ("Worker catalog", ", ".join(workers) or "disabled"),
@@ -1382,7 +1421,8 @@ def interactive_mode(
     subagent_names: Sequence[str] | None = None,
     main_agent_prompt: str | None = None,
     configuration_id: str | None = None,
-) -> None:
+    approval_mode: ApprovalMode | None = None,
+) -> int | None:
     """Start interactive REPL mode for ChemGraph CLI.
 
     Accepts the same configuration parameters as a normal run so that
@@ -1443,6 +1483,14 @@ def interactive_mode(
         "aliases such as 'quit' and 'help' also work.[/dim]\n"
     )
 
+    try:
+        approval_mode = normalize_approval_mode(
+            resolve_workflow(workflow), approval_mode, deepagent_auto_approve=deepagent_auto_approve,
+        )
+    except ValueError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return 2
+
     if workspace is not None and (not isinstance(workspace, str) or not workspace.strip()):
         console.print("[red]Workspace must be a non-empty host directory path.[/red]")
         return
@@ -1492,10 +1540,11 @@ def interactive_mode(
             return
         stored_graph_config = stored_metadata.graph_config
         try:
+            validate_main_agent_approval(stored_graph_config, approval_mode)
             main_options = _main_agent_options(stored_graph_config)
         except ValueError as exc:
             console.print(f"[red]{escape(str(exc))}[/red]")
-            return
+            return 2
         _print_main_agent_restore_configuration(restored_thread_id, stored_graph_config)
         model = stored_graph_config.model_name
         workflow = "main_agent"
@@ -1523,14 +1572,15 @@ def interactive_mode(
             console.print(f"[red]{escape(str(exc))}[/red]")
             return
         # Allow the user to override model/workflow at startup.
-        model = Prompt.ask(
-            "Select model (or type a custom model ID)", default=model
-        )
-        workflow = Prompt.ask(
-            "Select workflow",
-            choices=ALL_WORKFLOW_TYPES,
-            default=resolve_workflow(workflow),
-        )
+        if approval_mode == "review":
+            model = Prompt.ask(
+                "Select model (or type a custom model ID)", default=model
+            )
+            workflow = Prompt.ask(
+                "Select workflow",
+                choices=ALL_WORKFLOW_TYPES,
+                default=resolve_workflow(workflow),
+            )
 
     if workflow == "main_agent":
         checkpoint_runtime = CheckpointRuntime()
@@ -1551,6 +1601,7 @@ def interactive_mode(
                 main_configuration, return_option=return_option, checkpointer=checkpoint_saver,
                 argo_user=argo_user, verbose=verbose, model_name=selected_model,
                 reasoning_effort=selected_reasoning,
+                approval_mode=approval_mode,
             )
         return initialize_agent(
             selected_model,
@@ -1596,6 +1647,7 @@ def interactive_mode(
             max_retries=max_retries,
             terminal_tool_names=terminal_tool_names,
             **(main_options if selected_workflow == "main_agent" else {}),
+            approval_mode=approval_mode,
         )
 
     agent = initialize_selection(model, workflow, reasoning_effort)
@@ -1728,6 +1780,7 @@ Example queries:
                     continue
                 console.print(f"Model: {model}")
                 console.print(f"Workflow: {workflow}")
+                console.print(f"Approval mode: {approval_mode}")
                 console.print(
                     "Deep Agent: "
                     f"{'enabled' if workflow == 'deep_agent' or (enable_deepagent and workflow == 'main_agent') else 'disabled'}"
@@ -1777,6 +1830,7 @@ Example queries:
                         continue
                     target_config = target_metadata.graph_config
                     try:
+                        validate_main_agent_approval(target_config, approval_mode)
                         target_main_options = _main_agent_options(target_config)
                     except ValueError as exc:
                         console.print(f"[red]{escape(str(exc))}[/red]")
@@ -1796,6 +1850,7 @@ Example queries:
                         candidate_agent = _initialize_saved_main_agent(
                             target_config, return_option=return_option, checkpointer=candidate_saver,
                             argo_user=argo_user, verbose=verbose,
+                            approval_mode=approval_mode,
                         )
                         if candidate_agent is None:
                             raise RuntimeError("Could not recreate the stored agent.")

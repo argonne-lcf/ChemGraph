@@ -104,7 +104,7 @@ Use `/help` inside the shell to see the commands available in your release.
 Interactive sessions preserve conversation context and can be resumed later.
 
 The `main_agent` workflow is a durable agent with direct skills, file/shell,
-and local chemistry tools plus optional delegation. It requires interactive mode:
+and local chemistry tools plus optional delegation. Interactive use reviews actions by default:
 
 ```bash
 chemgraph run --interactive --workflow main_agent --workspace . \
@@ -223,9 +223,42 @@ chemgraph run --workflow deep_agent \
   --query "Run the repository tests and summarize failures."
 ```
 
-The unsafe flag is accepted only for non-interactive `deep_agent`, is not read
-from TOML, and requires an explicit workspace. The backend's shell is not
-confined to the workspace, so use a disposable, isolated environment.
+The legacy flag above remains limited to non-interactive `deep_agent` with an
+explicit workspace. The shared `--dangerously-skip-approvals` flag supports both
+`main_agent` and `deep_agent`, interactively or headlessly. Neither flag is read
+from TOML. Bypass also skips host-access confirmation; the host-access notice
+remains visible. Interactive bypass uses the selected model and workflow without
+startup selection prompts. `/config` displays the mode.
+
+```bash
+chemgraph run -w main_agent --workspace . --dangerously-skip-approvals \
+  -q "Run the repository tests and summarize failures."
+chemgraph run --interactive -w main_agent --dangerously-skip-approvals \
+  --resume <session-id>
+```
+
+For `main_agent`, omitting `--workspace` still means checkpoint files and no
+shell; local registry tools can still access the host. Headless standalone
+`deep_agent` continues to require an explicit workspace. Bypass disables default
+reviews, preserves stricter worker policies and genuine questions, and provides
+no execution isolation. Use an externally isolated environment for unattended
+host execution.
+
+Main-agent sessions retain their approval mode. Each new CLI launch restoring a
+bypass session requires the flag again, including launches that use `/resume`.
+Reviewed sessions must be resumed without it; start a new session to change modes.
+Existing compatible reviewed checkpoints retain their identities.
+
+Headless `main_agent` never answers interrupts automatically. It saves questions
+and remaining tool reviews as `waiting_for_user`, prints the session ID, and exits
+with code **3**. Exit codes **0**, **1**, and **2** mean completion, execution or
+initialization failure, and invalid CLI/resume configuration, respectively;
+Ctrl+C returns **130** and closes the checkpoint runtime.
+`--resume ID` without a query reports the restored state. With `-q`, it starts a
+new turn only if that state is completed. Pending input needs interactive resume;
+failed operations need interactive `/retry`. Completed tools are not replayed on
+restore. Recursion limits remain in effect; bypass does not add run-wide budgets
+or continuous goal execution.
 
 ## Saved sessions
 
