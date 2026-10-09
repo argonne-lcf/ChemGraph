@@ -13,11 +13,18 @@ import pytest
 
 
 SKILLS = Path(__file__).resolve().parents[1] / "src/chemgraph/skills"
+requires_pbs_shell = pytest.mark.skipif(
+    os.name != "posix" or shutil.which("bash") is None,
+    reason="PBS launch assets require a POSIX host with bash.",
+)
 
 
 @pytest.fixture
 def launch_environment(tmp_path):
     environment = {"PATH": os.environ.get("PATH", os.defpath)}
+    for name in ("USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP"):
+        if name in os.environ:
+            environment[name] = os.environ[name]
     environment.update(
         PYTHONPATH=str(SKILLS.parents[1]),
         PYTHONNOUSERSITE="1",
@@ -58,6 +65,7 @@ def test_ase_runner_without_scheduler(tmp_path, launch_environment, outcome):
         assert output["converged"] == (outcome == "success")
 
 
+@requires_pbs_shell
 @pytest.mark.parametrize(
     "allocation",
     ["valid", "qualified", "no_job", "no_nodefile", "absent", "directory", "unreadable", "empty", "wrong_host"],
@@ -98,6 +106,7 @@ def test_pbs_helper_checks_allocation(tmp_path, launch_environment, allocation):
         assert f"job=123.server host={host}" in result.stderr
 
 
+@requires_pbs_shell
 @pytest.mark.parametrize("skill", ["pbs-hpc", "iri-hpc"])
 @pytest.mark.parametrize("allocated", [True, False])
 def test_launch_templates_forward_arguments_and_status(tmp_path, launch_environment, skill, allocated):

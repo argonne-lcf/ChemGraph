@@ -98,7 +98,7 @@ for path in ('/chemgraph/assets/calculate.py',
              '/pbs-hpc/references/crux.md'):
     resource = resources.files('chemgraph.skills').joinpath(*path.lstrip('/').split('/')).read_bytes()
     assert backend.download_files([path])[0].content == resource
-    assert backend.read(path).file_data['content'] == resource.decode('utf-8')
+    assert backend.read(path).file_data['content'] == resource.decode('utf-8').replace('\\r\\n', '\\n')
 assert backend.write('/pbs-hpc/SKILL.md', 'overwrite').error
 aurora_path = '/pbs-hpc/references/aurora.md'
 aurora_resource = resources.files('chemgraph.skills').joinpath(

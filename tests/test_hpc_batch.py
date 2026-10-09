@@ -1,6 +1,7 @@
 """Scheduler/transfer lifecycle and native-tool regressions."""
 
 from concurrent.futures import ThreadPoolExecutor
+import os
 from pathlib import Path
 import shutil
 from unittest.mock import Mock
@@ -44,6 +45,7 @@ class Scheduler:
         self.records = []
         self.failure = None
         self.cancelled = []
+        self.inspections = []
         self.finished = False
 
     def resolve_resource(self, name):
@@ -82,9 +84,15 @@ class Scheduler:
     def cancel(self, resource, job_id):
         self.cancelled.append((resource, job_id))
 
+    def inspect(self, resource, path, **kwargs):
+        self.inspections.append((resource, path, kwargs))
+        return {"text": "result"}
+
 
 @pytest.fixture
 def batch(tmp_path, monkeypatch):
+    if os.name != "posix":
+        pytest.skip("HPC run locking requires a POSIX agent host.")
     monkeypatch.delenv("CHEMGRAPH_LOG_DIR", raising=False)
     local = tmp_path / "local"
     remote = tmp_path / "compute"
@@ -610,7 +618,7 @@ def test_two_catalogs_and_empty_restriction(batch):
 
 @pytest.mark.parametrize("decision", ["approve", "reject"])
 @pytest.mark.parametrize(
-    "action", ["hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job"]
+    "action", ["hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job", "hpc_read_file", "hpc_list_files"]
 )
 def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
     from langchain_core.messages import AIMessage, HumanMessage
@@ -632,6 +640,8 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
         },
         "hpc_submit_job": {"run_dir": str(root), "request": request.model_dump()},
         "hpc_cancel_job": {"run_dir": str(root), "job_id": "123.polaris"},
+        "hpc_read_file": {"run_dir": str(root), "path": "result.json"},
+        "hpc_list_files": {"run_dir": str(root)},
     }[action]
     registry = create_hpc_registry(service.config, names=[action], service=service)
     graph = construct_deep_agent_graph(
@@ -646,14 +656,14 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
         discover_skills=False,
     )
     config = {"configurable": {"thread_id": "test"}}
-    before = (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    before = (len(transfer.calls), len(iri.submissions), len(iri.cancelled), len(iri.inspections))
     state = graph.invoke(
         {"messages": [HumanMessage(content="Run the HPC action")]}, config
     )
     assert state["__interrupt__"]
-    assert before == (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    assert before == (len(transfer.calls), len(iri.submissions), len(iri.cancelled), len(iri.inspections))
     graph.invoke(Command(resume={"decisions": [{"type": decision}]}), config)
-    after = (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    after = (len(transfer.calls), len(iri.submissions), len(iri.cancelled), len(iri.inspections))
     assert (after == before) == (decision == "reject")
     if action == "hpc_submit_job" and decision == "reject":
         assert not (root / "submission.started").exists()
@@ -696,6 +706,7 @@ def test_explicit_config_and_cli_restrictions(batch, tmp_path, monkeypatch):
     ] == str(root.parent)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="HPC targets require POSIX host paths.")
 def test_collection_paths_are_not_compute_or_host_paths(tmp_path):
     target = HPCTarget(
         compute_resource="polaris",

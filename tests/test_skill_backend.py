@@ -31,7 +31,7 @@ def test_bundled_file_protocol(asynchronous):
         "download_files", ["/chemgraph/SKILL.md", "/absent", "/../secret"]
     )
     assert downloaded[0].error is None
-    assert read.file_data["content"] == downloaded[0].content.decode("utf-8")
+    assert read.file_data["content"] == downloaded[0].content.decode("utf-8").replace("\r\n", "\n")
     assert downloaded[1].error == "file_not_found"
     assert downloaded[2].error == "invalid_path"
     assert call("read", "/../secret").error
@@ -59,7 +59,7 @@ def test_bundled_download_preserves_line_endings(monkeypatch, tmp_path, newline)
 
     backend = BundledSkillsBackend()
     for path, content in contents.items():
-        assert "# Instructions" in backend.read(path).file_data["content"]
+        assert backend.read(path).file_data["content"] == content.decode("utf-8").replace("\r\n", "\n")
         assert backend.download_files([path])[0].content == content
 
 

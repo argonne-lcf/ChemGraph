@@ -1,6 +1,7 @@
 """Transport contracts and authentication without service credentials."""
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -56,7 +57,8 @@ def test_refresh_authorizer_updates_cache_and_survives_session(monkeypatch, tmp_
     assert json.loads(cache.read_text())["refresh_token"] == "refresh"
     assert json.loads(cache.read_text())["client_id"] == expected_client
     factory.assert_called_once_with(expected_client)
-    assert cache.stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":
+        assert cache.stat().st_mode & 0o777 == 0o600
     client.authorizer.expires_at = 1
     client.authorizer.get_authorization_header()
     assert auth.oauth2_refresh_token.call_count == 2
@@ -99,7 +101,8 @@ def test_terminal_login_and_refresh_use_same_client_and_cache(monkeypatch, tmp_p
     assert [call.args for call in factory.call_args_list] == [(expected_client,), (expected_client,)]
     assert json.loads(cache.read_text())["refresh_token"] == "refresh"
     assert json.loads(cache.read_text())["client_id"] == expected_client
-    assert cache.stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":
+        assert cache.stat().st_mode & 0o777 == 0o600
     assert other_cache.read_bytes() == original
 
 
