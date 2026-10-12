@@ -23,6 +23,7 @@ _COMMON_SETTINGS = (
     "model_name", "recursion_limit", "reasoning_effort", "structured_output",
     "generate_report", "max_retries", "human_supervised", "terminal_tool_names",
     "enable_deepagent", "configuration_id",
+    "approval_mode",
 )
 _WORKSPACE_SETTINGS = ("skills", "skill_dirs", "discover_skills", "user_skills_dir")
 
@@ -73,7 +74,8 @@ class MainAgentRuntimeConfig:
         tools, custom_tools = describe_tool_registry(agent.tool_registry)
         workers, custom_workers = describe_agent_registry(agent.agent_registry)
         workspace = local_skill_workspace(agent.backend)
-        policy = resolve_workspace_interrupt_policy(agent.tool_registry)
+        policy = (None if agent.approval_mode == "bypass"
+                  else resolve_workspace_interrupt_policy(agent.tool_registry))
         settings.update(
             artifact_directory=agent.log_dir, model_endpoint=endpoint,
             graph_schema_version=GRAPH_SCHEMA_VERSION, package_version=__version__,
@@ -115,7 +117,9 @@ class MainAgentRuntimeConfig:
             "deepagent_recursion_limit": saved.recursion_limit,
             **{f"deepagent_{name}": getattr(saved, f"deepagent_{name}") for name in _WORKSPACE_SETTINGS},
         }
-        identity = saved.model_dump(exclude={"package_version", "topology_fingerprint"})
+        # The effective review_policy already identifies the mode. Excluding
+        # this new descriptive field preserves existing reviewed checkpoints.
+        identity = saved.model_dump(exclude={"package_version", "topology_fingerprint", "approval_mode"})
         identity.update(
             main_backend=backend, legacy_worker_backend=legacy if saved.enable_deepagent else None,
             registry_specs=tools, agent_specs=workers, subagent_options=worker_options,
