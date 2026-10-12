@@ -9,6 +9,7 @@ from langchain_core.messages import ToolMessage
 from chemgraph.execution.scoped import (
     ARTIFACT_KEY,
     ExecutionContext,
+    ScopedExecutionError,
     current_execution,
     decode_result,
     execute_scoped_tool,
@@ -59,6 +60,7 @@ def test_scoped_paths_and_standalone_compatibility(tmp_path, monkeypatch):
             "../secret.txt",
             "escape/secret.txt",
             ".chemgraph-artifacts/x",
+            ".chemgraph-rag/x",
         ):
             with pytest.raises(PermissionError):
                 scoped_path(path)
@@ -134,7 +136,7 @@ async def test_controller_failure_never_invokes_tool(tmp_path):
         pytest.fail("execution preceded acceptance")
 
     with execution_context(scope(tmp_path, controller=Unavailable())):
-        with pytest.raises(OSError, match="journal unavailable"):
+        with pytest.raises(ScopedExecutionError, match="journal unavailable"):
             await execute_scoped_tool(
                 ToolSpec("writer", "", None),
                 SimpleNamespace(tool_call={"id": "one"}),

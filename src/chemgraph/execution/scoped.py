@@ -18,9 +18,15 @@ from typing import Awaitable, Callable, Protocol
 
 from langchain_core.messages import ToolMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.errors import GraphBubbleUp
 
 EXECUTION_CONTRACT_VERSION = 1
 ARTIFACT_KEY = "chemgraph_artifacts"
+WORKER_ARTIFACT_KEY = "_chemgraph_worker_artifacts"
+
+
+class ScopedExecutionError(RuntimeError):
+    """Execution control failed; graph error handlers must not retry the action."""
 
 
 class ExecutionController(Protocol):
@@ -80,8 +86,10 @@ def scoped_path(path) -> str | None:
     resolved = candidate.resolve()
     if not resolved.is_relative_to(context.workspace):
         raise PermissionError("Tool path is outside this conversation's workspace")
-    if ".chemgraph-artifacts" in resolved.relative_to(context.workspace).parts:
-        raise PermissionError("Artifact snapshots are read-only transport records")
+    if {".chemgraph-artifacts", ".chemgraph-rag"}.intersection(
+        resolved.relative_to(context.workspace).parts
+    ):
+        raise PermissionError("Internal execution records are not tool-controlled paths")
     return str(resolved)
 
 
@@ -202,6 +210,15 @@ def result_artifacts(state, task_id):
     return list(artifacts.values())
 
 
+def preserve_worker_artifacts(result):
+    """Carry child descriptors through Deep Agents' worker-result adaptation."""
+    context = current_execution()
+    if context is None or not isinstance(result, dict):
+        return result
+    artifacts = result_artifacts(result, context.task_id)
+    return {**result, WORKER_ARTIFACT_KEY: artifacts} if artifacts else result
+
+
 async def execute_scoped_tool(spec, request, handler):
     context = current_execution()
     if context is None or spec.interactive:
@@ -233,5 +250,10 @@ async def execute_scoped_tool(spec, request, handler):
             return {"result": encode_result(result), "artifacts": artifacts}
 
         # Controller errors deliberately propagate; callbacks must not authorize work.
-        saved = await context.controller.execute_tool(context, call, invoke)
-        return decode_result(saved["result"])
+        try:
+            saved = await context.controller.execute_tool(context, call, invoke)
+            return decode_result(saved["result"])
+        except (ScopedExecutionError, GraphBubbleUp):
+            raise
+        except Exception as exc:
+            raise ScopedExecutionError(str(exc)) from exc

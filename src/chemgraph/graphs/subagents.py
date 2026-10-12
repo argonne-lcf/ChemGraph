@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langgraph.errors import GraphInterrupt
 
 from chemgraph.agent.events import SUBAGENT_METADATA_KEY
+from chemgraph.execution.scoped import preserve_worker_artifacts
 from chemgraph.memory.subagent_recorder import SubagentRunRecorder
 
 
@@ -74,7 +75,7 @@ def _adapt_subagent(
             if recorder and run_id:
                 recorder.failed(run_id, exc)
             raise
-        result = _preserve_terminal_tool_output(result)
+        result = preserve_worker_artifacts(_preserve_terminal_tool_output(result))
         if recorder and run_id:
             recorder.completed(run_id, result)
         return result
@@ -91,7 +92,7 @@ def _adapt_subagent(
             if recorder and run_id:
                 recorder.failed(run_id, exc)
             raise
-        result = _preserve_terminal_tool_output(result)
+        result = preserve_worker_artifacts(_preserve_terminal_tool_output(result))
         if recorder and run_id:
             recorder.completed(run_id, result)
         return result

@@ -11,6 +11,7 @@ from chemgraph.agent.deepagent_backend import (
 )
 from chemgraph.registry.middleware import RegistryToolsMiddleware
 from chemgraph.registry.tools import ToolRegistry
+from chemgraph.execution.middleware import ScopedToolsMiddleware
 from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
 
 
@@ -205,4 +206,5 @@ def prepare_workspace_runtime(
         if attached_names & {"search_tools", "load_tools"}:
             raise ValueError("Attached tools conflict with registry discovery tool names.")
         middleware.append(loader)
+    middleware.append(ScopedToolsMiddleware(registry=tool_registry, tools=tools))
     return effective_backend, sources, middleware, effective_interrupt_on
