@@ -25,6 +25,12 @@ from chemgraph.schemas.xanes_schema import xanes_input_schema, mp_query_schema
 logger = logging.getLogger(__name__)
 
 
+def _output_path(path: Path) -> Path:
+    from chemgraph.execution.scoped import scoped_path
+
+    return Path(scoped_path(path) or path)
+
+
 # ---------------------------------------------------------------------------
 # Helper Functions
 # ---------------------------------------------------------------------------
@@ -63,11 +69,13 @@ def write_fdmnes_input(
     if input_file_dir is None:
         input_file_dir = Path.cwd()
 
-    with open(input_file_dir / "fdmfile.txt", "w") as f:
+    control_file = _output_path(input_file_dir / "fdmfile.txt")
+    input_file = _output_path(input_file_dir / "fdmnes_in.txt")
+    with open(control_file, "w") as f:
         f.write("1\n")
         f.write("fdmnes_in.txt\n")
 
-    with open(input_file_dir / "fdmnes_in.txt", "w") as f:
+    with open(input_file, "w") as f:
         f.write("Filout\n")
         f.write(f"{input_file_dir.name}\n\n")
 
@@ -262,6 +270,18 @@ def run_xanes_core(params: xanes_input_schema) -> dict:
         run_dir = Path(_resolve_path(params.output_dir)).resolve()
     else:
         run_dir = input_path.parent / f"fdmnes_{input_path.stem}"
+    run_dir = _output_path(run_dir)
+
+    formula = atoms.get_chemical_formula()
+    z_abs = params.z_absorber or int(atoms.get_atomic_numbers().max())
+    mp_id = atoms.info.get("MP-id", "local")
+    pkl_filename = f"Z{z_abs}_{mp_id}_{formula}.pkl"
+    # Check all Python-written outputs before any file is opened or engine started.
+    outputs = {
+        name: _output_path(run_dir / name)
+        for name in ("fdmfile.txt", "fdmnes_in.txt", pkl_filename,
+                     "fdmnes_stdout.txt", "fdmnes_stderr.txt")
+    }
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # Write FDMNES input files
@@ -274,18 +294,14 @@ def run_xanes_core(params: xanes_input_schema) -> dict:
     )
 
     # Save the atoms object alongside the inputs for provenance
-    formula = atoms.get_chemical_formula()
-    z_abs = params.z_absorber or int(atoms.get_atomic_numbers().max())
-    mp_id = atoms.info.get("MP-id", "local")
-    pkl_filename = f"Z{z_abs}_{mp_id}_{formula}.pkl"
-    with open(run_dir / pkl_filename, "wb") as f:
+    with open(outputs[pkl_filename], "wb") as f:
         pickle.dump(atoms, f)
 
     # Run FDMNES
     logger.info("Running FDMNES in %s", run_dir)
     with (
-        open(run_dir / "fdmnes_stdout.txt", "w") as fp_out,
-        open(run_dir / "fdmnes_stderr.txt", "w") as fp_err,
+        open(outputs["fdmnes_stdout.txt"], "w") as fp_out,
+        open(outputs["fdmnes_stderr.txt"], "w") as fp_err,
     ):
         proc = subprocess.run(
             fdmnes_exe,
