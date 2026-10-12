@@ -1857,14 +1857,16 @@ The CLI displays the saved settings before asking for host-workspace access;
 current CLI flags and TOML graph settings do not modify a resumed session.
 Caller-owned Python configurations require Python reconstruction and, for
 opaque components, their original non-secret <code>configuration_id</code>.</p>
-<p><code>main_agent</code> still requires interactive CLI mode. <code>enable_deepagent</code> controls
+<p>Headless <code>main_agent</code> requires <code>--dangerously-skip-approvals</code>. <code>enable_deepagent</code> controls
 only its legacy <code>deep_agent</code> worker. To call the graph directly, select
 <code>workflow = "deep_agent"</code>; <code>deepagent_workspace</code> applies to either entry point.
 Deep Agent is a development-only capability with broad local access, so leave
 it disabled unless you understand the security boundary.</p>
-<p>The headless-only <code>--deepagent-dangerously-skip-approvals</code> switch is
-intentionally not configurable through TOML. It must be typed explicitly for
-each run together with <code>--deepagent-workspace</code>.</p>
+<p><code>--dangerously-skip-approvals</code> works with interactive and headless <code>main_agent</code>
+and <code>deep_agent</code>. It is intentionally not configurable through TOML and must be
+supplied again when restoring a bypass session. Saved approval modes cannot be
+changed during resume. The legacy <code>--deepagent-dangerously-skip-approvals</code> flag
+remains limited to headless standalone <code>deep_agent</code> with <code>--deepagent-workspace</code>.</p>
 <p><code>deepagent_discover_skills</code> defaults to true and controls personal/project
 skill discovery for local workspaces. Bundled skills are always available.
 The matching CLI boolean flag overrides TOML. See <a href="../skills/">skills</a>.</p>

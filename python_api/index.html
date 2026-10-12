@@ -1895,6 +1895,12 @@ retain <code>session.thread_id</code>, reconstruct the same configuration, and c
 <code>await session.restore()</code> before answering pending interrupts. The default
 checkpointer is process-local. <code>MainAgentSession</code> inherits the graph's recursion
 limit; an explicit limit must match supplied session metadata.</p>
+<p>Set <code>approval_mode="bypass"</code> on <code>ChemGraph</code> to disable default tool reviews for
+<code>main_agent</code> or <code>deep_agent</code>; omission selects <code>"review"</code>. Stricter worker policies
+and genuine human questions remain active. The mode is saved with the graph's
+effective policy and must match on reconstruction. It does not grant shell access
+without a backend or isolate local tools from the host. The low-level graph
+constructors retain their existing <code>interrupt_on</code> argument.</p>
 <p>The saved configuration includes the canonical artifact directory selected by
 <code>log_dir</code>, <code>CHEMGRAPH_LOG_DIR</code>, or the generated default, plus a non-secret model
 endpoint descriptor. CLI restoration uses these saved values even if the current
@@ -2016,8 +2022,10 @@ request for compatibility. A configured handler may use the legacy
 <code>handler(question)</code> signature or <code>handler(question, payload)</code> when it needs the
 raw structured request; both synchronous and asynchronous handlers are
 supported. Setting
-<code>deepagent_auto_approve=True</code> removes this boundary and should be limited to an
-externally isolated, explicitly trusted workspace.</p>
+<code>approval_mode="bypass"</code> disables default reviews and should be limited to an
+externally isolated, explicitly trusted workspace. The compatibility option
+<code>deepagent_auto_approve=True</code> has the same effect for standalone <code>deep_agent</code>
+only and conflicts with an explicit <code>approval_mode="review"</code>.</p>
 <p>Handlers can reject an action with feedback using the existing decision format:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">response</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"decisions"</span><span class="p">:</span> <span class="p">[{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"reject"</span><span class="p">,</span> <span class="s2">"message"</span><span class="p">:</span> <span class="s2">"Use EMT instead of MACE."</span><span class="p">}]}</span>
 </code></pre></div>

@@ -1816,7 +1816,7 @@ across model calls so the model can reason from the actual operations performed.
   that specialist in <code>image_to_smiles</code> rather than <code>model="llm"</code>. If no
   specialist is installed, the workflow's default LLM image fallback cannot
   read the image through Codex.</li>
-<li><code>main_agent</code> must be interactive and can restore its supervisor checkpoint;
+<li><code>main_agent</code> supports interactive or explicitly authorized headless execution and can restore its supervisor checkpoint;
   individual Codex calls still start fresh read-only threads.</li>
 <li>The integration pins <code>openai-codex==0.144.4</code>; check the installed ChemGraph
   release before changing that dependency.</li>
