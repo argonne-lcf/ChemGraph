@@ -2,6 +2,7 @@
 
 import json
 
+from rich.console import Console
 from rich.markup import escape
 
 from chemgraph.agent.configuration import validate_cli_configuration
@@ -9,6 +10,7 @@ from chemgraph.agent.main_session import IncompatibleCheckpointError
 from chemgraph.cli import commands
 from chemgraph.cli.checkpoint_runtime import CheckpointRuntime, DEFAULT_CHECKPOINT_DB
 from chemgraph.cli.formatting import console, format_response
+from chemgraph.memory.graph_config import describe_tool_registry
 from chemgraph.memory.store import SessionStore
 from chemgraph.registry.tools import RegistryError
 
@@ -16,6 +18,10 @@ from chemgraph.registry.tools import RegistryError
 HEADLESS_TOOLS_ERROR = (
     "Headless main_agent cannot restore MCP or attached tools. Use --interactive; "
     "these sessions do not support CLI restoration."
+)
+HEADLESS_CONFIGURATION_ERROR = (
+    "Headless main_agent requires a CLI-restorable configuration. "
+    "Use --interactive for this configuration; CLI restoration is unavailable."
 )
 
 
@@ -31,8 +37,12 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             raise ValueError("Query is required unless --resume specifies a saved session.")
         if query is not None and not query.strip():
             raise ValueError("Query must not be empty.")
-        if not resume_session and options.get("tools"):
-            raise ValueError(HEADLESS_TOOLS_ERROR)
+        if not resume_session:
+            if options.get("tools"):
+                raise ValueError(HEADLESS_TOOLS_ERROR)
+            registry = options.get("tool_registry")
+            if registry is not None and describe_tool_registry(registry)[1]:
+                raise ValueError(HEADLESS_CONFIGURATION_ERROR)
         saved = None
         if resume_session:
             saved = SessionStore().get_session_metadata(resume_session)
@@ -73,10 +83,7 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             try:
                 validate_cli_configuration(agent.main_agent_metadata.graph_config)
             except ValueError as exc:
-                raise ValueError(
-                    "Headless main_agent requires a CLI-restorable configuration. "
-                    "Use --interactive for this configuration; CLI restoration is unavailable."
-                ) from exc
+                raise ValueError(HEADLESS_CONFIGURATION_ERROR) from exc
         session = commands.create_main_agent_session(
             agent, thread_id=thread_id if saved else None, checkpoint_db=checkpoint_db,
         )
@@ -85,6 +92,8 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             result = commands.restore_main_agent_session(
                 session, checkpoint_runtime=runtime, interactive=False,
             )
+            if query and result is not None and result.status in {"waiting_for_user", "failed"}:
+                Console(stderr=True).print(f"Query not run: session is {result.status}.")
         if query and (not saved or (result is not None and result.status == "completed")):
             result = commands.run_main_agent_query(
                 session, query, verbose=options.get("verbose", False),

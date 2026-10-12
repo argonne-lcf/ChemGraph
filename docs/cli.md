@@ -255,7 +255,8 @@ with code **3**. Exit code **0** means completion; **1** means execution,
 initialization, or output-export failure; **2** means invalid CLI/resume configuration.
 Ctrl+C returns **130** and closes the checkpoint runtime.
 `--resume ID` without a query reports the restored state. With `-q`, it starts a
-new turn only if that state is completed. Pending input needs interactive resume;
+new turn only if that state is completed. If the session is waiting or failed,
+the query is skipped with a warning on stderr. Pending input needs interactive resume;
 failed operations need interactive `/retry`. Completed tools are not replayed on
 restore. Recursion limits remain in effect; bypass does not add run-wide budgets
 or continuous goal execution.

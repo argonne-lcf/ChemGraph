@@ -14,7 +14,7 @@ from chemgraph.agent.main_session import MainAgentSession
 from chemgraph.cli import commands
 from chemgraph.cli.headless import run_headless_main_agent
 from chemgraph.memory.store import SessionStore
-from chemgraph.registry.tools import ToolRegistry
+from chemgraph.registry.tools import ToolRegistry, ToolSpec
 from chemgraph.graphs.workspace import create_cli_workspace_backend
 from tests.test_main_agent_configuration import api as api
 from tests.test_main_agent_execution_context import model_loader as model_loader, call
@@ -133,7 +133,7 @@ def headless(monkeypatch, tmp_path, model_loader):
     return run, model_loader[0], model_loader[1]
 
 
-def test_headless_restart_does_not_replay_completed_tools(headless, tmp_path):
+def test_headless_restart_does_not_replay_completed_tools(headless, tmp_path, capsys):
     run, responses, requests = headless
     responses[:] = [call("write_file", file_path="/workspace/result.txt", content="first"), AIMessage(content="done")]
     assert run(query="write", workspace=str(tmp_path)) == 0
@@ -146,6 +146,8 @@ def test_headless_restart_does_not_replay_completed_tools(headless, tmp_path):
     count = len(requests)
     assert run(resume_session=saved.session_id, approval_mode="review") == 2
     assert len(requests) == count
+    captured = capsys.readouterr()
+    assert "Query not run:" not in captured.out + captured.err
 
 
 def test_headless_clarification_survives_restart_and_interactive_answer(headless, monkeypatch):
@@ -176,6 +178,39 @@ def test_headless_failure_is_not_retried(headless):
     responses[:] = [AIMessage(content="must not run")]
     assert run(resume_session=saved.session_id, query="must not run") == 1
     assert SessionStore().get_session(saved.session_id).status == "failed"
+
+
+@pytest.mark.parametrize("waiting", [False, True])
+@pytest.mark.parametrize("query", [None, "must not run"])
+def test_headless_resume_reports_skipped_query(headless, monkeypatch, capsys, waiting, query):
+    run, responses, _ = headless
+    registry = ToolRegistry([ToolRegistry().get_spec("ask_human")]) if waiting else ToolRegistry([])
+    responses[:] = [AIMessage(content="first answer")]
+    assert run(query="hello", human_supervised=waiting, tool_registry=registry) == 0
+    session_id = SessionStore().list_sessions()[0].session_id
+    responses[:] = ([call("load_tools", names=["ask_human"]), call("ask_human", question="Which calculator?")]
+                    if waiting else [RuntimeError("model unavailable")])
+    code = 3 if waiting else 1
+    assert run(resume_session=session_id, query="calculate") == code
+    captured = capsys.readouterr()
+    assert "Query not run:" not in captured.out + captured.err
+    before = SessionStore().get_session(session_id)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("a blocked session must not execute a query or retry")
+    monkeypatch.setattr(commands, "run_main_agent_query", forbidden)
+    monkeypatch.setattr(MainAgentSession, "retry", forbidden)
+    assert run(resume_session=session_id, query=query) == code
+    captured = capsys.readouterr()
+    warnings = [line for line in captured.err.splitlines() if line.startswith("Query not run:")]
+    assert warnings == ([f"Query not run: session is {before.status}."] if query else [])
+    assert "Query not run:" not in captured.out
+    after = SessionStore().get_session(session_id)
+    assert after.status == before.status
+    assert after.query_count == before.query_count
+    assert [(message.role, message.content) for message in after.messages] == [
+        (message.role, message.content) for message in before.messages
+    ]
 
 
 @pytest.mark.parametrize("changes", [
@@ -325,8 +360,8 @@ def test_mcp_remains_interactive_and_resume_uses_saved_config(monkeypatch, inter
     assert received["tools"] == (tools if interactive else None)
 
 
-@pytest.mark.parametrize("attached", [False, True])
-def test_headless_rejects_nonrestorable_tools_before_session_creation(headless, monkeypatch, attached):
+@pytest.mark.parametrize("kind", ["attached", "opaque", "importable", "modified_builtin"])
+def test_headless_rejects_nonrestorable_tools_before_initialization(headless, monkeypatch, tmp_path, capsys, kind):
     run, _, requests = headless
 
     @tool
@@ -334,12 +369,44 @@ def test_headless_rejects_nonrestorable_tools_before_session_creation(headless, 
         """An opaque caller-owned tool."""
         pytest.fail("non-restorable tools must not execute")
 
-    monkeypatch.setattr(commands, "create_main_agent_session",
-                        lambda *a, **k: pytest.fail("non-restorable configuration must not create a session"))
-    options = {"tools": [custom_tool]} if attached else {"tool_registry": ToolRegistry([custom_tool])}
-    assert run(query="calculate", **options) == 2
+    def forbidden(*args, **kwargs):
+        pytest.fail("non-restorable configuration must fail before initialization")
+    monkeypatch.setattr("chemgraph.cli.headless.CheckpointRuntime", forbidden)
+    monkeypatch.setattr(commands, "initialize_agent", forbidden)
+    monkeypatch.setattr(commands, "_create_experimental_deepagent_backend", forbidden)
+    monkeypatch.setattr(commands, "create_main_agent_session", forbidden)
+    if kind == "attached":
+        options = {"tools": [custom_tool]}
+    else:
+        entry = custom_tool
+        if kind == "importable":
+            monkeypatch.setattr(f"{__name__}.custom_tool", custom_tool, raising=False)
+            entry = ToolSpec(custom_tool.name, custom_tool.description, f"{__name__}:custom_tool")
+        elif kind == "modified_builtin":
+            entry = replace(ToolRegistry().get_spec("calculator"), description="Caller-modified metadata")
+        options = {"tool_registry": ToolRegistry([entry])}
+    assert run(query="calculate", workspace=str(tmp_path), **options) == 2
+    assert not (tmp_path / "checkpoints.db").exists()
     assert not SessionStore().list_sessions()
-    assert len(requests) == (0 if attached else 1)
+    assert not requests
+    if kind != "attached":
+        assert "requires a CLI-restorable configuration" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("catalog", ["default", "empty", "subset"])
+def test_headless_accepts_restorable_registries_and_ignores_resume_overrides(headless, catalog):
+    run, responses, _ = headless
+    registry = {"default": None, "empty": ToolRegistry([]),
+                "subset": ToolRegistry([ToolRegistry().get_spec("calculator")])}[catalog]
+    responses[:] = [AIMessage(content="done")]
+    assert run(query="hello", tool_registry=registry) == 0
+    saved = SessionStore().list_sessions()[0]
+    config = SessionStore().get_session_metadata(saved.session_id)[1].graph_config
+    assert config.cli_restorable
+    custom = ToolRegistry([replace(ToolRegistry().get_spec("calculator"), description="Caller-modified metadata")])
+    responses[:] = [AIMessage(content="continued")]
+    assert run(resume_session=saved.session_id, query="continue", tool_registry=custom) == 0
+    assert SessionStore().get_session_metadata(saved.session_id)[1].graph_config == config
 
 
 @pytest.mark.parametrize("answer", ["ΔE = −1.0 eV", ""])
@@ -436,6 +503,7 @@ def test_headless_reports_usage_once_to_stderr(headless, monkeypatch, tmp_path, 
     assert run(**options) == {"waiting": 3, "failure": 1, "export_failure": 1,
                               "cancelled": 130, "init_failure": 2}.get(outcome, 0)
     captured = capsys.readouterr()
+    assert "Query not run:" not in captured.out + captured.err
     assert "Tokens" not in captured.out
     lines = [line for line in captured.err.splitlines() if line.startswith("Tokens")]
     assert len(lines) == (0 if outcome == "init_failure" else 1)
