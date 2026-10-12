@@ -39,6 +39,8 @@ Common options:
 | `--human-supervised` | Allow supported tools to pause for confirmation |
 | `--recursion-limit` | Maximum graph steps; defaults to 200 |
 | `--output-file` | Save the printed result to a file |
+| `--result-file PATH` | Write a JSON session receipt (headless `main_agent`) |
+| `--answers-file PATH` | Submit clarification answers by interrupt ID with `--resume` |
 | `-v`, `-vv` | INFO or DEBUG diagnostics |
 
 The recursion limit counts graph steps, including middleware and tool execution,
@@ -256,8 +258,9 @@ initialization, or output-export failure; **2** means invalid CLI/resume configu
 Ctrl+C returns **130** and closes the checkpoint runtime.
 `--resume ID` without a query reports the restored state. With `-q`, it starts a
 new turn only if that state is completed. If the session is waiting or failed,
-the query is skipped with a warning on stderr. Pending input needs interactive resume;
-failed operations need interactive `/retry`. Completed tools are not replayed on
+the query is skipped with a warning on stderr. Clarifications can use `--answers-file`
+as described below; other interrupts need interactive resume. Failed operations
+need interactive `/retry`. Completed tools are not replayed on
 restore. Recursion limits remain in effect; bypass does not add run-wide budgets
 or continuous goal execution.
 
@@ -273,6 +276,69 @@ interrupt instructions stay in the terminal. The output directory must already
 exist. Serialization or write failures return **1**, including when the session
 is waiting for input, without changing its saved status. Retry an export with
 `--resume ID --output-file PATH` without `-q` to avoid rerunning completed tools.
+
+### Machine-readable clarification handoff
+
+Headless `main_agent` accepts `--result-file PATH` independently of `--output`
+and `--output-file`. Stdout remains human-readable. The UTF-8 JSON receipt has
+this shape (interrupt IDs come from the saved checkpoint):
+
+```json
+{
+  "version": 1,
+  "session_id": "CHEMGRAPH_SESSION_ID",
+  "status": "waiting_for_user",
+  "assistant_response": "",
+  "interrupts": [
+    {"id": "INTERRUPT_ID", "kind": "clarification", "payload": {"question": "Which calculator?"}}
+  ],
+  "error": null
+}
+```
+
+`status` is `completed`, `waiting_for_user`, or `failed` when known; otherwise
+it is `null`. `session_id` is `null` when no session was established. `error`
+describes a CLI failure; it can be non-null even when the saved session completed
+(for example, if `--output-file` could not be written). Interrupt kinds are
+`clarification`, `tool_review`, and `unsupported`.
+
+To inspect without advancing the graph or calling the model/tools:
+
+```bash
+chemgraph run -w main_agent --dangerously-skip-approvals \
+  --resume SESSION_ID --result-file /absolute/run/inspection-001.json
+```
+
+For `clarification` interrupts with stable IDs, write a JSON object mapping **all**
+current interrupt IDs to the user's nonempty answer strings, then resume:
+
+```json
+{"INTERRUPT_ID": "Use EMT for this demonstration."}
+```
+
+```bash
+chemgraph run -w main_agent --dangerously-skip-approvals --resume SESSION_ID \
+  --answers-file /absolute/run/answers-001.json --result-file /absolute/run/result-002.json
+```
+
+Answers require `--resume` and cannot be combined with `--query` or `--interactive`.
+Malformed JSON, duplicate keys, empty answers, missing/extra/stale IDs, and sessions
+that are no longer waiting are rejected with exit **2** before executing the graph.
+Only the built-in `{"question": "..."}` payload is supported for file answers;
+tool reviews and other payloads require interactive resume. A continuation can
+ask again and exit **3**, with new IDs in its receipt.
+
+The result directory must already exist. Receipts are serialized before being
+atomically replaced; a write failure returns **1** without changing saved status.
+Use a fresh result path for each invocation so an older receipt cannot be mistaken
+for a new result. Answer, result, and output files must have distinct paths.
+Some startup errors occur before the headless driver can write a receipt; consult
+the exit code and logs when no new receipt exists. After uncertainty, inspect the
+saved session before resubmitting. Serialize operations on each session; these
+flags do not provide concurrent-writer coordination.
+
+See the [Hermes example](../examples/chemgraph_hermes/README.md) for relaying these
+questions and answers through Discord.
 
 ## Saved sessions
 

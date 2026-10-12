@@ -239,6 +239,10 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
         help="Increase verbosity (-v for INFO, -vv for DEBUG)",
     )
     parser.add_argument("--output-file", type=str, help="Save output to file")
+    parser.add_argument("--result-file", metavar="PATH",
+                        help="Write a JSON session result (headless main_agent only)")
+    parser.add_argument("--answers-file", metavar="PATH",
+                        help="Answer pending clarification IDs from JSON (headless main_agent --resume only)")
     parser.add_argument("--config", type=str, help="Load configuration from TOML file")
     parser.add_argument(
         "--base-url",
@@ -575,6 +579,13 @@ def _handle_run(args: argparse.Namespace) -> None:
             args.deepagent = bool(config["enable_deepagent"])
 
     args.workflow = resolve_workflow(args.workflow or "single_agent")
+    result_file = getattr(args, "result_file", None)
+    answers_file = getattr(args, "answers_file", None)
+    if (result_file is not None or answers_file is not None) and (
+        args.workflow != "main_agent" or getattr(args, "interactive", False)
+    ):
+        console.print("[red]--result-file and --answers-file require headless main_agent.[/red]")
+        sys.exit(2)
     migration_message = get_removed_workflow_message(args.workflow)
     if migration_message:
         console.print(f"[red]{escape(migration_message)}[/red]")
@@ -790,6 +801,7 @@ def _handle_run(args: argparse.Namespace) -> None:
             **main_options, query=args.query, resume_session=args.resume,
             checkpoint_db=getattr(args, "checkpoint_db", None) or config.get("checkpoint_db"),
             output_file=args.output_file, model_name=args.model,
+            result_file=result_file, answers_file=answers_file,
             structured_output=args.structured, return_option=args.output,
             generate_report=args.report, recursion_limit=args.recursion_limit,
             base_url=base_url, argo_user=argo_user, verbose=args.verbose > 0,
