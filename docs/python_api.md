@@ -355,16 +355,22 @@ and `result_artifacts`. Bind a context around each asynchronous session run or
 resume. Its owner/thread/task identifiers must come from authenticated application
 state. Retain the context’s state and lock for the conversation, changing only the
 current task ID between serialized turns. Give each conversation a distinct
-workspace; document-search state is conversation-local and reloads after restart.
+workspace and preserve that workspace across restarts.
 
-The default registry middleware passes native calls to
+Shared execution middleware passes registry-discovered and attached native calls,
+including tools in built-in specialist workers, to
 `controller.execute_tool(context, call, invoke)`. The controller must durably
 accept the exact tool name, arguments and call ID before awaiting `invoke()`.
 Persist its JSON-compatible return value unchanged and return it on a completed
 call’s replay. An uncertain call must require reconciliation, never an automatic
-retry. Hook failures propagate; dashboard callbacks are unsuitable for this job.
+retry. Controller and artifact-capture failures raise `ScopedExecutionError`,
+preserving the underlying exception as their cause; worker error handlers do not
+convert them into retryable tool responses. Dashboard callbacks are unsuitable
+for this job.
 Clarification interrupts bypass computational journaling. Registry availability
-checks and native approval policies remain in force.
+checks and native approval policies remain in force. The boundary is active even
+with an empty tool registry. Custom graph code that bypasses ChemGraph's tool
+dispatch is outside this contract.
 
 Tool-controlled paths resolve inside the conversation workspace, without a cwd
 fallback. Traversal and symlink escapes are rejected. Calculator command/profile
@@ -376,11 +382,31 @@ OS sandbox for untrusted scientific engines or arbitrary custom tool code.
 The runtime serializes native calls in a conversation, captures created/modified
 ordinary output files (excluding hidden files and `.log` files), and stores
 immutable snapshots before another call can overwrite them. Descriptors live in
-checkpointed tool messages. Call `result_artifacts(turn.state, task_id)` on a
+checkpointed tool messages; delegated workers also carry their descriptors into
+the parent's task result, preserving the original tool-call identifiers.
+Call `result_artifacts(turn.state, task_id)` on a
 completed or restored turn to retrieve paths, media types, hashes, source paths
 and tool-call IDs. Serve those files through the embedding application’s ownership
 checks; do not expose the workspace directly. Scientific results and metadata
 remain native ChemGraph output, without completion implying convergence.
+
+Scoped document search persists its FAISS vectors, document chunks, loading
+settings, and effective embedding configuration under `.chemgraph-rag` in the
+conversation workspace. This directory and `.chemgraph-artifacts` are reserved
+internal records, excluded from ordinary output capture and native tool paths.
+An atomic manifest selects complete document versions and the most recently
+loaded document. Restarted queries restore those versions without replaying
+`load_document`, re-reading changed source files, or re-embedding document chunks.
+Query embedding still requires the recorded provider's credentials or local
+model. Restoration never changes providers or downloads a missing local model.
+Records contain no credentials and do not use pickle deserialization.
+
+An explicit new load replaces the indexed version; missing or corrupt records
+produce an error requesting restoration or reload. `clear_vector_stores()` clears
+the scoped manifest and in-memory indexes. Old versions remain until the embedding
+application removes the conversation workspace. Documents loaded by older runtimes
+without persisted indexes require one explicit reload after restart. Standalone
+document stores remain process-local.
 
 `chemgraph.execution.submissions.submission_tool(controller)` creates the native
 `submit_hpc` tool only when a submission controller is available. That controller

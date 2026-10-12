@@ -8,6 +8,7 @@ HuggingFace embeddings with automatic fallback.
 import os
 import logging
 from typing import Optional
+from urllib.parse import urlsplit
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -34,6 +35,19 @@ def _document_path(path):
     from chemgraph.execution.scoped import scoped_path
 
     return scoped_path(path) or os.path.abspath(path)
+
+
+def _saved_documents():
+    from chemgraph.execution.documents import manifest
+    from chemgraph.execution.scoped import current_execution
+
+    context = current_execution()
+    if context is None:
+        return {}, None
+    saved = manifest(context)
+    paths = {str(context.workspace / path): record for path, record in saved["documents"].items()}
+    latest = str(context.workspace / saved["latest"]) if saved["latest"] else None
+    return paths, latest
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +200,44 @@ def _get_embeddings(provider: str = "openai"):
         ) from exc
 
 
+def _embedding_configuration(embeddings):
+    """Record the effective provider, including an initial provider fallback."""
+    from langchain_openai import OpenAIEmbeddings
+
+    if isinstance(embeddings, OpenAIEmbeddings):
+        endpoint = str(embeddings.openai_api_base or "https://api.openai.com/v1")
+        parsed = urlsplit(endpoint)
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError("Scoped embedding endpoints must not contain credentials or query parameters")
+        return {"provider": "openai", "model": embeddings.model,
+                "base_url": endpoint, "dimensions": embeddings.dimensions}
+    from langchain_huggingface import HuggingFaceEmbeddings
+
+    if isinstance(embeddings, HuggingFaceEmbeddings):
+        return {"provider": "huggingface", "model": embeddings.model_name}
+    raise ValueError("Scoped document persistence requires a supported embedding provider")
+
+
+def _restore_embeddings(configuration):
+    """Recreate the recorded provider without fallback or document re-embedding."""
+    if configuration["provider"] == "openai":
+        from langchain_openai import OpenAIEmbeddings
+
+        return OpenAIEmbeddings(
+            api_key=os.environ["OPENAI_API_KEY"], model=configuration["model"],
+            base_url=configuration["base_url"], dimensions=configuration["dimensions"],
+            check_embedding_ctx_length=False,
+        )
+    if configuration["provider"] == "huggingface":
+        from langchain_huggingface import HuggingFaceEmbeddings
+
+        return HuggingFaceEmbeddings(
+            model_name=configuration["model"],
+            model_kwargs={"device": "cpu", "local_files_only": True},
+        )
+    raise ValueError("Unknown saved embedding provider")
+
+
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
@@ -219,6 +271,7 @@ def load_document(
     """
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     from langchain_community.vectorstores import FAISS
+    from chemgraph.execution.scoped import current_execution
 
     resolved_path = _document_path(file_path)
     if not os.path.isfile(resolved_path):
@@ -266,9 +319,19 @@ def load_document(
 
     # Build FAISS index
     embeddings = _get_embeddings(provider=embedding_provider)
+    context = current_execution()
+    embedding_config = _embedding_configuration(embeddings) if context else None
     vector_store = FAISS.from_documents(chunks, embeddings)
 
-    # Register in module-level store
+    if context is not None:
+        from chemgraph.execution.documents import save_document
+
+        save_document(context, resolved_path, vector_store, embedding_config, {
+            "chunk_size": chunk_size, "chunk_overlap": chunk_overlap,
+            "embedding_provider": embedding_provider,
+        })
+
+    # Publish in memory only after the durable record is complete.
     _stores()[resolved_path] = vector_store
     # Also track the most-recently loaded path for convenience
     _stores()["__latest__"] = resolved_path
@@ -317,11 +380,20 @@ def query_knowledge_base(
         A dict with ``"ok"``, ``"query"``, ``"num_results"``, and
         ``"results"`` (list of dicts with ``"content"`` and ``"metadata"``).
     """
-    # Resolve which vector store to query
-    if file_path is not None:
-        resolved_path = _document_path(file_path)
-    else:
-        resolved_path = _stores().get("__latest__")
+    from chemgraph.execution.documents import DocumentStoreError, restore_document
+    from chemgraph.execution.scoped import current_execution
+
+    # Restore on cache miss; replaying load_document must not rebuild its index.
+    try:
+        saved, latest = _saved_documents()
+        resolved_path = (_document_path(file_path) if file_path is not None
+                         else _stores().get("__latest__", latest))
+        if resolved_path in saved and resolved_path not in _stores():
+            _stores()[resolved_path] = restore_document(
+                current_execution(), resolved_path, _restore_embeddings,
+            )
+    except DocumentStoreError as exc:
+        return {"ok": False, "error": str(exc)}
 
     if resolved_path is None or resolved_path not in _stores():
         available = [k for k in _stores() if k != "__latest__"]
@@ -358,9 +430,16 @@ def get_loaded_documents() -> list[str]:
 
     This is a plain helper (not a tool) for programmatic access.
     """
-    return [k for k in _stores() if k != "__latest__"]
+    saved, _ = _saved_documents()
+    return list(dict.fromkeys([*saved, *(k for k in _stores() if k != "__latest__")]))
 
 
 def clear_vector_stores() -> None:
     """Remove all loaded vector stores. Useful for testing and cleanup."""
+    from chemgraph.execution.documents import clear_documents
+    from chemgraph.execution.scoped import current_execution
+
+    context = current_execution()
+    if context is not None:
+        clear_documents(context)
     _stores().clear()
