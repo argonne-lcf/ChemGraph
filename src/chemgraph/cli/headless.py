@@ -1,5 +1,7 @@
 """Unattended execution of durable main-agent sessions."""
 
+import json
+
 from rich.markup import escape
 
 from chemgraph.agent.configuration import validate_cli_configuration
@@ -9,6 +11,12 @@ from chemgraph.cli.checkpoint_runtime import CheckpointRuntime, DEFAULT_CHECKPOI
 from chemgraph.cli.formatting import console, format_response
 from chemgraph.memory.store import SessionStore
 from chemgraph.registry.tools import RegistryError
+
+
+HEADLESS_TOOLS_ERROR = (
+    "Headless main_agent cannot restore MCP or attached tools. Use --interactive; "
+    "these sessions do not support CLI restoration."
+)
 
 
 def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=None,
@@ -23,6 +31,8 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             raise ValueError("Query is required unless --resume specifies a saved session.")
         if query is not None and not query.strip():
             raise ValueError("Query must not be empty.")
+        if not resume_session and options.get("tools"):
+            raise ValueError(HEADLESS_TOOLS_ERROR)
         saved = None
         if resume_session:
             saved = SessionStore().get_session_metadata(resume_session)
@@ -59,6 +69,14 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             )
         if agent is None:
             return 1
+        if not saved:
+            try:
+                validate_cli_configuration(agent.main_agent_metadata.graph_config)
+            except ValueError as exc:
+                raise ValueError(
+                    "Headless main_agent requires a CLI-restorable configuration. "
+                    "Use --interactive for this configuration; CLI restoration is unavailable."
+                ) from exc
         session = commands.create_main_agent_session(
             agent, thread_id=thread_id if saved else None, checkpoint_db=checkpoint_db,
         )
@@ -83,8 +101,14 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             elif status == "failed":
                 console.print("Resume interactively with --resume and --dangerously-skip-approvals; use /retry.")
             if output_file:
-                commands.save_output(str(result), output_file)
-        commands.print_token_usage(session, stderr=True)
+                try:
+                    content = (result.assistant_response if options["return_option"] == "last_message"
+                               else json.dumps(result.state, ensure_ascii=False, indent=2, allow_nan=False))
+                except (TypeError, ValueError) as exc:
+                    console.print(f"[red]Error serializing output: {escape(str(exc))}[/red]")
+                    return 1
+                if not commands.save_output(content, output_file):
+                    return 1
         return {"completed": 0, "waiting_for_user": 3}.get(status, 1)
     except (IncompatibleCheckpointError, TypeError, ValueError, RegistryError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
@@ -99,3 +123,5 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
     finally:
         if runtime is not None:
             runtime.close()
+        if session is not None:
+            commands.print_token_usage(session, stderr=True)

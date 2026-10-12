@@ -251,14 +251,27 @@ Existing compatible reviewed checkpoints retain their identities.
 
 Headless `main_agent` never answers interrupts automatically. It saves questions
 and remaining tool reviews as `waiting_for_user`, prints the session ID, and exits
-with code **3**. Exit codes **0**, **1**, and **2** mean completion, execution or
-initialization failure, and invalid CLI/resume configuration, respectively;
+with code **3**. Exit code **0** means completion; **1** means execution,
+initialization, or output-export failure; **2** means invalid CLI/resume configuration.
 Ctrl+C returns **130** and closes the checkpoint runtime.
 `--resume ID` without a query reports the restored state. With `-q`, it starts a
 new turn only if that state is completed. Pending input needs interactive resume;
 failed operations need interactive `/retry`. Completed tools are not replayed on
 restore. Recursion limits remain in effect; bypass does not add run-wide budgets
 or continuous goal execution.
+
+Headless `main_agent` requires a CLI-restorable configuration. New runs using
+`--mcp-url`, `--mcp-command`, or their TOML equivalents are rejected before
+connecting to the server. Use interactive mode for MCP tools; those sessions do
+not support CLI restoration. A resumed session uses its saved configuration.
+
+For headless `main_agent`, `--output-file PATH` writes UTF-8 assistant text with
+`--output last_message` (an empty file if no assistant text is available), or the
+graph state as JSON with `--output state` (the default). Session status and
+interrupt instructions stay in the terminal. The output directory must already
+exist. Serialization or write failures return **1**, including when the session
+is waiting for input, without changing its saved status. Retry an export with
+`--resume ID --output-file PATH` without `-q` to avoid rerunning completed tools.
 
 ## Saved sessions
 

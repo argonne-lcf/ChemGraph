@@ -1,5 +1,7 @@
 """Approval policy, unattended execution, and durable launch authorization."""
 
+import json
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -284,3 +286,158 @@ def test_headless_cancellation_closes_checkpoint_runtime(headless, monkeypatch):
     monkeypatch.setattr(commands, "run_main_agent_query", cancel)
     assert run(query="calculate") == 130
     assert len(runtimes) == 1 and runtimes[0]._closed
+
+
+@pytest.mark.parametrize("source", ["flag", "toml"])
+@pytest.mark.parametrize("transport", ["url", "command"])
+def test_headless_rejects_mcp_before_connecting(headless, monkeypatch, tmp_path, source, transport):
+    def forbidden(*args, **kwargs):
+        pytest.fail("MCP rejection must happen before connection or initialization")
+    monkeypatch.setattr("chemgraph.cli.mcp_utils.load_mcp_tools_from_config", forbidden)
+    monkeypatch.setattr(cli_main, "run_headless_main_agent", forbidden)
+    value = "https://example.test/mcp" if transport == "url" else "python -m example_mcp"
+    options = {}
+    if source == "toml":
+        config = tmp_path / "config.toml"
+        config.write_text(f'[mcp]\n{transport} = "{value}"\n', encoding="utf-8")
+        options["config"] = str(config)
+    else:
+        options[f"mcp_{transport}"] = value
+    with pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(_run_args(query="calculate", dangerously_skip_approvals=True, **options))
+    assert exc.value.code == 2
+    assert not SessionStore().list_sessions()
+    assert not headless[2]
+
+
+@pytest.mark.parametrize("interactive", [False, True])
+def test_mcp_remains_interactive_and_resume_uses_saved_config(monkeypatch, interactive):
+    tools = [object()]
+    connections, received = [], {}
+    monkeypatch.setattr("chemgraph.cli.mcp_utils.load_mcp_tools_from_config",
+                        lambda **kwargs: connections.append(kwargs) or tools)
+    monkeypatch.setattr(cli_main, "interactive_mode" if interactive else "run_headless_main_agent",
+                        lambda **kwargs: received.update(kwargs))
+    cli_main._handle_run(_run_args(query="calculate", dangerously_skip_approvals=True,
+                                  interactive=interactive, resume=None if interactive else "saved",
+                                  mcp_url="https://example.test/mcp"))
+    assert bool(connections) is interactive
+    assert received["tools"] == (tools if interactive else None)
+
+
+@pytest.mark.parametrize("attached", [False, True])
+def test_headless_rejects_nonrestorable_tools_before_session_creation(headless, monkeypatch, attached):
+    run, _, requests = headless
+
+    @tool
+    def custom_tool() -> str:
+        """An opaque caller-owned tool."""
+        pytest.fail("non-restorable tools must not execute")
+
+    monkeypatch.setattr(commands, "create_main_agent_session",
+                        lambda *a, **k: pytest.fail("non-restorable configuration must not create a session"))
+    options = {"tools": [custom_tool]} if attached else {"tool_registry": ToolRegistry([custom_tool])}
+    assert run(query="calculate", **options) == 2
+    assert not SessionStore().list_sessions()
+    assert len(requests) == (0 if attached else 1)
+
+
+@pytest.mark.parametrize("answer", ["ΔE = −1.0 eV", ""])
+@pytest.mark.parametrize("mode", ["state", "last_message"])
+def test_headless_exports_selected_output_on_run_and_restore(headless, tmp_path, mode, answer):
+    run, responses, _ = headless
+    responses[:] = [AIMessage(content=answer)]
+    output = tmp_path / "answer.txt"
+    assert run(query="hello", return_option=mode, output_file=str(output)) == 0
+    saved = SessionStore().list_sessions()[0]
+    for selected in (mode, "last_message" if mode == "state" else "state"):
+        if selected != mode:
+            responses[:] = [RuntimeError("restoration must not invoke the model")]
+            assert run(resume_session=saved.session_id, return_option=selected, output_file=str(output)) == 0
+        content = output.read_text(encoding="utf-8")
+        if selected == "last_message":
+            assert content == answer
+        else:
+            state = json.loads(content)
+            assert [message["content"] for message in state["messages"]] == ["hello", answer]
+            assert "assistant_response" not in state and "thread_id" not in state
+
+
+@pytest.mark.parametrize("failure", ["missing_directory", "permission", "serialization"])
+@pytest.mark.parametrize("waiting", [False, True])
+def test_export_failure_preserves_checkpoint_for_export_retry(headless, monkeypatch, tmp_path, failure, waiting):
+    run, responses, _ = headless
+    responses[:] = [call("write_file", file_path="/workspace/result.txt", content="first")]
+    if waiting:
+        responses.extend([call("load_tools", names=["ask_human"]), call("ask_human", question="Which calculator?")])
+    else:
+        responses.append(AIMessage(content="ΔE = −1.0 eV"))
+    output = tmp_path / "missing" / "answer.txt" if failure == "missing_directory" else tmp_path / "answer.txt"
+    registry = ToolRegistry([ToolRegistry().get_spec("ask_human")]) if waiting else ToolRegistry([])
+    with monkeypatch.context() as fault:
+        if failure == "permission":
+            def denied(*args, **kwargs):
+                raise PermissionError("output is read-only")
+            fault.setattr(commands, "open", denied, raising=False)
+        elif failure == "serialization":
+            original = commands.run_main_agent_query
+            def invalid_export(*args, **kwargs):
+                result = original(*args, **kwargs)
+                return replace(result, state={**result.state, "nonfinite": float("nan")})
+            fault.setattr(commands, "run_main_agent_query", invalid_export)
+        assert run(query="write", workspace=str(tmp_path), output_file=str(output),
+                   human_supervised=waiting, tool_registry=registry) == 1
+    assert not output.exists()
+    saved = SessionStore().list_sessions()[0]
+    assert saved.status == ("waiting_for_user" if waiting else "completed")
+    (tmp_path / "result.txt").write_text("user edit", encoding="utf-8")
+    responses[:] = [RuntimeError("export retry must not replay tools")]
+    output = tmp_path / "recovered.txt"
+    assert run(resume_session=saved.session_id, return_option="last_message", output_file=str(output)) == (3 if waiting else 0)
+    assert output.read_text(encoding="utf-8") == ("" if waiting else "ΔE = −1.0 eV")
+    assert (tmp_path / "result.txt").read_text() == "user edit"
+    assert SessionStore().get_session(saved.session_id).status == saved.status
+
+
+@pytest.mark.parametrize("outcome", ["success", "waiting", "failure", "export_failure", "restore", "cancelled", "init_failure"])
+def test_headless_reports_usage_once_to_stderr(headless, monkeypatch, tmp_path, capsys, outcome):
+    from chemgraph.agent.main_session import MainAgentTurnResult
+    from chemgraph.cli.checkpoint_runtime import CheckpointRuntime
+
+    run, responses, _ = headless
+    usage = {"input_tokens": 10, "output_tokens": 2, "total_tokens": 12}
+    answer = AIMessage(content="done", usage_metadata=usage)
+    options = {"query": "calculate"}
+    responses[:] = [answer]
+    if outcome == "failure":
+        responses[:] = [call("write_todos", todos=[]).model_copy(update={"usage_metadata": usage}),
+                        RuntimeError("model unavailable")]
+    elif outcome == "waiting":
+        responses[:] = [call("load_tools", names=["ask_human"]).model_copy(update={"usage_metadata": usage}),
+                        call("ask_human", question="Which calculator?")]
+        options.update(human_supervised=True, tool_registry=ToolRegistry([ToolRegistry().get_spec("ask_human")]))
+    elif outcome == "export_failure":
+        options["output_file"] = str(tmp_path / "missing" / "answer.txt")
+    elif outcome == "restore":
+        assert run(**options) == 0
+        options = {"resume_session": SessionStore().list_sessions()[0].session_id}
+        responses[:] = [RuntimeError("restore must not invoke the model")]
+        capsys.readouterr()
+    elif outcome == "cancelled":
+        original = CheckpointRuntime.run
+        def cancel_after_execution(self, operation):
+            result = original(self, operation)
+            if isinstance(result, MainAgentTurnResult):
+                raise KeyboardInterrupt
+            return result
+        monkeypatch.setattr(CheckpointRuntime, "run", cancel_after_execution)
+    elif outcome == "init_failure":
+        options["query"] = " "
+    assert run(**options) == {"waiting": 3, "failure": 1, "export_failure": 1,
+                              "cancelled": 130, "init_failure": 2}.get(outcome, 0)
+    captured = capsys.readouterr()
+    assert "Tokens" not in captured.out
+    lines = [line for line in captured.err.splitlines() if line.startswith("Tokens")]
+    assert len(lines) == (0 if outcome == "init_failure" else 1)
+    if lines:
+        assert "12 total" in lines[0]

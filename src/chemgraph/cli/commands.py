@@ -551,7 +551,7 @@ def print_token_usage(owner: Any, *, stderr: bool = False) -> None:
 
 
 def _report_failed_usage(operation):
-    """Print failures/cancellation here; callers print successes after answers."""
+    """Finalize usage and, unless suppressed, print failures and cancellation."""
     @wraps(operation)
     def run(owner, *args, **kwargs):
         result = None
@@ -571,7 +571,7 @@ def _report_failed_usage(operation):
                     "cancelled" if cancelled else "failed" if result is None
                     else getattr(result, "status", "completed")
                 )
-                if result is None:
+                if result is None and kwargs.get("report_failure_usage", True):
                     print_token_usage(owner, stderr=kwargs.get("usage_stderr", False))
             summaries = _interactive_usage.get()
             if summaries is not None and (executed or result is not None):
@@ -955,8 +955,9 @@ def _run_main_agent_operation(
     progress_description: str,
     checkpoint_runtime: CheckpointRuntime | None = None,
     interactive: bool = True,
+    report_failure_usage: bool = True,
 ) -> Any:
-    """Run one session operation and resolve nested-graph interrupts."""
+    """Run one operation; headless callers own printing when reporting is disabled."""
     from chemgraph.agent.main_session import IncompatibleCheckpointError
 
     try:
@@ -1039,6 +1040,7 @@ def run_main_agent_query(
         progress_description="Processing main-agent turn...",
         checkpoint_runtime=checkpoint_runtime,
         interactive=interactive,
+        report_failure_usage=interactive,
     )
 
 
@@ -1071,6 +1073,7 @@ def restore_main_agent_session(
         progress_description="Restoring main-agent thread...",
         checkpoint_runtime=checkpoint_runtime,
         interactive=interactive,
+        report_failure_usage=interactive,
     )
 
 
@@ -1257,8 +1260,8 @@ def delete_session_cmd(session_id: str, db_path: Optional[str] = None) -> None:
 # ---------------------------------------------------------------------------
 
 
-def save_output(content: str, output_file: str) -> None:
-    """Save output to a file.
+def save_output(content: str, output_file: str) -> bool:
+    """Save UTF-8 output to a file and return whether the write succeeded.
 
     Parameters
     ----------
@@ -1268,11 +1271,13 @@ def save_output(content: str, output_file: str) -> None:
         Destination file path.
     """
     try:
-        with open(output_file, "w") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             f.write(content)
         console.print(f"[green]Output saved to: {output_file}[/green]")
+        return True
     except Exception as e:
-        console.print(f"[red]Error saving output: {e}[/red]")
+        console.print(f"[red]Error saving output: {escape(str(e))}[/red]")
+        return False
 
 
 # ---------------------------------------------------------------------------

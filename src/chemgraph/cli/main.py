@@ -47,7 +47,7 @@ from chemgraph.cli.formatting import (
     format_response,
     list_models,
 )
-from chemgraph.cli.headless import run_headless_main_agent
+from chemgraph.cli.headless import HEADLESS_TOOLS_ERROR, run_headless_main_agent
 
 
 # ---------------------------------------------------------------------------
@@ -738,6 +738,9 @@ def _handle_run(args: argparse.Namespace) -> None:
     )
 
     if (mcp_url or mcp_command) and not (args.workflow == "main_agent" and args.resume):
+        if args.workflow == "main_agent" and not interactive:
+            console.print(f"[red]{HEADLESS_TOOLS_ERROR}[/red]")
+            sys.exit(2)
         from chemgraph.cli.mcp_utils import load_mcp_tools_from_config
 
         mcp_tools = load_mcp_tools_from_config(
