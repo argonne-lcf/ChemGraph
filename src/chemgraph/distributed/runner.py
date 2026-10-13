@@ -29,6 +29,10 @@ class ChemGraphRunner:
     def failed(self) -> bool:
         return bool(self.session is not None and self.session.failed)
 
+    @property
+    def supports_retry(self) -> bool:
+        return self.session is not None
+
     async def _ask_operator(self, question: str, payload: Any = None):
         self._legacy_interrupts = ({"question": question, "payload": payload},)
         self._answer = asyncio.get_running_loop().create_future()

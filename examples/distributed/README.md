@@ -55,6 +55,14 @@ exactly-once execution after a crash. The planner's final summary appears in the
 `output` field of its status and in its event log. `operator` identifies the
 human caller; agents report to it with a normal final response, not a peer message.
 
+Checkpoint retries reuse the original tool call's message ID. A running receiver
+acknowledges repeated identical messages without enqueueing them again, and rejects
+reuse of an ID with different content. These acceptance records last only for that
+receiver process; restarting it loses both the inbox and duplicate protection.
+Each CLI `send` is a new submission. Failed peers reject new work until a main-agent
+retry succeeds or a legacy peer is restarted. Work accepted before a failure remains
+queued in memory and is lost if that receiver restarts.
+
 ## Capabilities and approvals
 
 Each main-agent peer receives its configured MCP tools and allowed peer messaging,

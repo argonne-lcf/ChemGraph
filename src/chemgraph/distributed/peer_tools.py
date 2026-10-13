@@ -1,6 +1,10 @@
 """Peer communication is a normal ChemGraph tool, independent of Academy."""
 
-from langchain_core.tools import StructuredTool, ToolException
+import json
+import uuid
+from typing import Annotated
+
+from langchain_core.tools import InjectedToolCallId, StructuredTool, ToolException
 from pydantic import BaseModel, Field
 
 from chemgraph.distributed.protocol import PeerEnvelope, PeerTransport
@@ -9,13 +13,16 @@ from chemgraph.distributed.protocol import PeerEnvelope, PeerTransport
 class SendPeerMessage(BaseModel):
     recipient: str = Field(description="An allowed ChemGraph peer name. The operator receives normal final responses.")
     content: str = Field(min_length=1)
+    tool_call_id: Annotated[str, InjectedToolCallId]
     correlation_id: str | None = None
     reply_to: str | None = None
 
 
 def build_peer_tool(*, transport: PeerTransport, run_id: str, launch_id: str,
                     sender: str, allowed_peers: tuple[str, ...]) -> StructuredTool:
-    async def send_peer_message(recipient: str, content: str, correlation_id: str | None = None,
+    async def send_peer_message(recipient: str, content: str,
+                                tool_call_id: Annotated[str, InjectedToolCallId],
+                                correlation_id: str | None = None,
                                 reply_to: str | None = None) -> dict:
         if recipient not in allowed_peers:
             if recipient == "operator":
@@ -24,7 +31,9 @@ def build_peer_tool(*, transport: PeerTransport, run_id: str, launch_id: str,
                     "Return your result as a normal final assistant response; ChemGraph exposes it in peer status."
                 )
             raise ToolException(f"Recipient {recipient!r} is not an allowed peer. Allowed peers: {list(allowed_peers)}.")
+        identity = json.dumps(["chemgraph-peer-v2", run_id, launch_id, sender, tool_call_id])
         return await transport.send(PeerEnvelope(
+            message_id=str(uuid.uuid5(uuid.NAMESPACE_URL, identity)),
             run_id=run_id, launch_id=launch_id, sender=sender, recipient=recipient,
             content=content, correlation_id=correlation_id, reply_to=reply_to,
         ))

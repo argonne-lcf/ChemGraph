@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 
 from chemgraph.distributed.config import DistributedConfig
 from chemgraph.distributed.peer_tools import build_peer_tool
-from chemgraph.distributed.protocol import PeerEnvelope
+from chemgraph.distributed.protocol import PeerEnvelope, PeerTurnResult
 from chemgraph.distributed.runner import ConfiguredRunner, ChemGraphRunner
 from chemgraph.distributed.runtime import PeerRuntime
 from chemgraph.mcp.config import MCPToolSourceConfig
@@ -200,3 +200,49 @@ async def test_legacy_operator_response_uses_existing_handler(tmp_path):
     assert await runner.resume("EMT") is None
     assert (await task).output == "EMT"
     assert not runner.interrupts
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("restart_sender", [False, True])
+async def test_main_agent_retry_does_not_duplicate_accepted_delivery(tmp_path, scripted, restart_sender):
+    delivered = []
+    accepted = []
+
+    async def consume(envelope):
+        delivered.append(envelope)
+        return PeerTurnResult("done")
+
+    recipient = PeerRuntime(name="executor", run_id="run", launch_id="launch", allowed_senders=("worker",),
+                            runner=SimpleNamespace(interrupts=(), run=consume))
+    await recipient.start()
+
+    async def send(envelope):
+        accepted.append(envelope)
+        ack = await recipient.receive(envelope)
+        if len(accepted) == 1:
+            raise TimeoutError("delivery may have occurred")
+        return ack
+
+    peer_tool = build_peer_tool(transport=SimpleNamespace(send=send), run_id="run", launch_id="launch",
+                                sender="worker", allowed_peers=("executor",))
+    scripted[:] = [AIMessage(content="", tool_calls=[{
+        "name": peer_tool.name, "id": "checkpointed-call",
+        "args": {"recipient": "executor", "content": "expensive job"},
+    }]), AIMessage(content="sent")]
+    settings = config(tmp_path)
+    try:
+        async with ConfiguredRunner(settings, "worker", [peer_tool], lambda *_: None) as runner:
+            with pytest.raises(TimeoutError, match="delivery may have occurred"):
+                await runner.run(message())
+            if not restart_sender:
+                assert (await runner.retry()).output == "sent"
+        if restart_sender:
+            scripted[:] = [AIMessage(content="sent")]
+            async with ConfiguredRunner(settings, "worker", [peer_tool], lambda *_: None) as runner:
+                assert (await runner.retry()).output == "sent"
+        await asyncio.wait_for(recipient.inbox.join(), 2)
+        assert len(accepted) == 2
+        assert accepted[0].message_id == accepted[1].message_id
+        assert len(delivered) == 1
+    finally:
+        await recipient.close(timeout_s=0.01)

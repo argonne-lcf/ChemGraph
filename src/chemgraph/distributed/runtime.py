@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 import uuid
 from collections.abc import Callable
@@ -31,6 +32,8 @@ class PeerRuntime:
         self._closing = False
         self._interrupts: tuple[dict, ...] = ()
         self.instance_id = str(uuid.uuid4())
+        # Retain acceptance records for this process's lifetime, including completed turns.
+        self._accepted: dict[tuple[str, str], str] = {}
 
     async def start(self) -> None:
         if self._worker is not None:
@@ -47,10 +50,22 @@ class PeerRuntime:
             raise ValueError("Message does not belong to this peer launch")
         if message.sender != "operator" and message.sender not in self.allowed_senders:
             raise ValueError(f"Unexpected sender: {message.sender!r}")
-        self.inbox.put_nowait(message)
+        key = (message.sender, message.message_id)
+        fingerprint = hashlib.sha256(message.model_dump_json().encode()).hexdigest()
+        acknowledgement = {"status": "accepted", "message_id": message.message_id}
+        if key in self._accepted:
+            if self._accepted[key] != fingerprint:
+                raise ValueError("Message ID was already accepted with different content")
+            return acknowledgement
+        if self.state == "failed":
+            recovery = ("retry the failed turn" if getattr(self.runner, "supports_retry", False)
+                        else "restart the failed peer")
+            raise RuntimeError(f"Peer is failed; {recovery} before sending new work")
+        self.inbox.put_nowait(message.model_copy(deep=True))
+        self._accepted[key] = fingerprint
         self.last_activity = time.monotonic()
         self.trace("message_received", message.model_dump())
-        return {"status": "accepted", "message_id": message.message_id}
+        return acknowledgement
 
     def status(self) -> dict[str, Any]:
         interrupts = self.runner.interrupts or self._interrupts

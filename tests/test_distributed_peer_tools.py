@@ -25,5 +25,20 @@ async def test_transport_failure_is_not_hidden_as_recipient_error():
     tool = build_peer_tool(transport=transport, run_id="run", launch_id="launch", sender="planner",
                            allowed_peers=("executor",))
     with pytest.raises(TimeoutError, match="delivery uncertain"):
-        await tool.ainvoke({"recipient": "executor", "content": "task"})
+        await tool.ainvoke({"name": tool.name, "id": "call", "type": "tool_call",
+                           "args": {"recipient": "executor", "content": "task"}})
     transport.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_peer_message_id_uses_hidden_call_identity():
+    transport = SimpleNamespace(send=AsyncMock(return_value={"status": "accepted"}))
+    tool = build_peer_tool(transport=transport, run_id="run", launch_id="launch", sender="planner",
+                           allowed_peers=("executor",))
+    assert "tool_call_id" not in tool.tool_call_schema.model_json_schema()["properties"]
+    for call_id in ("first", "first", "second"):
+        await tool.ainvoke({"name": tool.name, "id": call_id, "type": "tool_call",
+                           "args": {"recipient": "executor", "content": "task"}})
+    messages = [call.args[0] for call in transport.send.await_args_list]
+    assert messages[0].message_id == messages[1].message_id
+    assert messages[0].message_id != messages[2].message_id

@@ -1,9 +1,12 @@
 import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from chemgraph.distributed.protocol import PeerEnvelope, PeerTurnResult
 from chemgraph.distributed.runtime import PeerRuntime
+from chemgraph.distributed.runner import ChemGraphRunner
 
 
 def message(content="task", **kwargs):
@@ -120,3 +123,71 @@ async def test_blocked_shutdown_reports_abandoned_work():
     await peer.close(timeout_s=0.01)
     assert peer.state == "stopped"
     assert any(payload.get("error") == "shutdown_timeout" for _, payload in events)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_messages_execute_once_and_conflicting_ids_are_rejected():
+    runner = Runner()
+    peer = runtime(runner)
+    await peer.start()
+    try:
+        first = message()
+        acknowledgements = await asyncio.gather(*(peer.receive(first) for _ in range(10)))
+        assert acknowledgements == [{"status": "accepted", "message_id": first.message_id}] * 10
+        await runner.started.wait()
+        with pytest.raises(ValueError, match="different content"):
+            await peer.receive(first.model_copy(update={"content": "another task"}))
+        runner.release.set()
+        await asyncio.wait_for(peer.inbox.join(), 2)
+        await peer.receive(first)
+        await asyncio.wait_for(peer.inbox.join(), 2)
+        assert runner.messages == [first]
+    finally:
+        await peer.close(timeout_s=0.01)
+
+
+@pytest.mark.asyncio
+async def test_failed_legacy_peer_rejects_new_work(tmp_path):
+    runner = ChemGraphRunner(SimpleNamespace(log_dir=str(tmp_path), run=AsyncMock(
+        side_effect=RuntimeError("model unavailable"))), thread_id="legacy")
+    peer = runtime(runner)
+    await peer.start()
+    try:
+        first = message()
+        await peer.receive(first)
+        async with asyncio.timeout(2):
+            while peer.state != "failed":
+                await asyncio.sleep(0)
+        assert (await peer.receive(first))["status"] == "accepted"
+        with pytest.raises(RuntimeError, match="restart the failed peer"):
+            await peer.receive(message("next"))
+        with pytest.raises(RuntimeError, match="restart other failed peers"):
+            await peer.retry()
+        assert peer.inbox.empty()
+        runner.agent.run.assert_awaited_once()
+    finally:
+        await peer.close(timeout_s=0.01)
+
+
+@pytest.mark.asyncio
+async def test_failed_retryable_peer_accepts_work_after_recovery():
+    runner = Runner()
+    runner.supports_retry = True
+    runner.run = AsyncMock(side_effect=RuntimeError("temporary failure"))
+    peer = runtime(runner)
+    await peer.start()
+    try:
+        await peer.receive(message())
+        async with asyncio.timeout(2):
+            while peer.state != "failed":
+                await asyncio.sleep(0)
+        with pytest.raises(RuntimeError, match="retry the failed turn"):
+            await peer.receive(message("next"))
+        await peer.retry()
+        runner.run.side_effect = None
+        runner.run.return_value = PeerTurnResult("next answer")
+        await peer.receive(message("next"))
+        await asyncio.wait_for(peer.inbox.join(), 2)
+        assert peer.output == "next answer"
+    finally:
+        await peer.close(timeout_s=0.01)
