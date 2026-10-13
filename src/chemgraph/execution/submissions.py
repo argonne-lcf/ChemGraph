@@ -39,9 +39,15 @@ def submission_tool(controller: SubmissionController):
             )
             operation = await controller.execute_submission(operation["id"])
         return {
-            "batch_id": operation["batch_id"],
+            "batch_id": operation.get("batch_id"),
             "state": operation["state"],
-            "message": "The embedding service will collect results; do not resubmit this operation.",
+            "message": (
+                "Submission rejected; no job was submitted."
+                if operation["state"] == "rejected"
+                else "Operation abandoned; completion and cancellation are not confirmed."
+                if operation["state"] == "abandoned"
+                else "The embedding service will collect results; do not resubmit this operation."
+            ),
         }
 
     return submit_hpc

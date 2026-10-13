@@ -300,6 +300,10 @@ Examples:
     )
 
     subparsers = parser.add_subparsers(dest="command")
+    subparsers.add_parser(
+        "service", add_help=False,
+        help="Run the optional authenticated service (chemgraph service --help).",
+    )
 
     # ---- "run" subcommand ------------------------------------------------
     run_parser = subparsers.add_parser(
@@ -972,6 +976,12 @@ def main() -> None:
     Dispatches to the appropriate subcommand handler, or falls back
     to the legacy behaviour when no subcommand is given.
     """
+    if len(sys.argv) > 1 and sys.argv[1] == "service":
+        try:
+            from chemgraph.service.cli import main as service_main
+        except ImportError as exc:
+            raise SystemExit('Install service dependencies with pip install "chemgraph[service]"') from exc
+        return service_main(sys.argv[2:])
     parser = create_argument_parser()
     args = parser.parse_args()
 

@@ -1,6 +1,6 @@
 # Integrate Connect with all ChemGraph ASE calculators
 
-Status: implementation in progress. Updated: 2026-10-12.
+Status: implemented in two stacked branches; cross-platform CI pending. Updated: 2026-10-13.
 
 Use two stacked PRs. First revise [#258](https://github.com/argonne-lcf/ChemGraph/pull/258)
 on `feature/scoped-tool-runtime`, preserving its isolation fixes, with prepared
@@ -80,3 +80,7 @@ Initially one instance and one serialized graph worker. Calculator integration i
 separate from scientific validation of a research workflow. Discord identity and
 delivery, attachments, campaigns, and distributed orchestration remain later work.
 Budget approximately 8,000–10,000 net lines across both PRs, refined from actual diffs.
+
+Current diff size: approximately 8,000 net lines including PR #258's original
+scoped runtime, the prepared execution additions, integrated service, tests and
+deployment documentation.

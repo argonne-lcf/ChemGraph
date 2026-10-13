@@ -450,3 +450,9 @@ opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete
 workflow.
 
 ChemGraph is distributed under the [Apache License 2.0](LICENSE).
+
+## Optional authenticated service
+
+Install `pip install "chemgraph[service]"` and use `chemgraph service`. See the
+[service guide](docs/service.md) for exact ASE approvals, recovery, authenticated
+artifacts and independently deployed Hermes integration.

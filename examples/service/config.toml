@@ -1,0 +1,47 @@
+# Use a NEW state directory; keep standalone Connect state for inspection.
+state_dir = "./state"
+public_url = "http://127.0.0.1:8080"
+
+[[principals]]
+name = "researcher"
+token_env = "CHEMGRAPH_PEER_TOKEN"
+role = "peer"
+
+[[principals]]
+name = "operator"
+token_env = "CHEMGRAPH_OPERATOR_TOKEN"
+role = "operator"
+
+[[principals]]
+name = "notifier"
+token_env = "CHEMGRAPH_NOTIFIER_TOKEN"
+role = "notifier"
+
+[profile]
+version = 3
+model = "gpt-4o-mini"
+max_submissions = 20
+capabilities = ["run_ase", "file_to_atomsdata", "save_atomsdata_to_file", "smiles_to_atomsdata", "smiles_to_coordinate_file", "extract_output_json", "get_symmetry_number", "is_linear_molecule"]
+calculators = ["emt", "mace_polar", "mace_mp", "mace_off", "mace_anicc", "fairchem", "aimnet2", "tblite", "nwchem", "orca"]
+# Configure installed weights and executable roots; no model download on approval.
+model_roots = []
+# Omit default_calculator to require an explicit scientific-method selection.
+
+[profile.limits]
+max_steps = 1000
+max_atoms = 200
+
+# Example provisioned bindings (paths must be inside model_roots):
+# [profile.model_resources]
+# "mace_mp:default" = "/srv/models/mace-mpa.model"
+# "mace_polar:default" = "/srv/models/polar-1-m.model"
+# "mace_off:medium" = "/srv/models/mace-off-medium.model"
+# "mace_anicc:default" = "/srv/models/ani-cc.model"
+# "aimnet2:aimnet2" = "/srv/models/aimnet2.jpt"
+# "fairchem:uma-s-1p1" = { weights = "/srv/models/uma.pt", atom_refs = "/srv/models/uma-refs.yaml" }
+# [profile.executable_bindings.orca]
+# command = "/opt/orca/orca"
+# files = ["/opt/orca/orca"]
+# [profile.executable_bindings.nwchem]
+# command = "/opt/nwchem/bin/nwchem PREFIX.nwi > PREFIX.nwo"
+# files = ["/opt/nwchem/bin/nwchem"]
