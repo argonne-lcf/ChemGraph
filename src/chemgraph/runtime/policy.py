@@ -13,6 +13,7 @@ import hashlib
 import importlib.metadata
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -185,7 +186,10 @@ def _resource(policy, path, role) -> dict:
 def _calculator(policy, payload: dict) -> tuple[dict, dict, list[dict]]:
     from chemgraph.schemas.ase_input import ASEInputSchema
 
-    calculator = payload.get("calculator") or policy.default_calculator
+    calculator = payload.get("calculator")
+    if calculator is not None and not isinstance(calculator, Mapping):
+        raise PreparationError("'calculator' must be an object with a calculator_type.")
+    calculator = calculator or policy.default_calculator
     if calculator is None:
         raise PreparationError("Select a calculator explicitly; scoped runs have no implicit default.")
     calculator = dict(calculator)
@@ -220,7 +224,10 @@ def _calculator(policy, payload: dict) -> tuple[dict, dict, list[dict]]:
 
 def _prepare_run_ase(context, arguments) -> tuple[dict, list, list, dict]:
     policy = context.policy
-    params, calculator, resources = _calculator(policy, dict(arguments.get("params") or {}))
+    params = arguments.get("params")
+    if params is not None and not isinstance(params, Mapping):
+        raise PreparationError("run_ase 'params' must be an object.")
+    params, calculator, resources = _calculator(policy, dict(params or {}))
     if params["driver"] not in _DRIVERS:
         raise PreparationError(f"Unsupported ASE driver {params['driver']!r}.")
     if not params["output_results_file"].endswith(".json"):

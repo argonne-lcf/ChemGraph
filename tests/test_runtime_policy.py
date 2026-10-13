@@ -1,5 +1,8 @@
 """Exact preparation of ASE tool calls and workspace confinement."""
 
+import errno
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -7,6 +10,7 @@ import pytest
 from chemgraph.runtime import (
     ExecutionPolicy, PolicyDenied, PreparationError, PreparedAction, run_context, scoped_path,
 )
+from chemgraph.runtime import artifacts as artifact_store
 from chemgraph.runtime.policy import prepare, validate
 from tests.runtime_helpers import make_context, run_ase_call
 
@@ -51,12 +55,32 @@ def test_digest_covers_inputs_and_rejects_tampering(tmp_path):
     (run_ase_call(driver="md"), PreparationError, "driver"),
     (run_ase_call(steps=10_000), PolicyDenied, "step limit"),
     (run_ase_call(structure=".chemgraph-inputs/x/h2.xyz"), PolicyDenied, "Internal"),
+    ({"name": "run_ase", "args": {"params": 1}, "id": "p"}, PreparationError, "params"),
+    (run_ase_call(calculator=1), PreparationError, "calculator"),
 ])
 def test_unpreparable_calls_fail_before_side_effects(tmp_path, call, error, match):
     context = make_context(tmp_path, limits={"max_steps": 5000})
     (tmp_path / "workspace" / "outside.xyz").write_text("2\n\nH 0 0 0\nH 0 0 1\n")
     with pytest.raises(error, match=match):
         prepare(context, call)
+
+
+def test_snapshot_reuse_syncs_with_a_writable_handle(tmp_path, monkeypatch):
+    fcntl = pytest.importorskip("fcntl")
+    fsync = os.fsync
+
+    def windows_fsync(fd):
+        # FlushFileBuffers requires write access; Windows never syncs directories here.
+        mode = os.fstat(fd).st_mode
+        if not stat.S_ISDIR(mode) and fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_ACCMODE == os.O_RDONLY:
+            raise OSError(errno.EBADF, "Bad file descriptor")
+        fsync(fd)
+
+    monkeypatch.setattr(artifact_store.os, "fsync", windows_fsync)
+    context = make_context(tmp_path)
+    first = prepare(context, run_ase_call())
+    again = prepare(context, run_ase_call("again"))
+    assert again.inputs[0]["path"] == first.inputs[0]["path"]
 
 
 def test_calculator_selection_is_explicit_and_permitted(tmp_path):

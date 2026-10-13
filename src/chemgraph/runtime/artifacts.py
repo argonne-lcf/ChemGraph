@@ -76,7 +76,8 @@ def publish_file(workspace, source, destination, expected: dict) -> None:
     if destination.exists():
         verify_file(destination, expected)
         # A previous attempt may have failed after rename but before syncing.
-        with destination.open("rb") as stream:
+        # Windows flushes only handles with write access; "r+b" never truncates.
+        with destination.open("r+b") as stream:
             os.fsync(stream.fileno())
     else:
         fd, temporary = tempfile.mkstemp(prefix=".publish-", dir=destination.parent)
