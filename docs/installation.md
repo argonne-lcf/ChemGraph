@@ -62,6 +62,8 @@ Install only the integrations needed by your workflow:
 | --- | --- | --- |
 | `calculators` | `pip install "chemgraph[calculators]"` | TBLite |
 | `uma` | `pip install "chemgraph[uma]"` | UMA through fairchem-core |
+| `nvalchemi_mace` | `pip install "chemgraph[nvalchemi_mace]"` | NVIDIA ALCHEMI Toolkit with MACE support |
+| `rootstock` | `pip install "chemgraph[rootstock]"` | Rootstock-hosted model calculator |
 | `ui` | `pip install "chemgraph[ui]"` | Additional UI dependencies |
 | `rag` | `pip install "chemgraph[rag]"` | Document ingestion and vector stores |
 | `xanes` | `pip install "chemgraph[xanes]"` | XANES workflow dependencies |
