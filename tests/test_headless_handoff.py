@@ -19,7 +19,7 @@ def test_file_handoff_inspects_and_answers_current_questions(headless, tmp_path,
     registry = ToolRegistry([ToolRegistry().get_spec("ask_human")])
     responses[:] = [call("load_tools", names=["ask_human"]), call("ask_human", question="Which calculator?")]
     assert run(query="calculate", human_supervised=True, tool_registry=registry, result_file=result) == 3
-    first = json.loads(result.read_text())
+    first = json.loads(result.read_text(encoding="utf-8"))
     assert first["version"] == 1 and first["status"] == "waiting_for_user" and first["error"] is None
     pending = first["interrupts"][0]
     assert pending["kind"] == "clarification" and pending["payload"] == {"question": "Which calculator?"}
@@ -28,39 +28,39 @@ def test_file_handoff_inspects_and_answers_current_questions(headless, tmp_path,
     with monkeypatch.context() as inspection:
         inspection.setattr(_ScriptedChatModel, "_generate", lambda *a, **k: pytest.fail("inspection called model"))
         assert run(resume_session=session_id, result_file=result) == 3
-        assert json.loads(result.read_text()) == first
-        answers.write_text('{"stale-id": "EMT"}')
+        assert json.loads(result.read_text(encoding="utf-8")) == first
+        answers.write_text('{"stale-id": "EMT"}', encoding="utf-8")
         assert run(resume_session=session_id, answers_file=answers, result_file=result) == 2
-        assert json.loads(result.read_text())["interrupts"] == first["interrupts"]
+        assert json.loads(result.read_text(encoding="utf-8"))["interrupts"] == first["interrupts"]
 
-    answers.write_text(json.dumps({pending["id"]: "EMT"}))
+    answers.write_text(json.dumps({pending["id"]: "EMT"}), encoding="utf-8")
     responses[:] = [AIMessage(content="", tool_calls=[
         {"name": "ask_human", "id": "charge", "args": {"question": "Charge?"}, "type": "tool_call"},
         {"name": "ask_human", "id": "spin", "args": {"question": "Spin?"}, "type": "tool_call"},
     ])]
     assert run(resume_session=session_id, answers_file=answers, result_file=result) == 3
-    second = json.loads(result.read_text())
+    second = json.loads(result.read_text(encoding="utf-8"))
     ids = {item["id"] for item in second["interrupts"]}
     assert len(ids) == 2 and pending["id"] not in ids
     with monkeypatch.context() as validation:
         validation.setattr(_ScriptedChatModel, "_generate", lambda *a, **k: pytest.fail("invalid answer called model"))
         for invalid in ({pending["id"]: "EMT"}, {next(iter(ids)): "0"}, {**dict.fromkeys(ids, "0"), "extra": "1"}):
-            answers.write_text(json.dumps(invalid))
+            answers.write_text(json.dumps(invalid), encoding="utf-8")
             assert run(resume_session=session_id, answers_file=answers, result_file=result) == 2
-            rejected = json.loads(result.read_text())
+            rejected = json.loads(result.read_text(encoding="utf-8"))
             assert rejected["status"] == "waiting_for_user" and rejected["error"]
             assert rejected["interrupts"] == second["interrupts"]
 
-    answers.write_text(json.dumps(dict.fromkeys(ids, "0")))
+    answers.write_text(json.dumps(dict.fromkeys(ids, "0")), encoding="utf-8")
     responses[:] = [AIMessage(content="Done — H₂O.")]
     output = tmp_path / "answer.txt"
     assert run(resume_session=session_id, answers_file=answers, result_file=result,
                return_option="last_message", output_file=output) == 0
-    assert json.loads(result.read_text()) == {
+    assert json.loads(result.read_text(encoding="utf-8")) == {
         "version": 1, "session_id": session_id, "status": "completed", "assistant_response": "Done — H₂O.",
         "interrupts": [], "error": None,
     }
-    assert output.read_text() == "Done — H₂O."
+    assert output.read_text(encoding="utf-8") == "Done — H₂O."
     assert run(resume_session=session_id, answers_file=answers, result_file=result) == 2
     saved = SessionStore().get_session(session_id)
     assert saved.status == "completed" and saved.query_count == 1
@@ -71,9 +71,9 @@ def test_file_handoff_inspects_and_answers_current_questions(headless, tmp_path,
 def test_invalid_answer_file_does_not_start_session(headless, tmp_path, content):
     run, _, requests = headless
     answers, result = tmp_path / "answers.json", tmp_path / "result.json"
-    answers.write_text(content)
+    answers.write_text(content, encoding="utf-8")
     assert run(resume_session="unknown", answers_file=answers, result_file=result) == 2
-    receipt = json.loads(result.read_text())
+    receipt = json.loads(result.read_text(encoding="utf-8"))
     assert receipt["session_id"] is None and receipt["status"] is None and receipt["error"]
     assert not requests
 
