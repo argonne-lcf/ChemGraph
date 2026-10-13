@@ -93,18 +93,37 @@ async def test_identical_calls_are_reviewed_and_executed_separately(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_rejection_and_undecided_resume(tmp_path):
+async def test_rejection_feedback_allows_a_revised_proposal(tmp_path):
     context = make_context(tmp_path)
-    graph = scoped_graph([ai(run_ase_call()), AIMessage(content="Understood")])
+    graph = scoped_graph([
+        ai(run_ase_call()), ai(run_ase_call("revised", output="revised.json")),
+        AIMessage(content="Done with the revised settings"),
+    ])
     paused = await run(graph, context, {"messages": [HumanMessage(content="Energy")]})
     # Resuming without a recorded decision pauses again for the same operation.
     again = await run(graph, context, Command(resume="approve"))
     assert again["__interrupt__"][0].value["operation_id"] == paused["__interrupt__"][0].value["operation_id"]
-    await decide_pending(context, again, approve_all=False, message="Use a larger basis.")
-    state = await run(graph, context, Command(resume="decided"))
-    rejection = tool_messages(state)[-1]
-    assert rejection.status == "error" and "larger basis" in rejection.content
+    await decide_pending(context, again, approve_all=False, message="Use a different output name.")
+    revised = await run(graph, context, Command(resume="decided"))
+    rejection = tool_messages(revised)[-1]
+    assert rejection.status == "error" and "Operator feedback: Use a different output name." in rejection.content
+    assert "Do not retry" not in rejection.content
     assert not (context.workspace / "energy.json").exists()
+    # The revised call is a new operation with its own review.
+    assert revised["__interrupt__"][0].value["tool_call_id"] == "revised"
+    await decide_pending(context, revised)
+    state = await run(graph, context, Command(resume="decided"))
+    assert [a["source_path"] for a in result_artifacts(state, context.task_id)] == ["revised.json"]
+
+
+@pytest.mark.asyncio
+async def test_rejection_without_feedback_discourages_retry(tmp_path):
+    context = make_context(tmp_path)
+    graph = scoped_graph([ai(run_ase_call()), AIMessage(content="Understood")])
+    paused = await run(graph, context, {"messages": [HumanMessage(content="Energy")]})
+    await decide_pending(context, paused, approve_all=False)
+    state = await run(graph, context, Command(resume="decided"))
+    assert "Do not retry it unless the user asks." in tool_messages(state)[-1].content
     assert state["messages"][-1].content == "Understood"
 
 

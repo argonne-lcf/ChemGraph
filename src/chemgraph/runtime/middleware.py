@@ -55,8 +55,14 @@ class ScopedToolsMiddleware(AgentMiddleware):
         if record["state"] == BLOCKED:
             return error_message(call, f"Not executed: {record['error']}")
         if record["state"] == REJECTED:
-            reason = (record["decision"] or {}).get("message") or "The operator rejected it."
-            return error_message(call, f"Not executed: {reason} Do not retry unless asked.")
+            reason = (record["decision"] or {}).get("message")
+            # A reason is reviewer feedback: the model may revise and propose again.
+            return error_message(call, (
+                f"The operator rejected this {call['name']} call, so it was not executed. "
+                f"Operator feedback: {reason}" if reason else
+                f"The operator rejected this {call['name']} call, so it was not executed. "
+                "Do not retry it unless the user asks."
+            ))
 
         async def invoke(action):
             outputs = set()
