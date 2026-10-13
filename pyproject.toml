@@ -78,6 +78,12 @@ dependencies = [
     ]
 
 [project.optional-dependencies]
+service = [
+    "a2a-sdk[http-server,sqlite]==1.2.2",
+    "httpx>=0.28,<0.29",
+    "uvicorn>=0.34,<1",
+]
+
 test = [
     "quickjs==1.19.4",
 ]

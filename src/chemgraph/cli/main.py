@@ -300,6 +300,10 @@ Examples:
     )
 
     subparsers = parser.add_subparsers(dest="command")
+    subparsers.add_parser(
+        "service", add_help=False,
+        help="Run the optional authenticated service (chemgraph service --help).",
+    )
 
     # ---- "run" subcommand ------------------------------------------------
     run_parser = subparsers.add_parser(
@@ -972,6 +976,10 @@ def main() -> None:
     Dispatches to the appropriate subcommand handler, or falls back
     to the legacy behaviour when no subcommand is given.
     """
+    if len(sys.argv) > 1 and sys.argv[1] == "service":
+        from chemgraph.cli import main as dispatch
+
+        return dispatch()
     parser = create_argument_parser()
     args = parser.parse_args()
 
