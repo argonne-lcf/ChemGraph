@@ -65,6 +65,30 @@ def test_unpreparable_calls_fail_before_side_effects(tmp_path, call, error, matc
         prepare(context, call)
 
 
+@pytest.mark.parametrize("fname, content, message", [
+    ("empty.xyz", "", "Cannot read input structure 'empty.xyz'"),
+    ("unsupported.unknownformat", "not a structure\n",
+     "Cannot read input structure 'unsupported.unknownformat'"),
+    ("truncated.xyz", "2\ncomment\nH 0 0 0\n", "Frame has 1 atoms, expected 2"),
+    ("bad_header.xyz", "not a number\n", "Expected xyz header"),
+])
+def test_unreadable_structures_are_preparation_errors(tmp_path, fname, content, message):
+    context = make_context(tmp_path, limits={"max_atoms": 2})
+    (context.workspace / fname).write_text(content)
+    with pytest.raises(PreparationError) as error:
+        prepare(context, run_ase_call(structure=fname))
+    assert message in str(error.value)
+    assert not (context.workspace / "energy.json").exists()
+
+
+def test_atom_limit_accepts_boundary_and_rejects_larger_structures(tmp_path):
+    context = make_context(tmp_path, limits={"max_atoms": 2})
+    assert prepare(context, run_ase_call()).inputs[0]["source"] == "h2.xyz"
+    context.policy = ExecutionPolicy(limits={"max_atoms": 1})
+    with pytest.raises(PolicyDenied, match="atom limit"):
+        prepare(context, run_ase_call())
+
+
 def test_snapshot_reuse_syncs_with_a_writable_handle(tmp_path, monkeypatch):
     fcntl = pytest.importorskip("fcntl")
     fsync = os.fsync

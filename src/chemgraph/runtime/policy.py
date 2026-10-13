@@ -237,8 +237,16 @@ def _prepare_run_ase(context, arguments) -> tuple[dict, list, list, dict]:
     snapshot = _snapshot(context, params["input_structure_file"])
     if "max_atoms" in policy.limits:
         from ase.io import read
+        from ase.io.formats import UnknownFileTypeError
 
-        if len(read(context.workspace / snapshot["path"])) > policy.limits["max_atoms"]:
+        try:
+            atoms = read(context.workspace / snapshot["path"])
+        except UnknownFileTypeError as exc:
+            raise PreparationError(
+                f"Cannot read input structure {params['input_structure_file']!r}: {exc}"
+            ) from exc
+
+        if len(atoms) > policy.limits["max_atoms"]:
             raise PolicyDenied("The structure exceeds the configured atom limit.")
     params["input_structure_file"] = snapshot["path"]
     params["output_results_file"] = _relative(context, params["output_results_file"])

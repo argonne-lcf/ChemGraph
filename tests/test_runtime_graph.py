@@ -188,6 +188,40 @@ async def test_unpermitted_and_unpreparable_calls_answer_the_model(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fname, content", [
+    ("empty.xyz", ""),
+    ("unsupported.unknownformat", "not a structure\n"),
+])
+async def test_unreadable_structure_allows_a_corrected_proposal(tmp_path, fname, content):
+    context = make_context(tmp_path, limits={"max_atoms": 2})
+    (context.workspace / fname).write_text(content)
+    graph = scoped_graph([
+        ai(run_ase_call("invalid", structure=fname, output="invalid.json")),
+        ai(run_ase_call("corrected", output="corrected.json")),
+        AIMessage(content="Energy computed from the corrected input"),
+    ])
+    paused = await run(graph, context, {"messages": [HumanMessage(content="Compute energy")]})
+    errors = tool_messages(paused)
+    assert len(errors) == 1 and errors[0].tool_call_id == "invalid"
+    assert errors[0].status == "error" and f"Cannot read input structure {fname!r}" in errors[0].content
+    assert [item.value["tool_call_id"] for item in paused["__interrupt__"]] == ["corrected"]
+    records = {r["tool_call_id"]: r for r in await context.journal.store.records()}
+    assert records["invalid"]["state"] == "blocked" and records["invalid"]["decision"] is None
+    assert records["corrected"]["state"] == "proposed"
+    assert not (context.workspace / "invalid.json").exists()
+    assert not (context.workspace / "corrected.json").exists()
+
+    pending = await decide_pending(context, paused)
+    state = await run(graph, context, Command(resume="ok"))
+    assert state["messages"][-1].content == "Energy computed from the corrected input"
+    artifacts = result_artifacts(state, context.task_id)
+    assert [a["source_path"] for a in artifacts] == ["corrected.json"]
+    assert json.loads(artifact_file(context.workspace, artifacts[0]).read_text())["success"] is True
+    assert (await context.journal.get(pending[0]["operation_id"]))["state"] == "finalized"
+    assert not (context.workspace / "invalid.json").exists()
+
+
+@pytest.mark.asyncio
 async def test_dependent_actions_are_reviewed_in_sequence(tmp_path):
     context = make_context(tmp_path)
     write = {"name": "smiles_to_coordinate_file",
