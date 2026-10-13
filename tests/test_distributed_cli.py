@@ -49,6 +49,38 @@ async def test_stale_approval_never_resumes_new_work(tmp_path, changed):
     assert json.loads(path.read_text())["status"] == "failed"
 
 
+@pytest.mark.asyncio
+async def test_shutdown_does_not_wait_for_operator_resume(tmp_path, monkeypatch):
+    monkeypatch.setattr("chemgraph.distributed.cli.uuid", SimpleNamespace(uuid4=iter(["a", "z"]).__next__))
+    settings = config(tmp_path)
+    directory = settings.peer_dir("worker")
+    status = {"state": "waiting_for_user", "current_message_id": "message",
+              "instance_id": "instance", "interrupts": []}
+    write_json_atomic(directory / "status.json", status)
+    queue_control(settings, "worker", "resume", "approve")
+    path = queue_control(settings, "worker", "shutdown")
+    resumed = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def resume(_response):
+        resumed.set()
+        await finish.wait()
+
+    runtime = SimpleNamespace(status=lambda: status, instance_id="instance", resume=resume)
+    stop = asyncio.Event()
+    task = asyncio.create_task(process_controls(directory, runtime, stop))
+    try:
+        await asyncio.wait_for(resumed.wait(), 1)
+        await process_controls(directory, runtime, stop, shutdown_only=True)
+        assert stop.is_set()
+        assert not task.done()
+        assert json.loads(path.read_text()) == {"status": "completed"}
+    finally:
+        finish.set()
+        await task
+    assert json.loads(path.read_text()) == {"status": "completed"}
+
+
 def test_config_resolves_local_paths_and_validates_names(tmp_path):
     path = tmp_path / "peers.json"
     path.write_text(json.dumps({"run_id": "run", "launch_id": "launch", "exchange_url": "http://unused", "peers": {"one": {}}}))

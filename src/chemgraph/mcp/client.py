@@ -76,4 +76,3 @@ async def load_mcp_tools(sources: Iterable[MCPToolSourceConfig]) -> list[BaseToo
             tool.metadata = {**(tool.metadata or {}), "mcp_server": source.name}
             selected.append(tool)
     return selected
-

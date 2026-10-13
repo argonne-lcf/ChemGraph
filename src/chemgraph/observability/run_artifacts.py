@@ -156,5 +156,3 @@ def _tool_result_summaries(events: list[RunEvent]) -> list[dict[str, Any]]:
             },
         )
     return results
-
-

@@ -30,11 +30,19 @@ def _transport(config, name=None):
                             name=name, timeout_s=config.timeout_s)
 
 
-async def process_controls(directory: Path, runtime: PeerRuntime, stop: asyncio.Event) -> None:
+async def process_controls(directory: Path, runtime: PeerRuntime, stop: asyncio.Event,
+                           *, shutdown_only: bool = False) -> None:
     for path in sorted((directory / "control").glob("*.request.json")):
-        result = {"status": "completed"}
         try:
-            request = json.loads(path.read_text())
+            contents = path.read_text()
+        except FileNotFoundError:
+            continue  # A shutdown request may have been consumed by the monitor.
+        result = {"status": "completed"}
+        request = None
+        try:
+            request = json.loads(contents)
+            if (request.get("action") == "shutdown") != shutdown_only:
+                continue
             if request.get("instance_id") != runtime.instance_id:
                 raise ValueError("Operator request belongs to a previous peer process")
             if request["action"] == "shutdown":
@@ -50,6 +58,8 @@ async def process_controls(directory: Path, runtime: PeerRuntime, stop: asyncio.
                 else:
                     raise ValueError("Unknown operator action")
         except Exception as exc:
+            if shutdown_only and not isinstance(request, dict):
+                continue  # The ordinary control pass reports malformed requests.
             result = {"status": "failed", "error": str(exc)}
         write_json_atomic(path.with_name(path.name.replace(".request.json", ".result.json")), result)
         path.unlink()
@@ -95,7 +105,9 @@ async def run_peer(config, name: str) -> None:
                         trace("agent_started", {"workflow_type": spec.workflow_type})
                         print(f"Peer {name} ready; artifacts and operator controls: {directory}", flush=True)
                         while not stop.is_set():
+                            transport.check_health()
                             write_json_atomic(directory / "status.json", runtime.status())
+                            await process_controls(directory, runtime, stop, shutdown_only=True)
                             if control_task is None or control_task.done():
                                 if control_task is not None:
                                     control_task.result()

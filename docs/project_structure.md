@@ -9,7 +9,9 @@ ChemGraph/
 │   │   ├── tools/        # Chemistry, ASE, analysis, and file tools
 │   │   ├── mcp/          # General and HPC MCP servers
 │   │   ├── execution/    # Local, Parsl, Ensemble, Globus backends
-│   │   ├── academy/      # Persistent multi-agent campaigns and dashboard
+│   │   ├── distributed/  # Peer runtime and optional Academy communication
+│   │   ├── dashboard/    # Run dashboard
+│   │   ├── observability/ # Shared event logs and summaries
 │   │   ├── models/       # Model registry, provider loaders, normalization
 │   │   ├── schemas/      # Pydantic input/output models
 │   │   ├── eval/         # Dataset-driven evaluation and judges

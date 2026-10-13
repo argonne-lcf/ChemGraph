@@ -412,48 +412,6 @@ Examples:
     distributed_parser.add_argument("distributed_args", nargs=argparse.REMAINDER)
     distributed_parser.add_argument("-h", "--help", action="store_true", dest="distributed_help")
 
-    # ---- "academy" subcommand -------------------------------------------
-    academy_parser = subparsers.add_parser(
-        "academy",
-        help="Run and inspect Academy-backed ChemGraph agent campaigns.",
-    )
-    academy_sub = academy_parser.add_subparsers(dest="academy_command")
-
-    daemon_parser = academy_sub.add_parser(
-        "mpi-daemon",
-        help="Run one ChemGraph Academy agent daemon inside mpiexec.",
-    )
-    daemon_parser.add_argument(
-        "daemon_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.runtime.daemon.",
-    )
-
-    compute_parser = academy_sub.add_parser(
-        "run-compute",
-        help="Run a profile-backed ChemGraph Academy campaign in this allocation.",
-    )
-    compute_parser.add_argument(
-        "compute_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.runtime.compute_launcher.",
-    )
-
-    dashboard_parser = academy_sub.add_parser(
-        "dashboard",
-        help="Start the local dashboard launcher for a ChemGraph Academy run.",
-    )
-    dashboard_parser.add_argument(
-        "dashboard_args",
-        nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.runtime.dashboard_launcher.",
-    )
-
-    academy_sub.add_parser(
-        "campaigns",
-        help="List ChemGraph Academy campaign specs.",
-    )
-
     # ---- Legacy fallback args -------------------------------------------
     # Also add run args to the top-level parser so that
     # `chemgraph -q "..."` keeps working without a subcommand.
@@ -946,40 +904,6 @@ def _run_module_main(module_name: str, argv: list[str]) -> None:
         sys.exit(code)
 
 
-def _handle_academy(args: argparse.Namespace) -> None:
-    """Handle Academy-backed ChemGraph campaign commands."""
-    command = getattr(args, "academy_command", None)
-    if command == "mpi-daemon":
-        _run_module_main(
-            "chemgraph.academy.runtime.daemon",
-            _strip_remainder_separator(args.daemon_args),
-        )
-        return
-    if command == "dashboard":
-        _run_module_main(
-            "chemgraph.academy.runtime.dashboard_launcher",
-            _strip_remainder_separator(args.dashboard_args),
-        )
-        return
-    if command == "run-compute":
-        from chemgraph.academy.runtime.compute_launcher import main as compute_main
-
-        code = compute_main(_strip_remainder_separator(args.compute_args))
-        if code:
-            sys.exit(code)
-        return
-    if command == "campaigns":
-        from chemgraph.academy.campaigns import list_campaigns
-
-        for name in list_campaigns():
-            console.print(name)
-        return
-    console.print(
-        "Usage: chemgraph academy "
-        "{mpi-daemon,run-compute,dashboard,campaigns}.",
-    )
-
-
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -1050,8 +974,6 @@ def main() -> None:
     elif args.command == "distributed":
         forwarded = ["--help"] if args.distributed_help else _strip_remainder_separator(args.distributed_args)
         _run_module_main("chemgraph.distributed.cli", forwarded)
-    elif args.command == "academy":
-        _handle_academy(args)
 
     elif args.command == "run":
         _handle_run(args)

@@ -372,8 +372,8 @@ applying files under [`k8s/`](k8s/README.md).
 ## Distributed and HPC execution
 
 ChemGraph includes pluggable execution backends for local processes, Parsl,
-Ensemble Launcher, and Globus Compute, plus an Academy-based persistent
-multi-agent campaign runtime. These paths require additional dependencies,
+Ensemble Launcher, and Globus Compute, plus optional Academy communication between
+independent, persistent ChemGraph peers. These paths require additional dependencies,
 site configuration, allocations, endpoints, or credentials and are not part
 of the first-run workflow.
 
@@ -381,7 +381,7 @@ Start with:
 
 - [HPC and Academy](https://argonne-lcf.github.io/ChemGraph/hpc_and_academy/)
 - [`scripts/demo/`](scripts/demo/README.md) for execution-backend demos
-- [Academy MACE screening example](examples/academy/example-002-mace-ensemble-screening/README.md)
+- [Distributed peer examples](examples/distributed/README.md)
 - [Connecting to Argo from an ALCF compute node](examples/connecting_to_argo/README.md)
 
 ## Configuration

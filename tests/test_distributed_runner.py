@@ -8,6 +8,7 @@ from chemgraph.distributed.config import DistributedConfig
 from chemgraph.distributed.protocol import PeerEnvelope
 from chemgraph.distributed.runner import ConfiguredRunner, ChemGraphRunner
 from chemgraph.models.endpoints import PreparedModel
+from chemgraph.observability.event_log import EventLog, read_events
 from tests.test_main_agent import _ScriptedChatModel
 
 
@@ -36,14 +37,17 @@ def scripted(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_main_agent_turns_and_checkpoint_restore(tmp_path, scripted):
     settings = config(tmp_path)
+    path = tmp_path / "events.jsonl"
+    trace = lambda event, payload: EventLog(path).emit(event, payload=payload)  # noqa: E731
     scripted[:] = [AIMessage(content="first")]
-    async with ConfiguredRunner(settings, "worker", [], lambda *_args: None) as runner:
+    async with ConfiguredRunner(settings, "worker", [], trace) as runner:
         assert (await runner.run(message())).output == "first"
     scripted[:] = [AIMessage(content="second")]
-    async with ConfiguredRunner(settings, "worker", [], lambda *_args: None) as runner:
+    async with ConfiguredRunner(settings, "worker", [], trace) as runner:
         assert (await runner.run(message("follow-up"))).output == "second"
         snapshot = await runner.agent.workflow.aget_state(runner.session.config)
         assert [m.content for m in snapshot.values["messages"] if m.type == "ai"] == ["first", "second"]
+    assert read_events(path)
 
 
 @pytest.mark.asyncio
