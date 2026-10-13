@@ -1,13 +1,7 @@
 from __future__ import annotations
 
-import pytest
 
-# Skip when the optional 'academy' extra is absent. The event_log
-# module itself is pure stdlib, but the import guard is applied
-# uniformly across the academy test suite.
-pytest.importorskip("academy")
-
-from chemgraph.academy.observability.event_log import EventLog, read_events
+from chemgraph.observability.event_log import EventLog, read_events
 
 
 def test_event_log_preserves_payload_shape(tmp_path) -> None:

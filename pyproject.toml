@@ -170,7 +170,7 @@ where = ["src/"]
 ]
 "chemgraph.academy.runtime.profiles" = ["*.json"]
 "chemgraph.academy.runtime.templates" = ["*"]
-"chemgraph.academy.dashboard" = ["static/*"]
+"chemgraph.dashboard" = ["static/*"]
 "ui" = ["assets/*.png"]
 
 [tool.ruff]

@@ -402,7 +402,7 @@ Examples:
     dashboard_parser.add_argument(
         "dashboard_args",
         nargs=argparse.REMAINDER,
-        help="Arguments forwarded to chemgraph.academy.dashboard.",
+        help="Arguments forwarded to chemgraph.dashboard.",
     )
 
     # ---- "academy" subcommand -------------------------------------------
@@ -1036,7 +1036,7 @@ def main() -> None:
 
     elif args.command == "dashboard":
         _run_module_main(
-            "chemgraph.academy.dashboard",
+            "chemgraph.dashboard",
             _strip_remainder_separator(args.dashboard_args),
         )
 
