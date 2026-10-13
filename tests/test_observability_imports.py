@@ -14,6 +14,9 @@ class NoAcademy:
             raise ImportError("Academy unavailable")
 sys.meta_path.insert(0, NoAcademy())
 from chemgraph.cli.trace import CLIRunTrace
+from chemgraph.distributed import PeerRuntime
+from chemgraph.distributed.cli import main
+from chemgraph.distributed.config import DistributedConfig
 from chemgraph.dashboard.server import _static_file
 assert b"<html" in _static_file("index.html", "text/html")[0].lower()
 assert _static_file("app.js", "text/javascript")[0]

@@ -25,19 +25,39 @@ path first so infrastructure failures are isolated from LLM behavior.
 Backend selection can use environment variables or `[execution]` settings. Do
 not copy another user's endpoint IDs, allocation names, or private paths.
 
-## Academy campaigns
+## Distributed peers
 
-Academy supports persistent multi-agent campaigns and a dashboard runtime:
+Academy is an optional transport for messages between independent ChemGraph
+instances. ChemGraph owns reasoning, tools, approval handling, sessions, inbox
+processing, and shutdown. Computation continues to use the execution backends
+above; the messaging adapter does not allocate compute resources.
 
 ```bash
-python -m pip install "chemgraph[academy,parsl,globus_compute]"
-chemgraph academy --help
+python -m pip install "chemgraph[academy]"
+chemgraph distributed --help
 chemgraph dashboard --help
 ```
 
-The [MACE ensemble-screening example](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy/example-002-mace-ensemble-screening)
-has a README and end-to-end guide. Review campaign JSON/JSONC, runtime profiles,
-prompt profiles, and data paths before launch.
+See the [distributed-peer examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/distributed)
+for two single-agent peers, a checkpointed main-agent peer with a multi-agent
+executor, and deployment across hosts. Each host needs access to the same HTTP
+exchange, but peers do not need a shared filesystem.
+
+### Migration from campaigns
+
+The old `chemgraph academy` commands, `chemgraph.academy` Python package,
+campaign JSONC format, prompt profiles, MPI daemon, and campaign-specific
+launchers have been removed. Configure ordinary ChemGraph peers and launch them
+with `chemgraph distributed run --config peers.json --peer NAME`. Use site job
+scripts or existing ChemGraph execution backends for HPC placement.
+
+The `academy` extra remains available for the communication adapter. There is
+no automatic campaign conversion. Re-express missions as peer prompts, tool
+access as per-server MCP allowlists, and connectivity as `allowed_peers`.
+`dev-academy-sim` is a historical prototype, not a required installation.
+
+`chemgraph dashboard` still reads existing event logs, including old campaign
+runs. Dashboard and CLI tracing work without Academy installed.
 
 ## ALCF model access and MCP
 
@@ -58,5 +78,5 @@ facility-specific assumptions. See [MCP servers](mcp_servers.md).
 5. Add concurrency only after logs, retries, and cleanup are understood.
 6. Record model, calculator, environment, scheduler, and code versions.
 
-Never place tokens in campaign files, prompts, repository config, or job logs.
+Never place tokens in peer configuration files, prompts, repository config, or job logs.
 Use facility-approved secret mechanisms and least-privilege endpoints.

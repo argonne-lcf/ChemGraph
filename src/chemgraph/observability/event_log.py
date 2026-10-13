@@ -1,6 +1,6 @@
 """Shared event log for ChemGraph runs.
 
-The dynamic campaign layer treats agent messages and ChemGraph job updates as
+ChemGraph treats agent messages and job updates as
 one append-only event stream.  The dashboard and HPC run scripts can consume
 this file without knowing which science use case created the event.
 """
@@ -71,7 +71,7 @@ __all__ = [
 
 
 class RunEvent(BaseModel):
-    """One durable event emitted by a campaign runtime."""
+    """One durable event emitted by a ChemGraph runtime."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -86,7 +86,7 @@ class RunEvent(BaseModel):
 
 
 class EventLog:
-    """Append/read helper for campaign JSONL event logs."""
+    """Append/read helper for ChemGraph JSONL event logs."""
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
@@ -127,7 +127,7 @@ class EventLog:
 
 
 def read_events(path: str | Path) -> list[RunEvent]:
-    """Read valid campaign events from *path*.
+    """Read valid ChemGraph events from *path*.
 
     Partially written or malformed lines are skipped so live dashboards can
     poll while another process is appending.

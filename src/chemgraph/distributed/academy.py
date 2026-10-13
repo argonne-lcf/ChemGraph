@@ -119,7 +119,13 @@ class AcademyTransport:
             handle = await self._find_peer(name)
             return await handle.action("get_status")
 
+    def check_health(self) -> None:
+        if self._task is not None and self._task.done():
+            self._task.result()
+            raise RuntimeError("Academy mailbox stopped")
+
     async def send(self, message: PeerEnvelope) -> dict[str, Any]:
+        self.check_health()
         if (message.run_id, message.launch_id) != (self.run_id, self.launch_id):
             raise ValueError("Message belongs to a different launch")
         expected_sender = self.name or "operator"

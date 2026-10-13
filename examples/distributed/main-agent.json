@@ -1,0 +1,43 @@
+{
+  "run_id": "main-agent-demo",
+  "launch_id": "replace-for-each-new-run",
+  "exchange_url": "http://127.0.0.1:8700",
+  "run_dir": "runs",
+  "peers": {
+    "planner": {
+      "workflow_type": "main_agent",
+      "model_name": "gpt-4o-mini",
+      "allowed_peers": [
+        "executor"
+      ],
+      "prompts": {
+        "main_agent": "You coordinate chemistry tasks. Delegate calculations to executor with send_peer_message. Send each request once, then finish your turn. On a result, summarize it for the operator. Do not send acknowledgements or poll the executor."
+      },
+      "options": {
+        "discover_skills": false,
+        "subagent_names": []
+      }
+    },
+    "executor": {
+      "workflow_type": "multi_agent",
+      "model_name": "gpt-4o-mini",
+      "allowed_peers": [
+        "planner"
+      ],
+      "mcp_servers": [
+        {
+          "name": "chemistry",
+          "url": "http://127.0.0.1:9003/mcp/",
+          "allowed_tools": [
+            "smiles_to_coordinate_file",
+            "run_ase",
+            "extract_output_json"
+          ]
+        }
+      ],
+      "prompts": {
+        "executor": "You execute chemistry tasks using your MCP tools. Use the requested calculator. Send a concise scientific result to planner once, preserving correlation and reply IDs when present. Then finish your turn. Do not ask for an acknowledgement."
+      }
+    }
+  }
+}

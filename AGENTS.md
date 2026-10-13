@@ -55,7 +55,8 @@ src/chemgraph/
   tools/        # chemistry + ASE tools (many file readers/writers)
   mcp/          # MCP servers (incl. *_mcp_hpc.py) + cg_fastmcp framework
   execution/    # pluggable backends: local, parsl, globus_compute, job_tracker
-  academy/      # distributed multi-agent module (campaigns, dashboard, runtime)
+  distributed/  # ChemGraph peer runtime and optional Academy communication adapter
+  dashboard/ observability/  # Shared run inspection and event logs
   models/       # LLM loader / settings / provider normalization
   schemas/      # pydantic schemas (ase_input, calculators, ...)
   prompt/ eval/ hpc_configs/ cli/ state/ utils/ memory/

@@ -25,7 +25,7 @@ The publisher page is available at
 
 ## HPC multi-agent orchestration
 
-Work using the distributed Academy/HPC orchestration features should also cite:
+Work using the distributed Academy communication features should also cite:
 
 > Thang Duc Pham, Harikrishna Tummalapalli, Fakhrul Hasan Bhuiyan, Álvaro
 > Vázquez Mayagoitia, Christine Simpson, Riccardo Balin, Venkatram Vishwanath,

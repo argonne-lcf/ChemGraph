@@ -1,7 +1,7 @@
 # Command-line interface
 
 The `chemgraph` command provides query execution, evaluation, session
-inspection, model discovery, the web interface, dashboards, and Academy
+inspection, model discovery, the web interface, dashboards, and distributed peer
 orchestration.
 
 ```text
@@ -11,7 +11,7 @@ chemgraph session    List, inspect, or delete saved sessions
 chemgraph models     List registered model identifiers
 chemgraph ui         Launch the Streamlit web interface
 chemgraph dashboard  Launch the trace dashboard
-chemgraph academy    Run Academy campaigns and workers
+chemgraph distributed Run ChemGraph peers and exchange messages
 ```
 
 Use `chemgraph <command> --help` for the options supported by your installed
@@ -309,7 +309,7 @@ then inspect the dashboard options available in your version:
 chemgraph dashboard --help
 ```
 
-## Evaluation and Academy
+## Evaluation and distributed peers
 
 Evaluation needs an explicit dataset or a configured profile:
 
@@ -317,11 +317,11 @@ Evaluation needs an explicit dataset or a configured profile:
 chemgraph eval --help
 ```
 
-Academy commands require the `academy` extra and, depending on the backend,
+Distributed communication requires the `academy` extra. Computation may need
 additional execution extras:
 
 ```bash
-chemgraph academy --help
+chemgraph distributed --help
 ```
 
 See [Evaluation](evaluation.md) and [HPC and Academy](hpc_and_academy.md).

@@ -65,7 +65,7 @@ class LLMSettings:
 
     @property
     def user(self) -> str | None:
-        """Backward-compatible academy name for Argo user metadata."""
+        """Backward-compatible name for Argo user metadata."""
         return self.argo_user
 
 
