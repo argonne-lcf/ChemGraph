@@ -39,6 +39,15 @@ class ScopedToolsMiddleware(AgentMiddleware):
         if current_execution() is None:
             return await handler(request)
         name = request.tool_call["name"]
+        policy = current_execution().policy
+        if policy is not None:
+            if name in policy.helpers:
+                return await handler(request)
+            # Enforce at every boundary, including unregistered attached tools and
+            # delegation. Delegation is outside the initial prepared ASE surface.
+            if name not in self.specs:
+                self.specs[name] = ToolSpec(name, "", None)
+            return await execute_scoped_tool(self.specs[name], request, handler)
         if name == "execute":
             raise ScopedExecutionError(
                 "Host shell execution is unavailable in scoped catalogs"

@@ -23,6 +23,7 @@ from chemgraph.tools.ase_core import _resolve_existing_path, _resolve_path
 
 
 class Controller:
+    contract_version = 2
     def __init__(self):
         self.calls = []
         self.saved = {}
@@ -30,7 +31,9 @@ class Controller:
     async def execute_tool(self, context, call, invoke):
         self.calls.append((context.owner, call["id"]))
         if call["id"] not in self.saved:
-            self.saved[call["id"]] = await invoke()
+            preflight = await invoke.preflight()
+            returned = await invoke.invoke(preflight)
+            self.saved[call["id"]] = await invoke.finalize(preflight, returned)
         return self.saved[call["id"]]
 
 
@@ -129,6 +132,7 @@ async def test_controller_precedes_execution_and_artifacts_survive_overwrite(tmp
 @pytest.mark.asyncio
 async def test_controller_failure_never_invokes_tool(tmp_path):
     class Unavailable:
+        contract_version = 2
         async def execute_tool(self, context, call, invoke):
             raise OSError("journal unavailable")
 

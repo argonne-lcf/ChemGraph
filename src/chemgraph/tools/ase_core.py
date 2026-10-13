@@ -427,6 +427,19 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
     """
     calc_type = calculator["calculator_type"].lower()
 
+    from chemgraph.execution.prepared import active_preparation
+
+    prepared = active_preparation()
+    if prepared and prepared.calculator and "executable" in prepared.calculator:
+        calculator = dict(calculator)
+        command = prepared.calculator["executable"]["command"]
+        if calc_type == "orca":
+            from ase.calculators.orca import OrcaProfile
+
+            calculator["profile"] = OrcaProfile(command=command)
+        elif calc_type == "nwchem":
+            calculator["command"] = command
+
     if "emt" in calc_type:
         from chemgraph.schemas.calculators.emt_calc import EMTCalc
         calc = EMTCalc(**calculator)
@@ -467,6 +480,11 @@ def load_calculator(calculator: dict) -> tuple[object, dict, object]:
 
         with mace_loading_lock():
             ase_calculator = calc.get_calculator()
+    elif calc_type == "fairchem" and prepared and prepared.calculator:
+        ase_calculator = calc.get_calculator(
+            checkpoint_path=prepared.calculator["weights"]["path"],
+            atom_refs_path=prepared.calculator["atom_refs"]["path"],
+        )
     else:
         ase_calculator = calc.get_calculator()
 

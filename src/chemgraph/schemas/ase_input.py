@@ -58,6 +58,8 @@ def _command_available(command_name: str, env_var_name: str) -> bool:
     return bool(os.environ.get(env_var_name)) or shutil.which(command_name) is not None
 
 
+_known_calculator_classes = [MaceCalc, FAIRChemCalc, AIMNET2Calc, TBLiteCalc, EMTCalc, NWChemCalc, OrcaCalc]
+
 if not _engine_available("fairchem.core"):
     FAIRChemCalc = None
 
@@ -151,7 +153,7 @@ available_calculator_classes: List[Type[BaseModel]] = [
 ]
 
 # Create a union for type hinting
-CalculatorUnion = Union[tuple(available_calculator_classes)]
+CalculatorUnion = Union[tuple(_known_calculator_classes)]
 
 _calculator_name_items = [calc.__name__ for calc in available_calculator_classes]
 _calculator_name_items = [
@@ -208,9 +210,16 @@ def _coerce_calculator_payload(data: Any) -> Any:
         calc = default_calculator()
         data["calculator"] = calc
 
+    from chemgraph.execution.scoped import current_execution
+
+    context = current_execution()
+    classes = (
+        _known_calculator_classes if context is not None and context.policy is not None
+        else available_calculator_classes
+    )
     available_calcs = {
         _calculator_key(c.__name__.removesuffix("Calc")): c
-        for c in available_calculator_classes
+        for c in classes
     }
     available_calc_names = [c.__name__ for c in available_calculator_classes]
 
@@ -230,8 +239,10 @@ def _coerce_calculator_payload(data: Any) -> Any:
 
         calculator_class = available_calcs[calc_key]
         init_args = calc.copy()
-        if calculator_class is not MaceCalc:
+        if calculator_class.__name__ != "MaceCalc":
             init_args.pop("calculator_type", None)
+        if "".join(ch for ch in calc_name.lower() if ch.isalnum()) == "gfn1xtb":
+            init_args.setdefault("method", "GFN1-xTB")
         data["calculator"] = calculator_class(**init_args)
         return data
 

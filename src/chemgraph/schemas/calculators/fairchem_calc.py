@@ -86,7 +86,9 @@ class FAIRChemCalc(BaseModel):
             data["multiplicity"] = data.pop("spin")
         return data
 
-    def get_calculator(self) -> Any:
+    def get_calculator(
+        self, *, checkpoint_path: str | None = None, atom_refs_path: str | None = None
+    ) -> Any:
         """Return a configured FAIRChemCalculator.
 
         Parameters
@@ -103,11 +105,21 @@ class FAIRChemCalc(BaseModel):
         if pretrained_mlip is None or FAIRChemCalculator is None:
             raise ImportError("fairchem is not installed.")
 
-        predict_unit = pretrained_mlip.get_predict_unit(
-            model_name=self.model_name,
-            inference_settings=self.inference_settings,
-            device=self.device,
-        )
+        if checkpoint_path is None:
+            predict_unit = pretrained_mlip.get_predict_unit(
+                model_name=self.model_name,
+                inference_settings=self.inference_settings,
+                device=self.device,
+            )
+        else:
+            from omegaconf import OmegaConf
+
+            predict_unit = pretrained_mlip.load_predict_unit(
+                path=checkpoint_path,
+                inference_settings=self.inference_settings,
+                device=self.device,
+                atom_refs=OmegaConf.load(atom_refs_path) if atom_refs_path else None,
+            )
         return FAIRChemCalculator(
             predict_unit=predict_unit,
             task_name=self.task_name,

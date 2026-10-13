@@ -20,7 +20,7 @@ from langchain_core.messages import ToolMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.errors import GraphBubbleUp
 
-EXECUTION_CONTRACT_VERSION = 1
+EXECUTION_CONTRACT_VERSION = 2
 ARTIFACT_KEY = "chemgraph_artifacts"
 WORKER_ARTIFACT_KEY = "_chemgraph_worker_artifacts"
 
@@ -30,11 +30,20 @@ class ScopedExecutionError(RuntimeError):
 
 
 class ExecutionController(Protocol):
+    contract_version: int
+
     async def execute_tool(
-        self, context, call: dict, invoke: Callable[[], Awaitable[dict]]
+        self, context, call: dict, stages: ToolStages
     ) -> dict:
-        """Durably accept before invoking; never replay uncertain side effects."""
+        """Save intent, returned result and finalized result at separate boundaries."""
         ...
+
+
+@dataclass(frozen=True)
+class ToolStages:
+    preflight: Callable[..., Awaitable[dict]]
+    invoke: Callable[[dict], Awaitable[dict]]
+    finalize: Callable[[dict, dict], Awaitable[dict]]
 
 
 @dataclass
@@ -48,6 +57,7 @@ class ExecutionContext:
     state: dict = field(default_factory=dict)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     model_roots: tuple[Path, ...] = ()
+    policy: object | None = None
 
     def __post_init__(self):
         if not all((self.owner, self.thread_id, self.task_id)):
@@ -86,7 +96,14 @@ def scoped_path(path) -> str | None:
     resolved = candidate.resolve()
     if not resolved.is_relative_to(context.workspace):
         raise PermissionError("Tool path is outside this conversation's workspace")
-    if {".chemgraph-artifacts", ".chemgraph-rag"}.intersection(
+    if ".chemgraph-inputs" in resolved.relative_to(context.workspace).parts:
+        from chemgraph.execution.prepared import active_preparation
+
+        action = active_preparation()
+        if action is not None and any(str(resolved) == item["path"] for item in action.inputs):
+            return str(resolved)
+        raise PermissionError("Input snapshots are not tool-controlled paths")
+    if {".chemgraph-artifacts", ".chemgraph-rag", ".chemgraph-execution"}.intersection(
         resolved.relative_to(context.workspace).parts
     ):
         raise PermissionError("Internal execution records are not tool-controlled paths")
@@ -221,7 +238,19 @@ def preserve_worker_artifacts(result):
 
 async def execute_scoped_tool(spec, request, handler):
     context = current_execution()
-    if context is None or spec.interactive:
+    if context is None:
+        return await handler(request)
+    if getattr(context.controller, "contract_version", None) != EXECUTION_CONTRACT_VERSION:
+        raise ScopedExecutionError("Execution controller requires contract version 2; version 1 is incompatible")
+    if context.policy is not None:
+        name = request.tool_call["name"]
+        if name in context.policy.helpers:
+            return await handler(request)
+        try:
+            context.policy.check_tool(name)
+        except PermissionError as exc:
+            raise ScopedExecutionError(str(exc)) from exc
+    elif spec.interactive:
         return await handler(request)
     if spec.executes_code:
         raise PermissionError(
@@ -230,10 +259,43 @@ async def execute_scoped_tool(spec, request, handler):
     call = request.tool_call
     async with context.lock:
 
-        async def invoke():
+        async def preflight(prepared=None):
+            from chemgraph.execution.prepared import PreparedAction, validate_preparation
+
+            if context.policy is not None:
+                if prepared is None:
+                    raise PermissionError("Strict execution requires an approved preparation")
+                action = PreparedAction.from_dict(prepared)
+                validate_preparation(context, call, action)
             before = await asyncio.to_thread(_files, context.workspace)
-            result = await handler(request)
-            artifacts = await asyncio.to_thread(_capture, context, call["id"], before)
+            return {"baseline": before, "prepared": prepared}
+
+        async def invoke(preflight):
+            from chemgraph.execution.prepared import PreparedAction, using_preparation, validate_preparation
+
+            prepared = preflight.get("prepared")
+            action = PreparedAction.from_dict(prepared) if prepared else None
+            if action is not None:
+                validate_preparation(context, call, action)
+                replacement = {**call, "args": action.arguments}
+                if hasattr(request, "override"):
+                    resolved_request = request.override(tool_call=replacement)
+                else:
+                    from copy import copy
+
+                    resolved_request = copy(request)
+                    resolved_request.tool_call = replacement
+            else:
+                resolved_request = request
+            with using_preparation(action):
+                result = await handler(resolved_request)
+            return {"result": encode_result(result)}
+
+        async def finalize(preflight, returned):
+            result = decode_result(returned["result"])
+            artifacts = await asyncio.to_thread(
+                _capture, context, call["id"], preflight["baseline"]
+            )
             if isinstance(result, ToolMessage):
                 result = result.model_copy(
                     update={
@@ -251,7 +313,9 @@ async def execute_scoped_tool(spec, request, handler):
 
         # Controller errors deliberately propagate; callbacks must not authorize work.
         try:
-            saved = await context.controller.execute_tool(context, call, invoke)
+            saved = await context.controller.execute_tool(
+                context, call, ToolStages(preflight, invoke, finalize)
+            )
             return decode_result(saved["result"])
         except (ScopedExecutionError, GraphBubbleUp):
             raise
