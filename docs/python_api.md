@@ -359,18 +359,45 @@ workspace and preserve that workspace across restarts.
 
 Shared execution middleware passes registry-discovered and attached native calls,
 including tools in built-in specialist workers, to
-`controller.execute_tool(context, call, invoke)`. The controller must durably
-accept the exact tool name, arguments and call ID before awaiting `invoke()`.
-Persist its JSON-compatible return value unchanged and return it on a completed
-call’s replay. An uncertain call must require reconciliation, never an automatic
-retry. Controller and artifact-capture failures raise `ScopedExecutionError`,
-preserving the underlying exception as their cause; worker error handlers do not
-convert them into retryable tool responses. Dashboard callbacks are unsuitable
-for this job.
-Clarification interrupts bypass computational journaling. Registry availability
-checks and native approval policies remain in force. The boundary is active even
-with an empty tool registry. Custom graph code that bypasses ChemGraph's tool
-dispatch is outside this contract.
+`controller.execute_tool(context, call, stages)`. Controllers declare
+`contract_version = 2`; version-1 controllers are rejected. Call
+`await stages.preflight(prepared_record)` before saving invocation intent. A
+preflight exception proves nonexecution. Persist the returned preflight record,
+including its output baseline, together with invocation intent, then call
+`await stages.invoke(preflight)`. Persist that returned value before calling
+`await stages.finalize(preflight, returned)`. Persist the finalized result for
+replay. A crash after intent and before saving the return is uncertain; never
+invoke again automatically. A saved return allows finalization to be retried
+without invocation. Block all subsequent workspace mutations while invocation is
+uncertain or artifact finalization is unfinished, including after restart.
+Scientific failure results are valid returned execution records.
+
+`ExecutionPolicy` from `chemgraph.execution.prepared` enables strict execution.
+Use `prepare_action(context, call)` before asking for approval; save its JSON
+`to_dict()` and bind the decision to its digest. Preparation resolves existing
+ASE schemas/defaults and snapshots structure/result inputs. Execute the saved
+preparation; changes to original files cannot change it. Repreparing changed
+inputs/settings produces a new digest. Snapshot/resource tampering prevents
+invocation. Configure permitted tools/calculators, an optional explicit default,
+model-resource bindings, executable bindings and limits. Every supported ASE
+calculator and driver remains available when its dependencies and resources are
+provisioned. Model labels alone are insufficient; bind installed weights files
+in operator model roots. NWChem/ORCA use trusted serializable command/file
+bindings, reconstructed only during invocation. Commands from tool arguments
+remain forbidden. Dependent file-producing and file-consuming actions require
+successive reviews when the input does not yet exist.
+
+`DiskExecutionController` is a disk-backed reference controller for hermetic
+integration tests. Its `prepare` and `decide` methods exercise exact approvals;
+production journals and operator authentication belong to the embedding service.
+Framework helpers are explicitly distinguished from scientific tools. Strict
+execution rejects unsupported preparations across registry and attached paths.
+Non-strict contexts preserve the broader native catalog, with version-2 durable
+control. Unscoped standalone calls retain their existing behavior.
+
+Controller and artifact failures raise `ScopedExecutionError`; native worker
+error handlers must not convert them into retryable tool responses. Custom graph
+code that bypasses ChemGraph dispatch is outside this contract.
 
 Tool-controlled paths resolve inside the conversation workspace, without a cwd
 fallback. Traversal and symlink escapes are rejected. Calculator command/profile
