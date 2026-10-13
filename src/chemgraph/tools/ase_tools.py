@@ -13,6 +13,7 @@ from langchain_core.tools import tool
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema
+from chemgraph.runtime.context import register_artifact
 from chemgraph.tools.ase_core import (
     _resolve_path,
     _resolve_existing_path,
@@ -109,6 +110,7 @@ def save_atomsdata_to_file(atomsdata: AtomsData, fname: str = "output.xyz") -> s
         )
         final_fname = _resolve_path(fname)
         write(final_fname, atoms)
+        register_artifact(final_fname)
         return f"Successfully saved atomsdata to {os.path.abspath(final_fname)}"
     except Exception as e:
         raise ValueError(f"Failed to save atomsdata to file: {str(e)}")
