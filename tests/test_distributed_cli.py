@@ -84,10 +84,15 @@ async def test_shutdown_does_not_wait_for_operator_resume(tmp_path, monkeypatch)
 def test_config_resolves_local_paths_and_validates_names(tmp_path):
     path = tmp_path / "peers.json"
     path.write_text(json.dumps({"run_id": "run", "launch_id": "launch", "exchange_url": "http://unused", "peers": {"one": {}}}))
-    assert load_config(path).peer_dir("one") == tmp_path / "distributed_runs/run/launch/one"
+    loaded = load_config(path)
+    assert loaded.peer_dir("one") == tmp_path / "distributed_runs/run/launch/one"
+    assert loaded.peers["one"].workflow_type == "main_agent"
     for peers in ({"../escape": {}}, {"one": {"allowed_peers": ["missing"]}}, {"operator": {}}):
         with pytest.raises(ValueError):
             DistributedConfig(run_id="run", launch_id="launch", exchange_url="http://unused", peers=peers)
+    with pytest.raises(ValueError, match="runtime-owned fields"):
+        DistributedConfig(run_id="run", launch_id="launch", exchange_url="http://unused",
+                          peers={"one": {"options": {"tool_registry": None}}})
 
 
 def test_distributed_help_forwarding(monkeypatch, capsys):

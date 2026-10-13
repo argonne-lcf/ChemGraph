@@ -6,14 +6,81 @@ import pytest
 pytest.importorskip("academy")
 
 from academy.exchange.local import LocalExchangeFactory
+from langchain_core.messages import AIMessage
 
 from chemgraph.distributed.academy import AcademyTransport
+from chemgraph.distributed.config import DistributedConfig
+from chemgraph.distributed.peer_tools import build_peer_tool
 from chemgraph.distributed.protocol import PeerEnvelope, PeerTurnResult
+from chemgraph.distributed.runner import ConfiguredRunner
 from chemgraph.distributed.runtime import PeerRuntime
+from chemgraph.models.endpoints import PreparedModel
+from tests.test_main_agent import _ScriptedChatModel
 
 
 def envelope(sender, recipient, content="task", launch_id="launch"):
     return PeerEnvelope(run_id="run", launch_id=launch_id, sender=sender, recipient=recipient, content=content)
+
+
+@pytest.mark.asyncio
+async def test_main_agent_peers_exchange_results_and_accept_more_work(tmp_path, monkeypatch):
+    def send(recipient, content, call_id):
+        return AIMessage(content="", tool_calls=[{"name": "send_peer_message", "id": call_id,
+                                                 "args": {"recipient": recipient, "content": content}}])
+
+    models = {
+        "planner": _ScriptedChatModel(responses=[item for i in range(2) for item in (
+            send("executor", f"task {i}", f"delegate-{i}"), AIMessage(content="delegated"),
+            AIMessage(content=f"summary {i}"),
+        )]),
+        "executor": _ScriptedChatModel(responses=[item for i in range(2) for item in (
+            send("planner", f"result {i}", f"reply-{i}"), AIMessage(content="result sent"),
+        )]),
+    }
+
+    def load(**kwargs):
+        name = kwargs["model_name"]
+        return models[name], PreparedModel(endpoint_name=name, protocol="openai_compatible", client_kwargs={"model": name})
+
+    monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", load)
+    settings = DistributedConfig(run_id="run", launch_id="launch", exchange_url="http://unused", run_dir=tmp_path,
+                                 peers={name: {"model_name": name, "allowed_peers": [other]}
+                                        for name, other in (("planner", "executor"), ("executor", "planner"))})
+    factory = LocalExchangeFactory()
+    runtimes = {}
+    async with AsyncExitStack() as stack:
+        for name, spec in settings.peers.items():
+            transport = await stack.enter_async_context(AcademyTransport(
+                exchange_factory=factory, run_id="run", launch_id="launch", name=name, timeout_s=3,
+            ))
+            tool = build_peer_tool(transport=transport, run_id="run", launch_id="launch", sender=name,
+                                   allowed_peers=spec.allowed_peers)
+            runner = await stack.enter_async_context(ConfiguredRunner(settings, name, [tool], lambda *_args: None))
+            peer = PeerRuntime(name=name, run_id="run", launch_id="launch", allowed_senders=spec.allowed_peers,
+                               runner=runner)
+            await peer.start()
+            stack.push_async_callback(peer.close, timeout_s=0.05)
+            await transport.start(peer.receive, peer.status)
+            runtimes[name] = peer
+
+        operator = await stack.enter_async_context(AcademyTransport(
+            exchange_factory=factory, run_id="run", launch_id="launch", timeout_s=3,
+        ))
+        for i in range(2):
+            assert (await operator.send(envelope("operator", "planner", f"request {i}")))["status"] == "accepted"
+            for name in ("planner", "executor", "planner"):
+                await asyncio.wait_for(runtimes[name].inbox.join(), 5)
+            status = await operator.peer_status("planner")
+            assert status["state"] == "idle"
+            assert status["output"] == f"summary {i}"
+            assert runtimes["executor"].status()["state"] == "idle"
+        for peer in runtimes.values():
+            assert peer.runner.agent.workflow_type == "main_agent"
+            tool_names = {item.name for item in models[peer.name].bound_tools}
+            assert {"send_peer_message", "read_file", "write_file"} <= tool_names
+            assert not {"run_ase", "search_tools", "load_tools", "search_agents", "load_agents", "task"} & tool_names
+            snapshot = await peer.runner.agent.workflow.aget_state(peer.runner.session.config)
+            assert len([m for m in snapshot.values["messages"] if m.type == "human"]) == (4 if peer.name == "planner" else 2)
 
 
 @pytest.mark.asyncio

@@ -19,7 +19,7 @@
       }
     },
     "executor": {
-      "workflow_type": "multi_agent",
+      "workflow_type": "main_agent",
       "model_name": "gpt-4o-mini",
       "allowed_peers": [
         "planner"
@@ -36,7 +36,7 @@
         }
       ],
       "prompts": {
-        "executor": "You execute chemistry tasks using your MCP tools. Use the requested calculator. Send a concise scientific result to planner once, preserving correlation and reply IDs when present. Then finish your turn. Do not ask for an acknowledgement."
+        "main_agent": "You execute chemistry tasks using your MCP tools. Use the requested calculator. Send a concise scientific result to planner once, preserving correlation and reply IDs when present. Then finish your turn. Do not ask for an acknowledgement."
       }
     }
   }
