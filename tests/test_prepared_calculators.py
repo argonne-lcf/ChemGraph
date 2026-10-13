@@ -265,3 +265,29 @@ def test_structure_tools_resolve_defaults_and_snapshot_reads(tmp_path, tool, arg
         assert action.arguments['randomSeed'] == 2025
     elif tool == 'save_atomsdata_to_file':
         assert action.arguments['fname'] == str(context.workspace / 'output.xyz')
+
+
+@pytest.mark.asyncio
+async def test_changed_model_resource_blocks_approved_invocation(tmp_path, monkeypatch):
+    from chemgraph.schemas import ase_input
+
+    monkeypatch.setattr(ase_input, '_engine_available', lambda name: True)
+    root = tmp_path / 'resources'
+    root.mkdir()
+    model = root / 'aimnet2.pt'
+    model.write_bytes(b'approved weights')
+    context = make_context(tmp_path, ExecutionPolicy(
+        model_resources={'aimnet2:aimnet2': str(model)},
+    ))
+    operation = call({'calculator_type': 'aimnet2'})
+    action = context.controller.prepare(context, operation)
+    context.controller.decide(action, approve=True)
+    model.write_bytes(b'different weights')
+
+    async def handler(request):
+        pytest.fail('Changed weights must not reach the loader')
+
+    with pytest.raises(ScopedExecutionError, match='resource changed'):
+        await invoke(context, operation, handler)
+    assert context.controller.get(action.operation_id)['state'] == 'nonexecution'
+    assert prepare_action(context, operation).digest != action.digest

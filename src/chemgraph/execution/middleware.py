@@ -40,7 +40,9 @@ class ScopedToolsMiddleware(AgentMiddleware):
             return await handler(request)
         name = request.tool_call["name"]
         policy = current_execution().policy
-        if policy is not None:
+        if policy is not None and name != "task":
+            if name == "execute":
+                raise ScopedExecutionError("Host shell execution is unavailable in scoped catalogs")
             if name in policy.helpers:
                 return await handler(request)
             # Enforce at every boundary, including unregistered attached tools and
@@ -53,6 +55,8 @@ class ScopedToolsMiddleware(AgentMiddleware):
                 "Host shell execution is unavailable in scoped catalogs"
             )
         if name == "task":
+            if policy is not None and name not in policy.helpers:
+                raise ScopedExecutionError("No permitted preparation for tool 'task'")
             # The child locks individual native calls. Locking task would deadlock.
             result = await handler(request)
             if isinstance(result, Command) and isinstance(result.update, dict):
