@@ -91,8 +91,12 @@ since the next tool operation may require another approval. The planner may rema
 idle while waiting for the executor's result.
 For an ordinary clarification, pass a JSON string such as `--response '"EMT"'`.
 Multiple interrupts use the existing ChemGraph mapping of interrupt IDs to
-responses. Operator requests are local files tied to the current process and
-pending message; the command prints where its result will appear. Peer messages
+responses. Operator requests are local files tied to the current process,
+pending message, and an opaque `control_token` for the current decision or failed
+attempt. Each resume/retry attempt invalidates the previous token, including when
+an identical question appears again. Interrupt payloads are rendered as JSON-safe
+values for inspection; they are not used as approval identities.
+The command prints where its result will appear. Peer messages
 cannot resume approvals. Failed main-agent turns support the local `retry`
 command, which resumes the checkpoint without appending the input again.
 

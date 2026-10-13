@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import uuid
 from contextlib import AsyncExitStack
 from typing import Any
 from urllib.parse import quote
@@ -27,6 +28,7 @@ class ChemGraphRunner:
         self.agent, self.thread_id, self.session = agent, thread_id, session
         self._answer: asyncio.Future | None = None
         self._legacy_interrupts: tuple[dict, ...] = ()
+        self.interrupt_token: str | None = None
         agent.human_input_handler = self._ask_operator
 
     @property
@@ -44,6 +46,7 @@ class ChemGraphRunner:
         return self.session is not None
 
     async def _ask_operator(self, question: str, payload: Any = None):
+        self.interrupt_token = str(uuid.uuid4())
         self._legacy_interrupts = ({"question": question, "payload": payload},)
         self._answer = asyncio.get_running_loop().create_future()
         try:
@@ -51,6 +54,7 @@ class ChemGraphRunner:
         finally:
             self._answer = None
             self._legacy_interrupts = ()
+            self.interrupt_token = None
 
     def _result(self, result) -> PeerTurnResult:
         return PeerTurnResult(output=result.assistant_response, status=result.status, interrupts=self.interrupts)

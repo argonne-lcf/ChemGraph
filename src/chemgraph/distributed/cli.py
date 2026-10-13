@@ -58,12 +58,14 @@ async def process_controls(directory: Path, runtime: PeerRuntime, stop: asyncio.
                 stop.set()
             else:
                 current = runtime.status()
-                if (request.get("message_id"), request.get("interrupts")) != (current["current_message_id"], current["interrupts"]):
+                token = request.get("control_token")
+                if (not token or token != current["control_token"]
+                        or request.get("message_id") != current["current_message_id"]):
                     raise ValueError("Peer state changed; inspect status and submit a new control request")
                 if request["action"] == "resume":
-                    await runtime.resume(request["response"])
+                    await runtime.resume(request["response"], control_token=token)
                 elif request["action"] == "retry":
-                    await runtime.retry()
+                    await runtime.retry(control_token=token)
                 else:
                     raise ValueError("Unknown operator action")
         except Exception as exc:
@@ -150,9 +152,12 @@ def queue_control(config, name: str, action: str, response=None) -> Path:
         raise RuntimeError("Peer is not waiting for operator input")
     if action == "retry" and status.get("state") != "failed":
         raise RuntimeError("Peer has no failed turn")
+    if action != "shutdown" and not status.get("control_token"):
+        raise RuntimeError("No current operator control token; refresh peer status before submitting")
     path = directory / "control" / f"{uuid.uuid4()}.request.json"
     write_json_atomic(path, {"action": action, "response": response,
                             "instance_id": status.get("instance_id"),
+                            "control_token": status.get("control_token"),
                             "message_id": status.get("current_message_id"), "interrupts": status.get("interrupts", [])})
     return path.with_name(path.name.replace(".request.json", ".result.json"))
 

@@ -191,3 +191,65 @@ async def test_failed_retryable_peer_accepts_work_after_recovery():
         assert peer.output == "next answer"
     finally:
         await peer.close(timeout_s=0.01)
+
+
+@pytest.mark.asyncio
+async def test_identical_legacy_questions_have_distinct_control_tokens(tmp_path):
+    answers = []
+    class Agent:
+        log_dir = str(tmp_path)
+        async def run(self, prompt, config):
+            for _ in range(2):
+                answers.append(await self.human_input_handler("Approve?", {"question": "same"}))
+            return "done"
+
+    peer = runtime(ChemGraphRunner(Agent(), thread_id="legacy"))
+    await peer.start()
+    try:
+        await peer.receive(message())
+        async with asyncio.timeout(2):
+            while peer.status()["state"] != "waiting_for_user":
+                await asyncio.sleep(0)
+        first = peer.status()
+        runner_token = peer.runner.interrupt_token
+        await peer.resume("one", control_token=first["control_token"])
+        async with asyncio.timeout(2):
+            while peer.runner.interrupt_token == runner_token:
+                await asyncio.sleep(0)
+        second = peer.status()
+        assert first["interrupts"] == second["interrupts"]
+        assert first["control_token"] != second["control_token"]
+        with pytest.raises(RuntimeError, match="Peer state changed"):
+            await peer.resume("stale", control_token=first["control_token"])
+        await peer.resume("two", control_token=second["control_token"])
+        await asyncio.wait_for(peer.inbox.join(), 2)
+        assert answers == ["one", "two"]
+        assert peer.status()["control_token"] is None
+    finally:
+        await peer.close(timeout_s=0.01)
+
+
+@pytest.mark.asyncio
+async def test_failed_retry_attempt_invalidates_old_control_token():
+    runner = Runner()
+    runner.run = AsyncMock(side_effect=RuntimeError("failed"))
+    runner.retry = AsyncMock(side_effect=[RuntimeError("still failed"), PeerTurnResult("recovered")])
+    peer = runtime(runner)
+    await peer.start()
+    try:
+        await peer.receive(message())
+        async with asyncio.timeout(2):
+            while peer.state != "failed":
+                await asyncio.sleep(0)
+        first = peer.status()["control_token"]
+        with pytest.raises(RuntimeError, match="still failed"):
+            await peer.retry(control_token=first)
+        second = peer.status()["control_token"]
+        assert first != second
+        with pytest.raises(RuntimeError, match="Peer state changed"):
+            await peer.retry(control_token=first)
+        await peer.retry(control_token=second)
+        await asyncio.wait_for(peer.inbox.join(), 2)
+        assert runner.retry.await_count == 2
+    finally:
+        await peer.close(timeout_s=0.01)

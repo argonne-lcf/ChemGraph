@@ -9,6 +9,8 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+from pydantic_core import to_jsonable_python
+
 from chemgraph.distributed.protocol import PeerEnvelope, PeerRunner, PeerTurnResult
 
 
@@ -34,6 +36,7 @@ class PeerRuntime:
         self.instance_id = str(uuid.uuid4())
         # Retain acceptance records for this process's lifetime, including completed turns.
         self._accepted: dict[tuple[str, str], str] = {}
+        self._control_epoch = str(uuid.uuid4())
 
     async def start(self) -> None:
         if self._worker is not None:
@@ -74,12 +77,19 @@ class PeerRuntime:
             state = "waiting_for_user"
         if self._closing and state != "stopped":
             state = "stopping"
+        control_token = None
+        if state in {"waiting_for_user", "failed"}:
+            # The runner token distinguishes identical successive legacy questions.
+            identity = f"{self._control_epoch}/{getattr(self.runner, 'interrupt_token', None)}"
+            control_token = hashlib.sha256(identity.encode()).hexdigest()
         return {"peer": self.name, "instance_id": self.instance_id, "state": state,
                 "pending_messages": self.inbox.qsize(), "output": self.output,
                 "current_message_id": self.current.message_id if self.current else None,
-                "last_error": self.last_error, "interrupts": list(interrupts)}
+                "last_error": self.last_error, "control_token": control_token,
+                "interrupts": to_jsonable_python(interrupts, fallback=str)}
 
     def _record(self, result: PeerTurnResult) -> None:
+        self._control_epoch = str(uuid.uuid4())
         self.output, self._interrupts = result.output, result.interrupts
         self.last_error = None
         self.state = "idle" if result.status == "completed" else result.status
@@ -90,6 +100,7 @@ class PeerRuntime:
             self._continue.set()
 
     def _failed(self, exc: Exception) -> None:
+        self._control_epoch = str(uuid.uuid4())
         self.last_error = str(exc)
         self.state = "failed"
         self.trace("agent_error", {"message_id": self.current.message_id if self.current else None, "error": str(exc)})
@@ -110,11 +121,17 @@ class PeerRuntime:
                 self.current = None
                 self.inbox.task_done()
 
-    async def resume(self, response: Any) -> None:
+    def _consume_control(self, token: str | None) -> None:
+        if token is not None and token != self.status()["control_token"]:
+            raise RuntimeError("Peer state changed; inspect status and submit a new control request")
+        self._control_epoch = str(uuid.uuid4())
+
+    async def resume(self, response: Any, *, control_token: str | None = None) -> None:
         """Explicit operator response; peer messages never call this method."""
         async with self._control_lock:
             if self._closing or self.status()["state"] != "waiting_for_user":
                 raise RuntimeError("Peer is not waiting for operator input")
+            self._consume_control(control_token)
             self.state = "resuming"
             try:
                 result = await self.runner.resume(response)
@@ -129,10 +146,11 @@ class PeerRuntime:
             else:
                 self.state = "running"
 
-    async def retry(self) -> None:
+    async def retry(self, *, control_token: str | None = None) -> None:
         async with self._control_lock:
             if self._closing or self.state != "failed":
                 raise RuntimeError("Peer has no failed turn to retry")
+            self._consume_control(control_token)
             self.state = "running"
             try:
                 self._record(await self.runner.retry())

@@ -8,6 +8,9 @@ import pytest
 
 from chemgraph.distributed.cli import _transport, process_controls, queue_control
 from chemgraph.distributed.config import DistributedConfig, load_config
+from chemgraph.distributed.protocol import PeerEnvelope
+from chemgraph.distributed.runner import ChemGraphRunner
+from chemgraph.distributed.runtime import PeerRuntime
 from chemgraph.observability.run_files import write_json_atomic
 
 
@@ -20,13 +23,13 @@ def config(tmp_path):
 async def test_explicit_local_operator_resume(tmp_path):
     settings = config(tmp_path)
     status = {"state": "waiting_for_user", "current_message_id": "message", "instance_id": "instance",
-              "interrupts": [{"id": "approve"}]}
+              "control_token": "token", "interrupts": [{"id": "approve"}]}
     write_json_atomic(settings.peer_dir("worker") / "status.json", status)
     response = {"decisions": [{"type": "reject"}]}
     path = queue_control(settings, "worker", "resume", response)
     runtime = SimpleNamespace(status=lambda: status, instance_id="instance", resume=AsyncMock())
     await process_controls(settings.peer_dir("worker"), runtime, asyncio.Event())
-    runtime.resume.assert_awaited_once_with(response)
+    runtime.resume.assert_awaited_once_with(response, control_token="token")
     assert json.loads(path.read_text()) == {"status": "completed"}
 
 
@@ -34,7 +37,8 @@ async def test_explicit_local_operator_resume(tmp_path):
 @pytest.mark.parametrize("changed", ["message", "process", "interrupt"])
 async def test_stale_approval_never_resumes_new_work(tmp_path, changed):
     settings = config(tmp_path)
-    status = {"state": "waiting_for_user", "current_message_id": "message", "instance_id": "instance", "interrupts": []}
+    status = {"state": "waiting_for_user", "current_message_id": "message", "instance_id": "instance",
+              "control_token": "token", "interrupts": []}
     write_json_atomic(settings.peer_dir("worker") / "status.json", status)
     path = queue_control(settings, "worker", "resume", "approve")
     runtime = SimpleNamespace(status=lambda: status, instance_id="instance", resume=AsyncMock())
@@ -43,7 +47,7 @@ async def test_stale_approval_never_resumes_new_work(tmp_path, changed):
     elif changed == "message":
         status["current_message_id"] = "new"
     else:
-        status["interrupts"] = [{"id": "new"}]
+        status["control_token"] = "new"
     await process_controls(settings.peer_dir("worker"), runtime, asyncio.Event())
     runtime.resume.assert_not_called()
     assert json.loads(path.read_text())["status"] == "failed"
@@ -55,14 +59,14 @@ async def test_shutdown_does_not_wait_for_operator_resume(tmp_path, monkeypatch)
     settings = config(tmp_path)
     directory = settings.peer_dir("worker")
     status = {"state": "waiting_for_user", "current_message_id": "message",
-              "instance_id": "instance", "interrupts": []}
+              "instance_id": "instance", "control_token": "token", "interrupts": []}
     write_json_atomic(directory / "status.json", status)
     queue_control(settings, "worker", "resume", "approve")
     path = queue_control(settings, "worker", "shutdown")
     resumed = asyncio.Event()
     finish = asyncio.Event()
 
-    async def resume(_response):
+    async def resume(_response, *, control_token):
         resumed.set()
         await finish.wait()
 
@@ -137,3 +141,36 @@ def test_exchange_authentication_is_not_checkpoint_identity(tmp_path):
     settings.exchange_auth_method = "globus"
     settings.exchange_header_env = {"Authorization": "TEST_EXCHANGE_AUTH"}
     assert _configuration_id(settings, "worker") == original
+
+
+@pytest.mark.asyncio
+async def test_non_json_native_interrupts_round_trip_through_operator_control(tmp_path):
+    payload = {"choices": ("EMT", "MACE"), "path": tmp_path, "custom": SimpleNamespace(value=1)}
+    class Agent:
+        log_dir = str(tmp_path)
+        async def run(self, prompt, config):
+            return await self.human_input_handler("Choose", payload)
+
+    settings = config(tmp_path)
+    runner = ChemGraphRunner(Agent(), thread_id="legacy")
+    peer = PeerRuntime(name="worker", run_id="run", launch_id="launch", allowed_senders=(), runner=runner)
+    await peer.start()
+    try:
+        await peer.receive(PeerEnvelope(run_id="run", launch_id="launch", sender="operator",
+                                        recipient="worker", content="task"))
+        async with asyncio.timeout(2):
+            while peer.status()["state"] != "waiting_for_user":
+                await asyncio.sleep(0)
+        status = peer.status()
+        assert status["interrupts"][0]["payload"] == {
+            "choices": ["EMT", "MACE"], "path": str(tmp_path), "custom": "namespace(value=1)",
+        }
+        assert runner.interrupts[0]["payload"] is payload
+        write_json_atomic(settings.peer_dir("worker") / "status.json", status)
+        result = queue_control(settings, "worker", "resume", "EMT")
+        await process_controls(settings.peer_dir("worker"), peer, asyncio.Event())
+        assert json.loads(result.read_text()) == {"status": "completed"}
+        await asyncio.wait_for(peer.inbox.join(), 2)
+        assert peer.output == "EMT"
+    finally:
+        await peer.close(timeout_s=0.01)
