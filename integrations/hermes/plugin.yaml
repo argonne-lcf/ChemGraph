@@ -1,0 +1,13 @@
+name: chemgraph-connect
+version: 0.2.0
+description: Persistent ChemGraph A2A submission, polling, replies and artifacts
+author: ChemGraph Connect contributors
+provides_tools:
+  - cg_submit
+  - cg_status
+  - cg_tasks
+  - cg_cancel
+  - cg_artifacts
+requires_env:
+  - CHEMGRAPH_CONNECT_URL
+  - CHEMGRAPH_CONNECT_TOKEN

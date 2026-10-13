@@ -2,3 +2,6 @@ include requirements/mace-polar.txt
 include requirements/ocsr-models.txt
 include config.toml environment.yml Dockerfile Dockerfile.arm
 include scripts/check_distribution_metadata.py
+
+recursive-include integrations/hermes *.py *.md *.yaml
+recursive-include examples/service *.toml
