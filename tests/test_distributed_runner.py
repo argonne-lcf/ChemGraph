@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -7,6 +8,7 @@ import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 
+from chemgraph.agent.main_session import IncompatibleCheckpointError
 from chemgraph.distributed.config import DistributedConfig
 from chemgraph.distributed.peer_tools import build_peer_tool
 from chemgraph.distributed.protocol import PeerEnvelope, PeerTurnResult
@@ -246,3 +248,51 @@ async def test_main_agent_retry_does_not_duplicate_accepted_delivery(tmp_path, s
         assert len(delivered) == 1
     finally:
         await recipient.close(timeout_s=0.01)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["other_peer", "timeout", "exchange", "key_order", "idle_timeout"])
+async def test_unrelated_configuration_changes_preserve_restore(tmp_path, scripted, change):
+    settings = config(tmp_path)
+    settings.peers["worker"].options["discover_skills"] = False
+    settings.peers["other"] = settings.peers["worker"].model_copy(deep=True)
+    scripted[:] = [AIMessage(content="saved")]
+    async with ConfiguredRunner(settings, "worker", [], lambda *_: None) as runner:
+        await runner.run(message())
+    modified = settings.model_copy(deep=True)
+    if change == "other_peer":
+        modified.peers["other"].prompts["main_agent"] = "Other instructions"
+    elif change == "timeout":
+        modified.timeout_s += 1
+    elif change == "exchange":
+        modified.exchange_url = "http://localhost:23456"
+    elif change == "idle_timeout":
+        modified.peers["worker"].idle_timeout_s = 60
+    else:
+        modified.peers = dict(reversed(list(modified.peers.items())))
+        modified.peers["worker"].options = dict(reversed(list(modified.peers["worker"].options.items())))
+    scripted[:] = [AIMessage(content="continued")]
+    async with ConfiguredRunner(modified, "worker", [], lambda *_: None) as runner:
+        assert (await runner.run(message("next"))).output == "continued"
+        snapshot = await runner.agent.workflow.aget_state(runner.session.config)
+        assert [m.content for m in snapshot.values["messages"] if m.type == "ai"] == ["saved", "continued"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["prompt", "capabilities", "legacy_identity"])
+async def test_incompatible_peer_checkpoints_require_fresh_launch(tmp_path, scripted, monkeypatch, change):
+    settings = config(tmp_path)
+    scripted[:] = [AIMessage(content="saved")]
+    with monkeypatch.context() as patch:
+        if change == "legacy_identity":
+            patch.setattr("chemgraph.distributed.runner._configuration_id", lambda config, _name:
+                          "distributed-" + hashlib.sha256(config.model_dump_json().encode()).hexdigest())
+        async with ConfiguredRunner(settings, "worker", [], lambda *_: None) as runner:
+            await runner.run(message())
+    if change == "prompt":
+        settings.peers["worker"].prompts["main_agent"] = "New instructions"
+    elif change == "capabilities":
+        settings.peers["worker"].options["subagent_names"] = ["single_agent"]
+    with pytest.raises(IncompatibleCheckpointError, match="fresh launch_id"):
+        async with ConfiguredRunner(settings, "worker", [], lambda *_: None):
+            pass

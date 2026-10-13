@@ -4,12 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from contextlib import AsyncExitStack
 from typing import Any
 from urllib.parse import quote
 
 from chemgraph.distributed.protocol import PeerEnvelope, PeerTurnResult
 from chemgraph.utils.artifacts import artifact_context
+
+
+def _configuration_id(config, name: str) -> str:
+    identity = {
+        "run_id": config.run_id, "launch_id": config.launch_id, "peer": name,
+        "spec": config.peers[name].model_dump(mode="json", exclude={"idle_timeout_s"}),
+    }
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode())
+    return f"distributed-v2-{digest.hexdigest()}"
 
 
 class ChemGraphRunner:
@@ -75,7 +85,7 @@ class ConfiguredRunner:
 
     async def __aenter__(self) -> ChemGraphRunner:
         from chemgraph.agent.llm_agent import ChemGraph, PromptConfig
-        from chemgraph.agent.main_session import MainAgentSession
+        from chemgraph.agent.main_session import IncompatibleCheckpointError, MainAgentSession
         from chemgraph.mcp.client import load_mcp_tools
 
         spec = self.config.peers[self.name]
@@ -103,8 +113,7 @@ class ConfiguredRunner:
                 ))
                 await saver.setup()
                 (directory / "checkpoints.db").chmod(0o600)
-                identity = hashlib.sha256(self.config.model_dump_json().encode()).hexdigest()
-                options.update(checkpointer=saver, configuration_id=f"distributed-{identity}",
+                options.update(checkpointer=saver, configuration_id=_configuration_id(self.config, self.name),
                                tool_registry=ToolRegistry(()))
                 options.setdefault("discover_skills", False)
                 if options.get("subagent_names") is None:
@@ -124,7 +133,14 @@ class ConfiguredRunner:
                                            session_store=agent.session_store, on_event=self.trace)
                 snapshot = await agent.workflow.aget_state(session.config)
                 if snapshot and snapshot.created_at:
-                    await session.restore()
+                    try:
+                        await session.restore()
+                    except IncompatibleCheckpointError as exc:
+                        raise IncompatibleCheckpointError(
+                            f"Peer {self.name!r} has an incompatible checkpoint. Use a fresh launch_id "
+                            "after changing workflow, capabilities, workspace, or upgrading pre-v2 "
+                            "distributed checkpoints; existing checkpoints are not migrated."
+                        ) from exc
             return ChemGraphRunner(agent, thread_id=thread_id, session=session)
         except BaseException:
             await self._stack.aclose()

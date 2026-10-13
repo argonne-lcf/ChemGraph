@@ -100,8 +100,15 @@ command, which resumes the checkpoint without appending the input again.
 
 Main-agent checkpoints and transcripts live under `run_dir/run_id/launch_id/peer/`,
 separately from the peer's artifacts. Restarting with the same configuration restores
-main-agent conversation state; it does not restore queued peer messages. Changes to
-workflow or capabilities require a new launch ID. Existing checkpoints are not converted.
+main-agent conversation state; it does not restore queued peer messages. Checkpoint
+identity is scoped to that peer: other peers' settings, exchange settings, timeouts,
+and JSON object key order do not affect restoration. Changes to the peer's workflow,
+prompts, capabilities, or actual workspace require a new launch ID. Relocating the
+config file is safe when it still resolves to the same workspace.
+
+The corrected distributed identity uses version `v2`. Checkpoints created by the
+earlier, unmerged PR implementation require a fresh `launch_id`; existing checkpoints
+are not converted or overwritten.
 
 `two-peers.json` remains a legacy single-agent example. Explicit `single_agent` and
 `multi_agent` selections still work, with graph checkpoints held in memory. Configs
