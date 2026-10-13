@@ -40,9 +40,12 @@ chemgraph dashboard --help
 ```
 
 See the [distributed-peer examples](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/distributed)
-for two single-agent peers, a checkpointed main-agent peer with a multi-agent
-executor, and deployment across hosts. Each host needs access to the same HTTP
-exchange, but peers do not need a shared filesystem.
+for a checkpointed main-agent planner and executor, legacy single-agent peers,
+and deployment across hosts. Distributed peers default to `main_agent`, with
+configured MCP tools and peer messaging; local science-tool and specialist
+catalogs are disabled by default. Normal ChemGraph approvals remain enabled.
+Each host needs access to the same HTTP exchange, but peers do not need a shared
+filesystem.
 
 ### Migration from campaigns
 

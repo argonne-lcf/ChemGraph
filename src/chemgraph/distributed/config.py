@@ -16,7 +16,7 @@ Name = Annotated[str, Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
 class PeerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    workflow_type: Literal["main_agent", "single_agent", "multi_agent"] = "single_agent"
+    workflow_type: Literal["main_agent", "single_agent", "multi_agent"] = "main_agent"
     model_name: str = "gpt-4o-mini"
     base_url: str | None = None
     allowed_peers: tuple[Name, ...] = ()
@@ -29,7 +29,7 @@ class PeerConfig(BaseModel):
     def validate_options(self):
         reserved = {"workflow_type", "model_name", "base_url", "tools", "prompts", "log_dir",
                     "on_event", "checkpointer", "session_store", "human_input_handler", "memory_db_path",
-                    "configuration_id", "return_option"}
+                    "configuration_id", "return_option", "tool_registry"}
         if conflicts := reserved.intersection(self.options):
             raise ValueError(f"Peer options override runtime-owned fields: {sorted(conflicts)}")
         if len(self.allowed_peers) != len(set(self.allowed_peers)):

@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 from contextlib import AsyncExitStack
 from typing import Any
+from urllib.parse import quote
 
 from chemgraph.distributed.protocol import PeerEnvelope, PeerTurnResult
 from chemgraph.utils.artifacts import artifact_context
@@ -90,6 +91,7 @@ class ConfiguredRunner:
                 import aiosqlite
                 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
                 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+                from chemgraph.registry.tools import ToolRegistry
 
                 connection = await self._stack.enter_async_context(aiosqlite.connect(directory / "checkpoints.db"))
                 saver = AsyncSqliteSaver(connection, serde=JsonPlusSerializer(
@@ -98,7 +100,14 @@ class ConfiguredRunner:
                 await saver.setup()
                 (directory / "checkpoints.db").chmod(0o600)
                 identity = hashlib.sha256(self.config.model_dump_json().encode()).hexdigest()
-                options.update(checkpointer=saver, configuration_id=f"distributed-{identity}")
+                options.update(checkpointer=saver, configuration_id=f"distributed-{identity}",
+                               tool_registry=ToolRegistry(()))
+                options.setdefault("discover_skills", False)
+                if options.get("subagent_names") is None:
+                    options["subagent_names"] = []
+            else:
+                # Legacy ChemGraph.run embeds this ID directly in state filenames.
+                thread_id = quote(thread_id, safe="")
             agent = ChemGraph(
                 model_name=spec.model_name, workflow_type=spec.workflow_type, base_url=spec.base_url,
                 tools=tools, prompts=PromptConfig(**spec.prompts), on_event=self.trace,
