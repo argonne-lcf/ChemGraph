@@ -8,16 +8,16 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from chemgraph.academy.observability.event_log import read_events
-from chemgraph.academy.observability.run_files import read_json_file
-from chemgraph.academy.observability.run_artifacts import write_run_artifacts
+from chemgraph.observability.event_log import read_events
+from chemgraph.observability.run_files import read_json_file
+from chemgraph.observability.run_artifacts import write_run_artifacts
 
 _STATIC_CACHE: dict[str, bytes] = {}
 
 
 def _static_file(name: str, content_type: str) -> tuple[bytes, str]:
     if name not in _STATIC_CACHE:
-        resource = files('chemgraph.academy.dashboard').joinpath(
+        resource = files('chemgraph.dashboard').joinpath(
             'static',
             name,
         )
