@@ -7,6 +7,7 @@ from tests.service.conftest import TOKENS, running
 from integrations.hermes.notify import deliver_once
 
 
+@pytest.mark.asyncio
 async def test_fixed_telegram_delivery_and_ack(settings):
     deliveries = []
 
@@ -28,6 +29,7 @@ async def test_fixed_telegram_delivery_and_ack(settings):
         assert (await service.store.one("SELECT state FROM outbox"))["state"] == "delivered"
 
 
+@pytest.mark.asyncio
 async def test_retry_is_persisted_and_ambiguous_not_retried(settings):
     async def retry(*args):
         return "retry", "helper did not start"
@@ -47,6 +49,3 @@ async def test_retry_is_persisted_and_ambiguous_not_retried(settings):
             assert (await notifier.post("/notifications/claim")).json()["notification"]
     async with running(settings) as (service, _, _):
         assert (await service.store.one("SELECT state FROM outbox"))["state"] == "ambiguous"
-
-
-pytestmark = pytest.mark.asyncio

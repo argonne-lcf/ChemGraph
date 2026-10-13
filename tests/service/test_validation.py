@@ -18,6 +18,7 @@ def test_legacy_profile_rejected_with_migration(profile):
         Profile.model_validate(profile)
 
 
+@pytest.mark.asyncio
 async def test_fixture_is_text_only(settings):
     from tests.service.conftest import running
 
@@ -35,7 +36,6 @@ def test_model_switch_changes_checkpoint_identity():
     assert new.identity != old.identity
 
 
-pytestmark = pytest.mark.asyncio
 
 
 def test_production_fixture_mode_is_rejected():
@@ -45,6 +45,7 @@ def test_production_fixture_mode_is_rejected():
         Profile(adapter='fixture')
 
 
+@pytest.mark.asyncio
 async def test_old_connect_state_is_retained_but_not_opened(settings):
     from chemgraph.service.service import Service
 

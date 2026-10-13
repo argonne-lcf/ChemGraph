@@ -55,6 +55,7 @@ def model(monkeypatch):
     return responses
 
 
+@pytest.mark.asyncio
 async def test_native_catalog_checkpoint_followup(settings, model):
     from tests.service.test_operations import approve
 
@@ -87,6 +88,7 @@ async def test_native_catalog_checkpoint_followup(settings, model):
         ]
 
 
+@pytest.mark.asyncio
 async def test_real_interrupt_restart_resume(settings, model):
     settings = settings.model_copy(update={"profile": Profile(adapter="chemgraph")})
     model[:] = [call("ask_human", question="Which molecule?")]
@@ -111,6 +113,7 @@ class AfterGraphAdapter(ChemGraphAdapter):
         await asyncio.Event().wait()
 
 
+@pytest.mark.asyncio
 async def test_crash_after_checkpoint_before_task_projection(settings, model):
     settings = settings.model_copy(update={"profile": Profile(adapter="chemgraph")})
     model[:] = [AIMessage(content="Durable answer")]
@@ -126,6 +129,7 @@ async def test_crash_after_checkpoint_before_task_projection(settings, model):
 
 
 @pytest.mark.parametrize("submission_delay", [0, 3.2], ids=["immediate", "delayed"])
+@pytest.mark.asyncio
 async def test_real_guarded_mcp_tool_pauses_and_resumes(settings, model, submission_delay):
     from tests.service.test_operations import FakeBackend, approve, wait_backend
 
@@ -161,6 +165,7 @@ async def test_real_guarded_mcp_tool_pauses_and_resumes(settings, model, submiss
         assert (await client.get(task.id)).status.state == a2a.TASK_STATE_WORKING
 
 
+@pytest.mark.asyncio
 async def test_native_batch_approvals_and_immutable_artifacts(settings, model):
     from pathlib import Path
 
@@ -224,6 +229,7 @@ async def test_native_batch_approvals_and_immutable_artifacts(settings, model):
         ]
 
 
+@pytest.mark.asyncio
 async def test_native_approval_restores_checkpoint(settings, model):
     from tests.service.test_operations import approve
 
@@ -247,6 +253,7 @@ async def test_native_approval_restores_checkpoint(settings, model):
         assert len(finished.artifacts) == 1
 
 
+@pytest.mark.asyncio
 async def test_unsupported_workspace_mutation_cannot_be_approved(settings, model):
     model[:] = [call("write_file", file_path="/draft.txt", content="notes")]
     async with running(settings, ChemGraphAdapter(settings)) as (service, client, _):
@@ -258,6 +265,7 @@ async def test_unsupported_workspace_mutation_cannot_be_approved(settings, model
             await service.operations.approve(operation["id"], {}, "operator")
 
 
+@pytest.mark.asyncio
 async def test_native_approval_expiry_prevents_resume(settings, model):
     from tests.service.test_operations import approve
 
@@ -282,4 +290,29 @@ async def test_native_approval_expiry_prevents_resume(settings, model):
         assert (await service.operations.get(operation["id"]))["state"] == "approval"
 
 
-pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.asyncio
+async def test_remote_rejection_has_no_job_or_submission(settings, model):
+    from chemgraph.service.config import HPC, Calculation
+    from tests.service.test_operations import FakeBackend
+    from tests.service.test_recovery_v2 import operator_post
+
+    hpc = HPC(server_url='https://mcp.example/mcp', endpoint_id='test', tool='run_ase',
+              calculator='mace_mp', model='installed', scheduler_limits='10 min',
+              calculations=(Calculation(name='fixed', arguments={'params': {}}),))
+    settings = settings.model_copy(update={'profile': Profile(hpc=hpc)})
+    model[:] = [call('submit_hpc', calculation='fixed'), AIMessage(content='Submission rejected.')]
+    adapter = ChemGraphAdapter(settings)
+    adapter.backend = FakeBackend()
+    async with running(settings, adapter) as (service, client, app):
+        task = (await client.send('Submit fixed study', blocking=True)).task
+        operation = (await service.operations.list(task.id))[0]
+        response = await operator_post(app, f"/admin/operations/{operation['id']}/reject", {
+            'digest': operation['digest'], 'interrupt_id': operation['interrupt_id'],
+        })
+        assert response.status_code == 200
+        finished = await service.wait(task.id, 'alice')
+        assert finished.status.state == a2a.TASK_STATE_COMPLETED
+        assert adapter.backend.submissions == 0
+        assert (await service.operations.get(operation['id']))['state'] == 'rejected'

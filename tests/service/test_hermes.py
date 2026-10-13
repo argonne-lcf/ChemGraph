@@ -137,6 +137,7 @@ async def connected_plugin(settings, monkeypatch, adapter=None):
         yield SimpleNamespace(service=service, client=client, app=app, call=call, urlopen=urlopen)
 
 
+@pytest.mark.asyncio
 async def test_plugin_roundtrip_restart_and_context_followup(settings, monkeypatch):
     async with connected_plugin(settings, monkeypatch, ArtifactAdapter(settings)) as wire:
         receipt = await wire.call(plugin.send, {"text": "Make a note"})
@@ -163,6 +164,7 @@ async def test_plugin_roundtrip_restart_and_context_followup(settings, monkeypat
         assert (await wire.service.store.get(followup["task"]["id"]))["thread_id"] == thread
 
 
+@pytest.mark.asyncio
 async def test_plugin_lost_receipt_replays_identical_message_once(settings, monkeypatch):
     async with connected_plugin(settings, monkeypatch) as wire:
         submissions = []
@@ -212,6 +214,7 @@ class QuestionsAdapter(FixtureAdapter):
         )
 
 
+@pytest.mark.asyncio
 async def test_plugin_multiple_clarifications_and_stale_ids(settings, monkeypatch):
     async with connected_plugin(settings, monkeypatch, QuestionsAdapter(settings)) as wire:
         task = (await wire.call(plugin.send, {"text": "Study a molecule"}))["task"]
@@ -243,6 +246,7 @@ async def test_plugin_multiple_clarifications_and_stale_ids(settings, monkeypatc
         }
 
 
+@pytest.mark.asyncio
 async def test_plugin_single_clarification_and_operator_boundary(settings, monkeypatch):
     async with connected_plugin(settings, monkeypatch) as wire:
         task = (await wire.call(plugin.send, {"text": "clarify"}))["task"]
@@ -268,6 +272,7 @@ async def test_plugin_single_clarification_and_operator_boundary(settings, monke
         assert "operator" in denied["error"]["message"]
 
 
+@pytest.mark.asyncio
 async def test_plugin_pagination_caller_isolation_and_cancel(settings, monkeypatch):
     async with connected_plugin(settings, monkeypatch, ArtifactAdapter(settings)) as wire:
         identifiers = set()
@@ -336,6 +341,3 @@ def test_missing_configuration_is_not_sent(monkeypatch):
     receipt = json.loads(plugin.send({"text": "work"}))
     assert receipt["message_id"]
     assert receipt["acceptance"] == "not_sent"
-
-
-pytestmark = pytest.mark.asyncio

@@ -977,9 +977,11 @@ def main() -> None:
     to the legacy behaviour when no subcommand is given.
     """
     if len(sys.argv) > 1 and sys.argv[1] == "service":
-        from chemgraph.cli import main as dispatch
-
-        return dispatch()
+        try:
+            from chemgraph.service.cli import main as service_main
+        except ImportError as exc:
+            raise SystemExit('Install service dependencies with pip install "chemgraph[service]"') from exc
+        return service_main(sys.argv[2:])
     parser = create_argument_parser()
     args = parser.parse_args()
 

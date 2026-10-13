@@ -116,6 +116,7 @@ async def wait_backend(service, task_id):
         pytest.fail(f"Timed out waiting for task {task_id} to reach backend: {last_state}")
 
 
+@pytest.mark.asyncio
 async def test_approval_and_remote_restart_without_resubmission(hpc_settings):
     backend = FakeBackend()
     async with running(hpc_settings, RemoteAdapter(hpc_settings)) as (service, client, app):
@@ -151,6 +152,7 @@ async def test_approval_and_remote_restart_without_resubmission(hpc_settings):
         assert backend.submissions == 1
 
 
+@pytest.mark.asyncio
 async def test_ambiguous_submission_never_repeated(hpc_settings):
     backend = FakeBackend()
     backend.ambiguous = True
@@ -168,6 +170,7 @@ async def test_ambiguous_submission_never_repeated(hpc_settings):
         assert backend.submissions == 1
 
 
+@pytest.mark.asyncio
 async def test_expired_or_changed_action_approval(hpc_settings):
     async with running(hpc_settings, RemoteAdapter(hpc_settings)) as (service, client, _):
         service.operations.backend = FakeBackend()
@@ -185,6 +188,7 @@ async def test_expired_or_changed_action_approval(hpc_settings):
         assert service.operations.backend.submissions == 0
 
 
+@pytest.mark.asyncio
 async def test_crash_between_acceptance_and_identifier_record(hpc_settings):
     async with running(hpc_settings, RemoteAdapter(hpc_settings)) as (service, client, _):
         task = (await client.send("remote", blocking=True)).task
@@ -198,6 +202,7 @@ async def test_crash_between_acceptance_and_identifier_record(hpc_settings):
         assert (await service.store.get(task.id))["reason"] == "reconciliation"
 
 
+@pytest.mark.asyncio
 async def test_operator_can_associate_recovered_job_without_submitting(hpc_settings):
     backend = FakeBackend()
     backend.ambiguous = True
@@ -214,6 +219,7 @@ async def test_operator_can_associate_recovered_job_without_submitting(hpc_setti
         assert backend.submissions == 1
 
 
+@pytest.mark.asyncio
 async def test_submission_limit_and_unconfigured_calculation(hpc_settings):
     hpc_settings = hpc_settings.model_copy(
         update={"profile": hpc_settings.profile.model_copy(update={"max_submissions": 1})}
@@ -227,6 +233,7 @@ async def test_submission_limit_and_unconfigured_calculation(hpc_settings):
             await service.operations.prepare(record, "other-call", "unconfigured")
 
 
+@pytest.mark.asyncio
 async def test_backend_unavailable_preserves_job_and_cancel_not_falsely_confirmed(hpc_settings):
     backend = FakeBackend()
     async with running(hpc_settings, RemoteAdapter(hpc_settings)) as (service, client, app):
@@ -240,6 +247,3 @@ async def test_backend_unavailable_preserves_job_and_cancel_not_falsely_confirme
         assert operation["state"] == "running"
         with pytest.raises(Exception, match="tracking continues"):
             await client.cancel(task.id)
-
-
-pytestmark = pytest.mark.asyncio

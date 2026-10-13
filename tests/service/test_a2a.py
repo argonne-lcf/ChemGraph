@@ -14,6 +14,7 @@ from chemgraph.service.client import Client
 from chemgraph.service.protocol import task_from
 
 
+@pytest.mark.asyncio
 async def test_sdk_roundtrip_restart_dedup_and_followup(settings):
     async with running(settings) as (service, client, _):
         sent = await client.send("hello", message_id="first", blocking=True)
@@ -32,6 +33,7 @@ async def test_sdk_roundtrip_restart_dedup_and_followup(settings):
         assert (await client.get(task.id)).status.state == a2a.TASK_STATE_COMPLETED
 
 
+@pytest.mark.asyncio
 async def test_context_clarification_survives_restart(settings):
     async with running(settings) as (_, client, _):
         task = (await client.send("clarify molecule", blocking=True)).task
@@ -54,6 +56,7 @@ class GatedAdapter(ArtifactAdapter):
         return await super().run(record)
 
 
+@pytest.mark.asyncio
 async def test_blocking_and_nonblocking_and_context_busy(settings):
     adapter = GatedAdapter(settings)
     async with running(settings, adapter) as (_, client, _):
@@ -70,6 +73,7 @@ async def test_blocking_and_nonblocking_and_context_busy(settings):
         assert (await pending).task.status.state == a2a.TASK_STATE_COMPLETED
 
 
+@pytest.mark.asyncio
 async def test_authentication_owner_scope_and_artifacts(settings):
     async with running(settings, ArtifactAdapter(settings)) as (_, alice, app):
         task = (await alice.send("create artifact", blocking=True)).task
@@ -95,6 +99,7 @@ async def test_authentication_owner_scope_and_artifacts(settings):
             assert card["securityRequirements"]
 
 
+@pytest.mark.asyncio
 async def test_artifact_tamper_detected(settings):
     async with running(settings, ArtifactAdapter(settings)) as (_, client, _):
         task = (await client.send("create artifact", blocking=True)).task
@@ -103,6 +108,7 @@ async def test_artifact_tamper_detected(settings):
         assert (await client.http.get("/artifacts/" + identifier)).status_code == 404
 
 
+@pytest.mark.asyncio
 async def test_restart_executing_local_fixture_and_missing_projection(settings):
     adapter = GatedAdapter(settings)
     async with running(settings, adapter) as (service, client, _):
@@ -120,6 +126,7 @@ async def test_restart_executing_local_fixture_and_missing_projection(settings):
         assert (await client.send("create artifact", message_id="recover")).task.id == task.id
 
 
+@pytest.mark.asyncio
 async def test_restart_before_execution(settings):
     adapter = GatedAdapter(settings)
     async with running(settings, adapter) as (_, client, _):
@@ -131,6 +138,7 @@ async def test_restart_before_execution(settings):
         assert (await service.wait(queued.id, "alice")).status.state == a2a.TASK_STATE_COMPLETED
 
 
+@pytest.mark.asyncio
 async def test_concurrent_duplicate_is_one_task(settings):
     async with running(settings) as (_, client, _):
         responses = await asyncio.gather(
@@ -139,6 +147,7 @@ async def test_concurrent_duplicate_is_one_task(settings):
         assert len({r.task.id for r in responses}) == 1
 
 
+@pytest.mark.asyncio
 async def test_profile_change_and_forged_approval_rejected(settings):
     async with running(settings) as (service, client, _):
         task = (await client.send("clarify", blocking=True)).task
@@ -155,6 +164,7 @@ async def test_profile_change_and_forged_approval_rejected(settings):
         )
 
 
+@pytest.mark.asyncio
 async def test_history_length_and_unsupported_streaming(settings):
     async with running(settings) as (_, client, _):
         task = (await client.send("hi", blocking=True)).task
@@ -172,6 +182,7 @@ async def test_history_length_and_unsupported_streaming(settings):
         assert "error" in response.json()
 
 
+@pytest.mark.asyncio
 async def test_pending_cancellation_retires_checkpoint_thread(settings):
     async with running(settings) as (service, client, _):
         task = (await client.send("clarify", blocking=True)).task
@@ -181,6 +192,7 @@ async def test_pending_cancellation_retires_checkpoint_thread(settings):
         assert (await service.store.get(new.id))["thread_id"] != original["thread_id"]
 
 
+@pytest.mark.asyncio
 async def test_single_instance_guard(settings):
     from chemgraph.service.service import Service
 
@@ -189,6 +201,7 @@ async def test_single_instance_guard(settings):
             await Service(settings).start()
 
 
+@pytest.mark.asyncio
 async def test_peer_cannot_subscribe_arbitrary_webhooks(settings):
     async with running(settings) as (_, client, _):
         response = await client.http.post(
@@ -203,6 +216,7 @@ async def test_peer_cannot_subscribe_arbitrary_webhooks(settings):
         assert "error" in response.json()
 
 
+@pytest.mark.asyncio
 async def test_outbox_reconstructed(settings):
     async with running(settings) as (service, client, _):
         task = (await client.send("hi", blocking=True)).task
@@ -215,6 +229,7 @@ async def test_outbox_reconstructed(settings):
         assert json.loads(rows[0]["payload"])["task_id"] == task.id
 
 
+@pytest.mark.asyncio
 async def test_invalid_auth_bytes_are_unauthorized(settings):
     async with running(settings) as (_, client, _):
         response = await client.http.get(
@@ -236,6 +251,7 @@ class MissingArtifactAdapter(FixtureAdapter):
         )
 
 
+@pytest.mark.asyncio
 async def test_missing_required_output_is_failed_not_completed(settings):
     async with running(settings, MissingArtifactAdapter(settings)) as (_, client, _):
         task = (await client.send("calculate", blocking=True)).task
@@ -243,6 +259,7 @@ async def test_missing_required_output_is_failed_not_completed(settings):
         assert "finalization" in task.status.message.parts[0].text
 
 
+@pytest.mark.asyncio
 async def test_incompatible_profile_blocks_continuation(settings):
     async with running(settings) as (_, client, _):
         task = (await client.send("clarify", blocking=True)).task
@@ -254,6 +271,7 @@ async def test_incompatible_profile_blocks_continuation(settings):
             await client.send("answer", task_id=task.id)
 
 
+@pytest.mark.asyncio
 async def test_waiting_task_cannot_be_canceled_by_other_owner(settings):
     async with running(settings) as (_, alice, app):
         task = (await alice.send("clarify", blocking=True)).task
@@ -262,6 +280,7 @@ async def test_waiting_task_cannot_be_canceled_by_other_owner(settings):
                 await bob.send("reply", task_id=task.id)
 
 
+@pytest.mark.asyncio
 async def test_multiple_clarifications_require_exact_interrupt_mapping(settings):
     async with running(settings) as (service, client, _):
         task = (await client.send("clarify", blocking=True)).task
@@ -287,6 +306,3 @@ async def test_multiple_clarifications_require_exact_interrupt_mapping(settings)
         assert (
             await client.rpc.send_message(request)
         ).task.status.state == a2a.TASK_STATE_COMPLETED
-
-
-pytestmark = pytest.mark.asyncio

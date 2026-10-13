@@ -384,12 +384,18 @@ class Operations:
             }:
                 raise ValueError("Only unfinished operations can be reconciled")
             record = await self.store.get(operation["task_id"])
+            if record["phase"] != "waiting" or record.get("reason") != "reconciliation":
+                raise ValueError("Wait for the active worker to stop before reconciliation")
             if record["profile"] != self.service.settings.profile.identity:
                 raise ValueError("Restore the original profile first")
             operation["reconciliation"] = {"operator": operator, "evidence": evidence,
                                            "mode": mode, "time": time.time()}
+            operation.setdefault("reconciliations", []).append({
+                **operation["reconciliation"], "previous_state": operation["state"],
+                "digest": operation["digest"],
+            })
             if mode == "job":
-                if operation["kind"] != "remote" or not isinstance(batch_id, str) or not batch_id:
+                if operation["state"] != "uncertain" or operation["kind"] != "remote" or not isinstance(batch_id, str) or not batch_id:
                     raise ValueError("A recovered remote job identifier is required")
                 operation.update(state="running", batch_id=batch_id, receipt={"batch_id": batch_id})
                 record.update(phase="queued" if record["interrupts"] else "backend",
@@ -403,6 +409,7 @@ class Operations:
                 if operation["state"] == "returned":
                     raise ValueError("A saved result proves invocation; cannot confirm nonexecution")
                 if operation["kind"] == "native":
+                    operation.setdefault("previous_preparations", []).append(operation["prepared"])
                     _, checksum, details = self.native_action(record, operation["call"])
                     operation.update(details, digest=checksum)
                 operation.update(state="approval", approval=None)
@@ -420,7 +427,7 @@ class Operations:
                 if operation["kind"] != "native" or not operation.get("preflight"):
                     raise ValueError("Native recovery requires a saved output baseline")
                 if mode == "result":
-                    if operation["state"] == "returned" or result is None:
+                    if operation["state"] not in {"uncertain", "invoking"} or result is None:
                         raise ValueError("Supply a recovered result only when no returned result is saved")
                     message = ToolMessage(content=json.dumps(result), tool_call_id=operation["call"]["id"])
                     operation.update(state="returned", returned={"result": encode_result(message)})
@@ -469,6 +476,11 @@ class Operations:
                 operation.update(state="rejected", approval=None,
                                  rejection={"operator": operator, "message": data.get("message", "Operator rejected action"),
                                             "digest": operation["digest"], "time": time.time()})
+            operation.setdefault("decisions", []).append({
+                "type": "reject" if reject else "approve",
+                **(operation["rejection"] if reject else operation["approval"]),
+                "time": time.time(),
+            })
             if record.get("resume_action") == "recover":
                 if reject:
                     from chemgraph.execution.scoped import encode_result

@@ -14,7 +14,6 @@ from tests.service.conftest import TOKENS, running
 from tests.service.test_operations import approve
 from tests.service.test_science import call, model as model
 
-pytestmark = pytest.mark.asyncio
 
 
 def script_energy(model):
@@ -46,6 +45,7 @@ async def operator_post(app, path, body):
         return await client.post(path, json=body)
 
 
+@pytest.mark.asyncio
 async def test_exact_input_approval_and_owner_isolation(settings, model):
     script_energy(model)
     async with running(settings, ChemGraphAdapter(settings)) as (service, client, app):
@@ -66,6 +66,7 @@ async def test_exact_input_approval_and_owner_isolation(settings, model):
 
 
 @pytest.mark.parametrize('fault', ['capture', 'result_persistence'])
+@pytest.mark.asyncio
 async def test_restart_finalizes_or_recovers_without_recalculation(settings, model, monkeypatch, fault):
     from chemgraph.execution import scoped
     from chemgraph.tools import ase_tools
@@ -119,6 +120,7 @@ async def test_restart_finalizes_or_recovers_without_recalculation(settings, mod
         assert (await service.operations.get(operation['id']))['state'] == 'completed'
 
 
+@pytest.mark.asyncio
 async def test_mixed_decisions_and_blocked_dependency(settings, model):
     model[:] = [call('load_tools', names=['save_atomsdata_to_file', 'run_ase']),
                 AIMessage(content='', tool_calls=[
@@ -141,6 +143,7 @@ async def test_mixed_decisions_and_blocked_dependency(settings, model):
         assert (await service.operations.get(dependent['id']))['state'] == 'blocked'
 
 
+@pytest.mark.asyncio
 async def test_authenticated_rejection_does_not_execute(settings, model):
     model[:] = [call('load_tools', names=['save_atomsdata_to_file']),
                 AIMessage(content='', tool_calls=[
@@ -165,6 +168,7 @@ async def test_authenticated_rejection_does_not_execute(settings, model):
 
 
 @pytest.mark.parametrize('decision', ['approve', 'reject'])
+@pytest.mark.asyncio
 async def test_confirmed_nonexecution_requires_new_decision(settings, model, monkeypatch, decision):
     from chemgraph.execution import scoped
 
@@ -189,6 +193,9 @@ async def test_confirmed_nonexecution_requires_new_decision(settings, model, mon
         assert response.status_code == 200, response.text
         renewed = await service.operations.get(operation['id'])
         assert renewed['approval'] is None
+        assert renewed['decisions'][0]['digest'] == operation['digest']
+        assert renewed['previous_preparations'][0] == operation['prepared']
+        assert renewed['reconciliations'][-1]['mode'] == 'nonexecution'
         assert renewed['interrupt_id'] != operation['interrupt_id']
         stale = await operator_post(app, f"/admin/operations/{operation['id']}/approve", {
             'digest': operation['digest'], 'interrupt_id': operation['interrupt_id'],
@@ -203,6 +210,7 @@ async def test_confirmed_nonexecution_requires_new_decision(settings, model, mon
         assert (Path(operation['workspace']) / 'energy.json').exists() == (decision == 'approve')
 
 
+@pytest.mark.asyncio
 async def test_artifact_registration_retries_saved_outcome(settings, monkeypatch):
     from tests.service.conftest import ArtifactAdapter
 
@@ -225,3 +233,61 @@ async def test_artifact_registration_retries_saved_outcome(settings, monkeypatch
         assert finished.status.state == a2a.TASK_STATE_COMPLETED
         assert len(finished.artifacts) == 1
         assert (await service.store.get(task.id)).get('pending_outcome') is None
+
+
+@pytest.mark.asyncio
+async def test_abandonment_retires_thread_without_claiming_cancellation(settings, model, monkeypatch):
+    from chemgraph.tools import ase_tools
+
+    script_energy(model)
+    async with running(settings, ChemGraphAdapter(settings)) as (service, client, app):
+        task, operation = await energy_review(service, client, app)
+
+        def lost(params):
+            raise OSError('invocation acknowledgement lost')
+
+        monkeypatch.setattr(ase_tools, 'run_ase_core', lost)
+        await approve(service, app, task.id, operation['id'])
+        await service.wait(task.id, 'alice')
+        response = await operator_post(app, f"/admin/operations/{operation['id']}/reconcile", {
+            'mode': 'abandon', 'evidence': 'Retiring this unresolved invocation after inspection',
+        })
+        assert response.status_code == 200, response.text
+        task = await client.get(task.id)
+        assert task.status.state == a2a.TASK_STATE_FAILED
+        assert 'not confirmed' in task.status.message.parts[0].text
+        assert await service.store.one('SELECT * FROM contexts WHERE context_id=?', (task.context_id,)) is None
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_cannot_race_active_invocation(settings, model, monkeypatch):
+    from dataclasses import replace
+
+    script_energy(model)
+    entered, release = asyncio.Event(), asyncio.Event()
+    async with running(settings, ChemGraphAdapter(settings)) as (service, client, app):
+        task, operation = await energy_review(service, client, app)
+        execute = service.operations.execute_tool
+
+        async def gated(record, context, call, stages):
+            invoke = stages.invoke
+
+            async def hold(preflight):
+                entered.set()
+                await release.wait()
+                return await invoke(preflight)
+
+            return await execute(record, context, call, replace(stages, invoke=hold))
+
+        monkeypatch.setattr(service.operations, 'execute_tool', gated)
+        await approve(service, app, task.id, operation['id'])
+        await asyncio.wait_for(entered.wait(), 10)
+        try:
+            response = await operator_post(app, f"/admin/operations/{operation['id']}/reconcile", {
+                'mode': 'nonexecution', 'evidence': 'This claim must not race active work',
+            })
+            assert response.status_code == 409
+            assert 'active worker' in response.text
+        finally:
+            release.set()
+        assert (await service.wait(task.id, 'alice')).status.state == a2a.TASK_STATE_COMPLETED
