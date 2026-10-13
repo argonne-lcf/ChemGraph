@@ -88,5 +88,3 @@ def notification_routes(service):
         Route("/admin/notifications", inspect),
         Route("/admin/notifications/{identifier}/resolve", resolve, methods=["POST"]),
     ]
-
-

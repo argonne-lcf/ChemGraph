@@ -49,5 +49,3 @@ class FixtureAdapter:
     async def recover(self, record):
         # All fixture operations are bounded, local and idempotent.
         return await self.run(record)
-
-
