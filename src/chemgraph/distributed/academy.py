@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
+from time import monotonic
 from typing import Any
 
 from academy.agent import Agent, action
@@ -11,6 +13,13 @@ from academy.runtime import Runtime, RuntimeConfig
 from academy.serialize import SerializationStrategy
 
 from chemgraph.distributed.protocol import PeerEnvelope, Receiver, Status
+
+
+@dataclass(frozen=True)
+class _CachedPeer:
+    handle: Handle
+    instance_id: str | None
+    expires_at: float
 
 
 class PeerMailbox(Agent):
@@ -43,6 +52,8 @@ class AcademyTransport:
         self._runtime: Runtime | None = None
         self._task: asyncio.Task | None = None
         self._registration = None
+        self._peers: dict[str, _CachedPeer] = {}
+        self._probe_after: dict[Any, float] = {}
 
     async def __aenter__(self):
         self._client = await self.factory.create_user_client(name=f"chemgraph/{self.run_id}/{self.launch_id}/client")
@@ -83,41 +94,72 @@ class AcademyTransport:
         self._task = asyncio.create_task(serve())
         await ready
 
-    async def _find_peer(self, name: str) -> Handle:
+    def _ready(self, name: str, state: dict) -> bool:
+        return (
+            (state.get("run_id"), state.get("launch_id"), state.get("peer"))
+            == (self.run_id, self.launch_id, name)
+            and state.get("state") in {"idle", "running", "waiting_for_user", "resuming", "failed"}
+        )
+
+    async def _probe(self, handle: Handle, deadline: float) -> dict | None:
+        remaining = deadline - asyncio.get_running_loop().time()
+        try:
+            async with asyncio.timeout(max(0, min(1, remaining / 4))):
+                state = await handle.action("get_status")
+            if isinstance(state, dict):
+                return state
+        except Exception:
+            pass  # Abandoned mailboxes must not consume the delivery deadline.
+        self._probe_after[handle.agent_id] = monotonic() + 1
+        return None
+
+    async def _find_peer(self, name: str, deadline: float) -> tuple[Handle, dict]:
         if self._client is None:
             raise RuntimeError("Academy transport is closed")
+        cached = self._peers.get(name)
+        if cached is not None:
+            if cached.expires_at > monotonic():
+                state = await self._probe(cached.handle, deadline)
+                if state is not None and self._ready(name, state) and state.get("instance_id") == cached.instance_id:
+                    return cached.handle, state
+            self._peers.pop(name, None)
         while True:
             # HTTP discovery returns UUIDs without display names. Resolve the
             # ChemGraph identity through the public mailbox action instead.
+            now = monotonic()
+            self._probe_after = {aid: after for aid, after in self._probe_after.items() if after > now}
             candidates = [aid for aid in await self._client.discover(PeerMailbox)
-                          if aid.name is None or aid.name == self._peer_name(name)]
+                          if (aid.name is None or aid.name == self._peer_name(name))
+                          and aid not in self._probe_after]
 
             async def probe(aid):
                 handle = Handle(aid, exchange=self._client, ignore_context=True,
                                 request_serializer=SerializationStrategy.JSON,
                                 result_serializer=SerializationStrategy.JSON,
                                 exception_serializer=SerializationStrategy.JSON)
-                try:
-                    state = await asyncio.wait_for(handle.action("get_status"), min(1, self.timeout_s))
-                except Exception:
-                    return None  # An abandoned mailbox is not a live peer.
-                if (state.get("run_id"), state.get("launch_id"), state.get("peer")) != (self.run_id, self.launch_id, name):
-                    return None
-                if state.get("state") not in {"starting", "stopping", "stopped"}:
-                    return handle
+                state = await self._probe(handle, deadline)
+                if state is not None and self._ready(name, state):
+                    return handle, state
                 return None
 
-            ready = [handle for handle in await asyncio.gather(*(probe(aid) for aid in candidates)) if handle is not None]
+            ready = [result for result in await asyncio.gather(*(probe(aid) for aid in candidates)) if result is not None]
             if len(ready) > 1:
                 raise RuntimeError(f"Multiple live registrations for peer {name!r}; stop the duplicate process")
             if ready:
+                handle, state = ready[0]
+                self._peers[name] = _CachedPeer(handle, state.get("instance_id"), monotonic() + 5)
                 return ready[0]
             await asyncio.sleep(0.1)
 
     async def peer_status(self, name: str) -> dict:
-        async with asyncio.timeout(self.timeout_s):
-            handle = await self._find_peer(name)
-            return await handle.action("get_status")
+        deadline = asyncio.get_running_loop().time() + self.timeout_s
+        try:
+            async with asyncio.timeout_at(deadline):
+                _, state = await self._find_peer(name, deadline)
+                return state
+        except Exception:
+            self._peers.pop(name, None)
+            raise
 
     def check_health(self) -> None:
         if self._task is not None and self._task.done():
@@ -131,18 +173,23 @@ class AcademyTransport:
         expected_sender = self.name or "operator"
         if message.sender != expected_sender:
             raise ValueError("Message sender does not match this transport")
+        deadline = asyncio.get_running_loop().time() + self.timeout_s
         try:
-            async with asyncio.timeout(self.timeout_s):
-                handle = await self._find_peer(message.recipient)
+            async with asyncio.timeout_at(deadline):
+                handle, _ = await self._find_peer(message.recipient, deadline)
                 result = await handle.action("receive_message", message.model_dump(mode="json"))
                 if result != {"status": "accepted", "message_id": message.message_id}:
                     raise RuntimeError("Peer returned an invalid delivery acknowledgement")
                 return result
         except TimeoutError as exc:
+            self._peers.pop(message.recipient, None)
             raise TimeoutError(
                 f"No acknowledgement for message {message.message_id} to {message.recipient!r}; "
                 "delivery may have occurred. Inspect peer status before resubmitting."
             ) from exc
+        except Exception:
+            self._peers.pop(message.recipient, None)
+            raise
 
     async def close(self) -> None:
         try:
@@ -151,6 +198,8 @@ class AcademyTransport:
                     self._runtime.signal_shutdown()
                 await self._task
         finally:
+            self._peers.clear()
+            self._probe_after.clear()
             if self._client is not None:
                 await self._client.close()
                 self._client = None

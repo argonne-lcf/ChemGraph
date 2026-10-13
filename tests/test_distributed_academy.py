@@ -1,5 +1,7 @@
 import asyncio
 from contextlib import AsyncExitStack
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -8,7 +10,7 @@ pytest.importorskip("academy")
 from academy.exchange.local import LocalExchangeFactory
 from langchain_core.messages import AIMessage
 
-from chemgraph.distributed.academy import AcademyTransport
+from chemgraph.distributed.academy import AcademyTransport, PeerMailbox
 from chemgraph.distributed.config import DistributedConfig
 from chemgraph.distributed.peer_tools import build_peer_tool
 from chemgraph.distributed.protocol import PeerEnvelope, PeerTurnResult
@@ -174,3 +176,101 @@ async def test_http_exchange_with_independent_factories():
                 sent = envelope("operator", "remote")
                 assert (await client.send(sent))["status"] == "accepted"
                 assert messages == [sent]
+
+
+@pytest.mark.asyncio
+async def test_stale_http_registration_does_not_block_live_peer():
+    from aiohttp.test_utils import TestServer
+    from academy.exchange.cloud import HttpExchangeFactory
+    from academy.exchange.cloud.app import create_app
+
+    received = []
+    async def receive(message):
+        received.append(message)
+        return {"status": "accepted", "message_id": message.message_id}
+
+    async with TestServer(create_app()) as server, AsyncExitStack() as stack:
+        factory = HttpExchangeFactory(url=str(server.make_url("")))
+        abandoned = await factory.create_user_client(name="abandoned-owner")
+        stack.push_async_callback(abandoned.close)
+        await abandoned.register_agent(PeerMailbox, name="chemgraph/old/launch/dead")
+        remote = await stack.enter_async_context(AcademyTransport(
+            exchange_factory=factory, run_id="run", launch_id="launch", name="remote"))
+        await remote.start(receive, lambda: {"state": "idle"})
+        client = await stack.enter_async_context(AcademyTransport(
+            exchange_factory=factory, run_id="run", launch_id="launch", timeout_s=0.2))
+        sent = envelope("operator", "remote")
+        assert (await client.send(sent))["status"] == "accepted"
+        assert received == [sent]
+
+
+def fake_discovery(monkeypatch):
+    class AgentId:
+        name = None
+    first, second = AgentId(), AgentId()
+    state = {"run_id": "run", "launch_id": "launch", "peer": "remote", "state": "idle", "instance_id": "first"}
+    handles = {
+        first: SimpleNamespace(agent_id=first, action=AsyncMock(return_value=state)),
+        second: SimpleNamespace(agent_id=second, action=AsyncMock(return_value={**state, "instance_id": "second"})),
+    }
+    monkeypatch.setattr("chemgraph.distributed.academy.Handle", lambda aid, **_: handles[aid])
+    transport = AcademyTransport(exchange_factory=None, run_id="run", launch_id="launch", timeout_s=0.3)
+    transport._client = SimpleNamespace(discover=AsyncMock(return_value=[first]))
+    return transport, first, second, handles
+
+
+@pytest.mark.asyncio
+async def test_cached_peer_is_checked_and_duplicate_detected_on_expiry(monkeypatch):
+    clock = [0]
+    monkeypatch.setattr("chemgraph.distributed.academy.monotonic", lambda: clock[0])
+    transport, first, second, handles = fake_discovery(monkeypatch)
+    assert (await transport.peer_status("remote"))["instance_id"] == "first"
+    assert (await transport.peer_status("remote"))["instance_id"] == "first"
+    transport._client.discover.assert_awaited_once()
+    assert handles[first].action.await_count == 2
+    transport._client.discover.return_value = [first, second]
+    clock[0] = 5
+    with pytest.raises(RuntimeError, match="Multiple live"):
+        await transport.peer_status("remote")
+    assert "remote" not in transport._peers
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["failure", "stopped", "identity", "instance"])
+async def test_cached_peer_is_invalidated_before_delivery(monkeypatch, change):
+    transport, first, second, handles = fake_discovery(monkeypatch)
+    await transport.peer_status("remote")
+    old = handles[first].action
+    if change == "failure":
+        old.side_effect = RuntimeError("mailbox unavailable")
+    elif change == "stopped":
+        old.return_value = {**old.return_value, "state": "stopped"}
+    elif change == "identity":
+        old.return_value = {**old.return_value, "launch_id": "other"}
+    else:
+        old.return_value = {**old.return_value, "instance_id": "changed"}
+    transport._client.discover.return_value = [second]
+    assert (await transport.peer_status("remote"))["instance_id"] == "second"
+    assert transport._client.discover.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_failed_probes_have_cooldown(monkeypatch):
+    transport, first, _, handles = fake_discovery(monkeypatch)
+    handles[first].action.side_effect = RuntimeError("abandoned")
+    with pytest.raises(TimeoutError):
+        await transport.peer_status("remote")
+    assert transport._client.discover.await_count > 1
+    handles[first].action.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_uncertain_delivery_is_not_automatically_resent(monkeypatch):
+    transport, first, _, handles = fake_discovery(monkeypatch)
+    await transport.peer_status("remote")
+    state = handles[first].action.return_value
+    handles[first].action.side_effect = [state, TimeoutError("ack lost")]
+    with pytest.raises(TimeoutError, match="delivery may have occurred"):
+        await transport.send(envelope("operator", "remote"))
+    assert [call.args[0] for call in handles[first].action.await_args_list].count("receive_message") == 1
+    assert "remote" not in transport._peers

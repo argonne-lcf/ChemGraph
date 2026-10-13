@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import signal
 import time
 import uuid
@@ -25,7 +26,15 @@ def _transport(config, name=None):
         from chemgraph.distributed.academy import AcademyTransport
     except ImportError as exc:
         raise RuntimeError("Distributed communication requires pip install 'chemgraph[academy]'") from exc
-    return AcademyTransport(exchange_factory=HttpExchangeFactory(url=config.exchange_url),
+    headers = {}
+    for header, variable in config.exchange_header_env.items():
+        value = os.environ.get(variable)
+        if not value:
+            raise ValueError(f"Exchange header {header!r} requires environment variable {variable!r}")
+        headers["Authorization" if header.lower() == "authorization" else header] = value
+    factory = HttpExchangeFactory(url=config.exchange_url, auth_method=config.exchange_auth_method,
+                                  additional_headers=headers)
+    return AcademyTransport(exchange_factory=factory,
                             run_id=config.run_id, launch_id=config.launch_id,
                             name=name, timeout_s=config.timeout_s)
 

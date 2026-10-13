@@ -124,6 +124,24 @@ host may use its own `run_dir`. Configure the executor's MCP URL from the
 executor host's perspective. Start each process through that site's ordinary
 shell or job script; Academy does not schedule jobs or launch simulations.
 
+For a self-hosted Globus-authenticated exchange, set `exchange_auth_method` to
+`"globus"`. For an exchange using a supplied header, set for example
+`"exchange_header_env": {"Authorization": "CHEMGRAPH_EXCHANGE_AUTHORIZATION"}`
+and export that variable with the complete header value (including `Bearer `
+when required). Missing or empty variables are rejected before connecting. Avoid
+combining a supplied Authorization header with `exchange_auth_method: "globus"`:
+Academy's generated Globus header takes precedence. Header values are not saved
+in the config, checkpoint identity, or peer status.
+
+Academy's mailbox ownership and sharing permissions are the access boundary.
+Envelope sender names, including `operator`, are application labels rather than
+authenticated identities. Only grant mailbox access to trusted participants;
+peer allowlists do not authenticate clients. Operator approvals remain local.
+
+Resolved mailboxes are cached for five seconds and checked before delivery.
+Discovery and cache refresh reject multiple live registrations; failed probes
+have a one-second cooldown. An uncertain send is never automatically resubmitted.
+
 MCP servers and execution backends own scientific files. A peer message does
 not make a path on another host readable. Transfer inputs/results using the
 existing ChemGraph transfer tools, or send small textual summaries.

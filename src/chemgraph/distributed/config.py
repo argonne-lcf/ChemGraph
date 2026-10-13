@@ -43,6 +43,8 @@ class DistributedConfig(BaseModel):
     run_id: Name
     launch_id: Name
     exchange_url: str
+    exchange_auth_method: Literal["globus"] | None = None
+    exchange_header_env: dict[str, str] = Field(default_factory=dict)
     run_dir: Path = Path("distributed_runs")
     timeout_s: float = Field(default=30, gt=0)
     peers: dict[Name, PeerConfig]
@@ -51,6 +53,10 @@ class DistributedConfig(BaseModel):
     def validate_peers(self):
         if not self.peers:
             raise ValueError("At least one peer is required")
+        if any(not header.strip() or not variable.strip() for header, variable in self.exchange_header_env.items()):
+            raise ValueError("Exchange header names and environment variable names must not be empty")
+        if len({header.lower() for header in self.exchange_header_env}) != len(self.exchange_header_env):
+            raise ValueError("Duplicate exchange header names")
         for name, peer in self.peers.items():
             if name == "operator":
                 raise ValueError("The peer name 'operator' is reserved")

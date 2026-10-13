@@ -2,11 +2,11 @@ import asyncio
 import json
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from chemgraph.distributed.cli import process_controls, queue_control
+from chemgraph.distributed.cli import _transport, process_controls, queue_control
 from chemgraph.distributed.config import DistributedConfig, load_config
 from chemgraph.observability.run_files import write_json_atomic
 
@@ -102,3 +102,38 @@ def test_distributed_help_forwarding(monkeypatch, capsys):
         main()
     assert exc.value.code == 0
     assert "resume" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("method", [None, "globus"])
+def test_exchange_authentication_forwarding(tmp_path, monkeypatch, method):
+    pytest.importorskip("academy")
+    factory = Mock()
+    monkeypatch.setattr("academy.exchange.cloud.HttpExchangeFactory", factory)
+    monkeypatch.setenv("TEST_EXCHANGE_AUTH", "Bearer dummy-test-token")
+    settings = config(tmp_path)
+    settings.exchange_auth_method = method
+    settings.exchange_header_env = {"authorization": "TEST_EXCHANGE_AUTH"}
+    _transport(settings)
+    factory.assert_called_once_with(url=settings.exchange_url, auth_method=method,
+                                    additional_headers={"Authorization": "Bearer dummy-test-token"})
+
+
+def test_missing_exchange_header_fails_before_connecting(tmp_path, monkeypatch):
+    pytest.importorskip("academy")
+    factory = Mock()
+    monkeypatch.setattr("academy.exchange.cloud.HttpExchangeFactory", factory)
+    monkeypatch.delenv("TEST_EXCHANGE_AUTH", raising=False)
+    settings = config(tmp_path)
+    settings.exchange_header_env = {"Authorization": "TEST_EXCHANGE_AUTH"}
+    with pytest.raises(ValueError, match="requires environment variable 'TEST_EXCHANGE_AUTH'"):
+        _transport(settings)
+    factory.assert_not_called()
+
+
+def test_exchange_authentication_is_not_checkpoint_identity(tmp_path):
+    from chemgraph.distributed.runner import _configuration_id
+    settings = config(tmp_path)
+    original = _configuration_id(settings, "worker")
+    settings.exchange_auth_method = "globus"
+    settings.exchange_header_env = {"Authorization": "TEST_EXCHANGE_AUTH"}
+    assert _configuration_id(settings, "worker") == original
