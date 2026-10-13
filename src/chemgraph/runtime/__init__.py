@@ -20,7 +20,9 @@ from chemgraph.runtime.context import (
     scoped_path,
 )
 from chemgraph.runtime.journal import (
+    ApprovalRequired,
     FileOperationStore,
+    OperationConflict,
     OperationJournal,
     OperationStore,
     result_artifacts,
@@ -34,8 +36,10 @@ from chemgraph.runtime.policy import (
 )
 
 __all__ = [
+    "ApprovalRequired",
     "ExecutionPolicy",
     "FileOperationStore",
+    "OperationConflict",
     "OperationJournal",
     "OperationStore",
     "PolicyDenied",

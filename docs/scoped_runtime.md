@@ -87,7 +87,9 @@ with run_context(context):
 ```
 
 The resume value never authorizes anything; the middleware reads the decision
-from the journal. An undecided or expired operation pauses again. A rejection
+from the journal. An undecided or expired operation pauses again, including
+one that is rejected or expires while it waits to run: the approval is checked
+again atomically when `invoking` is saved. A rejection
 reaches the model as an error message, and the decision's `message` explains
 why. Execution uses the prepared arguments and snapshots, so later changes to
 the original files cannot alter an approved action. If a snapshot or model
@@ -101,12 +103,15 @@ proposed -> approved -> invoking -> returned -> finalized
 blocked                 abandoned
 ```
 
-- `invoking` is saved before the tool runs and `returned` right after.
+- `invoking` is saved before the tool runs and `returned`, with the result
+  and the registered output paths, right after.
 - An exception raised by the tool is a known outcome, so it is saved as an
-  error result and finalized like any other result.
-- Finalization publishes only the registered outputs listed in the saved
-  manifest. If publication fails, the operation stays `returned`; retrying
-  the turn finalizes it without running the calculation again.
+  error result and finalized like any other result, with any outputs it
+  registered.
+- Finalization saves a checksum manifest of the registered outputs, then
+  publishes exactly those files. If either step fails, the operation stays
+  `returned`; retrying the turn finalizes it without running the calculation
+  again.
 - A finalized operation replays its saved result after verifying its
   artifact checksums.
 - `journal.recover()` marks interrupted invocations `uncertain`. An uncertain
@@ -119,8 +124,12 @@ blocked                 abandoned
 - Every decision and reconciliation is kept in the record's `history`.
 
 `OperationStore` is a small protocol (`get`, `put`, `records`) so a service can
-keep operations in its own database. `FileOperationStore` stores one fsynced
-JSON file per operation. Pass `authorizer=` to `OperationJournal` to add
+keep operations in its own database. `put(record, expected_revision=...)` is a
+compare-and-set on the record's `revision` and raises `OperationConflict` when
+the stored revision differs (`None` means the record must not exist yet); a
+conflicting `decide` raises `ValueError` so the operator can reload and decide
+again. `FileOperationStore` stores one fsynced JSON file per operation and is
+safe within one process only. Pass `authorizer=` to `OperationJournal` to add
 authorization sources such as study grants.
 
 ## Artifacts

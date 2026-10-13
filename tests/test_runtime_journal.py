@@ -1,13 +1,19 @@
 """The operation state machine at its durable boundaries, with real disk restarts."""
 
+import asyncio
+import copy
 import shutil
 import time
 
 import pytest
 from langchain_core.messages import ToolMessage
 
-from chemgraph.runtime import FileOperationStore, OperationJournal, ScopedExecutionError
+from chemgraph.runtime import (
+    ApprovalRequired, FileOperationStore, OperationConflict, OperationJournal,
+    ScopedExecutionError,
+)
 from chemgraph.runtime import artifacts as artifact_store
+from chemgraph.runtime import journal as journal_module
 from chemgraph.runtime.context import invocation, register_artifact, run_context
 from chemgraph.runtime.journal import ARTIFACT_KEY
 from tests.runtime_helpers import approve, make_context, run_ase_call
@@ -16,17 +22,14 @@ from tests.runtime_helpers import approve, make_context, run_ase_call
 def writer(context, calls, content='{"energy": 1.0}', *, fail=None):
     """An invoke stage that writes and registers one output, like a native tool."""
 
-    async def invoke(action):
+    async def invoke(action, outputs):
         calls.append(action.digest)
-        with run_context(context):
-            outputs = set()
-            with invocation(action, outputs):
-                (context.workspace / "energy.json").write_text(content)
-                register_artifact("energy.json")
-            if fail is not None:
-                raise fail
-            manifest = artifact_store.output_manifest(context.workspace, outputs)
-        return ToolMessage(content="done", tool_call_id=action.operation_id), manifest
+        with run_context(context), invocation(action, outputs):
+            (context.workspace / "energy.json").write_text(content)
+            register_artifact("energy.json")
+        if fail is not None:
+            raise fail
+        return ToolMessage(content="done", tool_call_id=action.operation_id)
 
     return invoke
 
@@ -86,6 +89,8 @@ async def test_tool_exception_is_a_returned_outcome(tmp_path):
         context, call, writer(context, calls, fail=RuntimeError("SCF diverged")))
     assert result.status == "error" and "SCF diverged" in result.content
     assert (await context.journal.get(record["id"]))["state"] == "finalized"
+    # Outputs registered before the failure are still published.
+    assert [a["source_path"] for a in result.additional_kwargs[ARTIFACT_KEY]] == ["energy.json"]
     # The workspace is not blocked by an observed failure.
     other, _ = await approved(context, run_ase_call("second"))
     assert (await context.journal.execute(context, other, writer(context, calls))).status != "error"
@@ -134,8 +139,12 @@ async def test_abandoned_operation_is_not_repeated(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["publication", "directory_sync"])
-async def test_finalization_retry_uses_saved_manifest(tmp_path, monkeypatch, failure):
+@pytest.mark.parametrize("module, target", [
+    (journal_module, "output_manifest"),
+    (artifact_store, "publish_file"),
+    (artifact_store, "sync_directory"),
+])
+async def test_finalization_retry_uses_saved_manifest(tmp_path, monkeypatch, module, target):
     context = make_context(tmp_path)
     call, record = await approved(context)
     calls = []
@@ -144,19 +153,21 @@ async def test_finalization_retry_uses_saved_manifest(tmp_path, monkeypatch, fai
         raise OSError("artifact volume unavailable")
 
     with monkeypatch.context() as patch:
-        target = "publish_file" if failure == "publication" else "sync_directory"
-        patch.setattr(artifact_store, target, unavailable)
+        patch.setattr(module, target, unavailable)
         with pytest.raises(ScopedExecutionError, match="artifacts failed"):
             await context.journal.execute(context, call, writer(context, calls))
     journal = reopen(context, tmp_path)
-    assert (await journal.get(record["id"]))["state"] == "returned"
+    saved = await journal.get(record["id"])
+    assert saved["state"] == "returned" and saved["returned"]["registered"] == ["energy.json"]
     other, _ = await approved(context, run_ase_call("second"))
     with pytest.raises(ScopedExecutionError, match="reconcile it first"):
         await journal.execute(context, other, writer(context, calls))
     # Retrying never rediscovers files absent from the persisted manifest.
     (context.workspace / "unrelated.json").write_text("{}")
     result = await journal.execute(context, call, writer(context, calls))
-    assert [a["source_path"] for a in result.additional_kwargs[ARTIFACT_KEY]] == ["energy.json"]
+    artifacts = result.additional_kwargs[ARTIFACT_KEY]
+    assert result.content == "done" and [a["source_path"] for a in artifacts] == ["energy.json"]
+    assert artifact_store.artifact_file(context.workspace, artifacts[0]).read_text() == '{"energy": 1.0}'
     assert len(calls) == 1
 
 
@@ -186,3 +197,63 @@ async def test_decisions_bind_digest_and_expiry(tmp_path):
     changed = run_ase_call(output="other.json")
     with pytest.raises(ScopedExecutionError, match="reused with different arguments"):
         await context.journal.propose(context, changed)
+
+
+@pytest.mark.asyncio
+async def test_rejection_during_validation_prevents_invocation(tmp_path, monkeypatch):
+    context = make_context(tmp_path)
+    call, record = await approved(context)
+    validate = journal_module.validate
+
+    def reject_meanwhile(*args):
+        validate(*args)
+        # Another process records a rejection while the preparation is re-checked.
+        operator = OperationJournal(FileOperationStore(tmp_path / "journal"))
+        asyncio.run(operator.decide(record["id"], digest=record["prepared"]["digest"],
+                                    approve=False, decided_by="operator", message="Wrong output."))
+
+    monkeypatch.setattr(journal_module, "validate", reject_meanwhile)
+    calls = []
+    with pytest.raises(ApprovalRequired):
+        await context.journal.execute(context, call, writer(context, calls))
+    saved = await context.journal.get(record["id"])
+    assert calls == [] and saved["state"] == "rejected"
+    assert [event["approve"] for event in saved["history"]] == [True, False]
+
+
+@pytest.mark.asyncio
+async def test_expiry_during_validation_prevents_invocation(tmp_path, monkeypatch):
+    context = make_context(tmp_path)
+    call = run_ase_call()
+    record = await context.journal.propose(context, call)
+    await approve(context, record, expires_at=time.time() + 60)
+    validate, clock = journal_module.validate, time.time
+
+    def expire_meanwhile(*args):
+        validate(*args)
+        monkeypatch.setattr(journal_module.time, "time", lambda: clock() + 120)
+
+    monkeypatch.setattr(journal_module, "validate", expire_meanwhile)
+    calls = []
+    with pytest.raises(ApprovalRequired, match="expired"):
+        await context.journal.execute(context, call, writer(context, calls))
+    assert calls == [] and (await context.journal.get(record["id"]))["state"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_saves_are_compare_and_set(tmp_path, monkeypatch):
+    context = make_context(tmp_path)
+    record = await context.journal.propose(context, run_ase_call())
+    stale = copy.deepcopy(record)
+    await approve(context, record)
+    store = context.journal.store
+    with pytest.raises(OperationConflict):
+        await store.put({**stale, "state": "invoking"}, expected_revision=stale["revision"])
+
+    async def stale_get(identifier):
+        return copy.deepcopy(stale)
+
+    monkeypatch.setattr(store, "get", stale_get)
+    with pytest.raises(ValueError, match="reload"):
+        await context.journal.decide(record["id"], digest=stale["prepared"]["digest"],
+                                     approve=False, decided_by="operator")

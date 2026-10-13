@@ -10,7 +10,8 @@ Off-path states are ``blocked`` (could not be prepared), ``rejected``,
 ``abandoned``. An uncertain operation is never repeated automatically; an
 operator either confirms nonexecution (returning it to review) or abandons it.
 An exception raised by the tool is an observed outcome and is saved as an
-error result.
+error result. Every save is a compare-and-set on the record's ``revision``, so
+a transition never overwrites a concurrent decision.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import asyncio
 import base64
 import json
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Awaitable, Callable, Protocol
@@ -27,7 +29,9 @@ from langchain_core.messages import ToolMessage
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.errors import GraphBubbleUp
 
-from chemgraph.runtime.artifacts import capture_artifacts, sync_directory, verify_artifacts
+from chemgraph.runtime.artifacts import (
+    capture_artifacts, output_manifest, sync_directory, verify_artifacts,
+)
 from chemgraph.runtime.context import ScopedExecutionError
 from chemgraph.runtime.policy import (
     PolicyDenied, PreparationError, PreparedAction, call_digest, operation_id,
@@ -64,18 +68,33 @@ def result_artifacts(state: dict, task_id: str) -> list[dict]:
     return list(artifacts.values())
 
 
+class OperationConflict(ScopedExecutionError):
+    """The stored record changed since it was read; reload it and decide again."""
+
+
+class ApprovalRequired(ScopedExecutionError):
+    """The operation has no valid approval now; it was not invoked."""
+
+
 class OperationStore(Protocol):
-    """Durable operation records. ``put`` must be durable when it returns."""
+    """Durable operation records. ``put`` must be durable when it returns.
+
+    ``put`` is a compare-and-set: it raises :class:`OperationConflict` unless the
+    stored record's ``revision`` equals ``expected_revision`` (``None`` means no
+    record with that id exists yet).
+    """
 
     async def get(self, identifier: str) -> dict | None: ...
 
-    async def put(self, record: dict) -> None: ...
+    async def put(self, record: dict, *, expected_revision: int | None) -> None: ...
 
     async def records(self, *, thread_id: str | None = None) -> list[dict]: ...
 
 
 class FileOperationStore:
     """One fsynced JSON file per operation, for single-process embedders and tests."""
+
+    _lock = threading.Lock()
 
     def __init__(self, directory):
         self.directory = Path(directory)
@@ -85,15 +104,19 @@ class FileOperationStore:
         path = self.directory / f"{identifier}.json"
         return json.loads(path.read_text()) if path.exists() else None
 
-    async def put(self, record):
+    async def put(self, record, *, expected_revision):
         path = self.directory / f"{record['id']}.json"
         temporary = path.with_suffix(".tmp")
-        with temporary.open("w") as stream:
-            json.dump(record, stream, allow_nan=False)
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.replace(path)
-        sync_directory(self.directory)
+        with self._lock:
+            current = json.loads(path.read_text())["revision"] if path.exists() else None
+            if current != expected_revision:
+                raise OperationConflict(f"Operation {record['id']} changed concurrently.")
+            with temporary.open("w") as stream:
+                json.dump(record, stream, allow_nan=False)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(path)
+            sync_directory(self.directory)
 
     async def records(self, *, thread_id=None):
         records = [json.loads(path.read_text()) for path in sorted(self.directory.glob("*.json"))]
@@ -113,7 +136,8 @@ def error_message(call: dict, content: str) -> ToolMessage:
     return ToolMessage(content=content, name=call["name"], tool_call_id=call["id"], status="error")
 
 
-Invoke = Callable[[PreparedAction], Awaitable[tuple[ToolMessage, list[dict]]]]
+# Runs the tool with the prepared arguments, registering outputs into the set.
+Invoke = Callable[[PreparedAction, set[str]], Awaitable[ToolMessage]]
 
 
 class OperationJournal:
@@ -127,8 +151,9 @@ class OperationJournal:
         return await self.store.get(identifier)
 
     async def _put(self, record: dict, state: str, **changes) -> dict:
-        record.update(changes, state=state, updated_at=time.time())
-        await self.store.put(record)
+        expected = record.get("revision")
+        record.update(changes, state=state, updated_at=time.time(), revision=(expected or 0) + 1)
+        await self.store.put(record, expected_revision=expected)
         return record
 
     # -- review ---------------------------------------------------------
@@ -152,8 +177,14 @@ class OperationJournal:
         try:
             action = await asyncio.to_thread(prepare, context, call)
         except (PolicyDenied, PreparationError) as exc:
-            return await self._put(record, BLOCKED, error=str(exc))
-        return await self._put(record, PROPOSED, prepared=action.to_dict())
+            state, changes = BLOCKED, {"error": str(exc)}
+        else:
+            state, changes = PROPOSED, {"prepared": action.to_dict()}
+        try:
+            return await self._put(record, state, **changes)
+        except OperationConflict:
+            # A concurrent proposal of this call was saved first.
+            return await self.propose(context, call)
 
     async def decide(self, identifier: str, *, digest: str, approve: bool, decided_by: str,
                      expires_at: float | None = None, message: str | None = None) -> dict:
@@ -166,7 +197,10 @@ class OperationJournal:
         decision = {"approve": approve, "digest": digest, "decided_by": decided_by,
                     "decided_at": time.time(), "expires_at": expires_at, "message": message}
         record["history"].append({"event": "decision", **decision})
-        return await self._put(record, APPROVED if approve else REJECTED, decision=decision)
+        try:
+            return await self._put(record, APPROVED if approve else REJECTED, decision=decision)
+        except OperationConflict as exc:
+            raise ValueError("The operation changed; reload it and decide again.") from exc
 
     def authorized(self, record: dict) -> bool:
         return self.authorizer(record)
@@ -232,25 +266,45 @@ class OperationJournal:
             )
         if record["state"] != RETURNED:
             if not self.authorized(record):
-                raise ScopedExecutionError("The operation has no valid approval.")
+                raise ApprovalRequired("The operation has no valid approval.")
             action = PreparedAction.from_dict(record["prepared"])
             try:
                 await asyncio.to_thread(validate, context, call, action)
             except (PreparationError, PermissionError, OSError) as exc:
-                await self._put(record, BLOCKED, error=str(exc))
-                return error_message(call, f"Not executed: {exc} Propose the action again.")
-            await self._put(record, INVOKING)
+                failure = exc
+            else:
+                failure = None
+            # A decision may have changed or expired meanwhile: transition from
+            # the saved record, and only while it is still authorized.
+            record = await self.store.get(record["id"])
+            if not self.authorized(record):
+                raise ApprovalRequired("The approval changed or expired before invocation.")
+            changes = {"error": str(failure)} if failure else {}
             try:
-                message, manifest = await invoke(action)
+                await self._put(record, BLOCKED if failure else INVOKING, **changes)
+            except OperationConflict as exc:
+                raise ApprovalRequired("The operation changed before invocation.") from exc
+            if failure:
+                return error_message(call, f"Not executed: {failure} Propose the action again.")
+            outputs = set()
+            try:
+                message = await invoke(action, outputs)
             except GraphBubbleUp:
                 raise
             except Exception as exc:
                 # The tool raised: its failure is known, unlike a crash.
-                message, manifest = error_message(call, f"Error: {exc!r}"), []
-            await self._put(record, RETURNED,
-                            returned={"message": encode_result(message), "outputs": manifest})
-        message = decode_result(record["returned"]["message"])
+                message = error_message(call, f"Error: {exc!r}")
+            await self._put(record, RETURNED, returned={
+                "message": encode_result(message), "registered": sorted(outputs), "outputs": None,
+            })
+        returned = record["returned"]
+        message = decode_result(returned["message"])
         try:
+            # Identify outputs once; a retry publishes exactly the saved manifest.
+            if returned["outputs"] is None:
+                manifest = await asyncio.to_thread(
+                    output_manifest, context.workspace, returned["registered"])
+                await self._put(record, RETURNED, returned={**returned, "outputs": manifest})
             artifacts = await asyncio.to_thread(
                 capture_artifacts, context, call["id"], record["returned"]["outputs"])
         except (OSError, ValueError) as exc:

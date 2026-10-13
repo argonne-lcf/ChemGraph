@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
 from copy import copy
 
 from langchain.agents.middleware import AgentMiddleware
 from langgraph.types import interrupt
 
-from chemgraph.runtime.artifacts import output_manifest
 from chemgraph.runtime.context import (
     ScopedExecutionError, current_context, invocation, run_context,
 )
 from chemgraph.runtime.journal import (
-    APPROVED, BLOCKED, PROPOSED, REJECTED, error_message,
+    APPROVED, BLOCKED, PROPOSED, REJECTED, ApprovalRequired, error_message,
 )
 
 
@@ -43,36 +41,37 @@ class ScopedToolsMiddleware(AgentMiddleware):
         if call["name"] not in policy.tools:
             return error_message(call, f"Tool {call['name']!r} is not available in this "
                                        "scoped run. Use only the permitted tools.")
-        record = await journal.propose(context, call)
-        while record["state"] in {PROPOSED, APPROVED} and not journal.authorized(record):
-            # Re-executed on resume: decisions come from the journal, not the resume value.
-            interrupt({
-                "kind": "approval", "operation_id": record["id"], "tool_call_id": call["id"],
-                "tool": call["name"], "digest": record["prepared"]["digest"],
-                "prepared": record["prepared"],
-            })
-            record = await journal.get(record["id"])
-        if record["state"] == BLOCKED:
-            return error_message(call, f"Not executed: {record['error']}")
-        if record["state"] == REJECTED:
-            reason = (record["decision"] or {}).get("message")
-            # A reason is reviewer feedback: the model may revise and propose again.
-            return error_message(call, (
-                f"The operator rejected this {call['name']} call, so it was not executed. "
-                f"Operator feedback: {reason}" if reason else
-                f"The operator rejected this {call['name']} call, so it was not executed. "
-                "Do not retry it unless the user asks."
-            ))
-
-        async def invoke(action):
-            outputs = set()
+        async def invoke(action, outputs):
             with invocation(action, outputs):
-                message = await handler(_with_arguments(request, {**call, "args": action.arguments}))
-            return message, await asyncio.to_thread(output_manifest, context.workspace, outputs)
+                return await handler(_with_arguments(request, {**call, "args": action.arguments}))
 
-        async with context.lock:
-            with run_context(context):
-                return await journal.execute(context, call, invoke)
+        while True:
+            record = await journal.propose(context, call)
+            while record["state"] in {PROPOSED, APPROVED} and not journal.authorized(record):
+                # Re-executed on resume: decisions come from the journal, not the resume value.
+                interrupt({
+                    "kind": "approval", "operation_id": record["id"], "tool_call_id": call["id"],
+                    "tool": call["name"], "digest": record["prepared"]["digest"],
+                    "prepared": record["prepared"],
+                })
+                record = await journal.get(record["id"])
+            if record["state"] == BLOCKED:
+                return error_message(call, f"Not executed: {record['error']}")
+            if record["state"] == REJECTED:
+                reason = (record["decision"] or {}).get("message")
+                # A reason is reviewer feedback: the model may revise and propose again.
+                return error_message(call, (
+                    f"The operator rejected this {call['name']} call, so it was not executed. "
+                    f"Operator feedback: {reason}" if reason else
+                    f"The operator rejected this {call['name']} call, so it was not executed. "
+                    "Do not retry it unless the user asks."
+                ))
+            async with context.lock:
+                with run_context(context):
+                    try:
+                        return await journal.execute(context, call, invoke)
+                    except ApprovalRequired:
+                        pass  # Rejected or expired meanwhile: review the journal again.
 
 
 def _with_arguments(request, call):

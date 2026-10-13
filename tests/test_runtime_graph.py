@@ -1,6 +1,8 @@
 """Scoped main-agent graphs: review, denial and journaled execution with real EMT."""
 
+import asyncio
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -11,7 +13,11 @@ from langgraph.types import Command
 from chemgraph.agent.approvals import normalize_approval_mode
 from chemgraph.graphs.main_agent import construct_main_agent_graph
 from chemgraph.registry import ToolRegistry
-from chemgraph.runtime import ScopedExecutionError, artifact_file, result_artifacts, run_context
+from chemgraph.runtime import (
+    FileOperationStore, OperationJournal, ScopedExecutionError, artifact_file, result_artifacts,
+    run_context,
+)
+from chemgraph.runtime import journal as journal_module
 from chemgraph.tools.ase_tools import run_ase
 from chemgraph.tools.cheminformatics_tools import smiles_to_coordinate_file
 from tests.runtime_helpers import ai, approve, make_context, run_ase_call
@@ -128,12 +134,47 @@ async def test_rejection_without_feedback_discourages_retry(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["expire", "reject"])
+async def test_decision_change_before_invocation_returns_to_review(tmp_path, monkeypatch, change):
+    context = make_context(tmp_path)
+    graph = scoped_graph([ai(run_ase_call()), AIMessage(content="Understood")])
+    paused = await run(graph, context, {"messages": [HumanMessage(content="Energy")]})
+    record = await context.journal.get(paused["__interrupt__"][0].value["operation_id"])
+    await approve(context, record, expires_at=time.time() + 60)
+    validate, clock = journal_module.validate, time.time
+
+    def change_meanwhile(*args):
+        validate(*args)
+        if change == "expire":
+            monkeypatch.setattr(journal_module.time, "time", lambda: clock() + 120)
+        else:
+            operator = OperationJournal(FileOperationStore(tmp_path / "journal"))
+            asyncio.run(operator.decide(record["id"], digest=record["prepared"]["digest"],
+                                        approve=False, decided_by="operator",
+                                        message="Use a smaller basis."))
+
+    monkeypatch.setattr(journal_module, "validate", change_meanwhile)
+    state = await run(graph, context, Command(resume="ok"))
+    assert not (context.workspace / "energy.json").exists()
+    if change == "reject":
+        assert "Operator feedback: Use a smaller basis." in tool_messages(state)[-1].content
+        return
+    # A lapsed approval pauses for a new decision instead of failing the run.
+    assert state["__interrupt__"][0].value["operation_id"] == record["id"]
+    monkeypatch.undo()
+    await approve(context, record)
+    state = await run(graph, context, Command(resume="ok"))
+    assert [a["source_path"] for a in result_artifacts(state, context.task_id)] == ["energy.json"]
+
+
+@pytest.mark.asyncio
 async def test_unpermitted_and_unpreparable_calls_answer_the_model(tmp_path):
     context = make_context(tmp_path)
     graph = scoped_graph([
         ai({"name": "write_file", "args": {"file_path": "/x.py", "content": "x"}, "id": "w"},
            {"name": "task", "args": {"subagent_type": "x", "description": "y"}, "id": "t"},
-           run_ase_call("missing", structure="later.xyz")),
+           run_ase_call("missing", structure="later.xyz"),
+           {"name": "run_ase", "args": {"params": 1}, "id": "malformed"}),
         AIMessage(content="I cannot do that"),
     ])
     state = await run(graph, context, {"messages": [HumanMessage(content="Try")]})
@@ -142,6 +183,7 @@ async def test_unpermitted_and_unpreparable_calls_answer_the_model(tmp_path):
     assert all(m.status == "error" for m in messages.values())
     assert "not available" in messages["w"].content and "not available" in messages["t"].content
     assert "does not exist yet" in messages["missing"].content
+    assert "'params' must be an object" in messages["malformed"].content
     assert state["messages"][-1].content == "I cannot do that"
 
 
