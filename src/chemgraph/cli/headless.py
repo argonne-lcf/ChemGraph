@@ -29,6 +29,12 @@ HEADLESS_CONFIGURATION_ERROR = (
 )
 
 
+class _HandoffError(ValueError):
+    def __init__(self, message, error_code):
+        super().__init__(message)
+        self.error_code = error_code
+
+
 def _interrupt_kind(payload):
     if is_tool_review(payload):
         return "tool_review"
@@ -36,6 +42,16 @@ def _interrupt_kind(payload):
             and isinstance(payload["question"], str) and payload["question"].strip()):
         return "clarification"
     return "unsupported"
+
+
+def _receipt_interrupt(item):
+    payload, kind = item.payload, _interrupt_kind(item.payload)
+    try:
+        json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError, OverflowError, RecursionError):
+        payload = {"message": "Interrupt payload could not be encoded as JSON; inspect interactively."}
+        kind = "unsupported"
+    return {"id": item.id, "kind": kind, "payload": payload}
 
 
 def _load_answers(path):
@@ -50,25 +66,28 @@ def _load_answers(path):
     try:
         answers = json.loads(Path(path).read_text(encoding="utf-8"), object_pairs_hook=unique_keys)
     except (OSError, ValueError) as exc:
-        raise ValueError(f"Invalid --answers-file: {exc}") from exc
+        raise _HandoffError(f"Invalid --answers-file: {exc}", "invalid_answers") from exc
     if not isinstance(answers, dict) or not answers or any(
         not key or not isinstance(value, str) or not value.strip()
         for key, value in answers.items()
     ):
-        raise ValueError("--answers-file must map interrupt IDs to nonempty answer strings.")
+        raise _HandoffError("--answers-file must map interrupt IDs to nonempty answer strings.", "invalid_answers")
     return answers
 
 
 def _validate_answers(result, answers):
     if result is None or result.status != "waiting_for_user" or not result.interrupts:
-        raise ValueError("Answers require a session waiting for clarification.")
+        raise _HandoffError("Answers require a session waiting for clarification.", "not_waiting")
     if any(not item.id for item in result.interrupts):
-        raise ValueError("Pending questions must have stable interrupt IDs.")
+        raise _HandoffError("Pending questions must have stable interrupt IDs.", "unsupported_interrupt")
     # The session API also accepts review payloads; enforce IDs even for one question.
     if set(answers) != {item.id for item in result.interrupts}:
-        raise ValueError("Answer IDs must exactly match the current pending interrupts.")
+        raise _HandoffError("Answer IDs must exactly match the current pending interrupts.", "stale_answers")
     if any(_interrupt_kind(item.payload) != "clarification" for item in result.interrupts):
-        raise ValueError("--answers-file supports clarifications only; resume interactively for other interrupts.")
+        raise _HandoffError(
+            "--answers-file supports clarifications only; resume interactively for other interrupts.",
+            "unsupported_interrupt",
+        )
 
 
 def _validate_handoff_paths(*paths):
@@ -79,19 +98,18 @@ def _validate_handoff_paths(*paths):
                 raise ValueError("Answer, result, and output files must have distinct paths.")
 
 
-def _write_result_file(path, session, result, error):
+def _write_result_file(path, session, result, error, *, exit_code, error_code=None, status=None):
     receipt = {
         "version": 1,
         "session_id": session.thread_id if session is not None else None,
-        "status": result.status if result is not None else (
+        "status": status or (result.status if result is not None else (
             "failed" if session is not None and session.failed else None
-        ),
+        )),
         "assistant_response": result.assistant_response if result is not None else "",
-        "interrupts": [
-            {"id": item.id, "kind": _interrupt_kind(item.payload), "payload": item.payload}
-            for item in result.interrupts
-        ] if result is not None else [],
+        "interrupts": [_receipt_interrupt(item) for item in result.interrupts] if result is not None else [],
         "error": error,
+        "error_code": error_code,
+        "exit_code": exit_code,
     }
     content = json.dumps(receipt, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
     destination = Path(path)
@@ -107,6 +125,22 @@ def _write_result_file(path, session, result, error):
             temporary.unlink(missing_ok=True)
 
 
+def report_headless_result(code, *, result_file=None, session=None, result=None,
+                           error=None, error_code=None, status=None):
+    """Write a receipt when requested; None denotes an invocation still running."""
+    if result_file is not None:
+        if error is None and code == 1:
+            error = "Execution failed; inspect the CLI log and saved session before retrying."
+        error_code = error_code or {1: "execution", 2: "config", 130: "interrupted"}.get(code)
+        try:
+            _write_result_file(result_file, session, result, error,
+                               exit_code=code, error_code=error_code, status=status)
+        except (OSError, TypeError, ValueError, OverflowError, RecursionError) as exc:
+            console.print(f"[red]Error writing result file: {escape(str(exc))}[/red]")
+            return 1
+    return code
+
+
 def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=None,
                             output_file=None, result_file=None, answers_file=None, **options) -> int:
     """Run or inspect a thread without prompting or automatically retrying it."""
@@ -115,16 +149,9 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
     result = None
     receipt_path = None
 
-    def finish(code, error=None):
-        if receipt_path is not None:
-            if error is None and code == 1:
-                error = "Execution failed; inspect the CLI log and saved session before retrying."
-            try:
-                _write_result_file(receipt_path, session, result, error)
-            except (OSError, TypeError, ValueError) as exc:
-                console.print(f"[red]Error writing result file: {escape(str(exc))}[/red]")
-                return 1
-        return code
+    def finish(code, error=None, error_code=None, *, status=None):
+        return report_headless_result(code, result_file=receipt_path, session=session, result=result,
+                                      error=error, error_code=error_code, status=status)
 
     try:
         if result_file is not None or answers_file is not None:
@@ -159,6 +186,9 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             commands.validate_main_agent_approval(metadata.graph_config, options["approval_mode"])
             checkpoint_db = metadata.checkpoint_db or checkpoint_db
             commands._print_main_agent_restore_configuration(thread_id, metadata.graph_config)
+    except _HandoffError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return finish(2, str(exc), exc.error_code)
     except ValueError as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         return finish(2, str(exc))
@@ -201,14 +231,20 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             if result is None:
                 return finish(1, "Could not restore the session; answers were not submitted.")
             _validate_answers(result, answers)
+            # Clear restored state so a failed operation cannot report the previous result.
             result = None
+            if finish(None, status="running") == 1:
+                return 1
             result = commands._run_main_agent_operation(
                 session, lambda: session.resume(answers),
                 progress_description="Answering main-agent questions...",
                 checkpoint_runtime=runtime, interactive=False, report_failure_usage=False,
             )
         if query and (not saved or (result is not None and result.status == "completed")):
+            # Clear restored state so a failed operation cannot report the previous result.
             result = None
+            if finish(None, status="running") == 1:
+                return 1
             result = commands.run_main_agent_query(
                 session, query, verbose=options.get("verbose", False),
                 checkpoint_runtime=runtime, interactive=False,
@@ -231,10 +267,13 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                                else json.dumps(result.state, ensure_ascii=False, indent=2, allow_nan=False))
                 except (TypeError, ValueError) as exc:
                     console.print(f"[red]Error serializing output: {escape(str(exc))}[/red]")
-                    return finish(1, f"Error serializing output: {exc}")
+                    return finish(1, f"Error serializing output: {exc}", "export")
                 if not commands.save_output(content, output_file):
-                    return finish(1, "Could not write --output-file; the saved session is unchanged.")
+                    return finish(1, "Could not write --output-file; the saved session is unchanged.", "export")
         return finish({"completed": 0, "waiting_for_user": 3}.get(status, 1))
+    except _HandoffError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        return finish(2, str(exc), exc.error_code)
     except (IncompatibleCheckpointError, TypeError, ValueError, RegistryError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         return finish(2, str(exc))

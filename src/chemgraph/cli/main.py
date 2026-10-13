@@ -47,7 +47,12 @@ from chemgraph.cli.formatting import (
     format_response,
     list_models,
 )
-from chemgraph.cli.headless import HEADLESS_TOOLS_ERROR, run_headless_main_agent
+from chemgraph.cli.headless import (
+    HEADLESS_TOOLS_ERROR,
+    _validate_handoff_paths,
+    report_headless_result,
+    run_headless_main_agent,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -530,6 +535,20 @@ def load_config(config_file: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def _exit_run_error(args, message, code=2, *, print_error=True):
+    if print_error:
+        console.print(f"[red]{escape(message)}[/red]")
+    result_file = getattr(args, "result_file", None)
+    if result_file is not None:
+        try:
+            _validate_handoff_paths(getattr(args, "answers_file", None), result_file, args.output_file)
+        except (OSError, ValueError) as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+        else:
+            code = report_headless_result(code, result_file=result_file, error=message, error_code="config")
+    sys.exit(code)
+
+
 def _handle_run(args: argparse.Namespace) -> None:
     """Handle the ``run`` subcommand and legacy no-subcommand mode.
 
@@ -569,7 +588,11 @@ def _handle_run(args: argparse.Namespace) -> None:
     # Load configuration if specified
     config: Dict[str, Any] = {}
     if args.config:
-        config = load_config(args.config)
+        try:
+            config = load_config(args.config)
+        except SystemExit as exc:
+            _exit_run_error(args, f"Could not load configuration from {args.config}; inspect the CLI diagnostics.",
+                            exc.code, print_error=False)
         # Override args with config values (only when the user hasn't
         # explicitly set them on the command line).
         for key, value in config.items():
@@ -584,12 +607,10 @@ def _handle_run(args: argparse.Namespace) -> None:
     if (result_file is not None or answers_file is not None) and (
         args.workflow != "main_agent" or getattr(args, "interactive", False)
     ):
-        console.print("[red]--result-file and --answers-file require headless main_agent.[/red]")
-        sys.exit(2)
+        _exit_run_error(args, "--result-file and --answers-file require headless main_agent.")
     migration_message = get_removed_workflow_message(args.workflow)
     if migration_message:
-        console.print(f"[red]{escape(migration_message)}[/red]")
-        sys.exit(2)
+        _exit_run_error(args, migration_message)
 
     if args.recursion_limit is None:
         args.recursion_limit = 200
@@ -623,8 +644,7 @@ def _handle_run(args: argparse.Namespace) -> None:
     if deepagent_discover_skills is None:
         deepagent_discover_skills = True
     if not isinstance(deepagent_discover_skills, bool):
-        console.print("[red]deepagent_discover_skills must be a boolean.[/red]")
-        sys.exit(2)
+        _exit_run_error(args, "deepagent_discover_skills must be a boolean.")
     deepagent_auto_approve = bool(
         getattr(args, "deepagent_dangerously_skip_approvals", False)
     )
@@ -632,27 +652,22 @@ def _handle_run(args: argparse.Namespace) -> None:
     approval_mode = "bypass" if bypass else "review"
     interactive = bool(getattr(args, "interactive", False))
     if bypass and args.workflow not in {"main_agent", "deep_agent"}:
-        console.print("[red]Approval bypass requires -w main_agent or -w deep_agent.[/red]")
-        sys.exit(2)
+        _exit_run_error(args, "Approval bypass requires -w main_agent or -w deep_agent.")
     if cli_deepagent is True and args.workflow != "main_agent":
-        console.print(
-            "[red]--deepagent adds a worker only to the main_agent workflow. "
-            "Use -w deep_agent to call it directly.[/red]"
+        _exit_run_error(
+            args, "--deepagent adds a worker only to the main_agent workflow. "
+            "Use -w deep_agent to call it directly."
         )
-        sys.exit(2)
     uses_deepagent = args.workflow == "deep_agent" or (
         enable_deepagent and args.workflow == "main_agent"
     )
     if not uses_deepagent:
         if cli_discover_skills is not None:
-            console.print("[red]--deepagent-discover-skills requires --deepagent or -w deep_agent.[/red]")
-            sys.exit(2)
+            _exit_run_error(args, "--deepagent-discover-skills requires --deepagent or -w deep_agent.")
         if cli_deepagent_workspace is not None:
-            console.print("[red]--deepagent-workspace requires --deepagent or -w deep_agent.[/red]")
-            sys.exit(2)
+            _exit_run_error(args, "--deepagent-workspace requires --deepagent or -w deep_agent.")
         if cli_deepagent_skills is not None:
-            console.print("[red]--deepagent-skill requires --deepagent or -w deep_agent.[/red]")
-            sys.exit(2)
+            _exit_run_error(args, "--deepagent-skill requires --deepagent or -w deep_agent.")
         # Retain saved settings for later REPL workflow switches.
         if not interactive or cli_deepagent is False:
             deepagent_workspace = None
@@ -665,49 +680,37 @@ def _handle_run(args: argparse.Namespace) -> None:
                 if interactive else resolve_skill_dirs(deepagent_skills)
             )
         except (TypeError, ValueError, RuntimeError, OSError) as exc:
-            console.print(f"[red]Invalid Deep Agent skills: {escape(str(exc))}[/red]")
-            sys.exit(2)
+            _exit_run_error(args, f"Invalid Deep Agent skills: {exc}")
     if enable_deepagent and args.workflow == "main_agent" and not interactive and not bypass:
-        console.print(
-            "[red]The experimental Deep Agent requires interactive mode.[/red]"
-        )
-        sys.exit(2)
+        _exit_run_error(args, "The experimental Deep Agent requires interactive mode.")
     if deepagent_auto_approve and (
         args.workflow != "deep_agent" or getattr(args, "interactive", False)
     ):
-        console.print(
-            "[red]--deepagent-dangerously-skip-approvals is supported only "
-            "for non-interactive -w deep_agent runs.[/red]"
+        _exit_run_error(
+            args, "--deepagent-dangerously-skip-approvals is supported only "
+            "for non-interactive -w deep_agent runs."
         )
-        sys.exit(2)
     if args.workflow == "deep_agent" and not getattr(args, "interactive", False):
         if not bypass:
-            console.print(
-                "[red]Headless deep_agent runs require "
-                "--dangerously-skip-approvals (or --deepagent-dangerously-skip-approvals).[/red]"
+            _exit_run_error(
+                args, "Headless deep_agent runs require "
+                "--dangerously-skip-approvals (or --deepagent-dangerously-skip-approvals)."
             )
-            sys.exit(2)
         if not deepagent_workspace:
-            console.print(
-                "[red]Headless deep_agent runs require an explicit "
-                "--deepagent-workspace PATH.[/red]"
+            _exit_run_error(
+                args, "Headless deep_agent runs require an explicit --deepagent-workspace PATH."
             )
-            sys.exit(2)
 
     if args.workflow == "main_agent":
         if not interactive and not bypass:
-            console.print(
-                "[red]main_agent requires interactive mode or --dangerously-skip-approvals.[/red]"
-            )
-            sys.exit(2)
+            _exit_run_error(args, "main_agent requires interactive mode or --dangerously-skip-approvals.")
 
     # Register metadata without importing local implementations or sending schemas.
     deepagent_tool_registry = None
     cli_tools = getattr(args, "local_tool_names", None)
     local_names = cli_tools if cli_tools is not None else config.get("tools")
     if cli_tools is not None and args.workflow not in {"deep_agent", "main_agent"}:
-        console.print("[red]--tool requires -w deep_agent or -w main_agent.[/red]")
-        sys.exit(2)
+        _exit_run_error(args, "--tool requires -w deep_agent or -w main_agent.")
     if (interactive or args.workflow in {"deep_agent", "main_agent"}) and local_names is not None:
         from chemgraph.registry.tools import RegistryError, ToolRegistry
 
@@ -721,8 +724,7 @@ def _handle_run(args: argparse.Namespace) -> None:
                 catalog.get_spec(name) for name in dict.fromkeys(local_names)
             )
         except (RegistryError, ValueError) as exc:
-            console.print(f"[red]Invalid local tools: {escape(str(exc))}[/red]")
-            sys.exit(2)
+            _exit_run_error(args, f"Invalid local tools: {exc}")
 
     main_options = {}
     for key in ("workspace", "skills", "discover_skills", "subagents"):
@@ -730,8 +732,7 @@ def _handle_run(args: argparse.Namespace) -> None:
         if value is not None:
             if args.workflow != "main_agent" and not interactive:
                 if key in explicit_main_options:
-                    console.print(f"[red]{key} requires the main_agent workflow.[/red]")
-                    sys.exit(2)
+                    _exit_run_error(args, f"{key} requires the main_agent workflow.")
                 continue
             main_options[{"skills": "skill_dirs", "subagents": "subagent_names"}.get(key, key)] = value
     if interactive or args.workflow == "main_agent":
@@ -750,8 +751,7 @@ def _handle_run(args: argparse.Namespace) -> None:
 
     if (mcp_url or mcp_command) and not (args.workflow == "main_agent" and args.resume):
         if args.workflow == "main_agent" and not interactive:
-            console.print(f"[red]{HEADLESS_TOOLS_ERROR}[/red]")
-            sys.exit(2)
+            _exit_run_error(args, HEADLESS_TOOLS_ERROR)
         from chemgraph.cli.mcp_utils import load_mcp_tools_from_config
 
         mcp_tools = load_mcp_tools_from_config(

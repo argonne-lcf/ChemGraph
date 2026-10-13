@@ -292,15 +292,41 @@ this shape (interrupt IDs come from the saved checkpoint):
   "interrupts": [
     {"id": "INTERRUPT_ID", "kind": "clarification", "payload": {"question": "Which calculator?"}}
   ],
-  "error": null
+  "error": null,
+  "error_code": null,
+  "exit_code": 3
 }
 ```
 
-`status` is `completed`, `waiting_for_user`, or `failed` when known; otherwise
-it is `null`. `session_id` is `null` when no session was established. `error`
-describes a CLI failure; it can be non-null even when the saved session completed
-(for example, if `--output-file` could not be written). Interrupt kinds are
-`clarification`, `tool_review`, and `unsupported`.
+Before executing a new query or validated answers, ChemGraph atomically writes
+`status: "running"` with the session ID, empty response/interrupts, and null
+`exit_code`, `error`, and `error_code`. If that write fails, the graph does not run.
+The final receipt replaces it. Inspection-only invocations report the restored
+state without publishing a running receipt.
+
+Final `status` is `completed`, `waiting_for_user`, or `failed` when known;
+otherwise it is `null`. `session_id` is `null` when no session was established.
+`exit_code` records the CLI outcome; `error_code` and human-readable `error` are
+null when no CLI error occurred. A completed session can still have an export
+error. Interrupt kinds are `clarification`, `tool_review`, and `unsupported`.
+An interrupt payload that cannot be encoded as strict UTF-8 JSON is replaced by
+a fixed message directing interactive inspection and marked `unsupported`;
+its ID and the waiting status/exit **3** are preserved.
+
+| `error_code` | Meaning |
+| --- | --- |
+| `invalid_answers` | Answer file is unreadable, malformed, or contains invalid values |
+| `stale_answers` | Answer IDs do not exactly match all current pending IDs |
+| `not_waiting` | The restored session is not waiting for input |
+| `unsupported_interrupt` | File answers cannot handle the pending payload or missing IDs |
+| `config` | Invalid CLI/configuration or incompatible resume |
+| `execution` | Initialization, restoration, or execution failed |
+| `export` | Output export failed; the saved session may already be completed |
+| `interrupted` | KeyboardInterrupt was handled; exit **130** |
+
+Receipt filesystem failures return **1** and print diagnostics; the destination
+may be unusable, so no new receipt or error code can be promised in that file.
+Existing exit codes are retained, including **1** for missing/malformed TOML.
 
 To inspect without advancing the graph or calling the model/tools:
 
@@ -332,10 +358,18 @@ The result directory must already exist. Receipts are serialized before being
 atomically replaced; a write failure returns **1** without changing saved status.
 Use a fresh result path for each invocation so an older receipt cannot be mistaken
 for a new result. Answer, result, and output files must have distinct paths.
-Some startup errors occur before the headless driver can write a receipt; consult
-the exit code and logs when no new receipt exists. After uncertainty, inspect the
-saved session before resubmitting. Serialize operations on each session; these
-flags do not provide concurrent-writer coordination.
+Expected configuration and mode errors after argument parsing also write receipts
+when the destination is usable and does not alias the answer/output files.
+Argument-parser failures, invalid/colliding destinations, and termination before
+session creation may leave no receipt; consult the exit code and logs.
+
+SIGTERM and abrupt crashes can leave the running receipt. Once the process has
+stopped, that receipt means the outcome is uncertain, not that work is still
+running. The early session ID does not guarantee that a checkpoint was saved.
+Reconcile the known process before inspecting or continuing; do not automatically
+replay uncertain operations. Stopping the CLI does not cancel external jobs.
+Serialize all operations on each session, including inspection; these flags
+provide no concurrent-writer coordination or session lock.
 
 See the [Hermes example](../examples/chemgraph_hermes/README.md) for relaying these
 questions and answers through Discord.
