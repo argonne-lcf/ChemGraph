@@ -342,3 +342,36 @@ async def test_clarification_interrupt_bypasses_journal(tmp_path):
         state = await graph.ainvoke(Command(resume="H2"), config)
     assert not state.get("__interrupt__")
     assert context.controller.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['registry', 'attached', 'delegated'])
+@pytest.mark.parametrize('permitted', [True, False])
+async def test_strict_preparation_enforced_on_every_native_path(tmp_path, mode, permitted):
+    from chemgraph.execution.journal import DiskExecutionController
+    from chemgraph.execution.prepared import ExecutionPolicy, FRAMEWORK_HELPERS
+
+    context = scope(tmp_path, controller=DiskExecutionController(tmp_path / 'journal'))
+    seed(context)
+    context.policy = ExecutionPolicy(
+        tools=frozenset({'run_ase'}) if permitted else frozenset(),
+        helpers=FRAMEWORK_HELPERS | {'task', 'load_agents', 'search_agents'},
+    )
+    operation = {'id': 'energy', 'name': 'run_ase', 'type': 'tool_call', 'args': {'params': {
+        'input_structure_file': 'h2.xyz', 'output_results_file': 'energy.json',
+        'calculator': {'calculator_type': 'emt'}, 'driver': 'energy',
+    }}}
+    if permitted:
+        action = context.controller.prepare(context, operation)
+        context.controller.decide(action, approve=True)
+    graph = graph_for(mode, InMemorySaver())
+    with execution_context(context):
+        if permitted:
+            state = await graph.ainvoke({'messages': [HumanMessage(content='Energy')]},
+                                       {'configurable': {'thread_id': 'strict'}})
+            assert result_artifacts(state, context.task_id)[0]['source_path'] == 'energy.json'
+        else:
+            with pytest.raises(ScopedExecutionError, match='preparation'):
+                await graph.ainvoke({'messages': [HumanMessage(content='Energy')]},
+                                    {'configurable': {'thread_id': 'strict'}})
+            assert not (context.workspace / 'energy.json').exists()

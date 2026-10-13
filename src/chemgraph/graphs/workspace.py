@@ -173,6 +173,12 @@ def resolve_workspace_interrupt_policy(tool_registry=None, interrupt_on=_DEFAULT
         name: {"allowed_decisions": ["approve", "reject"]}
         for name in _REGISTRY_REVIEW_TOOLS
     })
+    from chemgraph.execution.scoped import current_execution
+
+    context = current_execution()
+    if context is not None and context.policy is not None:
+        policy.update({name: {"allowed_decisions": ["approve", "reject"]}
+                       for name in context.policy.tools})
     return policy
 
 
