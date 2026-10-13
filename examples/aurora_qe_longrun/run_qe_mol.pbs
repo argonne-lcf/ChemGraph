@@ -1,0 +1,70 @@
+#!/bin/bash
+#PBS -A ChemGraph
+#PBS -q debug
+#PBS -l select=1:ncpus=208
+#PBS -l walltime=00:30:00
+#PBS -l filesystems=home:flare
+#PBS -N qe_mol_run
+#PBS -j oe
+
+# Route 1 (calc-layer) validation on a NON-PERIODIC molecule (H2O). This is the
+# stage that actually exercises the new DFT code path added on this branch:
+#   is_nonperiodic(atoms) -> atoms.center(vacuum) -> K_POINTS gamma
+# Bulk Si (run_qe_cap.pbs) is fully periodic and never touches that path, so this
+# script is the real proof the molecule fix works on live pw.x. No LLM here, so no
+# proxy/token needed. Runs all three molecule stages in one allocation:
+#   mol_smoke  -> single-point at Gamma (grep espresso.pwi for K_POINTS gamma)
+#   mol_cap    -> capped opt, leaves a resumable partial
+#   mol_resume -> uncapped resume; asserts the class-C water geometry band
+#
+# Requires the pslibrary USPP PBE H/O pseudos in $ESPRESSO_PSEUDO alongside Si.UPF:
+#   H.pbe-rrkjus_psl.1.0.0.UPF, O.pbe-n-rrkjus_psl.1.0.0.UPF
+#
+# Submit from this directory:  qsub run_qe_mol.pbs
+#
+# ====================== EDIT ME (site-specific) ==============================
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+
+echo "Jobid: $PBS_JOBID"
+echo "Host:  $(hostname)"
+
+for m in oneapi/release oneapi/eng-compiler; do
+  module is-loaded "$m" 2>/dev/null && module unload "$m" 2>/dev/null || true
+done
+module load oneapi/release/2025.3.1 mpich/opt/develop-git.6037a7a
+module load hdf5/1.14.6
+module list 2>&1 | tail -6
+
+export MPIR_CVAR_CH4_XPMEM_ENABLE=0
+export MPIR_CVAR_ENABLE_GPU=0
+export FI_CXI_DEFAULT_CQ_SIZE=131072
+export FI_CXI_CQ_FILL_PERCENT=20
+export OMP_NUM_THREADS=1
+
+QE_BIN=/soft/applications/quantum_espresso/7.5-oneapi2025.0.5/cpu/bin/pw.x
+NRANKS=8
+export ASE_ESPRESSO_COMMAND="mpiexec -np ${NRANKS} -ppn ${NRANKS} -d 1 ${QE_BIN}"
+export ESPRESSO_PSEUDO="${ESPRESSO_PSEUDO:-$HOME/qe_pseudo}"
+
+# H2O SCF is heavier than the 2-atom Si cell; give the cap a bit more room so it
+# fires cleanly a few steps in. Tune from the mol_smoke SCF time if needed.
+export QE_CAP_SECONDS="${QE_CAP_SECONDS:-90}"
+export CHEMGRAPH_ALLOCATION_MARGIN="${CHEMGRAPH_ALLOCATION_MARGIN:-40}"
+
+PY="${PY:-$HOME/chemgraph-env/bin/python}"
+export RUN_DIR="$PBS_O_WORKDIR/mol_run"
+mkdir -p "$RUN_DIR"
+
+echo "QE_CAP_SECONDS=$QE_CAP_SECONDS  MARGIN=$CHEMGRAPH_ALLOCATION_MARGIN"
+
+echo "########## STAGE mol_smoke ##########"
+"$PY" "$PBS_O_WORKDIR/qe_cap_driver.py" mol_smoke
+
+echo "########## STAGE mol_cap ##########"
+"$PY" "$PBS_O_WORKDIR/qe_cap_driver.py" mol_cap
+
+echo "########## STAGE mol_resume ##########"
+"$PY" "$PBS_O_WORKDIR/qe_cap_driver.py" mol_resume
+
+echo "=== mol job done ==="
