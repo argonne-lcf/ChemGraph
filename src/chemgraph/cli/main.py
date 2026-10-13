@@ -405,6 +405,13 @@ Examples:
         help="Arguments forwarded to chemgraph.dashboard.",
     )
 
+    distributed_parser = subparsers.add_parser(
+        "distributed", add_help=False,
+        help="Run independent ChemGraph peers and exchange messages.",
+    )
+    distributed_parser.add_argument("distributed_args", nargs=argparse.REMAINDER)
+    distributed_parser.add_argument("-h", "--help", action="store_true", dest="distributed_help")
+
     # ---- "academy" subcommand -------------------------------------------
     academy_parser = subparsers.add_parser(
         "academy",
@@ -1040,6 +1047,9 @@ def main() -> None:
             _strip_remainder_separator(args.dashboard_args),
         )
 
+    elif args.command == "distributed":
+        forwarded = ["--help"] if args.distributed_help else _strip_remainder_separator(args.distributed_args)
+        _run_module_main("chemgraph.distributed.cli", forwarded)
     elif args.command == "academy":
         _handle_academy(args)
 

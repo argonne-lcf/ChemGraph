@@ -77,7 +77,7 @@ class RunEvent(BaseModel):
 
     event_id: str = Field(default_factory=lambda: f"evt-{uuid.uuid4()}")
     timestamp: float = Field(default_factory=time.time)
-    event: EventKind
+    event: str = Field(min_length=1)
     run_id: str | None = None
     agent_id: str | None = None
     role: str | None = None
