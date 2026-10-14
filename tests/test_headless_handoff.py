@@ -221,6 +221,7 @@ def test_atomic_receipt_failure_preserves_last_write(headless, tmp_path, monkeyp
     assert run(query="calculate", result_file=result) == 1
     assert not list(tmp_path.glob(".result.json-*"))
     if failure_at == 1:
+        assert not result.exists()
         assert not SessionStore().list_sessions()
     else:
         receipt = json.loads(result.read_text(encoding="utf-8"))

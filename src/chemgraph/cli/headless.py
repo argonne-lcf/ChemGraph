@@ -120,15 +120,20 @@ def _write_result_file(path, session, result, error, *, exit_code, error_code=No
     if first_write:
         os.close(os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
     temporary = None
+    published = False
     try:
         with tempfile.NamedTemporaryFile(mode="wb", dir=destination.parent,
                                          prefix=f".{destination.name}-", delete=False) as stream:
             temporary = Path(stream.name)
             stream.write(content)
         os.replace(temporary, destination)
+        published = True
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
+        if first_write and not published:
+            # Remove only the empty reservation created above.
+            destination.unlink(missing_ok=True)
 
 
 def report_headless_result(code, *, result_file=None, session=None, result=None,
