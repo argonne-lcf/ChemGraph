@@ -1,16 +1,18 @@
 import asyncio
 import json
 import sys
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from chemgraph.distributed.cli import _transport, process_controls, queue_control
+from chemgraph.distributed.cli import _transport, process_controls, queue_control, run_peer
 from chemgraph.distributed.config import DistributedConfig, load_config
 from chemgraph.distributed.protocol import PeerEnvelope
 from chemgraph.distributed.runner import ChemGraphRunner
 from chemgraph.distributed.runtime import PeerRuntime
+from chemgraph.observability.event_log import read_events
 from chemgraph.observability.run_files import write_json_atomic
 
 
@@ -174,3 +176,27 @@ async def test_non_json_native_interrupts_round_trip_through_operator_control(tm
         assert peer.output == "EMT"
     finally:
         await peer.close(timeout_s=0.01)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Peer launcher requires POSIX file locking")
+@pytest.mark.asyncio
+async def test_peer_startup_records_workflow_and_host(tmp_path, monkeypatch):
+    @asynccontextmanager
+    async def transport(*_args):
+        yield SimpleNamespace(start=AsyncMock(), check_health=lambda: None)
+
+    @asynccontextmanager
+    async def runner(*_args):
+        yield SimpleNamespace(interrupts=())
+
+    monkeypatch.setattr("chemgraph.distributed.cli._transport", transport)
+    monkeypatch.setattr("chemgraph.distributed.cli.ConfiguredRunner", runner)
+    monkeypatch.setattr("chemgraph.distributed.cli.socket.gethostname", lambda: "compute.example")
+    settings = config(tmp_path)
+    settings.peers["worker"].idle_timeout_s = 0.001
+    await run_peer(settings, "worker")
+    events = read_events(settings.peer_dir("worker") / "events.jsonl")
+    started = next(event for event in events if event.event == "agent_started")
+    assert started.payload == {"workflow_type": "main_agent", "placement": {
+        "hostname": "compute.example", "short_hostname": "compute",
+    }}

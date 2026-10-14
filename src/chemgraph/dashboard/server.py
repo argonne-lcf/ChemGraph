@@ -91,6 +91,15 @@ def status_payload(handler: DashboardHandler) -> dict[str, Any]:
     artifacts = write_run_artifacts(run_dir)
     manifest = read_json_file(run_dir / "manifest.json", default={})
     updated = status.get("updated") or status.get("timestamp")
+    if isinstance(status.get("peer"), str) and status.get("mode") in {None, "distributed_peer"}:
+        name = status["peer"]
+        placement = artifacts["placement"]["agents"].get(name, {})
+        status = {
+            **status, "mode": "distributed_peer",
+            "agents": [{"agent_id": name, "agent_name": name,
+                        "role": placement.get("role") or "ChemGraph peer", "placement": placement}],
+        }
+        updated = updated or status_path.stat().st_mtime
     schema = (
         status.get("mode")
         or (manifest.get("mode") if isinstance(manifest, dict) else None)

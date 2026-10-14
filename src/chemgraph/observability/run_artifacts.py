@@ -39,7 +39,7 @@ def build_placement(
         if isinstance(placement, dict):
             agents[event.agent_id] = {
                 "agent_id": event.agent_id,
-                "role": event.role,
+                "role": event.role or event.payload.get("workflow_type"),
                 **placement,
             }
 

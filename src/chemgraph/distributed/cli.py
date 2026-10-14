@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import signal
+import socket
 import time
 import uuid
 from pathlib import Path
@@ -113,7 +114,10 @@ async def run_peer(config, name: str) -> None:
                     control_task = None
                     try:
                         await transport.start(runtime.receive, runtime.status)
-                        trace("agent_started", {"workflow_type": spec.workflow_type})
+                        hostname = socket.gethostname()
+                        trace("agent_started", {"workflow_type": spec.workflow_type,
+                                                "placement": {"hostname": hostname,
+                                                              "short_hostname": hostname.split(".")[0]}})
                         print(f"Peer {name} ready; artifacts and operator controls: {directory}", flush=True)
                         while not stop.is_set():
                             transport.check_health()

@@ -102,6 +102,7 @@
       }
       snapshotIdentity = nextIdentity;
       snapshot = nextSnapshot;
+      if (isDistributedMode() && !selectedAgent) selectedAgent = snapshot.status.peer;
       const latest = allEvents().length - 1;
       if (followLatest || timelineIndex === null) {
         timelineIndex = latest;
@@ -141,6 +142,10 @@
 
     function isWorkflowMode() {
       return snapshot?.schema === 'chemgraph_workflow';
+    }
+
+    function isDistributedMode() {
+      return snapshot?.schema === 'distributed_peer';
     }
 
     function currentEventIndex() {
@@ -272,6 +277,11 @@
           agent_id: agentId,
           agent_name: spec.agent_name || agentId,
           ...agentStateAt(agentId, currentEvents),
+          ...(isDistributedMode() ? {
+            state: snapshot.status.state,
+            started: snapshot.status.state !== 'starting',
+            last_error: snapshot.status.last_error,
+          } : {}),
           placement: visiblePlacements[agentId] || finalPlacements[agentId] || spec.placement || {},
         };
       }).filter(agent => agent.agent_id);
@@ -351,6 +361,19 @@
     function renderMetrics() {
       if (isWorkflowMode()) {
         renderWorkflowMetrics();
+        return;
+      }
+      if (isDistributedMode()) {
+        const peer = snapshot.status;
+        const values = [
+          ['Latest state', peer.state], ['Queued messages', peer.pending_messages],
+          ['Received', eventsOf('message_received').length],
+          ['Tool calls', eventsOf('tool_call_started').length],
+        ];
+        document.getElementById('metrics').innerHTML = values.map(([k,v]) => `
+          <div class="metric"><div class="label">${esc(k)}</div><div class="value">${esc(v)}</div></div>
+        `).join('');
+        document.getElementById('proof').innerHTML = '';
         return;
       }
       const events = visibleEvents();
@@ -1416,7 +1439,7 @@
         `;
       }).join('');
 
-      const edgeHint = !edges.length ? `
+      const edgeHint = !isDistributedMode() && !edges.length ? `
         <text class="graph-hint" x="${(width / 2).toFixed(1)}" y="${(height / 2).toFixed(1)}" text-anchor="middle">
           ${allVisibleMessages ? 'No routes visible in this graph mode. Try Recent or All.' : 'No messages visible at this time point.'}
         </text>
@@ -1437,7 +1460,7 @@
           !agent.started ? 'pending' : '',
           selectedEdgeKey && !selectedEdgeKey.split('->').includes(agent.agent_id) ? 'dimmed' : '',
         ].filter(Boolean).join(' ');
-        const status = !agent.started ? 'pending' : agent.last_error ? 'error' : `${agent.decision_count || 0} decisions`;
+        const status = isDistributedMode() ? agent.state : (!agent.started ? 'pending' : agent.last_error ? 'error' : `${agent.decision_count || 0} decisions`);
         return `
           <g class="${classes}" data-agent="${esc(agent.agent_id)}" tabindex="0" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
             <rect width="${nodeW}" height="${nodeH}" rx="7" fill="${hostColor(hIndex)}" stroke="${hostStroke(hIndex)}"></rect>
@@ -1883,6 +1906,18 @@
       selectedAgent = agent.agent_id;
       document.getElementById('agentSelect').value = selectedAgent;
       document.getElementById('detailTitle').textContent = agent.agent_id;
+      if (isDistributedMode()) {
+        const peer = snapshot.status;
+        document.getElementById('detailTitle').textContent = `${agent.agent_id} · latest status`;
+        document.getElementById('detailCards').innerHTML = detailCards([
+          ['Workflow', agent.role], ['Host', agentHost(agent)], ['State', peer.state],
+          ['Queued messages', peer.pending_messages], ['Current message', peer.current_message_id || '-'],
+        ]);
+        setDetailBlock('detailPrimaryTitle', 'Output', 'detailPrimary', peer.output || 'No output yet.');
+        setDetailBlock('detailSecondaryTitle', 'Last error', 'detailSecondary', peer.last_error || 'None');
+        setDetailBlock('detailTertiaryTitle', 'Pending interrupts', 'detailTertiary', JSON.stringify(peer.interrupts || [], null, 2));
+        return;
+      }
       document.getElementById('detailCards').innerHTML = detailCards([
         ['Role', agent.role || '-'],
         ['Host', agentHost(agent)],

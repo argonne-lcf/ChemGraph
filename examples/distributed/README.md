@@ -169,3 +169,6 @@ unless an operator resolves them before shutdown.
 
 `status.json` and `events.jsonl` provide per-peer inspection. No shared status
 files, global campaign controller, or Academy-specific reasoning loop is used.
+The dashboard recognizes a peer directory and displays its latest state, queued
+message count, output, errors, and pending interrupts alongside the event timeline.
+It inspects one peer at a time; it does not aggregate remote peers' status files.
