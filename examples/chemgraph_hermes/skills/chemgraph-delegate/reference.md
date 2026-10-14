@@ -60,7 +60,8 @@ survive. Never turn that placeholder into a clarification answer.
 An unusable receipt destination returns exit **1** and diagnostics, but cannot
 reliably contain its own error receipt. Argument parsing, colliding paths, or
 termination before session creation can also leave no receipt. Always use a
-fresh filename; never reuse a prior result when the current process produced none.
+fresh filename: existing result paths are rejected without overwriting them.
+Never reuse a prior result when the current process produced none.
 
 ## Inspect and continue
 

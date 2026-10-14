@@ -54,6 +54,12 @@ def _receipt_interrupt(item):
     return {"id": item.id, "kind": kind, "payload": payload}
 
 
+def _answerable(interrupts):
+    return bool(interrupts) and all(
+        item.id and _receipt_interrupt(item)["kind"] == "clarification" for item in interrupts
+    )
+
+
 def _load_answers(path):
     def unique_keys(pairs):
         result = {}
@@ -78,16 +84,14 @@ def _load_answers(path):
 def _validate_answers(result, answers):
     if result is None or result.status != "waiting_for_user" or not result.interrupts:
         raise _HandoffError("Answers require a session waiting for clarification.", "not_waiting")
-    if any(not item.id for item in result.interrupts):
-        raise _HandoffError("Pending questions must have stable interrupt IDs.", "unsupported_interrupt")
+    if not _answerable(result.interrupts):
+        raise _HandoffError(
+            "--answers-file requires clarifications with stable IDs; resume interactively for other interrupts.",
+            "unsupported_interrupt",
+        )
     # The session API also accepts review payloads; enforce IDs even for one question.
     if set(answers) != {item.id for item in result.interrupts}:
         raise _HandoffError("Answer IDs must exactly match the current pending interrupts.", "stale_answers")
-    if any(_interrupt_kind(item.payload) != "clarification" for item in result.interrupts):
-        raise _HandoffError(
-            "--answers-file supports clarifications only; resume interactively for other interrupts.",
-            "unsupported_interrupt",
-        )
 
 
 def _validate_handoff_paths(*paths):
@@ -98,7 +102,7 @@ def _validate_handoff_paths(*paths):
                 raise ValueError("Answer, result, and output files must have distinct paths.")
 
 
-def _write_result_file(path, session, result, error, *, exit_code, error_code=None, status=None):
+def _write_result_file(path, session, result, error, *, exit_code, error_code=None, status=None, first_write=True):
     receipt = {
         "version": 1,
         "session_id": session.thread_id if session is not None else None,
@@ -111,11 +115,13 @@ def _write_result_file(path, session, result, error, *, exit_code, error_code=No
         "error_code": error_code,
         "exit_code": exit_code,
     }
-    content = json.dumps(receipt, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    content = (json.dumps(receipt, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8", "replace")
     destination = Path(path)
+    if first_write:
+        os.close(os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent,
+        with tempfile.NamedTemporaryFile(mode="wb", dir=destination.parent,
                                          prefix=f".{destination.name}-", delete=False) as stream:
             temporary = Path(stream.name)
             stream.write(content)
@@ -126,7 +132,7 @@ def _write_result_file(path, session, result, error, *, exit_code, error_code=No
 
 
 def report_headless_result(code, *, result_file=None, session=None, result=None,
-                           error=None, error_code=None, status=None):
+                           error=None, error_code=None, status=None, first_write=True):
     """Write a receipt when requested; None denotes an invocation still running."""
     if result_file is not None:
         if error is None and code == 1:
@@ -134,7 +140,7 @@ def report_headless_result(code, *, result_file=None, session=None, result=None,
         error_code = error_code or {1: "execution", 2: "config", 130: "interrupted"}.get(code)
         try:
             _write_result_file(result_file, session, result, error,
-                               exit_code=code, error_code=error_code, status=status)
+                               exit_code=code, error_code=error_code, status=status, first_write=first_write)
         except (OSError, TypeError, ValueError, OverflowError, RecursionError) as exc:
             console.print(f"[red]Error writing result file: {escape(str(exc))}[/red]")
             return 1
@@ -148,10 +154,15 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
     session = None
     result = None
     receipt_path = None
+    first_write = True
 
     def finish(code, error=None, error_code=None, *, status=None):
-        return report_headless_result(code, result_file=receipt_path, session=session, result=result,
-                                      error=error, error_code=error_code, status=status)
+        nonlocal first_write
+        code = report_headless_result(code, result_file=receipt_path, session=session, result=result,
+                                      error=error, error_code=error_code, status=status, first_write=first_write)
+        if code != 1:
+            first_write = False
+        return code
 
     try:
         if result_file is not None or answers_file is not None:
@@ -187,7 +198,8 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             checkpoint_db = metadata.checkpoint_db or checkpoint_db
             commands._print_main_agent_restore_configuration(thread_id, metadata.graph_config)
     except _HandoffError as exc:
-        console.print(f"[red]{escape(str(exc))}[/red]")
+        message = str(exc).encode("utf-8", "replace").decode("utf-8")
+        console.print(f"[red]{escape(message)}[/red]")
         return finish(2, str(exc), exc.error_code)
     except ValueError as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
@@ -257,7 +269,7 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                 for pending in result.interrupts:
                     console.print(escape(commands._interrupt_question(pending.payload)))
                 console.print("Resume interactively with --resume and --dangerously-skip-approvals to answer.")
-                if result_file and all(_interrupt_kind(item.payload) == "clarification" for item in result.interrupts):
+                if result_file and _answerable(result.interrupts):
                     console.print("Or submit answers by interrupt ID with --resume and --answers-file.")
             elif status == "failed":
                 console.print("Resume interactively with --resume and --dangerously-skip-approvals; use /retry.")
@@ -272,7 +284,8 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                     return finish(1, "Could not write --output-file; the saved session is unchanged.", "export")
         return finish({"completed": 0, "waiting_for_user": 3}.get(status, 1))
     except _HandoffError as exc:
-        console.print(f"[red]{escape(str(exc))}[/red]")
+        message = str(exc).encode("utf-8", "replace").decode("utf-8")
+        console.print(f"[red]{escape(message)}[/red]")
         return finish(2, str(exc), exc.error_code)
     except (IncompatibleCheckpointError, TypeError, ValueError, RegistryError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")

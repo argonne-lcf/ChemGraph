@@ -245,7 +245,7 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--output-file", type=str, help="Save output to file")
     parser.add_argument("--result-file", metavar="PATH",
-                        help="Write a JSON session result (headless main_agent only)")
+                        help="Write a JSON session result to a new file (headless main_agent only)")
     parser.add_argument("--answers-file", metavar="PATH",
                         help="Answer pending clarification IDs from JSON (headless main_agent --resume only)")
     parser.add_argument("--config", type=str, help="Load configuration from TOML file")

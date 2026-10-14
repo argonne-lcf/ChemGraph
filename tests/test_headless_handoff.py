@@ -1,11 +1,13 @@
 """Regression tests for CLI clarification handoff across process restarts."""
 
+import io
 import json
 import os
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 import signal
+import sqlite3
 import subprocess
 import sys
 import textwrap
@@ -13,6 +15,7 @@ import time
 
 import pytest
 from langchain_core.messages import AIMessage
+from rich.console import Console
 
 from chemgraph.agent.main_session import MainAgentSession, PendingInterrupt
 from chemgraph.cli import commands, headless as driver
@@ -39,9 +42,11 @@ def test_file_handoff_inspects_and_answers_current_questions(headless, tmp_path,
 
     with monkeypatch.context() as inspection:
         inspection.setattr(_ScriptedChatModel, "_generate", lambda *a, **k: pytest.fail("inspection called model"))
+        result = tmp_path / "inspection.json"
         assert run(resume_session=session_id, result_file=result) == 3
         assert json.loads(result.read_text(encoding="utf-8")) == first
         answers.write_text('{"stale-id": "EMT"}', encoding="utf-8")
+        result = tmp_path / "stale.json"
         assert run(resume_session=session_id, answers_file=answers, result_file=result) == 2
         assert json.loads(result.read_text(encoding="utf-8"))["interrupts"] == first["interrupts"]
 
@@ -50,14 +55,16 @@ def test_file_handoff_inspects_and_answers_current_questions(headless, tmp_path,
         {"name": "ask_human", "id": "charge", "args": {"question": "Charge?"}, "type": "tool_call"},
         {"name": "ask_human", "id": "spin", "args": {"question": "Spin?"}, "type": "tool_call"},
     ])]
+    result = tmp_path / "second.json"
     assert run(resume_session=session_id, answers_file=answers, result_file=result) == 3
     second = json.loads(result.read_text(encoding="utf-8"))
     ids = {item["id"] for item in second["interrupts"]}
     assert len(ids) == 2 and pending["id"] not in ids
     with monkeypatch.context() as validation:
         validation.setattr(_ScriptedChatModel, "_generate", lambda *a, **k: pytest.fail("invalid answer called model"))
-        for invalid in ({pending["id"]: "EMT"}, {next(iter(ids)): "0"}, {**dict.fromkeys(ids, "0"), "extra": "1"}):
+        for index, invalid in enumerate(({pending["id"]: "EMT"}, {next(iter(ids)): "0"}, {**dict.fromkeys(ids, "0"), "extra": "1"})):
             answers.write_text(json.dumps(invalid), encoding="utf-8")
+            result = tmp_path / f"invalid-{index}.json"
             assert run(resume_session=session_id, answers_file=answers, result_file=result) == 2
             rejected = json.loads(result.read_text(encoding="utf-8"))
             assert rejected["status"] == "waiting_for_user" and rejected["error"]
@@ -67,6 +74,7 @@ def test_file_handoff_inspects_and_answers_current_questions(headless, tmp_path,
     answers.write_text(json.dumps(dict.fromkeys(ids, "0")), encoding="utf-8")
     responses[:] = [AIMessage(content="Done — H₂O.")]
     output = tmp_path / "answer.txt"
+    result = tmp_path / "completed.json"
     assert run(resume_session=session_id, answers_file=answers, result_file=result,
                return_option="last_message", output_file=output) == 0
     assert json.loads(result.read_text(encoding="utf-8")) == {
@@ -74,6 +82,7 @@ def test_file_handoff_inspects_and_answers_current_questions(headless, tmp_path,
         "interrupts": [], "error": None, "error_code": None, "exit_code": 0,
     }
     assert output.read_text(encoding="utf-8") == "Done — H₂O."
+    result = tmp_path / "not-waiting.json"
     assert run(resume_session=session_id, answers_file=answers, result_file=result) == 2
     receipt = json.loads(result.read_text(encoding="utf-8"))
     assert receipt["error_code"] == "not_waiting" and receipt["exit_code"] == 2
@@ -94,6 +103,17 @@ def test_invalid_answer_file_does_not_start_session(headless, tmp_path, content)
     assert receipt["session_id"] is None and receipt["status"] is None and receipt["error"]
     assert receipt["error_code"] == "invalid_answers" and receipt["exit_code"] == 2
     assert not requests
+
+
+def test_surrogate_in_duplicate_answer_id_keeps_error_receipt(headless, tmp_path, monkeypatch):
+    answers, result = tmp_path / "answers.json", tmp_path / "result.json"
+    answers.write_text('{"\\ud800": "EMT", "\\ud800": "MACE"}', encoding="utf-8")
+    with io.TextIOWrapper(io.BytesIO(), encoding="utf-8", errors="strict") as stream:
+        monkeypatch.setattr(driver, "console", Console(file=stream))
+        assert headless[0](resume_session="unknown", answers_file=answers, result_file=result) == 2
+    receipt = json.loads(result.read_text(encoding="utf-8"))
+    assert receipt["exit_code"] == 2 and receipt["error_code"] == "invalid_answers"
+    assert "Duplicate answer ID: ?" in receipt["error"]
 
 
 def test_cli_parses_and_forwards_handoff_paths(monkeypatch):
@@ -139,9 +159,33 @@ def test_running_receipt_precedes_new_turn_answers_and_followup(headless, tmp_pa
     waiting = json.loads(result.read_text(encoding="utf-8"))
     answers.write_text(json.dumps({waiting["interrupts"][0]["id"]: "EMT"}), encoding="utf-8")
     responses[:] = [AIMessage(content="done")]
+    result = tmp_path / "answered.json"
     assert run(resume_session=waiting["session_id"], answers_file=answers, result_file=result) == 0
+    assert json.loads(result.read_text(encoding="utf-8"))["status"] == "completed"
+    result = tmp_path / "followup.json"
     assert run(resume_session=waiting["session_id"], query="follow up", result_file=result) == 0
     assert observed == [waiting["session_id"]] * 4
+
+
+@pytest.mark.parametrize("startup_error", [False, True])
+def test_existing_result_database_keeps_checkpoints(headless, tmp_path, monkeypatch, startup_error):
+    run, responses, _ = headless
+    responses[:] = [AIMessage(content="saved")]
+    assert run(query="calculate") == 0
+    result = tmp_path / "checkpoints.db"
+    with sqlite3.connect(result) as db:
+        checkpoints = db.execute("SELECT thread_id, checkpoint_id, checkpoint FROM checkpoints ORDER BY checkpoint_id").fetchall()
+    assert checkpoints
+    monkeypatch.setattr(_ScriptedChatModel, "_generate", lambda *a, **k: pytest.fail("must not execute"))
+    if startup_error:
+        with pytest.raises(SystemExit) as exc:
+            cli_main._handle_run(_run_args(query="calculate", result_file=result))
+        assert exc.value.code == 1
+    else:
+        assert run(query="calculate again", result_file=result) == 1
+    with sqlite3.connect(result) as db:
+        assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+        assert db.execute("SELECT thread_id, checkpoint_id, checkpoint FROM checkpoints ORDER BY checkpoint_id").fetchall() == checkpoints
 
 
 @pytest.mark.parametrize("failure", ["missing_parent", "directory", "permission"])
@@ -161,11 +205,10 @@ def test_unusable_receipt_prevents_execution(headless, tmp_path, monkeypatch, fa
 
 
 @pytest.mark.parametrize("failure_at", [1, 2])
-def test_atomic_receipt_failure_preserves_previous_file(headless, tmp_path, monkeypatch, failure_at):
+def test_atomic_receipt_failure_preserves_last_write(headless, tmp_path, monkeypatch, failure_at):
     run, responses, _ = headless
     responses[:] = [AIMessage(content="done")]
     result = tmp_path / "result.json"
-    result.write_text("old receipt", encoding="utf-8")
     replace_file, writes = driver.os.replace, []
 
     def fail_replace(source, destination):
@@ -178,7 +221,6 @@ def test_atomic_receipt_failure_preserves_previous_file(headless, tmp_path, monk
     assert run(query="calculate", result_file=result) == 1
     assert not list(tmp_path.glob(".result.json-*"))
     if failure_at == 1:
-        assert result.read_text(encoding="utf-8") == "old receipt"
         assert not SessionStore().list_sessions()
     else:
         receipt = json.loads(result.read_text(encoding="utf-8"))
@@ -212,7 +254,7 @@ def test_unencodable_interrupt_preserves_waiting_outcome(headless, tmp_path, mon
     assert "inspect interactively" in pending["payload"]["message"]
 
 
-@pytest.mark.parametrize("kind", ["tool_review", "unsupported", "missing_id"])
+@pytest.mark.parametrize("kind", ["tool_review", "stale_tool_review", "unsupported", "missing_id"])
 def test_answers_reject_nonclarifications_without_advancing(headless, tmp_path, monkeypatch, kind):
     run, responses, _ = headless
     result, answers = tmp_path / "result.json", tmp_path / "answers.json"
@@ -221,21 +263,27 @@ def test_answers_reject_nonclarifications_without_advancing(headless, tmp_path, 
                tool_registry=ToolRegistry([ToolRegistry().get_spec("ask_human")])) == 3
     waiting = json.loads(result.read_text(encoding="utf-8"))
     pending_id = waiting["interrupts"][0]["id"]
-    answers.write_text(json.dumps({pending_id: "approve"}), encoding="utf-8")
+    answers.write_text(json.dumps({"stale" if kind == "stale_tool_review" else pending_id: "approve"}), encoding="utf-8")
+    payload_kind = "tool_review" if kind == "stale_tool_review" else kind
     original = commands.restore_main_agent_session
 
     def restore(*args, **kwargs):
         restored = original(*args, **kwargs)
         payload = {"tool_review": {"action_requests": [], "review_configs": []},
-                   "unsupported": {"message": "review"}, "missing_id": {"question": "Method?"}}[kind]
+                   "unsupported": {"message": "review"}, "missing_id": {"question": "Method?"}}[payload_kind]
         return replace(restored, interrupts=(PendingInterrupt("" if kind == "missing_id" else pending_id, payload),))
 
     monkeypatch.setattr(commands, "restore_main_agent_session", restore)
     monkeypatch.setattr(MainAgentSession, "resume", lambda *a, **k: pytest.fail("must not resume"))
+    if kind == "missing_id":
+        with driver.console.capture() as captured:
+            assert run(resume_session=waiting["session_id"], result_file=tmp_path / "anonymous.json") == 3
+        assert "Or submit answers" not in captured.get()
+    result = tmp_path / "rejected.json"
     assert run(resume_session=waiting["session_id"], answers_file=answers, result_file=result) == 2
     receipt = json.loads(result.read_text(encoding="utf-8"))
     assert receipt["error_code"] == "unsupported_interrupt" and receipt["status"] == "waiting_for_user"
-    assert receipt["interrupts"][0]["kind"] == ("clarification" if kind == "missing_id" else kind)
+    assert receipt["interrupts"][0]["kind"] == ("clarification" if kind == "missing_id" else payload_kind)
 
 
 @pytest.mark.parametrize("outcome", ["execution", "config", "export", "export_serialization", "interrupted", "initialization"])
@@ -281,6 +329,7 @@ def test_failed_continuation_does_not_report_previous_result(headless, tmp_path,
         answers.write_text(json.dumps({previous["interrupts"][0]["id"]: "EMT"}), encoding="utf-8")
         options = {"answers_file": answers}
     responses[:] = [RuntimeError("unavailable")]
+    result = tmp_path / "failed.json"
     assert run(resume_session=previous["session_id"], result_file=result, **options) == 1
     receipt = json.loads(result.read_text(encoding="utf-8"))
     assert receipt["status"] == "failed" and receipt["error_code"] == "execution"

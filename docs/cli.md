@@ -356,8 +356,9 @@ ask again and exit **3**, with new IDs in its receipt.
 
 The result directory must already exist. Receipts are serialized before being
 atomically replaced; a write failure returns **1** without changing saved status.
-Use a fresh result path for each invocation so an older receipt cannot be mistaken
-for a new result. Answer, result, and output files must have distinct paths.
+Each invocation requires a new result path: an existing destination is left
+untouched and returns **1** before graph execution. Answer, result, and output
+files must have distinct paths.
 Expected configuration and mode errors after argument parsing also write receipts
 when the destination is usable and does not alias the answer/output files.
 Argument-parser failures, invalid/colliding destinations, and termination before
