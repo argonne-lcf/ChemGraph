@@ -776,6 +776,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Interactive mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#machine-readable-clarification-handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Machine-readable clarification handoff
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1656,6 +1673,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Interactive mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#machine-readable-clarification-handoff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Machine-readable clarification handoff
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1786,6 +1820,14 @@ version.</p>
 <tr>
 <td><code>--output-file</code></td>
 <td>Save the printed result to a file</td>
+</tr>
+<tr>
+<td><code>--result-file PATH</code></td>
+<td>Write a JSON session receipt (headless <code>main_agent</code>)</td>
+</tr>
+<tr>
+<td><code>--answers-file PATH</code></td>
+<td>Submit clarification answers by interrupt ID with <code>--resume</code></td>
 </tr>
 <tr>
 <td><code>-v</code>, <code>-vv</code></td>
@@ -1961,8 +2003,9 @@ initialization, or output-export failure; <strong>2</strong> means invalid CLI/r
 Ctrl+C returns <strong>130</strong> and closes the checkpoint runtime.
 <code>--resume ID</code> without a query reports the restored state. With <code>-q</code>, it starts a
 new turn only if that state is completed. If the session is waiting or failed,
-the query is skipped with a warning on stderr. Pending input needs interactive resume;
-failed operations need interactive <code>/retry</code>. Completed tools are not replayed on
+the query is skipped with a warning on stderr. Clarifications can use <code>--answers-file</code>
+as described below; other interrupts need interactive resume. Failed operations
+need interactive <code>/retry</code>. Completed tools are not replayed on
 restore. Recursion limits remain in effect; bypass does not add run-wide budgets
 or continuous goal execution.</p>
 <p>Headless <code>main_agent</code> requires a CLI-restorable configuration. New runs using
@@ -1976,34 +2019,144 @@ interrupt instructions stay in the terminal. The output directory must already
 exist. Serialization or write failures return <strong>1</strong>, including when the session
 is waiting for input, without changing its saved status. Retry an export with
 <code>--resume ID --output-file PATH</code> without <code>-q</code> to avoid rerunning completed tools.</p>
+<h3 id="machine-readable-clarification-handoff">Machine-readable clarification handoff<a class="headerlink" href="#machine-readable-clarification-handoff" title="Permanent link">&para;</a></h3>
+<p>Headless <code>main_agent</code> accepts <code>--result-file PATH</code> independently of <code>--output</code>
+and <code>--output-file</code>. Stdout remains human-readable. The UTF-8 JSON receipt has
+this shape (interrupt IDs come from the saved checkpoint):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span><span class="nt">"session_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"CHEMGRAPH_SESSION_ID"</span><span class="p">,</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span><span class="nt">"status"</span><span class="p">:</span><span class="w"> </span><span class="s2">"waiting_for_user"</span><span class="p">,</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">  </span><span class="nt">"assistant_response"</span><span class="p">:</span><span class="w"> </span><span class="s2">""</span><span class="p">,</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">  </span><span class="nt">"interrupts"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">    </span><span class="p">{</span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"INTERRUPT_ID"</span><span class="p">,</span><span class="w"> </span><span class="nt">"kind"</span><span class="p">:</span><span class="w"> </span><span class="s2">"clarification"</span><span class="p">,</span><span class="w"> </span><span class="nt">"payload"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"question"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Which calculator?"</span><span class="p">}}</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">  </span><span class="p">],</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">  </span><span class="nt">"error"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">  </span><span class="nt">"error_code"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">  </span><span class="nt">"exit_code"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="p">}</span>
+</code></pre></div>
+<p>Before executing a new query or validated answers, ChemGraph atomically writes
+<code>status: "running"</code> with the session ID, empty response/interrupts, and null
+<code>exit_code</code>, <code>error</code>, and <code>error_code</code>. If that write fails, the graph does not run.
+The final receipt replaces it. Inspection-only invocations report the restored
+state without publishing a running receipt.</p>
+<p>Final <code>status</code> is <code>completed</code>, <code>waiting_for_user</code>, or <code>failed</code> when known;
+otherwise it is <code>null</code>. <code>session_id</code> is <code>null</code> when no session was established.
+<code>exit_code</code> records the CLI outcome; <code>error_code</code> and human-readable <code>error</code> are
+null when no CLI error occurred. A completed session can still have an export
+error. Interrupt kinds are <code>clarification</code>, <code>tool_review</code>, and <code>unsupported</code>.
+An interrupt payload that cannot be encoded as strict UTF-8 JSON is replaced by
+a fixed message directing interactive inspection and marked <code>unsupported</code>;
+its ID and the waiting status/exit <strong>3</strong> are preserved.</p>
+<table>
+<thead>
+<tr>
+<th><code>error_code</code></th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>invalid_answers</code></td>
+<td>Answer file is unreadable, malformed, or contains invalid values</td>
+</tr>
+<tr>
+<td><code>stale_answers</code></td>
+<td>Answer IDs do not exactly match all current pending IDs</td>
+</tr>
+<tr>
+<td><code>not_waiting</code></td>
+<td>The restored session is not waiting for input</td>
+</tr>
+<tr>
+<td><code>unsupported_interrupt</code></td>
+<td>File answers cannot handle the pending payload or missing IDs</td>
+</tr>
+<tr>
+<td><code>config</code></td>
+<td>Invalid CLI/configuration or incompatible resume</td>
+</tr>
+<tr>
+<td><code>execution</code></td>
+<td>Initialization, restoration, or execution failed</td>
+</tr>
+<tr>
+<td><code>export</code></td>
+<td>Output export failed; the saved session may already be completed</td>
+</tr>
+<tr>
+<td><code>interrupted</code></td>
+<td>KeyboardInterrupt was handled; exit <strong>130</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Receipt filesystem failures return <strong>1</strong> and print diagnostics; the destination
+may be unusable, so no new receipt or error code can be promised in that file.
+Existing exit codes are retained, including <strong>1</strong> for missing/malformed TOML.</p>
+<p>To inspect without advancing the graph or calling the model/tools:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>-w<span class="w"> </span>main_agent<span class="w"> </span>--dangerously-skip-approvals<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--resume<span class="w"> </span>SESSION_ID<span class="w"> </span>--result-file<span class="w"> </span>/absolute/run/inspection-001.json
+</code></pre></div>
+<p>For <code>clarification</code> interrupts with stable IDs, write a JSON object mapping <strong>all</strong>
+current interrupt IDs to the user's nonempty answer strings, then resume:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span><span class="nt">"INTERRUPT_ID"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Use EMT for this demonstration."</span><span class="p">}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>-w<span class="w"> </span>main_agent<span class="w"> </span>--dangerously-skip-approvals<span class="w"> </span>--resume<span class="w"> </span>SESSION_ID<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>--answers-file<span class="w"> </span>/absolute/run/answers-001.json<span class="w"> </span>--result-file<span class="w"> </span>/absolute/run/result-002.json
+</code></pre></div>
+<p>Answers require <code>--resume</code> and cannot be combined with <code>--query</code> or <code>--interactive</code>.
+Malformed JSON, duplicate keys, empty answers, missing/extra/stale IDs, and sessions
+that are no longer waiting are rejected with exit <strong>2</strong> before executing the graph.
+Only the built-in <code>{"question": "..."}</code> payload is supported for file answers;
+tool reviews and other payloads require interactive resume. A continuation can
+ask again and exit <strong>3</strong>, with new IDs in its receipt.</p>
+<p>The result directory must already exist. Receipts are serialized before being
+atomically replaced; a write failure returns <strong>1</strong> without changing saved status.
+Each invocation requires a new result path: an existing destination is left
+untouched and returns <strong>1</strong> before graph execution. Answer, result, and output
+files must have distinct paths.
+Expected configuration and mode errors after argument parsing also write receipts
+when the destination is usable and does not alias the answer/output files.
+Argument-parser failures, invalid/colliding destinations, and termination before
+session creation may leave no receipt; consult the exit code and logs.</p>
+<p>SIGTERM and abrupt crashes can leave the running receipt. Once the process has
+stopped, that receipt means the outcome is uncertain, not that work is still
+running. The early session ID does not guarantee that a checkpoint was saved.
+Reconcile the known process before inspecting or continuing; do not automatically
+replay uncertain operations. Stopping the CLI does not cancel external jobs.
+Serialize all operations on each session, including inspection; these flags
+provide no concurrent-writer coordination or session lock.</p>
+<p>See the <a href="../examples/chemgraph_hermes/skills/chemgraph-delegate/SKILL.md">Hermes skill</a> for relaying these
+questions and answers through Discord.</p>
 <h2 id="saved-sessions">Saved sessions<a class="headerlink" href="#saved-sessions" title="Permanent link">&para;</a></h2>
 <p>CLI sessions are stored in <code>~/.chemgraph/sessions.db</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>chemgraph<span class="w"> </span>session<span class="w"> </span>list
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>chemgraph<span class="w"> </span>session<span class="w"> </span>show<span class="w"> </span>&lt;session-id&gt;
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--resume<span class="w"> </span>&lt;session-id&gt;<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Continue with frequency analysis."</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>chemgraph<span class="w"> </span>session<span class="w"> </span>list
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>chemgraph<span class="w"> </span>session<span class="w"> </span>show<span class="w"> </span>&lt;session-id&gt;
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>chemgraph<span class="w"> </span>run<span class="w"> </span>--resume<span class="w"> </span>&lt;session-id&gt;<span class="w"> </span>-q<span class="w"> </span><span class="s2">"Continue with frequency analysis."</span>
 </code></pre></div>
 <p>Run <code>chemgraph session --help</code> before deletion or other state-changing session
 operations. Resume a session with a compatible workflow.</p>
 <h2 id="use-mcp-tools">Use MCP tools<a class="headerlink" href="#use-mcp-tools" title="Permanent link">&para;</a></h2>
 <p>Connect to one or more streamable-HTTP servers:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--mcp-url<span class="w"> </span>http://localhost:9003/mcp/<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Build a 3D structure for methane."</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>chemgraph<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span>--mcp-url<span class="w"> </span>http://localhost:9003/mcp/<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span>-q<span class="w"> </span><span class="s2">"Build a 3D structure for methane."</span>
 </code></pre></div>
 <p>Use repeated/configured server definitions for larger deployments. See
 <a href="../mcp_servers/">MCP servers</a> for transports and client configuration.</p>
 <h2 id="trace-and-dashboard">Trace and dashboard<a class="headerlink" href="#trace-and-dashboard" title="Permanent link">&para;</a></h2>
 <p>Use <code>--trace-dir &lt;directory&gt;</code> with <code>single_agent</code> to record trace information,
 then inspect the dashboard options available in your version:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>chemgraph<span class="w"> </span>dashboard<span class="w"> </span>--help
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>chemgraph<span class="w"> </span>dashboard<span class="w"> </span>--help
 </code></pre></div>
 <h2 id="evaluation-and-academy">Evaluation and Academy<a class="headerlink" href="#evaluation-and-academy" title="Permanent link">&para;</a></h2>
 <p>Evaluation needs an explicit dataset or a configured profile:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>--help
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span>--help
 </code></pre></div>
 <p>Academy commands require the <code>academy</code> extra and, depending on the backend,
 additional execution extras:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>chemgraph<span class="w"> </span>academy<span class="w"> </span>--help
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>chemgraph<span class="w"> </span>academy<span class="w"> </span>--help
 </code></pre></div>
 <p>See <a href="../evaluation/">Evaluation</a> and <a href="../hpc_and_academy/">HPC and Academy</a>.</p>
 
