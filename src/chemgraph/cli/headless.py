@@ -1,12 +1,16 @@
 """Unattended execution of durable main-agent sessions."""
 
 import json
+import os
+from pathlib import Path
+import tempfile
 
 from rich.console import Console
 from rich.markup import escape
 
 from chemgraph.agent.configuration import validate_cli_configuration
 from chemgraph.agent.main_session import IncompatibleCheckpointError
+from chemgraph.agent.interrupts import is_tool_review
 from chemgraph.cli import commands
 from chemgraph.cli.checkpoint_runtime import CheckpointRuntime, DEFAULT_CHECKPOINT_DB
 from chemgraph.cli.formatting import console, format_response
@@ -25,12 +29,155 @@ HEADLESS_CONFIGURATION_ERROR = (
 )
 
 
+class _HandoffError(ValueError):
+    def __init__(self, message, error_code):
+        super().__init__(message)
+        self.error_code = error_code
+
+
+def _interrupt_kind(payload):
+    if is_tool_review(payload):
+        return "tool_review"
+    if (isinstance(payload, dict) and set(payload) == {"question"}
+            and isinstance(payload["question"], str) and payload["question"].strip()):
+        return "clarification"
+    return "unsupported"
+
+
+def _receipt_interrupt(item):
+    payload, kind = item.payload, _interrupt_kind(item.payload)
+    try:
+        json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError, OverflowError, RecursionError):
+        payload = {"message": "Interrupt payload could not be encoded as JSON; inspect interactively."}
+        kind = "unsupported"
+    return {"id": item.id, "kind": kind, "payload": payload}
+
+
+def _answerable(interrupts):
+    return bool(interrupts) and all(
+        item.id and _receipt_interrupt(item)["kind"] == "clarification" for item in interrupts
+    )
+
+
+def _load_answers(path):
+    def unique_keys(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"Duplicate answer ID: {key}")
+            result[key] = value
+        return result
+
+    try:
+        answers = json.loads(Path(path).read_text(encoding="utf-8"), object_pairs_hook=unique_keys)
+    except (OSError, ValueError) as exc:
+        raise _HandoffError(f"Invalid --answers-file: {exc}", "invalid_answers") from exc
+    if not isinstance(answers, dict) or not answers or any(
+        not key or not isinstance(value, str) or not value.strip()
+        for key, value in answers.items()
+    ):
+        raise _HandoffError("--answers-file must map interrupt IDs to nonempty answer strings.", "invalid_answers")
+    return answers
+
+
+def _validate_answers(result, answers):
+    if result is None or result.status != "waiting_for_user" or not result.interrupts:
+        raise _HandoffError("Answers require a session waiting for clarification.", "not_waiting")
+    if not _answerable(result.interrupts):
+        raise _HandoffError(
+            "--answers-file requires clarifications with stable IDs; resume interactively for other interrupts.",
+            "unsupported_interrupt",
+        )
+    # The session API also accepts review payloads; enforce IDs even for one question.
+    if set(answers) != {item.id for item in result.interrupts}:
+        raise _HandoffError("Answer IDs must exactly match the current pending interrupts.", "stale_answers")
+
+
+def _validate_handoff_paths(*paths):
+    paths = [Path(path).resolve() for path in paths if path is not None]
+    for index, path in enumerate(paths):
+        for other in paths[:index]:
+            if path == other or (path.exists() and other.exists() and path.samefile(other)):
+                raise ValueError("Answer, result, and output files must have distinct paths.")
+
+
+def _write_result_file(path, session, result, error, *, exit_code, error_code=None, status=None, first_write=True):
+    receipt = {
+        "version": 1,
+        "session_id": session.thread_id if session is not None else None,
+        "status": status or (result.status if result is not None else (
+            "failed" if session is not None and session.failed else None
+        )),
+        "assistant_response": result.assistant_response if result is not None else "",
+        "interrupts": [_receipt_interrupt(item) for item in result.interrupts] if result is not None else [],
+        "error": error,
+        "error_code": error_code,
+        "exit_code": exit_code,
+    }
+    content = (json.dumps(receipt, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8", "replace")
+    destination = Path(path)
+    if first_write:
+        os.close(os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+    temporary = None
+    published = False
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", dir=destination.parent,
+                                         prefix=f".{destination.name}-", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+        os.replace(temporary, destination)
+        published = True
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        if first_write and not published:
+            # Remove only the empty reservation created above.
+            destination.unlink(missing_ok=True)
+
+
+def report_headless_result(code, *, result_file=None, session=None, result=None,
+                           error=None, error_code=None, status=None, first_write=True):
+    """Write a receipt when requested; None denotes an invocation still running."""
+    if result_file is not None:
+        if error is None and code == 1:
+            error = "Execution failed; inspect the CLI log and saved session before retrying."
+        error_code = error_code or {1: "execution", 2: "config", 130: "interrupted"}.get(code)
+        try:
+            _write_result_file(result_file, session, result, error,
+                               exit_code=code, error_code=error_code, status=status, first_write=first_write)
+        except (OSError, TypeError, ValueError, OverflowError, RecursionError) as exc:
+            console.print(f"[red]Error writing result file: {escape(str(exc))}[/red]")
+            return 1
+    return code
+
+
 def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=None,
-                            output_file=None, **options) -> int:
+                            output_file=None, result_file=None, answers_file=None, **options) -> int:
     """Run or inspect a thread without prompting or automatically retrying it."""
     runtime = None
     session = None
+    result = None
+    receipt_path = None
+    first_write = True
+
+    def finish(code, error=None, error_code=None, *, status=None):
+        nonlocal first_write
+        code = report_headless_result(code, result_file=receipt_path, session=session, result=result,
+                                      error=error, error_code=error_code, status=status, first_write=first_write)
+        if code != 1:
+            first_write = False
+        return code
+
     try:
+        if result_file is not None or answers_file is not None:
+            _validate_handoff_paths(answers_file, result_file, output_file)
+            receipt_path = result_file
+        if result_file is not None and not Path(result_file).parent.is_dir():
+            raise OSError("The --result-file parent directory must already exist.")
+        if answers_file is not None and (not resume_session or query is not None):
+            raise ValueError("--answers-file requires --resume and cannot be combined with --query.")
+        answers = _load_answers(answers_file) if answers_file is not None else None
         if options.get("approval_mode") != "bypass":
             raise ValueError("Headless main_agent requires --dangerously-skip-approvals.")
         if not query and not resume_session:
@@ -55,12 +202,16 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
             commands.validate_main_agent_approval(metadata.graph_config, options["approval_mode"])
             checkpoint_db = metadata.checkpoint_db or checkpoint_db
             commands._print_main_agent_restore_configuration(thread_id, metadata.graph_config)
+    except _HandoffError as exc:
+        message = str(exc).encode("utf-8", "replace").decode("utf-8")
+        console.print(f"[red]{escape(message)}[/red]")
+        return finish(2, str(exc), exc.error_code)
     except ValueError as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
-        return 2
+        return finish(2, str(exc))
     except Exception as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
-        return 1
+        return finish(1, str(exc))
 
     try:
         runtime = CheckpointRuntime()
@@ -78,7 +229,7 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                 workflow_type="main_agent", checkpointer=saver, _raise_configuration_errors=True, **options,
             )
         if agent is None:
-            return 1
+            return finish(1, "Could not initialize the main agent.")
         if not saved:
             try:
                 validate_cli_configuration(agent.main_agent_metadata.graph_config)
@@ -87,14 +238,30 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
         session = commands.create_main_agent_session(
             agent, thread_id=thread_id if saved else None, checkpoint_db=checkpoint_db,
         )
-        result = None
         if saved:
             result = commands.restore_main_agent_session(
                 session, checkpoint_runtime=runtime, interactive=False,
             )
             if query and result is not None and result.status in {"waiting_for_user", "failed"}:
                 Console(stderr=True).print(f"Query not run: session is {result.status}.")
+        if answers is not None:
+            if result is None:
+                return finish(1, "Could not restore the session; answers were not submitted.")
+            _validate_answers(result, answers)
+            # Clear restored state so a failed operation cannot report the previous result.
+            result = None
+            if finish(None, status="running") == 1:
+                return 1
+            result = commands._run_main_agent_operation(
+                session, lambda: session.resume(answers),
+                progress_description="Answering main-agent questions...",
+                checkpoint_runtime=runtime, interactive=False, report_failure_usage=False,
+            )
         if query and (not saved or (result is not None and result.status == "completed")):
+            # Clear restored state so a failed operation cannot report the previous result.
+            result = None
+            if finish(None, status="running") == 1:
+                return 1
             result = commands.run_main_agent_query(
                 session, query, verbose=options.get("verbose", False),
                 checkpoint_runtime=runtime, interactive=False,
@@ -107,6 +274,8 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                 for pending in result.interrupts:
                     console.print(escape(commands._interrupt_question(pending.payload)))
                 console.print("Resume interactively with --resume and --dangerously-skip-approvals to answer.")
+                if result_file and _answerable(result.interrupts):
+                    console.print("Or submit answers by interrupt ID with --resume and --answers-file.")
             elif status == "failed":
                 console.print("Resume interactively with --resume and --dangerously-skip-approvals; use /retry.")
             if output_file:
@@ -115,20 +284,24 @@ def run_headless_main_agent(*, query=None, resume_session=None, checkpoint_db=No
                                else json.dumps(result.state, ensure_ascii=False, indent=2, allow_nan=False))
                 except (TypeError, ValueError) as exc:
                     console.print(f"[red]Error serializing output: {escape(str(exc))}[/red]")
-                    return 1
+                    return finish(1, f"Error serializing output: {exc}", "export")
                 if not commands.save_output(content, output_file):
-                    return 1
-        return {"completed": 0, "waiting_for_user": 3}.get(status, 1)
+                    return finish(1, "Could not write --output-file; the saved session is unchanged.", "export")
+        return finish({"completed": 0, "waiting_for_user": 3}.get(status, 1))
+    except _HandoffError as exc:
+        message = str(exc).encode("utf-8", "replace").decode("utf-8")
+        console.print(f"[red]{escape(message)}[/red]")
+        return finish(2, str(exc), exc.error_code)
     except (IncompatibleCheckpointError, TypeError, ValueError, RegistryError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
-        return 2
+        return finish(2, str(exc))
     except KeyboardInterrupt:
         if session is not None:
             console.print(f"Session: {escape(session.thread_id)} | Interrupted")
-        return 130
+        return finish(130, "Interrupted; inspect the saved session before continuing.")
     except Exception as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
-        return 1
+        return finish(1, str(exc))
     finally:
         if runtime is not None:
             runtime.close()

@@ -39,6 +39,8 @@ Common options:
 | `--human-supervised` | Allow supported tools to pause for confirmation |
 | `--recursion-limit` | Maximum graph steps; defaults to 200 |
 | `--output-file` | Save the printed result to a file |
+| `--result-file PATH` | Write a JSON session receipt (headless `main_agent`) |
+| `--answers-file PATH` | Submit clarification answers by interrupt ID with `--resume` |
 | `-v`, `-vv` | INFO or DEBUG diagnostics |
 
 The recursion limit counts graph steps, including middleware and tool execution,
@@ -256,8 +258,9 @@ initialization, or output-export failure; **2** means invalid CLI/resume configu
 Ctrl+C returns **130** and closes the checkpoint runtime.
 `--resume ID` without a query reports the restored state. With `-q`, it starts a
 new turn only if that state is completed. If the session is waiting or failed,
-the query is skipped with a warning on stderr. Pending input needs interactive resume;
-failed operations need interactive `/retry`. Completed tools are not replayed on
+the query is skipped with a warning on stderr. Clarifications can use `--answers-file`
+as described below; other interrupts need interactive resume. Failed operations
+need interactive `/retry`. Completed tools are not replayed on
 restore. Recursion limits remain in effect; bypass does not add run-wide budgets
 or continuous goal execution.
 
@@ -273,6 +276,104 @@ interrupt instructions stay in the terminal. The output directory must already
 exist. Serialization or write failures return **1**, including when the session
 is waiting for input, without changing its saved status. Retry an export with
 `--resume ID --output-file PATH` without `-q` to avoid rerunning completed tools.
+
+### Machine-readable clarification handoff
+
+Headless `main_agent` accepts `--result-file PATH` independently of `--output`
+and `--output-file`. Stdout remains human-readable. The UTF-8 JSON receipt has
+this shape (interrupt IDs come from the saved checkpoint):
+
+```json
+{
+  "version": 1,
+  "session_id": "CHEMGRAPH_SESSION_ID",
+  "status": "waiting_for_user",
+  "assistant_response": "",
+  "interrupts": [
+    {"id": "INTERRUPT_ID", "kind": "clarification", "payload": {"question": "Which calculator?"}}
+  ],
+  "error": null,
+  "error_code": null,
+  "exit_code": 3
+}
+```
+
+Before executing a new query or validated answers, ChemGraph atomically writes
+`status: "running"` with the session ID, empty response/interrupts, and null
+`exit_code`, `error`, and `error_code`. If that write fails, the graph does not run.
+The final receipt replaces it. Inspection-only invocations report the restored
+state without publishing a running receipt.
+
+Final `status` is `completed`, `waiting_for_user`, or `failed` when known;
+otherwise it is `null`. `session_id` is `null` when no session was established.
+`exit_code` records the CLI outcome; `error_code` and human-readable `error` are
+null when no CLI error occurred. A completed session can still have an export
+error. Interrupt kinds are `clarification`, `tool_review`, and `unsupported`.
+An interrupt payload that cannot be encoded as strict UTF-8 JSON is replaced by
+a fixed message directing interactive inspection and marked `unsupported`;
+its ID and the waiting status/exit **3** are preserved.
+
+| `error_code` | Meaning |
+| --- | --- |
+| `invalid_answers` | Answer file is unreadable, malformed, or contains invalid values |
+| `stale_answers` | Answer IDs do not exactly match all current pending IDs |
+| `not_waiting` | The restored session is not waiting for input |
+| `unsupported_interrupt` | File answers cannot handle the pending payload or missing IDs |
+| `config` | Invalid CLI/configuration or incompatible resume |
+| `execution` | Initialization, restoration, or execution failed |
+| `export` | Output export failed; the saved session may already be completed |
+| `interrupted` | KeyboardInterrupt was handled; exit **130** |
+
+Receipt filesystem failures return **1** and print diagnostics; the destination
+may be unusable, so no new receipt or error code can be promised in that file.
+Existing exit codes are retained, including **1** for missing/malformed TOML.
+
+To inspect without advancing the graph or calling the model/tools:
+
+```bash
+chemgraph run -w main_agent --dangerously-skip-approvals \
+  --resume SESSION_ID --result-file /absolute/run/inspection-001.json
+```
+
+For `clarification` interrupts with stable IDs, write a JSON object mapping **all**
+current interrupt IDs to the user's nonempty answer strings, then resume:
+
+```json
+{"INTERRUPT_ID": "Use EMT for this demonstration."}
+```
+
+```bash
+chemgraph run -w main_agent --dangerously-skip-approvals --resume SESSION_ID \
+  --answers-file /absolute/run/answers-001.json --result-file /absolute/run/result-002.json
+```
+
+Answers require `--resume` and cannot be combined with `--query` or `--interactive`.
+Malformed JSON, duplicate keys, empty answers, missing/extra/stale IDs, and sessions
+that are no longer waiting are rejected with exit **2** before executing the graph.
+Only the built-in `{"question": "..."}` payload is supported for file answers;
+tool reviews and other payloads require interactive resume. A continuation can
+ask again and exit **3**, with new IDs in its receipt.
+
+The result directory must already exist. Receipts are serialized before being
+atomically replaced; a write failure returns **1** without changing saved status.
+Each invocation requires a new result path: an existing destination is left
+untouched and returns **1** before graph execution. Answer, result, and output
+files must have distinct paths.
+Expected configuration and mode errors after argument parsing also write receipts
+when the destination is usable and does not alias the answer/output files.
+Argument-parser failures, invalid/colliding destinations, and termination before
+session creation may leave no receipt; consult the exit code and logs.
+
+SIGTERM and abrupt crashes can leave the running receipt. Once the process has
+stopped, that receipt means the outcome is uncertain, not that work is still
+running. The early session ID does not guarantee that a checkpoint was saved.
+Reconcile the known process before inspecting or continuing; do not automatically
+replay uncertain operations. Stopping the CLI does not cancel external jobs.
+Serialize all operations on each session, including inspection; these flags
+provide no concurrent-writer coordination or session lock.
+
+See the [Hermes skill](../examples/chemgraph_hermes/skills/chemgraph-delegate/SKILL.md) for relaying these
+questions and answers through Discord.
 
 ## Saved sessions
 

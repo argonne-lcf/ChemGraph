@@ -1,6 +1,7 @@
 """CLI tests for the long-lived main-agent workflow."""
 
 import importlib
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -1391,6 +1392,50 @@ def _run_args(**overrides):
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
+
+@pytest.mark.parametrize("failure", ["bypass", "deepagent", "mcp", "tools", "missing_config", "malformed_config"])
+def test_startup_error_writes_handoff_receipt(monkeypatch, tmp_path, failure):
+    result = tmp_path / "result.json"
+    options = {"query": "calculate", "result_file": result, "dangerously_skip_approvals": True}
+    if failure == "bypass":
+        options["dangerously_skip_approvals"] = False
+    elif failure == "deepagent":
+        options["deepagent_workspace"] = str(tmp_path)
+    elif failure == "mcp":
+        options["mcp_url"] = "https://example.test/mcp"
+    elif failure == "tools":
+        options["local_tool_names"] = ["not-a-tool"]
+    else:
+        config = tmp_path / "config.toml"
+        if failure == "malformed_config":
+            config.write_text("[invalid", encoding="utf-8")
+        options["config"] = str(config)
+    monkeypatch.setattr(cli_main, "run_headless_main_agent", lambda **k: pytest.fail("must not start driver"))
+    with pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(_run_args(**options))
+    code = 1 if failure.endswith("config") else 2
+    assert exc.value.code == code
+    receipt = json.loads(result.read_text(encoding="utf-8"))
+    assert receipt["exit_code"] == code and receipt["error_code"] == "config" and receipt["error"]
+    assert receipt["session_id"] is None and receipt["status"] is None
+
+
+@pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
+def test_startup_receipt_never_overwrites_answers(tmp_path, alias):
+    answers = tmp_path / "answers.json"
+    content = '{"question": "EMT"}'
+    answers.write_text(content, encoding="utf-8")
+    result = answers if alias == "same" else tmp_path / "result.json"
+    if alias == "symlink":
+        result.symlink_to(answers)
+    elif alias == "hardlink":
+        result.hardlink_to(answers)
+    with pytest.raises(SystemExit) as exc:
+        cli_main._handle_run(_run_args(query="calculate", answers_file=answers, result_file=result))
+    assert exc.value.code == 2
+    assert answers.read_text(encoding="utf-8") == content
+    assert result.read_text(encoding="utf-8") == content
 
 
 @pytest.mark.parametrize("workflow", ["python_relp", "python_repl"])
