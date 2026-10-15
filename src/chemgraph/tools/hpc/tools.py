@@ -205,18 +205,28 @@ EXPLICIT_RESOURCES = ("node_count", "duration", "filesystems")
 HPC_MUTATION_TOOLS = ("hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job")
 
 
-def create_hpc_registry(config, *, base=None, names=None, service=None, human_supervised=False):
+def create_hpc_registry(
+    config, *, base=None, names=None, service=None, human_supervised=False, attached=(),
+):
     """Add HPC tools to ``base`` (default: built-ins), then apply restrictions.
 
     An explicit ``names`` list, including an empty one, selects from the
-    combined catalog. Mutation tools keep their review under approval bypass
-    unless the configuration explicitly allows unreviewed mutations.
+    combined catalog. Without ``base`` or ``names``, built-ins named by
+    ``attached`` tools are left out, as in the default catalog; HPC tools never
+    are, so an attached tool reusing an HPC name still conflicts. Mutation
+    tools keep their review under approval bypass unless the configuration
+    explicitly allows unreviewed mutations.
     """
-    from chemgraph.graphs.workspace import REVIEW_REQUIRED_TAG
+    from chemgraph.graphs.workspace import REVIEW_REQUIRED_TAG, default_tool_registry
     from chemgraph.registry.tools import ToolRegistry
 
     config = HPCConfig.model_validate(config)
-    registry = base.select(base.names()) if base is not None else ToolRegistry()
+    if base is not None:
+        registry = base.select(base.names())
+    elif names is None:
+        registry = default_tool_registry(attached, human_supervised=human_supervised)
+    else:
+        registry = ToolRegistry()
     for entry in create_hpc_tools(config, service=service):
         tags = ("hpc", "pbs")
         if entry.name in HPC_MUTATION_TOOLS and not config.allow_unreviewed_mutations:

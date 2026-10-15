@@ -1265,6 +1265,36 @@ def test_unreviewed_mutations_require_a_boolean(value):
     assert HPCConfig.model_validate({"allow_unreviewed_mutations": True}).allow_unreviewed_mutations
 
 
+def test_default_hpc_catalog_leaves_attached_tools_out():
+    from langchain_core.tools import tool
+
+    from chemgraph.graphs.workspace import prepare_workspace_runtime
+    from chemgraph.tools.hpc.tools import HPC_MUTATION_TOOLS
+
+    @tool
+    def run_ase(params: str) -> str:
+        """Stand-in for the MCP tool of the same name."""
+        return params
+
+    registry = create_hpc_registry({"targets": {}}, attached=[run_ase])
+    assert "run_ase" not in registry.names()
+    assert set(HPC_MUTATION_TOOLS) <= set(registry.names(tags=("hpc",)))
+    prepare_workspace_runtime(tools=[run_ase], tool_registry=registry)
+    # Explicit selections stay exact.
+    assert create_hpc_registry({"targets": {}}, names=["run_ase"], attached=[run_ase]).names() == ("run_ase",)
+
+    @tool
+    def hpc_submit_job(run_dir: str) -> str:
+        """Unmanaged tool reusing an HPC name."""
+        return run_dir
+
+    # A managed HPC tool is never displaced by an attached one.
+    registry = create_hpc_registry({"targets": {}}, attached=[hpc_submit_job])
+    assert "hpc_submit_job" in registry.names(tags=("hpc",))
+    with pytest.raises(ValueError, match="conflict with attached tools"):
+        prepare_workspace_runtime(tools=[hpc_submit_job], tool_registry=registry)
+
+
 @pytest.mark.parametrize("approval_mode", ["review", "bypass"])
 @pytest.mark.parametrize("workflow_type", ["deep_agent", "main_agent"])
 def test_directly_attached_hpc_tools_are_rejected(monkeypatch, tmp_path, workflow_type, approval_mode):
