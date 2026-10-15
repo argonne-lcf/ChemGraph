@@ -31,6 +31,7 @@ from chemgraph.runtime.journal import (
     result_artifacts,
 )
 from chemgraph.runtime.artifacts import artifact_file
+from chemgraph.runtime.sqlite_store import SqliteOperationStore
 from chemgraph.runtime.policy import (
     ExecutionPolicy,
     PolicyDenied,
@@ -51,6 +52,7 @@ __all__ = [
     "RunContext",
     "WorkspaceScope",
     "ScopedExecutionError",
+    "SqliteOperationStore",
     "artifact_file",
     "current_context",
     "current_workspace",
