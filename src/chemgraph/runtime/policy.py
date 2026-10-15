@@ -29,6 +29,9 @@ SCOPED_TOOLS = frozenset({
     "smiles_to_atomsdata", "smiles_to_coordinate_file", "extract_output_json",
     "get_symmetry_number", "is_linear_molecule",
 })
+# Explicit opt-in for services that permit external PubChem requests. Existing
+# embedded policies retain their local-only default catalog.
+PREPARABLE_TOOLS = SCOPED_TOOLS | {"molecule_name_to_smiles"}
 # Calculators whose resources a preparation can bind exactly.
 SCOPED_CALCULATORS = frozenset({"emt", "mace_mp", "mace_off", "mace_anicc"})
 _MODEL_CALCULATORS = SCOPED_CALCULATORS - {"emt"}
@@ -88,7 +91,7 @@ class ExecutionPolicy:
     configuration_id: str = ""
 
     def __post_init__(self):
-        if unknown := set(self.tools) - SCOPED_TOOLS:
+        if unknown := set(self.tools) - PREPARABLE_TOOLS:
             raise ValueError(f"No exact preparation exists for tools: {sorted(unknown)}")
         if unknown := set(self.calculators) - SCOPED_CALCULATORS:
             raise ValueError(f"Scoped runs do not yet support calculators: {sorted(unknown)}")
