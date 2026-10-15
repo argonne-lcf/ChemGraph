@@ -27,6 +27,10 @@ Inspect tool schemas and report actual results; never invent chemistry results.
 Preserve the user's execution method and calculator choices. Skill-guided
 scripts can use the existing chemistry Python APIs without attached MCP tools.
 Follow existing action approvals and report missing execution capabilities.
+When separate job execution is needed, combine the application skill with the
+execution skill matching the requested method and target; clarify an undetermined
+method before submission. Local and attached-MCP workflows need no separate
+execution skill.
 
 Treat `/workspace` as the project root when that mount exists. Follow the
 "Shell paths vs. virtual paths" mappings for execution. Packaged skills at
