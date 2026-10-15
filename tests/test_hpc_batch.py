@@ -13,7 +13,7 @@ import pytest
 
 from chemgraph.execution import globus_transfer as transfer_module
 from chemgraph.tools.alcf_iri_core import IRIClient, IRIRequestError
-from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget
+from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget, Resources
 from chemgraph.tools.hpc.service import HPCService
 from chemgraph.tools.hpc.store import read_json, write_json
 from chemgraph.tools.hpc.tools import create_hpc_registry
@@ -135,7 +135,11 @@ def batch(tmp_path, monkeypatch):
     )
     transfer, iri = Transfer(), Scheduler()
     service = HPCService(config, iri=iri, transfer_factory=lambda target: transfer)
-    request = BatchRequest(target="polaris", launch_script="launch.sh")
+    # Native submissions require explicit settings; these match the target defaults.
+    request = BatchRequest(
+        target="polaris", launch_script="launch.sh", project="project", queue="debug",
+        resources=Resources(node_count=1, duration=300, filesystems="home:eagle"),
+    )
     return service, root, transfer, iri, request
 
 
@@ -1275,3 +1279,84 @@ def test_single_agent_rejects_directly_attached_hpc_tools(monkeypatch, tmp_path)
     with pytest.raises(ValueError, match="create_hpc_registry"):
         ChemGraph(workflow_type="single_agent", enable_memory=False, log_dir=str(tmp_path),
                   tools=create_hpc_tools({"targets": {}}))
+
+
+def _service_with(batch, **target_updates):
+    service, _, transfer, iri, _ = batch
+    target = service.config.targets["polaris"].model_copy(update=target_updates)
+    return HPCService(
+        HPCConfig(targets={"polaris": target}), iri=iri, transfer_factory=lambda target: transfer,
+    )
+
+
+def test_partial_resources_keep_configured_defaults(batch):
+    _, root, _, iri, _ = batch
+    service = _service_with(
+        batch, resources=Resources(duration=3600, filesystems="home:eagle:grand"),
+    )
+    stage((service, root))
+    request = {"target": "polaris", "launch_script": "launch.sh", "resources": {"node_count": 2}}
+    assert service.submit(str(root), request)["state"] == "accepted"
+    spec = iri.submissions[-1][1]
+    assert spec["resources"] == {"node_count": 2}
+    assert spec["attributes"]["duration"] == 3600
+    assert spec["attributes"]["custom_attributes"] == {"filesystems": "home:eagle:grand"}
+    # The recorded request keeps only explicit fields, so a reload is identical.
+    assert attempts(root)[-1]["intent"]["batch"] == request
+    assert service.submit(str(root), BatchRequest.model_validate(request))["job_id"]
+    # An explicit walltime that differs from the default is a different job.
+    with pytest.raises(ValueError, match="changed"):
+        service.submit(str(root), BatchRequest.model_validate(request).model_dump())
+    assert len(iri.submissions) == 1
+
+
+def test_edited_manifest_defaults_never_reach_the_scheduler(batch):
+    service, root, _, iri, _ = batch
+    stage(batch)
+    manifest = read_json(root / "run.json")
+    manifest["target_snapshot"].update(
+        project="other", queue="prod", resources={"node_count": 64, "duration": 86400},
+    )
+    write_json(root / "run.json", manifest)
+    service.submit(str(root), BatchRequest(target="polaris", launch_script="launch.sh"))
+    spec = iri.submissions[-1][1]
+    assert spec["attributes"]["account"] == "project"
+    assert spec["attributes"]["queue_name"] == "debug"
+    assert spec["resources"] == {"node_count": 1}
+    assert spec["attributes"]["duration"] == 300
+
+
+def test_accepted_attempt_keeps_its_recorded_specification(batch):
+    service, root, _, iri, _ = batch
+    stage(batch)
+    request = BatchRequest(target="polaris", launch_script="launch.sh")
+    job = service.submit(str(root), request)["job_id"]
+    changed = _service_with(batch, project="renewed")
+    assert changed.submit(str(root), request)["job_id"] == job
+    assert attempts(root)[-1]["intent"]["jobspec"]["attributes"]["account"] == "project"
+    assert changed.status(str(root))["job_id"] == job
+    assert len(iri.submissions) == 1
+
+
+def test_native_submission_requires_explicit_settings(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    tool = create_hpc_registry({}, names=["hpc_submit_job"], service=service).get("hpc_submit_job")
+    implicit = {"target": "polaris", "launch_script": "launch.sh", "resources": {"node_count": 2}}
+    result = tool.invoke({"run_dir": str(root), "request": implicit})
+    assert result["error"] == "explicit_settings_required"
+    assert result["missing"] == ["project", "queue", "resources.duration", "resources.filesystems"]
+    assert result["configured_defaults"] == {
+        "project": "project", "queue": "debug",
+        "resources": {"node_count": 2, "duration": 300, "filesystems": "home:eagle"},
+    }
+    assert not iri.submissions and not (root / "submission.json").exists()
+    explicit = request.model_dump()
+    assert tool.invoke({"run_dir": str(root), "request": explicit})["state"] == "accepted"
+    spec = iri.submissions[-1][1]
+    # Every scheduler setting is taken from the reviewed arguments.
+    assert spec["attributes"]["account"] == explicit["project"]
+    assert spec["attributes"]["queue_name"] == explicit["queue"]
+    assert spec["resources"]["node_count"] == explicit["resources"]["node_count"]
+    assert spec["attributes"]["duration"] == explicit["resources"]["duration"]
+    assert spec["attributes"]["custom_attributes"]["filesystems"] == explicit["resources"]["filesystems"]

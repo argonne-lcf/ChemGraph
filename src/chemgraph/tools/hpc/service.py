@@ -498,10 +498,28 @@ class HPCService:
             )
             return record
 
-    @staticmethod
-    def _jobspec(manifest, target, request):
+    def effective_settings(self, target_name, request):
+        """Scheduler settings a request selects over the configured target defaults.
+
+        Defaults come from the configuration, never from the editable run
+        manifest, and only explicitly supplied resource fields override them.
+        """
+        target = self._target(target_name)
+        resources = target.resources
+        if request.resources is not None:
+            resources = resources.model_copy(
+                update=request.resources.model_dump(exclude_unset=True)
+            )
+        return {
+            "project": request.project or target.project,
+            "queue": request.queue or target.queue,
+            "resources": resources.model_dump(),
+        }
+
+    def _jobspec(self, manifest, request):
         remote = manifest["remote_directory"]
-        resources = request.resources or target.resources
+        settings = self.effective_settings(manifest["target"], request)
+        resources = settings["resources"]
         return {
             "executable": "/bin/bash",
             "arguments": [remote + "/" + request.launch_script, *request.arguments],
@@ -510,12 +528,12 @@ class HPCService:
             "stdout_path": remote + "/" + request.stdout,
             "stderr_path": remote + "/" + request.stderr,
             "environment": {},
-            "resources": {"node_count": resources.node_count},
+            "resources": {"node_count": resources["node_count"]},
             "attributes": {
-                "duration": resources.duration,
-                "queue_name": request.queue or target.queue,
-                "account": request.project or target.project,
-                "custom_attributes": {"filesystems": resources.filesystems},
+                "duration": resources["duration"],
+                "queue_name": settings["queue"],
+                "account": settings["project"],
+                "custom_attributes": {"filesystems": resources["filesystems"]},
             },
         }
 
@@ -543,8 +561,9 @@ class HPCService:
             if request.target != manifest["target"]:
                 raise ValueError("Request target differs from this run.")
             intent = {
-                "batch": request.model_dump(),
-                "jobspec": self._jobspec(manifest, target, request),
+                # Only explicit fields, so a reload keeps configured defaults distinct.
+                "batch": request.model_dump(exclude_unset=True),
+                "jobspec": self._jobspec(manifest, request),
             }
             path = root / "submission.json"
             evidence = read_json(path) if path.exists() else {
@@ -561,7 +580,9 @@ class HPCService:
                         message="Acceptance is unknown. Reconcile with hpc_job_status; never resubmit.",
                     )
                 if current["state"] != "rejected":
-                    if current["intent"] != intent:
+                    # An accepted attempt keeps its recorded specification:
+                    # match the same request or the same effective job.
+                    if all(current["intent"][key] != intent[key] for key in ("batch", "jobspec")):
                         raise ValueError("Run specification changed; use a fresh run directory.")
                     return self._summary(evidence)
                 if not resubmit:

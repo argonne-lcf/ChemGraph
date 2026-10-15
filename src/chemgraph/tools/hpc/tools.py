@@ -89,11 +89,27 @@ def create_hpc_tools(config, *, service=None):
     def hpc_submit_job(run_dir: str, request: BatchRequest, resubmit: bool = False) -> dict:
         """Submit one reviewed PBS batch after staging succeeds; never transfers files.
 
-        Resources are IRI JobSpec settings; #PBS comments are ignored. Repeated
-        unchanged accepted requests return the existing job ID. Set resubmit=true
-        only after the scheduler confirmed a rejection (state=rejected). Unknown
-        acceptance must be reconciled with hpc_job_status, never resubmitted.
+        Set project, queue and resources (node_count, duration in seconds,
+        filesystems) explicitly so the review shows what will run; take
+        defaults from hpc_list_targets. Resources are IRI JobSpec settings;
+        #PBS comments are ignored. Repeated unchanged accepted requests return
+        the existing job ID. Set resubmit=true only after the scheduler
+        confirmed a rejection (state=rejected). Unknown acceptance must be
+        reconciled with hpc_job_status, never resubmitted.
         """
+        request = BatchRequest.model_validate(request)
+        explicit = request.resources.model_fields_set if request.resources else set()
+        missing = [name for name in ("project", "queue") if getattr(request, name) is None]
+        missing += [f"resources.{name}" for name in EXPLICIT_RESOURCES if name not in explicit]
+        if missing:
+            # The reviewed arguments must contain every consequential setting.
+            return {
+                "error": "explicit_settings_required",
+                "missing": missing,
+                "configured_defaults": service.effective_settings(request.target, request),
+                "message": "Nothing was submitted. Repeat the call with these settings explicit "
+                "in the request so the review shows the account, queue and resources.",
+            }
         return service.submit(run_dir, request, resubmit=resubmit)
 
     @tool
@@ -174,6 +190,10 @@ def create_hpc_tools(config, *, service=None):
     for entry in tools:
         entry.metadata = {**(entry.metadata or {}), MANAGED_HPC_TOOL: True}
     return tools
+
+
+# Resource fields hpc_submit_job requires in its reviewed arguments.
+EXPLICIT_RESOURCES = ("node_count", "duration", "filesystems")
 
 
 # Transfers, submissions and cancellations change remote state or use an allocation.
