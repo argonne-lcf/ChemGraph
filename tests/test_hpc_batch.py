@@ -1111,7 +1111,8 @@ def test_failed_cancellation_can_be_repeated(batch):
     iri.cancel = Mock(side_effect=[IRIRequestError(503), None])
     with pytest.raises(IRIRequestError):
         service.cancel(str(root), job_id)
-    assert attempts(root)[-1]["cancellation"]["state"] == "requested"
+    assert read_json(root / "submission.json")["cancellations"][job_id]["state"] == "requested"
+    assert "cancellation" not in attempts(root)[-1]
     assert service.cancel(str(root), job_id)["state"] == "acknowledged"
     assert iri.cancel.call_count == 2
 
@@ -1360,3 +1361,134 @@ def test_native_submission_requires_explicit_settings(batch):
     assert spec["resources"]["node_count"] == explicit["resources"]["node_count"]
     assert spec["attributes"]["duration"] == explicit["resources"]["duration"]
     assert spec["attributes"]["custom_attributes"]["filesystems"] == explicit["resources"]["filesystems"]
+
+
+def test_failed_staging_restages_the_frozen_inputs(batch):
+    service, root, transfer, iri, request = batch
+    stage(batch)
+    transfer.state = "FAILED"
+    status = service.transfer_status(str(root))
+    assert status["status"] == "FAILED" and "repeat hpc_transfer_files" in status["message"]
+    before = (root / "run.json").read_bytes()
+    assert service.transfer_status(str(root), "transfer-1")["status"] == "FAILED"
+    assert (root / "run.json").read_bytes() == before  # Status is observation only.
+    stage(batch)
+    manifest = read_json(root / "run.json")
+    first, second = manifest["transfer_attempts"]
+    assert first["state"] == "failed" and first["transfer_id"] == "transfer-1"
+    assert second["state"] == "submitted" and manifest["transfer_id"] == "transfer-2"
+    assert transfer.calls[0][0] == transfer.calls[1][0]  # The same frozen mapping.
+    assert transfer.calls[1][1]["submission_id"] is None  # A new Globus submission ID.
+    transfer.state = "SUCCEEDED"
+    assert service.submit(str(root), request)["state"] == "accepted"
+    # Earlier attempts stay inspectable.
+    assert service.transfer_status(str(root), "transfer-1")["task_id"] == "transfer-1"
+
+
+@pytest.mark.parametrize("state", ["ACTIVE", "INACTIVE", "SUCCEEDED"])
+def test_unfinished_or_successful_staging_is_never_restaged(batch, state):
+    service, root, transfer, *_ = batch
+    stage(batch)
+    transfer.state = state
+    with pytest.raises(ValueError, match=f"already staged.*{state}"):
+        stage(batch)
+    assert len(transfer.calls) == 1
+
+
+def test_failed_staging_after_submission_evidence_is_not_restaged(batch, monkeypatch):
+    service, root, transfer, iri, request = batch
+    stage(batch)
+    monkeypatch.setattr(
+        "chemgraph.tools.hpc.service.mark_started", Mock(side_effect=OSError("disk full")),
+    )
+    with pytest.raises(OSError):
+        service.submit(str(root), request)
+    assert (root / "submission.json").exists() and not (root / "submission.started").exists()
+    transfer.state = "FAILED"
+    assert "message" not in service.transfer_status(str(root))
+    with pytest.raises(ValueError, match="already staged"):
+        stage(batch)
+    monkeypatch.undo()
+    transfer.state = "SUCCEEDED"
+    service.submit(str(root), request)
+    transfer.state = "FAILED"
+    with pytest.raises(ValueError, match="already attempted"):
+        stage(batch)
+    # Polling after submission never invalidates the fingerprinted manifest.
+    service.transfer_status(str(root))
+    assert service.status(str(root))["job_id"] == "123.polaris"
+    assert len(transfer.calls) == 1 and len(iri.submissions) == 1
+
+
+def test_verified_duplicate_jobs_can_be_cancelled(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = IRIRequestError(403)
+    service.submit(str(root), request)
+    iri.failure = None
+    accepted = service.submit(
+        str(root), request.model_copy(update={"project": "other-project"}), resubmit=True,
+    )["job_id"]
+    iri.records.append({"id": "777.polaris", "job_spec": iri.submissions[0][1]})
+    assert service.status(str(root))["duplicate_jobs"] == ["777.polaris"]
+    unrelated = dict(iri.submissions[0][1], directory="/elsewhere")
+    iri.records.append({"id": "888.polaris", "job_spec": unrelated})
+    for job_id in ("888.polaris", "777", "999.polaris"):
+        with pytest.raises(ValueError, match="verifies belongs to this run"):
+            service.cancel(str(root), job_id)
+    assert not iri.cancelled
+    result = service.cancel(str(root), "777.polaris")
+    assert result == {
+        "job_id": "777.polaris", "state": "acknowledged", "at": result["at"],
+        "verified_by": "scheduler_history",
+    }
+    assert service.cancel(str(root), accepted)["verified_by"] == "accepted_attempt"
+    evidence = read_json(root / "submission.json")
+    assert set(evidence["cancellations"]) == {"777.polaris", accepted}
+    assert all("cancellation" not in attempt for attempt in evidence["attempts"])
+    assert [job for _, job in iri.cancelled] == ["777.polaris", accepted]
+    assert len(iri.submissions) == 2
+
+
+def _submit_through_operation(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.submit = Mock(return_value={"task_id": "operation"})
+    assert service.submit(str(root), request)["state"] == "submission_unknown"
+    return attempts(root)[-1]["intent"]["jobspec"]
+
+
+@pytest.mark.parametrize("operation", [IRIRequestError(404), {"id": "operation", "status": "failed"}])
+def test_missing_or_failed_operation_reconciles_from_scheduler_history(batch, operation):
+    service, root, _, iri, request = batch
+    spec = _submit_through_operation(batch)
+    iri.task = Mock(side_effect=[operation])
+    iri.records.append({"id": "321.polaris", "job_spec": spec})
+    status = service.status(str(root))
+    assert status["job_id"] == "321.polaris"
+    current = attempts(root)[-1]
+    assert current["state"] == "accepted" and current["operation_diagnostic"]["at"]
+    iri.submit.assert_called_once()
+
+
+@pytest.mark.parametrize("operation", [IRIRequestError(404), {"id": "operation", "status": "failed"}])
+def test_missing_or_failed_operation_never_permits_resubmission(batch, operation):
+    service, root, _, iri, request = batch
+    _submit_through_operation(batch)
+    iri.task = Mock(side_effect=[operation, operation])
+    status = service.status(str(root))
+    assert status["state"] == "submission_unknown" and status["retry_safe"] is False
+    assert status["last_search"]["matches"] == []
+    for resubmit in (False, True):
+        result = service.submit(str(root), request, resubmit=resubmit)
+        assert result["state"] == "submission_unknown"
+    iri.submit.assert_called_once()
+
+
+def test_other_operation_errors_still_surface(batch):
+    service, root, _, iri, _ = batch
+    _submit_through_operation(batch)
+    iri.task = Mock(side_effect=IRIRequestError(503))
+    with pytest.raises(IRIRequestError):
+        service.status(str(root))
+    assert attempts(root)[-1]["state"] == "submission_unknown"

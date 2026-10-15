@@ -68,7 +68,8 @@ def create_hpc_tools(config, *, service=None):
         input JSON: use relative compute paths. Changed inputs require a fresh run.
         Retrieval overwrite must be explicitly requested. Returns a transfer ID.
         An unknown outcome is resolved by repeating the same call, which replays
-        the saved submission ID. Retry a confirmed rejection after correcting it.
+        the saved submission ID. Retry a confirmed rejection, or a staging
+        transfer that reached FAILED, after correcting it.
         """
         if direction == "stage":
             if not target:
@@ -144,7 +145,11 @@ def create_hpc_tools(config, *, service=None):
     @tool
     @_errors
     def hpc_cancel_job(run_dir: str, job_id: str) -> dict:
-        """Request cancellation of this run's exact full job ID; monitor afterward."""
+        """Request cancellation of this run's exact full job ID; monitor afterward.
+
+        Accepts the accepted job or a duplicate_jobs entry from hpc_job_status,
+        which scheduler history must still show belongs to this run.
+        """
         return service.cancel(run_dir, job_id)
 
     @tool

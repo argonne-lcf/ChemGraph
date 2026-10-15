@@ -297,7 +297,10 @@ class HPCService:
             if (root / "run.json").exists():
                 manifest, saved_target = self._load(root)
                 staging = manifest.get("staging")
-                if staging not in ("rejected", "unknown") or (root / "submission.json").exists():
+                if (
+                    staging not in ("rejected", "unknown", "submitted")
+                    or (root / "submission.json").exists()
+                ):
                     raise ValueError(
                         "Inputs were already staged; check hpc_transfer_status. "
                         "Changed inputs need a fresh run directory."
@@ -307,6 +310,18 @@ class HPCService:
                 if self._resolved(target) != saved_target:
                     raise ValueError("Retry must preserve the saved target configuration.")
                 self._check_inputs(root, manifest)
+                if staging == "submitted":
+                    # Only a transfer Globus reports as terminally FAILED may be
+                    # followed by a new attempt; an active one may still finish.
+                    observed = self.manager(saved_target).check_transfer_status(
+                        manifest["transfer_id"]
+                    )["status"]
+                    if observed != "FAILED":
+                        raise ValueError(
+                            f"Inputs were already staged (transfer status {observed}); check "
+                            "hpc_transfer_status. Only a FAILED staging transfer may be retried."
+                        )
+                    manifest["transfer_attempts"][-1].update(state="failed", failed_at=now())
                 # An unknown attempt is replayed with its own ID; only a confirmed
                 # rejection of an attempt's first request permits a new ID.
                 attempt = _replayable(manifest["transfer_attempts"][-1]) if staging == "unknown" else None
@@ -432,12 +447,25 @@ class HPCService:
                 }
             transfer_id = manifest["transfer_id"] if transfer_id is None else transfer_id
             known = {manifest["transfer_id"]}
+            known.update(item.get("transfer_id") for item in manifest["transfer_attempts"])
             known.update(item.get("transfer_id") for item in self._retrievals(root, manifest, target)[1])
             if not transfer_id or transfer_id not in known:
                 raise ValueError(
                     "No matching recorded transfer ID; do not restage this run."
                 )
-            return self.manager(target).check_transfer_status(transfer_id)
+            # Observation only: run.json is never rewritten here, because
+            # submission evidence fingerprints the manifest.
+            status = self.manager(target).check_transfer_status(transfer_id)
+            if (
+                transfer_id == manifest["transfer_id"]
+                and status.get("status") == "FAILED"
+                and not (root / "submission.json").exists()
+            ):
+                status["message"] = (
+                    "Staging failed. Correct the cause, then repeat hpc_transfer_files with the "
+                    "same target and files in this run directory to stage the frozen inputs again."
+                )
+            return status
 
     def retrieve(self, run_dir, files, *, overwrite=False):
         with self._run(run_dir) as root:
@@ -715,7 +743,19 @@ class HPCService:
     def _reconcile(self, manifest, target, evidence):
         current = evidence["attempts"][-1]
         if current.get("operation_id"):
-            operation = self.iri.task(current["operation_id"])
+            try:
+                operation = self.iri.task(current["operation_id"])
+            except IRIRequestError as exc:
+                if exc.status_code != 404:
+                    raise
+                # A missing task handle says nothing about the job: rely on
+                # scheduler history alone.
+                operation = None
+                current["operation_diagnostic"] = {"at": now(), "http_status": 404}
+            if isinstance(operation, dict) and operation.get("status") == "failed":
+                # The task may have failed after the scheduler accepted the job,
+                # so failure is recorded but never treated as a rejection.
+                current["operation_diagnostic"] = {"at": now(), "status": "failed"}
             result = operation.get("result") if isinstance(operation, dict) else None
             if (
                 isinstance(result, dict)
@@ -801,19 +841,30 @@ class HPCService:
         with self._run(run_dir) as root:
             manifest, target = self._load(root)
             path = root / "submission.json"
+            if not path.exists():
+                raise ValueError("No submission is recorded for this run.")
             evidence = read_json(path)
             current = evidence["attempts"][-1]
-            if current.get("job_id") != job_id or current["state"] != "accepted":
+            accepted = current["state"] == "accepted" and current.get("job_id") == job_id
+            # Any other job, such as a duplicate left by an earlier attempt, is
+            # cancelled only when scheduler history shows this exact ID with
+            # this run's name, directory and an attempt's account.
+            if not accepted and job_id not in self._search(manifest, target, evidence)[0]:
                 raise ValueError(
-                    "Cancellation must match this run's full accepted job ID."
+                    "Cancellation must match this run's full accepted job ID or a job "
+                    "that scheduler history verifies belongs to this run."
                 )
             # A cancellation request is not proof that the job has stopped.
-            current["cancellation"] = {"state": "requested", "at": now()}
+            cancellation = {
+                "state": "requested", "at": now(),
+                "verified_by": "accepted_attempt" if accepted else "scheduler_history",
+            }
+            evidence.setdefault("cancellations", {})[job_id] = cancellation
             write_json(path, evidence)
             self.iri.cancel(target.compute_resource, job_id)
-            current["cancellation"]["state"] = "acknowledged"
+            cancellation["state"] = "acknowledged"
             write_json(path, evidence)
-            return current["cancellation"]
+            return {"job_id": job_id, **cancellation}
 
     @staticmethod
     def _inspection(remote, operation, result, **extra):
