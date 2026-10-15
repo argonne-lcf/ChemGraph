@@ -435,3 +435,169 @@ def test_iri_terminal_login_saves_token_cache(monkeypatch, tmp_path):
     assert cache.stat().st_mode & 0o777 == 0o600
     assert "https://auth.example/authorize" in output
     assert os.environ.pop("ALCF_API_TOKEN") == "access"
+def _token_response(response_class, status=200, **fields):
+    import requests
+
+    raw = requests.Response()
+    raw.status_code = status
+    raw.url = "https://auth.globus.org/v2/oauth2/token"
+    raw.request = requests.Request("POST", raw.url).prepare()
+    raw.headers["Content-Type"] = "application/json"
+    raw._content = json.dumps(fields).encode()
+    if issubclass(response_class, globus_sdk.GlobusAPIError):
+        return response_class(raw)
+    return response_class(raw, client=Mock())
+
+
+def _refresh_response(access_token="new", **fields):
+    # Real responses report an omitted refresh token as None, not a missing key.
+    return _token_response(
+        globus_sdk.OAuthRefreshTokenResponse, access_token=access_token,
+        expires_in=3600, resource_server="transfer.api.globus.org",
+        scope=transfer_module.TRANSFER_SCOPE, token_type="Bearer", other_tokens=[],
+        **fields,
+    )
+
+
+@pytest.mark.parametrize("cached", [
+    {"access_token": "old", "refresh_token": "refresh", "expires_at_seconds": 1},
+    {"refresh_token": "refresh"},
+])
+def test_refresh_without_replacement_token_keeps_refresh_token(monkeypatch, tmp_path, cached):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache = transfer_module._token_file(transfer_module._DEFAULT_CLIENT_ID)
+    GlobusTransferManager._save_tokens(cache, cached)
+    auth = Mock()
+    auth.oauth2_refresh_token.side_effect = lambda _: _refresh_response()
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    manager = GlobusTransferManager("source", "dest", "/remote")
+    authorizer = manager._get_transfer_client().authorizer
+    assert authorizer.get_authorization_header() == "Bearer new"
+    authorizer.expires_at = 1
+    authorizer.get_authorization_header()
+    assert [call.args for call in auth.oauth2_refresh_token.call_args_list] == [
+        ("refresh",), ("refresh",)
+    ]
+    assert authorizer.refresh_token == "refresh"
+    assert json.loads(cache.read_text())["refresh_token"] == "refresh"
+
+
+def test_terminal_login_replaces_running_manager_credentials(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("builtins.input", lambda _: "authorization-code")
+    cache = transfer_module._token_file(transfer_module._DEFAULT_CLIENT_ID)
+    GlobusTransferManager._save_tokens(cache, {
+        "access_token": "stale", "refresh_token": "old-refresh", "expires_at_seconds": 1,
+    })
+    auth = Mock()
+    auth.oauth2_refresh_token.side_effect = lambda _: _refresh_response()
+    auth.oauth2_exchange_code_for_tokens.return_value = Mock(by_resource_server={
+        "transfer.api.globus.org": {
+            "access_token": "login-token", "refresh_token": "new-refresh",
+            "expires_at_seconds": 9999999999,
+        },
+    })
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    manager = GlobusTransferManager("source", "dest", "/remote")
+    stale_client = manager._get_transfer_client()
+    transfer_module.authenticate()
+    stale_client.authorizer.get_authorization_header()
+    assert json.loads(cache.read_text())["refresh_token"] == "new-refresh"
+    assert json.loads(cache.read_text())["access_token"] == "login-token"
+    client = manager._get_transfer_client()
+    assert client is not stale_client
+    assert client.authorizer.refresh_token == "new-refresh"
+    assert client.authorizer.get_authorization_header() == "Bearer login-token"
+    assert manager._get_transfer_client() is client
+
+
+def test_own_refresh_does_not_rebuild_client(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache = transfer_module._token_file(transfer_module._DEFAULT_CLIENT_ID)
+    GlobusTransferManager._save_tokens(cache, {
+        "access_token": "old", "refresh_token": "refresh", "expires_at_seconds": 1,
+    })
+    auth = Mock()
+    auth.oauth2_refresh_token.side_effect = lambda _: _refresh_response()
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    manager = GlobusTransferManager("source", "dest", "/remote")
+    client = manager._get_transfer_client()
+    client.authorizer.get_authorization_header()
+    assert json.loads(cache.read_text())["access_token"] == "new"
+    assert manager._get_transfer_client() is client
+
+
+def test_refresh_errors_distinguish_login_from_network(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache = transfer_module._token_file(transfer_module._DEFAULT_CLIENT_ID)
+    GlobusTransferManager._save_tokens(cache, {
+        "access_token": "old", "refresh_token": "refresh", "expires_at_seconds": 1,
+    })
+    auth = Mock()
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    manager = GlobusTransferManager("source", "dest", "/remote")
+    auth.oauth2_refresh_token.side_effect = globus_sdk.GlobusConnectionError(
+        "unreachable", Exception()
+    )
+    with pytest.raises(globus_sdk.GlobusConnectionError):
+        manager.prepare_mapping({"/a": "/b"})
+    auth.oauth2_refresh_token.side_effect = _token_response(
+        globus_sdk.AuthAPIError, status=400, error="invalid_grant"
+    )
+    with pytest.raises(TransferAuthenticationRequired):
+        manager.prepare_mapping({"/a": "/b"})
+
+
+def test_unreadable_cache_requires_login(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cache = transfer_module._token_file(transfer_module._DEFAULT_CLIENT_ID)
+    cache.parent.mkdir()
+    cache.write_bytes(b"\xff\xfe")
+    with pytest.raises(TransferAuthenticationRequired):
+        GlobusTransferManager("source", "dest", "/remote")._get_transfer_client()
+
+
+@pytest.mark.parametrize("names, expected", [
+    (["a/in.xyz", "b/in.xyz", "c/in_1.xyz"], ["in.xyz", "in_1.xyz", "in_1_1.xyz"]),
+    (["c/in_1.xyz", "a/in.xyz", "b/in.xyz"], ["in_1.xyz", "in.xyz", "in_2.xyz"]),
+    (["a/in.xyz", "a/in.xyz", "b/in"], ["in.xyz", "in"]),
+])
+def test_legacy_layout_allocates_unique_destinations(tmp_path, names, expected):
+    manager = GlobusTransferManager("source", "dest", "/remote")
+    manager._transfer_client = Mock()
+    manager._transfer_client.submit_transfer.return_value = {"task_id": "transfer"}
+    result = manager.transfer_files([str(tmp_path / name) for name in names], remote_subdir="run")
+    destinations = [f"/remote/run/{name}" for name in expected]
+    assert list(result.file_mapping.values()) == destinations
+    payload = manager._transfer_client.submit_transfer.call_args.args[0]
+    assert [item["destination_path"] for item in payload["DATA"]] == destinations
+
+
+def test_terminal_login_can_require_identity_domain(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("builtins.input", lambda _: "authorization-code")
+    auth = Mock()
+    auth.oauth2_exchange_code_for_tokens.return_value = Mock(by_resource_server={
+        "transfer.api.globus.org": {"access_token": "a", "refresh_token": "r"},
+    })
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    transfer_module.main([])
+    assert auth.oauth2_get_authorize_url.call_args.kwargs == {}
+    transfer_module.main(["--domain", "alcf.anl.gov"])
+    assert auth.oauth2_get_authorize_url.call_args.kwargs == {
+        "session_required_single_domain": ["alcf.anl.gov"], "prompt": "login",
+    }
+
+
+def test_transfer_error_details_reports_required_domain():
+    error = _token_response(
+        globus_sdk.TransferAPIError, status=502,
+        code="ExternalError.DirListingFailed.LoginFailed", request_id="kRpKmsfOL",
+        message="Login Failed: secret server detail",
+        authorization_parameters={"session_required_single_domain": ["alcf.anl.gov", "bad domain"]},
+    )
+    details = transfer_module.transfer_error_details(error)
+    assert details == {
+        "http_status": 502, "code": "ExternalError.DirListingFailed.LoginFailed",
+        "request_id": "kRpKmsfOL", "required_domains": ["alcf.anl.gov"],
+    }
