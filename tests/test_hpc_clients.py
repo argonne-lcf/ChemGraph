@@ -6,12 +6,18 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import globus_sdk
+import httpx
 import pytest
 
 from chemgraph.execution import globus_transfer as transfer_module
 from chemgraph.execution.globus_transfer import (
     GlobusTransferManager,
     TransferAuthenticationRequired,
+)
+from chemgraph.tools.alcf_iri_core import (
+    IRIAuthenticationRequired,
+    IRIClient,
+    IRIRequestError,
 )
 
 
@@ -172,6 +178,266 @@ def test_explicit_mapping_and_legacy_layout(monkeypatch, tmp_path):
     assert "client" not in repr(prepared) and "payload" not in repr(prepared)
 
 
+def test_iri_contracts_filters_history_and_cancel(monkeypatch):
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        if request.method == "DELETE":
+            return httpx.Response(204)
+        return httpx.Response(200, json=[])
+
+    client = IRIClient(transport=httpx.MockTransport(respond), headers=lambda: {})
+    client.jobs(
+        "compute", historical=True, limit=10, offset=20, filters={"owner": "user"}
+    )
+    assert calls[-1].method == "POST"
+    assert calls[-1].url.params["offset"] == "20"
+    assert calls[-1].url.params["include_spec"] == "false"
+    assert json.loads(calls[-1].content) == {"owner": "user"}
+    client.jobs("compute", include_spec=True)
+    assert calls[-1].url.params["include_spec"] == "true"
+    assert client.cancel("compute", "123.host") == {"ok": True}
+    client.status("compute", "123.host", historical=True)
+    assert calls[-1].url.params["historical"] == "true"
+    client.inspect("storage", "/run/result.json", offset=5, size=10)
+    assert calls[-1].url.path == "/api/v1/filesystem/view/storage"
+    assert calls[-1].url.params["size"] == "10"
+    client.inspect("storage", "/run", operation_id="operation")
+    assert calls[-1].url.path == "/api/v1/task/operation"
+
+
+def test_iri_reads_retry_but_submission_does_not():
+    calls = []
+
+    def fail(request):
+        calls.append(request)
+        return httpx.Response(503, text="secret response must not escape")
+
+    client = IRIClient(
+        transport=httpx.MockTransport(fail), headers=lambda: {}, sleep=lambda _: None
+    )
+    with pytest.raises(IRIRequestError) as error:
+        client.status("compute", "job")
+    assert len(calls) == 3 and "secret" not in str(error.value)
+    with pytest.raises(IRIRequestError):
+        client.submit("compute", {})
+    assert len(calls) == 4
+
+
+def test_prepared_submission_freezes_payload_and_credentials():
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json={"id": "job"})
+
+    headers = Mock(side_effect=[{"Authorization": "Bearer prepared-token"}])
+    client = IRIClient(transport=httpx.MockTransport(respond), headers=headers)
+    spec = {"arguments": ["original"]}
+    request = client.prepare_submission("compute", spec)
+    assert not calls
+    spec["arguments"].append("changed")
+    assert client.submit_prepared(request) == {"id": "job"}
+    assert calls[0].url.path == "/api/v1/compute/job/compute"
+    assert calls[0].headers["Authorization"] == "Bearer prepared-token"
+    assert json.loads(calls[0].content) == {"arguments": ["original"]}
+    headers.assert_called_once()
+
+
+def test_prepared_submission_response_remains_bounded():
+    client = IRIClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=b"a" * 1048577)),
+        headers=lambda: {},
+    )
+    with pytest.raises(ValueError, match="limit"):
+        client.submit("compute", {})
+
+
+@pytest.mark.parametrize("content", [b"a" * 500, b"\xff" * 500])
+def test_iri_response_is_bounded(content):
+    client = IRIClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=content)),
+        headers=lambda: {},
+    )
+    response = client.request(
+        "GET", "/file", read=True, max_bytes=32, allow_truncation=True
+    )
+    assert response["truncated"]
+    assert len(response.get("text", response.get("base64"))) <= 44
+    with pytest.raises(ValueError, match="limit"):
+        client.request("GET", "/file", read=True, max_bytes=32)
+
+
+def test_legacy_writes_remain_gated(monkeypatch):
+    from chemgraph.tools.alcf_iri_core import dispatch
+
+    monkeypatch.delenv("ALCF_IRI_ALLOW_UNSAFE", raising=False)
+    with pytest.raises(RuntimeError, match="Refusing"):
+        dispatch("compute", "submit_job", {"machine": "polaris", "jobspec": {}})
+
+
+def test_iri_authentication_refresh_never_resends_submission(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    calls = []
+    refresh = Mock(return_value=True)
+    monkeypatch.setattr(core, "_try_refresh_token", refresh)
+
+    def response(request):
+        calls.append(request)
+        return httpx.Response(401 if len(calls) == 1 else 200, json={"id": "job"})
+
+    client = IRIClient(transport=httpx.MockTransport(response), headers=lambda: {})
+    assert client.status("compute", "job")["id"] == "job"
+    refresh.assert_called_once()
+    # A 401 cancellation was not executed, so it is resent once after refresh.
+    calls.clear()
+    refresh.reset_mock()
+    assert client.cancel("compute", "job") == {"id": "job"}
+    assert len(calls) == 2
+    refresh.assert_called_once()
+    calls.clear()
+    refresh.reset_mock()
+    with pytest.raises(IRIRequestError):
+        client.submit("compute", {})
+    assert len(calls) == 1
+    refresh.assert_not_called()
+
+
+def test_rejected_iri_token_is_replaced_by_terminal_login(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    monkeypatch.setenv("ALCF_API_TOKEN", "expired")
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        if request.headers["Authorization"] == "Bearer expired":
+            return httpx.Response(401)
+        return httpx.Response(200, json={"id": "job"})
+
+    def terminal_login():
+        os.environ["ALCF_API_TOKEN"] = "fresh"
+        return True
+
+    client = IRIClient(transport=httpx.MockTransport(respond))
+    with pytest.raises(IRIRequestError) as error:
+        client.submit("compute", {})
+    assert error.value.status_code == 401 and len(calls) == 1
+    # The rejected token is not reused once the token cache has a login.
+    assert "ALCF_API_TOKEN" not in os.environ
+    monkeypatch.setattr(core, "_try_refresh_token", terminal_login)
+    assert client.submit("compute", {}) == {"id": "job"}
+    assert calls[-1].headers["Authorization"] == "Bearer fresh"
+
+
+def test_iri_resource_resolution_is_bounded_and_public(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    monkeypatch.setattr(core, "_RESOURCE_CACHE", {})
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json=[{"name": "Polaris", "id": "polaris-id"}])
+
+    headers = Mock(side_effect=AssertionError("public endpoint"))
+    client = IRIClient(transport=httpx.MockTransport(respond), headers=headers)
+    assert client.resolve_resource("polaris") == "polaris-id"
+    assert client.resolve_resource("POLARIS") == "polaris-id"
+    assert len(calls) == 1 and calls[0].url.path == "/api/v1/status/resources"
+    assert "Authorization" not in calls[0].headers
+    headers.assert_not_called()
+    oversized = IRIClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=b"a" * 1048577)),
+        headers=headers,
+    )
+    with pytest.raises(ValueError, match="limit"):
+        oversized.resolve_resource("aurora")
+
+
+def test_iri_async_filesystem_contract():
+    responses = iter(
+        [
+            {"task_id": "task", "task_uri": "/api/v1/task/task"},
+            {"id": "task", "status": "active", "result": None},
+            {"id": "task", "status": "completed", "result": {"content": "hello"}},
+        ]
+    )
+    client = IRIClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, json=next(responses))
+        ),
+        headers=lambda: {},
+    )
+    assert client.inspect("eagle", "/run/out")["task_id"] == "task"
+    assert (
+        client.inspect("eagle", "/run/out", operation_id="task")["status"] == "active"
+    )
+    assert client.inspect("eagle", "/run/out", operation_id="task")["result"] == {
+        "content": "hello"
+    }
+
+
+def test_iri_refresh_after_transient_failures_gets_another_request(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    statuses = iter([503, 503, 401, 200])
+    calls = []
+    monkeypatch.setattr(core, "_try_refresh_token", Mock(return_value=True))
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(next(statuses), json={"id": "job"})
+
+    client = IRIClient(transport=httpx.MockTransport(respond), headers=lambda: {}, sleep=lambda _: None)
+    assert client.status("compute", "job") == {"id": "job"}
+    assert len(calls) == 4
+
+
+def test_missing_iri_credentials_require_terminal_login():
+    calls = []
+    client = IRIClient(
+        transport=httpx.MockTransport(lambda request: calls.append(request)),
+        headers=Mock(side_effect=RuntimeError("secret provider detail")),
+    )
+    for operation in (
+        lambda: client.status("compute", "job"),
+        lambda: client.cancel("compute", "job"),
+        lambda: client.prepare_submission("compute", {}),
+    ):
+        with pytest.raises(IRIAuthenticationRequired) as error:
+            operation()
+        assert "python -m chemgraph.tools.alcf_iri_core login" in str(error.value)
+        assert "secret" not in str(error.value)
+    assert not calls
+
+
+def test_iri_terminal_login_saves_token_cache(monkeypatch, tmp_path):
+    import chemgraph.tools.alcf_iri_core as core
+
+    cache = tmp_path / "tokens.json"
+    monkeypatch.setattr(core, "_TOKENS_PATH", str(cache))
+    monkeypatch.delenv("ALCF_API_TOKEN", raising=False)
+    auth = Mock()
+    auth.oauth2_get_authorize_url.return_value = "https://auth.example/authorize"
+    auth.oauth2_exchange_code_for_tokens.return_value.by_resource_server = {
+        core._GLOBUS_SCOPE_CLIENT_ID: {"access_token": "access", "refresh_token": "refresh"},
+    }
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    output = []
+    monkeypatch.setattr("builtins.input", lambda prompt: " code ")
+    monkeypatch.setattr("builtins.print", lambda *args: output.append(" ".join(map(str, args))))
+    core.main(["login"])
+    auth.oauth2_exchange_code_for_tokens.assert_called_once_with("code")
+    auth.oauth2_get_authorize_url.assert_called_once_with(
+        session_required_policies=[core._GLOBUS_SESSION_POLICY]
+    )
+    assert json.loads(cache.read_text())["refresh_token"] == "refresh"
+    assert cache.stat().st_mode & 0o777 == 0o600
+    assert "https://auth.example/authorize" in output
+    assert os.environ.pop("ALCF_API_TOKEN") == "access"
 def _token_response(response_class, status=200, **fields):
     import requests
 

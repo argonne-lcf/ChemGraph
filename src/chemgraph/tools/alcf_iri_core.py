@@ -20,7 +20,8 @@ kinds per category:
   action=<name>          -> actually invoke the endpoint
 
 Auth: reads $ALCF_API_TOKEN for endpoints that need it. First-time
-setup uses the ``alcf_auth`` in-chat re-auth tool -- ask the agent
+setup uses ``python -m chemgraph.tools.alcf_iri_core login`` in a
+terminal, or the ``alcf_auth`` in-chat re-auth tool -- ask the agent
 to run action='start_reauth', visit the returned Globus URL, paste
 the code back. After that the tool silently refreshes access tokens
 for the next 30 days (Level 1, ``_try_refresh_token``); when the
@@ -58,6 +59,11 @@ _GLOBUS_SCOPE_CLIENT_ID = "6be511f6-a071-471f-9bc0-02a0d0836723"
 _GLOBUS_SCOPE = (
     f"https://auth.globus.org/scopes/{_GLOBUS_SCOPE_CLIENT_ID}/filesystem"
 )
+# ALCF session policy from the official Facility API token helper
+# (argonne-lcf/alcf-facility-api-token). Without it Globus reuses whatever
+# identity the browser session holds, and the API answers 401 "No identity
+# found in the session info".
+_GLOBUS_SESSION_POLICY = "a128e981-c9a5-417a-97ab-8571c9831bff"
 _TOKENS_PATH = os.path.expanduser(
     f"~/.globus/app/{_GLOBUS_AUTH_CLIENT_ID}/alcf_facility_api_app/tokens.json"
 )
@@ -98,7 +104,14 @@ def _headers(needs_auth: bool = True) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _resource_id(name: str) -> str:
+def _fetch_resources() -> Any:
+    with httpx.Client(timeout=TIMEOUT_S) as c:
+        r = c.get(f"{BASE_URL}/status/resources")
+        r.raise_for_status()
+        return r.json()
+
+
+def _resource_id(name: str, fetch=_fetch_resources) -> str:
     """Accept 'aurora' or the uuid itself. Case-insensitive on names.
 
     Resolves via the live /status/resources endpoint. No hardcoded
@@ -112,11 +125,8 @@ def _resource_id(name: str) -> str:
     key = name.strip().lower()
     if key in _RESOURCE_CACHE:
         return _RESOURCE_CACHE[key]
-    with httpx.Client(timeout=TIMEOUT_S) as c:
-        r = c.get(f"{BASE_URL}/status/resources")
-        r.raise_for_status()
-        for res in r.json():
-            _RESOURCE_CACHE[res["name"].strip().lower()] = res["id"]
+    for res in fetch():
+        _RESOURCE_CACHE[res["name"].strip().lower()] = res["id"]
     if key in _RESOURCE_CACHE:
         return _RESOURCE_CACHE[key]
     raise ValueError(
@@ -316,14 +326,16 @@ def _start_reauth() -> dict:
         requested_scopes=_GLOBUS_SCOPE,
         refresh_tokens=True,
     )
-    url = client.oauth2_get_authorize_url()
+    url = client.oauth2_get_authorize_url(
+        session_required_policies=[_GLOBUS_SESSION_POLICY],
+    )
     _PENDING_AUTH_CLIENT = client
     return {
         "status": "pending",
         "url": url,
         "next_step": (
             "Ask the user to open this URL in a browser, sign in with "
-            "their jinchuli@alcf.anl.gov identity, copy the resulting "
+            "their ALCF-linked identity, copy the resulting "
             "authorization code, and paste it into the next message. "
             "Then invoke alcf_auth with action='complete_reauth', "
             "params={'auth_code': '<the code>'}."
@@ -1041,3 +1053,210 @@ def dispatch(category: str, action: str, params: dict[str, Any]) -> Any:
             "to see all, or action='describe' target_action=<name> for one."
         )
     return actions[action][3](**params)
+
+
+# Terminal login for the Facility API; agent tools never prompt for codes.
+LOGIN_COMMAND = "python -m chemgraph.tools.alcf_iri_core login"
+
+
+class IRIRequestError(RuntimeError):
+    """Redacted HTTP error retaining status for safe submission decisions."""
+
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+        message = f"IRI request failed (HTTP {status_code})."
+        if status_code in (401, 403):
+            message += f" Authenticate in a terminal with `{LOGIN_COMMAND}` and verify resource access."
+        super().__init__(message)
+
+
+class IRIAuthenticationRequired(RuntimeError):
+    """Credentials were unavailable, so no request was sent."""
+
+    def __init__(self, message=None):
+        super().__init__(message or (
+            f"Authenticate the Facility API in a terminal with `{LOGIN_COMMAND}`, then retry "
+            "submission using the same run directory. No scheduler request was sent."
+        ))
+
+
+class IRIClient:
+    """Bounded transport for reviewed batch operations.
+
+    Reuses the legacy authentication provider and resource resolver. Legacy
+    dispatch write gates remain unchanged. Public Python callers authorize
+    mutations themselves; agent adapters must install their normal reviews.
+    """
+
+    def __init__(self, *, transport=None, headers=None, sleep=None):
+        import time
+        self.transport = transport
+        self.headers = headers or _headers
+        self.sleep = sleep or time.sleep
+
+    @staticmethod
+    def _discard_rejected_token(headers):
+        # A 401 proves the in-process token is unusable. Dropping it makes the
+        # next request load the token cache, including after a terminal login.
+        token = os.environ.get("ALCF_API_TOKEN")
+        if token and httpx.Headers(headers).get("Authorization") == f"Bearer {token}":
+            del os.environ["ALCF_API_TOKEN"]
+
+    def request(self, method, path, *, params=None, body=None, read=False,
+                max_bytes=1048576, allow_truncation=False, auth=True):
+        # Reads retry transient failures twice; one 401 refresh is separate,
+        # so a successful refresh is always followed by another request. A
+        # 401 was not executed, so cancellation may be resent after refresh.
+        retries = 2 if read else 0
+        refreshed = False
+        while True:
+            try:
+                headers = self.headers() if auth else {}
+            except RuntimeError:
+                raise IRIAuthenticationRequired(
+                    f"Facility API credentials are unavailable. Authenticate in a terminal with `{LOGIN_COMMAND}`."
+                ) from None
+            try:
+                with httpx.Client(timeout=TIMEOUT_S, transport=self.transport) as client:
+                    with client.stream(method, BASE_URL + path, headers=headers,
+                                       params=params, json=body) as response:
+                        status = response.status_code
+                        if status == 401 and auth and not refreshed:
+                            refreshed = True
+                            self._discard_rejected_token(headers)
+                            if _try_refresh_token():
+                                continue
+                        if status in (429, 502, 503, 504) and retries:
+                            self.sleep(0.25 * 2 ** (2 - retries))
+                            retries -= 1
+                            continue
+                        return self._read_response(response, max_bytes=max_bytes,
+                                                   allow_truncation=allow_truncation)
+            except httpx.TransportError:
+                if not retries:
+                    raise RuntimeError("IRI transport failed; request outcome may be unknown.") from None
+                self.sleep(0.25 * 2 ** (2 - retries))
+                retries -= 1
+
+    @staticmethod
+    def _read_response(response, *, max_bytes=1048576, allow_truncation=False):
+        import json
+        import base64
+
+        if response.status_code >= 400:
+            raise IRIRequestError(response.status_code)
+        content = bytearray()
+        for chunk in response.iter_bytes(chunk_size=8192):
+            content.extend(chunk[:max_bytes + 1 - len(content)])
+            if len(content) > max_bytes:
+                break
+        truncated = len(content) > max_bytes
+        if truncated and not allow_truncation:
+            raise ValueError("IRI response exceeds the limit; narrow the query.")
+        raw = bytes(content[:max_bytes])
+        if not raw:
+            return {"ok": True}
+        if not truncated:
+            try:
+                return json.loads(raw)
+            except (ValueError, UnicodeDecodeError):
+                pass
+        try:
+            text = raw.decode("utf-8")
+            return {"text": text, "truncated": truncated}
+        except UnicodeDecodeError:
+            return {"base64": base64.b64encode(raw).decode(), "truncated": truncated}
+
+    def resolve_resource(self, resource):
+        return _resource_id(resource, lambda: self.request(
+            "GET", "/status/resources", read=True, auth=False))
+
+    def prepare_submission(self, resource, spec):
+        """Resolve credentials and serialize the request without contacting compute.
+
+        The returned request contains credentials and must stay in memory.
+        """
+        try:
+            headers = httpx.Headers(self.headers())
+        except Exception:
+            raise IRIAuthenticationRequired() from None
+        return httpx.Request("POST", BASE_URL + f"/compute/job/{resource}",
+                             headers=headers, json=spec)
+
+    def submit_prepared(self, request):
+        """Send a prepared submission once, without acquiring credentials again."""
+        from contextlib import closing
+
+        try:
+            with httpx.Client(timeout=TIMEOUT_S, transport=self.transport) as client:
+                with closing(client.send(request, stream=True)) as response:
+                    if response.status_code == 401:
+                        # Never resent; the next prepared attempt reloads credentials.
+                        self._discard_rejected_token(request.headers)
+                    return self._read_response(response)
+        except httpx.TransportError:
+            raise RuntimeError("IRI transport failed; request outcome may be unknown.") from None
+
+    def submit(self, resource, spec):
+        return self.submit_prepared(self.prepare_submission(resource, spec))
+
+    def cancel(self, resource, job_id):
+        from urllib.parse import quote
+        return self.request("DELETE", f"/compute/cancel/{resource}/{quote(job_id, safe='')}")
+
+    def status(self, resource, job_id, *, historical=False):
+        from urllib.parse import quote
+        return self.request("GET", f"/compute/status/{resource}/{quote(job_id, safe='')}",
+                            params={"historical": historical}, read=True)
+
+    def jobs(self, resource, *, historical=False, limit=100, offset=0, filters=None,
+             include_spec=False):
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("Use limit 1..100 and a nonnegative offset.")
+        allowed = {"states", "owner", "jobIds", "queue", "accountingId"}
+        if set(filters or {}) - allowed:
+            raise ValueError("Unsupported job filter.")
+        return self.request("POST", f"/compute/status/{resource}", read=True,
+                            params={"historical": historical, "limit": limit, "offset": offset,
+                                    "include_spec": include_spec},
+                            body=filters or {})
+
+    def task(self, operation_id):
+        from urllib.parse import quote
+        return self.request("GET", f"/task/{quote(operation_id, safe='')}", read=True)
+
+    def inspect(self, resource, path, *, operation="view", offset=0, size=16384,
+                operation_id=None):
+        from urllib.parse import quote
+        if not 1 <= size <= 65536 or offset < 0 or operation not in ("view", "ls"):
+            raise ValueError("Invalid inspection bounds or operation.")
+        if operation_id:
+            route, params = f"/task/{quote(operation_id, safe='')}", None
+        else:
+            route, params = f"/filesystem/{operation}/{resource}", {"path": path}
+            if operation == "view":
+                params.update(size=size, offset=offset)
+        return self.request("GET", route, params=params, read=True,
+                            max_bytes=131072, allow_truncation=True)
+
+
+def login() -> None:
+    """Explicit terminal login for the Facility API, never called by tools."""
+    flow = _start_reauth()
+    print("Open this URL, sign in with your ALCF-linked identity, and copy the authorization code:")
+    print(flow["url"])
+    _complete_reauth(input("Authorization code: ").strip())
+    print(f"Saved Facility API tokens to {_TOKENS_PATH}.")
+
+
+def main(argv=None):
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Authenticate the ALCF Facility (IRI) API")
+    parser.add_argument("command", choices=["login"])
+    parser.parse_args(argv)
+    login()
+
+
+if __name__ == "__main__":
+    main()
