@@ -731,7 +731,8 @@ class HPCService:
                             and record.get("id")
                             and spec.get("name") == expected["name"]
                             and spec.get("directory") == manifest["remote_directory"]
-                            and spec.get("attributes", {}).get("account") == account
+                            and isinstance(spec.get("attributes"), dict)
+                            and spec["attributes"].get("account") == account
                         ):
                             matches[str(record["id"])] = record
                     if len(records) < 100:
@@ -827,7 +828,14 @@ class HPCService:
             }
             if len(evidence["attempts"]) > 1:
                 # Earlier attempts were rejected, but report any job they left.
-                matches, complete = self._search(manifest, target, evidence)
+                # Discovery is best-effort here and never authorizes resubmission.
+                try:
+                    matches, complete = self._search(manifest, target, evidence)
+                except Exception as exc:
+                    matches, complete = {}, False
+                    status["duplicate_search_error"] = {"type": type(exc).__name__}
+                    if isinstance(exc, IRIRequestError):
+                        status["duplicate_search_error"]["http_status"] = exc.status_code
                 status["duplicate_jobs"] = sorted(set(matches) - {job_id})
                 status["duplicate_search_complete"] = complete
             write_json(root / "job-status.json", status)

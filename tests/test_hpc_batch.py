@@ -1492,3 +1492,52 @@ def test_other_operation_errors_still_surface(batch):
     with pytest.raises(IRIRequestError):
         service.status(str(root))
     assert attempts(root)[-1]["state"] == "submission_unknown"
+
+
+def _resubmitted(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = IRIRequestError(403)
+    service.submit(str(root), request)
+    iri.failure = None
+    return service.submit(
+        str(root), request.model_copy(update={"project": "other-project"}), resubmit=True,
+    )["job_id"]
+
+
+@pytest.mark.parametrize("error", [IRIRequestError(403), ValueError("IRI response exceeds the limit")])
+def test_duplicate_search_failure_keeps_the_job_status(batch, error):
+    service, root, _, iri, _ = batch
+    job_id = _resubmitted(batch)
+    iri.jobs = Mock(side_effect=error)
+    status = service.status(str(root))
+    assert status["job_id"] == job_id and status["scheduler"] == {"state": "queued"}
+    assert status["duplicate_jobs"] == [] and status["duplicate_search_complete"] is False
+    expected = {"type": type(error).__name__}
+    if isinstance(error, IRIRequestError):
+        expected["http_status"] = 403
+    assert status["duplicate_search_error"] == expected
+    assert read_json(root / "job-status.json") == status
+
+
+def test_failed_history_search_never_permits_resubmission(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = IRIRequestError(401)
+    service.submit(str(root), request)
+    iri.failure = None
+    iri.jobs = Mock(side_effect=IRIRequestError(403))
+    with pytest.raises(IRIRequestError):
+        service.submit(str(root), request, resubmit=True)
+    assert len(iri.submissions) == 1
+    assert attempts(root)[-1]["state"] == "rejected"
+
+
+def test_null_job_attributes_do_not_match(batch):
+    service, root, _, iri, _ = batch
+    job_id = _resubmitted(batch)
+    spec = dict(iri.submissions[0][1], attributes=None)
+    iri.jobs = Mock(return_value=[{"id": "777.polaris", "job_spec": spec}])
+    status = service.status(str(root))
+    assert status["job_id"] == job_id and status["duplicate_jobs"] == []
+    assert status["duplicate_search_complete"] is True
