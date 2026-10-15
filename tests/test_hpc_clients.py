@@ -431,6 +431,9 @@ def test_iri_terminal_login_saves_token_cache(monkeypatch, tmp_path):
     monkeypatch.setattr("builtins.print", lambda *args: output.append(" ".join(map(str, args))))
     core.main(["login"])
     auth.oauth2_exchange_code_for_tokens.assert_called_once_with("code")
+    auth.oauth2_get_authorize_url.assert_called_once_with(
+        session_required_policies=[core._GLOBUS_SESSION_POLICY]
+    )
     assert json.loads(cache.read_text())["refresh_token"] == "refresh"
     assert cache.stat().st_mode & 0o777 == 0o600
     assert "https://auth.example/authorize" in output

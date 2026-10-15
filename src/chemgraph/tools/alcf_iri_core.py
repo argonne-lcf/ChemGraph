@@ -59,6 +59,11 @@ _GLOBUS_SCOPE_CLIENT_ID = "6be511f6-a071-471f-9bc0-02a0d0836723"
 _GLOBUS_SCOPE = (
     f"https://auth.globus.org/scopes/{_GLOBUS_SCOPE_CLIENT_ID}/filesystem"
 )
+# ALCF session policy from the official Facility API token helper
+# (argonne-lcf/alcf-facility-api-token). Without it Globus reuses whatever
+# identity the browser session holds, and the API answers 401 "No identity
+# found in the session info".
+_GLOBUS_SESSION_POLICY = "a128e981-c9a5-417a-97ab-8571c9831bff"
 _TOKENS_PATH = os.path.expanduser(
     f"~/.globus/app/{_GLOBUS_AUTH_CLIENT_ID}/alcf_facility_api_app/tokens.json"
 )
@@ -321,7 +326,9 @@ def _start_reauth() -> dict:
         requested_scopes=_GLOBUS_SCOPE,
         refresh_tokens=True,
     )
-    url = client.oauth2_get_authorize_url()
+    url = client.oauth2_get_authorize_url(
+        session_required_policies=[_GLOBUS_SESSION_POLICY],
+    )
     _PENDING_AUTH_CLIENT = client
     return {
         "status": "pending",
