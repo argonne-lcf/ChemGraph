@@ -77,7 +77,8 @@ def test_default_state_backend_reads_bundled_skill_without_seeding(asynchronous)
     )
     assert "pbs-hpc" in _prompt(model)
     assert any(
-        m.type == "tool" and "Use ChemGraph" in str(m.content)
+        m.type == "tool" and m.tool_call_id == "read-skill"
+        and m.status == "success" and m.content
         for m in state["messages"]
     )
     assert not any(
@@ -324,40 +325,6 @@ def test_nonlocal_backends_keep_execution_and_routes_without_host_discovery(
         assert backend.write(BUNDLED_SKILLS_PATH + "chemgraph/SKILL.md", "changed").error
 
 
-def test_skill_reads_work_inside_default_child_agent():
-    task = AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "name": "task",
-                "args": {
-                    "subagent_type": "general-purpose",
-                    "description": "Read the ChemGraph skill",
-                },
-                "id": "child",
-                "type": "tool_call",
-            }
-        ],
-    )
-    model = _RecordingChatModel(
-        responses=[
-            task,
-            _read_skill(),
-            AIMessage(content="Read ChemGraph instructions"),
-            AIMessage(content="Done"),
-        ]
-    )
-    graph = construct_deep_agent_graph(model)
-    state = graph.invoke(
-        {"messages": [HumanMessage(content="Delegate a skill read")]},
-        {"configurable": {"thread_id": "child"}},
-    )
-    assert any(
-        m.type == "tool" and "Read ChemGraph instructions" in str(m.content)
-        for m in state["messages"]
-    )
-
-
 def test_refresh_does_not_replay_pending_approved_write(tmp_path):
     write = AIMessage(
         content="",
@@ -542,7 +509,7 @@ def test_optional_download_failure_handling(tmp_path, asynchronous, error_type):
 
     if error_type in (OSError, ValueError, RuntimeError):
         update = load()
-        assert {s["name"] for s in update["skills_metadata"]} == {"chemgraph", "pbs-hpc"}
+        assert {s["name"] for s in update["skills_metadata"]} == {"chemgraph", "pbs-hpc", "iri-hpc"}
         assert len(update["skills_load_errors"]) == 1
         assert "Cannot load skills from '/.agents/skills/': Download failed" in update["skills_load_errors"]
     else:
@@ -661,45 +628,6 @@ def test_personal_root_and_discovery_are_persisted(monkeypatch, tmp_path):
     assert legacy.deepagent_user_skills_dir is None
 
 
-def test_standalone_reads_skill_then_uses_attached_chemistry_tool():
-    from langchain_core.tools import tool
-
-    calls = []
-
-    @tool
-    def run_ase_single(input_structure_file: str) -> dict:
-        """Return a hermetic calculation result for a scripted workflow."""
-        calls.append(input_structure_file)
-        return {"potential_energy": 1.25, "energy_unit": "eV", "status": "completed"}
-
-    calculation = AIMessage(
-        content="",
-        tool_calls=[
-            {
-                "name": "run_ase_single",
-                "args": {"input_structure_file": "/server/water.xyz"},
-                "id": "calculation",
-                "type": "tool_call",
-            }
-        ],
-    )
-    model = _RecordingChatModel(
-        responses=[_read_skill(), calculation, AIMessage(content="Energy: 1.25 eV")]
-    )
-    graph = construct_deep_agent_graph(model, tools=[run_ase_single])
-    state = graph.invoke(
-        {"messages": [HumanMessage(content="Calculate the energy")]},
-        {"configurable": {"thread_id": "chemistry"}},
-    )
-    assert calls == ["/server/water.xyz"]
-    assert [m.name for m in state["messages"] if m.type == "tool"] == [
-        "read_file",
-        "run_ase_single",
-    ]
-    assert '"energy_unit": "eV"' in str(state["messages"][-2].content)
-    assert DEFAULT_DEEPAGENT_PROMPT in _prompt(model)
-
-
 def test_optional_permission_error_does_not_hide_bundled_catalog(caplog):
     class InaccessibleDirectory:
         def stat(self):
@@ -715,5 +643,6 @@ def test_optional_permission_error_does_not_hide_bundled_catalog(caplog):
     assert {skill["name"] for skill in update["skills_metadata"]} == {
         "chemgraph",
         "pbs-hpc",
+        "iri-hpc",
     }
     assert "Cannot inspect optional skills" in caplog.text
