@@ -79,6 +79,15 @@ def _token_file(client_id: str) -> Path:
     return Path.home() / ".globus" / name
 
 
+def _cache_stamp(path: Path) -> Optional[tuple[int, int, int]]:
+    # Saves replace the file, so the inode changes even within one mtime tick.
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return stat.st_ino, stat.st_mtime_ns, stat.st_size
+
+
 def _login_command(client_id: str) -> str:
     import shlex
 
@@ -143,13 +152,23 @@ class GlobusTransferManager:
         self.source_base_path = source_base_path
         self._client_id = client_id or _DEFAULT_CLIENT_ID
         self._transfer_client = None
+        # Token-cache version the client was built from; None for injected clients.
+        self._token_stamp = None
 
     # ── authentication ──────────────────────────────────────────────────
 
     def _get_transfer_client(self):
-        """Lazily create an authenticated ``TransferClient``."""
-        if self._transfer_client is not None:
+        """Lazily create an authenticated ``TransferClient``.
+
+        The client is rebuilt when the token cache changes, so a terminal
+        login replaces credentials held by an already-running manager.
+        """
+        token_file = _token_file(self._client_id)
+        if self._transfer_client is not None and (
+            self._token_stamp is None or self._token_stamp == _cache_stamp(token_file)
+        ):
             return self._transfer_client
+        self._transfer_client = None
 
         try:
             import globus_sdk
@@ -160,7 +179,7 @@ class GlobusTransferManager:
             ) from exc
 
         client = globus_sdk.NativeAppAuthClient(self._client_id)
-        token_file = _token_file(self._client_id)
+        stamp = _cache_stamp(token_file)
         tokens = self._load_tokens(token_file)
         login = _login_command(self._client_id)
 
@@ -178,20 +197,40 @@ class GlobusTransferManager:
                 f"Globus Transfer needs a new refresh-token login. Run {login}"
             )
 
+        authorizer = None
+
         def on_refresh(response):
             fresh = dict(response.by_resource_server["transfer.api.globus.org"])
-            fresh.setdefault("refresh_token", tokens["refresh_token"])
+            # The SDK reports an omitted replacement as None and adopts it.
+            if not fresh.get("refresh_token"):
+                fresh["refresh_token"] = tokens["refresh_token"]
+            if authorizer is not None:
+                authorizer.refresh_token = fresh["refresh_token"]
             fresh["client_id"] = self._client_id
-            self._save_tokens(token_file, fresh)
+            # Never overwrite a login completed after this client was built.
+            cached = self._load_tokens(token_file) or {}
+            if (
+                cached.get("refresh_token") == tokens["refresh_token"]
+                and cached.get("client_id", _DEFAULT_CLIENT_ID) == self._client_id
+            ):
+                self._save_tokens(token_file, fresh)
+                current = getattr(self._transfer_client, "authorizer", None)
+                if authorizer is not None and current is authorizer:
+                    self._token_stamp = _cache_stamp(token_file)
             tokens.update(fresh)
 
+        access_token = tokens.get("access_token") or None
         authorizer = globus_sdk.RefreshTokenAuthorizer(
             tokens["refresh_token"], client,
-            access_token=tokens.get("access_token"),
-            expires_at=tokens.get("expires_at_seconds", 0),
+            access_token=access_token,
+            expires_at=tokens.get("expires_at_seconds", 0) if access_token else None,
             on_refresh=on_refresh,
         )
+        # Without a cached access token the constructor refreshes before
+        # on_refresh can reach the authorizer.
+        authorizer.refresh_token = tokens["refresh_token"]
         self._transfer_client = globus_sdk.TransferClient(authorizer=authorizer)
+        self._token_stamp = stamp
         return self._transfer_client
 
     @staticmethod
@@ -204,7 +243,7 @@ class GlobusTransferManager:
             with open(path) as f:
                 tokens = json.load(f)
                 return tokens if isinstance(tokens, dict) else None
-        except (json.JSONDecodeError, KeyError):
+        except (OSError, ValueError):  # unreadable, non-UTF-8 or invalid JSON
             return None
 
     @staticmethod
@@ -261,7 +300,8 @@ class GlobusTransferManager:
         try:
             # Refresh now, before the caller records a submission attempt.
             tc.authorizer.get_authorization_header()
-        except Exception:
+        except globus_sdk.AuthAPIError:
+            # Network errors propagate: they do not call for a new login.
             self._transfer_client = None
             raise TransferAuthenticationRequired(
                 "Globus Transfer credential refresh failed. Run "
@@ -353,21 +393,22 @@ class GlobusTransferManager:
         # Disambiguate same-basename inputs (e.g. /a/in.cif and /b/in.cif)
         # by suffixing duplicates with _1, _2, ...  Without this the
         # second add_item silently overwrites the first on the
-        # destination collection.
+        # destination collection.  Suffixed names are checked against
+        # every allocated name, since an input may already be called in_1.cif.
         file_mapping: dict[str, str] = {}
-        used_names: dict[str, int] = {}
+        used_names: set[str] = set()
         for local_path in local_paths:
             p = Path(local_path).resolve()
-            base = p.name
-            count = used_names.get(base, 0)
-            if count == 0:
-                remote_name = base
-            else:
-                stem, dot, suffix = base.partition(".")
+            if str(p) in file_mapping:
+                continue
+            stem, dot, suffix = p.name.partition(".")
+            remote_name, count = p.name, 0
+            while remote_name in used_names:
+                count += 1
                 remote_name = (
                     f"{stem}_{count}.{suffix}" if dot else f"{stem}_{count}"
                 )
-            used_names[base] = count + 1
+            used_names.add(remote_name)
             remote_path = f"{remote_dir}/{remote_name}"
             tdata.add_item(str(p), remote_path)
             file_mapping[str(p)] = remote_path
@@ -378,7 +419,7 @@ class GlobusTransferManager:
         logger.info(
             "Globus Transfer submitted: task_id=%s, %d files -> %s",
             task_id,
-            len(local_paths),
+            len(file_mapping),
             remote_dir,
         )
 
