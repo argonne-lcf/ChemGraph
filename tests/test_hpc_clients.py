@@ -2,6 +2,8 @@
 
 import json
 import os
+import threading
+from collections.abc import MutableMapping
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -605,3 +607,184 @@ def test_transfer_error_details_reports_required_domain():
         "http_status": 502, "code": "ExternalError.DirListingFailed.LoginFailed",
         "request_id": "kRpKmsfOL", "required_domains": ["alcf.anl.gov"],
     }
+
+
+class _InterleavedEnv(MutableMapping):
+    """Environment whose removals run a hook first, to force a thread interleaving."""
+
+    def __init__(self, data, on_delete):
+        self.data = dict(data)
+        self.on_delete = on_delete
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __setitem__(self, key, value):
+        self.data[key] = value
+
+    def __delitem__(self, key):
+        self.on_delete()
+        del self.data[key]
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+
+def test_second_401_lets_next_submission_load_terminal_login(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    cached_token = ["rejected-refresh"]
+    monkeypatch.setenv("ALCF_API_TOKEN", "expired")
+
+    def refresh():
+        os.environ["ALCF_API_TOKEN"] = cached_token[0]
+        return True
+
+    def respond(request):
+        if request.headers["Authorization"] == "Bearer terminal-login":
+            return httpx.Response(200, json={"id": "job"})
+        return httpx.Response(401)
+
+    monkeypatch.setattr(core, "_try_refresh_token", refresh)
+    client = IRIClient(transport=httpx.MockTransport(respond))
+    with pytest.raises(IRIRequestError):
+        client.status("compute", "job")
+    assert "ALCF_API_TOKEN" not in os.environ
+    # A separate terminal login updates the cache, not this process environment.
+    cached_token[0] = "terminal-login"
+    assert client.submit("compute", {}) == {"id": "job"}
+
+
+def test_discarding_a_token_keeps_one_published_concurrently(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    publisher = threading.Thread(target=core._publish_token, args=("fresh",))
+
+    def publish_during_removal():
+        publisher.start()
+        publisher.join(timeout=0.2)
+
+    env = _InterleavedEnv({"ALCF_API_TOKEN": "expired"}, publish_during_removal)
+    monkeypatch.setattr(core.os, "environ", env)
+    IRIClient._discard_rejected_token({"Authorization": "Bearer expired"})
+    publisher.join(timeout=5)
+    assert env.data == {"ALCF_API_TOKEN": "fresh"}
+
+
+def test_concurrent_discards_of_one_token_do_not_raise(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    barrier = threading.Barrier(2, timeout=0.3)
+
+    def wait_for_other_removal():
+        try:
+            barrier.wait()
+        except threading.BrokenBarrierError:
+            pass
+
+    env = _InterleavedEnv({"ALCF_API_TOKEN": "expired"}, wait_for_other_removal)
+    monkeypatch.setattr(core.os, "environ", env)
+    errors = []
+
+    def discard():
+        try:
+            IRIClient._discard_rejected_token({"Authorization": "Bearer expired"})
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=discard) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=5)
+    assert not errors and env.data == {}
+
+
+def test_encoded_iri_responses_are_rejected_unread():
+    calls = []
+
+    class Stream(httpx.SyncByteStream):
+        iterated = False
+
+        def __iter__(self):
+            Stream.iterated = True
+            yield b"compressed"
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, headers={"Content-Encoding": "gzip"}, stream=Stream())
+
+    client = IRIClient(
+        transport=httpx.MockTransport(respond),
+        headers=lambda: {"Accept-Encoding": "gzip", "Authorization": "Bearer token"},
+    )
+    with pytest.raises(RuntimeError, match="content encoding"):
+        client.inspect("storage", "/run", operation="ls")
+    with pytest.raises(RuntimeError, match="outcome may be unknown"):
+        client.submit("compute", {})
+    assert not Stream.iterated
+    assert [request.headers["Accept-Encoding"] for request in calls] == ["identity"] * 2
+
+
+@pytest.mark.parametrize("operation", ["submit", "status", "cancel"])
+def test_iri_redirects_are_errors(operation):
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(307, headers={"Location": "https://example.org/elsewhere"})
+
+    client = IRIClient(
+        transport=httpx.MockTransport(respond), headers=lambda: {}, sleep=lambda _: None
+    )
+    call = {
+        "submit": lambda: client.submit("compute", {}),
+        "status": lambda: client.status("compute", "job"),
+        "cancel": lambda: client.cancel("compute", "job"),
+    }[operation]
+    with pytest.raises(IRIRequestError) as error:
+        call()
+    assert error.value.status_code == 307 and len(calls) == 1
+
+
+@pytest.mark.parametrize("resource", ["../x", "a?b", "a#b", "..", "a/b", ""])
+@pytest.mark.parametrize("operation", ["prepare", "cancel", "status", "jobs", "inspect"])
+def test_iri_resource_must_be_a_path_segment(resource, operation):
+    calls = []
+    headers = Mock(return_value={})
+    client = IRIClient(
+        transport=httpx.MockTransport(lambda request: calls.append(request)), headers=headers
+    )
+    call = {
+        "prepare": lambda: client.prepare_submission(resource, {}),
+        "cancel": lambda: client.cancel(resource, "job"),
+        "status": lambda: client.status(resource, "job"),
+        "jobs": lambda: client.jobs(resource),
+        "inspect": lambda: client.inspect(resource, "/run"),
+    }[operation]
+    with pytest.raises(ValueError, match="resolve_resource"):
+        call()
+    assert not calls
+    headers.assert_not_called()
+
+
+def test_iri_file_views_allow_escaped_content():
+    body = json.dumps({"content": "\x00" * 65536}).encode()
+    assert len(body) > 131072
+    client = IRIClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=body)),
+        headers=lambda: {},
+    )
+    assert client.inspect("storage", "/run/f", size=65536)["content"] == "\x00" * 65536
+    polled = client.inspect("storage", "/run/f", size=65536, operation_id="task")
+    assert polled["content"] == "\x00" * 65536
+    assert client.inspect("storage", "/run", operation="ls")["truncated"]
+
+
+def test_iri_auth_errors_explain_recovery():
+    message = str(IRIRequestError(401))
+    assert "python -m chemgraph.tools.alcf_iri_core login" in message
+    assert "restart" in message
