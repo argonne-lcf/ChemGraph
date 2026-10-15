@@ -700,6 +700,11 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
         discover_skills=False,
     )
     config = {"configurable": {"thread_id": "test"}}
+
+    def evidence():
+        return {path.name: path.read_bytes() for path in root.iterdir() if path.is_file()}
+
+    files = evidence()
     before = (len(transfer.calls), len(iri.submissions), len(iri.cancelled), len(iri.inspections))
     state = graph.invoke(
         {"messages": [HumanMessage(content="Run the HPC action")]}, config
@@ -711,6 +716,8 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
     assert (after == before) == (decision == "reject")
     if action == "hpc_submit_job" and decision == "reject":
         assert not (root / "submission.started").exists()
+    if decision == "reject":
+        assert evidence() == files  # No evidence is written for a rejected review.
 
 
 @pytest.mark.skipif(os.name != "posix", reason="HPC targets require POSIX host paths.")
