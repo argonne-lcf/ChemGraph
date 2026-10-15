@@ -1253,6 +1253,18 @@ def test_deep_agent_bypass_keeps_hpc_mutation_reviews(monkeypatch, tmp_path, all
     assert captured["interrupt_on"] is None  # Ordinary catalogs keep #259 semantics.
 
 
+@pytest.mark.parametrize("value", ["true", "yes", 1, "1"])
+def test_unreviewed_mutations_require_a_boolean(value):
+    from pydantic import ValidationError
+
+    # A lenient value must not silently drop the mutation reviews.
+    with pytest.raises(ValidationError):
+        HPCConfig.model_validate({"allow_unreviewed_mutations": value})
+    with pytest.raises(ValidationError):
+        create_hpc_registry({"targets": {}, "allow_unreviewed_mutations": value})
+    assert HPCConfig.model_validate({"allow_unreviewed_mutations": True}).allow_unreviewed_mutations
+
+
 @pytest.mark.parametrize("approval_mode", ["review", "bypass"])
 @pytest.mark.parametrize("workflow_type", ["deep_agent", "main_agent"])
 def test_directly_attached_hpc_tools_are_rejected(monkeypatch, tmp_path, workflow_type, approval_mode):

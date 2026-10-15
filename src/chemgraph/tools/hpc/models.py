@@ -2,7 +2,7 @@
 
 from pathlib import Path, PurePosixPath
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 
 # Tool metadata key marking managed HPC tools; they must arrive through a
@@ -87,8 +87,8 @@ class HPCTarget(StrictModel):
 class HPCConfig(StrictModel):
     targets: dict[str, HPCTarget] = Field(default_factory=dict)
     # Approval bypass keeps transfer, submission and cancellation reviews
-    # unless this explicit opt-in is set.
-    allow_unreviewed_mutations: bool = False
+    # unless this explicit opt-in is set. Strict, so "yes" or 1 cannot opt in.
+    allow_unreviewed_mutations: StrictBool = False
 
 
 class BatchRequest(StrictModel):
