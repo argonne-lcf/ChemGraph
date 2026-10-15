@@ -43,5 +43,3 @@ async def test_sqlite_compare_and_set_has_one_winner(tmp_path):
     with pytest.raises(OperationConflict):
         await SqliteOperationStore(store.path).put(
             {**initial, "revision": 3, "owner": "bob"}, expected_revision=2)
-
-
