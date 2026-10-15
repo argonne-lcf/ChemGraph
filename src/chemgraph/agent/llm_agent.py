@@ -65,7 +65,7 @@ from chemgraph.graphs.deep_agent import (
     construct_deep_agent_graph,
     normalize_skill_sources,
 )
-from chemgraph.graphs.workspace import default_tool_registry
+from chemgraph.graphs.workspace import bypass_interrupt_policy, default_tool_registry
 from chemgraph.agent.turn import serialize_state
 from chemgraph.skills.runtime import resolve_skill_dirs, resolve_user_skills_dir
 from chemgraph.utils.workflow_utils import get_removed_workflow_message
@@ -385,6 +385,10 @@ class ChemGraph:
                 self.subagent_options[canonical] = normalized
         if deepagent_tool_registry is not None and workflow_type != "deep_agent":
             raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
+        # Configured HPC tools are scoped to standalone DeepAgent; durable
+        # main-agent sessions cannot reconstruct them or keep their reviews.
+        if tool_registry is not None and tool_registry.names(tags=("hpc",)):
+            raise ValueError("Configured HPC tools require the standalone deep_agent workflow.")
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."
@@ -660,7 +664,9 @@ class ChemGraph:
             if self.checkpointer is not None:
                 deepagent_options["checkpointer"] = self.checkpointer
             if self.approval_mode == "bypass":
-                deepagent_options["interrupt_on"] = None
+                deepagent_options["interrupt_on"] = bypass_interrupt_policy(
+                    self.deepagent_tool_registry
+                )
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 tools=self.tools,
