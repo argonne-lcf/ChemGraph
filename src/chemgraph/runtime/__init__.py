@@ -13,11 +13,14 @@ so tool modules can import this package without LangChain agent machinery.
 
 from chemgraph.runtime.context import (
     RunContext,
+    WorkspaceScope,
     ScopedExecutionError,
     current_context,
+    current_workspace,
     register_artifact,
     run_context,
     scoped_path,
+    workspace_scope,
 )
 from chemgraph.runtime.journal import (
     ApprovalRequired,
@@ -46,11 +49,14 @@ __all__ = [
     "PreparationError",
     "PreparedAction",
     "RunContext",
+    "WorkspaceScope",
     "ScopedExecutionError",
     "artifact_file",
     "current_context",
+    "current_workspace",
     "register_artifact",
     "result_artifacts",
     "run_context",
     "scoped_path",
+    "workspace_scope",
 ]
