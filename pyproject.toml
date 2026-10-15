@@ -62,7 +62,7 @@ dependencies = [
     "rdkit",
     "pymatgen",
     "mace-torch>=0.3.16",
-    "globus_sdk",
+    "globus_sdk>=4.4,<5",
     "streamlit==1.54.0",
     "py3Dmol",
     "plotly",
