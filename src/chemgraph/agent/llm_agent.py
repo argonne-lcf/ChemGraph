@@ -66,6 +66,7 @@ from chemgraph.graphs.deep_agent import (
     normalize_skill_sources,
 )
 from chemgraph.graphs.workspace import bypass_interrupt_policy, default_tool_registry
+from chemgraph.tools.hpc.models import managed_hpc_tool_names
 from chemgraph.agent.turn import serialize_state
 from chemgraph.skills.runtime import resolve_skill_dirs, resolve_user_skills_dir
 from chemgraph.utils.workflow_utils import get_removed_workflow_message
@@ -389,6 +390,19 @@ class ChemGraph:
         # main-agent sessions cannot reconstruct them or keep their reviews.
         if tool_registry is not None and tool_registry.names(tags=("hpc",)):
             raise ValueError("Configured HPC tools require the standalone deep_agent workflow.")
+        # Attached tools bypass the registry tags that carry their review policy.
+        attached = [*(tools or ()), *(data_tools or ())]
+        for options in (subagent_options or {}).values():
+            if isinstance(options, dict):
+                attached.extend(options.get("tools") or ())
+                worker_registry = options.get("tool_registry")
+                if hasattr(worker_registry, "names") and worker_registry.names(tags=("hpc",)):
+                    raise ValueError("Configured HPC tools require the standalone deep_agent workflow.")
+        if managed_hpc_tool_names(attached):
+            raise ValueError(
+                "Managed HPC tools cannot be attached directly; configure them with "
+                "create_hpc_registry() and pass deepagent_tool_registry to the deep_agent workflow."
+            )
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."

@@ -1239,3 +1239,39 @@ def test_deep_agent_bypass_keeps_hpc_mutation_reviews(monkeypatch, tmp_path, all
     ChemGraph(workflow_type="deep_agent", enable_memory=False, log_dir=str(tmp_path),
               approval_mode="bypass")
     assert captured["interrupt_on"] is None  # Ordinary catalogs keep #259 semantics.
+
+
+@pytest.mark.parametrize("approval_mode", ["review", "bypass"])
+@pytest.mark.parametrize("workflow_type", ["deep_agent", "main_agent"])
+def test_directly_attached_hpc_tools_are_rejected(monkeypatch, tmp_path, workflow_type, approval_mode):
+    from chemgraph.agent.llm_agent import ChemGraph
+    from chemgraph.tools.hpc.tools import create_hpc_tools
+
+    _stub_model(monkeypatch)
+    for name in ("construct_deep_agent_graph", "construct_main_agent_graph"):
+        monkeypatch.setattr(
+            f"chemgraph.agent.llm_agent.{name}",
+            lambda *args, **kwargs: pytest.fail("must reject before graph construction"),
+        )
+    # Attached tools would carry no review tags, so bypass would leave them unreviewed.
+    attached = create_hpc_tools({"targets": {}})
+    mixed = {"deepagent_tool_registry": create_hpc_registry({"targets": {}})}
+    for extra in ({}, mixed if workflow_type == "deep_agent" else {}):
+        with pytest.raises(ValueError, match="create_hpc_registry"):
+            ChemGraph(workflow_type=workflow_type, enable_memory=False, log_dir=str(tmp_path),
+                      approval_mode=approval_mode, tools=[attached[3]], **extra)
+    if workflow_type == "main_agent":
+        with pytest.raises(ValueError, match="create_hpc_registry"):
+            ChemGraph(workflow_type="main_agent", enable_memory=False, log_dir=str(tmp_path),
+                      approval_mode=approval_mode,
+                      subagent_options={"single_agent": {"tools": attached}})
+
+
+def test_single_agent_rejects_directly_attached_hpc_tools(monkeypatch, tmp_path):
+    from chemgraph.agent.llm_agent import ChemGraph
+    from chemgraph.tools.hpc.tools import create_hpc_tools
+
+    _stub_model(monkeypatch)
+    with pytest.raises(ValueError, match="create_hpc_registry"):
+        ChemGraph(workflow_type="single_agent", enable_memory=False, log_dir=str(tmp_path),
+                  tools=create_hpc_tools({"targets": {}}))

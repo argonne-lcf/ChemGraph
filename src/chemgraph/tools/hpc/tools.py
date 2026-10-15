@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 
 from chemgraph.execution.globus_transfer import TransferAuthenticationRequired
 from chemgraph.tools.alcf_iri_core import IRIAuthenticationRequired, IRIRequestError
-from chemgraph.tools.hpc.models import BatchRequest, HPCConfig
+from chemgraph.tools.hpc.models import MANAGED_HPC_TOOL, BatchRequest, HPCConfig
 from chemgraph.tools.hpc.service import HPCService, TransferOperationError
 
 
@@ -159,7 +159,7 @@ def create_hpc_tools(config, *, service=None):
         """Poll a task_id returned by hpc_read_file or hpc_list_files for this run, with the same bounds."""
         return service.operation_status(run_dir, operation_id)
 
-    return [
+    tools = [
         hpc_list_targets,
         hpc_transfer_files,
         hpc_transfer_status,
@@ -171,6 +171,9 @@ def create_hpc_tools(config, *, service=None):
         hpc_list_files,
         hpc_operation_status,
     ]
+    for entry in tools:
+        entry.metadata = {**(entry.metadata or {}), MANAGED_HPC_TOOL: True}
+    return tools
 
 
 # Transfers, submissions and cancellations change remote state or use an allocation.
