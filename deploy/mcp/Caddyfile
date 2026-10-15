@@ -1,0 +1,8 @@
+chemgraph.example {
+	request_body {
+		max_size 100MiB
+	}
+	reverse_proxy 127.0.0.1:9003 {
+		flush_interval -1
+	}
+}
