@@ -1541,3 +1541,60 @@ def test_null_job_attributes_do_not_match(batch):
     status = service.status(str(root))
     assert status["job_id"] == job_id and status["duplicate_jobs"] == []
     assert status["duplicate_search_complete"] is True
+
+
+def test_failed_retrieval_retries_without_overwriting(batch):
+    service, root, transfer, _, _ = batch
+    manifest = stage(batch)
+    (Path(manifest["remote_directory"]) / "result.json").write_text("{}")
+    service.retrieve(str(root), ["result.json"])
+    destination = root / "retrieved/result.json"
+    transfer.state = "ACTIVE"
+    with pytest.raises(ValueError, match="exists"):
+        service.retrieve(str(root), ["result.json"])
+    destination.unlink()
+    with pytest.raises(ValueError, match="still active"):
+        service.retrieve(str(root), ["result.json"])
+    transfer.state = "SUCCEEDED"
+    with pytest.raises(ValueError, match="already targets"):
+        service.retrieve(str(root), ["result.json"])
+    transfer.state = "FAILED"
+    service.retrieve(str(root), ["result.json"])  # Only missing files are written.
+    assert destination.exists() and len(transfer.calls) == 3
+    with pytest.raises(ValueError, match="exists"):
+        service.retrieve(str(root), ["result.json"])
+    service.retrieve(str(root), ["result.json"], overwrite=True)
+    assert len(read_json(root / ".hpc-retrievals.json")) == 3
+
+
+def test_transfer_operations_do_not_need_live_resource_discovery(batch):
+    service, root, _, iri, request = batch
+    manifest = stage(batch)
+    (Path(manifest["remote_directory"]) / "result.json").write_text("{}")
+    iri.resolve_resource = Mock(side_effect=RuntimeError("IRI status endpoint unavailable"))
+    assert service.transfer_status(str(root))["status"] == "SUCCEEDED"
+    assert service.retrieve(str(root), ["result.json"])["state"] == "submitted"
+    # Operations that use IRI still verify the frozen resources.
+    with pytest.raises(RuntimeError):
+        service.submit(str(root), request)
+    manifest = read_json(root / "run.json")
+    manifest["target_snapshot"]["remote_root"] = "/elsewhere"
+    write_json(root / "run.json", manifest)
+    with pytest.raises(ValueError, match="configured target"):
+        service.transfer_status(str(root))
+
+
+def test_staging_outside_the_selected_target_creates_nothing(batch, tmp_path):
+    service, _, transfer, iri, _ = batch
+    other = service.config.targets["polaris"].model_copy(
+        update={"local_root": str(tmp_path / "other"), "local_collection_root": str(tmp_path / "other")},
+    )
+    (tmp_path / "other").mkdir()
+    service = HPCService(
+        HPCConfig(targets={**service.config.targets, "other": other}),
+        iri=iri, transfer_factory=lambda target: transfer,
+    )
+    run = tmp_path / "other" / "new-run"
+    with pytest.raises(ValueError, match="outside target 'polaris'"):
+        service.stage(str(run), "polaris", ["launch.sh"])
+    assert not run.exists() and not transfer.calls

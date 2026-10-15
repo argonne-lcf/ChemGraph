@@ -224,18 +224,25 @@ class HPCService:
             "storage_resource": self.iri.resolve_resource(target.storage_resource),
         })
 
-    def _check_target(self, name, snapshot):
-        """The configured target, not the editable manifest, authorizes locations."""
+    def _check_target(self, name, snapshot, *, iri=True):
+        """The configured target, not the editable manifest, authorizes locations.
+
+        Transfer-only operations pass ``iri=False``: they never use the IRI
+        resources, so they need not resolve them through the live facility.
+        """
         configured = self._target(name)
-        resolved = self._resolved(configured)
-        for field in (*_TARGET_PATHS, "compute_resource", "storage_resource"):
-            if getattr(resolved, field) != getattr(snapshot, field):
+        fields = _TARGET_PATHS
+        if iri:
+            configured = self._resolved(configured)
+            fields += ("compute_resource", "storage_resource")
+        for field in fields:
+            if getattr(configured, field) != getattr(snapshot, field):
                 raise ValueError(
                     f"Run manifest does not match configured target {name!r} ({field}); "
                     "restore the target configuration used for this run."
                 )
 
-    def _load(self, root):
+    def _load(self, root, *, iri=True):
         manifest = read_json(root / "run.json")
         if not isinstance(manifest, dict) or manifest.get("version") != 1:
             raise ValueError("Unsupported run manifest version.")
@@ -245,7 +252,7 @@ class HPCService:
         if not isinstance(identity, str) or not _IDENTITY.fullmatch(identity):
             raise ValueError("Run manifest identity is invalid.")
         target = HPCTarget.model_validate(manifest.get("target_snapshot"))
-        self._check_target(manifest.get("target"), target)
+        self._check_target(manifest.get("target"), target, iri=iri)
         if not root.is_relative_to(Path(target.local_root).resolve()):
             raise ValueError("Run directory is outside its target local_root.")
         files = manifest.get("files")
@@ -284,6 +291,10 @@ class HPCService:
 
     def stage(self, run_dir, target_name, files):
         target = self._target(target_name)
+        path = Path(run_dir)
+        # Check the selected target before staging creates any directory.
+        if path.is_absolute() and not path.resolve().is_relative_to(Path(target.local_root).resolve()):
+            raise ValueError(f"Run directory is outside target {target_name!r} local_root.")
         with self._run(run_dir, create=True) as root:
             if not root.is_relative_to(Path(target.local_root).resolve()):
                 raise ValueError(f"Run directory is outside target {target_name!r} local_root.")
@@ -424,7 +435,7 @@ class HPCService:
 
     def transfer_status(self, run_dir, transfer_id=None):
         with self._run(run_dir) as root:
-            manifest, target = self._load(root)
+            manifest, target = self._load(root, iri=False)
             if transfer_id is None and not manifest["transfer_id"]:
                 if manifest.get("staging") == "rejected":
                     return {
@@ -469,7 +480,7 @@ class HPCService:
 
     def retrieve(self, run_dir, files, *, overwrite=False):
         with self._run(run_dir) as root:
-            manifest, target = self._load(root)
+            manifest, target = self._load(root, iri=False)
             names = [relative_path(name) for name in files]
             if not names or len(set(names)) != len(names):
                 raise ValueError("Select unique output files.")
@@ -504,10 +515,13 @@ class HPCService:
                             "Retrieval destination exists; explicitly request overwrite."
                         )
                 for item in overlapping:
-                    if not overwrite:
+                    observed = self.manager(target).check_transfer_status(item["transfer_id"])["status"]
+                    if observed not in {"SUCCEEDED", "FAILED"}:
+                        raise ValueError("A retrieval targeting these paths is still active; wait before retrying.")
+                    # Retrying a FAILED retrieval only fills missing destinations,
+                    # checked above; replacing a completed one is an overwrite.
+                    if observed == "SUCCEEDED" and not overwrite:
                         raise ValueError("A retrieval already targets these paths.")
-                    if self.manager(target).check_transfer_status(item["transfer_id"])["status"] not in {"SUCCEEDED", "FAILED"}:
-                        raise ValueError("A retrieval targeting these paths is still active; wait before overwriting.")
             with _transfer_phase("prepare"):
                 manager = self.manager(target)
                 prepared = manager.prepare_mapping(
@@ -899,7 +913,10 @@ class HPCService:
                 target.storage_resource, remote, operation=operation, offset=offset, size=size,
             )
             if isinstance(result, dict) and result.get("task_id"):
-                # Record the approved request so polling reproduces its bounds.
+                # Record which approved inspection returned this task. Polling
+                # reads that task's result and does not resend these bounds.
+                # The record is editable local evidence, so it scopes polling
+                # to this run's paths rather than authorizing it.
                 operations_path = root / ".hpc-operations.json"
                 operations = read_json(operations_path) if operations_path.exists() else {}
                 operations[str(result["task_id"])] = {
