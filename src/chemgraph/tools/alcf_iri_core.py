@@ -20,7 +20,8 @@ kinds per category:
   action=<name>          -> actually invoke the endpoint
 
 Auth: reads $ALCF_API_TOKEN for endpoints that need it. First-time
-setup uses the ``alcf_auth`` in-chat re-auth tool -- ask the agent
+setup uses ``python -m chemgraph.tools.alcf_iri_core login`` in a
+terminal, or the ``alcf_auth`` in-chat re-auth tool -- ask the agent
 to run action='start_reauth', visit the returned Globus URL, paste
 the code back. After that the tool silently refreshes access tokens
 for the next 30 days (Level 1, ``_try_refresh_token``); when the
@@ -98,7 +99,14 @@ def _headers(needs_auth: bool = True) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _resource_id(name: str) -> str:
+def _fetch_resources() -> Any:
+    with httpx.Client(timeout=TIMEOUT_S) as c:
+        r = c.get(f"{BASE_URL}/status/resources")
+        r.raise_for_status()
+        return r.json()
+
+
+def _resource_id(name: str, fetch=_fetch_resources) -> str:
     """Accept 'aurora' or the uuid itself. Case-insensitive on names.
 
     Resolves via the live /status/resources endpoint. No hardcoded
@@ -112,11 +120,8 @@ def _resource_id(name: str) -> str:
     key = name.strip().lower()
     if key in _RESOURCE_CACHE:
         return _RESOURCE_CACHE[key]
-    with httpx.Client(timeout=TIMEOUT_S) as c:
-        r = c.get(f"{BASE_URL}/status/resources")
-        r.raise_for_status()
-        for res in r.json():
-            _RESOURCE_CACHE[res["name"].strip().lower()] = res["id"]
+    for res in fetch():
+        _RESOURCE_CACHE[res["name"].strip().lower()] = res["id"]
     if key in _RESOURCE_CACHE:
         return _RESOURCE_CACHE[key]
     raise ValueError(
@@ -1082,15 +1087,24 @@ class IRIClient:
         self.headers = headers or _headers
         self.sleep = sleep or time.sleep
 
+    @staticmethod
+    def _discard_rejected_token(headers):
+        # A 401 proves the in-process token is unusable. Dropping it makes the
+        # next request load the token cache, including after a terminal login.
+        token = os.environ.get("ALCF_API_TOKEN")
+        if token and httpx.Headers(headers).get("Authorization") == f"Bearer {token}":
+            del os.environ["ALCF_API_TOKEN"]
+
     def request(self, method, path, *, params=None, body=None, read=False,
-                max_bytes=1048576, allow_truncation=False):
+                max_bytes=1048576, allow_truncation=False, auth=True):
         # Reads retry transient failures twice; one 401 refresh is separate,
-        # so a successful refresh is always followed by another request.
+        # so a successful refresh is always followed by another request. A
+        # 401 was not executed, so cancellation may be resent after refresh.
         retries = 2 if read else 0
         refreshed = False
         while True:
             try:
-                headers = self.headers()
+                headers = self.headers() if auth else {}
             except RuntimeError:
                 raise IRIAuthenticationRequired(
                     f"Facility API credentials are unavailable. Authenticate in a terminal with `{LOGIN_COMMAND}`."
@@ -1100,8 +1114,9 @@ class IRIClient:
                     with client.stream(method, BASE_URL + path, headers=headers,
                                        params=params, json=body) as response:
                         status = response.status_code
-                        if status == 401 and read and not refreshed:
+                        if status == 401 and auth and not refreshed:
                             refreshed = True
+                            self._discard_rejected_token(headers)
                             if _try_refresh_token():
                                 continue
                         if status in (429, 502, 503, 504) and retries:
@@ -1146,7 +1161,8 @@ class IRIClient:
             return {"base64": base64.b64encode(raw).decode(), "truncated": truncated}
 
     def resolve_resource(self, resource):
-        return _resource_id(resource)
+        return _resource_id(resource, lambda: self.request(
+            "GET", "/status/resources", read=True, auth=False))
 
     def prepare_submission(self, resource, spec):
         """Resolve credentials and serialize the request without contacting compute.
@@ -1167,6 +1183,9 @@ class IRIClient:
         try:
             with httpx.Client(timeout=TIMEOUT_S, transport=self.transport) as client:
                 with closing(client.send(request, stream=True)) as response:
+                    if response.status_code == 401:
+                        # Never resent; the next prepared attempt reloads credentials.
+                        self._discard_rejected_token(request.headers)
                     return self._read_response(response)
         except httpx.TransportError:
             raise RuntimeError("IRI transport failed; request outcome may be unknown.") from None

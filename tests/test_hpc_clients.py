@@ -277,7 +277,7 @@ def test_legacy_writes_remain_gated(monkeypatch):
         dispatch("compute", "submit_job", {"machine": "polaris", "jobspec": {}})
 
 
-def test_iri_authentication_refresh_on_reads_only(monkeypatch):
+def test_iri_authentication_refresh_never_resends_submission(monkeypatch):
     import chemgraph.tools.alcf_iri_core as core
 
     calls = []
@@ -291,12 +291,70 @@ def test_iri_authentication_refresh_on_reads_only(monkeypatch):
     client = IRIClient(transport=httpx.MockTransport(response), headers=lambda: {})
     assert client.status("compute", "job")["id"] == "job"
     refresh.assert_called_once()
+    # A 401 cancellation was not executed, so it is resent once after refresh.
+    calls.clear()
+    refresh.reset_mock()
+    assert client.cancel("compute", "job") == {"id": "job"}
+    assert len(calls) == 2
+    refresh.assert_called_once()
     calls.clear()
     refresh.reset_mock()
     with pytest.raises(IRIRequestError):
         client.submit("compute", {})
     assert len(calls) == 1
     refresh.assert_not_called()
+
+
+def test_rejected_iri_token_is_replaced_by_terminal_login(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    monkeypatch.setenv("ALCF_API_TOKEN", "expired")
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        if request.headers["Authorization"] == "Bearer expired":
+            return httpx.Response(401)
+        return httpx.Response(200, json={"id": "job"})
+
+    def terminal_login():
+        os.environ["ALCF_API_TOKEN"] = "fresh"
+        return True
+
+    client = IRIClient(transport=httpx.MockTransport(respond))
+    with pytest.raises(IRIRequestError) as error:
+        client.submit("compute", {})
+    assert error.value.status_code == 401 and len(calls) == 1
+    # The rejected token is not reused once the token cache has a login.
+    assert "ALCF_API_TOKEN" not in os.environ
+    monkeypatch.setattr(core, "_try_refresh_token", terminal_login)
+    assert client.submit("compute", {}) == {"id": "job"}
+    assert calls[-1].headers["Authorization"] == "Bearer fresh"
+
+
+def test_iri_resource_resolution_is_bounded_and_public(monkeypatch):
+    import chemgraph.tools.alcf_iri_core as core
+
+    monkeypatch.setattr(core, "_RESOURCE_CACHE", {})
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json=[{"name": "Polaris", "id": "polaris-id"}])
+
+    headers = Mock(side_effect=AssertionError("public endpoint"))
+    client = IRIClient(transport=httpx.MockTransport(respond), headers=headers)
+    assert client.resolve_resource("polaris") == "polaris-id"
+    assert client.resolve_resource("POLARIS") == "polaris-id"
+    assert len(calls) == 1 and calls[0].url.path == "/api/v1/status/resources"
+    assert "Authorization" not in calls[0].headers
+    headers.assert_not_called()
+    oversized = IRIClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, content=b"a" * 1048577)),
+        headers=headers,
+    )
+    with pytest.raises(ValueError, match="limit"):
+        oversized.resolve_resource("aurora")
 
 
 def test_iri_async_filesystem_contract():
