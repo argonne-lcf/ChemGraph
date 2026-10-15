@@ -181,7 +181,7 @@ def _token_response(response_class, status=200, **fields):
     raw.request = requests.Request("POST", raw.url).prepare()
     raw.headers["Content-Type"] = "application/json"
     raw._content = json.dumps(fields).encode()
-    if response_class is globus_sdk.AuthAPIError:
+    if issubclass(response_class, globus_sdk.GlobusAPIError):
         return response_class(raw)
     return response_class(raw, client=Mock())
 
@@ -308,3 +308,33 @@ def test_legacy_layout_allocates_unique_destinations(tmp_path, names, expected):
     assert list(result.file_mapping.values()) == destinations
     payload = manager._transfer_client.submit_transfer.call_args.args[0]
     assert [item["destination_path"] for item in payload["DATA"]] == destinations
+
+
+def test_terminal_login_can_require_identity_domain(monkeypatch, tmp_path):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("builtins.input", lambda _: "authorization-code")
+    auth = Mock()
+    auth.oauth2_exchange_code_for_tokens.return_value = Mock(by_resource_server={
+        "transfer.api.globus.org": {"access_token": "a", "refresh_token": "r"},
+    })
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    transfer_module.main([])
+    assert auth.oauth2_get_authorize_url.call_args.kwargs == {}
+    transfer_module.main(["--domain", "alcf.anl.gov"])
+    assert auth.oauth2_get_authorize_url.call_args.kwargs == {
+        "session_required_single_domain": ["alcf.anl.gov"], "prompt": "login",
+    }
+
+
+def test_transfer_error_details_reports_required_domain():
+    error = _token_response(
+        globus_sdk.TransferAPIError, status=502,
+        code="ExternalError.DirListingFailed.LoginFailed", request_id="kRpKmsfOL",
+        message="Login Failed: secret server detail",
+        authorization_parameters={"session_required_single_domain": ["alcf.anl.gov", "bad domain"]},
+    )
+    details = transfer_module.transfer_error_details(error)
+    assert details == {
+        "http_status": 502, "code": "ExternalError.DirListingFailed.LoginFailed",
+        "request_id": "kRpKmsfOL", "required_domains": ["alcf.anl.gov"],
+    }

@@ -59,6 +59,12 @@ def transfer_error_details(exc: Exception) -> dict:
             if isinstance(scope, str) and len(scope) <= 4096
             and re.fullmatch(scope_pattern, scope)
         ][:16]
+    domains = exc.info.authorization_parameters.session_required_single_domain
+    if domains:
+        details["required_domains"] = [
+            domain for domain in domains
+            if isinstance(domain, str) and re.fullmatch(r"[A-Za-z0-9.-]{1,253}", domain)
+        ][:16]
     return details
 
 # Globus Transfer API scope
@@ -515,8 +521,12 @@ class GlobusTransferManager:
         return f"{self.destination_base_path}/{filename}"
 
 
-def authenticate(collections=(), *, client_id=None) -> None:
-    """Explicit terminal login, never called by tools."""
+def authenticate(collections=(), *, client_id=None, domains=()) -> None:
+    """Explicit terminal login, never called by tools.
+
+    ``domains`` requests a session from those identity domains, which
+    collections such as ALCF Eagle require (``session_required_single_domain``).
+    """
     import globus_sdk
 
     client_id = client_id or _DEFAULT_CLIENT_ID
@@ -527,7 +537,8 @@ def authenticate(collections=(), *, client_id=None) -> None:
         for collection in collections
     ))
     client.oauth2_start_flow(requested_scopes=str(scope), refresh_tokens=True)
-    print(client.oauth2_get_authorize_url())
+    session = {"session_required_single_domain": list(domains), "prompt": "login"}
+    print(client.oauth2_get_authorize_url(**(session if domains else {})))
     response = client.oauth2_exchange_code_for_tokens(input("Authorization code: ").strip())
     GlobusTransferManager._save_tokens(
         _token_file(client_id),
@@ -542,8 +553,10 @@ def main(argv=None):
                         help="Managed collection needing data_access consent (repeatable)")
     parser.add_argument("--client-id", default=None,
                         help="OAuth client ID used by the configured transfer manager")
+    parser.add_argument("--domain", action="append", default=[],
+                        help="Identity domain a collection requires, e.g. alcf.anl.gov (repeatable)")
     args = parser.parse_args(argv)
-    authenticate(args.collection, client_id=args.client_id)
+    authenticate(args.collection, client_id=args.client_id, domains=args.domain)
 
 
 if __name__ == "__main__":
