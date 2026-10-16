@@ -55,6 +55,7 @@ def construct_main_agent_graph(
     discover_skills: bool = True,
     user_skills_dir: str | None = None,
     interrupt_on: dict[str, Any] | None | object = _DEFAULT_INTERRUPT_POLICY,
+    scoped: bool = False,
     recursion_limit: int = 200,
     human_supervised: bool = False,
     subagent_tools: list[BaseTool] | None = None,
@@ -83,6 +84,8 @@ def construct_main_agent_graph(
     Specialists are discovered and loaded on demand. Explicit compiled workers
     remain attached; legacy ``enable_deepagent`` explicitly activates its worker.
     Without a backend, file tools use checkpoints and no shell is exposed.
+    ``scoped`` replaces approval interrupts with :mod:`chemgraph.runtime` review;
+    such graphs run only inside ``chemgraph.runtime.run_context``.
     """
     if deepagent_recursion_limit <= 0:
         raise ValueError("deepagent_recursion_limit must be positive.")
@@ -146,7 +149,7 @@ def construct_main_agent_graph(
         subagent_recorder=subagent_recorder, restrict_delegation=True,
         backend=backend, skills=skills, skill_dirs=skill_dirs,
         discover_skills=discover_skills, user_skills_dir=user_skills_dir,
-        interrupt_on=interrupt_on, system_prompt=system_prompt,
+        interrupt_on=interrupt_on, scoped=scoped, system_prompt=system_prompt,
         recursion_limit=recursion_limit,
         **({"checkpointer": checkpointer} if checkpointer is not None else {}),
         name="main_agent",

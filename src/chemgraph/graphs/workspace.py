@@ -178,9 +178,16 @@ def resolve_workspace_interrupt_policy(tool_registry=None, interrupt_on=_DEFAULT
 def prepare_workspace_runtime(
     *, backend=None, tools=(), tool_registry=None, skills=None,
     discover_skills=True, user_skills_dir=None, skill_dirs=None,
-    interrupt_on=_DEFAULT_INTERRUPT_POLICY,
+    interrupt_on=_DEFAULT_INTERRUPT_POLICY, scoped=False,
 ):
-    """Return the backend, skill sources, middleware, and approval policy."""
+    """Return the backend, skill sources, middleware, and approval policy.
+
+    ``scoped`` graphs keep files in checkpoint state and review every tool call
+    through :class:`chemgraph.runtime.middleware.ScopedToolsMiddleware` instead
+    of approval interrupts.
+    """
+    if scoped and (backend is not None or interrupt_on is not None):
+        raise ValueError("Scoped graphs use checkpoint files and no approval interrupts.")
     effective_interrupt_on = resolve_workspace_interrupt_policy(tool_registry, interrupt_on)
     effective_backend = _normalize_backend(
         backend if backend is not None else StateBackend()
@@ -205,4 +212,8 @@ def prepare_workspace_runtime(
         if attached_names & {"search_tools", "load_tools"}:
             raise ValueError("Attached tools conflict with registry discovery tool names.")
         middleware.append(loader)
+    if scoped:
+        from chemgraph.runtime.middleware import ScopedToolsMiddleware
+
+        middleware.append(ScopedToolsMiddleware())
     return effective_backend, sources, middleware, effective_interrupt_on
