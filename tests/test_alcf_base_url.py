@@ -18,6 +18,7 @@ from chemgraph.utils.config_utils import (
 
 SOPHIA_MODEL = "alcf:meta-llama/Llama-3.3-70B-Instruct"
 MINERVA_MODEL = "alcf:nemotron-3-ultra"
+MUSE_SPARK_MODEL = "alcf:muse-spark-bf16"
 METIS_MODEL = "alcf:Mistral-Large-3-675B-Instruct-2512"
 
 
@@ -71,6 +72,7 @@ def test_non_sophia_models_keep_their_url_despite_a_sophia_setting():
 
     for model, expected in (
         (MINERVA_MODEL, ALCF_MINERVA_BASE_URL),
+        (MUSE_SPARK_MODEL, ALCF_MINERVA_BASE_URL),
         (METIS_MODEL, ALCF_METIS_BASE_URL),
     ):
         assert get_base_url_for_model_from_nested_config(model, nested) == expected
@@ -109,6 +111,7 @@ def test_load_alcf_model_uses_the_serving_cluster_and_strips_the_prefix():
     for model, expected_url, expected_wire in (
         (SOPHIA_MODEL, ALCF_DEFAULT_BASE_URL, "meta-llama/Llama-3.3-70B-Instruct"),
         (MINERVA_MODEL, ALCF_MINERVA_BASE_URL, "nemotron-3-ultra"),
+        (MUSE_SPARK_MODEL, ALCF_MINERVA_BASE_URL, "muse-spark-bf16"),
         (METIS_MODEL, ALCF_METIS_BASE_URL, "Mistral-Large-3-675B-Instruct-2512"),
     ):
         llm = load_alcf_model(model, api_key="dummy")
