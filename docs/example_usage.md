@@ -58,7 +58,7 @@ Materials Project access and/or FDMNES.
 ## Distributed execution and Academy
 
 - [Execution backend demos](https://github.com/argonne-lcf/ChemGraph/tree/main/scripts/demo)
-- [Academy MACE ensemble screening](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy/example-002-mace-ensemble-screening)
+- [Distributed ChemGraph peers](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/distributed)
 - [Connect to Argo from an ALCF compute node](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/connecting_to_argo)
 
 These examples deliberately separate direct backend calls from agent-driven
