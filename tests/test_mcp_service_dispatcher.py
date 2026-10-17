@@ -126,6 +126,60 @@ async def test_restart_dispatches_only_approved_and_finalizes_returned(tmp_path,
 
 @posix_only
 @pytest.mark.asyncio
+async def test_startup_publication_failure_affects_only_that_job(tmp_path, monkeypatch):
+    service = Service(config(tmp_path))
+    broken, context = await job(service, "alice", state=RETURNED)
+    (context.workspace / "out.json").unlink()
+    queued, _ = await job(service, "bob")
+    service = Service(config(tmp_path))
+    dispatcher = service.dispatcher = Dispatcher(service)
+    launched = fake_workers(dispatcher, monkeypatch)
+    await dispatcher.start()
+    try:
+        assert service.ready
+
+        async def done():
+            return (await service.status("bob", queued["id"]))["status"] == "finalized"
+        await wait_for(done)
+        assert launched == [queued["id"]]
+        assert (await service.status("alice", broken["id"]))["status"] == "returned"
+        (context.workspace / "out.json").write_text('{"energy": 1}')
+        saved = await service.results("alice", broken["id"])
+        assert saved["status"] == "finalized" and len(saved["artifacts"]) == 1
+    finally:
+        await dispatcher.stop()
+
+
+@posix_only
+@pytest.mark.asyncio
+async def test_startup_registers_only_uncataloged_finalized_jobs(tmp_path, monkeypatch):
+    service = Service(config(tmp_path))
+    cataloged, _ = await job(service, "alice", state=RETURNED)
+    await service.finalize(cataloged)
+    interrupted, _ = await job(service, "alice", state=RETURNED)
+    def unavailable(*args, **kwargs):
+        raise OSError("storage unavailable")
+    monkeypatch.setattr(service.files, "publish", unavailable)
+    with pytest.raises(OSError, match="storage unavailable"):
+        await service.finalize(interrupted)
+    service = Service(config(tmp_path))
+    dispatcher = service.dispatcher = Dispatcher(service)
+    published = []
+    publish = service.files.publish
+    def recorded(owner, operation_id, *args):
+        published.append(operation_id)
+        return publish(owner, operation_id, *args)
+    monkeypatch.setattr(service.files, "publish", recorded)
+    await dispatcher.start()
+    try:
+        assert published == [interrupted["id"]]
+        assert len(service.files.list("alice", operation_id=interrupted["id"])) == 1
+    finally:
+        await dispatcher.stop()
+
+
+@posix_only
+@pytest.mark.asyncio
 async def test_queued_cancellation_and_changed_snapshot_never_launch(tmp_path, monkeypatch):
     service = Service(config(tmp_path))
     dispatcher = service.dispatcher = Dispatcher(service)

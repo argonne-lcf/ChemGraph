@@ -161,9 +161,11 @@ crash sandbox.
 
 On startup, `approved` work is revalidated and queued, `invoking` becomes
 `uncertain`, and `returned` work finishes artifact publication without recalculating.
-Catalog registration is idempotent after `finalized`. If storage fails during
-publication, repair storage or increase the quota and call `get_job_results`
-again; a startup publication failure keeps the service unready.
+Catalog registration is idempotent after `finalized`; an interrupted registration
+is completed at startup or by the next `get_job_results`. If publication fails at
+startup, the failure is logged, only that job stays `returned`, and the service
+starts for other users. Repair storage or increase the quota, then call
+`get_job_results` again.
 
 The invocation-intent commit precedes process creation. A crash in between can
 therefore leave an uncertain job that never ran. Do not infer nonexecution from
