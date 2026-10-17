@@ -31,7 +31,6 @@ DEFAULT_WORKSPACE_INTERRUPT_ON = {
 # Apply the same mandatory policy to direct tools and registry workers.
 _REGISTRY_REVIEW_TOOLS = {
     "hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job",
-    "hpc_read_file", "hpc_list_files",
     "run_ase", "run_docking", "run_graspa", "run_xanes", "generate_html",
     "fetch_xanes_data", "plot_xanes_data",
     "load_document", "file_to_atomsdata", "extract_output_json",

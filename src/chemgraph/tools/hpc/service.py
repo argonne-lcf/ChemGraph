@@ -308,13 +308,10 @@ class HPCService:
             if (root / "run.json").exists():
                 manifest, saved_target = self._load(root)
                 staging = manifest.get("staging")
-                if (
-                    staging not in ("rejected", "unknown", "submitted")
-                    or (root / "submission.json").exists()
-                ):
+                if staging not in ("rejected", "unknown") or (root / "submission.json").exists():
                     raise ValueError(
                         "Inputs were already staged; check hpc_transfer_status. "
-                        "Changed inputs need a fresh run directory."
+                        "Changed inputs or a FAILED staging transfer need a fresh run directory."
                     )
                 if target_name != manifest["target"] or set(names) != set(manifest["files"]):
                     raise ValueError("Retry must use the same target and input files.")
@@ -326,18 +323,6 @@ class HPCService:
                     self._check_snapshot(root, manifest)
                 else:
                     self._check_inputs(root, manifest)
-                if staging == "submitted":
-                    # Only a transfer Globus reports as terminally FAILED may be
-                    # followed by a new attempt; an active one may still finish.
-                    observed = self.manager(saved_target).check_transfer_status(
-                        manifest["transfer_id"]
-                    )["status"]
-                    if observed != "FAILED":
-                        raise ValueError(
-                            f"Inputs were already staged (transfer status {observed}); check "
-                            "hpc_transfer_status. Only a FAILED staging transfer may be retried."
-                        )
-                    manifest["transfer_attempts"][-1].update(state="failed", failed_at=now())
                 # An unknown attempt is replayed with its own ID; only a confirmed
                 # rejection of an attempt's first request permits a new ID.
                 attempt = _replayable(manifest["transfer_attempts"][-1]) if staging == "unknown" else None
@@ -472,14 +457,10 @@ class HPCService:
             # Observation only: run.json is never rewritten here, because
             # submission evidence fingerprints the manifest.
             status = self.manager(target).check_transfer_status(transfer_id)
-            if (
-                transfer_id == manifest["transfer_id"]
-                and status.get("status") == "FAILED"
-                and not (root / "submission.json").exists()
-            ):
+            if transfer_id == manifest["transfer_id"] and status.get("status") == "FAILED":
+                # FAILED is terminal, so staging again elsewhere cannot duplicate it.
                 status["message"] = (
-                    "Staging failed. Correct the cause, then repeat hpc_transfer_files with the "
-                    "same target and files in this run directory to stage the frozen inputs again."
+                    "Staging failed. Correct the cause, then stage the inputs in a fresh run directory."
                 )
             return status
 
@@ -520,13 +501,10 @@ class HPCService:
                             "Retrieval destination exists; explicitly request overwrite."
                         )
                 for item in overlapping:
-                    observed = self.manager(target).check_transfer_status(item["transfer_id"])["status"]
-                    if observed not in {"SUCCEEDED", "FAILED"}:
-                        raise ValueError("A retrieval targeting these paths is still active; wait before retrying.")
-                    # Retrying a FAILED retrieval only fills missing destinations,
-                    # checked above; replacing a completed one is an overwrite.
-                    if observed == "SUCCEEDED" and not overwrite:
+                    if not overwrite:
                         raise ValueError("A retrieval already targets these paths.")
+                    if self.manager(target).check_transfer_status(item["transfer_id"])["status"] not in {"SUCCEEDED", "FAILED"}:
+                        raise ValueError("A retrieval targeting these paths is still active; wait before overwriting.")
             with _transfer_phase("prepare"):
                 manager = self.manager(target)
                 prepared = manager.prepare_mapping(
@@ -871,18 +849,6 @@ class HPCService:
                 "scheduler": record.get("status"),
                 "scientific_success": None,
             }
-            if len(evidence["attempts"]) > 1:
-                # Earlier attempts were rejected, but report any job they left.
-                # Discovery is best-effort here and never authorizes resubmission.
-                try:
-                    matches, complete = self._search(manifest, target, evidence)
-                except Exception as exc:
-                    matches, complete = {}, False
-                    status["duplicate_search_error"] = {"type": type(exc).__name__}
-                    if isinstance(exc, IRIRequestError):
-                        status["duplicate_search_error"]["http_status"] = exc.status_code
-                status["duplicate_jobs"] = sorted(set(matches) - {job_id})
-                status["duplicate_search_complete"] = complete
             write_json(root / "job-status.json", status)
             return status
 
@@ -898,81 +864,13 @@ class HPCService:
                 raise ValueError("No submission is recorded for this run.")
             evidence = read_json(path)
             current = evidence["attempts"][-1]
-            accepted = current["state"] == "accepted" and current.get("job_id") == job_id
-            # Any other job, such as a duplicate left by an earlier attempt, is
-            # cancelled only when scheduler history shows this exact ID with
-            # this run's name, directory and an attempt's account.
-            if not accepted and job_id not in self._search(manifest, target, evidence)[0]:
-                raise ValueError(
-                    "Cancellation must match this run's full accepted job ID or a job "
-                    "that scheduler history verifies belongs to this run."
-                )
+            if current["state"] != "accepted" or current.get("job_id") != job_id:
+                raise ValueError("Cancellation must match this run's full accepted job ID.")
             # A cancellation request is not proof that the job has stopped.
-            cancellation = {
-                "state": "requested", "at": now(),
-                "verified_by": "accepted_attempt" if accepted else "scheduler_history",
-            }
+            cancellation = {"state": "requested", "at": now()}
             evidence.setdefault("cancellations", {})[job_id] = cancellation
             write_json(path, evidence)
             self.iri.cancel(target.compute_resource, job_id)
             cancellation["state"] = "acknowledged"
             write_json(path, evidence)
             return {"job_id": job_id, **cancellation}
-
-    @staticmethod
-    def _inspection(remote, operation, result, **extra):
-        truncated = isinstance(result, dict) and bool(result.get("truncated"))
-        response = {
-            "path": remote, "operation": operation, "response": result,
-            "truncated": truncated, **extra,
-        }
-        if isinstance(result, dict) and result.get("task_id"):
-            response["message"] = (
-                "The facility returned a task; poll it with hpc_operation_status using this run_dir."
-            )
-        elif truncated:
-            response["message"] = "The response was truncated; retrieve the file with Globus for full content."
-        return response
-
-    def inspect(self, run_dir, path=".", *, operation="view", offset=0, size=16384):
-        with self._run(run_dir) as root:
-            manifest, target = self._load(root)
-            if path != ".":
-                path = relative_path(path)
-            remote = str(PurePosixPath(manifest["remote_directory"]) / path)
-            result = self.iri.inspect(
-                target.storage_resource, remote, operation=operation, offset=offset, size=size,
-            )
-            if isinstance(result, dict) and result.get("task_id"):
-                # Record which approved inspection returned this task. Polling
-                # reads that task's result and does not resend these bounds.
-                # The record is editable local evidence, so it scopes polling
-                # to this run's paths rather than authorizing it.
-                operations_path = root / ".hpc-operations.json"
-                operations = read_json(operations_path) if operations_path.exists() else {}
-                operations[str(result["task_id"])] = {
-                    "operation": operation, "path": remote, "offset": offset,
-                    "size": size, "created_at": now(),
-                }
-                write_json(operations_path, operations)
-            return self._inspection(remote, operation, result)
-
-    def operation_status(self, run_dir, operation_id):
-        """Poll a facility task that an approved inspection of this run returned."""
-        with self._run(run_dir) as root:
-            manifest, target = self._load(root)
-            operations_path = root / ".hpc-operations.json"
-            operations = read_json(operations_path) if operations_path.exists() else {}
-            saved = operations.get(operation_id) if isinstance(operations, dict) else None
-            if not isinstance(saved, dict) or not (
-                saved.get("path") == manifest["remote_directory"]
-                or str(saved.get("path", "")).startswith(manifest["remote_directory"] + "/")
-            ):
-                raise ValueError("Only operations returned by this run's inspections can be polled.")
-            result = self.iri.inspect(
-                target.storage_resource, saved["path"], operation=saved["operation"],
-                operation_id=operation_id, offset=saved["offset"], size=saved["size"],
-            )
-            return self._inspection(
-                saved["path"], saved["operation"], result, operation_id=operation_id,
-            )
