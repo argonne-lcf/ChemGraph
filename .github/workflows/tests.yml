@@ -52,8 +52,9 @@ jobs:
         python -m pip check
             
     - name: Run tests
+      timeout-minutes: 20
       run: |
-        python -m pytest tests/ -v -k "not tblite"
+        python -m pytest tests/ -v -k "not tblite" -o faulthandler_timeout=120
 
   wheel-install:
     needs: lint
@@ -115,5 +116,6 @@ jobs:
       run: python -c "import quickjs"
 
     - name: Run academy + backend tests
+      timeout-minutes: 20
       run: |
-        python -m pytest tests/ -v -k "not tblite"
+        python -m pytest tests/ -v -k "not tblite" -o faulthandler_timeout=120
