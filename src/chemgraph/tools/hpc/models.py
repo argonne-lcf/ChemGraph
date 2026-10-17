@@ -96,8 +96,9 @@ class BatchRequest(StrictModel):
     launch_script: str
     arguments: list[str] = Field(default_factory=list)
     resources: Resources | None = None
-    project: str | None = None
-    queue: str | None = None
+    # An empty value would be replaced by the configured default after review.
+    project: str | None = Field(default=None, min_length=1)
+    queue: str | None = Field(default=None, min_length=1)
     stdout: str = "stdout.txt"
     stderr: str = "stderr.txt"
     expected_outputs: list[str] = Field(default_factory=list)

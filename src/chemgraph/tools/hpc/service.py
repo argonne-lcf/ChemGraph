@@ -320,7 +320,12 @@ class HPCService:
                     raise ValueError("Retry must use the same target and input files.")
                 if self._resolved(target) != saved_target:
                     raise ValueError("Retry must preserve the saved target configuration.")
-                self._check_inputs(root, manifest)
+                if staging == "unknown":
+                    # A replay resends the frozen snapshot; edited host files
+                    # must not push a possibly accepted transfer to a new run.
+                    self._check_snapshot(root, manifest)
+                else:
+                    self._check_inputs(root, manifest)
                 if staging == "submitted":
                     # Only a transfer Globus reports as terminally FAILED may be
                     # followed by a new attempt; an active one may still finish.
@@ -614,19 +619,22 @@ class HPCService:
             current = evidence["attempts"][-1] if evidence["attempts"] else None
             sent = current is not None and started_attempt(root) == current["id"]
             if current is not None and (sent or current["state"] != "prepared"):
-                # Check input identity even for an accepted repeated request.
-                self._check_inputs(root, manifest)
+                # The scheduler runs the frozen snapshot, so edited host inputs
+                # are reported but never hide an existing or possible job.
+                self._check_snapshot(root, manifest)
+                warning = self._input_warning(root, manifest)
                 if current["state"] in ("prepared", "submission_unknown"):
                     return self._summary(
                         evidence, state="submission_unknown", retry_safe=False,
                         message="Acceptance is unknown. Reconcile with hpc_job_status; never resubmit.",
+                        **warning,
                     )
                 if current["state"] != "rejected":
                     # An accepted attempt keeps its recorded specification:
                     # match the same request or the same effective job.
                     if all(current["intent"][key] != intent[key] for key in ("batch", "jobspec")):
                         raise ValueError("Run specification changed; use a fresh run directory.")
-                    return self._summary(evidence)
+                    return self._summary(evidence, **warning)
                 if not resubmit:
                     return self._summary(
                         evidence, retry_safe=True,
@@ -704,13 +712,36 @@ class HPCService:
             return self._summary(evidence)
 
     @staticmethod
-    def _check_inputs(root, manifest):
+    def _check_snapshot(root, manifest):
         for name, digest in manifest["files"].items():
-            if (
+            if checksum(root / ".hpc-inputs" / name) != digest:
+                raise ValueError("The staged input snapshot changed; inspect this run manually.")
+
+    @staticmethod
+    def _sources_changed(root, manifest):
+        try:
+            return any(
                 checksum(_input_path(root, name)) != digest
-                or checksum(root / ".hpc-inputs" / name) != digest
-            ):
-                raise ValueError("Staged inputs changed; use a fresh run directory.")
+                for name, digest in manifest["files"].items()
+            )
+        except ValueError:  # Missing or replaced by a symlink.
+            return True
+
+    @classmethod
+    def _check_inputs(cls, root, manifest):
+        """Before a new attempt, the host inputs must still match the snapshot."""
+        cls._check_snapshot(root, manifest)
+        if cls._sources_changed(root, manifest):
+            raise ValueError("Staged inputs changed; use a fresh run directory.")
+
+    @classmethod
+    def _input_warning(cls, root, manifest):
+        if not cls._sources_changed(root, manifest):
+            return {}
+        return {"input_warning": (
+            "Host inputs changed after staging; this run uses the staged snapshot. "
+            "Start a fresh run only after this job has finished or been cancelled."
+        )}
 
     def _search(self, manifest, target, evidence):
         """Find scheduler jobs for this run under every attempt's account.

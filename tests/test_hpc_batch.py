@@ -187,7 +187,7 @@ def test_transfer_preparation_can_retry_same_directory(
         cache.unlink()
     elif failure == "refresh":
         transfer_module.GlobusTransferManager._save_tokens(cache, {**tokens, "expires_at_seconds": 1})
-        auth.oauth2_refresh_token.side_effect = RuntimeError("private-refresh")
+        auth.oauth2_refresh_token.side_effect = api_error(400, "invalid_grant", globus_sdk.AuthAPIError)
     payload_class = globus_sdk.TransferData
     if failure.startswith("payload"):
         error = OSError if failure == "payload_oserror" else TypeError
@@ -242,7 +242,7 @@ def test_transfer_preparation_can_retry_same_directory(
 SUBMISSION_ID = "11111111-1111-1111-1111-111111111111"
 
 
-def api_error(status, code):
+def api_error(status, code, error=globus_sdk.TransferAPIError):
     import json
     import requests
 
@@ -253,7 +253,7 @@ def api_error(status, code):
     ).encode()
     response.headers["Content-Type"] = "application/json"
     response.request = requests.Request("POST", "https://transfer.api.globus.org/v0.10/transfer").prepare()
-    return globus_sdk.TransferAPIError(response)
+    return error(response)
 
 
 def transfer_record(root, direction):
@@ -304,6 +304,8 @@ def test_uncertain_transfer_is_replayed_with_its_submission_id(
 
     # Accepted, response lost: replaying the same ID returns the original task.
     monkeypatch.setattr(module, "write_json", original)
+    if direction == "stage":
+        (root / "launch.sh").write_text("edited after staging")  # The snapshot is replayed.
     submit.side_effect = None
     submit.return_value = {"code": "Duplicate", "task_id": "sdk-transfer"}
     assert tool.invoke(args)["transfer_id"] == "sdk-transfer"
@@ -434,16 +436,36 @@ def test_incomplete_transfer_never_submits(batch, state):
     assert not (root / "submission.started").exists()
 
 
-@pytest.mark.parametrize("after_submit", [False, True])
-def test_changed_inputs_require_fresh_run(batch, after_submit):
+def test_changed_inputs_require_fresh_run(batch):
     service, root, _, iri, request = batch
     stage(batch)
-    if after_submit:
-        service.submit(str(root), request)
     (root / "inputs/water.xyz").write_text("changed")
-    with pytest.raises(ValueError, match="changed"):
+    with pytest.raises(ValueError, match="Staged inputs changed"):
         service.submit(str(root), request)
-    assert len(iri.submissions) == int(after_submit)
+    assert not iri.submissions
+
+
+@pytest.mark.parametrize("change", ["edit", "delete"])
+@pytest.mark.parametrize("outcome", ["accepted", "submission_unknown"])
+def test_changed_inputs_never_hide_an_existing_job(batch, change, outcome):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = RuntimeError("lost") if outcome == "submission_unknown" else None
+    service.submit(str(root), request)
+    iri.failure = None
+    if change == "edit":
+        (root / "launch.sh").write_text("edited after submission")
+    else:
+        (root / "launch.sh").unlink()
+    result = service.submit(str(root), request)
+    assert result["state"] == outcome and "after this job has finished" in result["input_warning"]
+    assert "fresh run directory" not in result.get("message", "")
+    assert len(iri.submissions) == 1
+    # The frozen snapshot itself is still verified.
+    (root / ".hpc-inputs/launch.sh").chmod(0o600)
+    (root / ".hpc-inputs/launch.sh").write_text("tampered")
+    with pytest.raises(ValueError, match="snapshot changed"):
+        service.submit(str(root), request)
 
 
 def test_concurrent_submission_and_new_session_monitoring(batch):
@@ -1401,6 +1423,11 @@ def test_native_submission_requires_explicit_settings(batch):
         "resources": {"node_count": 2, "duration": 300, "filesystems": "home:eagle"},
     }
     assert not iri.submissions and not (root / "submission.json").exists()
+    from pydantic import ValidationError
+
+    for field in ("project", "queue"):
+        with pytest.raises(ValidationError):
+            BatchRequest.model_validate({**request.model_dump(), field: ""})
     explicit = request.model_dump()
     assert tool.invoke({"run_dir": str(root), "request": explicit})["state"] == "accepted"
     spec = iri.submissions[-1][1]
