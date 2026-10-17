@@ -302,6 +302,15 @@ class ToolRegistry:
         if tool is not None:
             self._tools[spec.name] = tool
 
+    def select(self, names):
+        """Restrict a catalog while preserving configured tool instances."""
+        selected = ToolRegistry([])
+        for name in dict.fromkeys(names):
+            selected.register(self.get_spec(name))
+            if name in self._tools:
+                selected._tools[name] = self._tools[name]
+        return selected
+
     def names(self, *, tags: Iterable[str] = ()) -> tuple[str, ...]:
         """Return canonical names in deterministic registration order."""
         requested = frozenset(tags)
