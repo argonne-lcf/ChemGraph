@@ -78,10 +78,10 @@ conventions for them. If you use one, please:
 ```bash
 git clone https://github.com/argonne-lcf/ChemGraph.git
 cd ChemGraph
-python -m venv .venv && source .venv/bin/activate
-pip install -e .            # core
+uv venv .venv && source .venv/bin/activate
+uv pip install -e .            # core
 # extras as needed, e.g.:
-pip install -e ".[academy,parsl,globus_compute]"
+uv pip install -e ".[academy,parsl,globus_compute]"
 ```
 
 ## Before you open a PR
@@ -96,7 +96,7 @@ ruff check .
 pytest tests/ -k "not tblite"
 
 # If you touched the Academy / execution-backend features:
-pip install -e ".[academy,parsl,globus_compute]"
+uv pip install -e ".[academy,parsl,globus_compute]"
 pytest tests/ -k "not tblite"
 ```
 

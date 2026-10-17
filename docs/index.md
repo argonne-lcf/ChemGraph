@@ -16,13 +16,13 @@ workflow needs them.
 
 ## First run
 
-Install ChemGraph in a virtual environment:
+Install ChemGraph in a virtual environment with [uv](https://docs.astral.sh/uv/)
+(or `python -m venv` + `pip`):
 
 ```bash
-python -m venv .venv
+uv venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install chemgraph
+uv pip install chemgraph
 ```
 
 Set one model-provider credential, then check the installation and run a query:

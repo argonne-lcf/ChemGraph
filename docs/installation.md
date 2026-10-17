@@ -5,20 +5,22 @@ scientific dependencies may conflict with packages in other projects.
 
 ## Install from PyPI
 
+We recommend [uv](https://docs.astral.sh/uv/) to create the virtual environment
+and install ChemGraph:
+
+```bash
+uv venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+uv pip install chemgraph
+```
+
+Or with standard `venv` and `pip`:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip
 python -m pip install chemgraph
-```
-
-Prefer [uv](https://docs.astral.sh/uv/)? Use it to create the same environment
-and install ChemGraph:
-
-```bash
-uv venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
-uv pip install chemgraph
 ```
 
 Confirm that the command-line entry point and model registry load:
@@ -40,18 +42,18 @@ development:
 ```bash
 git clone https://github.com/argonne-lcf/ChemGraph.git
 cd ChemGraph
+uv venv .venv
+source .venv/bin/activate
+uv pip install -e .
+```
+
+Or with standard `venv` and `pip`:
+
+```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e .
-```
-
-With [uv](https://docs.astral.sh/uv/), the equivalent development setup is:
-
-```bash
-uv venv
-source .venv/bin/activate
-uv pip install -e .
 ```
 
 ## Optional extras
@@ -60,22 +62,22 @@ Install only the integrations needed by your workflow:
 
 | Extra | Install command | Adds |
 | --- | --- | --- |
-| `calculators` | `pip install "chemgraph[calculators]"` | TBLite |
-| `uma` | `pip install "chemgraph[uma]"` | UMA through fairchem-core |
-| `ui` | `pip install "chemgraph[ui]"` | Additional UI dependencies |
-| `rag` | `pip install "chemgraph[rag]"` | Document ingestion and vector stores |
-| `xanes` | `pip install "chemgraph[xanes]"` | XANES workflow dependencies |
-| `docking` | `pip install "chemgraph[docking]"` | Meeko docking preparation |
-| `parsl` | `pip install "chemgraph[parsl]"` | Parsl execution |
-| `ensemble_launcher` | `pip install "chemgraph[ensemble_launcher]"` | ALCF ensemble launcher |
-| `globus_compute` | `pip install "chemgraph[globus_compute]"` | Globus Compute execution |
-| `academy` | `pip install "chemgraph[academy]"` | Academy multi-agent runtime |
-| `codex` | Source checkout: `pip install -e ".[codex]"` | Codex subscription route |
+| `calculators` | `uv pip install "chemgraph[calculators]"` | TBLite |
+| `uma` | `uv pip install "chemgraph[uma]"` | UMA through fairchem-core |
+| `ui` | `uv pip install "chemgraph[ui]"` | Additional UI dependencies |
+| `rag` | `uv pip install "chemgraph[rag]"` | Document ingestion and vector stores |
+| `xanes` | `uv pip install "chemgraph[xanes]"` | XANES workflow dependencies |
+| `docking` | `uv pip install "chemgraph[docking]"` | Meeko docking preparation |
+| `parsl` | `uv pip install "chemgraph[parsl]"` | Parsl execution |
+| `ensemble_launcher` | `uv pip install "chemgraph[ensemble_launcher]"` | ALCF ensemble launcher |
+| `globus_compute` | `uv pip install "chemgraph[globus_compute]"` | Globus Compute execution |
+| `academy` | `uv pip install "chemgraph[academy]"` | Academy multi-agent runtime |
+| `codex` | Source checkout: `uv pip install -e ".[codex]"` | Codex subscription route |
 
 Extras can be combined:
 
 ```bash
-python -m pip install "chemgraph[academy,parsl,globus_compute]"
+uv pip install "chemgraph[academy,parsl,globus_compute]"
 ```
 
 !!! note "UMA environment"
