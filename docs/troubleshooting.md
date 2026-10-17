@@ -18,7 +18,7 @@ Activate the environment in which ChemGraph was installed:
 
 ```bash
 source .venv/bin/activate
-python -m pip show chemgraph
+uv pip show chemgraph
 ```
 
 Python 3.11 or newer is required.
@@ -65,7 +65,7 @@ A stale site-packages installation can shadow the checkout. Activate a clean
 environment and install the current checkout editable:
 
 ```bash
-python -m pip install -e .
+uv pip install -e .
 python -c "import chemgraph; print(chemgraph.__file__)"
 ```
 

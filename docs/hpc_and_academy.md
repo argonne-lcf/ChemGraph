@@ -30,7 +30,7 @@ not copy another user's endpoint IDs, allocation names, or private paths.
 Academy supports persistent multi-agent campaigns and a dashboard runtime:
 
 ```bash
-python -m pip install "chemgraph[academy,parsl,globus_compute]"
+uv pip install "chemgraph[academy,parsl,globus_compute]"
 chemgraph academy --help
 chemgraph dashboard --help
 ```
