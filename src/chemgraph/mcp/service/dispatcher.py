@@ -46,10 +46,19 @@ class Dispatcher:
         try:
             fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
             await OperationJournal(self.service.store).recover()
+            cataloged = await asyncio.to_thread(self.service.files.cataloged_operations)
             for record in await self.service.store.records():
-                if record["state"] in {RETURNED, FINALIZED}:
-                    async with self.service.locks[record["owner"]]:
-                        await self.service.finalize(record)
+                if record["state"] == RETURNED or (
+                        record["state"] == FINALIZED and record["result"]["artifacts"]
+                        and record["id"] not in cataloged):
+                    try:
+                        async with self.service.locks[record["owner"]]:
+                            await self.service.finalize(record)
+                    except Exception:
+                        # One job's storage or quota failure must not stop the service; it
+                        # stays returned and get_job_results retries its publication.
+                        logger.exception("job_publication_deferred owner=%s job=%s",
+                                         record["owner"], record["id"])
             self.loop_task = asyncio.create_task(self.run())
             self.service.ready = True
             self.wake.set()

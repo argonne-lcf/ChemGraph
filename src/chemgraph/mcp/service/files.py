@@ -135,6 +135,11 @@ class Files:
             rows = db.execute(query + " ORDER BY rowid LIMIT ? OFFSET ?", [*params, limit, offset]).fetchall()
         return [self.reference(row["id"], row["operation_id"], json.loads(row["descriptor"])) for row in rows]
 
+    def cataloged_operations(self):
+        """Operations with catalog rows; publish() inserts each one's rows in one transaction."""
+        with connection(self.config.database) as db:
+            return {row[0] for row in db.execute("SELECT DISTINCT operation_id FROM artifacts")}
+
     def get(self, owner, identifier):
         with connection(self.config.database) as db:
             row = db.execute("SELECT * FROM artifacts WHERE owner=? AND id=?", (owner, identifier)).fetchone()
