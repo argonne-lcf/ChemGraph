@@ -3,6 +3,7 @@
 import asyncio
 from dataclasses import replace
 import json
+import os
 
 import pytest
 
@@ -10,6 +11,8 @@ from chemgraph.mcp.service.app import create_app
 from chemgraph.mcp.service.auth import principal
 from chemgraph.runtime.policy import SCOPED_TOOLS
 from tests.mcp_service_helpers import WATER, config, running_app, headers, rpc, tool, completed
+
+pytestmark = pytest.mark.skipif(os.name != "posix", reason="The supervised service requires a POSIX host")
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,8 @@ from chemgraph.mcp.service.operations import Service
 from chemgraph.runtime.journal import APPROVED, INVOKING, RETURNED
 from tests.mcp_service_helpers import WATER, config
 
+posix_only = pytest.mark.skipif(os.name != "posix", reason="The supervised service requires a POSIX host")
+
 
 async def job(service, owner, *, state=APPROVED):
     context = service.context(owner, uuid.uuid4().hex, "run_ase")
@@ -61,6 +63,7 @@ if sys.argv[2] == 'blocked':
     return launched
 
 
+@posix_only
 @pytest.mark.asyncio
 async def test_crash_only_affects_its_job_and_other_users_and_queue_continue(tmp_path, monkeypatch):
     service = Service(config(tmp_path, max_workers=2))
@@ -95,6 +98,7 @@ async def test_crash_only_affects_its_job_and_other_users_and_queue_continue(tmp
         await dispatcher.stop()
 
 
+@posix_only
 @pytest.mark.asyncio
 async def test_restart_dispatches_only_approved_and_finalizes_returned(tmp_path, monkeypatch):
     service = Service(config(tmp_path))
@@ -120,6 +124,7 @@ async def test_restart_dispatches_only_approved_and_finalizes_returned(tmp_path,
         await dispatcher.stop()
 
 
+@posix_only
 @pytest.mark.asyncio
 async def test_queued_cancellation_and_changed_snapshot_never_launch(tmp_path, monkeypatch):
     service = Service(config(tmp_path))
@@ -168,6 +173,7 @@ async def test_queue_limit_and_disconnected_caller(tmp_path):
     assert completed == [True]
 
 
+@posix_only
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stop", ["cancel", "timeout", "shutdown"])
 async def test_running_process_is_reaped_and_never_requeued(tmp_path, monkeypatch, stop):
