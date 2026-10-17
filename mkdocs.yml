@@ -57,6 +57,7 @@ nav:
       - Tool and agent registries: registries.md
       - Calculators: calculators.md
       - Python API: python_api.md
+      - Scoped runtime for services: scoped_runtime.md
       - Deep Agent Skills: skills.md
       - PBS Jobs with Skills: pbs_jobs_with_skills.md
       - Streamlit interface: streamlit_web_interface.md
@@ -65,6 +66,7 @@ nav:
   - Integrations and scale:
       - Codex subscription: codex_subscription.md
       - MCP servers: mcp_servers.md
+      - Persistent MCP service: persistent_mcp.md
       - Docker: docker_support.md
       - Kubernetes: kubernetes.md
       - Local models: running_local_models.md

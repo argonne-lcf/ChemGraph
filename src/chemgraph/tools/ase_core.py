@@ -25,6 +25,9 @@ from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.schemas.ase_input import ASEInputSchema, ASEOutputSchema
 from chemgraph.schemas.calculators.mace_calc import MaceCalc
 from chemgraph.utils.artifacts import artifact_directory
+from chemgraph.runtime.context import (
+    current_workspace, register_artifact, scoped_path, standalone_log_record,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +42,15 @@ def _ensure_ase_core_file_log() -> None:
     a second call is a no-op, which avoids accumulating one open file
     handle per invocation. Honors ``CHEMGRAPH_LOG_DIR`` when set.
     """
-    if any(isinstance(h, logging.FileHandler) for h in logger.handlers):
+    handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
+    for handler in handlers:
+        handler.addFilter(standalone_log_record)
+    if handlers or current_workspace() is not None:
         return
     log_dir = artifact_directory() or os.path.join(os.getcwd(), "cg_logs")
     os.makedirs(log_dir, exist_ok=True)
     fh = logging.FileHandler(os.path.join(log_dir, "ase_core.log"))
+    fh.addFilter(standalone_log_record)
     fh.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
     logger.addHandler(fh)
     logger.setLevel(logging.DEBUG)
@@ -66,6 +73,9 @@ def _resolve_path(path: str) -> str:
     str
         Resolved path.
     """
+    scoped = scoped_path(path)
+    if scoped is not None:
+        return scoped
     log_dir = artifact_directory()
     if log_dir and not os.path.isabs(path):
         os.makedirs(log_dir, exist_ok=True)
@@ -88,6 +98,7 @@ def _write_ir_peaks_csv(path: str, rows) -> None:
         f.write("mode,frequency_cm1,intensity\n")
         for mode_index, freq_text, intensity in rows:
             f.write(f"{mode_index},{freq_text},{float(intensity):.8g}\n")
+    register_artifact(path)
 
 
 def _write_ir_spectrum_csv(path: str, frequencies, intensities) -> None:
@@ -106,6 +117,7 @@ def _write_ir_spectrum_csv(path: str, frequencies, intensities) -> None:
         f.write("frequency_cm1,intensity\n")
         for freq_value, intensity in zip(frequencies, intensities):
             f.write(f"{float(freq_value):.4f},{float(intensity):.8g}\n")
+    register_artifact(path)
 
 
 def _resolve_existing_path(path: str) -> str:
@@ -135,6 +147,9 @@ def _resolve_existing_path(path: str) -> str:
         The raw path if it exists, else the log-dir-resolved path if that
         exists, else the raw path unchanged.
     """
+    scoped = scoped_path(path)
+    if scoped is not None:
+        return scoped
     if os.path.isfile(path):
         return path
     resolved = _resolve_path(path)
@@ -782,6 +797,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
         )
         with open(output_results_file, "w", encoding="utf-8") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
+        register_artifact(output_results_file)
         logger.info("Results saved to %s (wall_time=%.2fs)", output_results_file, wall_time)
 
         if driver == "energy":
@@ -845,6 +861,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
             dyn = optimizer_class(atoms, trajectory=opt_traj_path)
             converged = dyn.run(fmax=fmax, steps=steps)
             optimization_steps = dyn.nsteps
+            register_artifact(opt_traj_path)
         else:
             converged = True
         logger.info("Optimization converged=%s", converged)
@@ -956,6 +973,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                         mode_indices, vib_data["frequencies"]
                     ):
                         f.write(f"{mol_stem}_vib.{mode_index}.traj,{freq}\n")
+                register_artifact(freq_file)
 
                 # Write normal-mode .traj files, then copy out of tmpdir
                 for mode_index in mode_indices:
@@ -977,6 +995,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                         else dest_name
                     )
                     shutil.copy2(traj_file, dest_path)
+                    register_artifact(dest_path)
 
                 # ---- IR ----
                 if driver == "ir":
@@ -1006,6 +1025,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
                     ir_plot_path = _resolve_path(f"ir_spectrum_{mol_stem}.png")
                     fig.savefig(ir_plot_path, format="png", dpi=300)
                     plt.close(fig)
+                    register_artifact(ir_plot_path)
 
                     # Also save the spectrum data so the UI can plot it
                     # interactively instead of showing the static image.
@@ -1077,6 +1097,7 @@ def _run_ase_core(params: ASEInputSchema) -> dict:
         )
         with open(output_results_file, "w", encoding="utf-8") as wf:
             wf.write(simulation_output.model_dump_json(indent=4))
+        register_artifact(output_results_file)
 
         # ---- minimal return payload ----
         abs_output = os.path.abspath(output_results_file)
