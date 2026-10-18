@@ -386,22 +386,16 @@ class ChemGraph:
                 self.subagent_options[canonical] = normalized
         if deepagent_tool_registry is not None and workflow_type != "deep_agent":
             raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
-        # Configured HPC tools are scoped to standalone DeepAgent; durable
-        # main-agent sessions cannot reconstruct them or keep their reviews.
-        if tool_registry is not None and tool_registry.names(tags=("hpc",)):
-            raise ValueError("Configured HPC tools require the standalone deep_agent workflow.")
         # Attached tools bypass the registry tags that carry their review policy.
         attached = [*(tools or ()), *(data_tools or ())]
         for options in (subagent_options or {}).values():
             if isinstance(options, dict):
                 attached.extend(options.get("tools") or ())
-                worker_registry = options.get("tool_registry")
-                if hasattr(worker_registry, "names") and worker_registry.names(tags=("hpc",)):
-                    raise ValueError("Configured HPC tools require the standalone deep_agent workflow.")
         if managed_hpc_tool_names(attached):
             raise ValueError(
                 "Managed HPC tools cannot be attached directly; configure them with "
-                "create_hpc_registry() and pass deepagent_tool_registry to the deep_agent workflow."
+                "create_hpc_registry() and pass it as tool_registry (main_agent or its workers) "
+                "or deepagent_tool_registry (deep_agent)."
             )
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(

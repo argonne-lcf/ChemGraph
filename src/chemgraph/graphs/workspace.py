@@ -167,13 +167,14 @@ def default_tool_registry(tools=(), *, human_supervised=False) -> ToolRegistry:
     )
 
 
-def bypass_interrupt_policy(tool_registry=None):
+def bypass_interrupt_policy(*tool_registries):
     """The reviews that remain under approval bypass, or None when there are none.
 
     This covers only tagged tool calls. Shell execution is not reviewed under
     bypass, so it is not an authorization boundary for those operations.
     """
-    names = () if tool_registry is None else tool_registry.names(tags=(REVIEW_REQUIRED_TAG,))
+    names = [name for registry in tool_registries if hasattr(registry, "names")
+             for name in registry.names(tags=(REVIEW_REQUIRED_TAG,))]
     return {name: {"allowed_decisions": ["approve", "reject"]} for name in names} or None
 
 

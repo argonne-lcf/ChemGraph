@@ -874,19 +874,25 @@ def _stub_model(monkeypatch):
 
 
 @pytest.mark.parametrize("allow", [False, True])
-def test_deep_agent_bypass_keeps_hpc_mutation_reviews(monkeypatch, tmp_path, allow):
+@pytest.mark.parametrize("placement", ["deep_agent", "main_agent", "main_agent_worker"])
+def test_bypass_keeps_hpc_mutation_reviews(monkeypatch, tmp_path, allow, placement):
     from chemgraph.agent.llm_agent import ChemGraph
     from chemgraph.tools.hpc.tools import HPC_MUTATION_TOOLS, create_hpc_registry
 
     _stub_model(monkeypatch)
     captured = {}
-    monkeypatch.setattr(
-        "chemgraph.agent.llm_agent.construct_deep_agent_graph",
-        lambda *args, **kwargs: captured.update(kwargs),
-    )
+    for name in ("construct_deep_agent_graph", "construct_main_agent_graph"):
+        monkeypatch.setattr(
+            f"chemgraph.agent.llm_agent.{name}", lambda *args, **kwargs: captured.update(kwargs),
+        )
     registry = create_hpc_registry({"targets": {}, "allow_unreviewed_mutations": allow})
-    ChemGraph(workflow_type="deep_agent", enable_memory=False, log_dir=str(tmp_path),
-              approval_mode="bypass", deepagent_tool_registry=registry)
+    options = {
+        "deep_agent": dict(workflow_type="deep_agent", deepagent_tool_registry=registry),
+        "main_agent": dict(workflow_type="main_agent", tool_registry=registry),
+        "main_agent_worker": dict(workflow_type="main_agent",
+                                  subagent_options={"deep_agent": {"tool_registry": registry}}),
+    }[placement]
+    ChemGraph(enable_memory=False, log_dir=str(tmp_path), approval_mode="bypass", **options)
     expected = None if allow else {
         name: {"allowed_decisions": ["approve", "reject"]} for name in HPC_MUTATION_TOOLS
     }
@@ -923,11 +929,7 @@ def test_default_hpc_catalog_leaves_attached_tools_out():
         prepare_workspace_runtime(tools=[hpc_submit_job], tool_registry=registry)
 
 
-@pytest.mark.parametrize("workflow_type, approval_mode", [
-    ("deep_agent", "review"), ("deep_agent", "bypass"),
-    ("main_agent", "review"), ("main_agent", "bypass"), ("single_agent", "review"),
-])
-def test_hpc_tools_require_a_deep_agent_registry(monkeypatch, tmp_path, workflow_type, approval_mode):
+def test_hpc_tools_cannot_be_attached_directly(monkeypatch, tmp_path):
     from chemgraph.agent.llm_agent import ChemGraph
     from chemgraph.tools.hpc.tools import create_hpc_tools
 
@@ -937,18 +939,14 @@ def test_hpc_tools_require_a_deep_agent_registry(monkeypatch, tmp_path, workflow
             f"chemgraph.agent.llm_agent.{name}",
             lambda *args, **kwargs: pytest.fail("must reject before graph construction"),
         )
-    options = dict(workflow_type=workflow_type, enable_memory=False, log_dir=str(tmp_path),
-                   approval_mode=approval_mode)
+    options = dict(enable_memory=False, log_dir=str(tmp_path), approval_mode="bypass")
     # Attached tools would carry no review tags, so bypass would leave them unreviewed.
     attached = create_hpc_tools({"targets": {}})
     with pytest.raises(ValueError, match="create_hpc_registry"):
-        ChemGraph(tools=[attached[3]], **options)
-    if workflow_type == "main_agent":
-        with pytest.raises(ValueError, match="create_hpc_registry"):
-            ChemGraph(subagent_options={"single_agent": {"tools": attached}}, **options)
-        # Durable main-agent sessions cannot rebuild configured HPC tools.
-        with pytest.raises(ValueError, match="standalone deep_agent"):
-            ChemGraph(tool_registry=create_hpc_registry({"targets": {}}), **options)
+        ChemGraph(workflow_type="deep_agent", tools=[attached[3]], **options)
+    with pytest.raises(ValueError, match="create_hpc_registry"):
+        ChemGraph(workflow_type="main_agent", subagent_options={"single_agent": {"tools": attached}},
+                  **options)
 
 
 def _service_with(batch, **target_updates):
