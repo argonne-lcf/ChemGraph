@@ -52,6 +52,7 @@ class Scheduler:
         self.records = []
         self.failure = None
         self.cancelled = []
+        self.inspections = []
         self.finished = False
 
     def resolve_resource(self, name):
@@ -97,6 +98,10 @@ class Scheduler:
 
     def cancel(self, resource, job_id):
         self.cancelled.append((resource, job_id))
+
+    def inspect(self, resource, path, **kwargs):
+        self.inspections.append((resource, path, kwargs))
+        return {"text": "result"}
 
 
 @pytest.fixture
@@ -577,7 +582,7 @@ def test_invalid_paths_do_not_start_transfer(batch, name, error):
 
 @pytest.mark.parametrize("decision", ["approve", "reject"])
 @pytest.mark.parametrize(
-    "action", ["hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job"]
+    "action", ["hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job", "hpc_read_file", "hpc_list_files"]
 )
 def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
     from langchain_core.messages import AIMessage, HumanMessage
@@ -599,6 +604,8 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
         },
         "hpc_submit_job": {"run_dir": str(root), "request": request.model_dump()},
         "hpc_cancel_job": {"run_dir": str(root), "job_id": "123.polaris"},
+        "hpc_read_file": {"run_dir": str(root), "path": "result.json"},
+        "hpc_list_files": {"run_dir": str(root)},
     }[action]
     registry = create_hpc_registry(service.config, names=[action], service=service)
     graph = construct_deep_agent_graph(
@@ -618,14 +625,14 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
         return {path.name: path.read_bytes() for path in root.iterdir() if path.is_file()}
 
     files = evidence()
-    before = (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    before = (len(transfer.calls), len(iri.submissions), len(iri.cancelled), len(iri.inspections))
     state = graph.invoke(
         {"messages": [HumanMessage(content="Run the HPC action")]}, config
     )
     assert state["__interrupt__"]
-    assert before == (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    assert before == (len(transfer.calls), len(iri.submissions), len(iri.cancelled), len(iri.inspections))
     graph.invoke(Command(resume={"decisions": [{"type": decision}]}), config)
-    after = (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+    after = (len(transfer.calls), len(iri.submissions), len(iri.cancelled), len(iri.inspections))
     assert (after == before) == (decision == "reject")
     if action == "hpc_submit_job" and decision == "reject":
         assert not (root / "submission.started").exists()
@@ -689,12 +696,13 @@ def test_tampered_manifest_is_rejected_before_submission(batch, tamper, error):
         lambda: service.status(str(root)),
         lambda: service.submit(str(root), request),
         lambda: service.cancel(str(root), "123.polaris"),
+        lambda: service.inspect(str(root), "stdout.txt"),
         lambda: stage(batch),
     ):
         with pytest.raises(ValueError, match=error):
             call()
     assert len(transfer.calls) == 1
-    assert not iri.submissions and not iri.cancelled
+    assert not iri.submissions and not iri.cancelled and not iri.inspections
 
 
 def test_tampered_retrieval_history_is_rejected(batch):
@@ -859,6 +867,43 @@ def test_failed_cancellation_can_be_repeated(batch):
     assert "cancellation" not in attempts(root)[-1]
     assert service.cancel(str(root), job_id)["state"] == "acknowledged"
     assert iri.cancel.call_count == 2
+
+
+def test_operation_polling_reuses_the_approved_request(batch):
+    service, root, _, iri, _ = batch
+    manifest = stage(batch)
+    iri.inspect = Mock(side_effect=[
+        {"task_id": "op-1"},
+        {"status": "completed", "result": {"output": "data"}, "truncated": True},
+    ])
+    tools = create_hpc_registry(
+        {}, names=["hpc_read_file", "hpc_operation_status"], service=service,
+    )
+    started = tools.get("hpc_read_file").invoke(
+        {"run_dir": str(root), "path": "stdout.txt", "offset": 10, "size": 2048}
+    )
+    assert started["response"] == {"task_id": "op-1"} and "hpc_operation_status" in started["message"]
+    polled = tools.get("hpc_operation_status").invoke({"run_dir": str(root), "operation_id": "op-1"})
+    remote = manifest["remote_directory"] + "/stdout.txt"
+    assert polled["path"] == remote and polled["operation"] == "view"
+    assert polled["truncated"] is True and polled["operation_id"] == "op-1"
+    assert iri.inspect.call_args.kwargs == {
+        "operation": "view", "operation_id": "op-1", "offset": 10, "size": 2048,
+    }
+    assert tools.get("hpc_operation_status").invoke(
+        {"run_dir": str(root), "operation_id": "someone-else"}
+    )["error"] == "invalid_run"
+    assert iri.inspect.call_count == 2
+
+
+@pytest.mark.parametrize("path", ["../outside", "/etc/passwd", ".hpc-inputs/launch.sh", ""])
+def test_inspection_stays_inside_the_run(batch, path):
+    service, root, _, iri, _ = batch
+    stage(batch)
+    with pytest.raises(ValueError):
+        service.inspect(str(root), path)
+    assert not iri.inspections
+    assert service.inspect(str(root), ".", operation="ls")["path"].endswith(read_json(root / "run.json")["identity"])
 
 
 def _stub_model(monkeypatch):
@@ -1026,16 +1071,91 @@ def test_native_submission_requires_explicit_settings(batch):
     assert spec["attributes"]["custom_attributes"]["filesystems"] == explicit["resources"]["filesystems"]
 
 
-@pytest.mark.parametrize("state", ["ACTIVE", "FAILED", "SUCCEEDED"])
-def test_staged_inputs_are_never_restaged(batch, state):
+def test_failed_staging_restages_the_frozen_inputs(batch):
+    service, root, transfer, iri, request = batch
+    stage(batch)
+    transfer.state = "FAILED"
+    status = service.transfer_status(str(root))
+    assert status["status"] == "FAILED" and "repeat hpc_transfer_files" in status["message"]
+    before = (root / "run.json").read_bytes()
+    assert service.transfer_status(str(root), "transfer-1")["status"] == "FAILED"
+    assert (root / "run.json").read_bytes() == before  # Status is observation only.
+    stage(batch)
+    manifest = read_json(root / "run.json")
+    first, second = manifest["transfer_attempts"]
+    assert first["state"] == "failed" and first["transfer_id"] == "transfer-1"
+    assert second["state"] == "submitted" and manifest["transfer_id"] == "transfer-2"
+    assert transfer.calls[0][0] == transfer.calls[1][0]  # The same frozen mapping.
+    assert transfer.calls[1][1]["submission_id"] is None  # A new Globus submission ID.
+    transfer.state = "SUCCEEDED"
+    assert service.submit(str(root), request)["state"] == "accepted"
+    # Earlier attempts stay inspectable.
+    assert service.transfer_status(str(root), "transfer-1")["task_id"] == "transfer-1"
+
+
+@pytest.mark.parametrize("state", ["ACTIVE", "INACTIVE", "SUCCEEDED"])
+def test_unfinished_or_successful_staging_is_never_restaged(batch, state):
     service, root, transfer, *_ = batch
     stage(batch)
     transfer.state = state
-    with pytest.raises(ValueError, match="already staged"):
+    with pytest.raises(ValueError, match=f"already staged.*{state}"):
         stage(batch)
     assert len(transfer.calls) == 1
-    if state == "FAILED":
-        assert "fresh run directory" in service.transfer_status(str(root))["message"]
+
+
+def test_failed_staging_after_submission_evidence_is_not_restaged(batch, monkeypatch):
+    service, root, transfer, iri, request = batch
+    stage(batch)
+    monkeypatch.setattr(
+        "chemgraph.tools.hpc.service.mark_started", Mock(side_effect=OSError("disk full")),
+    )
+    with pytest.raises(OSError):
+        service.submit(str(root), request)
+    assert (root / "submission.json").exists() and not (root / "submission.started").exists()
+    transfer.state = "FAILED"
+    assert "message" not in service.transfer_status(str(root))
+    with pytest.raises(ValueError, match="already staged"):
+        stage(batch)
+    monkeypatch.undo()
+    transfer.state = "SUCCEEDED"
+    service.submit(str(root), request)
+    transfer.state = "FAILED"
+    with pytest.raises(ValueError, match="already attempted"):
+        stage(batch)
+    # Polling after submission never invalidates the fingerprinted manifest.
+    service.transfer_status(str(root))
+    assert service.status(str(root))["job_id"] == "123.polaris"
+    assert len(transfer.calls) == 1 and len(iri.submissions) == 1
+
+
+def test_verified_duplicate_jobs_can_be_cancelled(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = IRIRequestError(403)
+    service.submit(str(root), request)
+    iri.failure = None
+    accepted = service.submit(
+        str(root), request.model_copy(update={"project": "other-project"}), resubmit=True,
+    )["job_id"]
+    iri.records.append({"id": "777.polaris", "job_spec": iri.submissions[0][1]})
+    assert service.status(str(root))["duplicate_jobs"] == ["777.polaris"]
+    unrelated = dict(iri.submissions[0][1], directory="/elsewhere")
+    iri.records.append({"id": "888.polaris", "job_spec": unrelated})
+    for job_id in ("888.polaris", "777", "999.polaris"):
+        with pytest.raises(ValueError, match="verifies belongs to this run"):
+            service.cancel(str(root), job_id)
+    assert not iri.cancelled
+    result = service.cancel(str(root), "777.polaris")
+    assert result == {
+        "job_id": "777.polaris", "state": "acknowledged", "at": result["at"],
+        "verified_by": "scheduler_history",
+    }
+    assert service.cancel(str(root), accepted)["verified_by"] == "accepted_attempt"
+    evidence = read_json(root / "submission.json")
+    assert set(evidence["cancellations"]) == {"777.polaris", accepted}
+    assert all("cancellation" not in attempt for attempt in evidence["attempts"])
+    assert [job for _, job in iri.cancelled] == ["777.polaris", accepted]
+    assert len(iri.submissions) == 2
 
 
 @pytest.mark.parametrize("operation", ["completed", "missing", "failed", "error"])
@@ -1064,3 +1184,53 @@ def test_submission_operation_reconciles_without_resubmission(batch, operation):
         expected = "123.polaris" if operation == "completed" else "321.polaris"
         assert service.status(str(root))["job_id"] == expected
     iri.submit.assert_called_once()
+
+
+def _resubmitted(batch):
+    service, root, _, iri, request = batch
+    stage(batch)
+    iri.failure = IRIRequestError(403)
+    service.submit(str(root), request)
+    iri.failure = None
+    return service.submit(
+        str(root), request.model_copy(update={"project": "other-project"}), resubmit=True,
+    )["job_id"]
+
+
+@pytest.mark.parametrize("error", [IRIRequestError(403), ValueError("IRI response exceeds the limit")])
+def test_duplicate_search_failure_keeps_the_job_status(batch, error):
+    service, root, _, iri, _ = batch
+    job_id = _resubmitted(batch)
+    iri.jobs = Mock(side_effect=error)
+    status = service.status(str(root))
+    assert status["job_id"] == job_id and status["scheduler"] == {"state": "queued"}
+    assert status["duplicate_jobs"] == [] and status["duplicate_search_complete"] is False
+    expected = {"type": type(error).__name__}
+    if isinstance(error, IRIRequestError):
+        expected["http_status"] = 403
+    assert status["duplicate_search_error"] == expected
+    assert read_json(root / "job-status.json") == status
+
+
+def test_failed_retrieval_retries_without_overwriting(batch):
+    service, root, transfer, _, _ = batch
+    manifest = stage(batch)
+    (Path(manifest["remote_directory"]) / "result.json").write_text("{}")
+    service.retrieve(str(root), ["result.json"])
+    destination = root / "retrieved/result.json"
+    transfer.state = "ACTIVE"
+    with pytest.raises(ValueError, match="exists"):
+        service.retrieve(str(root), ["result.json"])
+    destination.unlink()
+    with pytest.raises(ValueError, match="still active"):
+        service.retrieve(str(root), ["result.json"])
+    transfer.state = "SUCCEEDED"
+    with pytest.raises(ValueError, match="already targets"):
+        service.retrieve(str(root), ["result.json"])
+    transfer.state = "FAILED"
+    service.retrieve(str(root), ["result.json"])  # Only missing files are written.
+    assert destination.exists() and len(transfer.calls) == 3
+    with pytest.raises(ValueError, match="exists"):
+        service.retrieve(str(root), ["result.json"])
+    service.retrieve(str(root), ["result.json"], overwrite=True)
+    assert len(read_json(root / ".hpc-retrievals.json")) == 3
