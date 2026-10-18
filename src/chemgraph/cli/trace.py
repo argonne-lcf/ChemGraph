@@ -11,8 +11,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from chemgraph.academy.observability.event_log import EventLog
-from chemgraph.academy.observability.run_files import write_json_atomic
+from chemgraph.observability.event_log import EventLog
+from chemgraph.observability.run_files import write_json_atomic
 
 
 _AGENT_ID = "chemgraph"

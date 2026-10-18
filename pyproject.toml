@@ -120,9 +120,7 @@ globus_compute = [
     "globus-compute-sdk",
 ]
 academy = [
-    "academy-py",
-    "httpx",
-    "redis",
+    "academy-py>=0.5,<0.6",
 ]
 xanes = [
     "mp-api; python_version >= '3.11'",
@@ -161,16 +159,7 @@ where = ["src/"]
 # ocsr_models reads ocsr_registry.json through importlib.resources, so it has to ship.
 "chemgraph.tools" = ["ocsr_registry.json"]
 "chemgraph.tools.files.template_graspa_sycl" = ["*.def", "simulation.input"]
-"chemgraph.academy.campaigns" = [
-    "example-*/*.json",
-    "example-*/*.jsonc",
-    "example-*/data/*.json",
-    "example-*/models/*",
-    "example-*/prompt_profiles/*.json",
-]
-"chemgraph.academy.runtime.profiles" = ["*.json"]
-"chemgraph.academy.runtime.templates" = ["*"]
-"chemgraph.academy.dashboard" = ["static/*"]
+"chemgraph.dashboard" = ["static/*"]
 "ui" = ["assets/*.png"]
 
 [tool.ruff]
@@ -193,7 +182,6 @@ markers = [
     "globus_compute: marks tests requiring a live Globus Compute endpoint (run with --run-globus-compute)",
     "parsl: marks tests requiring a live Parsl deployment (run with --run-parsl)",
     "ensemble_launcher: marks tests requiring a live EnsembleLauncher deployment (run with --run-ensemble-launcher)",
-    "academy: marks tests requiring Academy agent infrastructure (run with --run-academy)",
     "asyncio: marks async tests",
 ]
 filterwarnings = [
