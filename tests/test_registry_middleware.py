@@ -149,7 +149,7 @@ def test_failed_loading_preserves_selection_and_replacement(catalog):
         discover_skills=False,
     ).invoke(
         {"messages": [HumanMessage(content="Use tools.")]},
-        {"configurable": {"thread_id": "test"}},
+        {"configurable": {"thread_id": "test"}, "max_concurrency": 1},
     )
     assert executed == [3]
     assert "double" in names(model.schemas[2])
