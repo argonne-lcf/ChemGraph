@@ -435,7 +435,8 @@ def test_iri_terminal_login_saves_token_cache(monkeypatch, tmp_path):
         session_required_policies=[core._GLOBUS_SESSION_POLICY]
     )
     assert json.loads(cache.read_text())["refresh_token"] == "refresh"
-    assert cache.stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":
+        assert cache.stat().st_mode & 0o777 == 0o600
     assert "https://auth.example/authorize" in output
     assert os.environ.pop("ALCF_API_TOKEN") == "access"
 def _token_response(response_class, status=200, **fields):
