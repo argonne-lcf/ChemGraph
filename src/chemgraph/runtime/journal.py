@@ -317,18 +317,22 @@ class OperationJournal:
             "message": encode_result(message), "registered": sorted(outputs), "outputs": None,
         })
 
+    async def bind_outputs(self, context, record: dict) -> dict:
+        """Identify outputs once; a retry publishes exactly the saved manifest."""
+        returned = record["returned"]
+        if returned["outputs"] is None:
+            manifest = await asyncio.to_thread(
+                output_manifest, context.workspace, returned["registered"])
+            await self._put(record, RETURNED, returned={**returned, "outputs": manifest})
+        return record
+
     async def finalize(self, context, call: dict, record: dict):
         """Finish a returned operation without invoking its tool again."""
         if record["state"] != RETURNED:
             raise ScopedExecutionError("Only returned operations can be finalized.")
-        returned = record["returned"]
-        message = decode_result(returned["message"])
+        message = decode_result(record["returned"]["message"])
         try:
-            # Identify outputs once; a retry publishes exactly the saved manifest.
-            if returned["outputs"] is None:
-                manifest = await asyncio.to_thread(
-                    output_manifest, context.workspace, returned["registered"])
-                await self._put(record, RETURNED, returned={**returned, "outputs": manifest})
+            await self.bind_outputs(context, record)
             artifacts = await asyncio.to_thread(
                 capture_artifacts, context, call["id"], record["returned"]["outputs"])
         except (OSError, ValueError) as exc:
