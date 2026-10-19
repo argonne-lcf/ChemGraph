@@ -74,7 +74,7 @@ class MainAgentRuntimeConfig:
         tools, custom_tools = describe_tool_registry(agent.tool_registry)
         workers, custom_workers = describe_agent_registry(agent.agent_registry)
         workspace = local_skill_workspace(agent.backend)
-        policy = (None if agent.approval_mode == "bypass"
+        policy = (None if agent.approval_mode in {"bypass", "scoped"}
                   else resolve_workspace_interrupt_policy(agent.tool_registry))
         settings.update(
             artifact_directory=agent.log_dir, model_endpoint=endpoint,
@@ -102,6 +102,7 @@ class MainAgentRuntimeConfig:
             "main_tools": agent.tools, "agent_registry": agent.agent_registry,
             "agent_options": agent.subagent_options, "backend": agent.backend,
             "tool_registry": agent.tool_registry, "interrupt_on": policy,
+            "scoped": agent.approval_mode == "scoped",
             "system_prompt": saved.main_agent_prompt, "recursion_limit": saved.recursion_limit,
             "human_supervised": saved.human_supervised,
             **{name: getattr(saved, name) for name in _WORKSPACE_SETTINGS},
@@ -123,7 +124,8 @@ class MainAgentRuntimeConfig:
         identity.update(
             main_backend=backend, legacy_worker_backend=legacy if saved.enable_deepagent else None,
             registry_specs=tools, agent_specs=workers, subagent_options=worker_options,
-            review_policy={"version": workspace_policy.WORKSPACE_REVIEW_POLICY_VERSION, "interrupt_on": graph["interrupt_on"]},
+            review_policy={"version": workspace_policy.WORKSPACE_REVIEW_POLICY_VERSION, "interrupt_on": graph["interrupt_on"],
+                           **({"scoped": True} if graph["scoped"] else {})},
             prompts={key: value for key, value in graph.items() if "prompt" in key},
             custom_tool_schemas=[(convert_to_openai_tool(tool), getattr(tool, "return_direct", False))
                                 for tool in [*(agent.tools or []), *[
