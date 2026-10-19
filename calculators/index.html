@@ -1748,6 +1748,9 @@
 <p>ChemGraph uses ASE calculators for energies, geometry optimization, vibrations,
 thermochemistry, and related tasks. Available calculators are detected at
 runtime; optional engines that cannot be imported or located are omitted.</p>
+<p>Install commands on this page use <code>uv pip</code> and assume the environment ChemGraph
+is installed in is active (see <a href="../installation/">Installation</a>). In a pip or
+conda environment, replace <code>uv pip</code> with <code>python -m pip</code>.</p>
 <h2 id="calculator-overview">Calculator overview<a class="headerlink" href="#calculator-overview" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1770,12 +1773,12 @@ runtime; optional engines that cannot be imported or located are omitted.</p>
 </tr>
 <tr>
 <td>TBLite</td>
-<td><code>pip install "chemgraph[calculators]"</code></td>
+<td><code>uv pip install "chemgraph[calculators]"</code></td>
 <td>Semiempirical calculations</td>
 </tr>
 <tr>
 <td>UMA / fairchem</td>
-<td><code>pip install "chemgraph[uma]"</code> in a separate environment</td>
+<td><code>uv pip install "chemgraph[uma]"</code> in a separate environment</td>
 <td>Advanced universal ML potential</td>
 </tr>
 <tr>
@@ -1865,14 +1868,14 @@ add-on is installed; otherwise it uses MACE-MP (<code>mace_mp</code>, reported a
 <code>medium-mpa-0</code>). Explicit calculator selections are preserved.</p>
 <p>Starting with v0.7.0, install Polar from the root of the matching source checkout
 or extracted source distribution (the directory containing <code>pyproject.toml</code>):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.<span class="w"> </span>-r<span class="w"> </span>requirements/mace-polar.txt
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>check
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>.<span class="w"> </span>-r<span class="w"> </span>requirements/mace-polar.txt
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>pip<span class="w"> </span>check
 </code></pre></div>
 <p>After v0.7.0 is published on PyPI and its Git tag exists, a wheel installation
 can use the command below from any directory. Before publication, use the
 development checkout instructions above. Pin both ChemGraph and its requirements
 to the same release:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'chemgraph==0.7.0'</span><span class="w"> </span>-r<span class="w"> </span>https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/mace-polar.txt
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">'chemgraph==0.7.0'</span><span class="w"> </span>-r<span class="w"> </span>https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/mace-polar.txt
 </code></pre></div>
 <p>Use the matching tag or commit when installing another version; the add-on files
 are introduced in v0.7.0. The conda environment and Docker images explicitly

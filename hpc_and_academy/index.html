@@ -1706,10 +1706,12 @@ path first so infrastructure failures are isolated from LLM behavior.</p>
 <p>Backend selection can use environment variables or <code>[execution]</code> settings. Do
 not copy another user's endpoint IDs, allocation names, or private paths.</p>
 <h2 id="academy-campaigns">Academy campaigns<a class="headerlink" href="#academy-campaigns" title="Permanent link">&para;</a></h2>
-<p>Academy supports persistent multi-agent campaigns and a dashboard runtime:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"chemgraph[academy,parsl,globus_compute]"</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>chemgraph<span class="w"> </span>academy<span class="w"> </span>--help
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>chemgraph<span class="w"> </span>dashboard<span class="w"> </span>--help
+<p>Academy supports persistent multi-agent campaigns and a dashboard runtime.
+Install it into the environment ChemGraph runs in:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"chemgraph[academy,parsl,globus_compute]"</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="c1"># or, in a conda/pip environment: python -m pip install "chemgraph[academy,parsl,globus_compute]"</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>chemgraph<span class="w"> </span>academy<span class="w"> </span>--help
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>chemgraph<span class="w"> </span>dashboard<span class="w"> </span>--help
 </code></pre></div>
 <p>The <a href="https://github.com/argonne-lcf/ChemGraph/tree/main/examples/academy/example-002-mace-ensemble-screening">MACE ensemble-screening example</a>
 has a README and end-to-end guide. Review campaign JSON/JSONC, runtime profiles,

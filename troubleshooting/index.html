@@ -1800,7 +1800,7 @@
 <h2 id="command-not-found">Command not found<a class="headerlink" href="#command-not-found" title="Permanent link">&para;</a></h2>
 <p>Activate the environment in which ChemGraph was installed:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>show<span class="w"> </span>chemgraph
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>pip<span class="w"> </span>show<span class="w"> </span>chemgraph<span class="w">   </span><span class="c1"># or: python -m pip show chemgraph</span>
 </code></pre></div>
 <p>Python 3.11 or newer is required.</p>
 <h2 id="credential-check-fails">Credential check fails<a class="headerlink" href="#credential-check-fails" title="Permanent link">&para;</a></h2>
@@ -1832,7 +1832,7 @@ launching the process:</p>
 <h2 id="a-source-checkout-imports-the-wrong-chemgraph">A source checkout imports the wrong ChemGraph<a class="headerlink" href="#a-source-checkout-imports-the-wrong-chemgraph" title="Permanent link">&para;</a></h2>
 <p>A stale site-packages installation can shadow the checkout. Activate a clean
 environment and install the current checkout editable:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="w">   </span><span class="c1"># or: python -m pip install -e .</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import chemgraph; print(chemgraph.__file__)"</span>
 </code></pre></div>
 <p>For test isolation, <code>PYTHONNOUSERSITE=1</code> can prevent user-site packages from
