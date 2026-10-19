@@ -17,11 +17,11 @@ dependencies:
   - pip:
     - ase==3.29.0
     - rdkit==2025.3.3
-    - langgraph==1.2.11
-    - langgraph-checkpoint==4.2.0
-    - langgraph-checkpoint-sqlite==3.1.1
-    - langgraph-prebuilt==1.1.0
-    - langgraph-sdk==0.4.4
+    - langgraph==1.2.16
+    - langgraph-checkpoint==4.3.0
+    - langgraph-checkpoint-sqlite==3.1.2
+    - langgraph-prebuilt==1.1.1
+    - langgraph-sdk==0.4.8
     - langchain==1.4.0
     - langchain-core==1.6.1
     - langchain-openai==1.4.1
