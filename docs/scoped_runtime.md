@@ -10,6 +10,15 @@ transport.
 This is an application boundary, not an operating-system sandbox. Calculator
 packages and model files are provisioned by the operator.
 
+For a runnable example, see
+[Scoped MACE-small optimization](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/scoped_runtime).
+It downloads or reuses MACE-small weights during setup, requests human approval,
+and verifies the saved optimization result. Run it from the repository root:
+
+```bash
+python -u examples/scoped_runtime/run_mace_small.py
+```
+
 ## Building and running a scoped agent
 
 ```python
