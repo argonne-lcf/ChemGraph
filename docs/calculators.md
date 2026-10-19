@@ -4,6 +4,10 @@ ChemGraph uses ASE calculators for energies, geometry optimization, vibrations,
 thermochemistry, and related tasks. Available calculators are detected at
 runtime; optional engines that cannot be imported or located are omitted.
 
+Install commands on this page use `uv pip` and assume the environment ChemGraph
+is installed in is active (see [Installation](installation.md)). In a pip or
+conda environment, replace `uv pip` with `python -m pip`.
+
 ## Calculator overview
 
 | Calculator | Setup | Best use in onboarding |
@@ -103,7 +107,7 @@ or extracted source distribution (the directory containing `pyproject.toml`):
 
 ```bash
 uv pip install . -r requirements/mace-polar.txt
-python -m pip check
+uv pip check
 ```
 
 After v0.7.0 is published on PyPI and its Git tag exists, a wheel installation

@@ -19,6 +19,8 @@ Install ChemGraph's pinned SDK integration from a source checkout:
 ```bash
 git clone https://github.com/argonne-lcf/ChemGraph.git
 cd ChemGraph
+uv venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
 uv pip install -e ".[codex]"
 ```
 

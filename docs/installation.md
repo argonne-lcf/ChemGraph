@@ -58,7 +58,9 @@ python -m pip install -e .
 
 ## Optional extras
 
-Install only the integrations needed by your workflow:
+Install only the integrations needed by your workflow, in the active environment.
+The commands below use `uv pip`; with standard `venv`/`pip` or conda, replace
+`uv pip` with `python -m pip`.
 
 | Extra | Install command | Adds |
 | --- | --- | --- |

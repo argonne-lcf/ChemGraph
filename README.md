@@ -311,7 +311,8 @@ capabilities, limitations, and interface support in more detail.
 
 The core installation includes ASE, EMT, and MACE. ChemGraph detects calculator
 engines and external executables at startup, then exposes only the calculators
-available in that environment.
+available in that environment. Install commands use `uv pip`; in a pip or conda
+environment, use `python -m pip` instead.
 
 | Capability | Installation | Notes |
 | --- | --- | --- |

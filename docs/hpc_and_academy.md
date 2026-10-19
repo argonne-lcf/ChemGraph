@@ -27,10 +27,12 @@ not copy another user's endpoint IDs, allocation names, or private paths.
 
 ## Academy campaigns
 
-Academy supports persistent multi-agent campaigns and a dashboard runtime:
+Academy supports persistent multi-agent campaigns and a dashboard runtime.
+Install it into the environment ChemGraph runs in:
 
 ```bash
 uv pip install "chemgraph[academy,parsl,globus_compute]"
+# or, in a conda/pip environment: python -m pip install "chemgraph[academy,parsl,globus_compute]"
 chemgraph academy --help
 chemgraph dashboard --help
 ```

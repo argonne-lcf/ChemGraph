@@ -4,6 +4,13 @@ Guidance for AI coding agents working in this repository. Human contributors
 should read [CONTRIBUTING.md](CONTRIBUTING.md); this file is the machine-facing
 companion.
 
+## Project overview
+
+ChemGraph is a computational-chemistry agent framework (PyPI package
+`chemgraph`, import package `chemgraph`). It connects natural-language queries to
+molecular simulations via a LangGraph/LangChain agent architecture, ASE, RDKit,
+and MCP servers. Requires Python >= 3.11.
+
 ## Setup
 
 Requires Python >= 3.11 (prefer `uv` over `conda` for local virtualenvs).
@@ -35,7 +42,7 @@ pytest tests/test_graphs.py::test_name -q
 chemgraph skills lint src/chemgraph/skills --core
 
 # Verify package metadata / dependency consistency
-python -m pip check
+uv pip check
 ```
 
 - Live integration tests are gated behind `--run-llm`, `--run-globus-compute`,
@@ -128,5 +135,5 @@ requirements/     # Git-URL add-ons (mace-polar.txt, ocsr-models.txt) disallowed
   environment simultaneously (see `.github/workflows/dependency_tests.yml`).
 - **Editable install shadowing:** a stale `chemgraph` or `chemgraphagent`
   install in site-packages can shadow the working tree; always run tests in an
-  editable install (`pip install -e .`) or with `PYTHONNOUSERSITE=1`.
+  editable install (`uv pip install -e .`) or with `PYTHONNOUSERSITE=1`.
 
