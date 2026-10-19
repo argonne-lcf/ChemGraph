@@ -439,6 +439,7 @@ def test_iri_terminal_login_saves_token_cache(monkeypatch, tmp_path):
     assert json.loads(cache.read_text())["refresh_token"] == "refresh"
     if os.name == "posix":
         assert cache.stat().st_mode & 0o777 == 0o600
+    assert [path.name for path in tmp_path.iterdir()] == ["tokens.json"]
     assert "https://auth.example/authorize" in output
     assert os.environ.pop("ALCF_API_TOKEN") == "access"
 
@@ -790,3 +791,96 @@ def test_iri_auth_errors_explain_recovery():
     message = str(IRIRequestError(401))
     assert "python -m chemgraph.tools.alcf_iri_core login" in message
     assert "restart" in message
+
+
+def _iri_cache(monkeypatch, tmp_path, tokens, env_token=None):
+    import chemgraph.tools.alcf_iri_core as core
+
+    cache = tmp_path / "tokens.json"
+    monkeypatch.setattr(core, "_TOKENS_PATH", str(cache))
+    monkeypatch.setenv("ALCF_API_TOKEN", "unused")
+    if env_token:
+        monkeypatch.setenv("ALCF_API_TOKEN", env_token)
+    else:
+        monkeypatch.delenv("ALCF_API_TOKEN")
+    core._save_iri_tokens(tokens)
+    return core, cache
+
+
+def _iri_refresh_response(access_token="new", **fields):
+    import chemgraph.tools.alcf_iri_core as core
+
+    # Real responses report an omitted refresh token as None, not a missing key.
+    return _token_response(
+        globus_sdk.OAuthRefreshTokenResponse, access_token=access_token,
+        expires_in=3600, resource_server=core._GLOBUS_SCOPE_CLIENT_ID,
+        scope=core._GLOBUS_SCOPE, token_type="Bearer", other_tokens=[], **fields,
+    )
+
+
+def test_iri_refresh_without_replacement_token_keeps_refresh_token(monkeypatch, tmp_path):
+    core, cache = _iri_cache(
+        monkeypatch, tmp_path, {"access_token": "old", "refresh_token": "refresh"}
+    )
+    auth = Mock()
+    auth.oauth2_refresh_token.side_effect = lambda _: _iri_refresh_response()
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    assert core._try_refresh_token() and core._try_refresh_token()
+    assert [call.args for call in auth.oauth2_refresh_token.call_args_list] == [
+        ("refresh",), ("refresh",)
+    ]
+    assert json.loads(cache.read_text())["refresh_token"] == "refresh"
+    if os.name == "posix":
+        assert cache.stat().st_mode & 0o777 == 0o600
+    assert os.environ["ALCF_API_TOKEN"] == "new"
+
+
+@pytest.mark.parametrize("env_token", [None, "rejected"])
+def test_iri_refresh_adopts_a_login_that_finished_meanwhile(monkeypatch, tmp_path, env_token):
+    core, cache = _iri_cache(
+        monkeypatch, tmp_path, {"access_token": "old", "refresh_token": "old-refresh"},
+        env_token,
+    )
+    login = {"access_token": "login-token", "refresh_token": "login-refresh"}
+
+    def refresh(_):
+        # A terminal login in another process replaces the cache meanwhile.
+        core._save_iri_tokens(login)
+        return _iri_refresh_response(access_token="stale")
+
+    auth = Mock()
+    auth.oauth2_refresh_token.side_effect = refresh
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    assert core._try_refresh_token()
+    assert os.environ["ALCF_API_TOKEN"] == "login-token"
+    assert json.loads(cache.read_text()) == login
+
+
+def test_iri_login_during_refresh_commit_wins(monkeypatch, tmp_path):
+    core, cache = _iri_cache(
+        monkeypatch, tmp_path, {"access_token": "old", "refresh_token": "old-refresh"}
+    )
+    login = {"access_token": "login-token", "refresh_token": "login-refresh"}
+    pending = Mock()
+    pending.oauth2_exchange_code_for_tokens.return_value.by_resource_server = {
+        core._GLOBUS_SCOPE_CLIENT_ID: login,
+    }
+    save, threads = core._save_iri_tokens, []
+
+    def save_refresh(data):
+        if data["access_token"] == "refreshed":
+            # An in-process login finishing mid-commit must wait for the lock.
+            monkeypatch.setattr(core, "_PENDING_AUTH_CLIENT", pending)
+            threads.append(threading.Thread(target=core._complete_reauth, args=("code",)))
+            threads[0].start()
+            threads[0].join(0.2)
+        save(data)
+
+    monkeypatch.setattr(core, "_save_iri_tokens", save_refresh)
+    auth = Mock()
+    auth.oauth2_refresh_token.side_effect = lambda _: _iri_refresh_response("refreshed")
+    monkeypatch.setattr(globus_sdk, "NativeAppAuthClient", Mock(return_value=auth))
+    assert core._try_refresh_token()
+    threads[0].join()
+    assert os.environ["ALCF_API_TOKEN"] == "login-token"
+    assert json.loads(cache.read_text()) == login

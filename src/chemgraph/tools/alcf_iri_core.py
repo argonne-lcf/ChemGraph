@@ -45,6 +45,7 @@ import base64
 import json
 import os
 import re
+import tempfile
 import threading
 import time
 from contextlib import closing
@@ -98,13 +99,54 @@ _RESOURCE_CACHE: dict[str, str] = {}
 # ---------------------------------------------------------------------------
 
 
-# Guards ALCF_API_TOKEN so a rejected token is never dropped over a newer one.
-_TOKEN_LOCK = threading.Lock()
+# Guards ALCF_API_TOKEN and the token cache so a rejected or stale token is
+# never written over a newer one. Reentrant: cache commits publish under it.
+_TOKEN_LOCK = threading.RLock()
 
 
 def _publish_token(token: str) -> None:
     with _TOKEN_LOCK:
         os.environ["ALCF_API_TOKEN"] = token
+
+
+def _cached_tokens(data: Any) -> dict:
+    """Return the IRI token record from either on-disk cache shape.
+
+    flat -- written by _complete_reauth and _try_refresh_token
+    nested -- written by ALCF's helper script (globus_sdk.UserApp),
+              tokens under data["data"]["DEFAULT"][<scope-uuid>]
+    """
+    if not isinstance(data, dict):
+        return {}
+    if data.get("refresh_token"):
+        return data
+    nested = data.get("data", {}).get("DEFAULT", {}).get(_GLOBUS_SCOPE_CLIENT_ID, {})
+    return nested if isinstance(nested, dict) else {}
+
+
+def _load_iri_tokens() -> dict:
+    try:
+        with open(_TOKENS_PATH) as f:
+            return _cached_tokens(json.load(f))
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def _save_iri_tokens(data: dict) -> None:
+    # Private from creation and replaced atomically, so the tokens are never
+    # readable by others and readers never see a partial file.
+    parent = os.path.dirname(_TOKENS_PATH)
+    os.makedirs(parent, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(dir=parent, prefix=".tokens-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, _TOKENS_PATH)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def _headers(needs_auth: bool = True) -> dict[str, str]:
@@ -178,24 +220,10 @@ def _try_refresh_token() -> bool:
         return False
     try:
         import globus_sdk
-        import json
     except ImportError:
         return False
     try:
-        with open(_TOKENS_PATH) as f:
-            data = json.load(f)
-        # Two shapes exist in the wild for the same on-disk path:
-        #   flat -- written by _complete_reauth below
-        #   nested -- written by ALCF's helper script (globus_sdk.UserApp),
-        #             tokens under data["data"]["DEFAULT"][<scope-uuid>]
-        refresh_token = data.get("refresh_token")
-        if not refresh_token:
-            nested = (
-                data.get("data", {})
-                .get("DEFAULT", {})
-                .get(_GLOBUS_SCOPE_CLIENT_ID, {})
-            )
-            refresh_token = nested.get("refresh_token")
+        refresh_token = _load_iri_tokens().get("refresh_token")
         if not refresh_token:
             return False
         client = globus_sdk.NativeAppAuthClient(_GLOBUS_AUTH_CLIENT_ID)
@@ -203,16 +231,22 @@ def _try_refresh_token() -> bool:
         fresh = response.by_resource_server.get(_GLOBUS_SCOPE_CLIENT_ID)
         if not fresh:
             return False
-        # Preserve the refresh_token if the response omits it.
-        fresh.setdefault("refresh_token", refresh_token)
-        with open(_TOKENS_PATH, "w") as f:
-            json.dump(fresh, f, indent=2)
-        os.chmod(_TOKENS_PATH, 0o600)
-        token = fresh.get("access_token")
-        if not token:
-            return False
-        _publish_token(token)
-        return True
+        fresh = dict(fresh)
+        # The SDK reports an omitted replacement as None; keep the old one.
+        if not fresh.get("refresh_token"):
+            fresh["refresh_token"] = refresh_token
+        with _TOKEN_LOCK:
+            cached = _load_iri_tokens()
+            if cached.get("refresh_token") != refresh_token:
+                # A login finished during the refresh; adopt it instead.
+                fresh = cached
+            else:
+                _save_iri_tokens(fresh)
+            token = fresh.get("access_token")
+            if not token:
+                return False
+            _publish_token(token)
+            return True
     except Exception:
         return False
 
@@ -390,16 +424,14 @@ def _complete_reauth(auth_code: str) -> dict:
         )
     # Cache to disk in the same location _try_refresh_token reads from,
     # so future calls hit the silent-refresh path and never re-prompt.
-    import json
-    os.makedirs(os.path.dirname(_TOKENS_PATH), exist_ok=True)
-    with open(_TOKENS_PATH, "w") as f:
-        json.dump(data, f, indent=2)
-    os.chmod(_TOKENS_PATH, 0o600)
     # Also update the in-process env so the NEXT call in this same turn
-    # uses the fresh token without a subprocess round-trip.
-    token = data.get("access_token")
-    if token:
-        _publish_token(token)
+    # uses the fresh token without a subprocess round-trip. One lock spans
+    # both so a concurrent refresh cannot commit between them.
+    with _TOKEN_LOCK:
+        _save_iri_tokens(data)
+        token = data.get("access_token")
+        if token:
+            _publish_token(token)
     return {"status": "ok", "message": "re-authenticated; retry your query."}
 
 
