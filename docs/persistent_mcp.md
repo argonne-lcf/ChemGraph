@@ -147,9 +147,9 @@ running jobs are monitored and individual worker files are bounded. These are
 application limits, not hard OS memory/filesystem quotas. Provision host limits
 appropriate for the group. Only the parent service writes operation records.
 
-When enabled, PubChem requests share the service host's outbound path and upstream
-rate limits. Set `enable_pubchem = false` to remove that tool, as in the sample
-configuration. No network or model downloads are required by the test suite.
+PubChem lookup is off by default. Set `enable_pubchem = true` to add
+`molecule_name_to_smiles`; its requests then share the service host's outbound path
+and upstream rate limits. No network or model downloads are required by the test suite.
 
 Logs identify requests, users, jobs and child PIDs without logging bearer headers.
 Per-job native stdout/stderr remain private operator files. Workers receive a
