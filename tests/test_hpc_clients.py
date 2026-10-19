@@ -180,7 +180,7 @@ def test_explicit_mapping_and_legacy_layout(monkeypatch, tmp_path):
     assert "client" not in repr(prepared) and "payload" not in repr(prepared)
 
 
-def test_iri_contracts_filters_history_and_cancel(monkeypatch):
+def test_iri_contracts_filters_history_and_cancel():
     calls = []
 
     def respond(request):
@@ -441,6 +441,8 @@ def test_iri_terminal_login_saves_token_cache(monkeypatch, tmp_path):
         assert cache.stat().st_mode & 0o777 == 0o600
     assert "https://auth.example/authorize" in output
     assert os.environ.pop("ALCF_API_TOKEN") == "access"
+
+
 def _token_response(response_class, status=200, **fields):
     import requests
 
