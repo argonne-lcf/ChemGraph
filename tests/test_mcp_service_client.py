@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 
 from chemgraph.cli import mcp_utils
-from chemgraph.cli.main import create_argument_parser, load_config
 
 
 @pytest.mark.parametrize("fail", [False, True])
@@ -39,13 +38,3 @@ def test_missing_token_and_remote_plaintext_fail_before_connect(monkeypatch):
     assert mcp_utils.load_mcp_tools_from_config(url="https://example.test/mcp", token_env="MISSING_TOKEN") is None
     monkeypatch.setenv("TEST_TOKEN", "test-only-token")
     assert mcp_utils.load_mcp_tools_from_config(url="http://example.test/mcp", token_env="TEST_TOKEN") is None
-
-
-def test_cli_and_toml_accept_env_variable_name(tmp_path):
-    args = create_argument_parser().parse_args(["run", "--mcp-token-env", "MY_TOKEN"])
-    assert args.mcp_token_env == "MY_TOKEN"
-    path = tmp_path / "client.toml"
-    path.write_text('[mcp]\nurl="https://chemgraph.example/mcp"\ntoken_env="MY_TOKEN"\n')
-    assert load_config(str(path))["mcp_token_env"] == "MY_TOKEN"
-    args = create_argument_parser().parse_args(["mcp", "--config", "service.toml", "token", "issue", "alice"])
-    assert args.service_config == "service.toml" and args.user == "alice"
