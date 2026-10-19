@@ -4,14 +4,18 @@ ChemGraph uses ASE calculators for energies, geometry optimization, vibrations,
 thermochemistry, and related tasks. Available calculators are detected at
 runtime; optional engines that cannot be imported or located are omitted.
 
+Install commands on this page use `uv pip` and assume the environment ChemGraph
+is installed in is active (see [Installation](installation.md)). In a pip or
+conda environment, replace `uv pip` with `python -m pip`.
+
 ## Calculator overview
 
 | Calculator | Setup | Best use in onboarding |
 | --- | --- | --- |
 | EMT | Included with ASE | Fast, offline smoke tests; limited elements/accuracy |
 | MACE | MACE-MP included in core; Polar requires an add-on | Polar medium is preferred when installed; otherwise MACE-MP supplies energies and forces |
-| TBLite | `pip install "chemgraph[calculators]"` | Semiempirical calculations |
-| UMA / fairchem | `pip install "chemgraph[uma]"` in a separate environment | Advanced universal ML potential |
+| TBLite | `uv pip install "chemgraph[calculators]"` | Semiempirical calculations |
+| UMA / fairchem | `uv pip install "chemgraph[uma]"` in a separate environment | Advanced universal ML potential |
 | AIMNet2 | Install its package/model dependencies separately | Supported molecular ML route when importable |
 | NWChem | Install/configure NWChem for ASE | External quantum chemistry |
 | ORCA | Install/configure ORCA for ASE | External quantum chemistry |
@@ -102,8 +106,8 @@ Starting with v0.7.0, install Polar from the root of the matching source checkou
 or extracted source distribution (the directory containing `pyproject.toml`):
 
 ```bash
-python -m pip install . -r requirements/mace-polar.txt
-python -m pip check
+uv pip install . -r requirements/mace-polar.txt
+uv pip check
 ```
 
 After v0.7.0 is published on PyPI and its Git tag exists, a wheel installation
@@ -112,7 +116,7 @@ development checkout instructions above. Pin both ChemGraph and its requirements
 to the same release:
 
 ```bash
-python -m pip install 'chemgraph==0.7.0' -r https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/mace-polar.txt
+uv pip install 'chemgraph==0.7.0' -r https://raw.githubusercontent.com/argonne-lcf/ChemGraph/v0.7.0/requirements/mace-polar.txt
 ```
 
 Use the matching tag or commit when installing another version; the add-on files

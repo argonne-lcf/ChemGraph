@@ -11,9 +11,9 @@ tree rather than as a standalone console script:
 ```bash
 git clone https://github.com/argonne-lcf/ChemGraph.git
 cd ChemGraph
-python -m venv .venv
+uv venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+uv pip install -e .
 chemgraph ui
 ```
 
