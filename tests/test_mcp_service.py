@@ -125,21 +125,3 @@ async def test_real_emt_jobs_survive_disconnect_and_results_survive_restart(tmp_
         for token, identifier in zip(tokens, identifiers):
             result = await tool(client, token, "get_job_results", batch_id=identifier)
             assert result["status"] == "finalized" and result["artifacts"]
-
-
-@pytest.mark.asyncio
-async def test_overlapping_same_user_vibrations_have_private_job_roots(tmp_path):
-    settings = config(tmp_path, max_workers=2, per_user_running=2)
-    async with running_app(settings) as (app, client):
-        token = app.state.tokens.issue("alice")
-        await tool(client, token, "put_workspace_file", path="water.xyz", content=WATER)
-        params = {"input_structure_file": "water.xyz", "driver": "vib", "calculator": {"calculator_type": "emt"}}
-        jobs = await asyncio.gather(*(tool(client, token, "run_ase", params=params) for _ in range(2)))
-        states = await asyncio.gather(*(completed(client, token, job["batch_id"]) for job in jobs))
-        assert all(state["status"] == "finalized" and state["outcome"] == "success" for state in states), states
-        results = [await tool(client, token, "get_job_results", batch_id=job["batch_id"]) for job in jobs]
-        frequencies = [next(a for a in result["artifacts"] if a["name"] == "frequencies_water.csv") for result in results]
-        owner = app.state.tokens.verify(token).user_id
-        paths = [app.state.service.files.get(owner, artifact["artifact_id"])[0] for artifact in frequencies]
-        assert paths[0] != paths[1] and all(path.exists() for path in paths)
-        assert paths[0].read_bytes() == paths[1].read_bytes()

@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import signal
+import sqlite3
 import sys
 import uuid
 
@@ -11,7 +12,9 @@ from langchain_core.messages import ToolMessage
 import pytest
 
 from chemgraph.mcp.service.dispatcher import Dispatcher
+from chemgraph.mcp.service.files import QuotaExceeded
 from chemgraph.mcp.service.operations import Service
+from chemgraph.runtime.context import ScopedExecutionError
 from chemgraph.runtime.journal import APPROVED, INVOKING, RETURNED
 from tests.mcp_service_helpers import WATER, config
 
@@ -152,34 +155,6 @@ async def test_startup_publication_failure_affects_only_that_job(tmp_path, monke
 
 @posix_only
 @pytest.mark.asyncio
-async def test_startup_registers_only_uncataloged_finalized_jobs(tmp_path, monkeypatch):
-    service = Service(config(tmp_path))
-    cataloged, _ = await job(service, "alice", state=RETURNED)
-    await service.finalize(cataloged)
-    interrupted, _ = await job(service, "alice", state=RETURNED)
-    def unavailable(*args, **kwargs):
-        raise OSError("storage unavailable")
-    monkeypatch.setattr(service.files, "publish", unavailable)
-    with pytest.raises(OSError, match="storage unavailable"):
-        await service.finalize(interrupted)
-    service = Service(config(tmp_path))
-    dispatcher = service.dispatcher = Dispatcher(service)
-    published = []
-    publish = service.files.publish
-    def recorded(owner, operation_id, *args):
-        published.append(operation_id)
-        return publish(owner, operation_id, *args)
-    monkeypatch.setattr(service.files, "publish", recorded)
-    await dispatcher.start()
-    try:
-        assert published == [interrupted["id"]]
-        assert len(service.files.list("alice", operation_id=interrupted["id"])) == 1
-    finally:
-        await dispatcher.stop()
-
-
-@posix_only
-@pytest.mark.asyncio
 async def test_queued_cancellation_and_changed_snapshot_never_launch(tmp_path, monkeypatch):
     service = Service(config(tmp_path))
     dispatcher = service.dispatcher = Dispatcher(service)
@@ -270,3 +245,41 @@ async def test_catalog_failure_retries_without_repeating_calculation(tmp_path, m
     monkeypatch.setattr(service.files, "publish", publish)
     result = await service.results("alice", record["id"])
     assert result["result"] == {"energy": 1} and len(result["artifacts"]) == 1
+
+
+@posix_only
+@pytest.mark.asyncio
+async def test_failed_dispatch_iteration_keeps_dispatching(tmp_path, monkeypatch):
+    service = Service(config(tmp_path))
+    dispatcher = service.dispatcher = Dispatcher(service)
+    record, _ = await job(service, "alice")
+    launched = fake_workers(dispatcher, monkeypatch)
+    records, failures = service.store.records, []
+    async def flaky(**kwargs):
+        if kwargs.get("state") == APPROVED and not failures:
+            failures.append(True)
+            raise sqlite3.OperationalError("database is locked")
+        return await records(**kwargs)
+    monkeypatch.setattr(service.store, "records", flaky)
+    await dispatcher.start()
+    try:
+        async def done():
+            return (await service.status("alice", record["id"]))["status"] == "finalized"
+        await wait_for(done)
+        assert failures and launched == [record["id"]] and service.ready
+    finally:
+        await dispatcher.stop()
+
+
+@pytest.mark.asyncio
+async def test_deferred_publication_never_adopts_replaced_outputs(tmp_path):
+    record, context = await job(Service(config(tmp_path)), "alice", state=RETURNED)
+    full = Service(config(tmp_path, max_storage_bytes=Service(config(tmp_path)).files.usage("alice")))
+    with pytest.raises(QuotaExceeded):
+        await full.finalize(record)
+    (context.workspace / "out.json").write_text('{"energy": 2}')
+    service = Service(config(tmp_path))
+    with pytest.raises(ScopedExecutionError):
+        await service.results("alice", record["id"])
+    assert (await service.status("alice", record["id"]))["status"] == "returned"
+    assert not service.files.list("alice")

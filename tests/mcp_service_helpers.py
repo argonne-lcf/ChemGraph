@@ -12,7 +12,7 @@ WATER = "3\nwater\nO 0 0 0\nH 0 0 0.96\nH 0.93 0 -0.24\n"
 
 
 def config(tmp_path, **kwargs):
-    return ServiceConfig(data_dir=tmp_path, public_url="http://localhost", enable_pubchem=False, **kwargs)
+    return ServiceConfig(data_dir=tmp_path, public_url="http://localhost", **kwargs)
 
 
 @asynccontextmanager
