@@ -68,7 +68,10 @@ class Files:
         return size
 
     def check_quota(self, owner, additional=0):
-        if self.usage(owner) + additional > self.config.max_storage_bytes:
+        self.check_quota_from(self.usage(owner), additional)
+
+    def check_quota_from(self, usage, additional):
+        if usage + additional > self.config.max_storage_bytes:
             raise QuotaExceeded("Workspace storage quota exceeded.")
 
     def ingest(self, owner, path, chunks, *, text=False):
@@ -78,8 +81,8 @@ class Files:
             raise ValueError("Text uploads support .xyz, .cif and .json files.")
         limit = self.config.max_text_bytes if text else self.config.max_upload_bytes
         destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        size, base = 0, self.usage(owner)
         fd, temporary = tempfile.mkstemp(prefix=".service-upload-", dir=destination.parent)
-        size = 0
         try:
             with os.fdopen(fd, "wb") as stream:
                 for chunk in chunks:
@@ -87,10 +90,12 @@ class Files:
                     if size > limit:
                         raise QuotaExceeded("Upload byte limit exceeded.")
                     # Include the immutable copy that will be published below.
-                    self.check_quota(owner, len(chunk) + size)
+                    self.check_quota_from(base, 2 * size)
                     stream.write(chunk)
                 stream.flush()
                 os.fsync(stream.fileno())
+            # Workers may have written meanwhile; the temporary file is now counted.
+            self.check_quota(owner, size)
             self.path(owner, path)  # recheck before publication
             os.replace(temporary, destination)
         finally:

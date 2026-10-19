@@ -107,12 +107,12 @@ def create_app(config):
         service.files.path(owner, path)
         async with service.inline_slots, service.locks[owner]:
             with tempfile.TemporaryFile(dir=config.data_dir) as spool:
-                size = 0
+                size, base = 0, await asyncio.to_thread(service.files.usage, owner)
                 async for chunk in request.stream():
                     size += len(chunk)
                     if size > config.max_upload_bytes:
                         raise QuotaExceeded("Upload byte limit exceeded.")
-                    await asyncio.to_thread(service.files.check_quota, owner, size * 2)
+                    service.files.check_quota_from(base, size * 2)
                     await asyncio.to_thread(spool.write, chunk)
                 spool.seek(0)
                 chunks = iter(lambda: spool.read(64 * 1024), b"")
