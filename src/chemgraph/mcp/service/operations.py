@@ -12,7 +12,6 @@ import uuid
 from langchain_core.messages import ToolMessage
 
 from chemgraph.runtime import OperationJournal, RunContext, SqliteOperationStore
-from chemgraph.runtime.artifacts import output_manifest
 from chemgraph.runtime.journal import APPROVED, BLOCKED, FINALIZED, RETURNED, decode_result
 from chemgraph.runtime.policy import PreparedAction
 from chemgraph.mcp.service.files import Files, relative_path
@@ -158,9 +157,10 @@ class Service:
     async def finalize(self, record):
         context = self.record_context(record)
         if record["state"] == RETURNED:
+            # Bind outputs before a quota failure can defer publication, so later
+            # workspace writes cannot replace this operation's results.
+            await context.journal.bind_outputs(context, record)
             manifest = record["returned"]["outputs"]
-            if manifest is None:
-                manifest = await asyncio.to_thread(output_manifest, context.workspace, record["returned"]["registered"])
             await asyncio.to_thread(self.files.check_quota, record["owner"], sum(a["size_bytes"] for a in manifest))
             await context.journal.finalize(context, call_from_record(record), record)
             record = await context.journal.get(record["id"])
