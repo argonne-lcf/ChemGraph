@@ -23,7 +23,7 @@ class ServiceConfig:
     max_job_seconds: int = 3600
     shutdown_seconds: int = 30
     max_inline_tools: int = 4
-    enable_pubchem: bool = True
+    enable_pubchem: bool = False
     policy: ExecutionPolicy = field(default_factory=lambda: ExecutionPolicy(
         limits={"max_steps": 1000, "max_atoms": 1000}))
 
