@@ -68,39 +68,41 @@ class Dispatcher:
             raise
 
     async def run(self):
-        try:
-            while not self.service.stopping:
-                self.wake.clear()
-                pending = await self.service.store.records(state=APPROVED)
-                grouped = defaultdict(list)
-                for record in pending:
-                    if record["id"] not in self.active:
-                        grouped[record["owner"]].append(record)
-                owners = list(grouped)
-                if self.last_owner in owners:
-                    index = owners.index(self.last_owner) + 1
-                    owners = owners[index:] + owners[:index]
-                counts = Counter(item.owner for item in self.active.values())
-                while owners and len(self.active) < self.config.max_workers:
-                    owner = owners.pop(0)
-                    if counts[owner] >= self.config.per_user_running:
-                        continue
-                    record = grouped[owner].pop(0)
-                    running = Running(owner)
-                    self.active[record["id"]] = running
-                    running.task = asyncio.create_task(self.execute(record, running))
-                    counts[owner] += 1
-                    self.last_owner = owner
-                    if grouped[owner]:
-                        owners.append(owner)
-                try:
-                    await asyncio.wait_for(self.wake.wait(), timeout=1)
-                except TimeoutError:
-                    pass
-        except Exception:
-            self.service.ready = False
-            logger.exception("service_dispatcher_stopped")
-            raise
+        while not self.service.stopping:
+            self.wake.clear()
+            try:
+                await self.dispatch()
+            except Exception:
+                # A transient store failure must not stop dispatch for every user.
+                logger.exception("service_dispatch_iteration_failed")
+            try:
+                await asyncio.wait_for(self.wake.wait(), timeout=1)
+            except TimeoutError:
+                pass
+
+    async def dispatch(self):
+        pending = await self.service.store.records(state=APPROVED)
+        grouped = defaultdict(list)
+        for record in pending:
+            if record["id"] not in self.active:
+                grouped[record["owner"]].append(record)
+        owners = list(grouped)
+        if self.last_owner in owners:
+            index = owners.index(self.last_owner) + 1
+            owners = owners[index:] + owners[:index]
+        counts = Counter(item.owner for item in self.active.values())
+        while owners and len(self.active) < self.config.max_workers:
+            owner = owners.pop(0)
+            if counts[owner] >= self.config.per_user_running:
+                continue
+            record = grouped[owner].pop(0)
+            running = Running(owner)
+            self.active[record["id"]] = running
+            running.task = asyncio.create_task(self.execute(record, running))
+            counts[owner] += 1
+            self.last_owner = owner
+            if grouped[owner]:
+                owners.append(owner)
 
     async def execute(self, record, running):
         owner, identifier = record["owner"], record["id"]
@@ -199,20 +201,25 @@ class Dispatcher:
             return None
 
     @staticmethod
-    async def terminate(process):
-        if process.returncode is not None:
-            return
+    def signal_group(process, sig):
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            os.killpg(process.pid, sig)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            # macOS refuses a group whose leader exited unreaped; signalling the
+            # leader itself succeeds then and still fails for a live, denied child.
+            process.send_signal(sig)
+
+    @classmethod
+    async def terminate(cls, process):
+        if process.returncode is not None:
+            return
+        cls.signal_group(process, signal.SIGTERM)
         try:
             await asyncio.wait_for(process.wait(), timeout=2)
         except TimeoutError:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            cls.signal_group(process, signal.SIGKILL)
             await process.wait()
 
     async def cancel(self, owner, identifier):
