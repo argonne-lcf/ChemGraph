@@ -63,6 +63,11 @@ configured Host header. Every other route requires a bearer token, including
 artifact routes, slash redirects and tool discovery. There is no OAuth issuer or
 authorization metadata in this pilot: configure clients with the bearer header.
 
+A failed dispatcher iteration makes `/readyz` return 503 and temporarily refuses
+new submissions/uploads. Dispatch retries automatically; readiness returns after
+a successful iteration. Existing workers stay supervised and status/results remain
+available. A stopped dispatcher is never reported ready.
+
 ## Connect a client
 
 Set `CHEMGRAPH_SERVICE_TOKEN` privately, then use:
@@ -119,6 +124,10 @@ the canonical runtime state:
 | `abandoned` | Withdrawn before dispatch, or explicitly abandoned by an operator. |
 
 An observed tool exception is a finalized error outcome, not an uncertain result.
+This includes nonfinite or otherwise non-JSON tool return values. Artifacts from
+an error outcome are retained as written by the tool; inspect the job outcome before
+using them. If an inline operation's outcome cannot be saved, it becomes `uncertain`
+when storage permits, or is reconciled on restart if storage remains unavailable.
 Terminating a running calculation produces `uncertain`, since partial work may
 have occurred. Canceling a queued operation abandons it without execution. Tool
 results include artifact references and authenticated download paths. Use

@@ -319,10 +319,18 @@ class OperationJournal:
 
     async def bind_outputs(self, context, record: dict) -> dict:
         """Identify outputs once; a retry publishes exactly the saved manifest."""
+        if record["state"] != RETURNED:
+            raise ScopedExecutionError("Only returned operations can bind outputs.")
         returned = record["returned"]
         if returned["outputs"] is None:
-            manifest = await asyncio.to_thread(
-                output_manifest, context.workspace, returned["registered"])
+            try:
+                manifest = await asyncio.to_thread(
+                    output_manifest, context.workspace, returned["registered"])
+            except (OSError, ValueError) as exc:
+                raise ScopedExecutionError(
+                    "Saving the operation's artifacts failed; retry after fixing storage. "
+                    "The calculation will not be repeated."
+                ) from exc
             await self._put(record, RETURNED, returned={**returned, "outputs": manifest})
         return record
 

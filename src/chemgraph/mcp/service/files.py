@@ -152,8 +152,14 @@ class Files:
             raise FileNotFoundError("Unknown artifact.")
         descriptor = json.loads(row["descriptor"])
         workspace = self.config.data_dir / row["workspace"]
-        path = artifact_file(workspace, descriptor)
-        verify_file(path, descriptor)
+        try:
+            path = artifact_file(workspace, descriptor)
+            verify_file(path, descriptor)
+        except (OSError, ValueError) as exc:
+            raise ValueError(
+                "Saved artifact is missing or corrupt; ask the operator to restore storage. "
+                "The calculation will not be repeated."
+            ) from exc
         return path, self.reference(row["id"], row["operation_id"], descriptor)
 
     def read(self, owner, identifier):
@@ -176,11 +182,17 @@ class Files:
         from chemgraph.runtime.artifacts import publish_file
 
         path = self.source(owner, source)
-        identity = file_identity(path)
+        try:
+            identity = file_identity(path)
+        except (OSError, ValueError) as exc:
+            raise ValueError("Calculation input is missing, unreadable or changed while staging.") from exc
         if identity["size_bytes"] > self.config.max_upload_bytes:
             raise QuotaExceeded("Calculation input exceeds the upload byte limit.")
         self.check_quota(owner, identity["size_bytes"] * 2)
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        publish_file(destination.parent, path, destination, identity)
+        try:
+            publish_file(destination.parent, path, destination, identity)
+        except (OSError, ValueError) as exc:
+            raise ValueError("Calculation input is missing, unreadable or changed while staging.") from exc
         return identity

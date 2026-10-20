@@ -35,3 +35,24 @@ def test_storage_quota_includes_published_copies_and_failed_upload_is_atomic(tmp
     assert files.path("alice", "input.xyz").read_bytes() == b"original"
     assert files.read("alice", saved["artifact_id"])["content"] == "original"
     assert not list(files.workspace("alice").glob(".service-upload-*"))
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_unavailable_artifacts_and_inputs_do_not_disclose_host_paths(tmp_path, missing):
+    settings = config(tmp_path)
+    initialize_database(settings.database)
+    files = Files(settings)
+    saved = files.ingest("alice", "input.xyz", [b"original"], text=True)
+    path, _ = files.get("alice", saved["artifact_id"])
+    if missing:
+        path.unlink()
+    else:
+        path.write_bytes(b"changed")
+    with pytest.raises(ValueError, match="Saved artifact is missing or corrupt") as error:
+        files.get("alice", saved["artifact_id"])
+    assert str(tmp_path) not in str(error.value)
+    with pytest.raises(ValueError, match="Calculation input is missing") as error:
+        files.stage("alice", "missing.xyz", tmp_path / "job" / "input.xyz")
+    assert str(tmp_path) not in str(error.value)
+    with pytest.raises(FileNotFoundError, match="^Unknown artifact.$"):
+        files.get("bob", saved["artifact_id"])

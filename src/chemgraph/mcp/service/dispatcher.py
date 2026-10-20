@@ -68,17 +68,23 @@ class Dispatcher:
             raise
 
     async def run(self):
-        while not self.service.stopping:
-            self.wake.clear()
-            try:
-                await self.dispatch()
-            except Exception:
-                # A transient store failure must not stop dispatch for every user.
-                logger.exception("service_dispatch_iteration_failed")
-            try:
-                await asyncio.wait_for(self.wake.wait(), timeout=1)
-            except TimeoutError:
-                pass
+        try:
+            while not self.service.stopping:
+                self.wake.clear()
+                try:
+                    await self.dispatch()
+                except Exception:
+                    # Retry transient failures while refusing new submissions.
+                    self.service.ready = False
+                    logger.exception("service_dispatch_iteration_failed")
+                else:
+                    self.service.ready = not self.service.stopping
+                try:
+                    await asyncio.wait_for(self.wake.wait(), timeout=1)
+                except TimeoutError:
+                    pass
+        finally:
+            self.service.ready = False
 
     async def dispatch(self):
         pending = await self.service.store.records(state=APPROVED)
@@ -131,10 +137,7 @@ class Dispatcher:
             logger.info("job_finished owner=%s job=%s", owner, identifier)
         except Exception:
             # A failure after RETURNED must preserve the saved result for recovery.
-            current = await context.journal.get(identifier)
-            if current is not None and current["state"] == INVOKING:
-                await context.journal.uncertain(identifier, reason="Service lost the invocation outcome.")
-            logger.exception("job_collection_failed owner=%s job=%s", owner, identifier)
+            await self.service.collection_failed(context, identifier)
         finally:
             if running.process is not None and running.process.returncode is None:
                 await self.terminate(running.process)
