@@ -207,3 +207,7 @@ Start with a new service database. Existing ownerless JSON job trackers are not
 imported automatically. Smoke-test two users with EMT, verify foreign-ID rejection,
 then enable the research group's validated calculator/model explicitly. Existing
 standalone-server users can continue using their previous commands.
+
+The [deployment smoke example](../examples/persistent_mcp/README.md) runs these
+checks against a temporary local service, including restart, or an existing HTTPS
+endpoint. Its receipt-based verification retrieves saved jobs without resubmitting.
