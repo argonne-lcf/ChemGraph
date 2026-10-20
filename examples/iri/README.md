@@ -131,6 +131,65 @@ turn; the model picks the tool by name.
 extra LLM turn on cold action lookups (`list_actions` / `describe`). Useful
 when the flat 43-tool surface is prohibitive.
 
+## Also usable from a bash-capable coding agent (Claude Code, deepagents, ...)
+
+A curl-oriented skill card at `src/chemgraph/skills/alcf_iri_bash.md`
+teaches any agent whose primary tool is `bash` how to hit the IRI API
+directly, without ChemGraph tools or the MCP server. Includes:
+
+- Auth (env var / on-disk Globus cache / ALCF helper CLI)
+- Endpoint recipes for every category with runnable curl + jq snippets
+- Multi-hop patterns (resolve machine names to UUIDs, paginate list_jobs, ...)
+- Write-safety notes for `submit_job` / `cancel_job` / `mkdir` / `rm`
+
+A benchmark harness ([`bench_claude_code.py`](bench_claude_code.py))
+drives headless Claude Code against the same 16-question benchmark used
+for `single_agent_iri`, writing a JSONL of answers + tool-call traces.
+
+**Easiest way to run it:** open
+[`bench_claude_code.ipynb`](bench_claude_code.ipynb) and Run All. The
+notebook preflights the environment, runs the sweep, scores each
+answer with a strict binary judge (0 or 1, style-blind), and prints a
+per-question summary. No manual copy-paste.
+
+Judge model auto-detects between the argo shim (if `ARGO_USER` is set
+or the local proxy responds) and the direct Anthropic API (if
+`ANTHROPIC_API_KEY` is set). Override with
+`BENCH_JUDGE_PROVIDER=argo|anthropic`. Claude Code itself is
+independent -- it uses whatever auth `claude login` set up, or
+`ANTHROPIC_API_KEY` if present.
+
+Or drive it from the CLI:
+
+```bash
+cd examples/iri/
+python bench_claude_code.py --qids q1 --trials 1        # one-question smoke
+python bench_claude_code.py --trials 1 --concurrency 2  # full 16-question sweep
+# then feed bench_claude_code.jsonl into the notebook's binary judge
+```
+
+## Also available as an MCP server
+
+The same tools ship as a standalone MCP server for use with
+non-LangChain clients (Claude Desktop, other agent frameworks,
+`main_agent`'s MCP wiring). Both tool-set variants are supported:
+
+```bash
+python -m chemgraph.mcp.alcf_iri_mcp                                 # flat, stdio
+python -m chemgraph.mcp.alcf_iri_mcp --variant category               # category
+python -m chemgraph.mcp.alcf_iri_mcp --transport streamable_http --port 9010
+```
+
+Env-var equivalent for MCP client configs that only pass env:
+`CHEMGRAPH_IRI_MCP_VARIANT=flat|category`. Default is flat.
+
+Same auth flow (`$ALCF_API_TOKEN` -> on-disk Globus cache -> interactive
+re-auth via `alcf_auth_start_reauth` / `alcf_auth_complete_reauth` for
+flat, or `alcf_auth(action='start_reauth' | 'complete_reauth')` for
+category). Same `$ALCF_IRI_ALLOW_UNSAFE=1` gate for write actions. A
+capability card for skill-routing agents (e.g. `main_agent`) lives at
+`src/chemgraph/skills/alcf_iri.md`.
+
 ## References
 - ALCF IRI docs: https://docs.alcf.anl.gov/services/iri-api/
 - OpenAPI spec: https://api.alcf.anl.gov/openapi.json

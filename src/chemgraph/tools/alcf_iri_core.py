@@ -207,12 +207,20 @@ def _raise_for_iri(r: "httpx.Response") -> None:
     # 401 after a refresh attempt gets a clearer message so the LLM
     # tells the user to re-auth in a shell instead of retrying forever.
     if r.status_code == 401:
-        detail = (
-            f"{detail} -- token expired and silent refresh failed. Use "
-            "the alcf_auth tool: action='start_reauth' returns a Globus "
-            "URL for the user to visit, then action='complete_reauth' "
-            "with the auth code they paste back."
-        )
+        variant = _detect_variant()
+        if variant == "flat":
+            hint = (
+                "Call alcf_auth_start_reauth (returns a Globus URL for "
+                "the user to visit), then alcf_auth_complete_reauth with "
+                "the auth code they paste back."
+            )
+        else:
+            hint = (
+                "Use the alcf_auth tool: action='start_reauth' returns a "
+                "Globus URL for the user to visit, then "
+                "action='complete_reauth' with the auth code they paste back."
+            )
+        detail = f"{detail} -- token expired and silent refresh failed. {hint}"
     raise RuntimeError(f"IRI {r.status_code}: {detail}")
 
 
@@ -296,6 +304,25 @@ _put = _with_retry_on_401(_put)
 # ---------------------------------------------------------------------------
 
 
+def _detect_variant() -> str:
+    """Walk the call stack to see which tool-wrapper module invoked us.
+
+    Returns "flat" when called via alcf_iri_flat_tools, else "category".
+    The two variants expose different tool names for the auth-complete
+    step, so the next_step string in _start_reauth needs to match.
+    """
+    import sys
+    frame = sys._getframe(1)
+    while frame is not None:
+        mod = frame.f_globals.get("__name__", "")
+        if mod.endswith(".alcf_iri_flat_tools"):
+            return "flat"
+        if mod.endswith(".alcf_iri_tools"):
+            return "category"
+        frame = frame.f_back
+    return "category"
+
+
 def _start_reauth() -> dict:
     """Kick off a Globus Native App OAuth flow. Returns the URL the
     user must visit + instructions for the second step.
@@ -318,16 +345,26 @@ def _start_reauth() -> dict:
     )
     url = client.oauth2_get_authorize_url()
     _PENDING_AUTH_CLIENT = client
-    return {
-        "status": "pending",
-        "url": url,
-        "next_step": (
+    variant = _detect_variant()
+    if variant == "flat":
+        next_step = (
             "Ask the user to open this URL in a browser, sign in with "
-            "their jinchuli@alcf.anl.gov identity, copy the resulting "
+            "their <user>@alcf.anl.gov identity, copy the resulting "
+            "authorization code, and paste it into the next message. "
+            "Then call alcf_auth_complete_reauth with auth_code='<the code>'."
+        )
+    else:
+        next_step = (
+            "Ask the user to open this URL in a browser, sign in with "
+            "their <user>@alcf.anl.gov identity, copy the resulting "
             "authorization code, and paste it into the next message. "
             "Then invoke alcf_auth with action='complete_reauth', "
             "params={'auth_code': '<the code>'}."
-        ),
+        )
+    return {
+        "status": "pending",
+        "url": url,
+        "next_step": next_step,
     }
 
 
