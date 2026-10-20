@@ -15,7 +15,7 @@ from chemgraph.mcp.service.dispatcher import Dispatcher
 from chemgraph.mcp.service.files import QuotaExceeded
 from chemgraph.mcp.service.operations import Service
 from chemgraph.runtime.context import ScopedExecutionError
-from chemgraph.runtime.journal import APPROVED, INVOKING, RETURNED
+from chemgraph.runtime.journal import APPROVED, INVOKING, RETURNED, OperationJournal
 from tests.mcp_service_helpers import WATER, config
 
 posix_only = pytest.mark.skipif(os.name != "posix", reason="The supervised service requires a POSIX host")
@@ -146,6 +146,9 @@ async def test_startup_publication_failure_affects_only_that_job(tmp_path, monke
         await wait_for(done)
         assert launched == [queued["id"]]
         assert (await service.status("alice", broken["id"]))["status"] == "returned"
+        with pytest.raises(ScopedExecutionError, match="will not be repeated") as error:
+            await service.results("alice", broken["id"])
+        assert str(tmp_path) not in str(error.value)
         (context.workspace / "out.json").write_text('{"energy": 1}')
         saved = await service.results("alice", broken["id"])
         assert saved["status"] == "finalized" and len(saved["artifacts"]) == 1
@@ -263,12 +266,19 @@ async def test_failed_dispatch_iteration_keeps_dispatching(tmp_path, monkeypatch
     monkeypatch.setattr(service.store, "records", flaky)
     await dispatcher.start()
     try:
+        async def not_ready():
+            return not service.ready
+        await wait_for(not_ready)
+        assert (await service.status("alice", record["id"]))["status"] == APPROVED
+        with pytest.raises(ValueError, match="not ready"):
+            await service.put_file("alice", "later.xyz", WATER)
         async def done():
             return (await service.status("alice", record["id"]))["status"] == "finalized"
         await wait_for(done)
         assert failures and launched == [record["id"]] and service.ready
     finally:
         await dispatcher.stop()
+    assert not service.ready
 
 
 @pytest.mark.asyncio
@@ -283,3 +293,58 @@ async def test_deferred_publication_never_adopts_replaced_outputs(tmp_path):
         await service.results("alice", record["id"])
     assert (await service.status("alice", record["id"]))["status"] == "returned"
     assert not service.files.list("alice")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("number", ["NaN", "Infinity", "1e999"])
+async def test_nonfinite_inline_result_is_a_saved_error(tmp_path, number):
+    service = Service(config(tmp_path))
+    service.ready = True
+    await service.put_file("alice", "result.json", '{"energy": ' + number + '}')
+    result = await service.call("alice", "extract_output_json", {"json_file": "result.json"})
+    assert result["status"] == "finalized" and result["outcome"] == "error"
+    assert result["result"]["error_type"] == "ValueError"
+    assert await service.results("alice", result["batch_id"]) == result
+    json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("phase,recovery_fails,state", [
+    ("record_return", False, "uncertain"),
+    ("record_return", True, "invoking"),
+    ("bind_outputs", False, "returned"),
+    ("publish", False, "finalized"),
+])
+async def test_inline_collection_preserves_durable_state_and_original_error(
+    tmp_path, monkeypatch, phase, recovery_fails, state,
+):
+    service = Service(config(tmp_path))
+    service.ready = True
+    await service.put_file("alice", "result.json", '{"energy": 1}')
+    original = OSError("collection unavailable")
+
+    async def unavailable(*args, **kwargs):
+        raise original
+    def publish_unavailable(*args, **kwargs):
+        raise original
+    async def reconciliation_unavailable(*args, **kwargs):
+        raise OSError("reconciliation unavailable")
+    if phase == "publish":
+        monkeypatch.setattr(service.files, phase, publish_unavailable)
+    else:
+        monkeypatch.setattr(OperationJournal, phase, unavailable)
+    if recovery_fails:
+        monkeypatch.setattr(OperationJournal, "uncertain", reconciliation_unavailable)
+    with pytest.raises(OSError) as error:
+        await service.call("alice", "extract_output_json", {"json_file": "result.json"})
+    assert error.value is original
+    records = await service.store.records()
+    assert len(records) == 1 and records[0]["state"] == state
+
+
+@pytest.mark.asyncio
+async def test_output_binding_requires_a_returned_operation(tmp_path):
+    record, context = await job(Service(config(tmp_path)), "alice")
+    with pytest.raises(ScopedExecutionError, match="Only returned"):
+        await context.journal.bind_outputs(context, record)
+    assert (await context.journal.get(record["id"]))["state"] == APPROVED

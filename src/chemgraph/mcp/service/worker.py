@@ -33,6 +33,9 @@ def execute(action, scope):
         try:
             value = chemistry_tools()[action.tool].invoke(action.arguments)
             result = to_jsonable_python(value)
+            # Report conversion failures as observed errors before collection or
+            # writing the subprocess report can strand the operation as invoking.
+            json.dumps(result, allow_nan=False)
             # Some core tools return a structured failure instead of raising.
             error = isinstance(result, dict) and result.get("status") in {"failure", "error", "failed"}
         except Exception as exc:

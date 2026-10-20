@@ -12,7 +12,7 @@ import uuid
 from langchain_core.messages import ToolMessage
 
 from chemgraph.runtime import OperationJournal, RunContext, SqliteOperationStore
-from chemgraph.runtime.journal import APPROVED, BLOCKED, FINALIZED, RETURNED, decode_result
+from chemgraph.runtime.journal import APPROVED, BLOCKED, FINALIZED, INVOKING, RETURNED, decode_result
 from chemgraph.runtime.policy import PreparedAction
 from chemgraph.mcp.service.files import Files, relative_path
 from chemgraph.mcp.service.worker import execute, public_value
@@ -142,9 +142,24 @@ class Service:
             record = await context.journal.begin(context, call, record)
             if record["state"] == BLOCKED:
                 return self.summary(record)
-            report = await asyncio.to_thread(execute, PreparedAction.from_dict(record["prepared"]), context.scope)
-            await self.returned(context, call, record, report)
+            try:
+                report = await asyncio.to_thread(execute, PreparedAction.from_dict(record["prepared"]), context.scope)
+                await self.returned(context, call, record, report)
+            except Exception:
+                await self.collection_failed(context, record["id"])
+                raise
             return await self.results(owner, record["id"])
+
+    async def collection_failed(self, context, identifier):
+        """Reconcile a failed collection without masking its original exception."""
+        logger.exception("job_collection_failed owner=%s job=%s", context.owner, identifier)
+        try:
+            current = await context.journal.get(identifier)
+            if current is not None and current["state"] == INVOKING:
+                await context.journal.uncertain(identifier, reason="Service lost the invocation outcome.")
+        except Exception:
+            # If storage is still unavailable, startup recovery handles INVOKING.
+            logger.exception("job_reconciliation_deferred owner=%s job=%s", context.owner, identifier)
 
     async def returned(self, context, call, record, report):
         value = public_value(report["result"], context.workspace)
