@@ -292,12 +292,9 @@ def test_deepagent_checkpoint_requires_same_selection_and_code(tmp_path, evaluat
 
 @pytest.mark.parametrize("setting", [
     "execution_url", "judge_url", "credentials",
-    "VLLM_BASE_URL", "OPENAI_BASE_URL", "OPENAI_API_BASE",
-    "ANTHROPIC_BASE_URL", "ANTHROPIC_API_URL", "GROQ_BASE_URL", "GROQ_API_BASE", "OLLAMA_HOST",
-    "GOOGLE_GEMINI_BASE_URL", "GOOGLE_VERTEX_BASE_URL", "GOOGLE_GENAI_USE_VERTEXAI",
-    "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "CHEMGRAPH_ARGO_MODEL_FORMAT",
+    "OPENAI_BASE_URL", "OLLAMA_HOST",
 ])
-def test_deepagent_checkpoint_endpoint_identity(tmp_path, monkeypatch, setting):
+def test_deepagent_checkpoint_configured_endpoints(tmp_path, monkeypatch, setting):
     dataset = tmp_path / "groundtruth.json"
     dataset.write_text(json.dumps([{"id": "water", "query": "Find the SMILES for water"}]))
     profile = tmp_path / "config.toml"
@@ -334,17 +331,14 @@ def test_deepagent_checkpoint_endpoint_identity(tmp_path, monkeypatch, setting):
         for name in ("OPENAI_API_KEY", "VLLM_API_KEY", "ANTHROPIC_API_KEY", "UNRELATED_SETTING"):
             monkeypatch.setenv(name, "dummy-rotated-secret")
     else:
-        monkeypatch.setenv(setting, {
-            "GOOGLE_GENAI_USE_VERTEXAI": "true", "GOOGLE_CLOUD_PROJECT": "changed-project",
-            "GOOGLE_CLOUD_LOCATION": "us-central1", "CHEMGRAPH_ARGO_MODEL_FORMAT": "wire",
-        }.get(setting, changed_url))
+        monkeypatch.setenv(setting, changed_url)
 
-    if setting == "credentials":
-        changed = make_runner()
-        assert changed._load_checkpoint("gpt-4o-mini", "deep_agent") == {"water": query_result}
-    else:
+    if setting in {"execution_url", "judge_url"}:
         with pytest.raises(ValueError, match="Incompatible Deep Agent checkpoint"):
             make_runner()  # Incompatible resume is rejected before loading the judge.
+    else:
+        changed = make_runner()
+        assert changed._load_checkpoint("gpt-4o-mini", "deep_agent") == {"water": query_result}
 
     # Only the digest is persisted, even when an endpoint embeds sensitive data.
     runner._clear_checkpoint("gpt-4o-mini", "deep_agent")

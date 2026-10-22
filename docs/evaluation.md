@@ -217,8 +217,11 @@ the error counts in JSON and Markdown execution summaries.
 
 Dataset and code checksums, dependency versions, and settings identify the run.
 Deep Agent resume requires a matching fingerprint, including the dataset,
-`query_ids`, `max_queries`, judge and execution settings, recorded dependency
-versions, and hashed package source (`.py`, `.md`, and `.template` files).
+`query_ids`, `max_queries`, judge and execution settings, configured model/judge
+endpoints, recorded dependency versions, and hashed package source (`.py`, `.md`,
+and `.template` files).
+Provider environment variables are not fingerprinted; resume assumes the
+provider environment remains unchanged.
 Changing query-selection options invalidates checkpoints even if they select the
 same queries; raising `--max-queries` to extend a smoke test also requires a new
 output directory. Package source changes, including evaluator fixes, invalidate
