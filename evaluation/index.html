@@ -1343,6 +1343,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#deep-agent-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deep Agent evaluation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#reports-and-diagnostics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1706,6 +1717,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#deep-agent-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Deep Agent evaluation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#reports-and-diagnostics" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1914,6 +1936,88 @@ which can increase runtime and model/tool costs. Steps include middleware and
 tool execution; they are not a token or monetary budget, so cost does not scale
 by a fixed factor. Use <code>--recursion-limit 50</code> to retain the previous budget, or
 set <code>recursion_limit = 50</code> in an evaluation profile. Limits must be at least 1.</p>
+<h2 id="deep-agent-evaluation">Deep Agent evaluation<a class="headerlink" href="#deep-agent-evaluation" title="Permanent link">&para;</a></h2>
+<p>The evaluator runs the existing <code>deep_agent</code> workflow with bundled skills,
+chemistry tool discovery, and one output directory per model/thread. File tools,
+shell commands, chemistry tools, and logs share real host paths under
+<code>&lt;output-dir&gt;/logs/&lt;model&gt;/deep_agent/thread_&lt;query-id&gt;/</code> (model <code>/</code> and <code>:</code> become
+<code>_</code>; query IDs are URL-escaped). This directory is also the shell working
+directory and <code>CHEMGRAPH_LOG_DIR</code>; there is no <code>/workspace</code> alias. The agent is
+told to keep generated inputs, scripts, and results here.
+On Windows, built-in file tools use forward-slash paths without the drive prefix
+(for example, <code>/Users/name/results/file.xyz</code>); the backend supplies the workspace
+drive. Chemistry tools continue to use native host paths. The evaluation prompt
+provides both directory forms.</p>
+<p><code>--output-dir</code> is sufficient; <code>--deepagent-workspace</code> optionally replaces the
+<code>&lt;output-dir&gt;/logs</code> root. Queries require empty thread directories. Before loading
+models or changing checkpoints and reports, evaluation rejects any selected query
+whose directory is nonempty, unless a compatible checkpoint already records that
+query and <code>--resume</code> will reuse it. This also rejects artifacts from interrupted
+queries that have no checkpoint. Existing files are preserved. Use a new output
+directory for a fresh benchmark, and a new <code>--deepagent-workspace</code> root if that
+override is configured. A second check immediately before each query rejects
+files that appeared after preflight as an initialization error.
+Persistent memory and personal/project skill discovery are disabled. These
+directories separate artifacts; they are <strong>not operating-system sandboxes</strong>.
+Deep Agent evaluation requires <code>--deepagent-auto-approve</code>, or
+<code>deepagent_auto_approve = true</code> in the evaluation profile
+(<code>deepagent_auto_approve=True</code> in Python). Evaluation has no interactive approval
+handler, so missing approval is rejected before any models are initialized,
+including when Deep Agent is selected alongside other workflows. Use this option
+only in a trusted execution environment: it allows unattended tool execution,
+file changes, and shell commands.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--config<span class="w"> </span>config.toml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--models<span class="w"> </span>argo:gpt-4.1-mini<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--dataset<span class="w"> </span>/path/to/groundtruth.json<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--workflows<span class="w"> </span>deep_agent<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--judge-type<span class="w"> </span>structured<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>--deepagent-auto-approve<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span>--query-ids<span class="w"> </span><span class="m">3</span><span class="w"> </span><span class="m">5</span><span class="w"> </span><span class="m">6</span><span class="w"> </span><span class="m">7</span><span class="w"> </span><span class="m">8</span><span class="w"> </span><span class="m">9</span><span class="w"> </span><span class="m">31</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span>--output-dir<span class="w"> </span>eval_results/deepagent-smoke
+</code></pre></div>
+<p>For a proxy, add <code>--base-url http://127.0.0.1:20219/v1</code> to the same command.
+It overrides provider URLs from <code>config.toml</code> for both execution and formatting
+(and the optional LLM judge). Profiles can also set <code>base_url</code>. When splitting
+a shell command across lines, each continuation backslash must be the last
+character on its line.</p>
+<p>Download <code>output_data.json</code> from the
+<a href="https://huggingface.co/datasets/Autonomous-Scientific-Agents/groundtruth">ground-truth dataset</a>
+at a fixed revision, and keep it outside the agent workspaces. The initial
+40-query benchmark uses revision <code>8fe726352eb0437e4958282ca741d064fcfe6959</code>.
+Omit <code>--query-ids</code> for the full dataset. IDs are selected in dataset order before
+<code>--max-queries</code> is applied. These options also work as profile keys:
+<code>deepagent_workspace</code>, <code>deepagent_auto_approve</code>, and <code>query_ids</code>.</p>
+<p>After a completed run, evaluation uses the same model and provider settings,
+including the agent's resolved reasoning effort,
+to format the recorded messages into <code>ResponseFormatter</code> JSON, with the existing
+formatter prompt and one retry. This formatting call has no tools or ground
+truth. It does not change the Deep Agent graph. The original answer and state
+are preserved separately from <code>structured_output</code> and <code>formatter_responses</code>.
+Formatter replies are retained even if a later retry raises an exception.
+The deterministic judge and its tolerances are unchanged, including the
+orientation-sensitive dipole component comparison.</p>
+<p>Each raw query record includes status, errors, workspace, elapsed seconds, and
+separate execution, formatting, and combined usage. Usage includes retries;
+unreported tokens remain unknown. Initialization and execution failures count as
+incorrect. Formatting failures, including invalid JSON and formatter model
+errors, count as incorrect for the structured judge. The LLM judge still scores
+the completed original answer and tool calls independently. Formatting failures
+retain their error status and diagnostics in raw records and remain included in
+the error counts in JSON and Markdown execution summaries.</p>
+<p>Dataset and code checksums, dependency versions, and settings identify the run.
+Deep Agent resume requires a matching fingerprint, including the dataset,
+<code>query_ids</code>, <code>max_queries</code>, judge and execution settings, configured model/judge
+endpoints, recorded dependency versions, and hashed package source (<code>.py</code>, <code>.md</code>,
+and <code>.template</code> files).
+Provider environment variables are not fingerprinted; resume assumes the
+provider environment remains unchanged.
+Changing query-selection options invalidates checkpoints even if they select the
+same queries; raising <code>--max-queries</code> to extend a smoke test also requires a new
+output directory. Package source changes, including evaluator fixes, invalidate
+old checkpoints. There is no checkpoint migration. Use separate output
+directories for smoke tests and full runs; <code>--resume</code> reuses completed query
+records, including failures, when the fingerprint matches.</p>
 <h2 id="reports-and-diagnostics">Reports and diagnostics<a class="headerlink" href="#reports-and-diagnostics" title="Permanent link">&para;</a></h2>
 <p>Select <code>--report json</code>, <code>markdown</code>, <code>console</code>, or <code>all</code> (the default). Structured
 results include:</p>
@@ -1930,43 +2034,43 @@ failure.</p>
 <h2 id="resume-interrupted-runs">Resume interrupted runs<a class="headerlink" href="#resume-interrupted-runs" title="Permanent link">&para;</a></h2>
 <p>The runner writes per-query checkpoints even when resume is disabled. Continue
 with the same dataset, model/workflow configuration, and output directory:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--dataset<span class="w"> </span>evaluation/questions.json<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--judge-type<span class="w"> </span>structured<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>eval_results<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--resume
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--dataset<span class="w"> </span>evaluation/questions.json<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--judge-type<span class="w"> </span>structured<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>eval_results<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>--resume
 </code></pre></div>
 <p>Use <code>--max-queries</code> for a smoke test, <code>--recursion-limit</code> to bound graph
 execution, and <code>--tags</code> for run metadata. Evaluation currently accepts
-<code>single_agent</code> and <code>multi_agent</code> workflows.</p>
+<code>single_agent</code>, <code>multi_agent</code>, and <code>deep_agent</code> workflows.</p>
 <h2 id="python-api">Python API<a class="headerlink" href="#python-api" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.eval</span><span class="w"> </span><span class="kn">import</span> <span class="n">BenchmarkConfig</span><span class="p">,</span> <span class="n">ModelBenchmarkRunner</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">config</span> <span class="o">=</span> <span class="n">BenchmarkConfig</span><span class="p">(</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">"gpt-4o-mini"</span><span class="p">],</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">dataset</span><span class="o">=</span><span class="s2">"evaluation/questions.json"</span><span class="p">,</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">workflow_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"single_agent"</span><span class="p">],</span>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">structured_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">judge_type</span><span class="o">=</span><span class="s2">"structured"</span><span class="p">,</span>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">output_dir</span><span class="o">=</span><span class="s2">"eval_results"</span><span class="p">,</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="p">)</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">ModelBenchmarkRunner</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run_all</span><span class="p">())</span>
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="n">runner</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">"all"</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">chemgraph.eval</span><span class="w"> </span><span class="kn">import</span> <span class="n">BenchmarkConfig</span><span class="p">,</span> <span class="n">ModelBenchmarkRunner</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">config</span> <span class="o">=</span> <span class="n">BenchmarkConfig</span><span class="p">(</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">models</span><span class="o">=</span><span class="p">[</span><span class="s2">"gpt-4o-mini"</span><span class="p">],</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="n">dataset</span><span class="o">=</span><span class="s2">"evaluation/questions.json"</span><span class="p">,</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="n">workflow_types</span><span class="o">=</span><span class="p">[</span><span class="s2">"single_agent"</span><span class="p">],</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="n">structured_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="n">judge_type</span><span class="o">=</span><span class="s2">"structured"</span><span class="p">,</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="n">output_dir</span><span class="o">=</span><span class="s2">"eval_results"</span><span class="p">,</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="p">)</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="n">runner</span> <span class="o">=</span> <span class="n">ModelBenchmarkRunner</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">runner</span><span class="o">.</span><span class="n">run_all</span><span class="p">())</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="n">runner</span><span class="o">.</span><span class="n">report</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">"all"</span><span class="p">)</span>
 </code></pre></div>
 <h2 id="optional-llm-judge">Optional LLM judge<a class="headerlink" href="#optional-llm-judge" title="Permanent link">&para;</a></h2>
 <p>Use the LLM judge only when a deterministic structured comparison does not
 capture the evaluation goal or when reproducing a legacy benchmark:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--dataset<span class="w"> </span>evaluation/questions.json<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>--judge-type<span class="w"> </span>llm<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>--judge-model<span class="w"> </span>gpt-4o<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span>--output-dir<span class="w"> </span>eval_results
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>chemgraph<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>--models<span class="w"> </span>gpt-4o-mini<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>--dataset<span class="w"> </span>evaluation/questions.json<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span>--judge-type<span class="w"> </span>llm<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span>--judge-model<span class="w"> </span>gpt-4o<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span>--output-dir<span class="w"> </span>eval_results
 </code></pre></div>
 <p>Use <code>--judge-type both</code> to record deterministic and LLM-judge results side by
 side. Report the judge model and settings, and do not substitute the LLM score
