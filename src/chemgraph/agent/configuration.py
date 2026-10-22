@@ -8,7 +8,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from chemgraph import __version__
 from chemgraph.graphs import workspace as workspace_policy
-from chemgraph.graphs.workspace import resolve_workspace_interrupt_policy
+from chemgraph.graphs.workspace import bypass_interrupt_policy, resolve_workspace_interrupt_policy
 from chemgraph.memory.graph_config import (
     GRAPH_SCHEMA_VERSION, NEW_SESSION_GUIDANCE, describe_agent_registry,
     describe_backend, describe_tool_registry, describe_worker_options, fingerprint,
@@ -74,8 +74,14 @@ class MainAgentRuntimeConfig:
         tools, custom_tools = describe_tool_registry(agent.tool_registry)
         workers, custom_workers = describe_agent_registry(agent.agent_registry)
         workspace = local_skill_workspace(agent.backend)
-        policy = (None if agent.approval_mode in {"bypass", "scoped"}
-                  else resolve_workspace_interrupt_policy(agent.tool_registry))
+        if agent.approval_mode == "scoped":
+            policy = None
+        elif agent.approval_mode == "bypass":
+            # Workers inherit this policy, so their review-required tools stay reviewed too.
+            worker_registries = [options.get("tool_registry") for options in agent.subagent_options.values()]
+            policy = bypass_interrupt_policy(agent.tool_registry, *worker_registries)
+        else:
+            policy = resolve_workspace_interrupt_policy(agent.tool_registry)
         settings.update(
             artifact_directory=agent.log_dir, model_endpoint=endpoint,
             graph_schema_version=GRAPH_SCHEMA_VERSION, package_version=__version__,

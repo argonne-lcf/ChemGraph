@@ -65,7 +65,8 @@ from chemgraph.graphs.deep_agent import (
     construct_deep_agent_graph,
     normalize_skill_sources,
 )
-from chemgraph.graphs.workspace import default_tool_registry
+from chemgraph.graphs.workspace import bypass_interrupt_policy, default_tool_registry
+from chemgraph.tools.hpc.models import managed_hpc_tool_names
 from chemgraph.agent.turn import serialize_state
 from chemgraph.skills.runtime import resolve_skill_dirs, resolve_user_skills_dir
 from chemgraph.utils.workflow_utils import get_removed_workflow_message
@@ -388,6 +389,17 @@ class ChemGraph:
                 self.subagent_options[canonical] = normalized
         if deepagent_tool_registry is not None and workflow_type != "deep_agent":
             raise ValueError("deepagent_tool_registry requires workflow_type='deep_agent'.")
+        # Attached tools bypass the registry tags that carry their review policy.
+        attached = [*(tools or ()), *(data_tools or ())]
+        for options in (subagent_options or {}).values():
+            if isinstance(options, dict):
+                attached.extend(options.get("tools") or ())
+        if managed_hpc_tool_names(attached):
+            raise ValueError(
+                "Managed HPC tools cannot be attached directly; configure them with "
+                "create_hpc_registry() and pass it as tool_registry (main_agent or its workers) "
+                "or deepagent_tool_registry (deep_agent)."
+            )
         if enable_deepagent and workflow_type != "main_agent":
             raise ValueError(
                 "enable_deepagent is supported only for the main_agent workflow."
@@ -663,7 +675,9 @@ class ChemGraph:
             if self.checkpointer is not None:
                 deepagent_options["checkpointer"] = self.checkpointer
             if self.approval_mode == "bypass":
-                deepagent_options["interrupt_on"] = None
+                deepagent_options["interrupt_on"] = bypass_interrupt_policy(
+                    self.deepagent_tool_registry
+                )
             self.workflow = self.workflow_map[workflow_type]["constructor"](
                 llm,
                 tools=self.tools,

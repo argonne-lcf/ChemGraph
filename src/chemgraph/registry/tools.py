@@ -15,6 +15,11 @@ from langchain_core.tools import BaseTool
 from chemgraph.utils.executables import resolve_executable
 
 
+# Eager tools carry this requirement into registry policy, including selections.
+REVIEW_REQUIRED_METADATA = "chemgraph_review_required"
+REVIEW_REQUIRED_TAG = "review-required"
+
+
 class RegistryError(Exception):
     """Base class for registry errors."""
 
@@ -278,11 +283,14 @@ class ToolRegistry:
     ) -> None:
         """Register a lazy specification or an already-created tool."""
         if isinstance(entry, BaseTool):
+            tags = frozenset(tags)
+            if (entry.metadata or {}).get(REVIEW_REQUIRED_METADATA) is True:
+                tags |= {REVIEW_REQUIRED_TAG}
             spec = ToolSpec(
                 name=entry.name,
                 description=entry.description,
                 import_path=None,
-                tags=frozenset(tags),
+                tags=tags,
             )
             tool = entry
         elif isinstance(entry, ToolSpec):
@@ -301,6 +309,15 @@ class ToolRegistry:
         self._tools.pop(spec.name, None)
         if tool is not None:
             self._tools[spec.name] = tool
+
+    def select(self, names):
+        """Restrict a catalog while preserving configured tool instances."""
+        selected = ToolRegistry([])
+        for name in dict.fromkeys(names):
+            selected.register(self.get_spec(name))
+            if name in self._tools:
+                selected._tools[name] = self._tools[name]
+        return selected
 
     def names(self, *, tags: Iterable[str] = ()) -> tuple[str, ...]:
         """Return canonical names in deterministic registration order."""

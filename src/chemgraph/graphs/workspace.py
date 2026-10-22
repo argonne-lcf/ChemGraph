@@ -10,12 +10,12 @@ from chemgraph.agent.deepagent_backend import (
     DEEPAGENT_ENV_ALLOWLIST, host_shell_environment, resolve_workspace,
 )
 from chemgraph.registry.middleware import RegistryToolsMiddleware
-from chemgraph.registry.tools import ToolRegistry
+from chemgraph.registry.tools import REVIEW_REQUIRED_TAG, ToolRegistry
 from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
 
 
 # Bump when approval semantics change, including removal of reviewed tools.
-WORKSPACE_REVIEW_POLICY_VERSION = 4
+WORKSPACE_REVIEW_POLICY_VERSION = 6
 
 
 DEFAULT_WORKSPACE_INTERRUPT_ON = {
@@ -30,6 +30,7 @@ DEFAULT_WORKSPACE_INTERRUPT_ON = {
 # Additional built-ins that read host files, write artifacts, or launch calculations.
 # Apply the same mandatory policy to direct tools and registry workers.
 _REGISTRY_REVIEW_TOOLS = {
+    "hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job",
     "run_ase", "run_docking", "run_graspa", "run_xanes", "generate_html",
     "fetch_xanes_data", "plot_xanes_data",
     "load_document", "file_to_atomsdata", "extract_output_json",
@@ -161,6 +162,17 @@ def default_tool_registry(tools=(), *, human_supervised=False) -> ToolRegistry:
         if spec.name not in attached_names
         and (human_supervised or not spec.interactive)
     )
+
+
+def bypass_interrupt_policy(*tool_registries):
+    """The reviews that remain under approval bypass, or None when there are none.
+
+    This covers only tagged tool calls. Shell execution is not reviewed under
+    bypass, so it is not an authorization boundary for those operations.
+    """
+    names = [name for registry in tool_registries if hasattr(registry, "names")
+             for name in registry.names(tags=(REVIEW_REQUIRED_TAG,))]
+    return {name: {"allowed_decisions": ["approve", "reject"]} for name in names} or None
 
 
 def resolve_workspace_interrupt_policy(tool_registry=None, interrupt_on=_DEFAULT_INTERRUPT_POLICY):

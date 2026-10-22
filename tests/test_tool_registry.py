@@ -115,6 +115,18 @@ def test_unknown_tool_is_clear():
         ToolRegistry().get("main_agent")
 
 
+@pytest.mark.parametrize("required", [True, False, None, "true", 1])
+def test_registration_preserves_review_metadata_and_explicit_tags(required):
+    entry = custom_tool.model_copy(update={"metadata": {"chemgraph_review_required": required}})
+    registry = ToolRegistry([])
+    registry.register(entry, tags=("custom",))
+    assert ("review-required" in registry.get_spec(entry.name).tags) == (required is True)
+    registry.register(entry, tags=("custom", "review-required"), replace=True)
+    selected = registry.select([entry.name])
+    assert selected.get_spec(entry.name).tags == {"custom", "review-required"}
+    assert selected.get(entry.name) is entry
+
+
 def test_require_available_aggregates_runtime_issue(monkeypatch):
     monkeypatch.delenv("CHEMGRAPH_TEST_EXECUTABLE", raising=False)
     registry = ToolRegistry(
