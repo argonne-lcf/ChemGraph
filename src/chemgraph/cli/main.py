@@ -709,20 +709,40 @@ def _handle_run(args: argparse.Namespace) -> None:
     deepagent_tool_registry = None
     cli_tools = getattr(args, "local_tool_names", None)
     local_names = cli_tools if cli_tools is not None else config.get("tools")
+    if "hpc" in config and args.workflow != "deep_agent":
+        _exit_run_error(args, "HPC configuration requires the standalone deep_agent workflow; use -w deep_agent.")
+    if "hpc" in config and bypass and not (
+        isinstance(config["hpc"], dict) and config["hpc"].get("allow_unreviewed_mutations") is True
+    ):
+        if not interactive:
+            _exit_run_error(
+                args, "Headless HPC runs require [hpc] allow_unreviewed_mutations = true: "
+                "hpc_transfer_files, hpc_submit_job and hpc_cancel_job stay reviewed under approval bypass."
+            )
+        console.print(
+            "[yellow]Approval bypass keeps reviews for hpc_transfer_files, hpc_submit_job and "
+            "hpc_cancel_job. Shell execution is not reviewed and is not an HPC authorization "
+            "boundary.[/yellow]"
+        )
     if cli_tools is not None and args.workflow not in {"deep_agent", "main_agent"}:
         _exit_run_error(args, "--tool requires -w deep_agent or -w main_agent.")
-    if (interactive or args.workflow in {"deep_agent", "main_agent"}) and local_names is not None:
+    if (interactive or args.workflow in {"deep_agent", "main_agent"}) and (
+        local_names is not None or "hpc" in config
+    ):
         from chemgraph.registry.tools import RegistryError, ToolRegistry
 
         try:
-            if not isinstance(local_names, list) or not all(
+            if local_names is not None and (not isinstance(local_names, list) or not all(
                 isinstance(name, str) and name.strip() for name in local_names
-            ):
+            )):
                 raise ValueError("tools must be a list of non-empty registry names")
-            catalog = ToolRegistry()
-            deepagent_tool_registry = ToolRegistry(
-                catalog.get_spec(name) for name in dict.fromkeys(local_names)
-            )
+            if "hpc" in config:
+                from chemgraph.tools.hpc.tools import create_hpc_registry
+                deepagent_tool_registry = create_hpc_registry(
+                    config["hpc"], names=local_names, human_supervised=bool(args.human_supervised),
+                )
+            else:
+                deepagent_tool_registry = ToolRegistry().select(local_names)
         except (RegistryError, ValueError) as exc:
             _exit_run_error(args, f"Invalid local tools: {exc}")
 
@@ -736,9 +756,10 @@ def _handle_run(args: argparse.Namespace) -> None:
                 continue
             main_options[{"skills": "skill_dirs", "subagents": "subagent_names"}.get(key, key)] = value
     if interactive or args.workflow == "main_agent":
-        # Retain the selected catalog for both capability workflows, including
-        # a workflow chosen in the startup prompt or a later /workflow command.
-        main_options["tool_registry"] = deepagent_tool_registry
+        # Ordinary catalogs serve both capability workflows, including a workflow
+        # chosen at startup or by /workflow. Configured HPC tools belong to
+        # standalone DeepAgent and must not enter durable main-agent sessions.
+        main_options["tool_registry"] = None if "hpc" in config else deepagent_tool_registry
 
     # ---- MCP tool loading ----------------------------------------------
     mcp_tools = None
