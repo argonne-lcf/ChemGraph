@@ -97,10 +97,12 @@ async def test_remote_reserves_receipt_before_network_and_keeps_progress(tmp_pat
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("crashed", [False, True])
-async def test_local_unclean_shutdown_retains_data_and_does_not_restart(tmp_path, monkeypatch, crashed):
+@pytest.mark.parametrize("failure", ["forced", "crashed", "lifespan", "missing_marker"])
+async def test_local_unclean_shutdown_retains_data_and_does_not_restart(tmp_path, monkeypatch, failure):
     root = tmp_path / "private"
     root.mkdir()
+    # A previous process's successful shutdown cannot authorize this cleanup.
+    (root / "server.log").write_text("INFO: Application shutdown complete.\n")
     monkeypatch.setattr(smoke.tempfile, "mkdtemp", lambda **kwargs: str(root))
     monkeypatch.setattr(smoke.subprocess, "check_output", lambda *args, **kwargs: "test-token")
     class Process:
@@ -109,7 +111,10 @@ async def test_local_unclean_shutdown_retains_data_and_does_not_restart(tmp_path
         def terminate(self):
             pass
         async def wait(self):
-            self.returncode = -9
+            self.returncode = -9 if failure == "forced" else -smoke.signal.SIGTERM
+            if failure == "lifespan":
+                with (root / "server.log").open("a") as log:
+                    log.write("ERROR: Application shutdown failed. Exiting.\n")
     process = Process()
     starts = []
     async def start(*args, **kwargs):
@@ -120,12 +125,12 @@ async def test_local_unclean_shutdown_retains_data_and_does_not_restart(tmp_path
         return httpx.Response(200)
     monkeypatch.setattr(smoke.httpx.AsyncClient, "get", get)
     async def exercise(*args, **kwargs):
-        if crashed:
+        if failure == "crashed":
             process.returncode = 1
     monkeypatch.setattr(smoke, "exercise", exercise)
     wait_for = asyncio.wait_for
     async def timeout_shutdown(awaitable, timeout):
-        if timeout == 15:
+        if timeout == 15 and failure == "forced":
             awaitable.close()
             raise TimeoutError
         return await wait_for(awaitable, timeout)
@@ -136,4 +141,4 @@ async def test_local_unclean_shutdown_retains_data_and_does_not_restart(tmp_path
         await smoke.local(5, [])
     assert len(starts) == 1
     assert root.is_dir() and (root / "server.log").exists()
-    assert bool(kills) is not crashed
+    assert bool(kills) is (failure == "forced")
