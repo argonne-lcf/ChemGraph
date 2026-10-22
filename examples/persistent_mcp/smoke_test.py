@@ -258,6 +258,7 @@ async def verify(url, tokens, receipt, *, local=False, transport=None):
 async def local_server(command, root, url, timeout, unsafe):
     log_path = root / "server.log"
     with log_path.open("ab") as log:
+        log_start = log.tell()
         process = await asyncio.create_subprocess_exec(*command, "serve", stdout=log, stderr=log,
                                                        start_new_session=True)
         # Only a confirmed graceful exit makes removing this directory safe.
@@ -292,6 +293,17 @@ async def local_server(command, root, url, timeout, unsafe):
                 # Uvicorn re-raises our SIGTERM after graceful lifespan shutdown.
                 require(not crashed and not forced and process.returncode in (0, -signal.SIGTERM),
                         "Unclean shutdown.")
+                # Uvicorn also re-raises SIGTERM when lifespan cleanup fails.
+                # Check only this process's logs, not a previous successful stop.
+                with log_path.open("rb") as output:
+                    output.seek(log_start)
+                    complete = False
+                    for line in output:
+                        require(b"Application shutdown failed" not in line
+                                and b"Exception in 'lifespan' protocol" not in line,
+                                "Application cleanup failed.")
+                        complete |= b"Application shutdown complete." in line
+                require(complete, "Application cleanup was not confirmed.")
             except BaseException as error:
                 raise SmokeFailure(f"Server did not shut down cleanly. Data/logs retained at {root}; "
                                    "worker groups may still be running. Stop them before cleanup or reuse.") from error

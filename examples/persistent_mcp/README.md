@@ -23,7 +23,8 @@ checksums. Successful output contains two `PASS:` lines. Exit status is zero on
 success and nonzero on failure. `--timeout 180` changes the per-job deadline;
 local startup is capped at 30 seconds and individual requests at 30 seconds.
 
-Normal completion removes the temporary directory. A crash or forced shutdown
+Normal completion removes the temporary directory only after this server's log
+confirms application shutdown. A crash, forced shutdown or unconfirmed cleanup
 fails the run, skips restart, and retains the directory and `server.log`; the
 error prints its location. Calculation processes have independent process groups
 and may survive killing the parent. Stop any remaining workers before cleaning
