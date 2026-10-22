@@ -15,6 +15,11 @@ from langchain_core.tools import BaseTool
 from chemgraph.utils.executables import resolve_executable
 
 
+# Eager tools carry this requirement into registry policy, including selections.
+REVIEW_REQUIRED_METADATA = "chemgraph_review_required"
+REVIEW_REQUIRED_TAG = "review-required"
+
+
 class RegistryError(Exception):
     """Base class for registry errors."""
 
@@ -278,11 +283,14 @@ class ToolRegistry:
     ) -> None:
         """Register a lazy specification or an already-created tool."""
         if isinstance(entry, BaseTool):
+            tags = frozenset(tags)
+            if (entry.metadata or {}).get(REVIEW_REQUIRED_METADATA) is True:
+                tags |= {REVIEW_REQUIRED_TAG}
             spec = ToolSpec(
                 name=entry.name,
                 description=entry.description,
                 import_path=None,
-                tags=frozenset(tags),
+                tags=tags,
             )
             tool = entry
         elif isinstance(entry, ToolSpec):

@@ -15,7 +15,7 @@ from chemgraph.tools.alcf_iri_core import IRIClient, IRIRequestError
 from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget, Resources
 from chemgraph.tools.hpc.service import HPCService, TransferOperationError
 from chemgraph.tools.hpc.store import read_json, write_json
-from chemgraph.tools.hpc.tools import create_hpc_registry
+from chemgraph.tools.hpc.tools import create_hpc_registry, create_hpc_tools
 
 
 class OfflineIRIClient(IRIClient):
@@ -575,14 +575,18 @@ def test_invalid_paths_do_not_start_transfer(batch, name, error):
     assert not transfer.calls
 
 
+@pytest.mark.parametrize("registration", ["factory", "manual", "selected"])
+@pytest.mark.parametrize("mode", ["review", "bypass"])
+@pytest.mark.parametrize("allow", [False, True])
 @pytest.mark.parametrize("decision", ["approve", "reject"])
 @pytest.mark.parametrize(
     "action", ["hpc_transfer_files", "hpc_submit_job", "hpc_cancel_job"]
 )
-def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
+def test_native_reviews_have_no_rejected_side_effects(batch, decision, action, registration, allow, mode):
     from langchain_core.messages import AIMessage, HumanMessage
     from langgraph.types import Command
     from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+    from chemgraph.graphs.workspace import bypass_interrupt_policy
     from tests.test_registry_middleware import CatalogModel, call
 
     service, root, transfer, iri, request = batch
@@ -600,7 +604,10 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
         "hpc_submit_job": {"run_dir": str(root), "request": request.model_dump()},
         "hpc_cancel_job": {"run_dir": str(root), "job_id": "123.polaris"},
     }[action]
-    registry = create_hpc_registry(service.config, names=[action], service=service)
+    config = service.config.model_copy(update={"allow_unreviewed_mutations": allow})
+    registry = registered_hpc_tools(config, registration, service=service).select([action])
+    policy = {"interrupt_on": bypass_interrupt_policy(registry)} if mode == "bypass" else {}
+    unreviewed = allow and mode == "bypass"
     graph = construct_deep_agent_graph(
         CatalogModel(
             responses=[
@@ -611,6 +618,7 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
         ),
         tool_registry=registry,
         discover_skills=False,
+        **policy,
     )
     config = {"configurable": {"thread_id": "test"}}
 
@@ -622,14 +630,18 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action):
     state = graph.invoke(
         {"messages": [HumanMessage(content="Run the HPC action")]}, config
     )
-    assert state["__interrupt__"]
-    assert before == (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
-    graph.invoke(Command(resume={"decisions": [{"type": decision}]}), config)
+    if unreviewed:
+        assert not state.get("__interrupt__")
+    else:
+        assert state["__interrupt__"]
+        assert before == (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
+        graph.invoke(Command(resume={"decisions": [{"type": decision}]}), config)
     after = (len(transfer.calls), len(iri.submissions), len(iri.cancelled))
-    assert (after == before) == (decision == "reject")
-    if action == "hpc_submit_job" and decision == "reject":
+    rejected = decision == "reject" and not unreviewed
+    assert sum(after) - sum(before) == (0 if rejected else 1)
+    if action == "hpc_submit_job" and rejected:
         assert not (root / "submission.started").exists()
-    if decision == "reject":
+    if rejected:
         assert evidence() == files  # No evidence is written for a rejected review.
 
 
@@ -750,6 +762,145 @@ def test_unrecorded_partial_snapshot_is_replaced(batch, monkeypatch):
 
 def attempts(root):
     return read_json(root / "submission.json")["attempts"]
+
+
+@pytest.mark.parametrize("resubmit", [False, True])
+@pytest.mark.parametrize("damage", ["missing", "empty_history", "empty_marker", "prepared", "rejected"])
+def test_orphaned_submission_marker_blocks_all_retries(batch, monkeypatch, damage, resubmit):
+    import chemgraph.tools.hpc.service as module
+
+    service, root, transfer, iri, request = batch
+    stage(batch)
+    # Capture genuine earlier evidence, before and after a confirmed rejection.
+    mark = module.mark_started
+    monkeypatch.setattr(module, "mark_started", Mock(side_effect=SystemExit))
+    with pytest.raises(SystemExit):
+        service.submit(str(root), request)
+    prepared = read_json(root / "submission.json")
+    monkeypatch.setattr(module, "mark_started", mark)
+    iri.failure = IRIRequestError(422)
+    service.submit(str(root), request)
+    rejected = read_json(root / "submission.json")
+    iri.failure = None
+    service.submit(str(root), request, resubmit=True)
+    path = root / "submission.json"
+    if damage == "missing":
+        path.unlink()
+    elif damage == "empty_marker":
+        (root / "submission.started").write_text(" \n")
+    else:
+        evidence = prepared if damage == "prepared" else rejected
+        if damage == "empty_history":
+            evidence["attempts"] = []
+        write_json(path, evidence)
+    before = {p.name: p.read_bytes() for p in root.iterdir() if p.is_file()}
+    iri.jobs = Mock(return_value=[])
+    service = HPCService(service.config, iri=iri, transfer_factory=lambda target: transfer)
+    for result in (service.status(str(root)), service.submit(str(root), request, resubmit=resubmit)):
+        assert result["state"] == "submission_unknown" and result["retry_safe"] is False
+        assert "evidence" in result["message"] and "never sent" not in result["message"]
+    assert len(iri.submissions) == 2
+    assert {p.name: p.read_bytes() for p in root.iterdir() if p.is_file()} == before
+    iri.jobs.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["defaults", "remote_root", "remote_collection", "compute_resource", "storage_resource"])
+def test_staging_replay_uses_saved_transfer_after_config_changes(batch, sdk_transfer, change):
+    service, root, _, iri, _ = batch
+    *_, submit = sdk_transfer
+    tool = create_hpc_tools(service.config, service=service)[1]
+    args = {"run_dir": str(root), "target": "polaris", "direction": "stage", "files": ["launch.sh"]}
+    submit.side_effect = TimeoutError("response lost")
+    assert tool.invoke(args)["phase"] == "submit"
+    before = read_json(root / "run.json")
+    config = service.config.model_dump()
+    changes = {
+        "project": "new-project", "queue": "new-queue",
+        "resources": {"node_count": 2, "duration": 600, "filesystems": "eagle"},
+        "setup_script": "/new/setup.sh", "python_executable": "/new/python",
+    } if change == "defaults" else {change: "/other" if change == "remote_root" else "other"}
+    config["targets"]["polaris"].update(changes)
+    service = HPCService(config, iri=iri)
+    tool = create_hpc_tools(config, service=service)[1]
+    submit.side_effect = None
+    result = tool.invoke(args)
+    if change != "defaults":
+        assert result["error"] == "invalid_run"
+        assert read_json(root / "run.json") == before
+        assert submit.call_count == 1
+        return
+    assert result["staging"] == "submitted"
+    assert submit.call_count == 2
+    assert dict(submit.call_args_list[0].args[0]) == dict(submit.call_args_list[1].args[0])
+    assert globus_sdk.TransferClient.get_submission_id.call_count == 1
+    after = read_json(root / "run.json")
+    for key in ("mapping", "target_snapshot", "identity", "files", "created_at"):
+        assert after[key] == before[key]
+    first, replayed = before["transfer_attempts"][0], after["transfer_attempts"][0]
+    assert len(after["transfer_attempts"]) == 1
+    for key in ("submission_id", "created_at", "error"):
+        assert replayed[key] == first[key]
+
+
+@pytest.mark.parametrize("failure", [None, "file", "snapshot_directory", "ancestor"])
+def test_snapshot_sync_precedes_publication_and_can_retry(batch, monkeypatch, failure):
+    import stat
+    import chemgraph.tools.hpc.service as module
+    from chemgraph.tools.hpc import store
+
+    service, old_root, transfer, *_ = batch
+    root = old_root / "nested" / "run"
+    root.mkdir(parents=True)
+    shutil.copytree(old_root / "inputs", root / "inputs")
+    shutil.copyfile(old_root / "launch.sh", root / "launch.sh")
+    snapshot = root / ".hpc-inputs"
+    local_root = old_root.parent
+    expected_dirs = [snapshot / "inputs", snapshot, root, root.parent, old_root, local_root]
+    events = []
+    fsync, sync, write, post = os.fsync, store.sync_directory, module.write_json, transfer.submit_prepared
+
+    def sync_file(fd):
+        mode = os.fstat(fd).st_mode
+        if stat.S_ISREG(mode) and stat.S_IMODE(mode) == 0o400:
+            events.append("file")
+            assert os.fstat(fd).st_size > 0  # Buffered bytes reached the descriptor.
+            if failure == "file":
+                raise OSError("file sync failed")
+        fsync(fd)
+
+    def sync_directory(path):
+        events.append(path)
+        if (failure == "snapshot_directory" and path == snapshot / "inputs") or (
+            failure == "ancestor" and path == old_root
+        ):
+            raise OSError("directory sync failed")
+        sync(path)
+
+    def publish(path, value):
+        events.append("manifest")
+        write(path, value)
+
+    def submit(prepared):
+        events.append("post")
+        return post(prepared)
+
+    monkeypatch.setattr(os, "fsync", sync_file)
+    monkeypatch.setattr(store, "sync_directory", sync_directory)
+    # stage uses the same store helper as atomic evidence writes.
+    monkeypatch.setattr(module, "sync_directory", sync_directory, raising=False)
+    monkeypatch.setattr(module, "write_json", publish)
+    monkeypatch.setattr(transfer, "submit_prepared", submit)
+    if failure:
+        with pytest.raises(OSError, match="sync failed"):
+            service.stage(str(root), "polaris", ["launch.sh", "inputs/water.xyz"])
+        assert snapshot.exists() and not (root / "run.json").exists() and not transfer.calls
+        failure = None
+        events.clear()
+    service.stage(str(root), "polaris", ["launch.sh", "inputs/water.xyz"])
+    assert events[:events.index("manifest")] == ["file", "file", *expected_dirs]
+    assert events.index("manifest") < events.index("post")
+    assert all(path.is_relative_to(local_root) for path in events if isinstance(path, Path))
+    assert len(transfer.calls) == 1
 
 
 @pytest.mark.parametrize("crash", ["record", "marker", "post", "outcome"])
@@ -873,11 +1024,37 @@ def _stub_model(monkeypatch):
     ))
 
 
+def registered_hpc_tools(config, registration, *, service=None):
+    from chemgraph.registry.tools import ToolRegistry
+
+    if registration == "factory":
+        return create_hpc_registry(config, service=service)
+    registry = ToolRegistry([])
+    for entry in create_hpc_tools(config, service=service):
+        registry.register(entry, tags=("caller-tag",))
+        assert "caller-tag" in registry.get_spec(entry.name).tags
+    return registry.select(registry.names()) if registration == "selected" else registry
+
+
+@pytest.mark.parametrize("allow", [False, True])
+def test_hpc_tool_metadata_uses_supplied_config_even_with_injected_service(batch, allow):
+    from chemgraph.tools.hpc.models import MANAGED_HPC_TOOL
+    from chemgraph.tools.hpc.tools import HPC_MUTATION_TOOLS
+
+    service, *_ = batch
+    for entry in create_hpc_tools({"allow_unreviewed_mutations": allow}, service=service):
+        assert entry.metadata[MANAGED_HPC_TOOL] is True
+        assert entry.metadata["chemgraph_review_required"] is (entry.name in HPC_MUTATION_TOOLS and not allow)
+    with pytest.raises(ValueError):
+        create_hpc_tools({"allow_unreviewed_mutations": "true"}, service=service)
+
+
+@pytest.mark.parametrize("registration", ["factory", "manual", "selected"])
 @pytest.mark.parametrize("allow", [False, True])
 @pytest.mark.parametrize("placement", ["deep_agent", "main_agent", "main_agent_worker"])
-def test_bypass_keeps_hpc_mutation_reviews(monkeypatch, tmp_path, allow, placement):
+def test_bypass_keeps_hpc_mutation_reviews(monkeypatch, tmp_path, allow, placement, registration):
     from chemgraph.agent.llm_agent import ChemGraph
-    from chemgraph.tools.hpc.tools import HPC_MUTATION_TOOLS, create_hpc_registry
+    from chemgraph.tools.hpc.tools import HPC_MUTATION_TOOLS
 
     _stub_model(monkeypatch)
     captured = {}
@@ -885,7 +1062,7 @@ def test_bypass_keeps_hpc_mutation_reviews(monkeypatch, tmp_path, allow, placeme
         monkeypatch.setattr(
             f"chemgraph.agent.llm_agent.{name}", lambda *args, **kwargs: captured.update(kwargs),
         )
-    registry = create_hpc_registry({"targets": {}, "allow_unreviewed_mutations": allow})
+    registry = registered_hpc_tools({"targets": {}, "allow_unreviewed_mutations": allow}, registration)
     options = {
         "deep_agent": dict(workflow_type="deep_agent", deepagent_tool_registry=registry),
         "main_agent": dict(workflow_type="main_agent", tool_registry=registry),

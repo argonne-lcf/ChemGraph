@@ -10,7 +10,7 @@ from chemgraph.agent.deepagent_backend import (
     DEEPAGENT_ENV_ALLOWLIST, host_shell_environment, resolve_workspace,
 )
 from chemgraph.registry.middleware import RegistryToolsMiddleware
-from chemgraph.registry.tools import ToolRegistry
+from chemgraph.registry.tools import REVIEW_REQUIRED_TAG, ToolRegistry
 from chemgraph.skills.runtime import ChemGraphSkillsMiddleware, prepare_skill_backend
 
 
@@ -36,9 +36,6 @@ _REGISTRY_REVIEW_TOOLS = {
     "load_document", "file_to_atomsdata", "extract_output_json",
 }
 
-
-# Registry tag for tools whose review survives an explicit approval bypass.
-REVIEW_REQUIRED_TAG = "review-required"
 
 _DEFAULT_INTERRUPT_POLICY = object()
 _WORKSPACE_MOUNT = "/workspace/"

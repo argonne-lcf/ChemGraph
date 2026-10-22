@@ -53,6 +53,20 @@ def test_python_options_are_applied_and_reconstructed(api, tmp_path):
     assert restored["discover_skills"] is False
 
 
+def test_hpc_review_requirement_changes_configuration_identity(api):
+    from chemgraph.tools.hpc.tools import create_hpc_tools
+
+    create, _ = api
+    identities = []
+    for allow in (False, True, False):
+        registry = ToolRegistry([])
+        for entry in create_hpc_tools({"allow_unreviewed_mutations": allow}):
+            registry.register(entry)
+        identities.append(create(tool_registry=registry, approval_mode="bypass").runtime_config.saved.topology_fingerprint)
+    assert identities[0] != identities[1]
+    assert identities[0] == identities[2]
+
+
 def test_catalog_defaults_filter_attached_and_interactive_tools(api):
     create, captured = api
     @tool

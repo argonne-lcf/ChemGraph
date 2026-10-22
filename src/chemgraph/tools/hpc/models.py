@@ -5,8 +5,8 @@ from pathlib import Path, PurePosixPath
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 
-# Tool metadata key marking managed HPC tools; they must arrive through a
-# registry from create_hpc_registry() so their review policy comes with them.
+# Managed HPC tools must arrive through a registry to carry their review policy.
+# Prefer create_hpc_registry(); ordinary registration of these tools is also safe.
 MANAGED_HPC_TOOL = "chemgraph_managed_hpc"
 
 

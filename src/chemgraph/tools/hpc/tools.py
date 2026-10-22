@@ -6,6 +6,7 @@ from typing import Literal
 from langchain_core.tools import tool
 
 from chemgraph.execution.globus_transfer import TransferAuthenticationRequired
+from chemgraph.registry.tools import REVIEW_REQUIRED_METADATA
 from chemgraph.tools.alcf_iri_core import IRIAuthenticationRequired, IRIRequestError
 from chemgraph.tools.hpc.models import MANAGED_HPC_TOOL, BatchRequest, HPCConfig
 from chemgraph.tools.hpc.service import HPCService, TransferOperationError
@@ -45,6 +46,11 @@ def _errors(function):
 
 
 def create_hpc_tools(config, *, service=None):
+    """Create managed tools for registration; prefer ``create_hpc_registry``.
+
+    Ordinary ToolRegistry registration also preserves mandatory mutation reviews.
+    """
+    config = HPCConfig.model_validate(config)
     service = service or HPCService(config)
 
     @tool
@@ -158,7 +164,12 @@ def create_hpc_tools(config, *, service=None):
         hpc_cancel_job,
     ]
     for entry in tools:
-        entry.metadata = {**(entry.metadata or {}), MANAGED_HPC_TOOL: True}
+        entry.metadata = {
+            **(entry.metadata or {}), MANAGED_HPC_TOOL: True,
+            REVIEW_REQUIRED_METADATA: (
+                entry.name in HPC_MUTATION_TOOLS and not config.allow_unreviewed_mutations
+            ),
+        }
     return tools
 
 
@@ -182,7 +193,7 @@ def create_hpc_registry(
     tools keep their review under approval bypass unless the configuration
     explicitly allows unreviewed mutations.
     """
-    from chemgraph.graphs.workspace import REVIEW_REQUIRED_TAG, default_tool_registry
+    from chemgraph.graphs.workspace import default_tool_registry
     from chemgraph.registry.tools import ToolRegistry
 
     config = HPCConfig.model_validate(config)
@@ -193,10 +204,7 @@ def create_hpc_registry(
     else:
         registry = ToolRegistry()
     for entry in create_hpc_tools(config, service=service):
-        tags = ("hpc", "pbs")
-        if entry.name in HPC_MUTATION_TOOLS and not config.allow_unreviewed_mutations:
-            tags += (REVIEW_REQUIRED_TAG,)
-        registry.register(entry, tags=tags)
+        registry.register(entry, tags=("hpc", "pbs"))
     if names is None:
         names = [
             spec.name

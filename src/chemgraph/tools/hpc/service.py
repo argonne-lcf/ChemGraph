@@ -21,6 +21,7 @@ from chemgraph.tools.hpc.store import (
     now,
     read_json,
     started_attempt,
+    sync_directory,
     write_json,
 )
 
@@ -182,6 +183,22 @@ def _input_path(root, name):
     return path
 
 
+def _orphaned_submission(root, evidence):
+    """A marker without its recorded attempt cannot prove submission is safe."""
+    marker = started_attempt(root)
+    if marker is not None and (
+        not marker or not any(
+            attempt.get("id") == marker for attempt in (evidence or {}).get("attempts", [])
+        )
+    ):
+        return {
+            "state": "submission_unknown", "retry_safe": False,
+            "message": "The submission marker has no matching attempt in the saved evidence. "
+            "Inspect this run manually and restore the missing evidence before any further submission.",
+        }
+    return None
+
+
 class HPCService:
     def __init__(self, config, *, iri=None, transfer_factory=None):
         self.config = HPCConfig.model_validate(config).model_copy(deep=True)
@@ -315,8 +332,6 @@ class HPCService:
                     )
                 if target_name != manifest["target"] or set(names) != set(manifest["files"]):
                     raise ValueError("Retry must use the same target and input files.")
-                if self._resolved(target) != saved_target:
-                    raise ValueError("Retry must preserve the saved target configuration.")
                 if staging == "unknown":
                     # A replay resends the frozen snapshot; edited host files
                     # must not push a possibly accepted transfer to a new run.
@@ -348,15 +363,27 @@ class HPCService:
                 prepared = manager.prepare_mapping(mapping, label=identity)
             snapshot.mkdir()
             identities = {}
+            directories = {snapshot}
             for name, source in sources.items():
                 destination = snapshot / name
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 before = checksum(source)
-                shutil.copyfile(source, destination)
-                if checksum(destination) != before or checksum(source) != before:
-                    raise ValueError("Inputs changed during staging; correct them and retry.")
-                destination.chmod(0o400)
+                with source.open("rb") as src, destination.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                    dst.flush()
+                    if checksum(destination) != before or checksum(source) != before:
+                        raise ValueError("Inputs changed during staging; correct them and retry.")
+                    os.fchmod(dst.fileno(), 0o400)
+                    os.fsync(dst.fileno())
                 identities[name] = before
+                directories.update(parent for parent in destination.parents if parent.is_relative_to(snapshot))
+            for directory in sorted(directories, key=lambda path: len(path.parts), reverse=True):
+                sync_directory(directory)
+            # Persist every child entry through the configured storage boundary.
+            for directory in (root, *root.parents):
+                sync_directory(directory)
+                if directory == Path(target.local_root).resolve():
+                    break
             manifest = {
                 "version": 1,
                 "identity": identity,
@@ -582,6 +609,10 @@ class HPCService:
         """
         request = BatchRequest.model_validate(request)
         with self._run(run_dir) as root:
+            path = root / "submission.json"
+            evidence = read_json(path) if path.exists() else None
+            if unknown := _orphaned_submission(root, evidence):
+                return unknown
             manifest, target = self._load(root)
             if request.target != manifest["target"]:
                 raise ValueError("Request target differs from this run.")
@@ -590,8 +621,7 @@ class HPCService:
                 "batch": request.model_dump(exclude_unset=True),
                 "jobspec": self._jobspec(manifest, request),
             }
-            path = root / "submission.json"
-            evidence = read_json(path) if path.exists() else {
+            evidence = evidence if evidence is not None else {
                 "manifest_hash": fingerprint(manifest), "attempts": [],
             }
             current = evidence["attempts"][-1] if evidence["attempts"] else None
@@ -812,15 +842,13 @@ class HPCService:
 
     def status(self, run_dir):
         with self._run(run_dir) as root:
-            manifest, target = self._load(root)
             path = root / "submission.json"
-            if not path.exists():
-                return {
-                    "state": "submission_unknown"
-                    if (root / "submission.started").exists()
-                    else "not_submitted"
-                }
-            evidence = read_json(path)
+            evidence = read_json(path) if path.exists() else None
+            if unknown := _orphaned_submission(root, evidence):
+                return unknown
+            manifest, target = self._load(root)
+            if not evidence or not evidence["attempts"]:
+                return {"state": "not_submitted"}
             current = evidence["attempts"][-1]
             if current["state"] in ("prepared", "submission_unknown"):
                 if started_attempt(root) != current["id"]:
