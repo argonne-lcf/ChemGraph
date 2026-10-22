@@ -24,6 +24,11 @@ def query_workspace(config, model_name, query_id):
             / f"thread_{quote(str(query_id), safe='')}")
 
 
+def file_tool_path(path):
+    """Use slash paths on the workspace drive for Deep Agents file tools."""
+    return path.as_posix().removeprefix(path.drive.replace("\\", "/"))
+
+
 async def format_result(model, state, usage, attempts=None):
     """Extract ResponseFormatter JSON using the same prompt and retry policy as single_agent."""
     messages = [
@@ -84,8 +89,10 @@ async def run_query(config, model_name, query, query_id):
                 f"\nThe working and output directory for this evaluation thread is {workspace}.\n"
                 "File tools and chemistry tools use real host paths. Shell commands start "
                 "in this directory and CHEMGRAPH_LOG_DIR points here. Keep generated inputs, "
-                "scripts, and results here; use absolute paths under this directory in tool "
-                "arguments. There is no /workspace mount for this run. Model runtime temporary "
+                "scripts, and results here; use absolute host paths in chemistry-tool arguments. "
+                f"For built-in file tools, use forward-slash paths under {file_tool_path(workspace_path)}. "
+                "On Windows, omit the drive prefix for file tools; the backend uses the workspace drive. "
+                "There is no /workspace mount for this run. Model runtime temporary "
                 "directories are not output locations.\n"
             )),
         )

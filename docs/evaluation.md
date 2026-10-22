@@ -150,6 +150,10 @@ shell commands, chemistry tools, and logs share real host paths under
 `_`; query IDs are URL-escaped). This directory is also the shell working
 directory and `CHEMGRAPH_LOG_DIR`; there is no `/workspace` alias. The agent is
 told to keep generated inputs, scripts, and results here.
+On Windows, built-in file tools use forward-slash paths without the drive prefix
+(for example, `/Users/name/results/file.xyz`); the backend supplies the workspace
+drive. Chemistry tools continue to use native host paths. The evaluation prompt
+provides both directory forms.
 
 `--output-dir` is sufficient; `--deepagent-workspace` optionally replaces the
 `<output-dir>/logs` root. Queries require empty thread directories. Before loading

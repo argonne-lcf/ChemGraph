@@ -2,7 +2,7 @@
 
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import shlex
 import subprocess
 import sys
@@ -24,6 +24,21 @@ from chemgraph.skills.runtime import prepare_skill_backend
 from chemgraph.tools.ase_tools import file_to_atomsdata, save_atomsdata_to_file
 from tests.test_main_agent import _ScriptedChatModel
 from tests.test_registry_middleware import call
+
+
+@pytest.mark.parametrize("path,expected", [
+    (PurePosixPath("/tmp/eval results/water.xyz"), "/tmp/eval results/water.xyz"),
+    (PureWindowsPath("C:/Users/runner/eval results/water.xyz"), "/Users/runner/eval results/water.xyz"),
+    (PureWindowsPath("D:/results/water.xyz"), "/results/water.xyz"),
+    (PureWindowsPath("//server/share/results/water.xyz"), "/results/water.xyz"),
+])
+def test_deepagent_file_tool_paths(path, expected):
+    from deepagents.backends.utils import validate_path
+
+    tool_path = deepagent.file_tool_path(path)
+    assert tool_path == expected
+    # Exercise the real middleware validator and the backend's workspace join.
+    assert path.parent / validate_path(tool_path) == path
 
 
 @pytest.mark.asyncio
@@ -63,6 +78,7 @@ async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output, judge_t
         workspace = Path(options["log_dir"])
         assert workspace == tmp_path / "results/logs/fake/deep_agent/thread_water"
         assert str(workspace) in options["prompts"].deepagent
+        assert deepagent.file_tool_path(workspace) in options["prompts"].deepagent
 
         # Exercise the graph's backend wrapping and real chemistry file tools.
         backend, _, _ = prepare_skill_backend(
@@ -557,7 +573,8 @@ async def test_deepagent_real_graph_formats_native_trace(
     workspace.mkdir(parents=True)  # Existing empty directories are valid.
     structure = workspace / "water.xyz"
     model = _ScriptedChatModel(responses=[
-        call("write_file", file_path=str(structure), content="3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n"),
+        call("write_file", file_path=deepagent.file_tool_path(structure),
+             content="3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n"),
         call("load_tools", names=["file_to_atomsdata"]),
         call("file_to_atomsdata", fname=str(structure)),
         AIMessage(content="Water has SMILES O."),
