@@ -16,6 +16,7 @@ from chemgraph.tools.hpc.models import BatchRequest, HPCConfig, HPCTarget, Resou
 from chemgraph.tools.hpc.service import HPCService, TransferOperationError
 from chemgraph.tools.hpc.store import read_json, write_json
 from chemgraph.tools.hpc.tools import create_hpc_registry, create_hpc_tools
+from tests.test_main_agent_execution_context import model_loader as model_loader
 
 
 class OfflineIRIClient(IRIClient):
@@ -76,13 +77,15 @@ class Scheduler:
         return self.records[-1]
 
     def jobs(self, resource, **kwargs):
-        if kwargs.get("offset", 0) or (self.finished and not kwargs.get("historical")):
+        if self.finished and not kwargs.get("historical"):
             return []
         account = (kwargs.get("filters") or {}).get("accountingId")
         records = [
             record for record in self.records
             if account is None or record.get("job_spec", {}).get("attributes", {}).get("account") == account
         ]
+        offset = kwargs.get("offset", 0)
+        records = records[offset:offset + kwargs.get("limit", 100)]
         if kwargs.get("include_spec"):
             return records
         return [{k: v for k, v in record.items() if k != "job_spec"} for record in records]
@@ -512,6 +515,49 @@ def test_missing_or_ambiguous_history_stays_unknown(batch, records):
     assert len(iri.submissions) == 1
 
 
+@pytest.mark.parametrize("historical", [False, True])
+@pytest.mark.parametrize("history", ["unique", "ambiguous", "bounded"])
+def test_reconciliation_requires_a_unique_complete_paginated_search(batch, history, historical):
+    service, root, transfer, iri, request = batch
+    stage(batch)
+    iri.failure = RuntimeError("response lost after acceptance")
+    assert service.submit(str(root), request)["state"] == "submission_unknown"
+    accepted = iri.records[0]
+    size = {"unique": 101, "ambiguous": 201, "bounded": 1000}[history]
+    iri.records = [
+        {"id": f"other-{i}.polaris", "job_spec": {**accepted["job_spec"], "name": f"other-{i}"}}
+        for i in range(size)
+    ]
+    iri.records[100] = accepted
+    if history == "ambiguous":
+        iri.records[200] = {**accepted, "id": "456.polaris"}
+    iri.finished = historical
+    iri.failure = None
+    iri.jobs = Mock(wraps=iri.jobs)
+    # Reconstruct the service: only durable evidence identifies the lost submission.
+    service = HPCService(service.config, iri=iri, transfer_factory=lambda target: transfer)
+    result = service.status(str(root))
+    pages = list(range(0, size, 100))
+    expected = ([(False, 0)] if historical else [(False, offset) for offset in pages])
+    if historical or history != "bounded":
+        expected += [(True, offset) for offset in pages]
+    assert [(c.kwargs["historical"], c.kwargs["offset"]) for c in iri.jobs.call_args_list] == expected
+    assert all(c.kwargs["limit"] == 100 and c.kwargs["include_spec"] is True
+               and c.kwargs["filters"] == {"accountingId": request.project}
+               for c in iri.jobs.call_args_list)
+    if history == "unique":
+        assert result["job_id"] == accepted["id"]
+    else:
+        assert result["state"] == "submission_unknown" and result["retry_safe"] is False
+        search = attempts(root)[-1]["last_search"]
+        assert search["complete"] is (history == "ambiguous")
+        assert search["matches"] == ([accepted["id"], "456.polaris"]
+                                     if history == "ambiguous" else [accepted["id"]])
+    repeated = service.submit(str(root), request, resubmit=True)
+    assert repeated["state"] == ("accepted" if history == "unique" else "submission_unknown")
+    assert len(iri.submissions) == 1
+
+
 def test_authentication_failure_can_retry_same_run_without_resubmission(batch):
     service, root, _, _, request = batch
     stage(batch)
@@ -643,6 +689,89 @@ def test_native_reviews_have_no_rejected_side_effects(batch, decision, action, r
         assert not (root / "submission.started").exists()
     if rejected:
         assert evidence() == files  # No evidence is written for a rejected review.
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("placement", ["main_agent", "deep_agent_graph"])
+async def test_scoped_graphs_reject_loaded_hpc_mutations(batch, tmp_path, model_loader, placement):
+    from langchain_core.messages import AIMessage, HumanMessage
+    from chemgraph.agent.llm_agent import ChemGraph
+    from chemgraph.graphs.deep_agent import construct_deep_agent_graph
+    from chemgraph.runtime import run_context
+    from chemgraph.tools.hpc.tools import HPC_MUTATION_TOOLS
+    from tests.runtime_helpers import make_context
+    from tests.test_registry_middleware import CatalogModel, call, outputs
+
+    service, root, transfer, iri, request = batch
+    registry = create_hpc_registry(service.config, service=service, names=HPC_MUTATION_TOOLS)
+    responses, _ = model_loader
+    responses.extend([
+        call("load_tools", names=list(HPC_MUTATION_TOOLS)),
+        call("hpc_transfer_files", run_dir=str(root), target="polaris", direction="stage", files=["launch.sh"]),
+        call("hpc_submit_job", run_dir=str(root), request=request.model_dump()),
+        call("hpc_cancel_job", run_dir=str(root), job_id="123.polaris"),
+        AIMessage(content="HPC operations are unavailable here"),
+    ])
+    if placement == "main_agent":
+        graph = ChemGraph(
+            workflow_type="main_agent", approval_mode="scoped", tool_registry=registry,
+            subagent_names=[], discover_skills=False, enable_memory=False, log_dir=str(tmp_path / "logs"),
+        ).workflow
+    else:
+        graph = construct_deep_agent_graph(
+            CatalogModel(responses=responses), tool_registry=registry,
+            scoped=True, interrupt_on=None, backend=None, discover_skills=False,
+        )
+    before = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    with run_context(make_context(tmp_path)):
+        state = await graph.ainvoke({"messages": [HumanMessage(content="Run the HPC operations")]},
+                                   {"configurable": {"thread_id": "scoped-hpc"}})
+    messages = {m.tool_call_id: m for m in outputs(state)}
+    assert messages["load_tools"].status == "success"
+    for name in HPC_MUTATION_TOOLS:
+        assert messages[name].status == "error"
+        assert "is not available in this scoped run" in messages[name].content
+    assert "__interrupt__" not in state
+    assert not transfer.calls and not iri.submissions and not iri.cancelled
+    assert {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
+
+
+@pytest.mark.asyncio
+async def test_scoped_main_agent_cannot_delegate_to_hpc_worker(batch, tmp_path, model_loader, monkeypatch):
+    from langchain_core.messages import AIMessage, HumanMessage
+    from chemgraph.agent.llm_agent import ChemGraph
+    from chemgraph.registry import ToolRegistry
+    from chemgraph.registry.agents import AgentRegistry
+    from chemgraph.runtime import run_context
+    from tests.runtime_helpers import make_context
+    from tests.test_registry_middleware import call, outputs
+
+    service, root, transfer, iri, _ = batch
+    registry = create_hpc_registry(service.config, service=service)
+    responses, _ = model_loader
+    responses.extend([
+        call("load_agents", names=["deep_agent"]),
+        call("task", subagent_type="deep_agent", description="Stage and submit the HPC job"),
+        AIMessage(content="Delegation is unavailable here"),
+    ])
+    worker = Mock(side_effect=AssertionError("Scoped calls must never construct a worker"))
+    monkeypatch.setattr(AgentRegistry, "as_subagent", worker)
+    graph = ChemGraph(
+        workflow_type="main_agent", approval_mode="scoped", tool_registry=ToolRegistry([]),
+        subagent_names=["deep_agent"], subagent_options={"deep_agent": {"tool_registry": registry}},
+        discover_skills=False, enable_memory=False, log_dir=str(tmp_path / "logs"),
+    ).workflow
+    with run_context(make_context(tmp_path)):
+        state = await graph.ainvoke({"messages": [HumanMessage(content="Delegate the HPC job")]},
+                                   {"configurable": {"thread_id": "scoped-worker"}})
+    messages = {m.tool_call_id: m for m in outputs(state)}
+    for name in ("load_agents", "task"):
+        assert messages[name].status == "error"
+        assert "is not available in this scoped run" in messages[name].content
+    assert "__interrupt__" not in state
+    worker.assert_not_called()
+    assert not transfer.calls and not iri.submissions and not iri.cancelled
+    assert not (root / "run.json").exists() and not (root / "submission.started").exists()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="HPC targets require POSIX host paths.")
