@@ -429,7 +429,10 @@ async def test_deepagent_workspace_setup_failure(evaluation_config, eval_models,
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("resume", [False, True], ids=["fresh-rerun", "interrupted-resume"])
-async def test_deepagent_stale_preflight_preserves_results(evaluation_config, eval_models, resume):
+@pytest.mark.parametrize("reuse_runner", [False, True], ids=["new-runner", "existing-runner"])
+async def test_deepagent_stale_preflight_preserves_results(
+    evaluation_config, eval_models, resume, reuse_runner,
+):
     config = evaluation_config
     add_second_query(config)
     runner = ModelBenchmarkRunner(config)
@@ -449,7 +452,10 @@ async def test_deepagent_stale_preflight_preserves_results(evaluation_config, ev
     config.resume = resume
 
     with pytest.raises(ValueError, match="[Ww]orkspace.*not empty") as exc:
-        ModelBenchmarkRunner(config)
+        if reuse_runner:
+            await runner.run_all()
+        else:
+            ModelBenchmarkRunner(config)
     assert str(stale.parent) in str(exc.value)
     assert "--output-dir" in str(exc.value) and "--deepagent-workspace" in str(exc.value)
     after = {str(p.relative_to(output)): p.read_bytes() for p in output.rglob("*") if p.is_file()}
@@ -461,13 +467,22 @@ async def test_deepagent_stale_preflight_preserves_results(evaluation_config, ev
 
 
 @pytest.mark.asyncio
-async def test_deepagent_late_artifacts_fail_query_and_continue(evaluation_config, eval_models):
+async def test_deepagent_late_artifacts_fail_query_and_continue(
+    evaluation_config, eval_models, monkeypatch,
+):
     config = evaluation_config
     add_second_query(config)
     runner = ModelBenchmarkRunner(config)
     stale = Path(config.deepagent_workspace) / "fake/deep_agent/thread_water/late.txt"
-    stale.parent.mkdir(parents=True)
-    stale.write_text("appeared after preflight")
+    original_run_query = deepagent.run_query
+
+    async def add_late_file(config, model_name, query, query_id):
+        if query_id == "water":
+            stale.parent.mkdir(parents=True)
+            stale.write_text("appeared after preflight")
+        return await original_run_query(config, model_name, query, query_id)
+
+    monkeypatch.setattr(deepagent, "run_query", add_late_file)
 
     result = (await runner.run_all())["fake"]["deep_agent"]
     assert [raw["status"] for raw in result["raw_tool_calls"]] == ["initialization_error", "completed"]
@@ -496,6 +511,8 @@ async def test_deepagent_escaped_failure_has_unknown_usage(
     assert raw["status"] == "execution_error"
     assert raw["query_id"] == "water" and raw["query"]
     assert raw["error"] == f"RuntimeError: {failure}"
+    expected_workspace = Path(evaluation_config.deepagent_workspace) / "fake/deep_agent/thread_water"
+    assert raw["workspace"] == str(expected_workspace)
     assert raw["elapsed_seconds"] >= 0
     assert result["judge_aggregate"]["n_correct"] == 0
     assert result["structured_judge_aggregate"]["n_correct"] == 0

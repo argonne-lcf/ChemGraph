@@ -530,7 +530,8 @@ class ModelBenchmarkRunner:
                 error = f"{type(e).__name__}: {e}"
                 llm_workflow.update(
                     query_id=item.id, query=item.query, status="execution_error", error=error,
-                    workspace=None, elapsed_seconds=round(time.monotonic() - started, 3),
+                    workspace=str(deepagent.query_workspace(self.config, model_name, item.id)),
+                    elapsed_seconds=round(time.monotonic() - started, 3),
                     structured_output={"_parse_error": error},
                     usage={"execution": None, "formatting": None,
                            "total": apply_history_coverage(summarize_usage([]), True)},
@@ -589,6 +590,8 @@ class ModelBenchmarkRunner:
         dict
             ``{model_name: {workflow_type: {"judge_aggregate": ..., ...}}}``
         """
+        if "deep_agent" in self.config.workflow_types:
+            self._preflight_deepagent_workspaces()
         timestamp = datetime.datetime.now().isoformat()
         self._run_metadata = {
             **self._provenance,
