@@ -2,6 +2,7 @@
 
 import json
 import sys
+import threading
 from types import ModuleType
 
 import pytest
@@ -158,6 +159,39 @@ def test_failed_loading_preserves_selection_and_replacement(catalog):
     assert "triple" in names(model.schemas[5])
     assert not {"double", "triple"} & names(model.schemas[7])
     assert len([m for m in outputs(result) if m.status == "error"]) == 2
+
+
+def test_single_worker_sync_run_does_not_deadlock(catalog):
+    # langgraph<1.2.15 could park every pool worker in a checkpoint save that
+    # waits on writes queued behind it (langchain-ai/langgraph#9270).
+    registry, executed, _ = catalog
+    model = CatalogModel(
+        responses=[
+            call("load_tools", names=["double"]),
+            call("double", value=1),
+            call("double", value=2),
+            call("double", value=3),
+            AIMessage(content="Done."),
+        ]
+    )
+    graph = construct_deep_agent_graph(
+        model, tool_registry=registry, discover_skills=False
+    )
+    results = []
+    thread = threading.Thread(
+        target=lambda: results.append(
+            graph.invoke(
+                {"messages": [HumanMessage(content="Double three times.")]},
+                {"configurable": {"thread_id": "single"}, "max_concurrency": 1},
+            )
+        ),
+        daemon=True,
+    )
+    thread.start()
+    thread.join(timeout=30)
+    assert not thread.is_alive(), "graph run deadlocked with max_concurrency=1"
+    assert executed == [1, 2, 3]
+    assert results[0]["messages"][-1].content == "Done."
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,7 @@ import pubchempy as pcp
 
 from chemgraph.schemas.atomsdata import AtomsData
 from chemgraph.tools.ase_core import _resolve_path
+from chemgraph.runtime.context import register_artifact
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +162,7 @@ def smiles_to_coordinate_file_core(
     if parent:
         os.makedirs(parent, exist_ok=True)
     ase_write(final_output_file, atoms)
+    register_artifact(final_output_file)
 
     return {
         "ok": True,

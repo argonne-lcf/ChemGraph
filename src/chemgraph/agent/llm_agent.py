@@ -234,11 +234,14 @@ class ChemGraph:
     deepagent_auto_approve : bool, optional
         Compatibility alias for ``approval_mode="bypass"`` on standalone
         ``deep_agent`` only. Conflicts with an explicit ``approval_mode="review"``.
-    approval_mode : {"review", "bypass"}, optional
+    approval_mode : {"review", "bypass", "scoped"}, optional
         Default tool-review policy for ``main_agent`` and ``deep_agent``.
         Omission selects ``review``. ``bypass`` disables default reviews;
         stricter worker policies and human questions remain active. This does
         not isolate shell or registry-tool execution from the host.
+        ``scoped`` (``main_agent`` only) permits only the operator policy's
+        tools, each prepared, approved and journaled by :mod:`chemgraph.runtime`;
+        run it inside ``chemgraph.runtime.run_context``.
     backend, tool_registry, skills, skill_dirs, discover_skills, user_skills_dir : optional
         Main-agent workspace backend, lazy tool catalog, and skill sources.
         Without a backend, files use checkpoint storage and no shell is exposed.

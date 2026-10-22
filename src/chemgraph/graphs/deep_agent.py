@@ -67,6 +67,7 @@ def construct_deep_agent_graph(
     initial_agents: Sequence[str] = (),
     subagent_recorder: Any | None = None,
     restrict_delegation: bool = False,
+    scoped: bool = False,
 ):
     """Construct a standalone or parent-checkpointed workspace Deep Agent.
 
@@ -95,7 +96,7 @@ def construct_deep_agent_graph(
     effective_backend, sources, middleware, effective_interrupt_on = prepare_workspace_runtime(
         backend=backend, tools=tools, tool_registry=tool_registry, skills=skills,
         discover_skills=discover_skills, user_skills_dir=user_skills_dir,
-        skill_dirs=skill_dirs, interrupt_on=interrupt_on,
+        skill_dirs=skill_dirs, interrupt_on=interrupt_on, scoped=scoped,
     )
     registered = list(subagents or [])
     if agent_registry is not None or restrict_delegation:

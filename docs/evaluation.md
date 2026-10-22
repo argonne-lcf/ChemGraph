@@ -141,6 +141,98 @@ tool execution; they are not a token or monetary budget, so cost does not scale
 by a fixed factor. Use `--recursion-limit 50` to retain the previous budget, or
 set `recursion_limit = 50` in an evaluation profile. Limits must be at least 1.
 
+## Deep Agent evaluation
+
+The evaluator runs the existing `deep_agent` workflow with bundled skills,
+chemistry tool discovery, and one output directory per model/thread. File tools,
+shell commands, chemistry tools, and logs share real host paths under
+`<output-dir>/logs/<model>/deep_agent/thread_<query-id>/` (model `/` and `:` become
+`_`; query IDs are URL-escaped). This directory is also the shell working
+directory and `CHEMGRAPH_LOG_DIR`; there is no `/workspace` alias. The agent is
+told to keep generated inputs, scripts, and results here.
+On Windows, built-in file tools use forward-slash paths without the drive prefix
+(for example, `/Users/name/results/file.xyz`); the backend supplies the workspace
+drive. Chemistry tools continue to use native host paths. The evaluation prompt
+provides both directory forms.
+
+`--output-dir` is sufficient; `--deepagent-workspace` optionally replaces the
+`<output-dir>/logs` root. Queries require empty thread directories. Before loading
+models or changing checkpoints and reports, evaluation rejects any selected query
+whose directory is nonempty, unless a compatible checkpoint already records that
+query and `--resume` will reuse it. This also rejects artifacts from interrupted
+queries that have no checkpoint. Existing files are preserved. Use a new output
+directory for a fresh benchmark, and a new `--deepagent-workspace` root if that
+override is configured. A second check immediately before each query rejects
+files that appeared after preflight as an initialization error.
+Persistent memory and personal/project skill discovery are disabled. These
+directories separate artifacts; they are **not operating-system sandboxes**.
+Deep Agent evaluation requires `--deepagent-auto-approve`, or
+`deepagent_auto_approve = true` in the evaluation profile
+(`deepagent_auto_approve=True` in Python). Evaluation has no interactive approval
+handler, so missing approval is rejected before any models are initialized,
+including when Deep Agent is selected alongside other workflows. Use this option
+only in a trusted execution environment: it allows unattended tool execution,
+file changes, and shell commands.
+
+```bash
+chemgraph eval \
+  --config config.toml \
+  --models argo:gpt-4.1-mini \
+  --dataset /path/to/groundtruth.json \
+  --workflows deep_agent \
+  --judge-type structured \
+  --deepagent-auto-approve \
+  --query-ids 3 5 6 7 8 9 31 \
+  --output-dir eval_results/deepagent-smoke
+```
+
+For a proxy, add `--base-url http://127.0.0.1:20219/v1` to the same command.
+It overrides provider URLs from `config.toml` for both execution and formatting
+(and the optional LLM judge). Profiles can also set `base_url`. When splitting
+a shell command across lines, each continuation backslash must be the last
+character on its line.
+
+Download `output_data.json` from the
+[ground-truth dataset](https://huggingface.co/datasets/Autonomous-Scientific-Agents/groundtruth)
+at a fixed revision, and keep it outside the agent workspaces. The initial
+40-query benchmark uses revision `8fe726352eb0437e4958282ca741d064fcfe6959`.
+Omit `--query-ids` for the full dataset. IDs are selected in dataset order before
+`--max-queries` is applied. These options also work as profile keys:
+`deepagent_workspace`, `deepagent_auto_approve`, and `query_ids`.
+
+After a completed run, evaluation uses the same model and provider settings,
+including the agent's resolved reasoning effort,
+to format the recorded messages into `ResponseFormatter` JSON, with the existing
+formatter prompt and one retry. This formatting call has no tools or ground
+truth. It does not change the Deep Agent graph. The original answer and state
+are preserved separately from `structured_output` and `formatter_responses`.
+Formatter replies are retained even if a later retry raises an exception.
+The deterministic judge and its tolerances are unchanged, including the
+orientation-sensitive dipole component comparison.
+
+Each raw query record includes status, errors, workspace, elapsed seconds, and
+separate execution, formatting, and combined usage. Usage includes retries;
+unreported tokens remain unknown. Initialization and execution failures count as
+incorrect. Formatting failures, including invalid JSON and formatter model
+errors, count as incorrect for the structured judge. The LLM judge still scores
+the completed original answer and tool calls independently. Formatting failures
+retain their error status and diagnostics in raw records and remain included in
+the error counts in JSON and Markdown execution summaries.
+
+Dataset and code checksums, dependency versions, and settings identify the run.
+Deep Agent resume requires a matching fingerprint, including the dataset,
+`query_ids`, `max_queries`, judge and execution settings, configured model/judge
+endpoints, recorded dependency versions, and hashed package source (`.py`, `.md`,
+and `.template` files).
+Provider environment variables are not fingerprinted; resume assumes the
+provider environment remains unchanged.
+Changing query-selection options invalidates checkpoints even if they select the
+same queries; raising `--max-queries` to extend a smoke test also requires a new
+output directory. Package source changes, including evaluator fixes, invalidate
+old checkpoints. There is no checkpoint migration. Use separate output
+directories for smoke tests and full runs; `--resume` reuses completed query
+records, including failures, when the fingerprint matches.
+
 ## Reports and diagnostics
 
 Select `--report json`, `markdown`, `console`, or `all` (the default). Structured
@@ -172,7 +264,7 @@ chemgraph eval \
 
 Use `--max-queries` for a smoke test, `--recursion-limit` to bound graph
 execution, and `--tags` for run metadata. Evaluation currently accepts
-`single_agent` and `multi_agent` workflows.
+`single_agent`, `multi_agent`, and `deep_agent` workflows.
 
 ## Python API
 

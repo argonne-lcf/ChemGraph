@@ -29,23 +29,23 @@ Aurora.
 
 ## Quickstart
 
-ChemGraph requires Python 3.11 or newer. A virtual environment keeps its
-scientific dependencies separate from other projects.
+ChemGraph requires Python 3.11 or newer. Use [uv](https://docs.astral.sh/uv/)
+(or a standard `venv`) to keep its scientific dependencies separate from other
+projects:
+
+```bash
+uv venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
+uv pip install chemgraph
+```
+
+Or with standard `venv` and `pip`:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
 python -m pip install --upgrade pip
 python -m pip install chemgraph
-```
-
-Prefer [uv](https://docs.astral.sh/uv/)? Use it to create the same environment
-and install ChemGraph:
-
-```bash
-uv venv
-source .venv/bin/activate              # Windows: .venv\Scripts\activate
-uv pip install chemgraph
 ```
 
 Choose one model provider and set only the credential it needs. The default
@@ -250,9 +250,9 @@ repository checkout:
 ```bash
 git clone https://github.com/argonne-lcf/ChemGraph.git
 cd ChemGraph
-python -m venv .venv
+uv venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+uv pip install -e .
 chemgraph ui
 ```
 
@@ -311,14 +311,15 @@ capabilities, limitations, and interface support in more detail.
 
 The core installation includes ASE, EMT, and MACE. ChemGraph detects calculator
 engines and external executables at startup, then exposes only the calculators
-available in that environment.
+available in that environment. Install commands use `uv pip`; in a pip or conda
+environment, use `python -m pip` instead.
 
 | Capability | Installation | Notes |
 | --- | --- | --- |
 | EMT | Core install | Lightweight; useful for setup checks, not general high-accuracy chemistry |
 | MACE | MACE-MP in core; Polar add-on optional | Defaults to MACE-Polar medium when its add-on is installed, otherwise MACE-MP. Dipole/IR require a capable calculator; Polar weights use the ASL. See [installation instructions](docs/calculators.md#mace-downloads). |
-| TBLite / xTB | `pip install "chemgraph[calculators]"` | May require a Fortran toolchain when no wheel is available |
-| UMA / FAIRChem | `pip install "chemgraph[uma]"` | Use a separate environment from MACE if `e3nn` resolution conflicts |
+| TBLite / xTB | `uv pip install "chemgraph[calculators]"` | May require a Fortran toolchain when no wheel is available |
+| UMA / FAIRChem | `uv pip install "chemgraph[uma]"` | Use a separate environment from MACE if `e3nn` resolution conflicts |
 | NWChem | Install the `nwchem` executable separately | Must be on `PATH` or configured through ASE |
 | ORCA | Install ORCA separately | Must be on `PATH` or configured through ASE |
 | AIMNet2 | Install `aimnet2calc` separately | Detected lazily when installed |
@@ -336,19 +337,19 @@ latest unreleased changes:
 ```bash
 git clone https://github.com/argonne-lcf/ChemGraph.git
 cd ChemGraph
-python -m venv .venv
+uv venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+uv pip install -e .
 ```
 
 Install only the extras required by the workflow you plan to run:
 
 ```bash
-python -m pip install -e ".[rag]"
-python -m pip install -e ".[academy,parsl,globus_compute]"
+uv pip install -e ".[rag]"
+uv pip install -e ".[academy,parsl,globus_compute]"
 ```
 
-Conda and uv instructions are available in the
+Standard `venv`/`pip` and conda instructions are available in the
 [installation guide](https://argonne-lcf.github.io/ChemGraph/installation/).
 
 ## Docker

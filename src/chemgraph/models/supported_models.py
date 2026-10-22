@@ -72,6 +72,7 @@ supported_alcf_models = [
     # -- Minerva -------------------------------------------------------------
     "alcf:nemotron-3-ultra",
     "alcf:inkling-bf16",
+    "alcf:muse-spark-bf16",
     # -- Metis (no tool calling) ---------------------------------------------
     "alcf:gpt-oss-120b",
     "alcf:Mistral-Large-3-675B-Instruct-2512",
@@ -86,6 +87,7 @@ supported_alcf_models = [
 supported_alcf_minerva_models = [
     "alcf:nemotron-3-ultra",
     "alcf:inkling-bf16",
+    "alcf:muse-spark-bf16",
 ]
 # Metis reuses upstream names that Sophia carries with an org prefix
 # ("alcf:gpt-oss-120b" here vs "alcf:openai/gpt-oss-120b" on Sophia), so the

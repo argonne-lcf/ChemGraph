@@ -229,6 +229,7 @@ def test_argo_compatible_route_strips_prefix_for_local_shim(monkeypatch):
             "meta-llama/Llama-3.3-70B-Instruct",
         ),
         ("alcf:nemotron-3-ultra", ALCF_MINERVA_BASE_URL, "nemotron-3-ultra"),
+        ("alcf:muse-spark-bf16", ALCF_MINERVA_BASE_URL, "muse-spark-bf16"),
         (
             "alcf:Mistral-Large-3-675B-Instruct-2512",
             ALCF_METIS_BASE_URL,
