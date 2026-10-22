@@ -157,8 +157,7 @@ class Files:
             verify_file(path, descriptor)
         except (OSError, ValueError) as exc:
             raise ValueError(
-                "Saved artifact is missing or corrupt; ask the operator to restore storage. "
-                "The calculation will not be repeated."
+                "Saved artifact is missing or corrupt; ask the operator to restore storage."
             ) from exc
         return path, self.reference(row["id"], row["operation_id"], descriptor)
 
@@ -170,6 +169,10 @@ class Files:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             raise ValueError("Binary artifact; use its authenticated download path.") from None
+        except OSError as exc:
+            raise ValueError(
+                "Saved artifact is missing or corrupt; ask the operator to restore storage."
+            ) from exc
         return {**reference, "content": text}
 
     def source(self, owner, reference):

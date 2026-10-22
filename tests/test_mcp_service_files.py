@@ -1,5 +1,7 @@
 """Immutable uploads and storage accounting without starting an HTTP server."""
 
+from pathlib import Path
+
 import pytest
 
 from chemgraph.mcp.service.files import Files, QuotaExceeded
@@ -51,8 +53,27 @@ def test_unavailable_artifacts_and_inputs_do_not_disclose_host_paths(tmp_path, m
     with pytest.raises(ValueError, match="Saved artifact is missing or corrupt") as error:
         files.get("alice", saved["artifact_id"])
     assert str(tmp_path) not in str(error.value)
+    assert "calculation" not in str(error.value).lower()
     with pytest.raises(ValueError, match="Calculation input is missing") as error:
         files.stage("alice", "missing.xyz", tmp_path / "job" / "input.xyz")
     assert str(tmp_path) not in str(error.value)
     with pytest.raises(FileNotFoundError, match="^Unknown artifact.$"):
         files.get("bob", saved["artifact_id"])
+
+
+@pytest.mark.parametrize("error_type", [FileNotFoundError, PermissionError])
+def test_artifact_read_failure_after_verification_hides_host_path(tmp_path, monkeypatch, error_type):
+    settings = config(tmp_path)
+    initialize_database(settings.database)
+    files = Files(settings)
+    saved = files.ingest("alice", "input.xyz", [b"original"], text=True)
+    path, _ = files.get("alice", saved["artifact_id"])
+    read_text = Path.read_text
+    def unreadable(self, *args, **kwargs):
+        if self == path:
+            raise error_type(2, "Storage failure", str(self))
+        return read_text(self, *args, **kwargs)
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    with pytest.raises(ValueError, match="Saved artifact is missing or corrupt") as error:
+        files.read("alice", saved["artifact_id"])
+    assert str(tmp_path) not in str(error.value)
