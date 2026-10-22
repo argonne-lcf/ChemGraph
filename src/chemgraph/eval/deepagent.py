@@ -17,13 +17,21 @@ from chemgraph.utils.get_workflow_from_llm import get_workflow_from_state
 from chemgraph.utils.parsing import parse_response_formatter
 
 
-async def format_result(model, state, usage):
+def query_workspace(config, model_name, query_id):
+    """Return the host directory shared by a query's file, shell and chemistry tools."""
+    safe_model = model_name.replace("/", "_").replace(":", "_")
+    return (Path(config.deepagent_workspace) / safe_model / "deep_agent"
+            / f"thread_{quote(str(query_id), safe='')}")
+
+
+async def format_result(model, state, usage, attempts=None):
     """Extract ResponseFormatter JSON using the same prompt and retry policy as single_agent."""
     messages = [
         {"role": "system", "content": formatter_prompt},
         {"role": "user", "content": json.dumps(state["messages"], default=str)},
     ]
-    attempts = []
+    if attempts is None:
+        attempts = []
     for _ in range(2):
         response = await model.ainvoke(messages, config={"callbacks": [usage]})
         text = response.text
@@ -40,14 +48,9 @@ async def format_result(model, state, usage):
 
 async def run_query(config, model_name, query, query_id):
     """Run in one directory per model/thread without passing ground truth to the model."""
-    from deepagents.backends import LocalShellBackend
-
     started = time.monotonic()
     previous_log_dir = os.environ.get("CHEMGRAPH_LOG_DIR")
-    safe_model = model_name.replace("/", "_").replace(":", "_")
-    workspace_path = (Path(config.deepagent_workspace) / safe_model / "deep_agent"
-                      / f"thread_{quote(str(query_id), safe='')}")
-    workspace_path.mkdir(parents=True, exist_ok=True)
+    workspace_path = query_workspace(config, model_name, query_id)
     workspace = str(workspace_path)
     run_config = {"configurable": {"thread_id": query_id}}
     formatting_usage = UsageCollector("eval", query_id, model=model_name)
@@ -55,6 +58,14 @@ async def run_query(config, model_name, query, query_id):
            "tool_calls": [], "result": "", "status": "initialization_error"}
     agent = None
     try:
+        from deepagents.backends import LocalShellBackend
+
+        workspace_path.mkdir(parents=True, exist_ok=True)
+        if any(workspace_path.iterdir()):
+            raise ValueError(
+                f"Workspace is not empty: {workspace}. Use a new --output-dir "
+                "and a new --deepagent-workspace if configured."
+            )
         # This process-wide override requires sequential evaluation queries.
         os.environ["CHEMGRAPH_LOG_DIR"] = workspace
         model_options = {"model_name": model_name, "base_url": config.get_base_url(model_name),
@@ -83,9 +94,12 @@ async def run_query(config, model_name, query, query_id):
         raw.update(get_workflow_from_state(state), state=state)
         if config.structured_output:
             raw["status"] = "formatting_error"
-            model = load_chat_model(**model_options, temperature=0.0)
+            raw["formatter_responses"] = []
+            model = load_chat_model(
+                **model_options, temperature=0.0, reasoning_effort=agent.reasoning_effort,
+            )
             raw["structured_output"], raw["formatter_responses"] = await format_result(
-                model, state, formatting_usage,
+                model, state, formatting_usage, attempts=raw["formatter_responses"],
             )
             if raw["structured_output"].get("_parse_error"):
                 raw["error"] = raw["structured_output"]["_parse_error"]
@@ -101,15 +115,17 @@ async def run_query(config, model_name, query, query_id):
             except Exception:
                 pass  # Initialization may have failed before any checkpoint exists.
     finally:
-        formatting_usage.finish(raw["status"])
-        execution_usage = agent.last_usage if agent is not None else None
-        raw["usage"] = {"execution": execution_usage, "formatting": formatting_usage.summary}
-        raw["usage"]["total"] = combine_usage([
-            *([execution_usage] if execution_usage is not None else []), formatting_usage.summary,
-        ])
-        raw["elapsed_seconds"] = round(time.monotonic() - started, 3)
-        if previous_log_dir is None:
-            os.environ.pop("CHEMGRAPH_LOG_DIR", None)
-        else:
-            os.environ["CHEMGRAPH_LOG_DIR"] = previous_log_dir
+        try:
+            formatting_usage.finish(raw["status"])
+            execution_usage = agent.last_usage if agent is not None else None
+            raw["usage"] = {"execution": execution_usage, "formatting": formatting_usage.summary}
+            raw["usage"]["total"] = combine_usage([
+                *([execution_usage] if execution_usage is not None else []), formatting_usage.summary,
+            ])
+            raw["elapsed_seconds"] = round(time.monotonic() - started, 3)
+        finally:
+            if previous_log_dir is None:
+                os.environ.pop("CHEMGRAPH_LOG_DIR", None)
+            else:
+                os.environ["CHEMGRAPH_LOG_DIR"] = previous_log_dir
     return raw

@@ -19,8 +19,11 @@ from chemgraph.eval.cli import build_config_from_args, parse_args, run_eval
 from chemgraph.eval.config import BenchmarkConfig
 from chemgraph.eval.runner import ModelBenchmarkRunner
 from chemgraph.graphs.deep_agent import _normalize_backend
+from chemgraph.models.endpoints import PreparedModel
 from chemgraph.skills.runtime import prepare_skill_backend
 from chemgraph.tools.ase_tools import file_to_atomsdata, save_atomsdata_to_file
+from tests.test_main_agent import _ScriptedChatModel
+from tests.test_registry_middleware import call
 
 
 @pytest.mark.asyncio
@@ -82,7 +85,7 @@ async def test_deepagent_evaluation(tmp_path, monkeypatch, valid_output, judge_t
             subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
         )
         assert shell.exit_code == 0 and "Properties=species" in shell.output
-        return SimpleNamespace(run=execution, last_usage=execution_usage)
+        return SimpleNamespace(run=execution, last_usage=execution_usage, reasoning_effort=None)
 
     formatter = FakeMessagesListChatModel(responses=[AIMessage(
         content=[{"type": "text", "text": json.dumps(expected) if valid_output else "invalid JSON"}],
@@ -170,7 +173,7 @@ async def test_deepagent_failure_scoring(tmp_path, monkeypatch, evaluation_datas
     }])
     agent = SimpleNamespace(
         run=AsyncMock(return_value=state), aget_state=AsyncMock(return_value=state),
-        last_usage=execution_usage,
+        last_usage=execution_usage, reasoning_effort=None,
     )
     make_agent = Mock(return_value=agent)
     formatter = SimpleNamespace(ainvoke=AsyncMock(side_effect=RuntimeError(failure)))
@@ -279,12 +282,11 @@ def test_deepagent_checkpoint_requires_same_selection_and_code(tmp_path, evaluat
         options["max_queries"] = 2
     elif setting == "query_ids":
         options["query_ids"] = ["water"]
-    changed = ModelBenchmarkRunner(BenchmarkConfig(**options))
-    if setting == "code_sha256":
-        changed._provenance["code_sha256"] = "changed-code-checksum"
     # Selection options must match even if the effective query list is identical.
-    assert changed.dataset == runner.dataset
     with pytest.raises(ValueError, match="Incompatible Deep Agent checkpoint"):
+        changed = ModelBenchmarkRunner(BenchmarkConfig(**options))
+        if setting == "code_sha256":
+            changed._provenance["code_sha256"] = "changed-code-checksum"
         changed._load_checkpoint("fake", "deep_agent")
 
 
@@ -337,16 +339,246 @@ def test_deepagent_checkpoint_endpoint_identity(tmp_path, monkeypatch, setting):
             "GOOGLE_CLOUD_LOCATION": "us-central1", "CHEMGRAPH_ARGO_MODEL_FORMAT": "wire",
         }.get(setting, changed_url))
 
-    changed = make_runner()
     if setting == "credentials":
+        changed = make_runner()
         assert changed._load_checkpoint("gpt-4o-mini", "deep_agent") == {"water": query_result}
     else:
         with pytest.raises(ValueError, match="Incompatible Deep Agent checkpoint"):
-            changed._load_checkpoint("gpt-4o-mini", "deep_agent")
+            make_runner()  # Incompatible resume is rejected before loading the judge.
 
     # Only the digest is persisted, even when an endpoint embeds sensitive data.
-    changed._clear_checkpoint("gpt-4o-mini", "deep_agent")
+    runner._clear_checkpoint("gpt-4o-mini", "deep_agent")
+    changed = make_runner()
     changed._save_query_checkpoint("gpt-4o-mini", "deep_agent", "water", 0, query_result)
     checkpoint = Path(changed._checkpoint_path("gpt-4o-mini", "deep_agent")).read_text()
     assert "dummy-endpoint-secret" not in checkpoint
     assert "dummy-rotated-secret" not in checkpoint
+
+
+@pytest.fixture
+def evaluation_config(tmp_path, evaluation_dataset):
+    return BenchmarkConfig(
+        models=["fake"], workflow_types=["deep_agent"], dataset=str(evaluation_dataset),
+        judge_type="both", judge_model="fake-judge", deepagent_auto_approve=True,
+        output_dir=str(tmp_path / "results"),
+    )
+
+
+@pytest.fixture
+def eval_models(monkeypatch):
+    state = {"messages": [{"type": "ai", "content": "Water has SMILES O."}]}
+    agent = SimpleNamespace(
+        run=AsyncMock(return_value=state), last_usage=summarize_usage([]),
+        reasoning_effort=None,
+    )
+    make_agent = Mock(return_value=agent)
+    formatter = FakeMessagesListChatModel(responses=[AIMessage(content='{"smiles": ["O"]}')])
+    make_formatter = Mock(return_value=formatter)
+    make_judge = Mock(return_value=object())
+    judge = AsyncMock(return_value={"score": 1, "rationale": "Correct", "parse_error": None})
+    monkeypatch.setattr(deepagent, "ChemGraph", make_agent)
+    monkeypatch.setattr(deepagent, "load_chat_model", make_formatter)
+    monkeypatch.setattr("chemgraph.eval.runner.load_judge_model", make_judge)
+    monkeypatch.setattr("chemgraph.eval.runner.judge_single_query", judge)
+    monkeypatch.setenv("CHEMGRAPH_LOG_DIR", "original-logs")
+    return SimpleNamespace(
+        agent=agent, make_agent=make_agent, make_formatter=make_formatter,
+        make_judge=make_judge, judge=judge,
+    )
+
+
+def add_second_query(config):
+    dataset = Path(config.dataset)
+    items = json.loads(dataset.read_text())
+    items.append({**items[0], "id": "second"})
+    dataset.write_text(json.dumps(items))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("location", ["custom_root", "model_directory", "thread_directory"])
+async def test_deepagent_workspace_setup_failure(evaluation_config, eval_models, location):
+    config = evaluation_config
+    workspace = Path(config.deepagent_workspace) / "fake/deep_agent/thread_water"
+    blocked = {
+        "custom_root": Path(config.output_dir).parent / "custom-workspace",
+        "model_directory": workspace.parent.parent,
+        "thread_directory": workspace,
+    }[location]
+    if location == "custom_root":
+        config.deepagent_workspace = str(blocked)
+    blocked.parent.mkdir(parents=True, exist_ok=True)
+    blocked.write_text("preserve this file")
+
+    runner = ModelBenchmarkRunner(config)
+    result = (await runner.run_all())["fake"]["deep_agent"]
+    raw = result["raw_tool_calls"][0]
+    assert raw["status"] == "initialization_error"
+    assert raw["query_id"] == "water" and raw["query"]
+    assert raw["error"] == raw["structured_output"]["_parse_error"]
+    assert raw["elapsed_seconds"] >= 0
+    assert raw["usage"]["total"]["call_count"] == 0
+    assert result["judge_aggregate"]["n_correct"] == 0
+    assert result["structured_judge_aggregate"]["n_correct"] == 0
+    assert result["execution_summary"]["n_errors"] == 1
+    eval_models.make_agent.assert_not_called()
+    eval_models.make_formatter.assert_not_called()
+    eval_models.judge.assert_not_awaited()
+    assert blocked.read_text() == "preserve this file"
+    assert os.environ["CHEMGRAPH_LOG_DIR"] == "original-logs"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resume", [False, True], ids=["fresh-rerun", "interrupted-resume"])
+async def test_deepagent_stale_preflight_preserves_results(evaluation_config, eval_models, resume):
+    config = evaluation_config
+    add_second_query(config)
+    runner = ModelBenchmarkRunner(config)
+    await runner.run_all()
+    runner.report("all")
+    if resume:
+        # Simulate interruption after the second query wrote artifacts, before checkpointing it.
+        checkpoint = Path(runner._checkpoint_path("fake", "deep_agent"))
+        first_record = checkpoint.read_text().splitlines()[0]
+        checkpoint.write_text(first_record + "\n")
+    stale = Path(config.deepagent_workspace) / "fake/deep_agent/thread_second/previous.txt"
+    stale.write_text("previous result")
+    output = Path(config.output_dir)
+    before = {str(p.relative_to(output)): p.read_bytes() for p in output.rglob("*") if p.is_file()}
+    for mock in (eval_models.make_agent, eval_models.make_formatter, eval_models.make_judge, eval_models.judge):
+        mock.reset_mock()
+    config.resume = resume
+
+    with pytest.raises(ValueError, match="[Ww]orkspace.*not empty") as exc:
+        ModelBenchmarkRunner(config)
+    assert str(stale.parent) in str(exc.value)
+    assert "--output-dir" in str(exc.value) and "--deepagent-workspace" in str(exc.value)
+    after = {str(p.relative_to(output)): p.read_bytes() for p in output.rglob("*") if p.is_file()}
+    assert after == before
+    eval_models.make_agent.assert_not_called()
+    eval_models.make_formatter.assert_not_called()
+    eval_models.make_judge.assert_not_called()
+    eval_models.judge.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_deepagent_late_artifacts_fail_query_and_continue(evaluation_config, eval_models):
+    config = evaluation_config
+    add_second_query(config)
+    runner = ModelBenchmarkRunner(config)
+    stale = Path(config.deepagent_workspace) / "fake/deep_agent/thread_water/late.txt"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("appeared after preflight")
+
+    result = (await runner.run_all())["fake"]["deep_agent"]
+    assert [raw["status"] for raw in result["raw_tool_calls"]] == ["initialization_error", "completed"]
+    assert result["judge_aggregate"]["n_correct"] == 1
+    assert result["structured_judge_aggregate"]["n_correct"] == 1
+    assert result["execution_summary"]["n_errors"] == 1
+    assert stale.read_text() == "appeared after preflight"
+    eval_models.make_agent.assert_called_once()
+    eval_models.judge.assert_awaited_once()
+    assert os.environ["CHEMGRAPH_LOG_DIR"] == "original-logs"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["adapter", "usage_finalization"])
+async def test_deepagent_escaped_failure_has_unknown_usage(
+    evaluation_config, eval_models, monkeypatch, failure,
+):
+    if failure == "adapter":
+        monkeypatch.setattr(deepagent, "run_query", AsyncMock(side_effect=RuntimeError(failure)))
+    else:
+        monkeypatch.setattr(deepagent, "combine_usage", Mock(side_effect=RuntimeError(failure)))
+    runner = ModelBenchmarkRunner(evaluation_config)
+    result = (await runner.run_all())["fake"]["deep_agent"]
+    runner.report("all")
+    raw = result["raw_tool_calls"][0]
+    assert raw["status"] == "execution_error"
+    assert raw["query_id"] == "water" and raw["query"]
+    assert raw["error"] == f"RuntimeError: {failure}"
+    assert raw["elapsed_seconds"] >= 0
+    assert result["judge_aggregate"]["n_correct"] == 0
+    assert result["structured_judge_aggregate"]["n_correct"] == 0
+    assert result["execution_summary"]["n_errors"] == 1
+    usage = result["execution_summary"]["usage"]
+    assert usage["total_tokens"] is None and usage["partial"] is True
+    assert usage["call_count"] == 0
+    eval_models.judge.assert_not_awaited()
+    assert os.environ["CHEMGRAPH_LOG_DIR"] == "original-logs"
+
+
+@pytest.mark.asyncio
+async def test_deepagent_retry_exception_preserves_reply_and_usage(evaluation_config, eval_models):
+    formatter = _ScriptedChatModel(responses=[
+        AIMessage(content="invalid first reply", usage_metadata={
+            "input_tokens": 20, "output_tokens": 5, "total_tokens": 25,
+        }),
+        RuntimeError("retry failed"),
+    ])
+    eval_models.make_formatter.return_value = formatter
+    runner = ModelBenchmarkRunner(evaluation_config)
+    result = (await runner.run_all())["fake"]["deep_agent"]
+    runner.report("all")
+    raw = result["raw_tool_calls"][0]
+    assert raw["status"] == "formatting_error"
+    assert raw["formatter_responses"] == ["invalid first reply"]
+    assert raw["error"] == "RuntimeError: retry failed"
+    assert raw["result"] == "Water has SMILES O."
+    assert raw["usage"]["formatting"]["call_count"] == 2
+    assert raw["usage"]["formatting"]["total_tokens"] == 25
+    assert raw["usage"]["formatting"]["partial"] is True
+    assert result["structured_judge_aggregate"]["n_correct"] == 0
+    assert result["judge_aggregate"]["n_correct"] == 1
+    checkpoint = json.loads(Path(runner._checkpoint_path("fake", "deep_agent")).read_text())
+    assert checkpoint["raw"]["formatter_responses"] == raw["formatter_responses"]
+    assert os.environ["CHEMGRAPH_LOG_DIR"] == "original-logs"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_name,effort", [("fake", None), ("argo:gpt-5.6-sol", "none")])
+async def test_deepagent_real_graph_formats_native_trace(
+    evaluation_config, monkeypatch, model_name, effort,
+):
+    config = evaluation_config
+    config.models = [model_name]
+    config.judge_type = "structured"
+    workspace = Path(config.deepagent_workspace) / model_name.replace(":", "_") / "deep_agent/thread_water"
+    workspace.mkdir(parents=True)  # Existing empty directories are valid.
+    structure = workspace / "water.xyz"
+    model = _ScriptedChatModel(responses=[
+        call("write_file", file_path=str(structure), content="3\nwater\nO 0 0 0\nH 0 0 1\nH 0 1 0\n"),
+        call("load_tools", names=["file_to_atomsdata"]),
+        call("file_to_atomsdata", fname=str(structure)),
+        AIMessage(content="Water has SMILES O."),
+    ])
+    for response in model.responses:
+        response.usage_metadata = {"input_tokens": 2, "output_tokens": 3, "total_tokens": 5}
+    formatter = _ScriptedChatModel(responses=[AIMessage(
+        content='{"smiles": ["O"]}',
+        usage_metadata={"input_tokens": 2, "output_tokens": 3, "total_tokens": 5},
+    )])
+    loader = Mock(return_value=(model, PreparedModel(
+        endpoint_name="test", protocol="openai_compatible", client_kwargs={},
+    )))
+    formatter_loader = Mock(return_value=formatter)
+    monkeypatch.setattr("chemgraph.agent.llm_agent.load_chat_model_prepared", loader)
+    monkeypatch.setattr(deepagent, "load_chat_model", formatter_loader)
+    monkeypatch.delenv("CHEMGRAPH_LOG_DIR", raising=False)
+    runner = ModelBenchmarkRunner(config)
+    result = (await runner.run_all())[model_name]["deep_agent"]
+    raw = result["raw_tool_calls"][0]
+    assert raw["status"] == "completed", raw.get("error")
+    assert raw["result"] == "Water has SMILES O."
+    assert raw["tool_calls"][-1] == {"file_to_atomsdata": {"fname": str(structure)}}
+    native_reply = next(m for m in raw["state"]["messages"] if m.get("name") == "file_to_atomsdata")
+    assert "numbers=[8, 1, 1]" in native_reply["content"]
+    assert structure.is_file()
+    assert result["structured_judge_aggregate"]["accuracy"] == 1.0
+    assert raw["usage"]["total"]["total_tokens"] == 25
+    assert loader.call_args.kwargs["reasoning_effort"] == effort
+    assert formatter_loader.call_args.kwargs.get("reasoning_effort") == effort
+    assert "CHEMGRAPH_LOG_DIR" not in os.environ
+    config.resume = True
+    assert (await ModelBenchmarkRunner(config).run_all())[model_name]["deep_agent"] == result
+    loader.assert_called_once()
+    formatter_loader.assert_called_once()

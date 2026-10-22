@@ -152,8 +152,14 @@ directory and `CHEMGRAPH_LOG_DIR`; there is no `/workspace` alias. The agent is
 told to keep generated inputs, scripts, and results here.
 
 `--output-dir` is sufficient; `--deepagent-workspace` optionally replaces the
-`<output-dir>/logs` root. Re-running a thread uses the same directory without
-clearing existing files. Use a new output directory for a fresh benchmark.
+`<output-dir>/logs` root. Queries require empty thread directories. Before loading
+models or changing checkpoints and reports, evaluation rejects any selected query
+whose directory is nonempty, unless a compatible checkpoint already records that
+query and `--resume` will reuse it. This also rejects artifacts from interrupted
+queries that have no checkpoint. Existing files are preserved. Use a new output
+directory for a fresh benchmark, and a new `--deepagent-workspace` root if that
+override is configured. A second check immediately before each query rejects
+files that appeared after preflight as an initialization error.
 Persistent memory and personal/project skill discovery are disabled. These
 directories separate artifacts; they are **not operating-system sandboxes**.
 Deep Agent evaluation requires `--deepagent-auto-approve`, or
@@ -190,11 +196,13 @@ Omit `--query-ids` for the full dataset. IDs are selected in dataset order befor
 `--max-queries` is applied. These options also work as profile keys:
 `deepagent_workspace`, `deepagent_auto_approve`, and `query_ids`.
 
-After a completed run, evaluation uses the same model and provider settings
+After a completed run, evaluation uses the same model and provider settings,
+including the agent's resolved reasoning effort,
 to format the recorded messages into `ResponseFormatter` JSON, with the existing
 formatter prompt and one retry. This formatting call has no tools or ground
 truth. It does not change the Deep Agent graph. The original answer and state
 are preserved separately from `structured_output` and `formatter_responses`.
+Formatter replies are retained even if a later retry raises an exception.
 The deterministic judge and its tolerances are unchanged, including the
 orientation-sensitive dipole component comparison.
 

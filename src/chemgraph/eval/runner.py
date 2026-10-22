@@ -12,11 +12,12 @@ import inspect
 import json
 import os
 from pathlib import Path
+import time
 import traceback
 from typing import Any, Dict, List
 
 from chemgraph.agent.llm_agent import ChemGraph
-from chemgraph.agent.usage import combine_usage
+from chemgraph.agent.usage import apply_history_coverage, combine_usage, summarize_usage
 from chemgraph.eval import deepagent
 from chemgraph.eval.config import BenchmarkConfig
 from chemgraph.eval.datasets import GroundTruthItem, load_dataset
@@ -118,6 +119,7 @@ class ModelBenchmarkRunner:
                 self._provenance["versions"]["tblite"] = version("tblite")
             except PackageNotFoundError:
                 self._provenance["versions"]["tblite"] = None
+            self._preflight_deepagent_workspaces()
 
         # Load judge model only when LLM judge is requested.
         self._judge_llm = None
@@ -166,7 +168,9 @@ class ModelBenchmarkRunner:
         os.makedirs(d, exist_ok=True)
         return d
 
-    def _checkpoint_path(self, model_name: str, workflow_type: str) -> str:
+    def _checkpoint_path(
+        self, model_name: str, workflow_type: str, *, create_dir: bool = True,
+    ) -> str:
         """Return the JSONL checkpoint file path for a model/workflow pair.
 
         Parameters
@@ -175,6 +179,8 @@ class ModelBenchmarkRunner:
             Model identifier being evaluated.
         workflow_type : str
             Workflow type being evaluated.
+        create_dir : bool
+            Create the checkpoint directory for writes; disable for read-only checks.
 
         Returns
         -------
@@ -182,8 +188,11 @@ class ModelBenchmarkRunner:
             Checkpoint JSONL file path.
         """
         safe_name = model_name.replace("/", "_").replace(":", "_")
+        directory = self._checkpoint_dir() if create_dir else os.path.join(
+            self.config.output_dir, "checkpoints",
+        )
         return os.path.join(
-            self._checkpoint_dir(),
+            directory,
             f"{safe_name}_{workflow_type}.jsonl",
         )
 
@@ -242,7 +251,7 @@ class ModelBenchmarkRunner:
             for each successfully checkpointed query.  Corrupt lines
             (e.g. from a mid-write crash) are silently skipped.
         """
-        path = self._checkpoint_path(model_name, workflow_type)
+        path = self._checkpoint_path(model_name, workflow_type, create_dir=False)
         completed: Dict[str, dict] = {}
         if not os.path.exists(path):
             return completed
@@ -288,7 +297,7 @@ class ModelBenchmarkRunner:
         workflow_type : str
             Workflow type being evaluated.
         """
-        path = self._checkpoint_path(model_name, workflow_type)
+        path = self._checkpoint_path(model_name, workflow_type, create_dir=False)
         if os.path.exists(path):
             os.remove(path)
             logger.debug(f"Cleared stale checkpoint: {path}")
@@ -296,6 +305,27 @@ class ModelBenchmarkRunner:
     # ------------------------------------------------------------------
     # Core execution
     # ------------------------------------------------------------------
+
+    def _preflight_deepagent_workspaces(self) -> None:
+        """Reject stale inputs before loading models or replacing previous results."""
+        stale = []
+        for model_name in self.config.models:
+            completed = self._load_checkpoint(model_name, "deep_agent") if self.config.resume else {}
+            for item in self.dataset:
+                if item.id in completed:
+                    continue
+                workspace = deepagent.query_workspace(self.config, model_name, item.id)
+                try:
+                    if workspace.is_dir() and any(workspace.iterdir()):
+                        stale.append(str(workspace))
+                except OSError:
+                    # Record inaccessible paths through the adapter's per-query error handling.
+                    continue
+        if stale:
+            raise ValueError(
+                f"Workspace directories are not empty: {', '.join(stale)}. "
+                "Use a new --output-dir and a new --deepagent-workspace if configured."
+            )
 
     async def _run_single_model_workflow(
         self,
@@ -328,7 +358,8 @@ class ModelBenchmarkRunner:
             model_name.replace("/", "_").replace(":", "_"),
             workflow_type,
         )
-        os.makedirs(run_log_dir, exist_ok=True)
+        if workflow_type != "deep_agent":
+            os.makedirs(run_log_dir, exist_ok=True)
 
         try:
             # Resolve per-model base_url and argo_user from config.toml.
@@ -477,6 +508,7 @@ class ModelBenchmarkRunner:
         dict
             Query result containing raw output and judge results.
         """
+        started = time.monotonic()
         try:
             if workflow_type == "deep_agent":
                 llm_workflow = await deepagent.run_query(
@@ -494,6 +526,15 @@ class ModelBenchmarkRunner:
             model_tool_calls = []
             model_result = f"ERROR: {e}"
             llm_workflow = {"tool_calls": [], "result": model_result}
+            if workflow_type == "deep_agent":
+                error = f"{type(e).__name__}: {e}"
+                llm_workflow.update(
+                    query_id=item.id, query=item.query, status="execution_error", error=error,
+                    workspace=None, elapsed_seconds=round(time.monotonic() - started, 3),
+                    structured_output={"_parse_error": error},
+                    usage={"execution": None, "formatting": None,
+                           "total": apply_history_coverage(summarize_usage([]), True)},
+                )
 
         result: Dict[str, Any] = {"raw": llm_workflow}
 
