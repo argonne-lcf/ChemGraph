@@ -1,11 +1,14 @@
 # Main-agent and Deep Agent skills
 
-ChemGraph ships two Agent Skills: **chemgraph** for its Python, CLI, and chemistry
-MCP workflows, and **pbs-hpc** for PBS job preparation, monitoring, and facility
-guidance. They are available directly to `main_agent`, standalone Deep Agents,
+ChemGraph ships four Agent Skills: **chemgraph** for its Python, CLI, and chemistry
+MCP workflows, **pbs-hpc** for PBS job preparation, monitoring, and facility
+guidance, **iri-hpc** for remote ALCF jobs through the IRI API v2, and
+**globus-transfer** for staging files with the Globus CLI. They are available directly to `main_agent`, standalone Deep Agents,
 registry-created Deep Agent workers, and the legacy main-agent workspace worker.
 
 For direct submission from a login-node shell, see [PBS jobs with skills](pbs_jobs_with_skills.md).
+For submission from a laptop through IRI, including with Claude Code or Codex, see
+[the IRI Polaris example](https://github.com/argonne-lcf/ChemGraph/tree/main/examples/iri_polaris).
 Deep Agent writes calculation and batch scripts using the skills and existing
 Python APIs; it does not need attached chemistry MCP tools for this route.
 

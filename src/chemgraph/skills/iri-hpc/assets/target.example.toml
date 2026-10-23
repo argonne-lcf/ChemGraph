@@ -1,0 +1,37 @@
+# IRI target for one ALCF system, saved as ./target.toml in the workspace.
+# For Polaris with Eagle storage the agent writes it with scripts/iri_configure.py;
+# fill this template by hand only for other systems or filesystems.
+# Replace every YOUR_* value; keep tokens out of this file.
+# Resource IDs come from https://api.alcf.anl.gov/api/v2/status/resources.
+
+compute_resource_id = "55c1c993-1124-47f9-b823-514ba3849a9a"  # Polaris
+# Storage must match the remote_root prefix:
+# Eagle (/eagle) 1c3ad9d4-2e91-42bc-becb-72b1fde1235c, Home (/home) 6115bd2c-957a-4543-abff-5fae52992ff2.
+storage_resource_id = "1c3ad9d4-2e91-42bc-becb-72b1fde1235c"
+
+account = "YOUR_PROJECT"
+username = "YOUR_USER"  # ALCF username; IRI filters jobs by it as owner.
+queue = "debug"
+filesystems = "home:eagle"  # Aurora uses "flare".
+node_count = 1
+duration = 300  # Walltime in seconds.
+
+# Parent of the per-run remote directories, as seen by compute nodes.
+remote_root = "/eagle/YOUR_PROJECT/YOUR_USER/iri-runs"
+
+# Globus collections for staging (globus-transfer skill).
+# Find with: globus endpoint local-id
+local_collection_id = "YOUR_LOCAL_COLLECTION_ID"
+# The workspace as the local collection names it; Globus Connect Personal uses /~/ for home.
+local_globus_root = "/~/iri-test"
+# Must match the remote_root filesystem. Public ALCF collections (globus endpoint search):
+# Eagle alcf#dtn_eagle 05d2c76a-e867-4f67-aa57-76edeb0beda0,
+# Home alcf#dtn_home 9032dd3a-e841-4687-a163-2720da731b5b,
+# Flare alcf#dtn_flare f39a7a0f-5bfc-46ce-9615-ba9f8592814f.
+remote_collection_id = "05d2c76a-e867-4f67-aa57-76edeb0beda0"  # Eagle
+# remote_root as the collection names it: Eagle's collection root is /eagle.
+remote_globus_root = "/YOUR_PROJECT/YOUR_USER/iri-runs"
+
+# Existing compute environment with ChemGraph installed; never installed automatically.
+environment_setup = "source /eagle/YOUR_PROJECT/YOUR_USER/envs/chemgraph/bin/activate"
+python = "/eagle/YOUR_PROJECT/YOUR_USER/envs/chemgraph/bin/python"

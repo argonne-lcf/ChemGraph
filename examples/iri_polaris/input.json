@@ -1,0 +1,9 @@
+{
+  "input_structure_file": "water.xyz",
+  "output_results_file": "result.json",
+  "driver": "opt",
+  "optimizer": "bfgs",
+  "fmax": 0.05,
+  "steps": 200,
+  "calculator": {"calculator_type": "emt"}
+}

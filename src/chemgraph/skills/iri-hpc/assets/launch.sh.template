@@ -1,0 +1,10 @@
+#!/bin/bash
+# IRI runs this script with bash; the JobSpec selects resources, so #PBS lines are ignored.
+# Replace {{ENVIRONMENT_SETUP}} and {{PYTHON}} from the target configuration.
+set -eo pipefail
+RUN_DIR=$(cd "$(dirname "$0")" && pwd)
+{{ENVIRONMENT_SETUP}}
+set -u
+cd "$RUN_DIR"
+export CHEMGRAPH_LOG_DIR="$RUN_DIR" TMPDIR=/tmp
+exec {{PYTHON}} "$RUN_DIR/calculate.py"
