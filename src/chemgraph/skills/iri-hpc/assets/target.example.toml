@@ -1,4 +1,7 @@
-# IRI target for one ALCF system. Replace every YOUR_* value; keep tokens out of this file.
+# IRI target for one ALCF system, saved as ./target.toml in the workspace.
+# For Polaris with Eagle storage the agent writes it with scripts/iri_configure.py;
+# fill this template by hand only for other systems or filesystems.
+# Replace every YOUR_* value; keep tokens out of this file.
 # Resource IDs come from https://api.alcf.anl.gov/api/v2/status/resources.
 
 compute_resource_id = "55c1c993-1124-47f9-b823-514ba3849a9a"  # Polaris

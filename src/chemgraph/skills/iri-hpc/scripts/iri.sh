@@ -4,6 +4,33 @@
 set -o pipefail
 BASE=${BASE:-https://api.alcf.anl.gov/api/v2}
 
+# Load IDs and paths from the workspace's target.toml, so commands never retype
+# them; a variable the caller already set wins.
+if [ -f target.toml ]; then
+  if _iri_target=$(python - target.toml <<'PY'
+import shlex, sys, tomllib
+names = {
+    "compute_resource_id": "COMPUTE", "storage_resource_id": "STORAGE",
+    "username": "OWNER", "account": "ACCOUNT", "remote_root": "REMOTE_ROOT",
+    "local_collection_id": "LOCAL", "remote_collection_id": "REMOTE_COLLECTION",
+    "local_globus_root": "LOCAL_ROOT", "remote_globus_root": "REMOTE_GLOBUS_ROOT",
+}
+with open(sys.argv[1], "rb") as handle:
+    target = tomllib.load(handle)
+for key, name in names.items():
+    if key in target:
+        print(f'[ -n "${{{name}-}}" ] || {name}={shlex.quote(str(target[key]))}')
+PY
+  ); then
+    eval "$_iri_target"
+    unset _iri_target
+  else
+    unset _iri_target
+    echo "Could not read target.toml; fix or recreate it before continuing." >&2
+    return 1
+  fi
+fi
+
 iri() {
   set +x
   local token
@@ -24,7 +51,7 @@ iri() {
 # POST a JSON body to a filesystem operation and wait for its task.
 iri_fs() {  # iri_fs OPERATION JSON
   local task
-  : "${STORAGE:?set STORAGE to the storage_resource_id for this path}"
+  : "${STORAGE:?run commands from the workspace that holds target.toml (iri-hpc setup writes it)}"
   task=$(iri -X POST -H 'Content-Type: application/json' -d "$2" \
     "$BASE/filesystem/$1/$STORAGE" | jq -er '.task_id') || return 1
   iri_task "$task"

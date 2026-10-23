@@ -15,17 +15,18 @@ globus ls "$EAGLE:/<project>/"                 # Eagle: compute path /eagle/<pro
 ## Record and submit a transfer
 
 ```bash
-STATE=...    # state directory outside the transferred tree, e.g. <workspace>/.globus
-LABEL=...    # unique per run and direction, e.g. run-001-stage-in
+STATE=...        # state directory outside the transferred tree, e.g. <workspace>/.globus
+LABEL=...        # unique per run and direction, e.g. run-001-stage-in
+SOURCE=...       # iri-hpc runs: "$LOCAL:$LOCAL_ROOT/$RUN/" (variables from iri.sh)
+DESTINATION=...  # iri-hpc runs: "$REMOTE_COLLECTION:$REMOTE_GLOBUS_ROOT/$RUN/"
 mkdir -p "$STATE"
 set -C       # refuse to overwrite an existing record
 sid=$(globus task generate-submission-id) && [ -n "$sid" ] &&
 jq -n --arg sid "$sid" \
-  --arg source "$LOCAL:/~/iri-test/run-001/" \
-  --arg destination "$EAGLE:/<project>/<user>/iri-runs/run-001/" \
-  --arg label "$LABEL" \
+  --arg source "$SOURCE" --arg destination "$DESTINATION" \
+  --arg lbl "$LABEL" \
   '{submission_id: $sid, source: $source, destination: $destination,
-    label: $label, options: ["--recursive"]}' > "$STATE/$LABEL.json"
+    label: $lbl, options: ["--recursive"]}' > "$STATE/$LABEL.json"
 ```
 
 Submit from the record, as a separate command. Submitting again from the same
